@@ -1658,6 +1658,7 @@ def get_location_builder(
 def get_create_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     location_builder: LocationBuilder = Depends(get_location_builder),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> CreateCompetitionUseCase:
     """
     Proveedor del caso de uso CreateCompetitionUseCase.
@@ -1668,7 +1669,7 @@ def get_create_competition_use_case(
     3. Crea una instancia de `CreateCompetitionUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return CreateCompetitionUseCase(uow, location_builder)
+    return CreateCompetitionUseCase(uow, location_builder, user_uow.users)
 
 
 def get_list_competitions_use_case(
@@ -1933,23 +1934,26 @@ def get_reorder_golf_courses_use_case(
 
 def get_request_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> RequestEnrollmentUseCase:
     """Proveedor del caso de uso RequestEnrollmentUseCase."""
-    return RequestEnrollmentUseCase(uow)
+    return RequestEnrollmentUseCase(uow, user_uow.users)
 
 
 def get_direct_enroll_player_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> DirectEnrollPlayerUseCase:
     """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(uow)
+    return DirectEnrollPlayerUseCase(uow, user_uow.users)
 
 
 def get_handle_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> HandleEnrollmentUseCase:
     """Proveedor del caso de uso HandleEnrollmentUseCase."""
-    return HandleEnrollmentUseCase(uow)
+    return HandleEnrollmentUseCase(uow, user_uow.users)
 
 
 def get_cancel_enrollment_use_case(

@@ -44,6 +44,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -75,7 +76,9 @@ class TestSendInvitationByUserIdUseCase:
 
     async def _create_active_competition(self, comp_uow, creator_id):
         """Helper: crea y activa una competicion."""
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),
@@ -96,7 +99,9 @@ class TestSendInvitationByUserIdUseCase:
         que tenga apertura programada, asi que la unica que sigue en DRAFT —y
         por tanto la unica a la que una invitacion puede abrirle nada— es esa.
         """
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),

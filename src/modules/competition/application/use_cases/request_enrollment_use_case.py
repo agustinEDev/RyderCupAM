@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     InvalidTeeColorError,
 )
+from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
@@ -31,6 +32,9 @@ from src.modules.competition.domain.services.competition_policy import (
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -83,7 +87,9 @@ class RequestEnrollmentUseCase:
     - El usuario no puede tener otra inscripcion activa en la misma competicion
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
+    ):
         """
         Constructor.
 
@@ -91,6 +97,8 @@ class RequestEnrollmentUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # El género es obligatorio para apuntarse (#710)
+        self._user_repo = user_repository
 
     async def execute(self, request: RequestEnrollmentRequestDTO) -> RequestEnrollmentResponseDTO:
         """
@@ -170,6 +178,9 @@ class RequestEnrollmentUseCase:
                 raise TooManyEnrollmentsError(
                     f"Ya estás en {MAX_ENROLLMENTS_PER_USER} competiciones, el máximo a la vez."
                 ) from e
+
+            # Sin género no se sabe desde qué barras juega (#710)
+            await exigir_genero(self._user_repo, user_id, es_quien_se_apunta=True)
 
             # 4. Crear enrollment con factory method
             try:

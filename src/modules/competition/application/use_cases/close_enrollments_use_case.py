@@ -13,6 +13,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    sin_plaza_para_las_pendientes,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -71,7 +74,9 @@ class CloseEnrollmentsUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Con la fila bloqueada, como al nombrar capitanes: una aceptación a
+            # la vez leería «abierta» y entraría tras el cierre (#710)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
@@ -90,6 +95,9 @@ class CloseEnrollmentsUseCase:
 
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
+
+            # 6. Las invitaciones pendientes se quedan sin plaza (#710)
+            await sin_plaza_para_las_pendientes(self._uow, competition_id)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(

@@ -29,6 +29,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,7 +54,9 @@ class TestRevertCompetitionToInProgressUseCase:
 
     async def _create_completed_competition(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Helper: crea una competición en estado COMPLETED."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -135,7 +138,9 @@ class TestRevertCompetitionToInProgressUseCase:
         When: Se intenta revertir
         Then: Se lanza CompetitionStateError
         """
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),

@@ -8,6 +8,7 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -21,6 +22,10 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
+    UsuariosConGenero,
+)
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -50,7 +55,9 @@ class TestCreateCompetitionUseCase:
         Then: La competición se crea con las inscripciones abiertas (BE #332)
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -95,7 +102,9 @@ class TestCreateCompetitionUseCase:
         Then: La competición se crea con los 3 países correctamente
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Iberian Cup 2025",
             start_date=date(2025, 7, 1),
@@ -131,7 +140,9 @@ class TestCreateCompetitionUseCase:
         Then: Se lanza CompetitionAlreadyExistsError
         """
         # Arrange: Crear competición existente
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         existing_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -166,7 +177,9 @@ class TestCreateCompetitionUseCase:
         Then: Se lanza InvalidCountryError
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Invalid Cup",
             start_date=date(2025, 6, 1),
@@ -192,7 +205,9 @@ class TestCreateCompetitionUseCase:
         Then: Se lanza InvalidCountryError
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Invalid Adjacency Cup",
             start_date=date(2025, 6, 1),
@@ -219,7 +234,9 @@ class TestCreateCompetitionUseCase:
         Then: La competición se crea con play_mode configurado
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Handicap Cup",
             start_date=date(2025, 6, 1),
@@ -247,7 +264,9 @@ class TestCreateCompetitionUseCase:
         Then: Se crea un enrollment APPROVED para el creador
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Auto Enroll Cup",
             start_date=date(2025, 6, 1),
@@ -276,7 +295,9 @@ class TestCreateCompetitionUseCase:
         Then: Se llama a commit() en el UoW
         """
         # Arrange
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request_dto = CreateCompetitionRequestDTO(
             name="Commit Test Cup",
             start_date=date(2025, 6, 1),
@@ -319,7 +340,9 @@ class TestComoNaceLaCompeticion:
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """Nadie deberia pulsar un boton cuyo unico trabajo es mover un estado."""
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
 
         respuesta = await use_case.execute(self._peticion(), creator_id)
 
@@ -330,7 +353,9 @@ class TestComoNaceLaCompeticion:
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """Con dias puestos, DRAFT significa una sola cosa: esperando."""
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
 
         respuesta = await use_case.execute(self._peticion(dias=5), creator_id)
 
@@ -345,7 +370,9 @@ class TestComoNaceLaCompeticion:
         Es el motivo de abrirla llamando a `activate()` y no naciendo en ACTIVE
         desde el factory: el estado se habria movido sin que nadie se enterase.
         """
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
 
         respuesta = await use_case.execute(self._peticion(), creator_id)
 
@@ -359,7 +386,9 @@ class TestComoNaceLaCompeticion:
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """Todavia no ha abierto: anunciarlo diria algo que no ha pasado."""
-        use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
 
         respuesta = await use_case.execute(self._peticion(dias=5), creator_id)
 
@@ -367,3 +396,30 @@ class TestComoNaceLaCompeticion:
             competition = await uow.competitions.find_by_id(CompetitionId(respuesta.id))
         eventos = [type(e).__name__ for e in competition.get_domain_events()]
         assert "CompetitionActivatedEvent" not in eventos
+
+
+# ==================== El organizador juega: su género, al crear (#710, 24 sep) ====================
+# Crearla le inscribe como jugador. Sin género, bloqueaba la generación de los
+# partidos igual que cualquier otro inscrito
+
+
+async def test_sin_genero_no_se_crea_y_lo_dice():
+    uow = InMemoryUnitOfWork()
+    organizador = UserId(uuid4())
+
+    with pytest.raises(GenderRequiredError, match="Para crear una competición"):
+        await CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), UsuariosConGenero(sin_genero=[organizador])
+        ).execute(
+            CreateCompetitionRequestDTO(
+                name="Sin género",
+                start_date=date(2026, 6, 1),
+                end_date=date(2026, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+            ),
+            organizador,
+        )
+
+    async with uow:
+        assert await uow.enrollments.find_by_user(organizador) == []

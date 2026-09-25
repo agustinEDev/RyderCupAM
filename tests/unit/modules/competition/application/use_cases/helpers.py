@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -29,6 +30,20 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 
 
+class UsuariosConGenero:
+    """Todos con género, salvo los que se digan (#710: crear exige el del organizador)."""
+
+    def __init__(self, sin_genero=()):
+        self._sin_genero = set(sin_genero)
+
+    async def find_by_id(self, user_id):
+        genero = None if user_id in self._sin_genero else Gender.MALE
+        return SimpleNamespace(id=user_id, gender=genero)
+
+
+USUARIOS_CON_GENERO = UsuariosConGenero()
+
+
 async def create_competition(
     uow: InMemoryUnitOfWork, creator_id: UserId, enrollment_opens_days_before: int | None = None
 ):
@@ -37,7 +52,7 @@ async def create_competition(
     Sin días de apertura nace con las inscripciones abiertas (BE #332). Con
     ellos espera en DRAFT, que es la única forma de tener hoy un borrador.
     """
-    create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+    create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO)
     request = CreateCompetitionRequestDTO(
         name="Test Cup",
         start_date=date(2026, 6, 1),

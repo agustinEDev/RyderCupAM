@@ -1,6 +1,7 @@
 """Tests para RespondToInvitationUseCase."""
 
 from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -15,6 +16,7 @@ from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
@@ -38,6 +40,11 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from src.shared.domain.value_objects.gender import Gender
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
+    set_competition_status,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -54,20 +61,28 @@ class TestRespondToInvitationUseCase:
         return UserInMemoryUoW()
 
     async def _create_user(
-        self, user_uow, email="user@test.com", first_name="Test", last_name="User"
+        self,
+        user_uow,
+        email="user@test.com",
+        first_name="Test",
+        last_name="User",
+        gender=Gender.MALE,
     ):
         user = User.create(
             first_name=first_name,
             last_name=last_name,
             email_str=email,
             plain_password="SecureP@ssw0rd123",
+            gender=gender,
         )
         async with user_uow:
             await user_uow.users.save(user)
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id, max_players=24):
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),
@@ -123,6 +138,144 @@ class TestRespondToInvitationUseCase:
         assert result.enrollment_id is not None
         assert result.inviter_name == "Creator Boss"
         assert result.invitee_name == "Invitee Player"
+
+    # ==================== Con la inscripción cerrada (#710, 24 sep) ====================
+
+    async def _pendiente_en_una_cerrada(self, comp_uow, user_uow):
+        """Una invitación de antes del cambio, que se quedó pendiente al cerrar."""
+        creator = await self._create_user(user_uow, email="c@test.com")
+        invitee = await self._create_user(user_uow, email="i@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "i@test.com"
+        )
+        await set_competition_status(comp_uow, created.id, "CLOSED")
+        return invitation, invitee
+
+    async def test_i6_aceptarla_cerrada_la_deja_sin_plaza(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(InvalidInvitationStatusViolation, match="plazas"):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+            inscripcion = await comp_uow.enrollments.find_by_user_and_competition(
+                invitee.id, invitation.competition_id
+            )
+        assert guardada.status == InvitationStatus.NO_ROOM
+        assert inscripcion is None
+
+    async def test_i6b_otro_usuario_no_la_deja_sin_plaza(self, comp_uow, user_uow):
+        """Solo el invitado responde: con el id de otra no se le cambia el estado."""
+        invitation, _ = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        intruso = await self._create_user(user_uow, email="x@test.com")
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(NotInviteeError):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=intruso.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+        assert guardada.status == InvitationStatus.PENDING
+
+    async def test_i6c_una_ya_sin_plaza_lo_dice_en_su_idioma(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+        pedir = RespondInvitationRequestDTO(
+            invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+        )
+        with pytest.raises(InvalidInvitationStatusViolation):
+            await uc.execute(pedir)
+
+        # La segunda vez ya está NO_ROOM: el mismo motivo, no «Invitation is in status…»
+        with pytest.raises(InvalidInvitationStatusViolation, match="No quedan plazas"):
+            await uc.execute(pedir)
+
+    async def test_aceptar_bloquea_la_fila_de_la_competicion(self, comp_uow, user_uow):
+        """Contra el cierre a la vez (CodeRabbit en la #380): con la fila
+        bloqueada, uno espera al otro y lee el estado de verdad."""
+        creator = await self._create_user(user_uow, email="lc@test.com")
+        invitee = await self._create_user(user_uow, email="li@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "li@test.com"
+        )
+        comp_uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=comp_uow.competitions.find_by_id_for_update
+        )
+
+        await RespondToInvitationUseCase(comp_uow, user_uow).execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+            )
+        )
+
+        comp_uow.competitions.find_by_id_for_update.assert_awaited()
+
+    async def test_i7_rechazarla_cerrada_sigue_valiendo(self, comp_uow, user_uow):
+        invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        result = await uc.execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="DECLINE"
+            )
+        )
+
+        assert result.status == "DECLINED"
+
+    # ==================== El género es obligatorio para apuntarse (#710) ====================
+
+    async def _invitado_sin_genero(self, comp_uow, user_uow):
+        creator = await self._create_user(user_uow, email="c2@test.com")
+        invitee = await self._create_user(user_uow, email="sg@test.com", gender=None)
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "sg@test.com"
+        )
+        return invitation, invitee
+
+    async def test_g4_sin_genero_no_se_acepta_y_la_invitacion_sigue_ahi(self, comp_uow, user_uow):
+        invitation, invitee = await self._invitado_sin_genero(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(GenderRequiredError, match="tu género en tu perfil"):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            guardada = await comp_uow.invitations.find_by_id(invitation.id)
+            inscripcion = await comp_uow.enrollments.find_by_user_and_competition(
+                invitee.id, invitation.competition_id
+            )
+        # Pendiente: la acepta en cuanto rellene su perfil
+        assert guardada.status == InvitationStatus.PENDING
+        assert inscripcion is None
+
+    async def test_g5_sin_genero_se_puede_rechazar(self, comp_uow, user_uow):
+        invitation, invitee = await self._invitado_sin_genero(comp_uow, user_uow)
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        result = await uc.execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="DECLINE"
+            )
+        )
+
+        assert result.status == "DECLINED"
 
     async def test_decline_invitation_successfully(self, comp_uow, user_uow):
         """Happy path: rechazar invitacion."""

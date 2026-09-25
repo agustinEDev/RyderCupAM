@@ -46,6 +46,11 @@ MAX_COMPETITION_DURATION_DAYS = 365
 MAX_INVITATIONS_PER_HOUR = 100
 
 
+# Cerrada la inscripcion ya no quedan plazas: ni se invita ni se acepta (#710)
+INSCRIPCION_CERRADA = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
+SIN_PLAZAS = "No quedan plazas en esta competición: la inscripción está cerrada"
+
+
 class CompetitionPolicy:
     """
     Domain service con reglas de negocio para competiciones.
@@ -180,7 +185,10 @@ class CompetitionPolicy:
         """
         Valida si el estado de la competicion permite enviar invitaciones.
 
-        Allowed: DRAFT, ACTIVE, CLOSED, IN_PROGRESS.
+        Allowed: DRAFT, ACTIVE.
+
+        CLOSED e IN_PROGRESS no desde el 24 sep (#710): cerrada la inscripcion
+        no quedan plazas, y una invitacion enviada ahi nadie podria aceptarla.
 
         DRAFT entra desde BE #319: invitar a la primera persona ES abrir el
         torneo, y quien invita no tiene por que pasar antes por un boton cuyo
@@ -193,16 +201,16 @@ class CompetitionPolicy:
         Raises:
             InvitationCompetitionStatusViolation: Si el estado no permite invitaciones
         """
+        if competition_status in INSCRIPCION_CERRADA:
+            raise InvitationCompetitionStatusViolation(SIN_PLAZAS)
         allowed = {
             CompetitionStatus.DRAFT,
             CompetitionStatus.ACTIVE,
-            CompetitionStatus.CLOSED,
-            CompetitionStatus.IN_PROGRESS,
         }
         if competition_status not in allowed:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Invitations only allowed in DRAFT, ACTIVE, CLOSED, or IN_PROGRESS status."
+                "Invitations only allowed in DRAFT or ACTIVE status."
             )
 
     @staticmethod
@@ -232,7 +240,10 @@ class CompetitionPolicy:
         """
         Valida si el estado de la competicion permite aceptar invitaciones.
 
-        Allowed: ACTIVE, CLOSED, IN_PROGRESS.
+        Allowed: ACTIVE.
+
+        Cerrada o en juego, no (decidido el 24 sep, #710): con los equipos
+        hechos, entrar descuadraba los partidos.
 
         Args:
             competition_status: Estado actual de la competicion
@@ -240,15 +251,12 @@ class CompetitionPolicy:
         Raises:
             InvitationCompetitionStatusViolation: Si el estado no permite aceptar
         """
-        allowed = {
-            CompetitionStatus.ACTIVE,
-            CompetitionStatus.CLOSED,
-            CompetitionStatus.IN_PROGRESS,
-        }
-        if competition_status not in allowed:
+        if competition_status in INSCRIPCION_CERRADA:
+            raise InvitationCompetitionStatusViolation(SIN_PLAZAS)
+        if competition_status != CompetitionStatus.ACTIVE:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Accepting invitations only allowed in ACTIVE, CLOSED, or IN_PROGRESS status."
+                "Accepting invitations only allowed in ACTIVE status."
             )
 
     @staticmethod

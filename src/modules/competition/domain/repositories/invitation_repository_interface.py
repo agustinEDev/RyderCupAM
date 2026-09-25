@@ -71,6 +71,11 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
+        """TODAS las invitaciones PENDING de una competicion, sin paginar (#710)."""
+        pass
+
+    @abstractmethod
     async def find_pending_by_email_and_competition(
         self, email: str, competition_id: CompetitionId
     ) -> Invitation | None:

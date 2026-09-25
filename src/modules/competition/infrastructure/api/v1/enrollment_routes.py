@@ -64,6 +64,7 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError as HandleNotCreatorError,
     NotCreatorError as RemoveHandicapNotCreatorError,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
     NotOwnerError as CancelNotOwnerError,
@@ -271,6 +272,7 @@ async def request_enrollment(
         CompetitionFullError,
         EnrollmentClosedError,
         TooManyEnrollmentsError,
+        GenderRequiredError,
     ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CompetitionIsPrivateError as e:
@@ -317,7 +319,7 @@ async def direct_enroll_player(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except DirectNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except DirectCompetitionNotActiveError as e:
+    except (DirectCompetitionNotActiveError, GenderRequiredError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
@@ -395,7 +397,7 @@ async def approve_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (EnrollmentStateError, CompetitionFullError) as e:
+    except (EnrollmentStateError, CompetitionFullError, GenderRequiredError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 

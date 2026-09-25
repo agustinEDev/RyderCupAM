@@ -345,6 +345,26 @@ class TestInvitationAccept:
             invitation.accept()
 
 
+class TestInvitationNoRoom:
+    """Al cerrar la inscripción las pendientes se rechazan por falta de plazas (#710)."""
+
+    def test_i1_una_pendiente_se_queda_sin_plaza(self):
+        invitation = _make_invitation()
+
+        invitation.reject_for_no_room()
+
+        assert invitation.status == InvitationStatus.NO_ROOM
+        assert invitation.responded_at is not None
+
+    def test_i2_una_ya_aceptada_no_se_toca(self):
+        invitation = _make_invitation()
+        invitation.accept()
+
+        with pytest.raises(InvalidInvitationStatusViolation):
+            invitation.reject_for_no_room()
+        assert invitation.status == InvitationStatus.ACCEPTED
+
+
 class TestInvitationDecline:
     """Tests para el metodo decline()."""
 

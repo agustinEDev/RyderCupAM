@@ -24,6 +24,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,7 +54,9 @@ class TestListMyInvitationsUseCase:
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id, name="Test Cup"):
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name=name,
             start_date=date(2026, 6, 1),

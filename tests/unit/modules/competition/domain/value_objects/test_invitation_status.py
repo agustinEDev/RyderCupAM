@@ -20,8 +20,21 @@ class TestInvitationStatusValues:
     def test_expired_value(self):
         assert InvitationStatus.EXPIRED == "EXPIRED"
 
-    def test_has_four_states(self):
-        assert len(InvitationStatus) == 4
+    def test_has_five_states(self):
+        assert len(InvitationStatus) == 5
+
+    def test_no_room_value(self):
+        """Rechazada por falta de plazas al cerrar la inscripción (#710, 24 sep)."""
+        assert InvitationStatus.NO_ROOM == "NO_ROOM"
+
+    def test_no_room_is_final(self):
+        assert InvitationStatus.NO_ROOM.is_final()
+
+    def test_pending_can_transition_to_no_room(self):
+        assert InvitationStatus.PENDING.can_transition_to(InvitationStatus.NO_ROOM)
+
+    def test_accepted_cannot_transition_to_no_room(self):
+        assert not InvitationStatus.ACCEPTED.can_transition_to(InvitationStatus.NO_ROOM)
 
 
 class TestInvitationStatusTransitions:

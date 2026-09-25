@@ -14,6 +14,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    sin_plaza_para_las_pendientes,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -87,10 +90,14 @@ class NameCaptainsUseCase:
                 )
             }
             reparto = await self._uow.team_assignments.find_by_competition(competition_id)
+            estaba = competition.status
             competition.name_captains(
                 team_a, team_b, approved_player_ids=aprobados, has_teams=reparto is not None
             )
             await self._uow.competitions.update(competition)
+            # Nombrarlos cierra la inscripción: las pendientes, sin plaza (#710)
+            if estaba != competition.status:
+                await sin_plaza_para_las_pendientes(self._uow, competition_id)
 
         return NameCaptainsResponseDTO(
             id=competition.id.value,

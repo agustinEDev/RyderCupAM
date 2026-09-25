@@ -24,11 +24,12 @@ class TestCanSendInvitation:
     def test_active_allows_send(self):
         CompetitionPolicy.can_send_invitation(CompetitionStatus.ACTIVE)
 
-    def test_closed_allows_send(self):
-        CompetitionPolicy.can_send_invitation(CompetitionStatus.CLOSED)
-
-    def test_in_progress_allows_send(self):
-        CompetitionPolicy.can_send_invitation(CompetitionStatus.IN_PROGRESS)
+    # I4 (#710, 24 sep): cerrada, no queda plaza. Una invitación enviada ahí
+    # nadie podría aceptarla
+    @pytest.mark.parametrize("status", [CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS])
+    def test_closed_or_in_progress_does_not_send(self, status):
+        with pytest.raises(InvitationCompetitionStatusViolation, match="plazas"):
+            CompetitionPolicy.can_send_invitation(status)
 
     def test_draft_allows_send(self):
         """BE #319: invitar a la primera persona es lo que abre el torneo."""
@@ -70,11 +71,11 @@ class TestCanAcceptInvitation:
     def test_active_allows_accept(self):
         CompetitionPolicy.can_accept_invitation(CompetitionStatus.ACTIVE)
 
-    def test_closed_allows_accept(self):
-        CompetitionPolicy.can_accept_invitation(CompetitionStatus.CLOSED)
-
-    def test_in_progress_allows_accept(self):
-        CompetitionPolicy.can_accept_invitation(CompetitionStatus.IN_PROGRESS)
+    # I3 (#710, 24 sep): con los equipos hechos, entrar descuadra los partidos
+    @pytest.mark.parametrize("status", [CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS])
+    def test_closed_or_in_progress_does_not_accept(self, status):
+        with pytest.raises(InvitationCompetitionStatusViolation, match="plazas"):
+            CompetitionPolicy.can_accept_invitation(status)
 
     def test_draft_raises(self):
         with pytest.raises(InvitationCompetitionStatusViolation, match="DRAFT"):

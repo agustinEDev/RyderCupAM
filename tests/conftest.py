@@ -473,12 +473,14 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
         }
     )
 
-    # Registrar un usuario
+    # Registrar un usuario. Con género: sin él no puede crear ni apuntarse a
+    # ninguna competición (#710)
     user_data = {
         "email": "testuser@example.com",
         "password": "TestPass123!",
         "first_name": "Test",
         "last_name": "User",
+        "gender": "MALE",
     }
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
@@ -501,7 +503,12 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
 
 
 async def create_authenticated_user(
-    client: AsyncClient, email: str, password: str, first_name: str, last_name: str
+    client: AsyncClient,
+    email: str,
+    password: str,
+    first_name: str,
+    last_name: str,
+    gender: str | None = "MALE",
 ) -> dict:
     """
     Helper para crear un usuario y obtener sus cookies de autenticación.
@@ -515,6 +522,8 @@ async def create_authenticated_user(
         password: Contraseña del usuario
         first_name: Nombre
         last_name: Apellido
+        gender: Con género por defecto: sin él no se puede apuntar a ninguna
+            competición (#710). None para probar a quien no lo tiene
 
     Returns:
         Dict con 'cookies', 'token' (legacy), 'user'
@@ -526,6 +535,8 @@ async def create_authenticated_user(
         "first_name": first_name,
         "last_name": last_name,
     }
+    if gender is not None:
+        user_data["gender"] = gender
 
     register_response = await client.post(
         "/api/v1/auth/register",

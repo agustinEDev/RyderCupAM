@@ -32,6 +32,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -42,7 +43,9 @@ class TestWhatAStrangerSees:
         return InMemoryUnitOfWork()
 
     async def _crear(self, uow, creator_id, nombre, visibility):
-        create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         return await create_uc.execute(
             CreateCompetitionRequestDTO(
                 name=nombre,
