@@ -93,6 +93,9 @@ from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E40
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
 )
+from src.shared.infrastructure.http.unhandled_error_middleware import (  # noqa: E402
+    UnhandledErrorMiddleware,
+)
 from src.shared.infrastructure.middleware.csrf_middleware import (  # noqa: E402
     CSRFMiddleware,
 )
@@ -295,6 +298,13 @@ async def limit_avatar_upload_content_length(request: Request, call_next):
 # Exime GET, HEAD, OPTIONS, rutas públicas (/health, /docs)
 # Se registra ANTES de CORS para que CORS envuelva CSRF en ejecución
 app.add_middleware(CSRFMiddleware)
+
+# ================================
+# ERRORES NO CONTROLADOS (FE #710)
+# ================================
+# Registrado ANTES de CORS → se ejecuta DENTRO de él: un 500 lleva sus
+# cabeceras y el navegador lo lee como 500, no como «Failed to fetch»
+app.add_middleware(UnhandledErrorMiddleware)
 
 # ================================
 # CORS MIDDLEWARE (v1.8.0)
