@@ -34,6 +34,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # En el orden del día, para nombrarlas como se juegan
 _ORDEN_DE_FRANJA = {SessionType.MORNING: 0, SessionType.AFTERNOON: 1, SessionType.EVENING: 2}
 
+
 class CompetitionNotEditableError(Exception):
     """Excepción lanzada cuando la competición no está en estado DRAFT."""
 
