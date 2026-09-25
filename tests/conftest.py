@@ -1059,3 +1059,33 @@ async def create_admin_user(
     admin_data["cookies"] = dict(login_response.cookies)
 
     return admin_data
+
+
+async def add_one_session(client: AsyncClient, cookies: dict, competition: dict) -> dict:
+    """Una sesión en la competición: sin ninguna no se puede iniciar (#710, 25 sep).
+
+    Un campo aprobado, añadido a la competición, y una sesión el día de inicio.
+    Devuelve la sesión creada.
+    """
+    admin = await create_admin_user(
+        client, f"admin-{uuid.uuid4()}@test.com", "P@ssw0rd123!", "Admin", "Sesion"
+    )
+    campo = await create_golf_course(client, cookies)
+    await approve_golf_course(client, admin["cookies"], campo["id"])
+    set_auth_cookies(client, cookies)
+    anadido = await client.post(
+        f"/api/v1/competitions/{competition['id']}/golf-courses",
+        json={"golf_course_id": campo["id"]},
+    )
+    assert anadido.status_code == 201, anadido.text
+    sesion = await client.post(
+        f"/api/v1/competitions/{competition['id']}/rounds",
+        json={
+            "golf_course_id": campo["id"],
+            "round_date": competition["start_date"],
+            "session_type": "MORNING",
+            "match_format": "SINGLES",
+        },
+    )
+    assert sesion.status_code == 201, sesion.text
+    return sesion.json()
