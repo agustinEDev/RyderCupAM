@@ -10,6 +10,10 @@ from src.modules.competition.application.exceptions import (
     NotInviteeError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.nombre_de_quien_invita import (
+    nombre_de_quien_invita,
+    quieren_su_nombre_legal,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
@@ -182,12 +186,18 @@ class RespondToInvitationUseCase:
         self, invitation, enrollment_id, competition_name=None
     ) -> RespondInvitationResponseDTO:
         """Construye el DTO de respuesta enriquecido con nombres."""
+        # El mismo nombre que la lista sobre la que se pinta: con uno distinto,
+        # aceptar una invitación cambiaba el nombre en la pantalla (BE #239,
+        # #710). El que usa quien invita en ESA competición
+        async with self._uow:
+            legal = bool(
+                await quieren_su_nombre_legal(
+                    self._uow, [(invitation.competition_id, invitation.inviter_id)]
+                )
+            )
         async with self._user_uow:
-            # `display_name` (BE #239): esta respuesta se pinta encima de la
-            # lista que ya enseñaba el alias. Con el nombre legal aqui, aceptar
-            # una invitacion de «Chuchi» cambiaba el nombre en la pantalla
             inviter_user = await self._user_uow.users.find_by_id(invitation.inviter_id)
-            inviter_name = inviter_user.display_name if inviter_user else "Unknown"
+            inviter_name = nombre_de_quien_invita(inviter_user, legal)
 
             invitee_name = None
             if invitation.invitee_user_id:

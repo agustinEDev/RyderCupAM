@@ -484,6 +484,35 @@ class TestSendInvitationByEmailUseCase:
         assert result.status == "PENDING"
         assert result.invitee_email == "someone@test.com"
 
+    async def test_the_email_keeps_the_alias_he_chose_for_this_competition(
+        self, comp_uow, user_uow
+    ):
+        creator = await self._create_user(
+            user_uow, email="ce_elige@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        created = await self._create_active_competition(comp_uow, creator.id)
+        async with comp_uow:
+            suya = await comp_uow.enrollments.find_by_user_and_competition(
+                creator.id, CompetitionId(created.id)
+            )
+            suya.set_name_preference(use_real_name=False)
+            await comp_uow.enrollments.update(suya)
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(return_value=True)
+
+        await SendInvitationByEmailUseCase(comp_uow, user_uow, email_service=mock_email).execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_email="otro@test.com",
+            )
+        )
+
+        assert mock_email.send_invitation_email.call_args[1]["inviter_name"] == "Trinx"
+
     async def test_the_email_names_the_inviter_as_in_this_competition(self, comp_uow, user_uow):
         """Con alias pero sin pedirlo aquí: su nombre legal en el correo (#710)."""
         creator = await self._create_user(
