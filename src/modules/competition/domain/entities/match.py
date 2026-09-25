@@ -442,6 +442,18 @@ class Match:
         return self._is_decided
 
     @property
+    def closing_result(self) -> dict | None:
+        """El resultado de un partido cerrado sin jugarlo hasta el final.
+
+        Concedido o ganado por walkover, ese resultado —quien gana y por que—
+        manda sobre el de los hoyos: si A iba ganando y concede, gana B (BE #384).
+        Jugado hasta el final o todavia en juego, None: manda lo de los hoyos.
+        """
+        if self._status in (MatchStatus.CONCEDED, MatchStatus.WALKOVER):
+            return self._result
+        return None
+
+    @property
     def decided_result(self) -> dict | None:
         return self._decided_result
 

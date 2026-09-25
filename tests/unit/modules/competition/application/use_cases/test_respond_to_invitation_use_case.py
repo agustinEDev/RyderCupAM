@@ -26,6 +26,7 @@ from src.modules.competition.application.use_cases.respond_to_invitation_use_cas
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
+    InvitationNoRoomViolation,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -156,7 +157,8 @@ class TestRespondToInvitationUseCase:
         invitation, invitee = await self._pendiente_en_una_cerrada(comp_uow, user_uow)
         uc = RespondToInvitationUseCase(comp_uow, user_uow)
 
-        with pytest.raises(InvalidInvitationStatusViolation, match="plazas"):
+        # Con su propia excepcion, que la ruta contesta con su codigo (BE #385)
+        with pytest.raises(InvitationNoRoomViolation):
             await uc.execute(
                 RespondInvitationRequestDTO(
                     invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
@@ -197,9 +199,42 @@ class TestRespondToInvitationUseCase:
         with pytest.raises(InvalidInvitationStatusViolation):
             await uc.execute(pedir)
 
-        # La segunda vez ya está NO_ROOM: el mismo motivo, no «Invitation is in status…»
-        with pytest.raises(InvalidInvitationStatusViolation, match="No quedan plazas"):
+        # La segunda vez ya está NO_ROOM: el mismo motivo, no «Invitation is in status…»,
+        # y cierto aunque se reabra (BE #385)
+        with pytest.raises(InvitationNoRoomViolation, match="se quedó sin plaza"):
             await uc.execute(pedir)
+
+    async def test_i6d_si_la_cierran_entre_medias_tambien_dice_sin_plaza(self, comp_uow, user_uow):
+        """La carrera con el cierre (revision local de la BE #385): entre la
+        primera lectura y la de la fase 2 el cierre la deja sin plaza, y salia
+        el generico «no longer pending», sin su codigo."""
+        creator = await self._create_user(user_uow, email="c@test.com")
+        invitee = await self._create_user(user_uow, email="i@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "i@test.com"
+        )
+        leer = comp_uow.invitations.find_by_id
+        lecturas = 0
+
+        async def el_cierre_llega_entre_medias(invitation_id):
+            nonlocal lecturas
+            lecturas += 1
+            leida = await leer(invitation_id)
+            if lecturas == 2:
+                leida.reject_for_no_room()
+            return leida
+
+        comp_uow.invitations.find_by_id = el_cierre_llega_entre_medias
+        uc = RespondToInvitationUseCase(comp_uow, user_uow)
+
+        with pytest.raises(InvitationNoRoomViolation):
+            await uc.execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+                )
+            )
+        assert lecturas == 2
 
     async def test_aceptar_bloquea_la_fila_de_la_competicion(self, comp_uow, user_uow):
         """Contra el cierre a la vez (CodeRabbit en la #380): con la fila

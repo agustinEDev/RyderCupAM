@@ -189,3 +189,24 @@ class TestLeaderboardRespectsNamePreference:
             for p in (*m.team_a_players, *m.team_b_players)
         }
         assert user_names[str(player_a.user_id)] == "Nombre Legal"
+
+
+class TestLeaderboardConcededMatch:
+    """BE #384, el gemelo de la vista de anotacion: la clasificacion sacaba el
+    ganador de un partido concedido de los hoyos, y los puntos de la concesion.
+    Si A iba ganando y concedia, decia «gana A» con el punto para B."""
+
+    @pytest.mark.asyncio
+    async def test_manda_la_concesion_y_no_los_hoyos(self, uow, user_repo):
+        competition_id, _a, _b = await _setup_scheduled_match(uow)
+        match = next(iter(uow._matches._matches.values()))
+        match.start()
+        match.mark_decided({"winner": "A", "score": "4&2"})
+        match.concede("A")
+        uc = GetLeaderboardUseCase(uow, user_repo, ScoringService())
+
+        view = await uc.execute(str(competition_id))
+
+        resultado = view.matches[0].result
+        assert (resultado.winner, resultado.score) == ("B", "CONCEDED")
+        assert (view.team_a_points, view.team_b_points) == (0.0, 1.0)

@@ -104,9 +104,19 @@ class GetScoringViewUseCase:
             scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
 
             standing = self._scoring_service.calculate_match_standing(hole_results_list)
-            decided_result = (
-                DecidedResultDTO(**match.decided_result) if match.decided_result else None
-            )
+            # Un partido concedido o ganado por walkover tambien esta decidido, y
+            # la pantalla tiene que saber quien gano: ese resultado lo guarda la
+            # concesion o el walkover, no `decided_result`, que es el de los
+            # hoyos (BE #384)
+            cerrado_sin_jugar = match.closing_result
+            if cerrado_sin_jugar is not None:
+                decided_result = DecidedResultDTO(
+                    winner=cerrado_sin_jugar["winner"], score=cerrado_sin_jugar["score"]
+                )
+            elif match.decided_result:
+                decided_result = DecidedResultDTO(**match.decided_result)
+            else:
+                decided_result = None
             team_a_name = (
                 competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
             )
@@ -119,7 +129,7 @@ class GetScoringViewUseCase:
                 match_number=match.match_number,
                 match_format=round_entity.match_format.value if round_entity.match_format else "",
                 match_status=match.status.value,
-                is_decided=match.is_decided,
+                is_decided=match.is_decided or cerrado_sin_jugar is not None,
                 decided_result=decided_result,
                 round_info=round_info,
                 competition_id=str(competition.id),

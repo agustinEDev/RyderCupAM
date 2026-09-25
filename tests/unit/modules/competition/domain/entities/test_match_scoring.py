@@ -268,3 +268,31 @@ class TestUnaTarjetaPorBandoEnFoursomes:
 
         assert set(entregadas) == {a1.user_id, a2.user_id}
         assert set(match.scorecards_submitted_by(MatchFormat.FOURBALL)) == {a1.user_id}
+
+
+class TestClosingResult:
+    """El resultado de un partido cerrado sin jugarlo hasta el final (BE #384).
+
+    Lo leen la vista de anotacion y la clasificacion: en uno concedido o ganado
+    por walkover manda ese resultado, no el de los hoyos.
+    """
+
+    def test_concedido(self):
+        match = _create_match(status=MatchStatus.IN_PROGRESS)
+        match.concede("A")
+        assert match.closing_result == {"winner": "B", "score": "CONCEDED", "reason": None}
+
+    def test_walkover(self):
+        match = _create_match(status=MatchStatus.IN_PROGRESS)
+        match.declare_walkover("A")
+        assert match.closing_result["winner"] == "A"
+        assert match.closing_result["score"] == "W/O"
+
+    def test_jugado_hasta_el_final_no_tiene(self):
+        match = _create_match(status=MatchStatus.IN_PROGRESS)
+        match.complete({"winner": "A", "score": "2&1"})
+        assert match.closing_result is None
+
+    def test_en_juego_no_tiene(self):
+        match = _create_match(status=MatchStatus.IN_PROGRESS)
+        assert match.closing_result is None

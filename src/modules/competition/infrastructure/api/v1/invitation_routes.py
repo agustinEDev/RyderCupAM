@@ -8,6 +8,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from src.config.dependencies import (
@@ -55,6 +56,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationCompetitionStatusViolation,
     InvitationExpiredViolation,
+    InvitationNoRoomViolation,
     InvitationRateLimitViolation,
     SelfInvitationViolation,
 )
@@ -235,6 +237,13 @@ async def respond_to_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotInviteeError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except InvitationNoRoomViolation as e:
+        # Con su codigo en la raiz, para que la pantalla lo diga en su idioma
+        # (claves siempre, #360; BE #385)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(e), "error_code": e.error_code},
+        )
     except InvalidInvitationStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationExpiredViolation as e:

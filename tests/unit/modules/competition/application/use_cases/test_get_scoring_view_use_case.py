@@ -314,3 +314,78 @@ class TestLaTarjetaDelBandoEnLaPantalla:
         view = await uc.execute(str(parejas.id))
 
         assert set(view.scorecard_submitted_by) == {str(yellow.user_id), str(companero.user_id)}
+
+
+class TestElPartidoConcedido:
+    """BE #384: la vista de un partido concedido dice quien gano.
+
+    Tras conceder, la pantalla seguia en «Empate · 0 hoyos» con la anotacion
+    abierta: la vista mandaba CONCEDED sin ganador, y el resultado —que el
+    partido si guarda— solo lo leia la clasificacion.
+
+        #   caso                                  | que dice la vista
+        ----|-------------------------------------|---------------------------------
+        C1  concede el equipo A                   | decidido, gana B, CONCEDED
+        C2  concede el equipo B                   | decidido, gana A, CONCEDED
+        C3  en juego y sin decidir                | como siempre: sin resultado
+        C4  decidido por los hoyos                | como siempre: su resultado
+        C5  walkover (el gemelo)                  | decidido, gana quien toca, W/O
+        C6  terminado en empate                   | como siempre, sin inventar ganador
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("concede", "gana"), [("A", "B"), ("B", "A")])
+    async def test_c1_c2_concedido_dice_quien_gana(self, uow, user_repo, concede, gana):
+        match, _yellow, _red, gc_repo = await _setup(uow, _course_two_tees())
+        match.concede(concede, reason="lesion")
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.match_status == "CONCEDED"
+        assert view.is_decided is True
+        assert view.decided_result is not None
+        assert (view.decided_result.winner, view.decided_result.score) == (gana, "CONCEDED")
+
+    @pytest.mark.asyncio
+    async def test_c3_en_juego_sin_decidir_no_trae_resultado(self, uow, user_repo):
+        match, _yellow, _red, gc_repo = await _setup(uow, _course_two_tees())
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.is_decided is False
+        assert view.decided_result is None
+
+    @pytest.mark.asyncio
+    async def test_c4_decidido_por_los_hoyos_trae_el_suyo(self, uow, user_repo):
+        match, _yellow, _red, gc_repo = await _setup(uow, _course_two_tees())
+        match.mark_decided({"winner": "A", "score": "4&2"})
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.is_decided is True
+        assert (view.decided_result.winner, view.decided_result.score) == ("A", "4&2")
+
+    @pytest.mark.asyncio
+    async def test_c5_walkover_dice_quien_gana(self, uow, user_repo):
+        match, _yellow, _red, gc_repo = await _setup(uow, _course_two_tees())
+        match.declare_walkover("B", reason="no se presento")
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.is_decided is True
+        assert (view.decided_result.winner, view.decided_result.score) == ("B", "W/O")
+
+    @pytest.mark.asyncio
+    async def test_c6_terminado_en_empate_sigue_como_estaba(self, uow, user_repo):
+        match, _yellow, _red, gc_repo = await _setup(uow, _course_two_tees())
+        match.complete({"winner": None, "score": "AS"})
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.is_decided is False
+        assert view.decided_result is None

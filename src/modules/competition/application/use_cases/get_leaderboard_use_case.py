@@ -151,6 +151,10 @@ class GetLeaderboardUseCase:
 
     async def _resolve_final_result(self, match, round_entity) -> dict:
         """Determines the final result for a finished match."""
+        # Concedido o walkover: manda ese resultado, no el de los hoyos, igual
+        # que en la vista de anotacion (BE #384)
+        if match.closing_result is not None:
+            return match.closing_result
         if match.is_decided and match.decided_result:
             return match.decided_result
         if round_entity.match_format is not None:
