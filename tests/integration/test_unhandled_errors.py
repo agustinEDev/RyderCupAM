@@ -49,6 +49,8 @@ async def test_u1_el_500_lleva_las_cabeceras_cors(cliente):
     assert respuesta.status_code == 500
     assert respuesta.headers.get("access-control-allow-origin") == ORIGEN
     assert respuesta.json()["error_code"] == "INTERNAL_ERROR"
+    # Y su id de correlación, para cruzarlo con el evento de Sentry (CodeRabbit)
+    assert respuesta.headers.get("x-correlation-id")
 
 
 async def test_u2_no_cuenta_el_detalle_interno(cliente):
