@@ -277,6 +277,30 @@ class TestRespondToInvitationUseCase:
 
         assert result.status == "DECLINED"
 
+    async def test_the_response_names_the_inviter_as_in_this_competition(
+        self, comp_uow, user_uow
+    ):
+        """La misma invitación que «Mis invitaciones»: el mismo nombre (#710)."""
+        creator = await self._create_user(
+            user_uow, email="rc@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        invitee = await self._create_user(user_uow, email="ri@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "ri@test.com"
+        )
+
+        result = await RespondToInvitationUseCase(comp_uow, user_uow).execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitation.id.value, user_id=invitee.id.value, action="DECLINE"
+            )
+        )
+
+        assert result.inviter_name == "Agustin Estevez"
+
     async def test_decline_invitation_successfully(self, comp_uow, user_uow):
         """Happy path: rechazar invitacion."""
         creator = await self._create_user(user_uow, email="creator@test.com")

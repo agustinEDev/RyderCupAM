@@ -4,6 +4,10 @@ from src.modules.competition.application.dto.invitation_dto import (
     InvitationResponseDTO,
     PaginatedInvitationResponseDTO,
 )
+from src.modules.competition.application.services.nombre_de_quien_invita import (
+    nombre_de_quien_invita,
+    quieren_su_nombre_legal,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -88,6 +92,11 @@ class ListMyInvitationsUseCase:
             # Paginar desde la lista deduplicada
             paginated = all_invitations[offset : offset + limit]
 
+            # El nombre que cada uno usa en SU competición (#710)
+            legales = await quieren_su_nombre_legal(
+                self._uow, [(inv.competition_id, inv.inviter_id) for inv in paginated]
+            )
+
             # Resolver competition_names dentro del comp UoW
             for inv in paginated:
                 comp_id_str = str(inv.competition_id.value)
@@ -101,10 +110,12 @@ class ListMyInvitationsUseCase:
         invitation_dtos = []
         async with self._user_uow:
             for inv in paginated:
-                # Los dos nombres se pintan en pantalla, asi que van con
-                # `display_name`: el alias de quien lo tenga (BE #239)
+                # Quien invita, como aparece en su competición (#710). Quien es
+                # invitado aún no está en ella: su nombre de siempre (BE #239)
                 inviter_user = await self._user_uow.users.find_by_id(inv.inviter_id)
-                inviter_name = inviter_user.display_name if inviter_user else "Unknown"
+                inviter_name = nombre_de_quien_invita(
+                    inviter_user, (inv.competition_id, inv.inviter_id) in legales
+                )
 
                 invitee_name = None
                 if inv.invitee_user_id:
