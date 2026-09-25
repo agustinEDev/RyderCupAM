@@ -9,6 +9,7 @@ que lo pintan: enviarla por usuario, por email, «Mis invitaciones» y la lista
 de la competición.
 """
 
+from collections import defaultdict
 from collections.abc import Iterable
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -26,11 +27,18 @@ async def quieren_su_nombre_legal(
     Se llama dentro de la transacción de la competición. Quien no está
     inscrito en ella no ha pedido nada: sale con su nombre de siempre.
     """
+    # Una consulta por competición y no por invitación: una página puede traer
+    # cien (CodeRabbit en la #381)
+    por_competicion: dict[CompetitionId, set[UserId]] = defaultdict(set)
+    for competition_id, inviter_id in pares:
+        por_competicion[competition_id].add(inviter_id)
     legales: set[tuple[CompetitionId, UserId]] = set()
-    for competition_id, inviter_id in set(pares):
-        inscripcion = await uow.enrollments.find_by_user_and_competition(inviter_id, competition_id)
-        if inscripcion is not None and inscripcion.use_real_name:
-            legales.add((competition_id, inviter_id))
+    for competition_id, invitan in por_competicion.items():
+        for inscripcion in await uow.enrollments.find_by_user_ids_and_competition(
+            list(invitan), competition_id
+        ):
+            if inscripcion.use_real_name:
+                legales.add((competition_id, inscripcion.user_id))
     return legales
 
 

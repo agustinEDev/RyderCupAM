@@ -9,6 +9,7 @@ El nombre de quien invita, como aparece en ESA competición (#710).
     Q4  ya no existe                                | «Unknown»
 """
 
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -73,3 +74,23 @@ async def test_q3_sin_inscripcion_sale_su_nombre_de_siempre():
 
 def test_q4_si_ya_no_existe_se_dice():
     assert nombre_de_quien_invita(None, True) == "Unknown"
+
+
+async def test_q5_una_consulta_por_competicion_no_por_invitacion():
+    """Una página de invitaciones puede traer 100: una consulta por cada una eran
+    100 viajes a la base de datos (CodeRabbit en la #381)."""
+    uow, competicion = InMemoryUnitOfWork(), CompetitionId(uuid4())
+    jugadores = [UserId(uuid4()) for _ in range(3)]
+    await _inscrito(uow, competicion, jugadores[0])
+    await _inscrito(uow, competicion, jugadores[1], alias_aqui=True)
+    lotes = AsyncMock(wraps=uow.enrollments.find_by_user_ids_and_competition)
+    uow.enrollments.find_by_user_ids_and_competition = lotes
+    uno_a_uno = AsyncMock(wraps=uow.enrollments.find_by_user_and_competition)
+    uow.enrollments.find_by_user_and_competition = uno_a_uno
+
+    async with uow:
+        legales = await quieren_su_nombre_legal(uow, [(competicion, j) for j in jugadores])
+
+    assert legales == {(competicion, jugadores[0])}
+    assert lotes.await_count == 1
+    uno_a_uno.assert_not_awaited()
