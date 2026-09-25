@@ -112,12 +112,10 @@ class GetScoringViewUseCase:
             # la pantalla tiene que saber quien gano: ese resultado lo guarda la
             # concesion o el walkover, no `decided_result`, que es el de los
             # hoyos (BE #384)
-            sin_jugar_hasta_el_final = (
-                match.status in _SIN_JUGAR_HASTA_EL_FINAL and match.result is not None
-            )
-            if sin_jugar_hasta_el_final:
+            cerrado_sin_jugar = match.result if match.status in _SIN_JUGAR_HASTA_EL_FINAL else None
+            if cerrado_sin_jugar is not None:
                 decided_result = DecidedResultDTO(
-                    winner=match.result["winner"], score=match.result["score"]
+                    winner=cerrado_sin_jugar["winner"], score=cerrado_sin_jugar["score"]
                 )
             elif match.decided_result:
                 decided_result = DecidedResultDTO(**match.decided_result)
@@ -135,7 +133,7 @@ class GetScoringViewUseCase:
                 match_number=match.match_number,
                 match_format=round_entity.match_format.value if round_entity.match_format else "",
                 match_status=match.status.value,
-                is_decided=match.is_decided or sin_jugar_hasta_el_final,
+                is_decided=match.is_decided or cerrado_sin_jugar is not None,
                 decided_result=decided_result,
                 round_info=round_info,
                 competition_id=str(competition.id),
