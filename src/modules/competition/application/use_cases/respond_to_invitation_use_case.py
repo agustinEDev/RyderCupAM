@@ -15,6 +15,7 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     quieren_su_nombre_legal,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationNoRoomViolation,
@@ -106,9 +107,7 @@ class RespondToInvitationUseCase:
 
         async with self._uow:
             # Re-fetch para tener la entidad en la sesion actual
-            invitation = await self._uow.invitations.find_by_id(invitation_id)
-            if not invitation or not invitation.is_pending():
-                raise InvalidInvitationStatusViolation("Invitation is no longer pending.")
+            invitation = await self._releer_pendiente(invitation_id)
 
             # Verificar current_user es invitee
             if not self._es_el_invitado(invitation, current_user_id, current_user_email):
@@ -124,6 +123,19 @@ class RespondToInvitationUseCase:
 
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
+
+    async def _releer_pendiente(self, invitation_id: InvitationId) -> Invitation:
+        """La invitacion de la fase 2, que tiene que seguir pendiente.
+
+        El cierre pudo llegar entre las dos fases y dejarla sin plaza: se dice
+        con su codigo, no con el generico (revision local de la BE #385).
+        """
+        invitation = await self._uow.invitations.find_by_id(invitation_id)
+        if invitation and invitation.status == InvitationStatus.NO_ROOM:
+            raise InvitationNoRoomViolation()
+        if not invitation or not invitation.is_pending():
+            raise InvalidInvitationStatusViolation("Invitation is no longer pending.")
+        return invitation
 
     @staticmethod
     def _es_el_invitado(invitation, user_id: UserId, email: str) -> bool:
