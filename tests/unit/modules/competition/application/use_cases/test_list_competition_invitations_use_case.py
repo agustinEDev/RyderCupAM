@@ -228,3 +228,21 @@ class TestListCompetitionInvitationsUseCase:
 
         assert result.invitations[0].inviter_name == "John Doe"
         assert result.invitations[0].competition_name == "Champions Cup"
+
+    async def test_the_inviter_is_shown_as_in_this_competition(self, comp_uow, user_uow):
+        """Con alias pero sin pedirlo aquí, su nombre legal (#710, BE #254)."""
+        creator = await self._create_user(
+            user_uow, email="alias@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        created = await self._create_active_competition(comp_uow, creator.id, name="Ryder")
+        await self._add_invitation(comp_uow, created.id, creator.id, "p@test.com")
+
+        result = await ListCompetitionInvitationsUseCase(comp_uow, user_uow).execute(
+            competition_id=str(created.id),
+            current_user_id=str(creator.id.value),
+        )
+
+        assert result.invitations[0].inviter_name == "Agustin Estevez"

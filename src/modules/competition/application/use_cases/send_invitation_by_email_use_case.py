@@ -14,6 +14,10 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
+from src.modules.competition.application.services.nombre_de_quien_invita import (
+    nombre_de_quien_invita,
+    quieren_su_nombre_legal,
+)
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     AlreadyEnrolledInvitationViolation,
@@ -136,12 +140,15 @@ class SendInvitationByEmailUseCase:
                 competition.activate()
                 await self._uow.competitions.update(competition)
 
+            # El nombre que usa en ESTA competición (#710), también en el correo
+            legal = bool(await quieren_su_nombre_legal(self._uow, [(competition_id, inviter_id)]))
+
         # 9. Retornar DTO enriquecido
         async with self._user_uow:
-            # `display_name` (BE #239), tambien en el correo: ver el comentario
-            # gemelo en send_invitation_by_user_id_use_case
+            # Como aparece en la competicion, tambien en el correo: ver el
+            # comentario gemelo en send_invitation_by_user_id_use_case
             inviter_user = await self._user_uow.users.find_by_id(inviter_id)
-            inviter_name = inviter_user.display_name if inviter_user else "Unknown"
+            inviter_name = nombre_de_quien_invita(inviter_user, legal)
 
         # 10. Enviar email de invitacion (fuera de la transaccion, no bloquea la creacion)
         if self._email_service:

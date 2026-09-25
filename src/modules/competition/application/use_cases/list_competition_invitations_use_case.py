@@ -8,6 +8,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.nombre_de_quien_invita import (
+    nombre_de_quien_invita,
+    quieren_su_nombre_legal,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -88,16 +92,22 @@ class ListCompetitionInvitationsUseCase:
 
             # 6. Guardar datos intermedios
             competition_name = str(competition.name)
+            # El nombre que usa en esta competición quien invita (#710)
+            legales = await quieren_su_nombre_legal(
+                self._uow, [(inv.competition_id, inv.inviter_id) for inv in invitations]
+            )
 
         # 7. Enriquecer con nombres en una sola sesion de usuario
         invitation_dtos = []
         async with self._user_uow:
             for inv in invitations:
-                # `display_name`, igual que en «Mis invitaciones» (BE #239):
-                # son el MISMO DTO y el mismo flujo, y con un nombre en cada
-                # sitio la misma persona salia de dos maneras
+                # Igual que en «Mis invitaciones»: son el MISMO DTO y el mismo
+                # flujo, y con un nombre en cada sitio la misma persona salia
+                # de dos maneras (BE #239, #710)
                 inviter_user = await self._user_uow.users.find_by_id(inv.inviter_id)
-                inviter_name = inviter_user.display_name if inviter_user else "Unknown"
+                inviter_name = nombre_de_quien_invita(
+                    inviter_user, (inv.competition_id, inv.inviter_id) in legales
+                )
 
                 invitee_name = None
                 if inv.invitee_user_id:

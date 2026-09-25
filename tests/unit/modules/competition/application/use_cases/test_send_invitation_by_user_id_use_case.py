@@ -276,6 +276,34 @@ class TestSendInvitationByUserIdUseCase:
         assert result.inviter_name == "Creator User"
         assert result.invitee_name == "Invitee Player"
 
+    async def test_the_email_names_the_inviter_as_in_this_competition(self, comp_uow, user_uow):
+        """Con alias pero sin pedirlo aquí: su nombre legal, también en el correo (#710)."""
+        creator = await self._create_user(
+            user_uow, email="c_alias@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        invitee = await self._create_user(
+            user_uow, email="i_alias@test.com", first_name="Invitee", last_name="Player"
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(return_value=True)
+
+        result = await SendInvitationByUserIdUseCase(
+            comp_uow, user_uow, email_service=mock_email
+        ).execute(
+            SendInvitationByUserIdRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_user_id=invitee.id.value,
+            )
+        )
+
+        assert result.inviter_name == "Agustin Estevez"
+        assert mock_email.send_invitation_email.call_args[1]["inviter_name"] == "Agustin Estevez"
+
     async def test_should_raise_competition_not_found(self, comp_uow, user_uow):
         """Competition inexistente lanza CompetitionNotFoundError."""
         creator = await self._create_user(user_uow, email="creator@test.com")

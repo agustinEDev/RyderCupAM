@@ -483,3 +483,25 @@ class TestSendInvitationByEmailUseCase:
         # Invitacion creada a pesar del error de email
         assert result.status == "PENDING"
         assert result.invitee_email == "someone@test.com"
+
+    async def test_the_email_names_the_inviter_as_in_this_competition(self, comp_uow, user_uow):
+        """Con alias pero sin pedirlo aquí: su nombre legal en el correo (#710)."""
+        creator = await self._create_user(
+            user_uow, email="ce_alias@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        created = await self._create_active_competition(comp_uow, creator.id)
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(return_value=True)
+
+        await SendInvitationByEmailUseCase(comp_uow, user_uow, email_service=mock_email).execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_email="nuevo@test.com",
+            )
+        )
+
+        assert mock_email.send_invitation_email.call_args[1]["inviter_name"] == "Agustin Estevez"
