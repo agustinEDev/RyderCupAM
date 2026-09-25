@@ -26,7 +26,6 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
 )
@@ -35,9 +34,6 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-
-# Cerrados sin jugarlos hasta el final: el ganador vive en `result`
-_SIN_JUGAR_HASTA_EL_FINAL = (MatchStatus.CONCEDED, MatchStatus.WALKOVER)
 
 
 def _hole_card_dto(holes) -> list[HoleInfoDTO]:
@@ -112,7 +108,7 @@ class GetScoringViewUseCase:
             # la pantalla tiene que saber quien gano: ese resultado lo guarda la
             # concesion o el walkover, no `decided_result`, que es el de los
             # hoyos (BE #384)
-            cerrado_sin_jugar = match.result if match.status in _SIN_JUGAR_HASTA_EL_FINAL else None
+            cerrado_sin_jugar = match.closing_result
             if cerrado_sin_jugar is not None:
                 decided_result = DecidedResultDTO(
                     winner=cerrado_sin_jugar["winner"], score=cerrado_sin_jugar["score"]
