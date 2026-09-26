@@ -153,7 +153,7 @@ def correo(
     ingles: Ingles,
     pie: str,
     otros_botones: list[Boton] | None = None,
-    con_respaldo: bool = False,
+    con_respaldo: bool = True,
 ) -> str:
     """
     Arma el correo entero.
@@ -168,7 +168,9 @@ def correo(
         ingles: El bloque corto en inglés
         pie: Por qué le llega el correo, en los dos idiomas
         otros_botones: Acciones secundarias bajo la principal (registrarse)
-        con_respaldo: Si se repite el enlace a mano bajo el botón
+        con_respaldo: Si se repite el enlace a mano bajo el botón. Sí por
+            defecto: un botón que el cliente de correo no deja pulsar no
+            puede ser el único camino
     """
     logo = _html.escape(f"{web}/images/rcf-monogram-white.png", quote=True)
     anio = datetime.now(UTC).year

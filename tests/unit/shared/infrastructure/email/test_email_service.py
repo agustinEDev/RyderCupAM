@@ -104,6 +104,18 @@ class TestEveryEmailWearsTheAppsBranding:
             assert len(_botones(cuerpo)) >= 2, nombre
 
 
+class TestEveryEmailRepeatsItsLink:
+    """El enlace a mano bajo el botón, por si no se puede pulsar (CodeRabbit en
+    la PR #390: la #389 lo pide en los cinco, y solo lo llevaban dos)."""
+
+    @pytest.mark.asyncio
+    async def test_all_five_repeat_the_main_link_below_the_button(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            principal = _botones(cuerpo)[0]
+            assert "¿No funciona el botón?" in cuerpo, nombre
+            assert f">{principal}</a>" in cuerpo, nombre
+
+
 class TestTheButtonsGoWhereTheySay:
     """Cada botón lleva a una pantalla que existe."""
 

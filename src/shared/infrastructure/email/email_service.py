@@ -115,7 +115,6 @@ The Ryder Cup Friends Team
                 ),
             ],
             boton=Boton("Confirmar mi correo", verification_link),
-            con_respaldo=True,
             ingles=Ingles(
                 frase(
                     "Hi ",
@@ -242,7 +241,6 @@ The Ryder Cup Friends Team
                 ),
             ],
             boton=Boton("Restablecer mi contraseña", reset_link),
-            con_respaldo=True,
             ingles=Ingles(
                 frase(
                     "Hi ",
