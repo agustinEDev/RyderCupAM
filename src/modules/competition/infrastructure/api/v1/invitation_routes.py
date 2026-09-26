@@ -8,6 +8,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from src.config.dependencies import (
@@ -32,6 +33,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.list_competition_invitations_use_case import (
     ListCompetitionInvitationsUseCase,
 )
@@ -54,6 +56,7 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
     InvitationCompetitionStatusViolation,
     InvitationExpiredViolation,
+    InvitationNoRoomViolation,
     InvitationRateLimitViolation,
     SelfInvitationViolation,
 )
@@ -234,6 +237,13 @@ async def respond_to_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotInviteeError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except InvitationNoRoomViolation as e:
+        # Con su codigo en la raiz, para que la pantalla lo diga en su idioma
+        # (claves siempre, #360; BE #385)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(e), "error_code": e.error_code},
+        )
     except InvalidInvitationStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationExpiredViolation as e:
@@ -242,6 +252,8 @@ async def respond_to_invitation(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except GenderRequiredError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 

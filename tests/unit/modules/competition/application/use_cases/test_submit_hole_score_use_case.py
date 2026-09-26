@@ -159,7 +159,7 @@ class TestSubmitHoleScoreValidation:
         await uow.hole_scores.add(hs_b)
 
         # Entregar tarjeta de A
-        match.submit_scorecard(a.user_id)
+        match.submit_scorecard(a.user_id, MatchFormat.SINGLES)
         await uow.matches.update(match)
 
         # Mock competition for scoring view
@@ -212,7 +212,7 @@ class TestSubmitHoleScoreValidation:
         await uow.hole_scores.add(hs_b)
 
         # B entrega tarjeta
-        match.submit_scorecard(b.user_id)
+        match.submit_scorecard(b.user_id, MatchFormat.SINGLES)
         await uow.matches.update(match)
 
         # Mock competition for scoring view
@@ -471,3 +471,56 @@ class TestSubmitHoleScoreOmittedFields:
         assert marked.own_score == 4
         assert marked.marker_submitted is False
         assert marked.validation_status.value == "PENDING"
+
+
+class TestLaBolaDelBandoEnFoursomes:
+    """BE #377: en foursomes la tarjeta es del bando. Si el compañero ya la
+    entregó, lo que mande el otro no cambia la bola del bando."""
+
+    @pytest.mark.asyncio
+    async def test_u3_entregada_por_el_companero_la_bola_ya_no_cambia(
+        self, uow, user_repo, scoring_service
+    ):
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        assignments = [
+            MarkerAssignment(
+                scorer_user_id=a2.user_id, marks_user_id=b1.user_id, marked_by_user_id=b1.user_id
+            ),
+            MarkerAssignment(
+                scorer_user_id=b1.user_id, marks_user_id=a2.user_id, marked_by_user_id=a2.user_id
+            ),
+        ]
+        match, mock_round = _setup_match(
+            uow,
+            [a1, a2],
+            [b1, b2],
+            match_format=MatchFormat.FOURSOMES,
+            marker_assignments=assignments,
+        )
+        await uow.matches.add(match)
+        uow._rounds._rounds[mock_round.id] = mock_round
+        for jugador, equipo in ((a1, "A"), (a2, "A"), (b1, "B"), (b2, "B")):
+            hoyo = HoleScore.create(
+                match_id=match.id,
+                hole_number=1,
+                player_user_id=jugador.user_id,
+                team=equipo,
+                strokes_received=0,
+            )
+            if equipo == "A":
+                hoyo.set_own_score(4)
+            await uow.hole_scores.add(hoyo)
+        match.submit_scorecard(a1.user_id, MatchFormat.FOURSOMES)
+        await uow.matches.update(match)
+        mock_comp = MagicMock()
+        mock_comp.id = mock_round.competition_id
+        mock_comp.team_1_name = "Team A"
+        mock_comp.team_2_name = "Team B"
+        uow._competitions._competitions[mock_comp.id] = mock_comp
+
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(own_score=7, marked_player_id=str(b1.user_id), marked_score=5)
+        await uc.execute(str(match.id), 1, body, a2.user_id)
+
+        for jugador in (a1, a2):
+            assert (await uow.hole_scores.find_one(match.id, 1, jugador.user_id)).own_score == 4

@@ -5,6 +5,7 @@ Esta es el agregado raíz del módulo competition.
 Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
+from collections.abc import Collection
 from datetime import datetime
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -38,6 +39,7 @@ from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
 from ..value_objects.play_mode import PlayMode
+from ..value_objects.setup_mode import SetupMode
 from ..value_objects.team_assignment import TeamAssignment
 from ..value_objects.visibility import Visibility
 
@@ -61,6 +63,36 @@ MAX_PLAYING_HANDICAP = 54
 
 class CompetitionStateError(Exception):
     """Excepción lanzada cuando se intenta una operación en un estado inválido."""
+
+    pass
+
+
+class CaptainsLockedError(Exception):
+    """Los capitanes ya no se pueden cambiar: los equipos estan repartidos."""
+
+    pass
+
+
+class CaptainNotEnrolledError(Exception):
+    """El capitan propuesto no es un inscrito aprobado de la competicion."""
+
+    pass
+
+
+class TeamsNotAssignedError(Exception):
+    """Todavia no hay equipos repartidos, y esto se elige dentro de un equipo."""
+
+    pass
+
+
+class CaptainMissingError(Exception):
+    """Hay un solo capitan: el otro se dio de baja y falta nombrarlo."""
+
+    pass
+
+
+class CaptainOnWrongTeamError(Exception):
+    """Un capitan no esta en el equipo que capitanea."""
 
     pass
 
@@ -122,6 +154,7 @@ class Competition:
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
+        setup_mode: SetupMode = SetupMode.RYDER_CUP,
     ):
         # Validaciones de invariantes
         self._validate_team_names(team_1_name, team_2_name)
@@ -143,12 +176,21 @@ class Competition:
         self._max_playing_handicap = max_playing_handicap
         self._enrollment_opens_days_before = enrollment_opens_days_before
         self._visibility = visibility
+        # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
+        self._setup_mode = setup_mode
+        self._team_assignment = self._reparto_del_modo(setup_mode)
         self._validate_enrollment_opening(enrollment_opens_days_before)
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
         self._golf_courses: list[CompetitionGolfCourse] = []
+        # Uno por equipo, y siempre dos de los inscritos (BE #320)
+        self._team_a_captain_id: UserId | None = None
+        self._team_b_captain_id: UserId | None = None
+        # Cada capitan elige al suyo tras el draft, y asciende si el capitan se va
+        self._team_a_vice_captain_id: UserId | None = None
+        self._team_b_vice_captain_id: UserId | None = None
 
     @classmethod
     def create(
@@ -166,6 +208,7 @@ class Competition:
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
+        setup_mode: SetupMode = SetupMode.RYDER_CUP,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -186,6 +229,7 @@ class Competition:
             max_playing_handicap=max_playing_handicap,
             enrollment_opens_days_before=enrollment_opens_days_before,
             visibility=visibility,
+            setup_mode=setup_mode,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -389,6 +433,28 @@ class Competition:
         """Quien puede ver esta competicion y pedir sitio en ella."""
         return self._visibility
 
+    @property
+    def setup_mode(self) -> SetupMode:
+        """Cuanto monta la aplicacion por su cuenta (FE #695)."""
+        return self._setup_mode
+
+    @staticmethod
+    def _reparto_del_modo(setup_mode: SetupMode) -> "TeamAssignment":
+        """Como se reparten los equipos, segun el modo (FE #695, 22 sep).
+
+        El reparto dejo de preguntarse aparte: un campo propio podia
+        contradecir al modo —«todo automatico» con el reparto a mano—, y la
+        ficha devolvia las dos cosas.
+
+        En estilo RyderCup los equipos salen del draft, o se ponen a mano: lo
+        que no puede es repartirlos la aplicacion a espaldas del organizador.
+        """
+        return (
+            TeamAssignment.AUTOMATIC
+            if setup_mode == SetupMode.AUTOMATIC
+            else TeamAssignment.MANUAL
+        )
+
     def accepts_enrollment_requests(self) -> bool:
         """Indica si un desconocido puede pedir plaza por su cuenta.
 
@@ -424,24 +490,24 @@ class Competition:
         """Verifica si el torneo permite modificar configuración."""
         return self._status.allows_modifications()
 
-    def allows_deletion(self, has_schedule: bool) -> bool:
-        """Verifica si el torneo todavía se puede borrar del todo (BE #333).
+    def allows_deletion(self, has_played: bool) -> bool:
+        """Verifica si el torneo todavía se puede borrar del todo (BE #333, #347).
 
         Dos condiciones, y la segunda no se puede leer del estado. El estado
-        tiene que permitirlo, y ademas **no puede haber calendario**: el estado
+        tiene que permitirlo, y ademas **no puede haber nada jugado**: el estado
         se anda hacia atras —`revert-status` y `reopen-enrollments`— sin
-        deshacer las rondas, asi que un torneo ya jugado puede volver a ACTIVE
-        con sus golpes dentro. Mirando solo el estado, la cascada se los
-        llevaria.
+        deshacer partidos ni golpes, asi que un torneo ya jugado puede volver a
+        ACTIVE con sus tarjetas dentro. Mirando solo el estado, la cascada se
+        las llevaria.
 
-        El sorteo de equipos no entra (21 sep): se protege lo jugado, no lo
-        preparado. Sin rondas no hay partidos ni golpes, y el sorteo se rehace.
+        Tener calendario o equipos sorteados no cuenta (21 y 22 sep): se protege
+        lo jugado, no lo montado, y lo montado se rehace.
 
         Args:
-            has_schedule: Si ya tiene rondas. Solo se crean en CLOSED, asi que
-                tenerlas significa que este torneo paso de ahi.
+            has_played: Si algun partido quedo terminado o con walkover, o
+                alguien llego a anotar un hoyo.
         """
-        return self._status.allows_deletion() and not has_schedule
+        return self._status.allows_deletion() and not has_played
 
     # ===========================================
     # MÉTODOS DE COMANDO (CAMBIOS DE ESTADO)
@@ -598,6 +664,275 @@ class Competition:
         )
         self._add_domain_event(event)
 
+    # ===========================================
+    # CAPITANES (BE #320)
+    # ===========================================
+
+    @property
+    def team_a_captain_id(self) -> UserId | None:
+        """El capitan del equipo A, o None si no hay."""
+        return self._team_a_captain_id
+
+    @property
+    def team_b_captain_id(self) -> UserId | None:
+        """El capitan del equipo B, o None si no hay."""
+        return self._team_b_captain_id
+
+    @property
+    def team_a_vice_captain_id(self) -> UserId | None:
+        """El subcapitan del equipo A, o None si no hay."""
+        return self._team_a_vice_captain_id
+
+    @property
+    def team_b_vice_captain_id(self) -> UserId | None:
+        """El subcapitan del equipo B, o None si no hay."""
+        return self._team_b_vice_captain_id
+
+    def is_captain_of(self, team: str, user_id: UserId) -> bool:
+        """Indica si ese jugador capitanea ese equipo ("A" o "B")."""
+        return self._captain(team) == user_id
+
+    def name_captains(
+        self,
+        team_a: UserId,
+        team_b: UserId,
+        approved_player_ids: Collection[UserId],
+        has_teams: bool,
+    ) -> None:
+        """Nombra a los dos capitanes, y con las inscripciones abiertas las cierra.
+
+        Nadie quiere pulsar «cerrar inscripciones», pero nombrar a los capitanes
+        si es algo que el organizador quiere hacer, y es lo que de verdad congela
+        la plantilla (decidido el 20 sep). Ya cerradas, se pueden cambiar
+        mientras no haya equipos: despues, cambiar uno exigiria rehacerlos.
+
+        Los capitanes siempre juegan: tienen que ser dos de los inscritos
+        aprobados, y el organizador puede ser uno si esta inscrito.
+
+        Args:
+            team_a: Capitan del equipo A
+            team_b: Capitan del equipo B
+            approved_player_ids: Los inscritos aprobados. Las inscripciones son
+                otro agregado: el caso de uso los trae, y la regla vive aqui
+            has_teams: Si ya hay equipos repartidos. Es otro agregado, y
+                reabrir las inscripciones no lo deshace: por eso no se deduce
+                del estado.
+
+        Raises:
+            ValueError: Si es la misma persona
+            CaptainNotEnrolledError: Si alguno no es un inscrito aprobado
+            CaptainsLockedError: Si ya hay equipos repartidos
+            CompetitionStateError: Si no esta en ACTIVE ni en CLOSED
+        """
+        if team_a == team_b:
+            raise ValueError("Los capitanes tienen que ser dos jugadores distintos")
+        if team_a not in approved_player_ids or team_b not in approved_player_ids:
+            raise CaptainNotEnrolledError(
+                "Los capitanes tienen que ser jugadores inscritos y aprobados"
+            )
+        if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
+            raise CompetitionStateError(
+                f"Los capitanes se nombran con las inscripciones abiertas o recien "
+                f"cerradas. Estado actual: {self._status.value}"
+            )
+        if has_teams:
+            raise CaptainsLockedError(
+                "Los equipos ya estan repartidos: cambiar un capitan obligaria a rehacerlos"
+            )
+
+        self._team_a_captain_id = team_a
+        self._team_b_captain_id = team_b
+        if self._status == CompetitionStatus.ACTIVE:
+            self.close_enrollments(total_enrollments=len(approved_player_ids))
+        else:
+            self._updated_at = datetime.now()
+
+    def name_vice_captain(
+        self,
+        team: str,
+        player: UserId,
+        team_player_ids: Collection[UserId],
+        has_teams: bool,
+    ) -> None:
+        """Nombra al subcapitan de un equipo, que asciende si el capitan se va.
+
+        Decidido el 22 sep: lo elige cada capitan entre los de su equipo, una
+        vez repartidos. Quien puede pedirlo (el capitan, el organizador o un
+        admin) lo decide el caso de uso.
+
+        Args:
+            team: "A" o "B"
+            player: El subcapitan
+            team_player_ids: Los jugadores de ese equipo que siguen inscritos
+            has_teams: Si ya hay equipos repartidos
+
+        Raises:
+            ValueError: Si el equipo no existe o es su propio capitan
+            CompetitionStateError: Si no esta en ACTIVE ni en CLOSED
+            TeamsNotAssignedError: Si todavia no hay equipos
+            CaptainOnWrongTeamError: Si no es de ese equipo
+        """
+        self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
+        if player == self._captain(team):
+            raise ValueError("El capitán no puede ser también su subcapitán")
+        self._set_vice_captain(team, player)
+        self._updated_at = datetime.now()
+
+    def fill_captain(
+        self,
+        team: str,
+        player: UserId,
+        team_player_ids: Collection[UserId],
+        has_teams: bool,
+    ) -> None:
+        """Cubre el puesto de un capitan que se fue sin subcapitan que ascendiera.
+
+        Solo tras el draft —antes se nombran los dos con `name_captains`— y solo
+        si el capitan ya no esta: el puesto vacio, o un capitan que ya no sigue
+        en la plantilla. Lo segundo pasa si se retiro con el torneo en marcha,
+        donde la baja no toca a los capitanes, y despues se volvio a CLOSED. Un
+        capitan que sigue no se cambia por aqui: obligaria a rehacer los equipos.
+
+        Raises:
+            ValueError: Si el equipo no existe
+            CompetitionStateError: Si no esta en ACTIVE ni en CLOSED
+            TeamsNotAssignedError: Si todavia no hay equipos
+            CaptainOnWrongTeamError: Si no es de ese equipo
+            CaptainsLockedError: Si el capitan de ese equipo sigue en el torneo
+        """
+        self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
+        if self._captain(team) in team_player_ids:
+            raise CaptainsLockedError(
+                "Ese equipo ya tiene capitán: solo se cubre el puesto de uno que se fue"
+            )
+        if team == "A":
+            self._team_a_captain_id = player
+        else:
+            self._team_b_captain_id = player
+        if self._vice_captain(team) == player:
+            self._set_vice_captain(team, None)
+        self._updated_at = datetime.now()
+
+    def handle_withdrawal(self, user_id: UserId) -> bool:
+        """Lo que pasa con los capitanes cuando un jugador se da de baja.
+
+        La baja sigue funcionando como siempre (22 sep). Si se va un capitan,
+        asciende su subcapitan; sin subcapitan, el puesto queda libre y el
+        organizador lo cubre. Si se va un subcapitan, su puesto queda libre.
+
+        Con el torneo en marcha o terminado no se toca nada: una baja ahi no
+        puede borrar al capitan de un torneo que se esta jugando.
+
+        Returns:
+            True si era capitan o subcapitan y algo cambio
+        """
+        if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
+            return False
+        for team in ("A", "B"):
+            if user_id == self._captain(team):
+                ascendido = self._vice_captain(team)
+                if team == "A":
+                    self._team_a_captain_id = ascendido
+                else:
+                    self._team_b_captain_id = ascendido
+                self._set_vice_captain(team, None)
+                self._updated_at = datetime.now()
+                return True
+            if user_id == self._vice_captain(team):
+                self._set_vice_captain(team, None)
+                self._updated_at = datetime.now()
+                return True
+        return False
+
+    def teams_reassigned(self) -> None:
+        """Al repartir de nuevo, los subcapitanes quedan libres.
+
+        Se eligen entre los del equipo, y el equipo ha cambiado: el draft
+        automatico puede haber movido a un subcapitan al otro lado.
+        """
+        self._team_a_vice_captain_id = None
+        self._team_b_vice_captain_id = None
+
+    def _captain(self, team: str) -> UserId | None:
+        """El capitán de ese equipo; valida antes que el equipo sea A o B."""
+        self._comprobar_equipo(team)
+        return self._team_a_captain_id if team == "A" else self._team_b_captain_id
+
+    def _vice_captain(self, team: str) -> UserId | None:
+        """El subcapitán de ese equipo; valida antes que el equipo sea A o B."""
+        self._comprobar_equipo(team)
+        return self._team_a_vice_captain_id if team == "A" else self._team_b_vice_captain_id
+
+    def _set_vice_captain(self, team: str, player: UserId | None) -> None:
+        """Pone o vacía el subcapitán de un equipo ya validado."""
+        if team == "A":
+            self._team_a_vice_captain_id = player
+        else:
+            self._team_b_vice_captain_id = player
+
+    @staticmethod
+    def _comprobar_equipo(team: str) -> None:
+        """Solo hay dos equipos: A y B."""
+        if team not in ("A", "B"):
+            raise ValueError(f"El equipo tiene que ser A o B, no {team!r}")
+
+    def _comprobar_dentro_del_equipo(
+        self,
+        team: str,
+        player: UserId,
+        team_player_ids: Collection[UserId],
+        has_teams: bool,
+    ) -> None:
+        """Lo comun a elegir capitan o subcapitan dentro de un equipo ya repartido."""
+        self._comprobar_equipo(team)
+        if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
+            raise CompetitionStateError(
+                f"Con el torneo en marcha ya no se cambia. Estado actual: {self._status.value}"
+            )
+        if not has_teams:
+            raise TeamsNotAssignedError(
+                "Todavía no hay equipos: antes del reparto se nombran los dos capitanes"
+            )
+        if player not in team_player_ids:
+            raise CaptainOnWrongTeamError(f"Tiene que ser un jugador del equipo {team}")
+
+    def captains_for_team_split(self) -> tuple[UserId, UserId] | None:
+        """Los capitanes que quedan fijos al repartir equipos.
+
+        Sin ninguno, None: el reparto de siempre, porque el flujo viejo convive
+        con el nuevo durante la transicion. Con uno solo —el otro se dio de
+        baja— no se reparte cojo: un equipo quedaria sin capitan.
+
+        Raises:
+            CaptainMissingError: Si solo hay uno
+        """
+        if self._team_a_captain_id is None and self._team_b_captain_id is None:
+            return None
+        if self._team_a_captain_id is None or self._team_b_captain_id is None:
+            raise CaptainMissingError(
+                "Falta un capitán: se dio de baja. Nombra a otro antes de repartir equipos"
+            )
+        return self._team_a_captain_id, self._team_b_captain_id
+
+    def check_captains_placement(
+        self, team_a_player_ids: list[UserId], team_b_player_ids: list[UserId]
+    ) -> None:
+        """Comprueba que cada capitan esta en el equipo que capitanea.
+
+        Hasta BE #320 nada lo garantizaba: la figura no existia. Sin capitanes
+        no hay nada que comprobar.
+
+        Raises:
+            CaptainMissingError: Si solo hay uno
+            CaptainOnWrongTeamError: Si alguno no esta en su equipo
+        """
+        capitanes = self.captains_for_team_split()
+        if capitanes is None:
+            return
+        capitan_a, capitan_b = capitanes
+        if capitan_a not in team_a_player_ids or capitan_b not in team_b_player_ids:
+            raise CaptainOnWrongTeamError("Cada capitán tiene que estar en el equipo que capitanea")
+
     def reopen_enrollments(self) -> None:
         """
         Reabre las inscripciones (CLOSED → ACTIVE).
@@ -637,6 +972,7 @@ class Competition:
         team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
         visibility: Visibility | None = None,
+        setup_mode: SetupMode | None = None,
     ) -> None:
         """
         Actualiza la información del torneo, mientras las inscripciones estén abiertas.
@@ -680,6 +1016,16 @@ class Competition:
         if visibility is not None:
             self._visibility = visibility
 
+        # Mientras las inscripciones sigan abiertas, que es lo que ya exige este
+        # metodo: al cerrarlas el modo decide lo que ya esta montado (FE #695).
+        # Ojo: por la API hay un limite mas estrecho —BE #323 rechaza la edicion
+        # entera si ya hay rondas—, asi que una reabierta con calendario ya no
+        # cambia de modo
+        if setup_mode is not None:
+            self._setup_mode = setup_mode
+            # El modo manda: si llegan los dos, el reparto sale de el
+            self._team_assignment = self._reparto_del_modo(setup_mode)
+
         self._update_team_names(team_1_name, team_2_name)
 
         self._updated_at = datetime.now()
@@ -720,18 +1066,18 @@ class Competition:
         Añade un campo de golf a la competición.
 
         Business Rules:
-        - Solo en estado DRAFT
+        - Hasta que la competición termina o se cancela (BE #368)
         - El país del campo debe ser compatible con la location de la competición
         - No se permiten duplicados
 
         Raises:
-            CompetitionStateError: Si las inscripciones ya no están abiertas
+            CompetitionStateError: Si la competición ya terminó o se canceló
             ValueError: Si el país no es compatible o el campo ya existe
         """
-        if not self.allows_modifications():
+        if not self._status.allows_adding_golf_courses():
             raise CompetitionStateError(
-                f"Solo puedes añadir campos de golf mientras las inscripciones "
-                f"están abiertas. Estado actual: {self._status.value}"
+                f"No se pueden añadir campos de golf a una competición terminada "
+                f"o cancelada. Estado actual: {self._status.value}"
             )
 
         if not self._is_country_compatible(country_code):

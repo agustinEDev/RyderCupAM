@@ -34,6 +34,19 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def find_by_match_for_update(self, match_id: MatchId) -> list[HoleScore]:
+        # `populate_existing`: sin el, una tarjeta ya cargada vuelve vacía
+        # aunque la hayan anotado mientras se esperaba el bloqueo
+        statement = (
+            select(HoleScore)
+            .where(HoleScore._match_id == match_id)
+            .order_by(HoleScore._hole_number.asc(), HoleScore._player_user_id.asc())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
         statement = select(HoleScore).where(
             HoleScore._match_id == match_id,

@@ -17,8 +17,10 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -32,6 +34,9 @@ from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.hole_score_repository import (
+    SQLAlchemyHoleScoreRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.match_repository import (
     SQLAlchemyMatchRepository,
@@ -184,9 +189,106 @@ class TestFindByIdForUpdate:
         assert bloqueado.status == MatchStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
+    async def test_bloquea_la_fila_del_partido(self, db_session, match):
+        """Es lo que impide entregar dos veces la misma tarjeta (BE #377): la
+        segunda petición espera a la primera y ya la ve entregada."""
+        await SQLAlchemyMatchRepository(db_session).find_by_id_for_update(match.id)
+
+        assert await _esta_bloqueada(db_session, "matches", match.id.value) is True
+
     async def test_un_partido_que_no_existe_devuelve_none(self, db_session, match):
         from src.modules.competition.domain.value_objects.match_id import MatchId
 
-        assert await SQLAlchemyMatchRepository(db_session).find_by_id_for_update(
-            MatchId(uuid4())
-        ) is None
+        assert (
+            await SQLAlchemyMatchRepository(db_session).find_by_id_for_update(MatchId(uuid4()))
+            is None
+        )
+
+
+# ======================================================================================
+# El borrado de competiciones (BE #347): partidos y tarjetas con su fila bloqueada
+# ======================================================================================
+
+
+async def _esta_bloqueada(db_session, tabla: str, fila_id) -> bool:
+    """Intenta bloquear la fila desde OTRA conexión, sin esperar.
+
+    Es la única forma de ver el bloqueo: dentro de la misma transacción volver
+    a pedirlo no falla nunca.
+    """
+    async with db_session.bind.connect() as otra:
+        try:
+            await otra.execute(
+                text(f"SELECT id FROM {tabla} WHERE id = :id FOR UPDATE NOWAIT"),
+                {"id": str(fila_id)},
+            )
+        except DBAPIError:
+            return True
+        finally:
+            await otra.rollback()
+    return False
+
+
+@pytest_asyncio.fixture
+async def tarjeta(db_session, match, creator_id) -> HoleScore:
+    """Una tarjeta vacía, como las que crea abrir el partido."""
+    hoyo = HoleScore.create(
+        match_id=match.id, hole_number=1, player_user_id=creator_id, team="A", strokes_received=0
+    )
+    await SQLAlchemyHoleScoreRepository(db_session).add_many([hoyo])
+    await db_session.commit()
+    return hoyo
+
+
+class TestFindByRoundForUpdate:
+    @pytest.mark.asyncio
+    async def test_bloquea_los_partidos_de_la_ronda(self, db_session, match):
+        """Conceder o terminar un partido a la vez espera a que acabe el borrado."""
+        await SQLAlchemyMatchRepository(db_session).find_by_round_for_update(match.round_id)
+
+        assert await _esta_bloqueada(db_session, "matches", match.id.value) is True
+
+    @pytest.mark.asyncio
+    async def test_devuelve_el_estado_de_la_base_de_datos_no_el_que_ya_tenia(
+        self, db_session, match
+    ):
+        """Si lo concedieron mientras tanto, el borrado tiene que verlo concedido."""
+        repo = SQLAlchemyMatchRepository(db_session)
+        assert (await repo.find_by_round(match.round_id))[0].status == MatchStatus.SCHEDULED
+
+        await db_session.execute(
+            text("UPDATE matches SET status = 'CONCEDED' WHERE id = :id"),
+            {"id": str(match.id.value)},
+        )
+        await db_session.commit()
+
+        bloqueados = await repo.find_by_round_for_update(match.round_id)
+
+        assert [m.status for m in bloqueados] == [MatchStatus.CONCEDED]
+
+
+class TestFindByMatchForUpdate:
+    @pytest.mark.asyncio
+    async def test_bloquea_las_tarjetas_del_partido(self, db_session, match, tarjeta):
+        """Anotar un hoyo a la vez espera a que acabe el borrado."""
+        await SQLAlchemyHoleScoreRepository(db_session).find_by_match_for_update(match.id)
+
+        assert await _esta_bloqueada(db_session, "hole_scores", tarjeta.id.value) is True
+
+    @pytest.mark.asyncio
+    async def test_devuelve_el_estado_de_la_base_de_datos_no_el_que_ya_tenia(
+        self, db_session, match, tarjeta
+    ):
+        """Si anotaron el hoyo mientras tanto, el borrado tiene que verlo anotado."""
+        repo = SQLAlchemyHoleScoreRepository(db_session)
+        assert (await repo.find_by_match(match.id))[0].is_recorded is False
+
+        await db_session.execute(
+            text("UPDATE hole_scores SET own_score = 4, own_submitted = true WHERE id = :id"),
+            {"id": str(tarjeta.id.value)},
+        )
+        await db_session.commit()
+
+        bloqueadas = await repo.find_by_match_for_update(match.id)
+
+        assert [t.is_recorded for t in bloqueadas] == [True]

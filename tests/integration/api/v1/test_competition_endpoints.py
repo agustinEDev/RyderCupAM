@@ -13,6 +13,7 @@ from httpx import AsyncClient
 
 from tests.conftest import (
     activate_competition,
+    add_one_session,
     approve_golf_course,
     create_admin_user,
     create_authenticated_user,
@@ -22,6 +23,7 @@ from tests.conftest import (
     estado_en_bd,
     set_auth_cookies,
 )
+from tests.integration.api.v1.test_scoring_endpoints import setup_match_in_progress
 
 
 class TestCreateCompetition:
@@ -254,9 +256,7 @@ class TestListCompetitions:
         data = response.json()
         assert [c["name"] for c in data] == [creada["name"]]
 
-    async def test_list_competitions_by_creator_ignores_a_blank_search(
-        self, client: AsyncClient
-    ):
+    async def test_list_competitions_by_creator_ignores_a_blank_search(self, client: AsyncClient):
         """
         Buscar por espacios no devuelve la lista entera.
 
@@ -332,9 +332,7 @@ class TestListCompetitions:
         assert response.status_code == 200
         assert response.json() == []
 
-    async def test_list_competitions_by_creator_still_finds_a_real_name(
-        self, client: AsyncClient
-    ):
+    async def test_list_competitions_by_creator_still_finds_a_real_name(self, client: AsyncClient):
         """
         La rama nueva del OR no puede tapar la búsqueda de siempre.
 
@@ -588,9 +586,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         assert despues.status_code == 200
         assert despues.json()["max_players"] == 20
 
@@ -628,9 +624,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         assert despues.json()["max_players"] == 100
 
     @pytest.mark.asyncio
@@ -656,9 +650,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         codigos = [c["code"] for c in despues.json()["countries"]]
         assert "PT" in codigos
 
@@ -685,9 +677,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         codigos = [c["code"] for c in despues.json()["countries"]]
         assert "PT" in codigos
 
@@ -756,9 +746,7 @@ class TestUpdateCompetition:
 
         assert response.status_code == 200
 
-        despues = await client.get(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
         assert "PT" in [c["code"] for c in despues.json()["countries"]]
 
     @pytest.mark.asyncio
@@ -863,11 +851,12 @@ class TestDeleteCompetition:
         assert (await client.get(f"/api/v1/competitions/{comp['id']}")).status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_closed_competition_returns_400(self, client: AsyncClient):
-        """BE #333: cerradas las inscripciones ya no se borra.
+    async def test_delete_closed_competition_with_nothing_played_returns_204(
+        self, client: AsyncClient
+    ):
+        """BE #347: cerradas las inscripciones se sigue pudiendo borrar.
 
-        A partir de aquí se sortean equipos y se generan partidos, y el borrado
-        va en cascada hasta los golpes anotados.
+        Se protege lo jugado, no el estado: sin un golpe no hay nada que perder.
         """
         user = await create_authenticated_user(
             client, "deleter3@test.com", "P@ssw0rd123!", "Delete", "Three"
@@ -885,8 +874,7 @@ class TestDeleteCompetition:
             f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
         )
 
-        assert response.status_code == 400
-        assert "CLOSED" in response.json()["detail"]
+        assert response.status_code == 204, response.text
 
 
 class TestListingOpensScheduledCompetitions:
@@ -947,9 +935,7 @@ class TestListingOpensScheduledCompetitions:
                         "par": 72,
                     },
                 ],
-                "holes": [
-                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
-                ],
+                "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
             },
         )
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
@@ -979,67 +965,74 @@ class TestListingOpensScheduledCompetitions:
         )
 
 
-class TestDeleteReopenedCompetition:
-    """BE #333: volver a ACTIVE no vuelve a hacer borrable un torneo montado."""
+class TestDeletePlayedCompetition:
+    """BE #347: lo que decide es lo jugado, no el estado ni el calendario.
+
+    Por HTTP y contra Postgres, que es donde vive la cascada: borrar una
+    competición con calendario se lleva rondas, partidos y tarjetas por
+    `ON DELETE CASCADE`, y hasta ahora no había llegado a pasar nunca.
+    """
+
+    async def _en_juego_y_de_vuelta(self, client: AsyncClient, *, anotar: bool) -> dict:
+        """Partido abierto, con un hoyo anotado o no, y el torneo devuelto a CLOSED."""
+        ctx = await setup_match_in_progress(client)
+        if anotar:
+            set_auth_cookies(client, ctx["player_a"]["cookies"])
+            hoyo = await client.post(
+                f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+                json={
+                    "own_score": 4,
+                    "marked_player_id": ctx["player_b"]["user"]["id"],
+                    "marked_score": 5,
+                },
+            )
+            assert hoyo.status_code == 200, hoyo.text
+
+        set_auth_cookies(client, ctx["creator"]["cookies"])
+        vuelta = await client.put(f"/api/v1/competitions/{ctx['competition_id']}/revert-status")
+        assert vuelta.status_code == 200, vuelta.text
+        assert vuelta.json()["status"] == "CLOSED"
+        return ctx
 
     @pytest.mark.asyncio
-    async def test_delete_reopened_competition_with_rounds_returns_400(
-        self, client: AsyncClient
-    ):
-        """Con calendario montado no se borra, aunque el estado haya vuelto a ACTIVE.
+    async def test_delete_competition_with_a_recorded_hole_returns_400(self, client: AsyncClient):
+        """Un solo hoyo anotado la protege, aunque el estado haya vuelto a ACTIVE.
 
-        El estado se puede andar hacia atrás y ninguna de esas vueltas deshace
-        rondas ni partidos. Mirando solo el estado, la cascada se llevaría el
-        torneo entero con sus tarjetas.
+        El estado se anda hacia atrás sin deshacer partidos ni golpes: mirando
+        solo el estado, la cascada se llevaría las tarjetas.
         """
-        admin = await create_admin_user(
-            client, "reopen-admin@test.com", "P@ssw0rd123!", "Reopen", "Admin"
-        )
-        user = await create_authenticated_user(
-            client, "reopener@test.com", "P@ssw0rd123!", "Re", "Opener"
-        )
-
-        comp = await create_competition(client, user["cookies"])
-
-        gc = await create_golf_course(client, user["cookies"])
-        await approve_golf_course(client, admin["cookies"], gc["id"])
-
-        set_auth_cookies(client, user["cookies"])
-        asociado = await client.post(
-            f"/api/v1/competitions/{comp['id']}/golf-courses",
-            json={"golf_course_id": gc["id"]},
-        )
-        assert asociado.status_code == 201, asociado.text
-
-        await activate_competition(client, user["cookies"], comp["id"])
-
-        set_auth_cookies(client, user["cookies"])
-        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
-        assert cerrada.status_code == 200, cerrada.text
-
-        ronda = await client.post(
-            f"/api/v1/competitions/{comp['id']}/rounds",
-            json={
-                "golf_course_id": gc["id"],
-                "round_date": comp["start_date"],
-                "session_type": "MORNING",
-                "match_format": "SINGLES",
-            },
-        )
-        assert ronda.status_code == 201, ronda.text
-
-        reabierta = await client.post(
-            f"/api/v1/competitions/{comp['id']}/reopen-enrollments"
-        )
+        ctx = await self._en_juego_y_de_vuelta(client, anotar=True)
+        comp_id = ctx["competition_id"]
+        reabierta = await client.post(f"/api/v1/competitions/{comp_id}/reopen-enrollments")
         assert reabierta.status_code == 200, reabierta.text
         assert reabierta.json()["status"] == "ACTIVE"
 
-        response = await client.delete(
-            f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"]
-        )
+        ficha = await client.get(f"/api/v1/competitions/{comp_id}")
+        response = await client.delete(f"/api/v1/competitions/{comp_id}")
 
+        assert ficha.json()["can_delete"] is False
         assert response.status_code == 400
-        assert "calendario" in response.json()["detail"].lower()
+        assert "golpes anotados" in response.json()["detail"]
+        assert "calendario" not in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_competition_whose_open_match_has_blank_cards_returns_204(
+        self, client: AsyncClient
+    ):
+        """Abrir un partido crea las tarjetas vacías: eso no es haber jugado.
+
+        Y el borrado se lleva por cascada la ronda, el partido y sus 36 tarjetas.
+        """
+        ctx = await self._en_juego_y_de_vuelta(client, anotar=False)
+        comp_id = ctx["competition_id"]
+
+        ficha = await client.get(f"/api/v1/competitions/{comp_id}")
+        response = await client.delete(f"/api/v1/competitions/{comp_id}")
+        despues = await client.get(f"/api/v1/competitions/{comp_id}")
+
+        assert ficha.json()["can_delete"] is True
+        assert response.status_code == 204, response.text
+        assert despues.status_code == 404
 
 
 class TestCompetitionStateTransitions:
@@ -1078,6 +1071,52 @@ class TestCompetitionStateTransitions:
         assert response.json()["status"] == "CANCELLED"
 
     @pytest.mark.asyncio
+    async def test_shortening_the_dates_says_which_sessions_fall_out(self, client: AsyncClient):
+        """#710: con varias sesiones, «alguna quedaría fuera» no decía cuál."""
+        from datetime import date, timedelta
+
+        user = await create_authenticated_user(
+            client, "fechas_fuera@test.com", "P@ssw0rd123!", "Fechas", "Fuera"
+        )
+        comp = await create_competition(client, user["cookies"])
+        sesion = await add_one_session(client, user["cookies"], comp)
+        inicio = date.fromisoformat(comp["start_date"])
+
+        set_auth_cookies(client, user["cookies"])
+        response = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={
+                "start_date": (inicio + timedelta(days=1)).isoformat(),
+                "end_date": (inicio + timedelta(days=2)).isoformat(),
+            },
+        )
+
+        assert response.status_code == 400, response.text
+        cuerpo = response.json()
+        assert cuerpo["error_code"] == "DATES_LEAVE_SESSIONS_OUT"
+        assert cuerpo["sessions_outside"] == [
+            {"id": sesion["id"], "round_date": comp["start_date"], "session_type": "MORNING"}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_start_without_any_session_returns_400(self, client: AsyncClient):
+        """Sin ninguna sesión no hay torneo que iniciar (#710, 25 sep)."""
+        user = await create_authenticated_user(
+            client, "no_sessions@test.com", "P@ssw0rd123!", "Sin", "Sesiones"
+        )
+        comp = await create_competition(client, user["cookies"])
+        await client.post(
+            f"/api/v1/competitions/{comp['id']}/close-enrollments", cookies=user["cookies"]
+        )
+
+        response = await client.post(
+            f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
+        )
+
+        assert response.status_code == 400, response.text
+        assert "sesión" in response.json()["detail"]
+
+    @pytest.mark.asyncio
     async def test_full_lifecycle(self, client: AsyncClient):
         """Test del ciclo de vida completo: DRAFT -> ACTIVE -> CLOSED -> IN_PROGRESS -> COMPLETED."""
         user = await create_authenticated_user(
@@ -1101,7 +1140,8 @@ class TestCompetitionStateTransitions:
         )
         assert response.json()["status"] == "CLOSED"
 
-        # 4. Iniciar (IN_PROGRESS)
+        # 4. Iniciar (IN_PROGRESS): sin ninguna sesión no se inicia (#710)
+        await add_one_session(client, user["cookies"], comp)
         response = await client.post(
             f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"]
         )
@@ -1149,6 +1189,7 @@ class TestCompetitionStateTransitions:
             cookies=user["cookies"],
         )
         assert r2.status_code == 200
+        await add_one_session(client, user["cookies"], comp)
         r3 = await client.post(f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"])
         assert r3.status_code == 200
 
@@ -1226,6 +1267,7 @@ class TestCompetitionStateTransitions:
             cookies=user["cookies"],
         )
         assert r2.status_code == 200
+        await add_one_session(client, user["cookies"], comp)
         r3 = await client.post(f"/api/v1/competitions/{comp['id']}/start", cookies=user["cookies"])
         assert r3.status_code == 200
         r4 = await client.post(
@@ -1511,11 +1553,11 @@ class TestCompetitionGolfCourses:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_add_golf_course_once_enrollment_closes_returns_400(self, client: AsyncClient):
-        """BE #323: con las inscripciones abiertas sí; cerradas, ya no.
+    async def test_add_golf_course_after_enrollment_closes(self, client: AsyncClient):
+        """BE #323 abrió la puerta con las inscripciones abiertas; BE #368, hasta el final.
 
-        Justo el caso que motivó el cambio: quien invita antes de poner el campo
-        —y con ello abre el torneo— tiene que poder ponerlo después.
+        Añadir solo amplía la lista: ninguna sesión cambia de campo, así que
+        cerrar las inscripciones no es motivo para dejar fuera otro campo.
         """
         # Arrange
         admin = await create_admin_user(
@@ -1540,7 +1582,7 @@ class TestCompetitionGolfCourses:
         )
         assert abierta.status_code == 201
 
-        # Al cerrarlas, ya no
+        # Y al cerrarlas, también
         await client.post(
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
             cookies=creator["cookies"],
@@ -1554,8 +1596,8 @@ class TestCompetitionGolfCourses:
             cookies=creator["cookies"],
         )
 
-        assert response.status_code == 400
-        assert "inscripciones" in response.text
+        assert response.status_code == 201, response.text
+        assert response.json()["display_order"] == 2
 
     @pytest.mark.asyncio
     async def test_remove_golf_course_from_competition_success(self, client: AsyncClient):
@@ -1802,6 +1844,7 @@ class TestCompetitionGolfCourses:
         assert len(golf_courses) == 0
         assert golf_courses == []
 
+
 # Del reloj y no del calendario: una fecha fija hace que el test empiece a
 # fallar solo el dia en que queda por detras de «ahora»
 
@@ -1972,9 +2015,7 @@ class TestScheduledEnrollmentOpening:
                         "par": 72,
                     },
                 ],
-                "holes": [
-                    {"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)
-                ],
+                "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
             },
         )
         await approve_golf_course(client, admin["cookies"], golf_course["id"])
@@ -2159,3 +2200,537 @@ class TestPublicAndPrivate:
         assert competicion_id not in [c["id"] for c in mias.json()]
 
 
+@pytest.mark.integration
+class TestCanDeleteEnLaFicha:
+    """
+    La ficha dice si quien la mira puede borrarla ahora (BE #347), para que la
+    app enseñe el botón solo cuando el borrado va a funcionar. En los listados
+    no se calcula: sería mirar el calendario de cada competición de la lista.
+    """
+
+    @pytest.mark.asyncio
+    async def test_i1_el_creador_de_una_abierta_sin_calendario_puede(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(creador["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.status_code == 200, ficha.text
+        assert ficha.json()["can_delete"] is True
+
+    @pytest.mark.asyncio
+    async def test_i2_otro_usuario_no_puede(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador2@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        otro = await create_authenticated_user(
+            client, "cd-otro@test.com", "P@ssw0rd123!", "Otro", "Usuario"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(otro["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.status_code == 200
+        assert ficha.json()["can_delete"] is False
+
+    @pytest.mark.asyncio
+    async def test_i3_en_los_listados_no_se_calcula(self, client: AsyncClient):
+        creador = await create_authenticated_user(
+            client, "cd-creador3@test.com", "P@ssw0rd123!", "Can", "Delete"
+        )
+        await create_competition(client, creador["cookies"])
+
+        client.cookies.clear()
+        client.cookies.update(creador["cookies"])
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert listado.status_code == 200
+        competiciones = listado.json()
+        assert competiciones
+        assert all(c.get("can_delete") is None for c in competiciones)
+
+
+class TestCaptains:
+    """BE #320: nombrar a los capitanes cierra las inscripciones.
+
+    Por HTTP y contra Postgres: que los capitanes se guarden y vuelvan en la
+    ficha es justo lo que un test en memoria no ve.
+    """
+
+    async def _abierta_con(self, client: AsyncClient, cuantos: int) -> tuple[dict, dict, list]:
+        """Una abierta con el creador y `cuantos` jugadores más, inscritos directamente."""
+        creador = await create_authenticated_user(
+            client, "capi-creador@test.com", "P@ssw0rd123!", "Creador", "Capitanes"
+        )
+        jugadores = [
+            await create_authenticated_user(
+                client, f"capi-{i}@test.com", "P@ssw0rd123!", "Jugador" + "ABCDEFGH"[i], "Capitanes"
+            )
+            for i in range(cuantos)
+        ]
+        comp = await create_competition(client, creador["cookies"])
+        set_auth_cookies(client, creador["cookies"])
+        for jugador in jugadores:
+            inscrito = await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+            )
+            assert inscrito.status_code == 201, inscrito.text
+            jugador["enrollment_id"] = inscrito.json()["id"]
+        return creador, comp, jugadores
+
+    async def _nombrar(self, client, comp, a, b):
+        """PUT de los capitanes con las cookies que tenga el cliente en ese momento."""
+        return await client.put(
+            f"/api/v1/competitions/{comp['id']}/captains",
+            json={"team_a_captain_id": a["user"]["id"], "team_b_captain_id": b["user"]["id"]},
+        )
+
+    @pytest.mark.asyncio
+    async def test_nombrarlos_cierra_y_la_ficha_los_ensena(self, client: AsyncClient):
+        """
+        Given: una abierta con cuatro inscritos
+        When: el creador nombra a Ana y Bea
+        Then: queda CLOSED, avisa que los números cuadran y la ficha, leída de Postgres, los enseña
+        """
+        _, comp, (ana, bea, _) = await self._abierta_con(client, 3)
+
+        respuesta = await self._nombrar(client, comp, ana, bea)
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["status"] == "CLOSED"
+        assert respuesta.json()["total_players"] == 4
+        assert respuesta.json()["uneven_teams"] is False
+        assert ficha.json()["status"] == "CLOSED"
+        assert ficha.json()["team_a_captain_id"] == ana["user"]["id"]
+        assert ficha.json()["team_b_captain_id"] == bea["user"]["id"]
+
+    @pytest.mark.asyncio
+    async def test_con_numeros_impares_avisa_y_deja_seguir(self, client: AsyncClient):
+        """
+        Given: una abierta con tres inscritos
+        When: se nombran capitanes
+        Then: responde 200 con `uneven_teams` a true
+        """
+        _, comp, (ana, bea) = await self._abierta_con(client, 2)
+
+        respuesta = await self._nombrar(client, comp, ana, bea)
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["total_players"] == 3
+        assert respuesta.json()["uneven_teams"] is True
+
+    @pytest.mark.asyncio
+    async def test_sin_capitanes_la_ficha_los_da_nulos(self, client: AsyncClient):
+        """
+        Given: una competición recién creada
+        When: se abre su ficha
+        Then: los dos capitanes vienen a null, no ausentes
+        """
+        _, comp, _ = await self._abierta_con(client, 0)
+
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.json()["team_a_captain_id"] is None
+        assert ficha.json()["team_b_captain_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_un_capitan_que_no_esta_inscrito_es_400(self, client: AsyncClient):
+        """
+        Given: un usuario que no se ha inscrito
+        When: el creador lo nombra capitán
+        Then: 400, y el motivo habla de los inscritos
+        """
+        creador, comp, (ana,) = await self._abierta_con(client, 1)
+        ajeno = await create_authenticated_user(
+            client, "capi-ajeno@test.com", "P@ssw0rd123!", "Ajeno", "Capitanes"
+        )
+        set_auth_cookies(client, creador["cookies"])
+
+        respuesta = await self._nombrar(client, comp, ana, ajeno)
+
+        assert respuesta.status_code == 400
+        assert "inscritos" in respuesta.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_otro_usuario_no_puede_nombrarlos(self, client: AsyncClient):
+        """
+        Given: una abierta ajena
+        When: un jugador intenta nombrar capitanes
+        Then: 403
+        """
+        _, comp, (ana, bea) = await self._abierta_con(client, 2)
+        set_auth_cookies(client, ana["cookies"])
+
+        respuesta = await self._nombrar(client, comp, ana, bea)
+
+        assert respuesta.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_una_competicion_que_no_existe_es_404(self, client: AsyncClient):
+        """
+        Given: un identificador que no existe
+        When: se nombran capitanes
+        Then: 404
+        """
+        _, _, (ana, bea) = await self._abierta_con(client, 2)
+
+        respuesta = await self._nombrar(client, {"id": str(uuid.uuid4())}, ana, bea)
+
+        assert respuesta.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_la_baja_de_un_capitan_libera_su_puesto(self, client: AsyncClient):
+        """
+        Given: capitanes nombrados y sin equipos
+        When: Ana se da de baja
+        Then: la ficha deja libre su puesto y conserva a Bea
+        """
+        creador, comp, (ana, bea) = await self._abierta_con(client, 2)
+        assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
+
+        set_auth_cookies(client, ana["cookies"])
+        baja = await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
+        set_auth_cookies(client, creador["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert baja.status_code == 200, baja.text
+        assert ficha.json()["team_a_captain_id"] is None
+        assert ficha.json()["team_b_captain_id"] == bea["user"]["id"]
+
+    async def _repartir(self, client, comp, modo, equipo_a=None, equipo_b=None):
+        """POST del reparto; con listas, manual, y sin ellas, automático."""
+        cuerpo = {"mode": modo}
+        if equipo_a is not None:
+            cuerpo["team_a_player_ids"] = [j["user"]["id"] for j in equipo_a]
+            cuerpo["team_b_player_ids"] = [j["user"]["id"] for j in equipo_b]
+        return await client.post(f"/api/v1/competitions/{comp['id']}/teams", json=cuerpo)
+
+    @pytest.mark.asyncio
+    async def test_repartir_con_un_capitan_fuera_de_su_equipo_es_400(self, client: AsyncClient):
+        """
+        Given: capitanes nombrados
+        When: el reparto manual pone a cada una en el equipo contrario
+        Then: 400 y no 500
+        """
+        creador, comp, (ana, bea, carla) = await self._abierta_con(client, 3)
+        assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
+
+        respuesta = await self._repartir(
+            client, comp, "MANUAL", [bea, {"user": creador["user"]}], [ana, carla]
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+        assert "capitanea" in respuesta.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_repartir_con_un_solo_capitan_es_400(self, client: AsyncClient):
+        # Cinco con el creador, y tras la baja cuatro: con un número impar el
+        # reparto se pararía antes, por los impares, y no llegaría a esto
+        """
+        Given: capitanes nombrados y Ana de baja
+        When: se reparte en automático
+        Then: 400 pidiendo el capitán que falta
+        """
+        creador, comp, (ana, bea, *_) = await self._abierta_con(client, 4)
+        assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
+        set_auth_cookies(client, ana["cookies"])
+        await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
+        set_auth_cookies(client, creador["cookies"])
+
+        respuesta = await self._repartir(client, comp, "AUTOMATIC")
+
+        assert respuesta.status_code == 400, respuesta.text
+        assert "Falta un capitán" in respuesta.json()["detail"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("error", ["desiguales", "repetido"])
+    async def test_un_reparto_manual_mal_formado_es_400_y_no_500(self, client: AsyncClient, error):
+        """El gemelo del anterior: ya pasaba sin capitanes."""
+        creador, comp, (ana, bea, carla) = await self._abierta_con(client, 3)
+        set_auth_cookies(client, creador["cookies"])
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
+        organizador = {"user": creador["user"]}
+        equipos = {
+            "desiguales": ([organizador, ana, bea], [carla]),
+            "repetido": ([organizador, ana], [ana, carla]),
+        }[error]
+
+        respuesta = await self._repartir(client, comp, "MANUAL", *equipos)
+
+        assert respuesta.status_code == 400, respuesta.text
+
+    async def _repartida(self, client):
+        """Cuatro con el creador, Ana y Bea capitanas, equipos repartidos a mano."""
+        creador, comp, (ana, bea, carla) = await self._abierta_con(client, 3)
+        assert (await self._nombrar(client, comp, ana, bea)).status_code == 200
+        organizador = {"user": creador["user"]}
+        reparto = await self._repartir(client, comp, "MANUAL", [ana, carla], [bea, organizador])
+        assert reparto.status_code == 201, reparto.text
+        return creador, comp, ana, bea, carla
+
+    @pytest.mark.asyncio
+    async def test_la_capitana_elige_subcapitan_y_asciende_si_se_va(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: Ana elige a Carla y después se da de baja
+        Then: Carla pasa a capitana y su puesto de subcapitana queda libre
+        """
+        creador, comp, ana, _, carla = await self._repartida(client)
+
+        set_auth_cookies(client, ana["cookies"])
+        elegido = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/A/vice-captain",
+            json={"player_id": carla["user"]["id"]},
+        )
+        baja = await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
+        set_auth_cookies(client, creador["cookies"])
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert elegido.status_code == 200, elegido.text
+        assert elegido.json()["team_a_vice_captain_id"] == carla["user"]["id"]
+        assert baja.status_code == 200, baja.text
+        assert ficha.json()["team_a_captain_id"] == carla["user"]["id"]
+        assert ficha.json()["team_a_vice_captain_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_otro_no_elige_el_subcapitan_de_un_equipo_ajeno(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: Bea intenta elegir el subcapitán del equipo A
+        Then: 403
+        """
+        _, comp, _, bea, carla = await self._repartida(client)
+        set_auth_cookies(client, bea["cookies"])
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/A/vice-captain",
+            json={"player_id": carla["user"]["id"]},
+        )
+
+        assert respuesta.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_un_subcapitan_de_otro_equipo_es_400(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: Ana elige a alguien del equipo B
+        Then: 400
+        """
+        creador, comp, ana, _, _ = await self._repartida(client)
+        set_auth_cookies(client, ana["cookies"])
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/A/vice-captain",
+            json={"player_id": creador["user"]["id"]},
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_un_equipo_que_no_existe_es_422(self, client: AsyncClient):
+        """
+        Given: equipos repartidos
+        When: se pide el subcapitán del equipo C
+        Then: 422: la ruta solo admite A o B
+        """
+        creador, comp, _, _, carla = await self._repartida(client)
+        set_auth_cookies(client, creador["cookies"])
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/C/vice-captain",
+            json={"player_id": carla["user"]["id"]},
+        )
+
+        assert respuesta.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_el_organizador_cubre_el_puesto_de_un_capitan_que_se_fue(
+        self, client: AsyncClient
+    ):
+        """
+        Given: Ana se va tras el draft sin subcapitán
+        When: el organizador pone a Carla, y Bea lo intenta después
+        Then: Carla queda de capitana y a Bea se le responde 403
+        """
+        creador, comp, ana, bea, carla = await self._repartida(client)
+        set_auth_cookies(client, ana["cookies"])
+        await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
+
+        set_auth_cookies(client, creador["cookies"])
+        cubierto = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/A/captain",
+            json={"player_id": carla["user"]["id"]},
+        )
+        set_auth_cookies(client, bea["cookies"])
+        ajeno = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/A/captain",
+            json={"player_id": carla["user"]["id"]},
+        )
+
+        assert cubierto.status_code == 200, cubierto.text
+        assert cubierto.json()["team_a_captain_id"] == carla["user"]["id"]
+        assert ajeno.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_cubrir_un_puesto_que_no_esta_vacio_es_400(self, client: AsyncClient):
+        """
+        Given: Ana sigue de capitana
+        When: el organizador intenta cubrir su puesto
+        Then: 400: no se cambia a un capitán que sigue
+        """
+        creador, comp, _, _, carla = await self._repartida(client)
+        set_auth_cookies(client, creador["cookies"])
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{comp['id']}/teams/A/captain",
+            json={"player_id": carla["user"]["id"]},
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+
+
+class TestTeamsAssignedEnLaFicha:
+    """FE #692: la ficha dice si ya hay equipos, para ofrecer el botón correcto."""
+
+    @pytest.mark.asyncio
+    async def test_la_ficha_dice_si_hay_equipos_y_los_listados_no(self, client: AsyncClient):
+        """
+        Given: una competición cerrada con cuatro inscritos
+        When: se mira la ficha antes y después de repartir, y el listado
+        Then: false, luego true, y null en el listado, donde no se calcula
+        """
+        creador = await create_authenticated_user(
+            client, "equipos-creador@test.com", "P@ssw0rd123!", "Creador", "Equipos"
+        )
+        comp = await create_competition(client, creador["cookies"])
+        set_auth_cookies(client, creador["cookies"])
+        for letra in "ABC":
+            jugador = await create_authenticated_user(
+                client, f"equipos-{letra}@test.com", "P@ssw0rd123!", "Jugador" + letra, "Equipos"
+            )
+            set_auth_cookies(client, creador["cookies"])
+            inscrito = await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+            )
+            assert inscrito.status_code == 201, inscrito.text
+        cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        assert cerrada.status_code == 200, cerrada.text
+
+        antes = await client.get(f"/api/v1/competitions/{comp['id']}")
+        reparto = await client.post(
+            f"/api/v1/competitions/{comp['id']}/teams", json={"mode": "AUTOMATIC"}
+        )
+        despues = await client.get(f"/api/v1/competitions/{comp['id']}")
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert antes.json()["teams_assigned"] is False
+        assert reparto.status_code == 201, reparto.text
+        assert despues.json()["teams_assigned"] is True
+        assert all(c.get("teams_assigned") is None for c in listado.json())
+
+
+class TestSetupMode:
+    """FE #695: el modo de configuración se elige al crear y se cambia mientras abre."""
+
+    @pytest.mark.asyncio
+    async def test_se_crea_con_el_modo_elegido_y_la_ficha_lo_devuelve(self, client: AsyncClient):
+        """
+        Given: un organizador
+        When: crea una competición en modo automático
+        Then: la ficha y el listado lo devuelven
+        """
+        user = await create_authenticated_user(
+            client, "modo-auto@test.com", "P@ssw0rd123!", "Modo", "Automatico"
+        )
+        set_auth_cookies(client, user["cookies"])
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": f"Modo automatico {uuid.uuid4().hex[:6]}",
+                "start_date": "2030-06-01",
+                "end_date": "2030-06-03",
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "setup_mode": "AUTOMATIC",
+            },
+        )
+        assert creada.status_code == 201, creada.text
+        ficha = await client.get(f"/api/v1/competitions/{creada.json()['id']}")
+        listado = await client.get("/api/v1/competitions", params={"my_competitions": True})
+
+        assert creada.json()["setup_mode"] == "AUTOMATIC"
+        assert ficha.status_code == 200, ficha.text
+        assert ficha.json()["setup_mode"] == "AUTOMATIC"
+        assert [c["setup_mode"] for c in listado.json()] == ["AUTOMATIC"]
+
+    @pytest.mark.asyncio
+    async def test_sin_decir_nada_nace_en_estilo_rydercup(self, client: AsyncClient):
+        """Es lo que son todas hoy: nadie ve cambiar su torneo por no contestar."""
+        user = await create_authenticated_user(
+            client, "modo-defecto@test.com", "P@ssw0rd123!", "Modo", "Defecto"
+        )
+        comp = await create_competition(client, user["cookies"])
+        set_auth_cookies(client, user["cookies"])
+
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert ficha.json()["setup_mode"] == "RYDER_CUP"
+
+    @pytest.mark.asyncio
+    async def test_se_cambia_mientras_abre_y_ya_no_al_cerrar(self, client: AsyncClient):
+        """
+        Given: una competición abierta
+        When: se cambia el modo, se cierran las inscripciones y se intenta otra vez
+        Then: el primer cambio entra y el segundo se rechaza
+        """
+        user = await create_authenticated_user(
+            client, "modo-cambio@test.com", "P@ssw0rd123!", "Modo", "Cambio"
+        )
+        comp = await create_competition(client, user["cookies"])
+        set_auth_cookies(client, user["cookies"])
+
+        cambiada = await client.put(
+            f"/api/v1/competitions/{comp['id']}", json={"setup_mode": "MANUAL"}
+        )
+        await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+        despues = await client.put(
+            f"/api/v1/competitions/{comp['id']}", json={"setup_mode": "AUTOMATIC"}
+        )
+        ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
+
+        assert cambiada.status_code == 200, cambiada.text
+        assert cambiada.json()["setup_mode"] == "MANUAL"
+        assert despues.status_code == 400
+        assert ficha.json()["setup_mode"] == "MANUAL"
+
+    @pytest.mark.asyncio
+    async def test_un_modo_que_no_existe_es_422(self, client: AsyncClient):
+        user = await create_authenticated_user(
+            client, "modo-malo@test.com", "P@ssw0rd123!", "Modo", "Malo"
+        )
+        set_auth_cookies(client, user["cookies"])
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": f"Modo malo {uuid.uuid4().hex[:6]}",
+                "start_date": "2030-06-01",
+                "end_date": "2030-06-03",
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "setup_mode": "SEMIAUTOMATIC",
+            },
+        )
+
+        assert creada.status_code == 422

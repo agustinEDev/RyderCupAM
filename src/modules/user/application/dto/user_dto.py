@@ -380,6 +380,10 @@ class LogoutRequestDTO(BaseModel):
     # Security context (opcional, proporcionado por API layer)
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+    # El token de refresco de ESTE dispositivo (BE #376). La API lo pone desde su
+    # cookie httpOnly y descarta lo que llegue en el cuerpo: solo se cierra la
+    # sesión desde la que se sale
+    refresh_token: str | None = Field(None, exclude=True, description="Uso interno.")
 
 
 class LogoutResponseDTO(BaseModel):

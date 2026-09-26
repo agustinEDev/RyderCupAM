@@ -8,6 +8,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
 )
+from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -23,6 +24,9 @@ from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -50,16 +54,23 @@ class CreateCompetitionUseCase:
     - Persistir mediante repositorio
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, location_builder: LocationBuilder):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        location_builder: LocationBuilder,
+        user_repository: UserRepositoryInterface,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
             location_builder: Domain Service para construir Location (patrón UserFinder)
+            user_repository: Para exigir el género del organizador, que juega (#710)
         """
         self._uow = uow
         self._location_builder = location_builder
+        self._user_repo = user_repository
 
     async def execute(
         self, request: CreateCompetitionRequestDTO, creator_id: UserId
@@ -128,6 +139,7 @@ class CreateCompetitionUseCase:
                 max_playing_handicap=request.max_playing_handicap,
                 enrollment_opens_days_before=request.enrollment_opens_days_before,
                 visibility=request.visibility,
+                setup_mode=request.setup_mode,
             )
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
@@ -145,7 +157,9 @@ class CreateCompetitionUseCase:
             # 10. Persistir la competición
             await self._uow.competitions.add(competition)
 
-            # 11. Auto-enroll del creador como jugador APPROVED
+            # 11. Auto-enroll del creador como jugador APPROVED. Juega, así que
+            # su género hace falta como el de cualquier inscrito (#710)
+            await exigir_genero(self._user_repo, creator_id, es_quien_se_apunta=True, al_crear=True)
             creator_enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,
@@ -185,6 +199,7 @@ class CreateCompetitionUseCase:
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
+            setup_mode=str(competition.setup_mode),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

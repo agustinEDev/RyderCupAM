@@ -29,6 +29,11 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
     async def find_by_match(self, match_id: MatchId) -> list[HoleScore]:
         return [hs for hs in self._scores.values() if hs.match_id == match_id]
 
+    async def find_by_match_for_update(self, match_id: MatchId) -> list[HoleScore]:
+        # En memoria no hay nada que bloquear. Sin pasar por `find_by_match`:
+        # los tests espían cuál de las dos lecturas usa cada camino
+        return [hs for hs in self._scores.values() if hs.match_id == match_id]
+
     async def find_by_match_and_hole(self, match_id: MatchId, hole_number: int) -> list[HoleScore]:
         return [
             hs

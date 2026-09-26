@@ -101,14 +101,7 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         stmt = (
             select(Competition)
             .where(Competition._id == competition_id)
-            .options(
-                selectinload(Competition._golf_courses)
-                .selectinload(CompetitionGolfCourse.golf_course)
-                .options(
-                    # Los hoyos llegan con las salidas: cuelgan de ellas
-                    selectinload(GolfCourse._tees),
-                )
-            )
+            .options(*self._agregado_completo())
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
@@ -117,15 +110,40 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         """
         Busca una competición por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
 
+        Trae el agregado entero, igual que `find_by_id` (BE #370). Sin los campos,
+        preguntarle a la competición por ellos disparaba una carga perezosa dentro
+        de código asíncrono (`MissingGreenlet`): pasó en crear, configurar y
+        cambiar sesiones. El bloqueo es solo de la fila de la competición; los
+        campos llegan en consultas aparte (`selectinload`).
+
         Args:
             competition_id: ID de la competición
 
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
-        stmt = select(Competition).where(Competition._id == competition_id).with_for_update()
+        # `populate_existing` no es un adorno: sin el, SQLAlchemy devuelve el
+        # objeto que la sesion ya tenia, con el estado de ANTES del bloqueo, y
+        # quien comprueba tras bloquear decide con datos viejos (revision de la
+        # BE #375: un golpe pisaba una reapertura). Mismo patron que los partidos
+        stmt = (
+            select(Competition)
+            .where(Competition._id == competition_id)
+            .options(*self._agregado_completo())
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    @staticmethod
+    def _agregado_completo():
+        """Los campos de la competición y sus salidas (los hoyos cuelgan de ellas)."""
+        return (
+            selectinload(Competition._golf_courses)
+            .selectinload(CompetitionGolfCourse.golf_course)
+            .options(selectinload(GolfCourse._tees)),
+        )
 
     async def find_by_creator(
         self, creator_id: UserId, limit: int = 100, offset: int = 0

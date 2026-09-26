@@ -33,6 +33,24 @@ class CompetitionNotClosedError(Exception):
     pass
 
 
+class AgendaNotEditableError(Exception):
+    """La competición ya terminó o se canceló: su agenda no se toca (BE #365)."""
+
+    pass
+
+
+class DateOutOfRangeError(Exception):
+    """La fecha de la sesión está fuera de las fechas de la competición."""
+
+    pass
+
+
+class ScheduleAlreadyInPlayError(Exception):
+    """Alguna sesión ya tiene partidos: la agenda automática se la llevaría."""
+
+    pass
+
+
 class MatchNotFoundError(Exception):
     """El partido no existe."""
 
@@ -148,3 +166,22 @@ class GolfCourseHasRoundsError(Exception):
     """
 
     pass
+
+
+class NotCompetitionParticipantError(Exception):
+    """Quien pregunta no es de esta competicion.
+
+    Sin esto, probando identificadores se leia la sesion de cualquiera, incluida
+    la de una competicion privada (FE #655).
+    """
+
+    pass
+
+
+class CompetitionFullError(Exception):
+    """La competición no tiene plazas libres (BE #372).
+
+    Tanto al pedir plaza como al aprobarla: la violación del dominio sin
+    traducir llegaba como un 500 sin cabeceras de CORS, y el navegador lo veía
+    como un fallo de red.
+    """

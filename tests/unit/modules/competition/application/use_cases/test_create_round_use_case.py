@@ -8,8 +8,8 @@ import pytest
 from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundRequestDTO,
 )
+from src.modules.competition.application.exceptions import AgendaNotEditableError
 from src.modules.competition.application.use_cases.create_round_use_case import (
-    CompetitionNotClosedError,
     CompetitionNotFoundError,
     CreateRoundUseCase,
     DateOutOfRangeError,
@@ -234,20 +234,23 @@ class TestCreateRoundUseCase:
         assert response.id is not None
         assert response.status == "PENDING_TEAMS"
 
-    async def test_should_fail_when_not_closed(
+    async def test_should_fail_when_cancelled(
         self,
         uow: InMemoryUnitOfWork,
         creator_id: UserId,
         golf_course_id: GolfCourseId,
     ):
         """
-        Verifica que la competicion debe estar en estado CLOSED.
+        Verifica que una competicion cancelada ya no admite cambios de agenda (BE #365).
 
-        Given: Una competicion en estado ACTIVE (no CLOSED)
+        Hasta el 24 sep esto exigia CLOSED; la agenda se edita desde que la
+        competicion existe, y solo se cierra al terminar o cancelarse.
+
+        Given: Una competicion cancelada
         When: Se intenta crear una ronda
         Then: Se lanza CompetitionNotClosedError
         """
-        # Arrange - crear competicion en estado ACTIVE (no CLOSED)
+        # Arrange - crear competicion y cancelarla
         competition = Competition.create(
             id=CompetitionId(uuid4()),
             creator_id=creator_id,
@@ -261,6 +264,7 @@ class TestCreateRoundUseCase:
             team_2_name="Team B",
         )
         competition.activate()
+        competition.cancel()
 
         # Asociar campo de golf
         comp_gc = CompetitionGolfCourse.create(
@@ -283,7 +287,7 @@ class TestCreateRoundUseCase:
         )
 
         # Act & Assert
-        with pytest.raises(CompetitionNotClosedError):
+        with pytest.raises(AgendaNotEditableError):
             await use_case.execute(request, creator_id)
 
     async def test_should_fail_when_golf_course_not_in_competition(

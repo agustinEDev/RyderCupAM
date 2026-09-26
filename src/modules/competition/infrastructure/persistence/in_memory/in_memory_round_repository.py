@@ -26,6 +26,10 @@ class InMemoryRoundRepository(RoundRepositoryInterface):
     async def find_by_id(self, round_id: RoundId) -> Round | None:
         return self._rounds.get(round_id)
 
+    async def find_by_id_for_update(self, round_id: RoundId) -> Round | None:
+        # En memoria no hay nada que bloquear ni nada viejo que refrescar
+        return self._rounds.get(round_id)
+
     async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         return [r for r in self._rounds.values() if r.competition_id == competition_id]
 

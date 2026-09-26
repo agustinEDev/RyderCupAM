@@ -24,5 +24,13 @@ class MatchFormat(StrEnum):
             return 1
         return 2  # FOURBALL y FOURSOMES
 
+    def one_ball_per_side(self) -> bool:
+        """Si cada bando juega UNA sola bola, a golpes alternos (foursomes).
+
+        Entonces la bola, sus golpes y su tarjeta son del bando, no de cada
+        jugador (decidido en agosto; tarjetas, BE #377).
+        """
+        return self == MatchFormat.FOURSOMES
+
     def __str__(self) -> str:
         return self.value

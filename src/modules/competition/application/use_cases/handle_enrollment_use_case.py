@@ -9,15 +9,23 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionFullError,
     CompetitionNotFoundError,
     EnrollmentNotFoundError,
     NotCreatorError,
+)
+from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.domain.exceptions.competition_violations import (
+    CompetitionFullViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -44,7 +52,9 @@ class HandleEnrollmentUseCase:
     - Las acciones válidas son APPROVE y REJECT
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
+    ):
         """
         Constructor.
 
@@ -52,6 +62,9 @@ class HandleEnrollmentUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # Aprobar tambien exige el genero: la solicitud pudo ser de antes de la
+        # regla, o quien la hizo pudo borrarlo luego (#710)
+        self._user_repo = user_repository
 
     async def execute(
         self, request: HandleEnrollmentRequestDTO, creator_id: UserId, is_admin: bool = False
@@ -102,9 +115,15 @@ class HandleEnrollmentUseCase:
                 approved_count = await self._uow.enrollments.count_approved_by_competition(
                     enrollment.competition_id
                 )
-                CompetitionPolicy.validate_capacity(
-                    approved_count, competition.max_players, enrollment.competition_id
-                )
+                try:
+                    CompetitionPolicy.validate_capacity(
+                        approved_count, competition.max_players, enrollment.competition_id
+                    )
+                except CompetitionFullViolation as e:
+                    raise CompetitionFullError(
+                        f"La competición está completa: {competition.max_players} plazas ocupadas."
+                    ) from e
+                await exigir_genero(self._user_repo, enrollment.user_id, es_quien_se_apunta=False)
                 enrollment.approve()
             elif request.action == "REJECT":
                 enrollment.reject()

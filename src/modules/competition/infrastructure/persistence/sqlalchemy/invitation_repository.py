@@ -92,6 +92,16 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
+        stmt = select(Invitation).where(
+            and_(
+                Invitation._competition_id == competition_id,
+                Invitation._status == InvitationStatus.PENDING,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_pending_by_email_and_competition(
         self, email: str, competition_id: CompetitionId
     ) -> Invitation | None:

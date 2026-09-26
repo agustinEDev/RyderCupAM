@@ -4,6 +4,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_competition_uow,
@@ -33,6 +34,7 @@ from src.modules.competition.application.mappers.competition_mapper import (
 from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
+from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -49,6 +51,7 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     CompetitionNotEditableError,
+    DatesLeaveSessionsOutError,
     UpdateCompetitionUseCase,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -307,6 +310,7 @@ async def create_competition(
                 team_assignment=enriched_dto.team_assignment,
                 enrollment_opens_days_before=competition.enrollment_opens_days_before,
                 visibility=str(competition.visibility),
+                setup_mode=str(competition.setup_mode),
                 team_1_name=competition.team_1_name,
                 team_2_name=competition.team_2_name,
                 is_creator=True,
@@ -317,7 +321,12 @@ async def create_competition(
 
     except CompetitionAlreadyExistsError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    except (InvalidCountryError, InvalidCountryCodeError, InvalidLocationError) as e:
+    except (
+        InvalidCountryError,
+        InvalidCountryCodeError,
+        InvalidLocationError,
+        GenderRequiredError,
+    ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -411,6 +420,7 @@ async def get_competition(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
+    delete_uc: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
@@ -441,6 +451,19 @@ async def get_competition(
                 competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
 
+        # Solo aquí y no en el mapper, que usan también los listados: saberlo
+        # exige recorrer lo jugado. La regla es la misma que aplica el borrado,
+        # no una copia (BE #347). Fuera del bloque de arriba: el caso de uso abre
+        # su propia unidad de trabajo
+        dto.can_delete = await delete_uc.puede_borrar(
+            competition_vo_id, current_user_id, is_admin=current_user.is_admin
+        )
+        # Igual, solo en la ficha: con él elige el botón de capitanes (FE #692)
+        dto.teams_assigned = await get_competition_uc.tiene_equipos(competition_vo_id)
+        # Cómo se repartieron DE VERDAD: la competición guarda el modo con el
+        # que nació, y así unos equipos salidos del draft se contaban como
+        # repartidos a mano
+        dto.actual_team_assignment = await get_competition_uc.reparto_real(competition_vo_id)
         return dto
 
     except ValueError as e:
@@ -497,6 +520,23 @@ async def update_competition(
     # dos caracteres pero mal formado como "1a" (InvalidCountryCodeError) y el
     # país repetido, que el DTO deja pasar y rechaza la Location
     # (InvalidLocationError). Sin nombrarlos, cada uno sale como un 500.
+    except DatesLeaveSessionsOutError as e:
+        # Cuáles, y no solo que alguna (#710). En claves: la pantalla escribe la
+        # fecha y la franja en su idioma (decidido el 24 sep, BE #360)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": (
+                    "No se pueden mover las fechas: alguna sesión quedaría fuera del torneo. "
+                    "Cambia o borra antes esas sesiones."
+                ),
+                "error_code": "DATES_LEAVE_SESSIONS_OUT",
+                "sessions_outside": [
+                    {"id": str(id_), "round_date": dia.isoformat(), "session_type": franja}
+                    for id_, dia, franja in e.sesiones
+                ],
+            },
+        )
     except (
         CompetitionNotEditableError,
         InvalidCountryError,
@@ -514,10 +554,12 @@ async def update_competition(
     description=(
         "Elimina físicamente una competición, con todo lo que cuelga de ella. "
         "Solo el creador o un administrador, y solo si se cumplen DOS cosas: el "
-        "estado lo permite (DRAFT, ACTIVE o CANCELLED) y no hay calendario "
-        "montado. La segunda no se deduce del estado: reabrir las inscripciones "
-        "devuelve a ACTIVE un torneo ya jugado sin borrar sus rondas. Los "
-        "equipos sorteados no lo impiden. Si no se cumple, 400."
+        "estado lo permite (todos menos IN_PROGRESS y COMPLETED) y no hay nada "
+        "jugado: ningún partido terminado, con walkover o concedido, ni un hoyo "
+        "anotado. La segunda no se deduce del estado: reabrir las inscripciones "
+        "devuelve a ACTIVE un torneo ya jugado sin borrar sus partidos. El "
+        "calendario sin jugar y los equipos sorteados no lo impiden, y se van "
+        "con ella. Si no se cumple, 400."
     ),
     tags=["Competitions"],
 )

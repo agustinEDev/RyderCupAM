@@ -1,7 +1,7 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -20,6 +20,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.visibility import Visibility
 
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
@@ -170,6 +171,7 @@ class CreateCompetitionRequestDTO(BaseModel):
         ),
     )
     visibility: Visibility = Field(Visibility.PRIVATE, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: SetupMode = Field(SetupMode.RYDER_CUP, description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
@@ -283,6 +285,7 @@ class CreateCompetitionResponseDTO(BaseModel):
         ),
     )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: str = Field(..., description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
 
     # Campos calculados
     is_creator: bool = Field(default=True, description="Siempre True para el creador.")
@@ -371,6 +374,7 @@ class UpdateCompetitionRequestDTO(BaseModel):
         ),
     )
     visibility: Visibility | None = Field(None, description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: SetupMode | None = Field(None, description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
 
     team_1_name: str | None = Field(
         None, min_length=3, max_length=50, description="Nuevo nombre del equipo 1."
@@ -493,6 +497,44 @@ class CompetitionResponseDTO(BaseModel):
         ),
     )
     visibility: str = Field(..., description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.")
+    setup_mode: str = Field(..., description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.")
+    team_a_captain_id: UUID | None = Field(
+        None, description="Capitán del equipo A, o null si no hay (BE #320)."
+    )
+    team_b_captain_id: UUID | None = Field(
+        None, description="Capitán del equipo B, o null si no hay (BE #320)."
+    )
+    team_a_vice_captain_id: UUID | None = Field(
+        None, description="Subcapitán del equipo A, o null si no hay (BE #320)."
+    )
+    team_b_vice_captain_id: UUID | None = Field(
+        None, description="Subcapitán del equipo B, o null si no hay (BE #320)."
+    )
+    teams_assigned: bool | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: si ya hay equipos repartidos. Con equipos los capitanes "
+            "ya no se cambian, y reabrir las inscripciones no deshace el reparto. Null "
+            "en los listados, donde no se calcula."
+        ),
+    )
+    actual_team_assignment: str | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: como se repartieron los equipos DE VERDAD. La "
+            "competicion guarda el modo con el que nacio —del tipo Ryder sale "
+            "MANUAL—, asi que unos equipos elegidos en la sala de draft salian "
+            "como repartidos a mano. Null mientras no haya reparto."
+        ),
+    )
+    can_delete: bool | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: si quien la mira puede borrarla ahora (creador o admin, "
+            "estado que lo permita y nada jugado). Null en los listados, donde no "
+            "se calcula para no recorrer los partidos de cada competición."
+        ),
+    )
 
     # Campos calculados (NUEVO - requeridos por frontend)
     is_creator: bool = Field(
@@ -604,6 +646,99 @@ class CloseEnrollmentsResponseDTO(BaseModel):
     closed_at: datetime = Field(..., description="Fecha y hora de cierre.")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------------------
+# Name Captains (BE #320): nombrarlos cierra las inscripciones
+# --------------------------------------------------------------------------------------
+
+
+class NameCaptainsBodyDTO(BaseModel):
+    """Cuerpo de PUT /competitions/{id}/captains: la competición va en la ruta."""
+
+    team_a_captain_id: UUID = Field(
+        ..., description="Capitán del equipo A: un inscrito aprobado."
+    )
+    team_b_captain_id: UUID = Field(
+        ..., description="Capitán del equipo B: un inscrito aprobado, distinto del A."
+    )
+
+
+class NameCaptainsRequestDTO(BaseModel):
+    """
+    DTO de entrada para nombrar a los dos capitanes.
+
+    Con las inscripciones abiertas, las cierra (ACTIVE → CLOSED). Ya cerradas,
+    los cambia, mientras no haya equipos repartidos.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team_a_captain_id: UUID = Field(
+        ..., description="Capitán del equipo A: un inscrito aprobado."
+    )
+    team_b_captain_id: UUID = Field(
+        ..., description="Capitán del equipo B: un inscrito aprobado, distinto del A."
+    )
+
+
+class NameCaptainsResponseDTO(BaseModel):
+    """
+    DTO de salida al nombrar capitanes, con el aviso de números que no cuadran.
+    """
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    status: str = Field(..., description="Estado tras nombrarlos (CLOSED).")
+    team_a_captain_id: UUID = Field(..., description="Capitán del equipo A.")
+    team_b_captain_id: UUID = Field(..., description="Capitán del equipo B.")
+    total_players: int = Field(..., description="Inscritos aprobados.")
+    uneven_teams: bool = Field(
+        ...,
+        description=(
+            "Aviso, no bloqueo: con un número impar de inscritos los equipos no "
+            "saldrán iguales. Los capitanes quedan nombrados, pero para repartir "
+            "los equipos hará falta un número par: que entre o salga alguien."
+        ),
+    )
+
+
+class TeamPlayerBodyDTO(BaseModel):
+    """Cuerpo de las rutas de capitanía de un equipo: el jugador elegido."""
+
+    player_id: UUID = Field(..., description="Jugador del equipo, inscrito y aprobado.")
+
+
+class NameViceCaptainRequestDTO(BaseModel):
+    """
+    DTO de entrada para nombrar al subcapitán de un equipo, tras el draft.
+
+    Lo elige el capitán de ese equipo; también el organizador o un admin.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team: Literal["A", "B"] = Field(..., description="Equipo: A o B.")
+    player_id: UUID = Field(..., description="Subcapitán: un jugador de ese equipo.")
+
+
+class FillCaptainRequestDTO(BaseModel):
+    """
+    DTO de entrada para cubrir el puesto de un capitán que se fue sin subcapitán.
+
+    Solo el organizador o un admin, solo tras el draft y solo un puesto vacío.
+    """
+
+    competition_id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team: Literal["A", "B"] = Field(..., description="Equipo: A o B.")
+    player_id: UUID = Field(..., description="Nuevo capitán: un jugador de ese equipo.")
+
+
+class CaptaincyResponseDTO(BaseModel):
+    """Capitanes y subcapitanes de la competición, tras cambiar alguno."""
+
+    id: UUID = Field(..., description=COMPETITION_ID_DESC)
+    team_a_captain_id: UUID | None = Field(None, description="Capitán del equipo A.")
+    team_b_captain_id: UUID | None = Field(None, description="Capitán del equipo B.")
+    team_a_vice_captain_id: UUID | None = Field(None, description="Subcapitán del equipo A.")
+    team_b_vice_captain_id: UUID | None = Field(None, description="Subcapitán del equipo B.")
 
 
 # --------------------------------------------------------------------------------------
@@ -751,7 +886,7 @@ class CompleteCompetitionResponseDTO(BaseModel):
 # ======================================================================================
 
 # --------------------------------------------------------------------------------------
-# Delete Competition (eliminación física - mientras no haya calendario)
+# Delete Competition (eliminación física - mientras no haya nada jugado)
 # --------------------------------------------------------------------------------------
 
 
@@ -760,8 +895,8 @@ class DeleteCompetitionRequestDTO(BaseModel):
     DTO de entrada para eliminar físicamente una competición.
 
     Restricciones:
-    - Solo si el estado lo permite (DRAFT, ACTIVE o CANCELLED)
-    - Y solo si no hay calendario montado (los equipos sorteados no impiden)
+    - Solo si el estado lo permite (todos menos IN_PROGRESS y COMPLETED)
+    - Y solo si no hay nada jugado (el calendario y los equipos no impiden)
     - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments)
     """

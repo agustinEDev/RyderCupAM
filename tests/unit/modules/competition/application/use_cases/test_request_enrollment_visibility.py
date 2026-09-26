@@ -7,6 +7,7 @@ para evitar: que un desconocido llame a la puerta de la Ryder de unos amigos.
 """
 
 from datetime import date
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -31,8 +32,20 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
+
+
+class _ConGenero:
+    """Cualquiera tiene el género puesto: esto prueba la visibilidad, no el género."""
+
+    async def find_by_id(self, user_id):
+        return SimpleNamespace(id=user_id, gender=Gender.MALE)
+
+
+_CON_GENERO = _ConGenero()
 
 
 class TestAskingForAPlace:
@@ -45,7 +58,9 @@ class TestAskingForAPlace:
         return UserId(uuid4())
 
     async def _competition_open_to(self, uow, creator_id, visibility):
-        create_uc = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         created = await create_uc.execute(
             CreateCompetitionRequestDTO(
                 name="Ryder de los amigos",
@@ -63,7 +78,7 @@ class TestAskingForAPlace:
         """La puerta de un torneo entre amigos no se toca desde fuera."""
         created = await self._competition_open_to(uow, creator_id, Visibility.PRIVATE)
 
-        uc = RequestEnrollmentUseCase(uow)
+        uc = RequestEnrollmentUseCase(uow, _CON_GENERO)
         with pytest.raises(CompetitionIsPrivateError):
             await uc.execute(
                 RequestEnrollmentRequestDTO(competition_id=created.id, user_id=uuid4())
@@ -73,7 +88,7 @@ class TestAskingForAPlace:
         """Y en la de un club, cualquiera puede pedir sitio."""
         created = await self._competition_open_to(uow, creator_id, Visibility.PUBLIC)
 
-        uc = RequestEnrollmentUseCase(uow)
+        uc = RequestEnrollmentUseCase(uow, _CON_GENERO)
         respuesta = await uc.execute(
             RequestEnrollmentRequestDTO(competition_id=created.id, user_id=uuid4())
         )
@@ -85,7 +100,7 @@ class TestAskingForAPlace:
         created = await self._competition_open_to(uow, creator_id, Visibility.PRIVATE)
         quien = uuid4()
 
-        uc = RequestEnrollmentUseCase(uow)
+        uc = RequestEnrollmentUseCase(uow, _CON_GENERO)
         with pytest.raises(CompetitionIsPrivateError):
             await uc.execute(RequestEnrollmentRequestDTO(competition_id=created.id, user_id=quien))
 

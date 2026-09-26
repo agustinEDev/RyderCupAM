@@ -27,6 +27,19 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
     async def find_by_id(self, round_id: RoundId) -> Round | None:
         return await self._session.get(Round, round_id)
 
+    async def find_by_id_for_update(self, round_id: RoundId) -> Round | None:
+        # `populate_existing`: si la sesion ya la tenia en memoria, se pisa con
+        # lo que hay en la base de datos. Sin eso, tras esperar el bloqueo se
+        # seguiria decidiendo con el estado de antes
+        statement = (
+            select(Round)
+            .where(Round._id == round_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         statement = (
             select(Round)

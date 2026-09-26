@@ -21,21 +21,21 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
     DeleteCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
-from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
-from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
+    montar_calendario,
+)
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -70,7 +70,9 @@ class TestDeleteCompetitionUseCase:
         Then: Se elimina correctamente y retorna confirmación
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -128,7 +130,9 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -148,46 +152,30 @@ class TestDeleteCompetitionUseCase:
 
         assert "Solo el creador puede eliminar" in str(exc_info.value)
 
-    async def test_should_raise_error_when_competition_is_closed(
+    async def test_should_delete_a_closed_competition_with_nothing_played(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
-        BE #333: cerradas las inscripciones ya no se borra.
+        BE #347: cerradas las inscripciones, se sigue pudiendo borrar.
 
-        Given: Una competición en estado CLOSED
-        When: El creador intenta eliminarla
-        Then: Se lanza CompetitionNotDeletableError
+        Given: Una competición en estado CLOSED sin nada jugado
+        When: El creador la elimina
+        Then: Se elimina
         """
-        # Arrange: Crear competición y activarla
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
-        create_request = CreateCompetitionRequestDTO(
-            name="Ryder Cup 2025",
-            start_date=date(2025, 6, 1),
-            end_date=date(2025, 6, 3),
-            main_country="ES",
-            play_mode="SCRATCH",
-        )
-        created = await create_use_case.execute(create_request, creator_id)
-
-        # Llevarla hasta CLOSED, que es donde deja de poder borrarse
+        created = await self._crear_competicion(uow, creator_id)
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             competition.close_enrollments()
             await uow.competitions.update(competition)
             await uow.commit()
 
-        # Act: Intentar eliminar competición CLOSED
-        delete_use_case = DeleteCompetitionUseCase(uow)
-        delete_request = DeleteCompetitionRequestDTO(competition_id=created.id)
+        response = await DeleteCompetitionUseCase(uow).execute(
+            DeleteCompetitionRequestDTO(competition_id=created.id), creator_id
+        )
 
-        # Assert
-        with pytest.raises(CompetitionNotDeletableError) as exc_info:
-            await delete_use_case.execute(delete_request, creator_id)
-
-        assert "Estado actual: CLOSED" in str(exc_info.value)
-        # El motivo es el estado, no el montaje: decirle «sin calendario» a quien
-        # solo tiene que reabrir las inscripciones le manda a arreglar otra cosa
-        assert "calendario" not in str(exc_info.value).lower()
+        assert response.deleted is True
+        async with uow:
+            assert await uow.competitions.find_by_id(CompetitionId(created.id)) is None
 
     async def test_should_raise_error_when_trying_to_delete_in_progress_competition(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -200,7 +188,9 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza CompetitionNotDeletableError
         """
         # Arrange: Crear competición y llevarla a IN_PROGRESS
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -239,7 +229,9 @@ class TestDeleteCompetitionUseCase:
         Then: Se lanza CompetitionNotDeletableError
         """
         # Arrange: Crear competición y llevarla a COMPLETED
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -358,18 +350,18 @@ class TestDeleteCompetitionUseCase:
     async def test_should_refuse_to_delete_a_cancelled_competition_that_was_played(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
-        """Cancelar un torneo ya montado no lo hace desechable.
+        """Cancelar un torneo ya jugado no lo hace desechable.
 
-        Es la otra cara: lo que decide no es el estado sino si llegó a montarse,
-        y una cancelada con calendario tiene rondas y partidos detrás.
+        Es la otra cara: lo que decide no es el estado sino si se llegó a jugar,
+        y una cancelada con un golpe anotado se lo llevaría en la cascada.
 
-        Given: Una competición con calendario montado y luego cancelada
+        Given: Una competición con un golpe anotado y luego cancelada
         When: El creador intenta eliminarla
         Then: Se lanza CompetitionNotDeletableError
         """
         created = await self._crear_competicion(uow, creator_id)
         await self._activar(uow, created.id)
-        await self._montar_una_ronda(uow, created.id)
+        await montar_calendario(uow, created.id, "golpe propio")
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             competition.cancel()
@@ -382,9 +374,11 @@ class TestDeleteCompetitionUseCase:
         with pytest.raises(CompetitionNotDeletableError) as exc_info:
             await delete_use_case.execute(request, creator_id)
 
-        assert "calendario" in str(exc_info.value).lower()
+        assert "golpes anotados" in str(exc_info.value)
+        # El calendario ya no es el motivo: decirlo mandaría a deshacerlo en balde
+        assert "calendario" not in str(exc_info.value).lower()
 
-    async def test_should_refuse_to_delete_a_reopened_competition_that_already_has_rounds(
+    async def test_should_refuse_to_delete_a_reopened_competition_that_was_played(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
     ):
         """
@@ -395,13 +389,13 @@ class TestDeleteCompetitionUseCase:
         de las dos borra rondas ni partidos. Mirando solo el estado, un torneo ya
         jugado acabaría siendo borrable, y la cascada se llevaría los golpes.
 
-        Given: Una competición en ACTIVE que ya tiene calendario montado
+        Given: Una competición en ACTIVE con un partido terminado
         When: El creador intenta eliminarla
-        Then: Se lanza CompetitionNotDeletableError
+        Then: Se lanza CompetitionNotDeletableError, que dice por qué
         """
         created = await self._crear_competicion(uow, creator_id)
         await self._activar(uow, created.id)
-        await self._montar_una_ronda(uow, created.id)
+        await montar_calendario(uow, created.id, "terminado")
 
         delete_use_case = DeleteCompetitionUseCase(uow)
         request = DeleteCompetitionRequestDTO(competition_id=created.id)
@@ -409,7 +403,32 @@ class TestDeleteCompetitionUseCase:
         with pytest.raises(CompetitionNotDeletableError) as exc_info:
             await delete_use_case.execute(request, creator_id)
 
-        assert "calendario" in str(exc_info.value).lower()
+        assert "golpes anotados" in str(exc_info.value)
+        # El calendario ya no es el motivo: decirlo mandaría a deshacerlo en balde
+        assert "calendario" not in str(exc_info.value).lower()
+
+    async def test_should_delete_a_competition_whose_schedule_was_never_played(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """
+        BE #347: tener calendario ya no impide borrar; haberlo jugado, sí.
+
+        La cascada se lleva la ronda, sus partidos y sus tarjetas, y todo eso
+        estaba vacío: se protege lo jugado, no lo montado (22 sep).
+
+        Given: Una competición con un partido abierto y sus tarjetas vacías
+        When: El creador la elimina
+        Then: Se elimina, y con ella su calendario
+        """
+        created = await self._crear_competicion(uow, creator_id)
+        await self._activar(uow, created.id)
+        await montar_calendario(uow, created.id, "empezado")
+
+        response = await DeleteCompetitionUseCase(uow).execute(
+            DeleteCompetitionRequestDTO(competition_id=created.id), creator_id
+        )
+
+        assert response.deleted is True
 
     async def test_should_delete_a_competition_whose_teams_are_drawn_but_has_no_schedule(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -487,7 +506,9 @@ class TestDeleteCompetitionUseCase:
 
     async def _crear_competicion(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Crea una competición en DRAFT y devuelve la respuesta de creación."""
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -500,9 +521,7 @@ class TestDeleteCompetitionUseCase:
     async def _activar(self, uow: InMemoryUnitOfWork, competition_id: str) -> None:
         """Abre las inscripciones de una competición recién creada."""
 
-    async def _inscribir(
-        self, uow: InMemoryUnitOfWork, competition_id: str, cuantos: int
-    ) -> None:
+    async def _inscribir(self, uow: InMemoryUnitOfWork, competition_id: str, cuantos: int) -> None:
         """Mete a `cuantos` jugadores aprobados en la competición."""
         async with uow:
             for _ in range(cuantos):
@@ -512,20 +531,6 @@ class TestDeleteCompetitionUseCase:
                     user_id=UserId(uuid4()),
                 )
                 await uow.enrollments.add(enrollment)
-            await uow.commit()
-
-    async def _montar_una_ronda(self, uow: InMemoryUnitOfWork, competition_id: str) -> None:
-        """Deja una ronda colgando de la competición, como haría el calendario."""
-        async with uow:
-            await uow.rounds.add(
-                Round.create(
-                    competition_id=CompetitionId(competition_id),
-                    golf_course_id=GolfCourseId(uuid4()),
-                    round_date=date(2025, 6, 1),
-                    session_type=SessionType.MORNING,
-                    match_format=MatchFormat.SINGLES,
-                )
-            )
             await uow.commit()
 
     async def _sortear_equipos(self, uow: InMemoryUnitOfWork, competition_id: str) -> None:

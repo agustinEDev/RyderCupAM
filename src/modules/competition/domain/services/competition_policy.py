@@ -46,6 +46,11 @@ MAX_COMPETITION_DURATION_DAYS = 365
 MAX_INVITATIONS_PER_HOUR = 100
 
 
+# Cerrada la inscripcion ya no quedan plazas: ni se invita ni se acepta (#710)
+INSCRIPCION_CERRADA = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
+SIN_PLAZAS = "No quedan plazas en esta competición: la inscripción está cerrada"
+
+
 class CompetitionPolicy:
     """
     Domain service con reglas de negocio para competiciones.
@@ -109,7 +114,7 @@ class CompetitionPolicy:
             DuplicateEnrollmentViolation: Si el usuario ya está inscrito
             MaxEnrollmentsExceededViolation: Si excede el límite de inscripciones
             InvalidCompetitionStatusViolation: Si el estado no permite enrollments
-            EnrollmentPastStartDateViolation: Si intenta inscribirse después del inicio
+            EnrollmentPastStartDateViolation: Si intenta inscribirse pasado el día de inicio
 
         Example:
             >>> CompetitionPolicy.can_enroll(
@@ -141,10 +146,12 @@ class CompetitionPolicy:
                 "Enrollments only allowed in ACTIVE or CLOSED status."
             )
 
-        # 4. Validar restricción temporal (competición no debe haber empezado)
-        if datetime.now().date() >= competition_start_date:
+        # 4. Validar restricción temporal: hasta el día de inicio INCLUIDO (BE #372).
+        # El día del torneo es cuando más gente se apunta; lo que protege el
+        # torneo es el estado (en juego ya no) y la aprobación del organizador
+        if datetime.now().date() > competition_start_date:
             raise EnrollmentPastStartDateViolation(
-                f"Competition starts on {competition_start_date}. Cannot enroll after start date."
+                f"Competition started on {competition_start_date}. Cannot enroll after start date."
             )
 
     @staticmethod
@@ -178,7 +185,10 @@ class CompetitionPolicy:
         """
         Valida si el estado de la competicion permite enviar invitaciones.
 
-        Allowed: DRAFT, ACTIVE, CLOSED, IN_PROGRESS.
+        Allowed: DRAFT, ACTIVE.
+
+        CLOSED e IN_PROGRESS no desde el 24 sep (#710): cerrada la inscripcion
+        no quedan plazas, y una invitacion enviada ahi nadie podria aceptarla.
 
         DRAFT entra desde BE #319: invitar a la primera persona ES abrir el
         torneo, y quien invita no tiene por que pasar antes por un boton cuyo
@@ -191,16 +201,16 @@ class CompetitionPolicy:
         Raises:
             InvitationCompetitionStatusViolation: Si el estado no permite invitaciones
         """
+        if competition_status in INSCRIPCION_CERRADA:
+            raise InvitationCompetitionStatusViolation(SIN_PLAZAS)
         allowed = {
             CompetitionStatus.DRAFT,
             CompetitionStatus.ACTIVE,
-            CompetitionStatus.CLOSED,
-            CompetitionStatus.IN_PROGRESS,
         }
         if competition_status not in allowed:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Invitations only allowed in DRAFT, ACTIVE, CLOSED, or IN_PROGRESS status."
+                "Invitations only allowed in DRAFT or ACTIVE status."
             )
 
     @staticmethod
@@ -230,7 +240,10 @@ class CompetitionPolicy:
         """
         Valida si el estado de la competicion permite aceptar invitaciones.
 
-        Allowed: ACTIVE, CLOSED, IN_PROGRESS.
+        Allowed: ACTIVE.
+
+        Cerrada o en juego, no (decidido el 24 sep, #710): con los equipos
+        hechos, entrar descuadraba los partidos.
 
         Args:
             competition_status: Estado actual de la competicion
@@ -238,15 +251,12 @@ class CompetitionPolicy:
         Raises:
             InvitationCompetitionStatusViolation: Si el estado no permite aceptar
         """
-        allowed = {
-            CompetitionStatus.ACTIVE,
-            CompetitionStatus.CLOSED,
-            CompetitionStatus.IN_PROGRESS,
-        }
-        if competition_status not in allowed:
+        if competition_status in INSCRIPCION_CERRADA:
+            raise InvitationCompetitionStatusViolation(SIN_PLAZAS)
+        if competition_status != CompetitionStatus.ACTIVE:
             raise InvitationCompetitionStatusViolation(
                 f"Competition status is {competition_status.value}. "
-                "Accepting invitations only allowed in ACTIVE, CLOSED, or IN_PROGRESS status."
+                "Accepting invitations only allowed in ACTIVE status."
             )
 
     @staticmethod

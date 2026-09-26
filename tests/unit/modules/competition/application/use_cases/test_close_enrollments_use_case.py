@@ -1,6 +1,7 @@
 """Tests para CloseEnrollmentsUseCase."""
 
-from datetime import date
+from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -18,12 +19,16 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
     CreateCompetitionUseCase,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -58,7 +63,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se cierran correctamente y cambia a estado CLOSED
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -89,6 +96,57 @@ class TestCloseEnrollmentsUseCase:
         async with uow:
             competition = await uow.competitions.find_by_id(CompetitionId(created.id))
             assert competition.status.value == "CLOSED"
+
+    async def test_i5_las_invitaciones_pendientes_se_quedan_sin_plaza(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
+        """Decidido el 24 sep (#710): al cerrar, las pendientes se rechazan por
+        falta de plazas. Aceptar una después metía a alguien con el draft hecho."""
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
+        crear = lambda nombre: CreateCompetitionRequestDTO(  # noqa: E731
+            name=nombre,
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        )
+        esta = await create_use_case.execute(crear("Esta"), creator_id)
+        otra = await create_use_case.execute(crear("Otra"), creator_id)
+
+        def invitacion(competicion, email):
+            return Invitation.create(
+                id=InvitationId.generate(),
+                competition_id=CompetitionId(competicion.id),
+                inviter_id=creator_id,
+                invitee_email=email,
+            )
+
+        pendientes = [invitacion(esta, f"p{i}@test.com") for i in range(2)]
+        # Caducada sin que nadie la pasara a EXPIRED: caducada, no «sin plaza»
+        caducada = invitacion(esta, "c@test.com")
+        caducada._expires_at = datetime.now() - timedelta(days=1)
+        aceptada = invitacion(esta, "a@test.com")
+        aceptada.accept()
+        de_otra = invitacion(otra, "o@test.com")
+        async with uow:
+            for inv in [*pendientes, caducada, aceptada, de_otra]:
+                await uow.invitations.add(inv)
+
+        await CloseEnrollmentsUseCase(uow).execute(
+            CloseEnrollmentsRequestDTO(competition_id=esta.id), creator_id
+        )
+
+        async with uow:
+            estados = {
+                inv.id: (await uow.invitations.find_by_id(inv.id)).status
+                for inv in [*pendientes, caducada, aceptada, de_otra]
+            }
+        assert [estados[p.id] for p in pendientes] == [InvitationStatus.NO_ROOM] * 2
+        assert estados[caducada.id] == InvitationStatus.EXPIRED
+        assert estados[aceptada.id] == InvitationStatus.ACCEPTED
+        assert estados[de_otra.id] == InvitationStatus.PENDING
 
     async def test_should_raise_error_when_competition_not_found(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -122,7 +180,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza NotCompetitionCreatorError
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -159,7 +219,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear competición (queda en DRAFT)
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -193,7 +255,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se lanza CompetitionStateError
         """
         # Arrange: Crear, activar y cerrar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -231,7 +295,9 @@ class TestCloseEnrollmentsUseCase:
         Then: Se emite el evento de dominio
         """
         # Arrange: Crear y activar competición
-        create_use_case = CreateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        create_use_case = CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        )
         create_request = CreateCompetitionRequestDTO(
             name="Ryder Cup 2025",
             start_date=date(2025, 6, 1),
@@ -262,3 +328,34 @@ class TestCloseEnrollmentsUseCase:
             assert events[2].__class__.__name__ == "CompetitionEnrollmentsClosedEvent"
             assert events[2].competition_id == str(created.id)
             assert events[2].total_enrollments == 1  # Solo el creador (auto-enrolled)
+
+
+# ==================== Con la fila bloqueada (#710, CodeRabbit en la #380) ====================
+# Sin bloqueo, aceptar leía la competición ABIERTA, cerrar confirmaba CLOSED y
+# las invitaciones sin plaza, y la aceptación se confirmaba después: entraba
+# alguien con la inscripción ya cerrada
+
+
+async def test_cerrar_bloquea_la_fila_de_la_competicion():
+    uow = InMemoryUnitOfWork()
+    creator_id = UserId(uuid4())
+    create_use_case = CreateCompetitionUseCase(
+        uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+    )
+    creada = await create_use_case.execute(
+        CreateCompetitionRequestDTO(
+            name="Bloqueo",
+            start_date=date(2025, 6, 1),
+            end_date=date(2025, 6, 3),
+            main_country="ES",
+            play_mode="SCRATCH",
+        ),
+        creator_id,
+    )
+    uow.competitions.find_by_id_for_update = AsyncMock(wraps=uow.competitions.find_by_id_for_update)
+
+    await CloseEnrollmentsUseCase(uow).execute(
+        CloseEnrollmentsRequestDTO(competition_id=creada.id), creator_id
+    )
+
+    uow.competitions.find_by_id_for_update.assert_awaited()

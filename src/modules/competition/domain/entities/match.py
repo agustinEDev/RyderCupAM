@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
+from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
@@ -284,20 +285,24 @@ class Match:
         self._marker_assignments = tuple(assignments)
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-    def submit_scorecard(self, user_id: UserId) -> None:
+    def submit_scorecard(self, user_id: UserId, match_format: MatchFormat) -> None:
         """
         Registra que un jugador ha entregado su tarjeta.
 
+        En foursomes la tarjeta es del bando (BE #377): la de uno vale por los
+        dos, y el compañero ya no la entrega.
+
         Args:
             user_id: ID del jugador que entrega
+            match_format: El formato de la sesion, que decide de quien es la tarjeta
 
         Raises:
-            ValueError: Si no es jugador del partido o ya entrego
+            ValueError: Si no es jugador del partido o ya entrego (el o su bando)
         """
         if self.find_player(user_id) is None:
             raise ValueError(f"User {user_id} is not a player in this match")
 
-        if self.has_submitted_scorecard(user_id):
+        if self.has_submitted_scorecard(user_id, match_format):
             raise ValueError(f"User {user_id} has already submitted their scorecard")
 
         self._scorecard_submitted_by = (*self._scorecard_submitted_by, user_id)
@@ -331,14 +336,31 @@ class Match:
         """Retorna el handicap combinado del Equipo B."""
         return sum(p.playing_handicap for p in self._team_b_players)
 
-    def has_submitted_scorecard(self, user_id: UserId) -> bool:
-        """Retorna True si el jugador ya entrego su tarjeta."""
-        return user_id in self._scorecard_submitted_by
+    def has_submitted_scorecard(self, user_id: UserId, match_format: MatchFormat) -> bool:
+        """Retorna True si la tarjeta del jugador ya esta entregada (en foursomes, la de su bando)."""
+        return user_id in self.scorecards_submitted_by(match_format)
 
-    def all_scorecards_submitted(self) -> bool:
-        """Retorna True si todos los jugadores han entregado su tarjeta."""
-        all_player_ids = self.get_all_player_ids()
-        return all(uid in self._scorecard_submitted_by for uid in all_player_ids)
+    def all_scorecards_submitted(self, match_format: MatchFormat) -> bool:
+        """Retorna True si estan todas las tarjetas: una por bando en foursomes."""
+        entregadas = self.scorecards_submitted_by(match_format)
+        return all(uid in entregadas for uid in self.get_all_player_ids())
+
+    def scorecards_submitted_by(self, match_format: MatchFormat) -> tuple[UserId, ...]:
+        """Quienes tienen la tarjeta entregada, aplicando la regla del formato.
+
+        En foursomes, si alguien del bando entrego, estan los dos (BE #377). Lo
+        que se enseña en la pantalla sale de aqui: la regla vive en un sitio.
+        """
+        if not match_format.one_ball_per_side():
+            return self._scorecard_submitted_by
+        entregadas = set(self._scorecard_submitted_by)
+        bandos = (self._team_a_players, self._team_b_players)
+        return tuple(
+            jugador.user_id
+            for bando in bandos
+            if entregadas & {j.user_id for j in bando}
+            for jugador in bando
+        )
 
     def get_player_team(self, user_id: UserId) -> str | None:
         """Retorna el equipo del jugador ("A"/"B") o None si no es jugador."""
@@ -418,6 +440,18 @@ class Match:
     @property
     def is_decided(self) -> bool:
         return self._is_decided
+
+    @property
+    def closing_result(self) -> dict | None:
+        """El resultado de un partido cerrado sin jugarlo hasta el final.
+
+        Concedido o ganado por walkover, ese resultado —quien gana y por que—
+        manda sobre el de los hoyos: si A iba ganando y concede, gana B (BE #384).
+        Jugado hasta el final o todavia en juego, None: manda lo de los hoyos.
+        """
+        if self._status in (MatchStatus.CONCEDED, MatchStatus.WALKOVER):
+            return self._result
+        return None
 
     @property
     def decided_result(self) -> dict | None:

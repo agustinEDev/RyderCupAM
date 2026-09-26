@@ -1,7 +1,9 @@
 """Caso de Uso: Obtener Schedule de la competición."""
 
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
+from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
     GetScheduleRequestDTO,
     GetScheduleResponseDTO,
@@ -21,9 +23,34 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
+
+if TYPE_CHECKING:
+    # Solo para el tipo: la mesa de sobres llega hasta aquí por el generador de
+    # partidos, e importarla de verdad cierra un círculo
+    from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+
+
+def _descansan(team_assignment, inscritos: set[UserId], matches: list) -> list[UserId]:
+    """Los inscritos de los equipos que no juegan ningún partido de la sesión (#710).
+
+    Con equipos desiguales el que sobra se quedaba sin partido y nadie lo decía.
+    Sin partidos todavía no se sabe quién juega, así que nadie descansa aún.
+    """
+    if not team_assignment or not matches:
+        return []
+    juegan = {p.user_id for m in matches for p in [*m.team_a_players, *m.team_b_players]}
+    return [
+        uid
+        for uid in [*team_assignment.team_a_player_ids, *team_assignment.team_b_player_ids]
+        if uid in inscritos and uid not in juegan
+    ]
 
 
 class GetScheduleUseCase:
@@ -40,8 +67,13 @@ class GetScheduleUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         golf_course_repo: IGolfCourseRepository | None = None,
+        sobres: "EnvelopeDesk | None" = None,
     ):
         self._uow = uow
+        # Mirar la agenda abre los sobres que ya tocan (BE #367), como mirar la
+        # página del sobre: si nadie la abría, la sesión llegaba a su hora con
+        # los sobres cerrados y, desde la #361, sin partidos
+        self._sobres = sobres
         # Para la hora a la que abre la anotacion de cada ronda, que es la LOCAL
         # de SU campo (BE #305). De aqui saca el movil su lista de proximos
         # partidos, asi que sin esto no puede ofrecer «Anotar» sin cobertura
@@ -60,6 +92,7 @@ class GetScheduleUseCase:
 
             # 2. Obtener todas las rondas
             rounds = await self._uow.rounds.find_by_competition(competition_id)
+            await self._abre_los_sobres_que_tocan(competition, rounds)
 
             # 3. Obtener partidos para cada ronda
             total_matches = 0
@@ -71,6 +104,17 @@ class GetScheduleUseCase:
 
             # 4. Obtener asignación de equipos
             team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
+            # Quién sigue dentro: un retirado no «descansa», no está (#710)
+            inscritos = (
+                {
+                    e.user_id
+                    for e in await self._uow.enrollments.find_by_competition_and_status(
+                        competition_id, EnrollmentStatus.APPROVED
+                    )
+                }
+                if team_assignment
+                else set()
+            )
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
@@ -127,6 +171,10 @@ class GetScheduleUseCase:
                     round_entity.session_type,
                     zonas_por_campo.get(round_entity.golf_course_id),
                 ),
+                match_generation_block=block_to_dto(round_entity.match_generation_block),
+                resting_player_ids=[
+                    uid.value for uid in _descansan(team_assignment, inscritos, matches)
+                ],
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,
             )
@@ -161,3 +209,19 @@ class GetScheduleUseCase:
             total_matches=total_matches,
             team_assignment=ta_dto,
         )
+
+    async def _abre_los_sobres_que_tocan(self, competition, rounds) -> None:
+        """Abre los sobres vencidos de las sesiones que esperan partidos.
+
+        Solo en modo Ryder, que es donde hay sobres: en el manual, leer la
+        agenda no puede ponerse a generar partidos. Y solo las sesiones que
+        esperan partidos, porque la agenda la lee mucha más gente que la
+        página del sobre: el resto no cuesta ni una consulta.
+        """
+        if self._sobres is None or competition.setup_mode != SetupMode.RYDER_CUP:
+            return
+        for ronda in rounds:
+            if ronda.status != RoundStatus.PENDING_MATCHES:
+                continue
+            sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
+            await self._sobres.revelar_si_toca(ronda, competition, sobres)

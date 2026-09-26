@@ -1,13 +1,23 @@
 """In-Memory Unit of Work para Competition Module (testing)."""
 
+import copy
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.repositories.draft_repository_interface import (
+    DraftRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.envelope_repository_interface import (
+    EnvelopeRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.hole_score_repository_interface import (
     HoleScoreRepositoryInterface,
@@ -32,7 +42,9 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
 )
 
 from .in_memory_competition_repository import InMemoryCompetitionRepository
+from .in_memory_draft_repository import InMemoryDraftRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
+from .in_memory_envelope_repository import InMemoryEnvelopeRepository
 from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
 from .in_memory_match_repository import InMemoryMatchRepository
@@ -50,6 +62,8 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._rounds = InMemoryRoundRepository()
         self._matches = InMemoryMatchRepository()
         self._team_assignments = InMemoryTeamAssignmentRepository()
+        self._drafts = InMemoryDraftRepository()
+        self._envelopes = InMemoryEnvelopeRepository()
         self._invitations = InMemoryInvitationRepository()
         self._hole_scores = InMemoryHoleScoreRepository()
         self.committed = False
@@ -77,6 +91,14 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def team_assignments(self) -> TeamAssignmentRepositoryInterface:
         return self._team_assignments
+
+    @property
+    def drafts(self) -> DraftRepositoryInterface:
+        return self._drafts
+
+    @property
+    def envelopes(self) -> EnvelopeRepositoryInterface:
+        return self._envelopes
 
     @property
     def invitations(self) -> InvitationRepositoryInterface:
@@ -108,6 +130,33 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
 
     async def flush(self) -> None:
         pass
+
+    @asynccontextmanager
+    async def savepoint(self) -> AsyncIterator[None]:
+        """Guarda una copia de todo y la repone si algo falla dentro.
+
+        El `rollback` de aqui no deshace nada, asi que sin esto un test no
+        veria la diferencia entre deshacer lo escrito a medias y dejarlo.
+        """
+        repositorios = [
+            self._competitions,
+            self._enrollments,
+            self._rounds,
+            self._matches,
+            self._team_assignments,
+            self._drafts,
+            self._envelopes,
+            self._invitations,
+            self._hole_scores,
+        ]
+        copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
+        try:
+            yield
+        except BaseException:
+            for repo, copia in zip(repositorios, copias, strict=True):
+                repo.__dict__.clear()
+                repo.__dict__.update(copia)
+            raise
 
     def is_active(self) -> bool:
         return True

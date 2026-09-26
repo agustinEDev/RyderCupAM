@@ -5,6 +5,9 @@ Implementacion asincrona del Unit of Work para el modulo de competiciones.
 Coordina transacciones entre 8 repositorios.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
@@ -12,8 +15,14 @@ from src.modules.competition.domain.repositories.competition_repository_interfac
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.repositories.draft_repository_interface import (
+    DraftRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.envelope_repository_interface import (
+    EnvelopeRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.hole_score_repository_interface import (
     HoleScoreRepositoryInterface,
@@ -33,8 +42,14 @@ from src.modules.competition.domain.repositories.team_assignment_repository_inte
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
 )
+from src.modules.competition.infrastructure.persistence.sqlalchemy.draft_repository import (
+    SQLAlchemyDraftRepository,
+)
 from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_repository import (
     SQLAlchemyEnrollmentRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.envelope_repository import (
+    SQLAlchemyEnvelopeRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.hole_score_repository import (
     SQLAlchemyHoleScoreRepository,
@@ -74,8 +89,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._rounds = SQLAlchemyRoundRepository(session)
         self._matches = SQLAlchemyMatchRepository(session)
         self._team_assignments = SQLAlchemyTeamAssignmentRepository(session)
+        self._envelopes = SQLAlchemyEnvelopeRepository(session)
         self._invitations = SQLAlchemyInvitationRepository(session)
         self._hole_scores = SQLAlchemyHoleScoreRepository(session)
+        self._drafts = SQLAlchemyDraftRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -102,6 +119,14 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         return self._team_assignments
 
     @property
+    def drafts(self) -> DraftRepositoryInterface:
+        return self._drafts
+
+    @property
+    def envelopes(self) -> EnvelopeRepositoryInterface:
+        return self._envelopes
+
+    @property
     def invitations(self) -> InvitationRepositoryInterface:
         return self._invitations
 
@@ -126,6 +151,12 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
 
     async def flush(self) -> None:
         await self._session.flush()
+
+    @asynccontextmanager
+    async def savepoint(self) -> AsyncIterator[None]:
+        """SAVEPOINT de Postgres: deshace solo lo escrito dentro."""
+        async with self._session.begin_nested():
+            yield
 
     def is_active(self) -> bool:
         return self._session.is_active

@@ -1,9 +1,9 @@
 """
 Caso de Uso: Eliminar Competition (eliminacion fisica).
 
-Permite eliminar fisicamente una competicion mientras no tenga calendario:
-el estado tiene que permitirlo (DRAFT, ACTIVE o CANCELLED) y no puede haber
-rondas montadas.
+Permite eliminar fisicamente una competicion mientras no se haya jugado nada:
+el estado tiene que permitirlo (todos menos IN_PROGRESS y COMPLETED) y no puede
+haber un partido terminado ni un hoyo anotado. El calendario no cuenta.
 Solo el creador o un administrador pueden realizar esta accion.
 """
 
@@ -17,6 +17,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.lo_jugado import LoJugado
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -35,7 +36,7 @@ class DeleteCompetitionUseCase:
     Caso de uso para eliminar fisicamente una competicion.
 
     Restricciones:
-    - Solo si el estado lo permite y no hay calendario montado (BE #333)
+    - Solo si el estado lo permite y no hay nada jugado (BE #333, #347)
     - Solo el creador o un administrador pueden eliminar
     - Se elimina permanentemente de la BD (incluyendo enrollments si existieran)
 
@@ -76,10 +77,12 @@ class DeleteCompetitionUseCase:
         """
         async with self._uow:
             # 1. Buscar la competicion, con la fila bloqueada. Entre comprobar
-            #    que no hay calendario y borrar caben milisegundos, y en READ
+            #    que no hay nada jugado y borrar caben milisegundos, y en READ
             #    COMMITTED leer no reserva nada: una ronda creada a la vez desde
             #    otra pestana se colaba y se iba en cascada sin que nadie lo
-            #    supiera. Mismo bloqueo que usa handle_enrollment para el cupo
+            #    supiera. Mismo bloqueo que usa handle_enrollment para el cupo.
+            #    Anotar, conceder o terminar no pasan por esta fila: de eso se
+            #    encarga `LoJugado(...).en_la_competicion(bloquear=True)`
             competition_id = CompetitionId(request.competition_id)
             competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
@@ -94,23 +97,21 @@ class DeleteCompetitionUseCase:
 
             # 3. Verificar que todavia se pueda borrar. Las dos mitades se
             #    comprueban por separado para poder decir cual falla: el front
-            #    ensena este texto tal cual, y «sin calendario» cuando lo que
-            #    sobra es el estado manda al creador a arreglar lo que no es
+            #    ensena este texto tal cual
             if not competition.status.allows_deletion():
                 raise CompetitionNotDeletableError(
-                    f"Solo se pueden eliminar competiciones mientras las inscripciones "
-                    f"siguen abiertas, o si están canceladas. "
+                    f"No se puede eliminar una competición en juego o terminada. "
                     f"Estado actual: {competition.status.value}"
                 )
 
-            # El calendario se consulta porque el estado se puede andar hacia
-            # atras sin deshacerlo: un torneo ya jugado puede estar de vuelta en
+            # Lo jugado se consulta porque el estado se puede andar hacia atras
+            # sin deshacerlo: un torneo ya jugado puede estar de vuelta en
             # ACTIVE, y la cascada se llevaria sus partidos y sus golpes
-            con_calendario = await self._tiene_calendario(competition_id)
-            if not competition.allows_deletion(has_schedule=con_calendario):
+            jugado = await LoJugado(self._uow).en_la_competicion(competition_id, bloquear=True)
+            if not competition.allows_deletion(has_played=jugado):
                 raise CompetitionNotDeletableError(
-                    "No se puede eliminar una competición que ya tiene calendario: "
-                    "con él se irían sus partidos y los golpes anotados."
+                    "No se puede eliminar una competición con partidos jugados o "
+                    "golpes anotados: se irían con ella."
                 )
 
             # 4. Guardar datos para el response antes de eliminar
@@ -128,18 +129,35 @@ class DeleteCompetitionUseCase:
             deleted_at=datetime.now(),
         )
 
-    async def _tiene_calendario(self, competition_id: CompetitionId) -> bool:
-        """Indica si el torneo llego a montar su calendario.
+    async def puede_borrar(
+        self, competition_id: CompetitionId, user_id: UserId, is_admin: bool = False
+    ) -> bool:
+        """Indica si ese usuario podría borrar la competición ahora (BE #347).
 
-        Es lo unico que hay que proteger aqui, y el motivo es concreto: sin
-        rondas no hay partidos, y sin partidos no puede haber un solo golpe
-        anotado. Con rondas si, porque un torneo jugado puede volver a ACTIVE
-        —`revert-status` y luego `reopen-enrollments`— sin que nada las deshaga.
+        La ficha lo necesita para enseñar o no el botón. Son las mismas tres
+        comprobaciones que `execute` —quién, el estado y lo jugado— y con las
+        mismas piezas, pero contestando sí o no en vez de lanzar el error que
+        diga cuál falla. Que las dos digan siempre lo mismo lo vigila una tabla
+        de equivalencia en los tests. No bloquea la fila: es una pregunta.
 
-        El sorteo de equipos NO cuenta, decidido con el dueno del producto el 21
-        sep: se protege lo jugado, no lo preparado. Un sorteo sin calendario no
-        tapa ningun golpe y se rehace en un minuto —`assign_teams` reasigna
-        borrando el anterior—, asi que no vale para impedir que alguien deshaga
-        un torneo que esta borrando a proposito.
+        Args:
+            competition_id: La competición
+            user_id: Quién pregunta
+            is_admin: Si es administrador
+
+        Returns:
+            True si `execute` la borraría ahora mismo para ese usuario
         """
-        return bool(await self._uow.rounds.find_by_competition(competition_id))
+        async with self._uow:
+            competition = await self._uow.competitions.find_by_id(competition_id)
+            if not competition:
+                return False
+            if not is_admin and not competition.is_creator(user_id):
+                return False
+            # Se ve en todas las fichas: si el estado ya dice que no, sin
+            # recorrer el calendario
+            if not competition.status.allows_deletion():
+                return False
+            return competition.allows_deletion(
+                has_played=await LoJugado(self._uow).en_la_competicion(competition_id)
+            )

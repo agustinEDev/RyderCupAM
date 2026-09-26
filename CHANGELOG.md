@@ -5,6 +5,229 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.22.0] - 2026-09-26
+
+El resto del rediseño de las competiciones: el modo de configuración, los
+capitanes, la sala de draft, los sobres de los capitanes y la agenda editable
+desde el primer día. El hilo es el mismo que en la 2.21.0: cada paso cae de algo
+que el organizador o los capitanes querían hacer de todas formas. Detrás van los
+arreglos de las rondas e2e previas a la release (24-26 sep), jugando torneos
+completos con varios usuarios a la vez.
+
+**Notas de despliegue.** Seis migraciones aditivas, en cadena: `e4b8c1f92a07`
+(capitanes) → `f1a4c7d29b63` (modo de configuración) → `b2e9d4c71a58` (tabla de
+drafts) → `c7d3a1e58b94` (tabla de sobres) → `d8e2f4a19c73` (abrir sin esperar)
+→ `e4b7c2d91f36` (motivo de bloqueo de una sesión). Sale con el frontend 2.37.0,
+y esta vez **el frontend va PRIMERO** (o los dos a la vez): el frontend
+desplegado falla ante un estado de invitación desconocido, y el nuevo `NO_ROOM`
+rompería «Mis invitaciones» (#380). En Sentry, los errores no controlados llegan
+ahora por la integración de logging como `handled: true` (#383): las alertas que
+filtren por `error.unhandled:true` dejarán de contarlos.
+
+### Added
+
+- **El modo de configuración, elegido al crear** (#351). `AUTOMATIC`, `MANUAL` o
+  `RYDER_CUP`, que es el de siempre y el que toman las existentes. La decisión se
+  toma al principio y dice qué pasos existen después; se puede cambiar mientras
+  las inscripciones están abiertas. El reparto de equipos se deriva del modo en
+  vez de preguntarse aparte, porque los dos podían contradecirse. Migración
+  `f1a4c7d29b63`.
+
+- **Nombrar a los capitanes cierra las inscripciones** (#349, #320). Nadie
+  quiere pulsar «cerrar inscripciones»; nombrar a los capitanes es lo que se
+  quería hacer y es lo que congela la lista. Dos inscritos aprobados, uno por
+  equipo, y el organizador puede ser uno. Tras el draft cada capitán elige un
+  **vicecapitán**, que le sustituye si se retira. Un número impar avisa, no
+  bloquea. Migración `e4b8c1f92a07`.
+
+- **La sala de draft** (#352). Los dos capitanes entran, el organizador lanza el
+  sorteo y quien tiene el turno dispone de un minuto para elegir. **El reloj es
+  del servidor**: un turno vencido lo resuelve quien mira la sala, eligiendo el
+  hándicap más bajo disponible, así que el draft nunca se queda esperando a un
+  capitán que no aparece. Los equipos pueden quedar desiguales por uno, pero solo
+  aquí. La sala aguanta a todo el grupo mirando a la vez (300 peticiones por
+  minuto en su lectura). Migración `b2e9d4c71a58`.
+
+- **El último jugador del draft entra solo** (#379). Elegido el penúltimo, el
+  que queda va al equipo que tiene el turno y la sala se cierra, sin hacer
+  esperar a nadie un minuto para una elección que no existe.
+
+- **Los sobres de los capitanes** (#353, #356). Cada capitán entrega una lista
+  ordenada de los suyos sin ver la del rival, y los partidos salen de cruzarlas
+  **por posición**, como en la Ryder de verdad. Juegan todos; lo que falte al
+  abrirlos lo rellena la app por hándicap sin tocar la lista de quien la entregó
+  a tiempo. Vale también para las modalidades por parejas, y el organizador puede
+  **rehacer** los sobres de una sesión mientras no se haya jugado nada de ella.
+  Migración `c7d3a1e58b94`.
+
+- **Los sobres se abren solos seis horas antes de la sesión** (#354). Esa hora
+  es también el plazo de entrega, y nunca llega antes de que termine la sesión
+  anterior: se elige con el marcador delante. Si **los dos** capitanes marcan
+  «abrir sin esperar», se abren en cuanto están los dos. Sin tarea en segundo
+  plano: los abre quien los mira. Migración `d8e2f4a19c73`.
+
+- **Un capitán sabe qué sobres le faltan por entregar** (#357). Antes solo lo
+  descubría entrando sesión a sesión, y el plazo pasaba sin que lo supiera. El
+  aviso se mide contra el plazo real, en la hora del campo, y alimenta
+  «Requiere tu atención».
+
+- **Los partidos se crean al abrir los sobres, y si no se puede se dice por
+  qué** (#364, #361, #379, #360). Abiertos los sobres, los emparejamientos ya
+  están decididos, así que los partidos se generan en la misma operación. Si
+  falta algo (un jugador sin género, un tee que el campo no tiene, una sesión sin
+  campo…), la sesión guarda el motivo nombrando a **todos** los afectados, en
+  claves que traduce el frontend, y el organizador ve sus sesiones bloqueadas.
+  El reintento manual con «Generar» guarda y responde el mismo motivo. Migración
+  `e4b7c2d91f36`.
+
+- **Quién descansa en cada sesión** (#380). Con equipos desiguales tras el
+  draft, el jugador que no juega una sesión ya no desaparece sin decir nada: el
+  calendario lo nombra.
+
+- **La ficha dice lo que el organizador necesita para decidir** (#348, #350,
+  #362): si quien la mira puede borrarla ahora, si ya hay equipos asignados y
+  cómo se repartieron **de verdad** (una competición con equipos elegidos en el
+  draft decía «Manual»). Solo en el detalle; los listados no lo calculan.
+
+- **La clasificación dice la fecha y la sesión de cada partido** (#390, #388).
+  Solo llevaba número y modalidad, y varias sesiones enseñaban dos «#2 -
+  SINGLES» seguidos. Las rondas antiguas, sin esos datos, se ven como antes.
+
+- **Los cinco correos con la imagen de la app** (#390, #389). Verificación,
+  restablecer y cambio de contraseña, invitación y solicitud de amistad
+  comparten ahora una plantilla: cabecera verde con el monograma, un título que
+  dice qué ha pasado, un botón grande con el enlace repetido debajo y un bloque
+  corto en inglés.
+
+### Changed
+
+- **Borrar una competición protege lo jugado, no el calendario** (#348, #347).
+  Un calendario que nadie ha jugado se rehace en minutos; un hoyo apuntado no. Se
+  puede borrar en borrador, activa, cerrada o cancelada mientras no haya un
+  partido terminado ni un hoyo registrado (también una bola recogida).
+
+- **La agenda se edita desde que la competición existe** (#366, #365). Crear,
+  editar y borrar sesiones ya no espera al cierre de inscripciones; lo que se
+  protege es cada sesión con partidos. El calendario automático se puede proponer
+  nada más crear la competición y se rechaza cuando ya reemplazaría sesiones con
+  partidos o días jugados.
+
+- **Se pueden añadir campos hasta que la competición acaba** (#369, #368). Con
+  la agenda propuesta al crear, toda competición nacía con sesiones y nunca se
+  podía añadir un segundo campo.
+
+- **Los partidos se pueden generar con el torneo en juego** (#364). Los sobres
+  del segundo día se abren con la competición ya iniciada; exigir que estuviera
+  cerrada los dejaba sin partidos posibles.
+
+- **Abrir los sobres antes de hora pide el consentimiento de los dos capitanes**
+  (#355, #379, #374). El relleno automático es predecible: un capitán que
+  pudiera abrir con solo su sobre dentro construiría la lista para ganar cada
+  cruce. Ni el organizador los abre antes de hora, salvo en una sesión sin
+  plazo (un campo sin zona horaria), donde conserva la llave para que no se
+  atasque.
+
+- **Mirar el calendario abre los sobres que ya tocan** (#379, #367). Antes solo
+  lo hacía la pantalla de los sobres, y una sesión podía llegar a su hora con los
+  sobres cerrados y sin partidos.
+
+- **El primer golpe a la hora de la sesión inicia una competición cerrada**
+  (#379, #375). Hasta ahora, si el organizador olvidaba pulsar «Iniciar
+  competición» o no tenía cobertura en el campo, nadie podía anotar aunque los
+  partidos ya estuvieran abiertos. El botón sigue ahí para empezar antes.
+
+- **Al cerrar las inscripciones, las invitaciones pendientes se quedan sin
+  plaza** (#380). Pasan al nuevo estado `NO_ROOM`, cierre a mano o nombrando
+  capitanes, y ya no se puede invitar a una competición cerrada o en juego:
+  nadie podría aceptar esa invitación. Solo se acepta con las inscripciones
+  abiertas.
+
+- **El género es obligatorio para inscribirse** (#380). Las cinco entradas
+  (pedir plaza, aceptar invitación, inscripción directa, aprobar una solicitud y
+  crear una competición, que inscribe al organizador) lo piden con un mensaje
+  que dice qué hacer, en vez de descubrirlo al generar partidos.
+
+- **Se puede pedir plaza hasta el día de inicio incluido** (#373, #372). Ese día
+  es cuando la gente se apunta; lo que protege el torneo es su estado y la
+  aprobación del organizador.
+
+- **Iniciar una competición pide al menos una sesión** (#382). Y acortar las
+  fechas dejando sesiones fuera responde 400 nombrando cuáles, en orden de juego,
+  para que el organizador sepa qué mover.
+
+- **Las invitaciones nombran a quien invita como aparece en esa competición**
+  (#381). Salía su alias aunque en ese torneo jugara con su nombre legal,
+  también en el correo: un defecto copiado de antes de la regla de #254.
+
+### Fixed
+
+- **La invitación del correo llevaba a una página en blanco** (#390, #389). El
+  botón apuntaba a `/invitations`, que el frontend no tiene; ahora abre
+  `/player/invitations`.
+
+- **Un partido concedido o ganado por W.O. no decía quién había ganado** (#387,
+  #384). La anotación seguía mostrando empate a 0 con el hoyo abierto, y la
+  clasificación podía dar «gana A» con el punto para B si A iba por delante y
+  concedía. Ahora el resultado de cierre manda en los dos sitios.
+
+- **Aceptar una invitación sin plaza daba un motivo falso** (#387, #385). Decía
+  «la inscripción está cerrada» aunque se hubiera reabierto. Ahora es un 409
+  `INVITATION_NO_ROOM` con el motivo real, también cuando el cierre cae entre las
+  dos lecturas.
+
+- **Un 500 no controlado se veía en la app como «Sin conexión»** (#383). Salía
+  sin cabeceras CORS y el navegador lo bloqueaba. Ahora es un 500 genérico con
+  CORS y `X-Correlation-ID`, sin detalles internos en la respuesta, y la traza
+  queda en el log.
+
+- **Rehacer los sobres de una sesión daba 503** (#363). Solo fallaba con los dos
+  sobres entregados, que es justo cuando se rehacen.
+
+- **Cambiar el campo de una sesión desde la agenda daba 500** (#371, #370). La
+  lectura bloqueada de la competición no traía sus campos. Era la tercera vez;
+  ahora devuelve el agregado entero en vez de parchear cada llamada.
+
+- **Varios rechazos llegaban como 500 mudos** (#349, #353, #373, #379). Pedir
+  plaza en una competición llena, fuera de fecha o por encima del límite,
+  aprobar con la competición llena, repartir equipos con un capitán mal
+  colocado, un sobre mal formado o una sesión por hándicap sin campo responden
+  ahora 400 con su motivo.
+
+- **El calendario automático dejaba las sesiones en «esperando equipos»**
+  (#366) aunque los equipos ya existieran, y nada las movía después. Editar una
+  competición con calendario rechazaba hasta cambiarle el nombre (#366).
+
+- **Foursomes: una tarjeta por bando y sin entrega doble** (#379, #377). Cuando
+  un compañero entrega, cuenta para los dos, y la segunda entrega recibe «Ya
+  entregaste tu tarjeta». Se cierran los partidos heredados que se quedaron
+  abiertos con todas las tarjetas.
+
+- **Decisiones tomadas con lo leído antes de un bloqueo** (#379, #366). Un
+  golpe que esperaba mientras el partido se cerraba seguía escribiendo, y dos
+  primeros golpes podían iniciar la competición dos veces. Tras el bloqueo se
+  vuelve a leer lo que hay en la base de datos.
+
+- **Una apertura automática de sobres a medias** (#354). Abrir el sobre de un
+  equipo y fallar al rellenar el del otro dejaba la sesión sin salida; ahora es
+  todo o nada. Un equipo impar en una sesión por parejas se nombra como el
+  problema en vez de dejar fuera a un jugador sin decirlo (#353, #356).
+
+### Security
+
+- **Cerrar sesión cierra solo este dispositivo, y la inactividad la decide el
+  servidor** (#378, #376, ADR-039). Salir en un ordenador olvidado ya no tira la
+  sesión del móvil en el campo. Tras 24 h sin uso, un dispositivo pierde la
+  sesión al refrescar (OWASP A07), y volver a entrar en él revoca sus tokens
+  antiguos en vez de resucitarlos.
+
+- **La sala de draft y los sobres, solo para los inscritos aprobados** (#352,
+  #353). Cualquiera autenticado podía leer una sala probando UUIDs, y una
+  inscripción rechazada o retirada seguía sirviendo de llave para ver nombres,
+  hándicaps y equipos.
+
+- **Los correos escapan todo el texto que reciben** (#390). Los de la cuenta
+  interpolaban nombres sin escapar.
+
 ## [2.21.0] - 2026-09-22
 
 El rediseño de las competiciones, piezas 1 a 4: invitar, pública o privada y

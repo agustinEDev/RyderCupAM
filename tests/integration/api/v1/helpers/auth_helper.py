@@ -15,6 +15,7 @@ async def create_and_login_user(
     last_name: str = "User",
     is_admin: bool = False,
     return_cookies_only: bool = False,
+    gender: str | None = "MALE",
 ):
     """
     Creates a new user and logs them in.
@@ -27,6 +28,8 @@ async def create_and_login_user(
         last_name: User last name
         is_admin: Whether the user should be admin (requires manual DB update)
         return_cookies_only: If True, only returns cookies (assumes user exists)
+        gender: Set by default: without it nobody can enrol in a competition
+            (#710). None to test a user without one
 
     Returns:
         tuple: (user_data, cookies) or just cookies if return_cookies_only=True
@@ -38,6 +41,7 @@ async def create_and_login_user(
             json={
                 "email": email,
                 "password": password,
+                **({"gender": gender} if gender is not None else {}),
                 "first_name": first_name,
                 "last_name": last_name,
             },

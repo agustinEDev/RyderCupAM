@@ -21,13 +21,18 @@ class InvitationStatus(StrEnum):
       PENDING -> ACCEPTED (invitado acepta)
               -> DECLINED (invitado rechaza)
               -> EXPIRED  (pasan 7 dias)
-      ACCEPTED, DECLINED, EXPIRED son estados terminales.
+              -> NO_ROOM  (se cerro la inscripcion: no quedan plazas, #710)
+      ACCEPTED, DECLINED, EXPIRED y NO_ROOM son estados terminales.
     """
 
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
     DECLINED = "DECLINED"
     EXPIRED = "EXPIRED"
+    # Decidido el 24 sep (#710): al cerrar la inscripcion, las pendientes se
+    # rechazan por falta de plazas. Aceptar una despues metia a alguien con el
+    # draft hecho y descuadraba los partidos
+    NO_ROOM = "NO_ROOM"
 
     def is_pending(self) -> bool:
         """Verifica si la invitacion esta pendiente de respuesta."""
@@ -39,6 +44,7 @@ class InvitationStatus(StrEnum):
             InvitationStatus.ACCEPTED,
             InvitationStatus.DECLINED,
             InvitationStatus.EXPIRED,
+            InvitationStatus.NO_ROOM,
         }
 
     def can_transition_to(self, new_status: "InvitationStatus") -> bool:
@@ -52,10 +58,12 @@ class InvitationStatus(StrEnum):
                 InvitationStatus.ACCEPTED,
                 InvitationStatus.DECLINED,
                 InvitationStatus.EXPIRED,
+                InvitationStatus.NO_ROOM,
             },
             InvitationStatus.ACCEPTED: set(),
             InvitationStatus.DECLINED: set(),
             InvitationStatus.EXPIRED: set(),
+            InvitationStatus.NO_ROOM: set(),
         }
 
         return new_status in valid_transitions.get(self, set())

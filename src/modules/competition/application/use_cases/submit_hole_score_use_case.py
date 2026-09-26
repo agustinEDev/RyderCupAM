@@ -24,6 +24,7 @@ from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -80,24 +81,43 @@ class SubmitHoleScoreUseCase:
             # abierto» lleva la hora, que tampoco es suya (BE #305)
             if not match.status.can_record_scores():
                 match = await self._abre_si_toca(match, llegada)
+            else:
+                # Con la fila bloqueada para decidir qué está cerrado: si no, un
+                # golpe del compañero que llega mientras él entrega la tarjeta
+                # del bando la ve sin entregar y reescribe la bola ya validada
+                # (revisión de la BE #377). Abrirlo ya la bloquea; y siempre
+                # después de saber que es suyo, como al abrirlo (BE #305)
+                bloqueado = await self._uow.matches.find_by_id_for_update(match.id)
+                # Y lo que se decide, con lo que hay DESPUÉS del bloqueo: si
+                # mientras esperaba lo terminaron, lo concedieron o lo borraron,
+                # este golpe ya no entra (revisión de la BE #377)
+                if bloqueado is None:
+                    raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
+                if not bloqueado.status.can_record_scores():
+                    raise MatchNotScoringError(
+                        f"Partido no esta en estado para scoring. Estado: {bloqueado.status.value}"
+                    )
+                match = bloqueado
+
+            # El formato decide de quién es la tarjeta: en foursomes, del bando
+            # (BE #377). Si el compañero la entregó, la bola ya no cambia
+            round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            if not round_entity:
+                raise RoundNotFoundError("La ronda asociada no existe")
+            match_format = round_entity.match_format
 
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
-            own_score_locked = match.has_submitted_scorecard(user_id)
+            own_score_locked = match.has_submitted_scorecard(user_id, match_format)
 
             marked_player_uid = UserId(body.marked_player_id)
             if match.find_player(marked_player_uid) is None:
                 raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
 
             # Tarjeta del marcado entregada: marker_score ignorado, own_score sigue editable
-            marker_score_locked = match.has_submitted_scorecard(marked_player_uid)
+            marker_score_locked = match.has_submitted_scorecard(marked_player_uid, match_format)
 
             if not MIN_HOLE <= hole_number <= MAX_HOLE:
                 raise InvalidHoleNumberError(f"Hoyo invalido: {hole_number}")
-
-            round_entity = await self._uow.rounds.find_by_id(match.round_id)
-            if not round_entity:
-                raise RoundNotFoundError("La ronda asociada no existe")
-            match_format = round_entity.match_format
 
             # Omitir un score NO es mandarlo nulo (#301). Nulo es un hoyo
             # recogido —conceder, en match play—, y un campo que no viene es un
@@ -162,7 +182,12 @@ class SubmitHoleScoreUseCase:
             raise no_se_puede
 
         competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
-        if not competition or not competition.is_in_progress():
+        # Cerrada también vale: la competición está en juego en cuanto su primer
+        # partido se puede anotar, y si nadie pulsó «Iniciar» la arranca el
+        # primer golpe (BE #375). Reabierta o sin cerrar, no está lista
+        if not competition or not (
+            competition.is_in_progress() or competition.status == CompetitionStatus.CLOSED
+        ):
             raise no_se_puede
 
         # La hora es la LOCAL del campo donde se juega esa ronda, no la de la
@@ -186,6 +211,9 @@ class SubmitHoleScoreUseCase:
                 opens_at=opens_at,
             )
 
+        if not competition.is_in_progress():
+            await self._arranca_la_competicion(competition.id, no_se_puede)
+
         # Con la fila bloqueada, y releyendo el estado: dos jugadores pueden
         # mandar su primer golpe a la vez, y abrirlo dos veces duplicaria los 18
         # hoyos de cada jugador —`add_many` no deduplica—. El segundo se
@@ -204,6 +232,23 @@ class SubmitHoleScoreUseCase:
         await self._uow.matches.update(match)
         await self._uow.rounds.update(round_entity)
         return match
+
+    async def _arranca_la_competicion(self, competition_id, no_se_puede) -> None:
+        """Pone la competición en juego con su fila bloqueada (BE #375).
+
+        Dos primeros golpes a la vez la arrancarían dos veces: el segundo espera
+        el bloqueo y se la encuentra ya en juego. Si entre medias la reabrieron,
+        ya no está lista y el golpe se rechaza como siempre.
+        """
+        competition = await self._uow.competitions.find_by_id_for_update(competition_id)
+        if competition is None:
+            raise no_se_puede
+        if competition.is_in_progress():
+            return
+        if competition.status != CompetitionStatus.CLOSED:
+            raise no_se_puede
+        competition.start()
+        await self._uow.competitions.update(competition)
 
     async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
         """Actualiza own_score para los jugadores afectados."""

@@ -13,10 +13,12 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -81,7 +83,18 @@ class StartCompetitionUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede iniciar la competición")
 
-            # 3. Iniciar la competición (la entidad valida la transición)
+            # 3. Sin ninguna sesión no hay torneo que jugar (decidido el 25 sep,
+            # #710). El arranque automático no pasa por aquí: lo hace el primer
+            # golpe de una sesión, que por tanto existe. Solo si por lo demás se
+            # podría iniciar: a una en borrador se le dice antes su estado
+            if competition.status.can_transition_to(
+                CompetitionStatus.IN_PROGRESS
+            ) and not await self._uow.rounds.find_by_competition(competition_id):
+                raise CompetitionStateError(
+                    "Añade al menos una sesión antes de iniciar la competición"
+                )
+
+            # 4. Iniciar la competición (la entidad valida la transición)
             competition.start()
 
             # 4. Persistir cambios

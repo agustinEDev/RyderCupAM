@@ -23,6 +23,7 @@ from src.modules.competition.domain.repositories.competition_repository_interfac
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 logger = logging.getLogger(__name__)
 
@@ -116,4 +117,14 @@ class CompetitionTimezoneFromCourse(ICompetitionTimezone):
             )
             return None
 
+        return campo.timezone
+
+    async def for_course(self, golf_course_id: GolfCourseId) -> str | None:
+        """La zona de ese campo, o `None` si no existe o no la tiene."""
+        campo = await self._golf_courses.find_by_id(golf_course_id)
+        if campo is None:
+            logger.warning(
+                "Se pidio la zona de un campo que no existe: %s", golf_course_id.value
+            )
+            return None
         return campo.timezone

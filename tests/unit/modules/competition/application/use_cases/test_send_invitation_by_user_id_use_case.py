@@ -44,6 +44,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -75,7 +76,9 @@ class TestSendInvitationByUserIdUseCase:
 
     async def _create_active_competition(self, comp_uow, creator_id):
         """Helper: crea y activa una competicion."""
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),
@@ -96,7 +99,9 @@ class TestSendInvitationByUserIdUseCase:
         que tenga apertura programada, asi que la unica que sigue en DRAFT —y
         por tanto la unica a la que una invitacion puede abrirle nada— es esa.
         """
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2026, 6, 1),
@@ -270,6 +275,62 @@ class TestSendInvitationByUserIdUseCase:
         assert result.competition_name == "Test Cup"
         assert result.inviter_name == "Creator User"
         assert result.invitee_name == "Invitee Player"
+
+    async def test_the_email_names_the_inviter_as_in_this_competition(self, comp_uow, user_uow):
+        """Con alias pero sin pedirlo aquí: su nombre legal, también en el correo (#710)."""
+        creator = await self._create_user(
+            user_uow, email="c_alias@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        invitee = await self._create_user(
+            user_uow, email="i_alias@test.com", first_name="Invitee", last_name="Player"
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        mock_email = AsyncMock()
+        mock_email.send_invitation_email = AsyncMock(return_value=True)
+
+        result = await SendInvitationByUserIdUseCase(
+            comp_uow, user_uow, email_service=mock_email
+        ).execute(
+            SendInvitationByUserIdRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_user_id=invitee.id.value,
+            )
+        )
+
+        assert result.inviter_name == "Agustin Estevez"
+        assert mock_email.send_invitation_email.call_args[1]["inviter_name"] == "Agustin Estevez"
+
+    async def test_the_inviter_keeps_the_alias_he_chose_for_this_competition(
+        self, comp_uow, user_uow
+    ):
+        creator = await self._create_user(
+            user_uow, email="c_elige@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        invitee = await self._create_user(user_uow, email="i_elige@test.com")
+        created = await self._create_active_competition(comp_uow, creator.id)
+        async with comp_uow:
+            suya = await comp_uow.enrollments.find_by_user_and_competition(
+                creator.id, CompetitionId(created.id)
+            )
+            suya.set_name_preference(use_real_name=False)
+            await comp_uow.enrollments.update(suya)
+
+        result = await SendInvitationByUserIdUseCase(comp_uow, user_uow).execute(
+            SendInvitationByUserIdRequestDTO(
+                competition_id=created.id,
+                inviter_id=creator.id.value,
+                invitee_user_id=invitee.id.value,
+            )
+        )
+
+        assert result.inviter_name == "Trinx"
 
     async def test_should_raise_competition_not_found(self, comp_uow, user_uow):
         """Competition inexistente lanza CompetitionNotFoundError."""

@@ -85,6 +85,27 @@ class CompetitionStatus(StrEnum):
         """Verifica si es un estado final (no permite más transiciones)."""
         return self in {CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED}
 
+    def allows_agenda_edits(self) -> bool:
+        """Verifica si se pueden crear, cambiar o borrar sesiones (BE #365).
+
+        Desde que la competición existe hasta que termina o se cancela: la
+        agenda se propone al crearla. Lo que se protege es tocar una sesión ya
+        jugada, y eso lo decide cada sesión, no el estado de la competición
+        (diseño del 20 sep).
+        """
+        return not self.is_final()
+
+    def allows_adding_golf_courses(self) -> bool:
+        """Verifica si se pueden añadir campos de golf (BE #368).
+
+        Añadir solo amplía la lista: ninguna sesión cambia de campo. Con la
+        agenda propuesta al crear, toda competición Ryder nace con sesiones, así
+        que esperar a que no las haya dejaba el segundo campo fuera para
+        siempre. Quitar un campo sí puede dejar una sesión sin el suyo, y por
+        eso sigue con `allows_modifications`.
+        """
+        return not self.is_final()
+
     def allows_modifications(self) -> bool:
         """Verifica si el estado permite modificar la configuración.
 
@@ -99,35 +120,33 @@ class CompetitionStatus(StrEnum):
     def allows_deletion(self) -> bool:
         """Verifica si el estado permite borrar la competicion del todo.
 
-        Mientras las inscripciones siguen abiertas, equivocarse al crearla se
-        deshace: era solo DRAFT, y con las competiciones naciendo abiertas
-        (BE #332) eso dejaba cancelar como unica salida, con la cancelada
-        quedandose en la lista para siempre.
+        Mientras no se esta jugando, equivocarse al crearla se deshace. Era solo
+        DRAFT, y con las competiciones naciendo abiertas (BE #332) eso dejaba
+        cancelar como unica salida, con la cancelada quedandose en la lista para
+        siempre. CANCELLED entra por lo mismo: cancelar era la salida de un
+        error, no su destino.
 
-        CANCELLED entra por eso mismo: cancelar era la salida de un error, no su
-        destino, y dejarla fuera reproducia el problema que esto viene a quitar.
-        Lo que protege al historial no es el estado sino no haber llegado a
-        montarse, y de eso se encarga la otra mitad de la regla.
+        CLOSED tambien (BE #347, 22 sep): ahi se sortean equipos y se monta el
+        calendario, pero todo eso se rehace. Lo irrecuperable son los golpes, y
+        se protege lo jugado, no lo montado.
 
-        De CLOSED en adelante, no: ahi ya se monta el calendario y se generan
-        partidos, y el borrado va en cascada hasta los golpes anotados. Lo que
-        protege eso de verdad es la otra mitad de la regla, no el estado — vease
-        abajo.
+        IN_PROGRESS y COMPLETED, nunca: ahi el torneo ES lo jugado.
 
         OJO: el estado por si solo no basta, y por eso esto es la MITAD de la
         regla. Se puede andar hacia atras —`revert-status` devuelve un torneo en
         juego a CLOSED y `reopen-enrollments` lo devuelve a ACTIVE—, y ninguna de
-        las dos borra rondas ni partidos. Un torneo ya jugado puede estar en
+        las dos borra partidos ni golpes. Un torneo ya jugado puede estar en
         ACTIVE con sus tarjetas dentro. La otra mitad la pone
-        `Competition.allows_deletion`, que ademas exige que no haya calendario.
+        `Competition.allows_deletion`, que ademas exige que no haya nada jugado.
 
-        Regla propia y no `allows_modifications`, aunque hoy coincidan: corregir
-        el montaje y destruirlo no son lo mismo, y compartir el metodo las haria
-        moverse juntas sin que nadie lo decida.
+        Regla propia y no `allows_modifications`: corregir el montaje y
+        destruirlo no son lo mismo, y compartir el metodo las haria moverse
+        juntas sin que nadie lo decida.
         """
         return self in {
             CompetitionStatus.DRAFT,
             CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
             CompetitionStatus.CANCELLED,
         }
 
@@ -146,3 +165,9 @@ class CompetitionStatus(StrEnum):
         Requerido para que SQLAlchemy pueda persistir el Value Object.
         """
         return (self.value,)
+
+
+# Donde hay partidos que crear: cerrada, o ya en juego para las sesiones que
+# vienen (BE #361). Una sola lista para la generacion a mano, la que sale al
+# abrir los sobres y el aviso del organizador: si difieren, se contradicen
+SE_JUEGA = (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS)

@@ -595,6 +595,19 @@ class TestGetLeaderboard:
         assert len(match["team_b_players"]) >= 1
 
     @pytest.mark.asyncio
+    async def test_each_match_says_its_session(self, client: AsyncClient):
+        """Cada partido dice de qué sesión es (BE #388): el montaje crea la
+        ronda de mañana dentro de 30 días."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.get(f"/api/v1/competitions/{ctx['competition_id']}/leaderboard")
+
+        match = response.json()["matches"][0]
+        assert match["round_date"] == (date.today() + timedelta(days=30)).isoformat()
+        assert match["session_type"] == "MORNING"
+
+    @pytest.mark.asyncio
     async def test_get_leaderboard_not_found(self, client: AsyncClient):
         """Leaderboard de competicion inexistente retorna 404."""
         user = await create_authenticated_user(

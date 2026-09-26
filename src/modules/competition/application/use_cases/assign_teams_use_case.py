@@ -1,7 +1,5 @@
 """Caso de Uso: Asignar equipos a una competición."""
 
-from decimal import Decimal
-
 from src.modules.competition.application.dto.round_match_dto import (
     AssignTeamsRequestDTO,
     AssignTeamsResponseDTO,
@@ -12,19 +10,20 @@ from src.modules.competition.application.exceptions import (
     InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
-from src.modules.competition.domain.entities.team_assignment import TeamAssignment
+from src.modules.competition.application.services.draft_roster import DraftRoster
+from src.modules.competition.application.services.team_assignment_writer import (
+    TeamAssignmentWriter,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.snake_draft_service import (
-    PlayerForDraft,
     SnakeDraftService,
     Team,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.team_assignment_mode import TeamAssignmentMode
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -75,7 +74,9 @@ class AssignTeamsUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Con la fila bloqueada, como al nombrar capitanes (BE #320): si no,
+            # nombrarlos a la vez guardaria un reparto con los capitanes viejos
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
@@ -110,32 +111,19 @@ class AssignTeamsUseCase:
                 )
 
             mode = TeamAssignmentMode(request.mode)
+            if mode == TeamAssignmentMode.DRAFT:
+                # DRAFT no se pide: es lo que queda cuando la sala termina.
+                # Admitirlo aqui guardaria un reparto calculado por la
+                # aplicacion diciendo que lo eligieron los capitanes
+                raise ValueError(
+                    "Los equipos de un draft los eligen los capitanes en la sala, "
+                    "no se piden por aquí"
+                )
+            team_a_ids, team_b_ids = await self._repartir(competition, request, enrollments, mode)
 
-            if mode == TeamAssignmentMode.AUTOMATIC:
-                team_a_ids, team_b_ids = await self._auto_assign(enrollments)
-            else:
-                team_a_ids, team_b_ids = self._manual_assign(request, enrollments)
-
-            # 5. Eliminar asignación previa si existe (re-asignación)
-            existing = await self._uow.team_assignments.find_by_competition(competition_id)
-            if existing:
-                await self._uow.team_assignments.delete(existing.id)
-
-            # 6. Crear TeamAssignment
-            assignment = TeamAssignment.create(
-                competition_id=competition_id,
-                mode=mode,
-                team_a_player_ids=team_a_ids,
-                team_b_player_ids=team_b_ids,
+            assignment = await TeamAssignmentWriter.guardar(
+                self._uow, competition, mode, team_a_ids, team_b_ids
             )
-            await self._uow.team_assignments.add(assignment)
-
-            # 7. Transicionar rondas PENDING_TEAMS → PENDING_MATCHES
-            rounds = await self._uow.rounds.find_by_competition(competition_id)
-            for round_entity in rounds:
-                if round_entity.status == RoundStatus.PENDING_TEAMS:
-                    round_entity.mark_teams_assigned()
-                    await self._uow.rounds.update(round_entity)
 
         return AssignTeamsResponseDTO(
             id=assignment.id.value,
@@ -146,26 +134,31 @@ class AssignTeamsUseCase:
             created_at=assignment.created_at,
         )
 
-    async def _auto_assign(self, enrollments):
-        """Asignación automática usando SnakeDraftService."""
-        players = []
-        for enrollment in enrollments:
-            # Obtener handicap: custom_handicap > User.handicap > 0
-            if enrollment.custom_handicap is not None:
-                handicap = enrollment.custom_handicap
-            else:
-                user = await self._user_repo.find_by_id(enrollment.user_id)
-                if user and user.handicap is not None:
-                    handicap = Decimal(str(user.handicap.value))
-                else:
-                    handicap = Decimal("0")
-            players.append(PlayerForDraft(user_id=enrollment.user_id, handicap=handicap))
+    async def _repartir(self, competition, request, enrollments, mode):
+        """Reparte los equipos; las reglas de los capitanes son del dominio (BE #320)."""
+        if mode == TeamAssignmentMode.MANUAL:
+            team_a_ids, team_b_ids = self._manual_assign(request, enrollments)
+            competition.check_captains_placement(team_a_ids, team_b_ids)
+            return team_a_ids, team_b_ids
 
-        results = self._draft_service.assign_teams(players)
+        capitanes = competition.captains_for_team_split()
+        players = await self._players_for_draft(enrollments)
+        if capitanes is None:
+            results = self._draft_service.assign_teams(players)
+            return (
+                self._draft_service.get_team_players(results, Team.A),
+                self._draft_service.get_team_players(results, Team.B),
+            )
+        return self._draft_service.assign_teams_with_captains(players, *capitanes)
 
-        team_a_ids = self._draft_service.get_team_players(results, Team.A)
-        team_b_ids = self._draft_service.get_team_players(results, Team.B)
-        return team_a_ids, team_b_ids
+    async def _players_for_draft(self, enrollments):
+        """Los jugadores con el hándicap que cuenta para el draft.
+
+        La misma regla que usa la sala de draft (FE #653), en un solo sitio:
+        si divergieran, la aplicación elegiría por un capitán con un criterio
+        distinto del que usa al repartir sola.
+        """
+        return await DraftRoster.de_los_inscritos(enrollments, self._user_repo)
 
     def _manual_assign(self, request, enrollments):
         """Asignación manual con validación."""

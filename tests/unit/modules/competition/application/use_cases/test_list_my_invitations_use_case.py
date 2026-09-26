@@ -24,6 +24,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as UserInMemoryUoW,
 )
+from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,7 +54,9 @@ class TestListMyInvitationsUseCase:
         return user
 
     async def _create_active_competition(self, comp_uow, creator_id, name="Test Cup"):
-        create_uc = CreateCompetitionUseCase(comp_uow, LocationBuilder(comp_uow.countries))
+        create_uc = CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        )
         request = CreateCompetitionRequestDTO(
             name=name,
             start_date=date(2026, 6, 1),
@@ -181,13 +184,39 @@ class TestListMyInvitationsUseCase:
         assert result.total_count == 1
 
     # ------------------------------------------------------------------
-    # El alias de quien invita (BE #239). La misma invitación se lee en dos
-    # pantallas —«Mis invitaciones» y la lista de la competición—, así que las
-    # dos tienen que decir el mismo nombre o la misma persona sale de dos
-    # maneras en el mismo flujo.
+    # El nombre de quien invita es el que usa en ESA competición (#710). Desde
+    # la BE #254 una competición enseña el nombre legal salvo que el jugador
+    # pida su alias para ella; las invitaciones seguían con el alias de la
+    # BE #239. La misma invitación se lee en dos pantallas, así que las dos
+    # dicen el mismo nombre.
     # ------------------------------------------------------------------
 
-    async def test_the_inviter_is_shown_by_their_alias(self, comp_uow, user_uow):
+    async def test_the_inviter_is_shown_by_their_legal_name_by_default(self, comp_uow, user_uow):
+        creator = await self._create_user(
+            user_uow, email="legal_creator@test.com", first_name="Agustin", last_name="Estevez"
+        )
+        async with user_uow:
+            creator.update_profile(alias="Trinx")
+            await user_uow.users.save(creator)
+        invitee = await self._create_user(
+            user_uow, email="legal_invitee@test.com", first_name="Ana", last_name="Garcia"
+        )
+        created = await self._create_active_competition(comp_uow, creator.id)
+        await self._add_invitation(
+            comp_uow,
+            created.id,
+            creator.id,
+            "legal_invitee@test.com",
+            invitee_user_id=invitee.id,
+        )
+
+        result = await ListMyInvitationsUseCase(comp_uow, user_uow).execute(
+            user_id=str(invitee.id.value)
+        )
+
+        assert result.invitations[0].inviter_name == "Agustin Estevez"
+
+    async def test_the_inviter_is_shown_by_their_alias_if_they_chose_it(self, comp_uow, user_uow):
         creator = await self._create_user(
             user_uow, email="alias_creator@test.com", first_name="Agustin", last_name="Estevez"
         )
@@ -198,6 +227,13 @@ class TestListMyInvitationsUseCase:
             user_uow, email="alias_invitee@test.com", first_name="Ana", last_name="Garcia"
         )
         created = await self._create_active_competition(comp_uow, creator.id)
+        # En esta competición pidió su alias
+        async with comp_uow:
+            suya = await comp_uow.enrollments.find_by_user_and_competition(
+                creator.id, CompetitionId(created.id)
+            )
+            suya.set_name_preference(use_real_name=False)
+            await comp_uow.enrollments.update(suya)
         await self._add_invitation(
             comp_uow,
             created.id,

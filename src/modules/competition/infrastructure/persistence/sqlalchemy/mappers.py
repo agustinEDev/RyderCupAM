@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import composite, relationship
@@ -33,7 +34,9 @@ from src.modules.competition.domain.entities.competition import (
 from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,
 )
+from src.modules.competition.domain.entities.draft import Draft, DraftPick
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
@@ -54,10 +57,13 @@ from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.draft_id import DraftId
+from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
+from src.modules.competition.domain.value_objects.envelope_id import EnvelopeId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.hole_score_id import HoleScoreId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
@@ -65,6 +71,9 @@ from src.modules.competition.domain.value_objects.invitation_status import Invit
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
@@ -72,6 +81,7 @@ from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.team_assignment import (
     TeamAssignment as TeamAssignmentVO,
 )
@@ -286,6 +296,44 @@ class RoundIdDecorator(TypeDecorator):
         return RoundId(uuid.UUID(value))
 
 
+class DraftIdDecorator(TypeDecorator):
+    """TypeDecorator para convertir DraftId (UUID VO) a/desde VARCHAR(36)."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: "DraftId | str | None", dialect) -> str | None:
+        if isinstance(value, DraftId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> "DraftId | None":
+        if value is None:
+            return None
+        return DraftId(uuid.UUID(value))
+
+
+class EnvelopeIdDecorator(TypeDecorator):
+    """TypeDecorator para convertir EnvelopeId (UUID VO) a/desde VARCHAR(36)."""
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def process_bind_param(self, value: "EnvelopeId | str | None", dialect) -> str | None:
+        if isinstance(value, EnvelopeId):
+            return str(value.value)
+        if isinstance(value, str):
+            return value
+        return None
+
+    def process_result_value(self, value: str | None, dialect) -> "EnvelopeId | None":
+        if value is None:
+            return None
+        return EnvelopeId(uuid.UUID(value))
+
+
 class MatchIdDecorator(TypeDecorator):
     """TypeDecorator para convertir MatchId (UUID VO) a/desde VARCHAR(36)."""
 
@@ -362,6 +410,7 @@ TeamAssignmentModeDecorator = _create_enum_decorator(TeamAssignmentMode)
 TeeColorDecorator = _create_enum_decorator(TeeColor)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
 VisibilityDecorator = _create_enum_decorator(Visibility)
+SetupModeDecorator = _create_enum_decorator(SetupMode)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
 
@@ -402,7 +451,9 @@ class MatchPlayersJsonType(TypeDecorator):
                 "tee_color": p.tee_color.value,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
                 "strokes_received": list(p.strokes_received),
-                "player_handicap": str(p.player_handicap) if p.player_handicap is not None else None,
+                "player_handicap": str(p.player_handicap)
+                if p.player_handicap is not None
+                else None,
             }
             for p in value
         ]
@@ -446,6 +497,70 @@ class UserIdsJsonType(TypeDecorator):
         return tuple(UserId(uuid.UUID(uid_str)) for uid_str in value)
 
 
+class DraftPicksJsonType(TypeDecorator):
+    """TypeDecorator para las elecciones del draft, como array de objetos JSONB.
+
+    En la misma fila que la sala y no en otra tabla: son pocas, siempre se leen
+    juntas y nunca se consultan por separado, igual que los participantes de una
+    partida rapida (FE #653).
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: tuple | list | None, dialect) -> list | None:
+        if value is None:
+            return None
+        return [
+            {
+                "user_id": str(pick.user_id.value),
+                "team": pick.team,
+                "order": pick.order,
+                "automatic": pick.automatic,
+                "last_remaining": pick.last_remaining,
+            }
+            for pick in value
+        ]
+
+    def process_result_value(self, value: list | None, dialect) -> tuple | None:
+        if value is None:
+            return None
+        return tuple(
+            DraftPick(
+                user_id=UserId(uuid.UUID(pick["user_id"])),
+                team=pick["team"],
+                order=pick["order"],
+                automatic=pick.get("automatic", False),
+                last_remaining=pick.get("last_remaining", False),
+            )
+            for pick in value
+        )
+
+
+class EnvelopeEntriesJsonType(TypeDecorator):
+    """
+    TypeDecorator para las filas de un sobre (FE #655).
+
+    Se almacena como array de arrays de UUID: [["uuid-1"], ["uuid-2"], ...] en
+    individuales, y [["uuid-1", "uuid-2"], ...] en los formatos de dos. Van en
+    la misma fila del sobre porque el ORDEN es el dato: una tabla aparte
+    obligaria a ordenar por una columna que no aporta nada mas.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: tuple | list | None, dialect) -> list | None:
+        if value is None:
+            return None
+        return [[str(uid.value) for uid in fila] for fila in value]
+
+    def process_result_value(self, value: list | None, dialect) -> tuple | None:
+        if value is None:
+            return None
+        return tuple(tuple(UserId(uuid.UUID(uid)) for uid in fila) for fila in value)
+
+
 class MatchResultJsonType(TypeDecorator):
     """TypeDecorator pass-through para dict | None almacenado como JSONB."""
 
@@ -457,6 +572,23 @@ class MatchResultJsonType(TypeDecorator):
 
     def process_result_value(self, value: dict | None, dialect) -> dict | None:
         return value
+
+
+class MatchGenerationBlockJsonType(TypeDecorator):
+    """
+    TypeDecorator para el motivo por el que una sesion no tiene partidos (BE #361).
+
+    NULL en BD es «no hay motivo»: o se generaron, o nadie lo ha intentado.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: MatchGenerationBlock | None, dialect) -> dict | None:
+        return value.to_dict() if value is not None else None
+
+    def process_result_value(self, value: dict | None, dialect) -> MatchGenerationBlock | None:
+        return MatchGenerationBlock.from_dict(value) if value else None
 
 
 class MarkerAssignmentsJsonType(TypeDecorator):
@@ -713,6 +845,33 @@ competitions_table = Table(
     # Privada por defecto: lo que hay hoy son Ryders entre amigos, y publicar
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
+    # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
+    Column("setup_mode", SetupModeDecorator, nullable=False, server_default="RYDER_CUP"),
+    # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
+    Column(
+        "team_a_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column(
+        "team_b_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column(
+        "team_a_vice_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column(
+        "team_b_vice_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -801,6 +960,8 @@ rounds_table = Table(
     Column("allowance_percentage", Integer, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    # Por que no se pudieron generar sus partidos al abrir los sobres (BE #361)
+    Column("match_generation_block", MatchGenerationBlockJsonType, nullable=True),
 )
 
 
@@ -838,6 +999,47 @@ matches_table = Table(
 # TABLA TEAM_ASSIGNMENTS
 # =============================================================================
 
+DraftStatusDecorator = _create_enum_decorator(DraftStatus)
+
+# =============================================================================
+# TABLA DRAFTS (FE #653)
+# =============================================================================
+
+drafts_table = Table(
+    "drafts",
+    metadata,
+    Column("id", DraftIdDecorator, primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    ),
+    # RESTRICT: una sala sin capitan no existe, asi que borrar a uno con un
+    # draft vivo se para antes, en el panel de administracion
+    Column(
+        "team_a_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column(
+        "team_b_captain_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("status", DraftStatusDecorator, nullable=False),
+    Column("first_pick", String(1), nullable=True),
+    Column("current_team", String(1), nullable=True),
+    # El reloj es del servidor: de aqui sale cuanto queda de turno (BE #305)
+    Column("turn_started_at", DateTime, nullable=True),
+    Column("picks", DraftPicksJsonType, nullable=False),
+    Column("seconds_per_turn", Integer, nullable=False),
+)
+
+
 team_assignments_table = Table(
     "team_assignments",
     metadata,
@@ -852,6 +1054,49 @@ team_assignments_table = Table(
     Column("team_a_player_ids", UserIdsJsonType, nullable=False),
     Column("team_b_player_ids", UserIdsJsonType, nullable=False),
     Column("created_at", DateTime, nullable=False),
+)
+
+
+# =============================================================================
+# TABLA ENVELOPES (FE #655)
+# =============================================================================
+
+envelopes_table = Table(
+    "envelopes",
+    metadata,
+    Column("id", EnvelopeIdDecorator, primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "round_id",
+        RoundIdDecorator,
+        ForeignKey("rounds.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("team", String(1), nullable=False),
+    Column("match_format", MatchFormatDecorator, nullable=False),
+    Column("entries", EnvelopeEntriesJsonType, nullable=False),
+    Column("submitted_at", DateTime, nullable=True),
+    # SET NULL y no CASCADE: si el capitan se borra, el sobre sigue valiendo.
+    # Quien lo entrego es un dato de auditoria, no lo que hace valido el sobre
+    Column(
+        "submitted_by",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column("automatic", Boolean, nullable=False, default=False),
+    Column("revealed", Boolean, nullable=False, default=False),
+    # Si ese capitan pidio abrirlos en cuanto esten los dos, sin esperar a la
+    # hora. Hacen falta los DOS para que valga (23 sep)
+    Column("reveal_when_both_ready", Boolean, nullable=False, default=False),
+    # Uno por equipo y sesion: dos serian dos listas a la vez para el mismo
+    # cruce, y nadie sabria cual manda
+    UniqueConstraint("round_id", "team", name="uq_envelopes_round_team"),
 )
 
 
@@ -962,6 +1207,11 @@ def start_competition_mappers():
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
+                "_setup_mode": competitions_table.c.setup_mode,
+                "_team_a_captain_id": competitions_table.c.team_a_captain_id,
+                "_team_b_captain_id": competitions_table.c.team_b_captain_id,
+                "_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
+                "_team_b_vice_captain_id": competitions_table.c.team_b_vice_captain_id,
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs
@@ -1070,6 +1320,7 @@ def start_competition_mappers():
                 "_allowance_percentage": rounds_table.c.allowance_percentage,
                 "_created_at": rounds_table.c.created_at,
                 "_updated_at": rounds_table.c.updated_at,
+                "_match_generation_block": rounds_table.c.match_generation_block,
             },
         )
 
@@ -1109,6 +1360,45 @@ def start_competition_mappers():
                 "_team_a_player_ids": team_assignments_table.c.team_a_player_ids,
                 "_team_b_player_ids": team_assignments_table.c.team_b_player_ids,
                 "_created_at": team_assignments_table.c.created_at,
+            },
+        )
+
+    # Mapear Draft (FE #653)
+    if Draft not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            Draft,
+            drafts_table,
+            properties={
+                "_id": drafts_table.c.id,
+                "_competition_id": drafts_table.c.competition_id,
+                "_team_a_captain_id": drafts_table.c.team_a_captain_id,
+                "_team_b_captain_id": drafts_table.c.team_b_captain_id,
+                "_status": drafts_table.c.status,
+                "_first_pick": drafts_table.c.first_pick,
+                "_current_team": drafts_table.c.current_team,
+                "_turn_started_at": drafts_table.c.turn_started_at,
+                "_picks": drafts_table.c.picks,
+                "_seconds_per_turn": drafts_table.c.seconds_per_turn,
+            },
+        )
+
+    # Mapear Envelope (FE #655)
+    if Envelope not in mapper_registry.mappers:
+        mapper_registry.map_imperatively(
+            Envelope,
+            envelopes_table,
+            properties={
+                "_id": envelopes_table.c.id,
+                "_competition_id": envelopes_table.c.competition_id,
+                "_round_id": envelopes_table.c.round_id,
+                "_team": envelopes_table.c.team,
+                "_match_format": envelopes_table.c.match_format,
+                "_entries": envelopes_table.c.entries,
+                "_submitted_at": envelopes_table.c.submitted_at,
+                "_submitted_by": envelopes_table.c.submitted_by,
+                "_automatic": envelopes_table.c.automatic,
+                "_revealed": envelopes_table.c.revealed,
+                "_reveal_when_both_ready": envelopes_table.c.reveal_when_both_ready,
             },
         )
 

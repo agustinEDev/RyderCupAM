@@ -9,6 +9,9 @@ from datetime import UTC, date, datetime
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -53,6 +56,7 @@ class Round:
         allowance_percentage: int | None,
         created_at: datetime,
         updated_at: datetime,
+        match_generation_block: MatchGenerationBlock | None = None,
     ):
         """Constructor privado (usar factory methods)."""
         self._id = id
@@ -66,6 +70,7 @@ class Round:
         self._allowance_percentage = allowance_percentage
         self._created_at = created_at
         self._updated_at = updated_at
+        self._match_generation_block = match_generation_block
 
     @classmethod
     def create(
@@ -143,6 +148,7 @@ class Round:
         allowance_percentage: int | None,
         created_at: datetime,
         updated_at: datetime,
+        match_generation_block: MatchGenerationBlock | None = None,
     ) -> "Round":
         """Reconstruye desde BD (sin validaciones)."""
         return cls(
@@ -157,6 +163,7 @@ class Round:
             allowance_percentage=allowance_percentage,
             created_at=created_at,
             updated_at=updated_at,
+            match_generation_block=match_generation_block,
         )
 
     # ==================== Business Methods ====================
@@ -184,6 +191,32 @@ class Round:
                 f"Expected PENDING_MATCHES"
             )
         self._status = RoundStatus.SCHEDULED
+        # Con los partidos hechos, el motivo por el que no salian ya no vale
+        self._match_generation_block = None
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def block_match_generation(self, block: MatchGenerationBlock) -> None:
+        """
+        Apunta por que no se han podido generar los partidos (BE #361).
+
+        Los partidos se crean al abrirse los sobres, dentro de una lectura que
+        nadie esta mirando como un error: sin esto la sesion se quedaba con los
+        enfrentamientos a la vista y sin partidos, y nadie sabia por que.
+
+        Solo mientras la sesion espera sus partidos: con ellos ya hechos no hay
+        nada que explicar.
+        """
+        if self._status != RoundStatus.PENDING_MATCHES:
+            raise ValueError(
+                f"Cannot block match generation from status {self._status}. "
+                "Expected PENDING_MATCHES"
+            )
+        self._match_generation_block = block
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def clear_match_generation_block(self) -> None:
+        """Olvida el motivo: se han rehecho los sobres y se empieza de nuevo."""
+        self._match_generation_block = None
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def reopen_for_regeneration(self) -> None:
@@ -203,6 +236,30 @@ class Round:
         if self._status != RoundStatus.SCHEDULED:
             raise ValueError(
                 f"Cannot reopen a round in status {self._status}. Expected SCHEDULED"
+            )
+        self._status = RoundStatus.PENDING_MATCHES
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
+    def reset_to_pending_matches(self) -> None:
+        """
+        Devuelve la sesión a PENDING_MATCHES para rehacer sus sobres (FE #655).
+        Transición: SCHEDULED | IN_PROGRESS → PENDING_MATCHES
+
+        Distinto de `reopen_for_regeneration`, que solo admite SCHEDULED: allí
+        se recalculan los golpes de partidos que siguen en pie, y una sesión
+        arrancada ya tiene resultados que se reescribirían.
+
+        Aquí no queda nada que reescribir. Rehacer los sobres se lleva los
+        partidos por delante y solo se permite si NO se ha jugado nada —ni un
+        partido terminado ni un hoyo anotado—, así que una sesión IN_PROGRESS
+        es una que arrancó sola a su hora (BE #305) sin que nadie jugara. Sin
+        esta transición se quedaba en IN_PROGRESS y vacía, y generar partidos
+        exige PENDING_MATCHES: no habría forma de rehacerla.
+        """
+        if self._status not in (RoundStatus.SCHEDULED, RoundStatus.IN_PROGRESS):
+            raise ValueError(
+                f"Cannot reset a round in status {self._status}. "
+                "Expected SCHEDULED or IN_PROGRESS"
             )
         self._status = RoundStatus.PENDING_MATCHES
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -379,6 +436,11 @@ class Round:
     def handicap_mode(self) -> HandicapMode | None:
         """Modo de handicap (solo para SINGLES: MATCH_PLAY)."""
         return self._handicap_mode
+
+    @property
+    def match_generation_block(self) -> MatchGenerationBlock | None:
+        """Por que esta sesion no tiene partidos, si se intento y no se pudo."""
+        return self._match_generation_block
 
     @property
     def allowance_percentage(self) -> int | None:

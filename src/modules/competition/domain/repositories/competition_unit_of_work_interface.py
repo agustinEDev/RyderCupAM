@@ -6,6 +6,7 @@ Esta interfaz extiende la base añadiendo acceso a los repositorios de competici
 """
 
 from abc import abstractmethod
+from contextlib import AbstractAsyncContextManager
 
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -13,7 +14,9 @@ from src.shared.domain.repositories.country_repository_interface import (
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
 from .competition_repository_interface import CompetitionRepositoryInterface
+from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
+from .envelope_repository_interface import EnvelopeRepositoryInterface
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
 from .match_repository_interface import MatchRepositoryInterface
@@ -43,6 +46,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
 
     @property
     @abstractmethod
+    def envelopes(self) -> EnvelopeRepositoryInterface:
+        """Acceso al repositorio de sobres (FE #655)."""
+        pass
+
+    @property
+    @abstractmethod
     def countries(self) -> CountryRepositoryInterface:
         """Acceso al repositorio de paises."""
         pass
@@ -67,6 +76,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
 
     @property
     @abstractmethod
+    def drafts(self) -> DraftRepositoryInterface:
+        """Acceso al repositorio de salas de draft (FE #653)."""
+        pass
+
+    @property
+    @abstractmethod
     def invitations(self) -> InvitationRepositoryInterface:
         """Acceso al repositorio de invitaciones."""
         pass
@@ -75,4 +90,15 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         """Acceso al repositorio de hole scores."""
+        pass
+
+    @abstractmethod
+    def savepoint(self) -> AbstractAsyncContextManager[None]:
+        """Un punto de vuelta dentro de la transaccion abierta (BE #361).
+
+        Lo que se escriba dentro se deshace si sale una excepcion, y lo de
+        antes se queda. Lo necesita abrir los sobres: los partidos se generan
+        en la misma transaccion, y si fallan a mitad no pueden dejar ni los
+        sobres cerrados ni la mitad de los partidos escritos.
+        """
         pass

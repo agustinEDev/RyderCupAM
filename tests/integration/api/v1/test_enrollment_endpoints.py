@@ -13,6 +13,7 @@ from httpx import AsyncClient
 
 from tests.conftest import (
     activate_competition,
+    add_one_session,
     create_admin_user,
     create_authenticated_user,
     create_competition,
@@ -562,6 +563,7 @@ class TestRemoveCustomHandicap:
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
             cookies=creator["cookies"],
         )
+        await add_one_session(client, creator["cookies"], comp)
         await client.post(
             f"/api/v1/competitions/{comp['id']}/start",
             cookies=creator["cookies"],
@@ -720,6 +722,7 @@ class TestSetNamePreference:
             f"/api/v1/competitions/{comp['id']}/close-enrollments",
             cookies=creator["cookies"],
         )
+        await add_one_session(client, creator["cookies"], comp)
         await client.post(
             f"/api/v1/competitions/{comp['id']}/start",
             cookies=creator["cookies"],
