@@ -957,10 +957,9 @@ Returns unified scoring data: hole-by-hole scores, validation statuses, match st
 **GET /api/v1/competitions/{competition_id}/leaderboard** (Any authenticated user)
 
 **Response (200 OK):**
-- `competition_id` (string, UUID)
-- `team_a` (object) - `name`, `points` (float)
-- `team_b` (object) - `name`, `points` (float)
-- `matches` (array) - Per match: `match_id`, `round_name`, `format`, `status`, `team_a_players`, `team_b_players`, `standing`, `result`, `points_a`, `points_b`
+- `competition_id`, `competition_name` (string)
+- `team_a_name`, `team_b_name` (string), `team_a_points`, `team_b_points` (float)
+- `matches` (array) - Per match: `match_id`, `match_number`, `match_format`, `round_date` (date or null), `session_type` (`MORNING` | `AFTERNOON` | `EVENING` or null), `status`, `current_hole`, `standing`, `leading_team`, `team_a_players`, `team_b_players`, `result`. `round_date` and `session_type` say which session the match belongs to: match numbers repeat across sessions; null only for rounds created before sessions existed
 
 **Ryder Cup Points:**
 - Win: 1.0 point
