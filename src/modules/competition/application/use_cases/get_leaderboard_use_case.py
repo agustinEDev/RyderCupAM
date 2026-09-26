@@ -124,6 +124,10 @@ class GetLeaderboardUseCase:
                             match_format=round_entity.match_format.value
                             if round_entity.match_format
                             else "",
+                            round_date=round_entity.round_date,
+                            session_type=round_entity.session_type.value
+                            if round_entity.session_type
+                            else None,
                             status=match.status.value,
                             current_hole=current_hole,
                             standing=standing_str,

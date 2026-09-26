@@ -7,6 +7,7 @@ esa persona en ESTA competición haya elegido su nombre legal (BE #254). No
 existía ningún test de este caso de uso antes de esta issue.
 """
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,6 +22,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -86,6 +88,8 @@ async def _setup_scheduled_match(uow: InMemoryUnitOfWork):
     mock_round.id = round_id
     mock_round.competition_id = competition_id
     mock_round.match_format = MagicMock(value="SINGLES")
+    mock_round.round_date = None
+    mock_round.session_type = None
 
     match = Match.create(
         round_id=round_id, match_number=1, team_a_players=[player_a], team_b_players=[player_b]
@@ -210,3 +214,94 @@ class TestLeaderboardConcededMatch:
         resultado = view.matches[0].result
         assert (resultado.winner, resultado.score) == ("B", "CONCEDED")
         assert (view.team_a_points, view.team_b_points) == (0.0, 1.0)
+
+
+def _jugador():
+    return MatchPlayer.create(
+        user_id=UserId.generate(),
+        playing_handicap=10,
+        tee_color=TeeColor.YELLOW,
+        tee_gender=Gender.MALE,
+        strokes_received=[],
+    )
+
+
+async def _sesion(uow, competition_id, dia, sesion, numero=1):
+    """Una ronda con su fecha y su sesión, y un partido programado en ella."""
+    ronda = MagicMock()
+    ronda.id = RoundId.generate()
+    ronda.competition_id = competition_id
+    ronda.match_format = MagicMock(value="SINGLES")
+    ronda.round_date = dia
+    ronda.session_type = sesion
+    uow._rounds._rounds[ronda.id] = ronda
+    partido = Match.create(
+        round_id=ronda.id,
+        match_number=numero,
+        team_a_players=[_jugador()],
+        team_b_players=[_jugador()],
+    )
+    await uow.matches.add(partido)
+    return partido
+
+
+def _competicion(uow):
+    competition_id = CompetitionId.generate()
+    comp = MagicMock()
+    comp.id = competition_id
+    comp.name = "Test Cup"
+    comp.team_1_name = "Europa"
+    comp.team_2_name = "Estados Unidos"
+    uow._competitions._competitions[competition_id] = comp
+    return competition_id
+
+
+class TestLeaderboardSaysTheSessionOfEachMatch:
+    """Cada partido dice de qué sesión es (BE #388): con varias sesiones
+    salían dos «#2 - SINGLES» seguidos sin forma de distinguirlos."""
+
+    @pytest.mark.asyncio
+    async def test_a_match_carries_the_date_and_session_of_its_round(self, uow, user_repo):
+        competition_id = _competicion(uow)
+        await _sesion(uow, competition_id, date(2026, 9, 25), SessionType.MORNING)
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        assert view.matches[0].round_date == date(2026, 9, 25)
+        assert view.matches[0].session_type == "MORNING"
+
+    @pytest.mark.asyncio
+    async def test_matches_with_the_same_number_keep_their_own_session(self, uow, user_repo):
+        competition_id = _competicion(uow)
+        viernes = await _sesion(uow, competition_id, date(2026, 9, 25), SessionType.MORNING, 2)
+        sabado = await _sesion(uow, competition_id, date(2026, 9, 26), SessionType.AFTERNOON, 2)
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        por_id = {m.match_id: m for m in view.matches}
+        assert (por_id[str(viernes.id)].round_date, por_id[str(viernes.id)].session_type) == (
+            date(2026, 9, 25),
+            "MORNING",
+        )
+        assert (por_id[str(sabado.id)].round_date, por_id[str(sabado.id)].session_type) == (
+            date(2026, 9, 26),
+            "AFTERNOON",
+        )
+
+    @pytest.mark.asyncio
+    async def test_an_old_round_without_session_does_not_break_the_leaderboard(
+        self, uow, user_repo
+    ):
+        competition_id = _competicion(uow)
+        await _sesion(uow, competition_id, None, None)
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id)
+        )
+
+        assert view.matches[0].round_date is None
+        assert view.matches[0].session_type is None

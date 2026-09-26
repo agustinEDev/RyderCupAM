@@ -1,6 +1,6 @@
 """DTOs para el modulo de scoring."""
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -204,6 +204,10 @@ class LeaderboardMatchDTO(BaseModel):
     match_id: str
     match_number: int
     match_format: str
+    # De qué sesión es: con varias, el número de partido se repite (BE #388).
+    # Opcionales porque las rondas de antes no tenían fecha ni sesión
+    round_date: date | None = None
+    session_type: str | None = None
     status: str
     current_hole: int | None = None
     standing: str | None = None
