@@ -5,7 +5,6 @@ Servicio para enviar emails usando Mailgun.
 """
 
 import asyncio
-import html
 import logging
 from datetime import datetime
 
@@ -20,6 +19,17 @@ from src.modules.social.application.ports.social_email_service_interface import 
     ISocialEmailService,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.shared.infrastructure.email.email_layout import (
+    Boton,
+    Ingles,
+    aviso,
+    cita,
+    correo,
+    frase,
+    negrita,
+    parrafo,
+    recuadro,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,76 +101,32 @@ Best regards,
 The Ryder Cup Friends Team
         """
 
-        html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-        }}
-        .container {{
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        .button {{
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #4CAF50;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            margin: 20px 0;
-        }}
-        .section {{
-            margin-bottom: 30px;
-            padding-bottom: 30px;
-            border-bottom: 1px solid #e0e0e0;
-        }}
-        .section:last-of-type {{
-            border-bottom: none;
-        }}
-        .footer {{
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Español -->
-        <div class="section">
-            <h2>¡Bienvenido a Ryder Cup Friends, {safe_user_name}!</h2>
-            <p>Gracias por registrarte en Ryder Cup Friends.</p>
-            <p>Para completar tu registro y activar tu cuenta, por favor confirma tu dirección de correo electrónico:</p>
-            <a href="{verification_link}" class="button">Verificar mi email</a>
-            <p>O copia y pega este enlace en tu navegador:</p>
-            <p style="word-break: break-all; color: #0066cc;">{verification_link}</p>
-        </div>
-
-        <!-- English -->
-        <div class="section">
-            <h2>Welcome to Ryder Cup Friends, {safe_user_name}!</h2>
-            <p>Thank you for signing up for Ryder Cup Friends.</p>
-            <p>To complete your registration and activate your account, please confirm your email address:</p>
-            <a href="{verification_link}" class="button">Verify my email</a>
-            <p>Or copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; color: #0066cc;">{verification_link}</p>
-        </div>
-
-        <div class="footer">
-            <p>Si no te has registrado en Ryder Cup Friends, puedes ignorar este mensaje.<br>
-            If you did not sign up for Ryder Cup Friends, you can safely ignore this message.</p>
-            <p>&copy; 2025 Ryder Cup Friends. Todos los derechos reservados. | All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>
-        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Confirma tu correo para activar tu cuenta · Confirm your email to activate your account",
+            etiqueta="Bienvenida",
+            titulo="Confirma tu correo y empieza a jugar",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", gracias por registrarte en RyderCupFriends. Solo falta un paso: "
+                    "confirma que este correo es tuyo para activar la cuenta.",
+                ),
+            ],
+            boton=Boton("Confirmar mi correo", verification_link),
+            con_respaldo=True,
+            ingles=Ingles(
+                frase(
+                    "Hi ",
+                    negrita(safe_user_name),
+                    ", confirm your email to activate your RyderCupFriends account.",
+                ),
+                Boton("Confirm my email", verification_link),
+            ),
+            pie="Si no te has registrado en RyderCupFriends, ignora este correo. "
+            "If you didn't sign up, ignore this email.",
+        )
 
         return self._send_email(
             to=f'"{safe_user_name}" <{to_email}>',  # RFC 5322 format with quotes
@@ -215,7 +181,7 @@ The Ryder Cup Friends Team
         """
         Envía un email con enlace para resetear contraseña.
 
-        Template bilingüe (ES/EN) con diseño consistente con verify_email.
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
         """
         safe_user_name = self._sanitize_name(user_name)
 
@@ -255,121 +221,40 @@ Best regards,
 The Ryder Cup Friends Team
         """
 
-        html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        .container {{
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            padding: 30px;
-        }}
-        .header {{
-            background-color: #0066cc;
-            color: white;
-            padding: 20px;
-            border-radius: 10px 10px 0 0;
-            text-align: center;
-        }}
-        .content {{
-            background-color: white;
-            padding: 30px;
-            border-radius: 0 0 10px 10px;
-        }}
-        .button {{
-            display: inline-block;
-            padding: 15px 30px;
-            background-color: #0066cc;
-            color: white !important;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-            font-weight: bold;
-        }}
-        .footer {{
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-        }}
-        .warning {{
-            background-color: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 15px;
-            margin: 20px 0;
-        }}
-        .divider {{
-            border-top: 2px solid #ddd;
-            margin: 30px 0;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🔐 Reseteo de Contraseña</h1>
-            <h2>Password Reset</h2>
-        </div>
-        <div class="content">
-            <!-- Spanish -->
-            <p>Hola <strong>{safe_user_name}</strong>,</p>
-            <p>Hemos recibido una solicitud para resetear la contraseña de tu cuenta en Ryder Cup Friends.</p>
-            <p>Para establecer una nueva contraseña, haz clic en el siguiente botón:</p>
-            <center>
-                <a href="{reset_link}" class="button">Resetear mi contraseña</a>
-            </center>
-            <p style="font-size: 12px; color: #666;">Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
-            <p style="font-size: 12px; word-break: break-all;">{reset_link}</p>
-
-            <div class="warning">
-                <p style="margin: 0;"><strong>⚠️ Importante:</strong></p>
-                <ul style="margin: 10px 0 0 0;">
-                    <li>Este enlace es válido por <strong>24 horas</strong></li>
-                    <li>Todas tus sesiones activas serán cerradas al cambiar la contraseña</li>
-                    <li>Si no solicitaste este cambio, ignora este mensaje</li>
-                </ul>
-            </div>
-
-            <div class="divider"></div>
-
-            <!-- English -->
-            <p>Hello <strong>{safe_user_name}</strong>,</p>
-            <p>We received a request to reset the password for your Ryder Cup Friends account.</p>
-            <p>To set a new password, click on the following button:</p>
-            <center>
-                <a href="{reset_link}" class="button">Reset my password</a>
-            </center>
-            <p style="font-size: 12px; color: #666;">If the button doesn't work, copy and paste this link into your browser:</p>
-            <p style="font-size: 12px; word-break: break-all;">{reset_link}</p>
-
-            <div class="warning">
-                <p style="margin: 0;"><strong>⚠️ Important:</strong></p>
-                <ul style="margin: 10px 0 0 0;">
-                    <li>This link is valid for <strong>24 hours</strong></li>
-                    <li>All your active sessions will be closed when you change your password</li>
-                    <li>If you did not request this change, ignore this message</li>
-                </ul>
-            </div>
-
-            <div class="footer">
-                <p>Saludos | Best regards,<br>
-                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Restablece tu contraseña · Reset your password",
+            etiqueta="Seguridad",
+            titulo="Restablece tu contraseña",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", hemos recibido una petición para restablecer la contraseña de tu cuenta.",
+                ),
+                parrafo(
+                    "El enlace vale durante 24 horas. Al cambiar la contraseña se cierran "
+                    "todas tus sesiones abiertas."
+                ),
+                parrafo(
+                    "Si no lo has pedido tú, ignora este correo: tu contraseña actual sigue valiendo.",
+                    pequeno=True,
+                ),
+            ],
+            boton=Boton("Restablecer mi contraseña", reset_link),
+            con_respaldo=True,
+            ingles=Ingles(
+                frase(
+                    "Hi ",
+                    negrita(safe_user_name),
+                    ", use this link within 24 hours to set a new password. "
+                    "If you didn't ask for it, ignore this email.",
+                ),
+                Boton("Reset my password", reset_link),
+            ),
+            pie="Te llega porque alguien pidió restablecer la contraseña de esta cuenta. "
+            "You get this because a password reset was requested for this account.",
+        )
 
         return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
@@ -377,7 +262,7 @@ The Ryder Cup Friends Team
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 
-        Template bilingüe (ES/EN) con información de seguridad.
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
         """
         safe_user_name = self._sanitize_name(user_name)
 
@@ -411,119 +296,35 @@ Best regards,
 The Ryder Cup Friends Team
         """
 
-        html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        .container {{
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            padding: 30px;
-        }}
-        .header {{
-            background-color: #28a745;
-            color: white;
-            padding: 20px;
-            border-radius: 10px 10px 0 0;
-            text-align: center;
-        }}
-        .content {{
-            background-color: white;
-            padding: 30px;
-            border-radius: 0 0 10px 10px;
-        }}
-        .success-box {{
-            background-color: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px;
-            margin: 20px 0;
-        }}
-        .alert-box {{
-            background-color: #f8d7da;
-            border-left: 4px solid #dc3545;
-            padding: 15px;
-            margin: 20px 0;
-        }}
-        .footer {{
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-        }}
-        .divider {{
-            border-top: 2px solid #ddd;
-            margin: 30px 0;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>✅ Contraseña Cambiada</h1>
-            <h2>Password Changed</h2>
-        </div>
-        <div class="content">
-            <!-- Spanish -->
-            <p>Hola <strong>{safe_user_name}</strong>,</p>
-
-            <div class="success-box">
-                <p style="margin: 0;"><strong>✅ Cambio exitoso</strong></p>
-                <p style="margin: 10px 0 0 0;">Tu contraseña ha sido cambiada exitosamente.</p>
-            </div>
-
-            <p><strong>Acciones de seguridad tomadas:</strong></p>
-            <ul>
-                <li>Todas tus sesiones activas han sido cerradas</li>
-                <li>Necesitarás iniciar sesión nuevamente con tu nueva contraseña</li>
-                <li>Este cambio ha sido registrado en nuestro sistema</li>
-            </ul>
-
-            <div class="alert-box">
-                <p style="margin: 0;"><strong>⚠️ ¿No fuiste tú?</strong></p>
-                <p style="margin: 10px 0 0 0;">Si NO realizaste este cambio, tu cuenta podría estar comprometida. Contacta a nuestro equipo de soporte inmediatamente.</p>
-            </div>
-
-            <div class="divider"></div>
-
-            <!-- English -->
-            <p>Hello <strong>{safe_user_name}</strong>,</p>
-
-            <div class="success-box">
-                <p style="margin: 0;"><strong>✅ Successful change</strong></p>
-                <p style="margin: 10px 0 0 0;">Your password has been successfully changed.</p>
-            </div>
-
-            <p><strong>Security actions taken:</strong></p>
-            <ul>
-                <li>All your active sessions have been closed</li>
-                <li>You will need to log in again with your new password</li>
-                <li>This change has been logged in our system</li>
-            </ul>
-
-            <div class="alert-box">
-                <p style="margin: 0;"><strong>⚠️ Wasn't you?</strong></p>
-                <p style="margin: 10px 0 0 0;">If you did NOT make this change, your account may be compromised. Contact our support team immediately.</p>
-            </div>
-
-            <div class="footer">
-                <p>Saludos | Best regards,<br>
-                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-        """
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="La contraseña de tu cuenta ha cambiado · Your password was changed",
+            etiqueta="Seguridad",
+            titulo="Tu contraseña ha cambiado",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", la contraseña de tu cuenta acaba de cambiar. Por seguridad hemos "
+                    "cerrado todas tus sesiones: vuelve a entrar con la nueva.",
+                ),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Restablece la contraseña ahora: alguien puede estar usando tu cuenta.",
+                ),
+            ],
+            boton=Boton("Restablecer la contraseña", restablecer),
+            ingles=Ingles(
+                frase(
+                    negrita("Your password was changed"),
+                    " and all your sessions were closed. If it wasn't you, reset it now.",
+                ),
+                Boton("Reset my password", restablecer),
+            ),
+            pie="Este aviso se envía siempre que cambia la contraseña. "
+            "We always send this when the password changes.",
+        )
 
         return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
@@ -550,41 +351,26 @@ The Ryder Cup Friends Team
         """
         Envia un email de invitacion a una competicion.
 
-        Template bilingue (ES/EN) con diseno consistente.
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
         """
         safe_inviter = self._sanitize_name(inviter_name)
         safe_competition = self._sanitize_name(competition_name)
         safe_invitee = self._sanitize_name(invitee_name) if invitee_name else None
 
-        # HTML-escaped variants for HTML template interpolation
-        html_inviter = html.escape(safe_inviter)
-        html_competition = html.escape(safe_competition)
-        html_invitee = html.escape(safe_invitee) if safe_invitee else None
-
         greeting_es = f"Hola {safe_invitee}" if safe_invitee else "Hola"
         greeting_en = f"Hello {safe_invitee}" if safe_invitee else "Hello"
-        greeting_html_es = f"Hola {html_invitee}" if html_invitee else "Hola"
-        greeting_html_en = f"Hello {html_invitee}" if html_invitee else "Hello"
 
         expires_str = expires_at.strftime("%d/%m/%Y")
 
         # Mensaje personal (si existe)
         personal_es = ""
         personal_en = ""
-        personal_html_es = ""
-        personal_html_en = ""
         if personal_message:
-            escaped_message = html.escape(personal_message)
             personal_es = f'\nMensaje de {safe_inviter}: "{personal_message}"\n'
             personal_en = f'\nMessage from {safe_inviter}: "{personal_message}"\n'
-            personal_html_es = f"""
-            <div style="background-color: #f0f4f8; border-left: 4px solid #0066cc; padding: 15px; margin: 15px 0;">
-                <p style="margin: 0; font-style: italic;">"{escaped_message}"</p>
-                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">- {html_inviter}</p>
-            </div>"""
-            personal_html_en = personal_html_es
 
-        invitations_link = f"{settings.FRONTEND_URL}/invitations"
+        # El buzón del jugador: «/invitations» no existe y dejaba una página en blanco
+        invitations_link = f"{settings.FRONTEND_URL}/player/invitations"
         register_link = f"{settings.FRONTEND_URL}/register"
 
         subject = (
@@ -594,21 +380,9 @@ The Ryder Cup Friends Team
         # Texto para no registrados
         unregistered_es = ""
         unregistered_en = ""
-        unregistered_html_es = ""
-        unregistered_html_en = ""
         if not safe_invitee:
             unregistered_es = f"\nAun no tienes cuenta? Registrate aqui: {register_link}\n"
             unregistered_en = f"\nDon't have an account yet? Register here: {register_link}\n"
-            unregistered_html_es = f"""
-            <p>Si aun no tienes cuenta, registrate primero:</p>
-            <center>
-                <a href="{register_link}" class="button" style="background-color: #28a745;">Registrarme</a>
-            </center>"""
-            unregistered_html_en = f"""
-            <p>Don't have an account yet? Register first:</p>
-            <center>
-                <a href="{register_link}" class="button" style="background-color: #28a745;">Register</a>
-            </center>"""
 
         text_body = f"""
 {greeting_es},
@@ -636,111 +410,42 @@ Best regards,
 The Ryder Cup Friends Team
         """
 
-        html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        .container {{
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            padding: 30px;
-        }}
-        .header {{
-            background-color: #0066cc;
-            color: white;
-            padding: 20px;
-            border-radius: 10px 10px 0 0;
-            text-align: center;
-        }}
-        .content {{
-            background-color: white;
-            padding: 30px;
-            border-radius: 0 0 10px 10px;
-        }}
-        .button {{
-            display: inline-block;
-            padding: 15px 30px;
-            background-color: #0066cc;
-            color: white !important;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-            font-weight: bold;
-        }}
-        .info-box {{
-            background-color: #e8f4fd;
-            border-left: 4px solid #0066cc;
-            padding: 15px;
-            margin: 20px 0;
-        }}
-        .footer {{
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-        }}
-        .divider {{
-            border-top: 2px solid #ddd;
-            margin: 30px 0;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Invitacion a Competicion</h1>
-            <h2>Competition Invitation</h2>
-        </div>
-        <div class="content">
-            <!-- Spanish -->
-            <p>{greeting_html_es},</p>
-            <p><strong>{html_inviter}</strong> te ha invitado a participar en la competicion:</p>
-
-            <div class="info-box">
-                <p style="margin: 0; font-size: 18px; font-weight: bold;">{html_competition}</p>
-                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">Expira el {expires_str}</p>
-            </div>
-            {personal_html_es}
-            <center>
-                <a href="{invitations_link}" class="button">Ver mis invitaciones</a>
-            </center>
-            {unregistered_html_es}
-
-            <div class="divider"></div>
-
-            <!-- English -->
-            <p>{greeting_html_en},</p>
-            <p><strong>{html_inviter}</strong> has invited you to join the competition:</p>
-
-            <div class="info-box">
-                <p style="margin: 0; font-size: 18px; font-weight: bold;">{html_competition}</p>
-                <p style="margin: 5px 0 0 0; font-size: 13px; color: #666;">Expires on {expires_str}</p>
-            </div>
-            {personal_html_en}
-            <center>
-                <a href="{invitations_link}" class="button">View my invitations</a>
-            </center>
-            {unregistered_html_en}
-
-            <div class="footer">
-                <p>Saludos | Best regards,<br>
-                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-        """
+        saludo = ("Hola ", negrita(safe_invitee), ", ") if safe_invitee else ("Hola, ",)
+        cuerpo = [
+            parrafo(*saludo, negrita(safe_inviter), " te ha invitado a esta competición:"),
+            recuadro(safe_competition, f"Responde antes del {expires_str}"),
+        ]
+        if personal_message:
+            cuerpo.append(cita(personal_message, safe_inviter))
+        otros_botones = []
+        if not safe_invitee:
+            cuerpo.append(
+                parrafo(
+                    "¿Aún no tienes cuenta? Créala con este mismo correo y la invitación "
+                    "te estará esperando.",
+                    pequeno=True,
+                )
+            )
+            otros_botones.append(Boton("Crear mi cuenta", register_link))
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"{safe_inviter} te invita a {safe_competition} · "
+            f"{safe_inviter} invites you to {safe_competition}",
+            etiqueta="Invitación",
+            titulo=f"{safe_inviter} te invita a jugar",
+            cuerpo=cuerpo,
+            boton=Boton("Ver la invitación", invitations_link),
+            otros_botones=otros_botones,
+            ingles=Ingles(
+                frase(
+                    negrita(f"{safe_inviter} invites you to play {safe_competition}"),
+                    f". Reply before {expires_str}.",
+                ),
+                Boton("View invitation", invitations_link),
+            ),
+            pie="Te llega porque alguien te invitó en RyderCupFriends. "
+            "You get this because someone invited you on RyderCupFriends.",
+        )
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
         return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
@@ -754,18 +459,14 @@ The Ryder Cup Friends Team
         """
         Envia un email notificando una nueva solicitud de amistad.
 
-        Template bilingue (ES/EN) con diseno consistente con send_invitation_email.
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
         """
         safe_addressee = self._sanitize_name(addressee_name)
         safe_requester = self._sanitize_name(requester_name)
-        html_addressee = html.escape(safe_addressee)
-        html_requester = html.escape(safe_requester)
 
         friends_link = f"{settings.FRONTEND_URL}/friends"
 
-        subject = (
-            f"{safe_requester} quiere ser tu amigo | {safe_requester} wants to be your friend"
-        )
+        subject = f"{safe_requester} quiere ser tu amigo | {safe_requester} wants to be your friend"
 
         text_body = f"""
 Hola {safe_addressee},
@@ -789,91 +490,33 @@ Best regards,
 The Ryder Cup Friends Team
         """
 
-        html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        .container {{
-            background-color: #f9f9f9;
-            border-radius: 10px;
-            padding: 30px;
-        }}
-        .header {{
-            background-color: #0066cc;
-            color: white;
-            padding: 20px;
-            border-radius: 10px 10px 0 0;
-            text-align: center;
-        }}
-        .content {{
-            background-color: white;
-            padding: 30px;
-            border-radius: 0 0 10px 10px;
-        }}
-        .button {{
-            display: inline-block;
-            padding: 15px 30px;
-            background-color: #0066cc;
-            color: white !important;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 20px 0;
-            font-weight: bold;
-        }}
-        .footer {{
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-        }}
-        .divider {{
-            border-top: 2px solid #ddd;
-            margin: 30px 0;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Nueva Solicitud de Amistad</h1>
-            <h2>New Friend Request</h2>
-        </div>
-        <div class="content">
-            <!-- Spanish -->
-            <p>Hola <strong>{html_addressee}</strong>,</p>
-            <p><strong>{html_requester}</strong> te ha enviado una solicitud de amistad en Ryder Cup Friends.</p>
-            <center>
-                <a href="{friends_link}" class="button">Ver solicitud</a>
-            </center>
-
-            <div class="divider"></div>
-
-            <!-- English -->
-            <p>Hello <strong>{html_addressee}</strong>,</p>
-            <p><strong>{html_requester}</strong> has sent you a friend request on Ryder Cup Friends.</p>
-            <center>
-                <a href="{friends_link}" class="button">View request</a>
-            </center>
-
-            <div class="footer">
-                <p>Saludos | Best regards,<br>
-                <strong>El equipo de Ryder Cup Friends | The Ryder Cup Friends Team</strong></p>
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"{safe_requester} quiere ser tu amigo · "
+            f"{safe_requester} wants to be your friend",
+            etiqueta="Amigos",
+            titulo=f"{safe_requester} quiere ser tu amigo",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_addressee),
+                    ", ",
+                    negrita(safe_requester),
+                    " te ha enviado una solicitud de amistad en RyderCupFriends. "
+                    "Acéptala o recházala desde tu lista de amigos.",
+                ),
+            ],
+            boton=Boton("Ver la solicitud", friends_link),
+            ingles=Ingles(
+                frase(
+                    negrita(f"{safe_requester} sent you a friend request."),
+                    " Accept or decline it from your friends list.",
+                ),
+                Boton("View request", friends_link),
+            ),
+            pie="Te llega porque alguien quiere añadirte como amigo en RyderCupFriends. "
+            "You get this because someone wants to add you as a friend on RyderCupFriends.",
+        )
 
         recipient = f'"{safe_addressee}" <{to_email}>'
         return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
