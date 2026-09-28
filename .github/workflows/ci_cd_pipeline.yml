@@ -9,7 +9,7 @@
 # 2. Unit Tests - 662 tests (Python 3.11 + 3.12)
 # 3. Integration Tests - 72 tests (con PostgreSQL)
 # 4. Security Tests - 45+ tests (CSRF, XSS, SQLi, Auth Bypass)
-# 5. Security Checks - Bandit, Safety, pip-audit, Gitleaks
+# 5. Security Checks - Bandit, pip-audit, Gitleaks
 # 6. Linting - Ruff (linter + formatter)
 # 7. Type Checking - Mypy
 # 8. Build - Docker + Trivy container scan
@@ -23,7 +23,9 @@ name: CI/CD Pipeline
 # Triggers: Cuándo se ejecuta este workflow
 on:
   push:
-    branches: ['**']  # Todas las ramas
+    # Solo las ramas largas: una rama de trabajo ya se prueba por su pull_request,
+    # y con '**' cada commit de una PR corría el pipeline dos veces.
+    branches: [main, develop, 'release/**', 'hotfix/**']
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -34,9 +36,14 @@ on:
   workflow_dispatch:
 
 # Permissions for security scanning
+# Mínimos para todos; el job que sube SARIF (build, Trivy) pide security-events.
 permissions:
   contents: read
-  security-events: write  # Required for CodeQL/Trivy SARIF upload
+
+# Un push nuevo a la misma rama cancela la ejecución anterior, salvo en main.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # ================================
@@ -47,6 +54,7 @@ jobs:
   preparation:
     name: 🔧 Preparation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       python-version: ${{ steps.setup-python.outputs.python-version }}
       cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
@@ -93,6 +101,7 @@ jobs:
   unit_tests:
     name: 🧪 Unit Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: preparation
     strategy:
       fail-fast: false
@@ -153,6 +162,7 @@ jobs:
   integration_tests:
     name: 🗄️ Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: preparation
 
     services:
@@ -222,6 +232,7 @@ jobs:
   security_tests:
     name: 🔐 Security Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: preparation
 
     services:
@@ -306,6 +317,7 @@ jobs:
   security_checks:
     name: 🔒 Security Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: preparation
 
     steps:
@@ -335,38 +347,6 @@ jobs:
           echo "🔒 Running Bandit - Python security linter..."
           bandit -r src/ -f json -o bandit-report.json || true
           bandit -r src/ -f screen
-        continue-on-error: true
-
-      - name: Run Safety Check (Dependency Vulnerabilities)
-        id: safety-check
-        run: |
-          echo "🛡️ Running Safety - Checking dependencies for known vulnerabilities..."
-          echo "Using Safety DB (40,000+ known vulnerabilities)"
-
-          # Generate JSON report (always succeeds)
-          safety scan --output json > safety-report.json || true
-
-          # Run safety scan for screen output
-          # Exit codes: 0 = no vulns, 64 = vulns found, other = error
-          safety scan --output screen || SAFETY_EXIT=$?
-
-          # Analyze results
-          VULN_COUNT=$(jq '[.dependencies[].vulns[]] | length' safety-report.json 2>/dev/null || echo "0")
-          echo "vulnerabilities_found=$VULN_COUNT" >> $GITHUB_OUTPUT
-
-          echo ""
-          echo "📊 Safety Summary:"
-          echo "  Vulnerabilities found: $VULN_COUNT"
-
-          if [ "$VULN_COUNT" -gt "0" ]; then
-            echo "  Status: ⚠️ VULNERABILITIES DETECTED"
-            echo ""
-            echo "⚠️ WARNING: Found $VULN_COUNT known vulnerabilities in dependencies"
-            echo "Review the safety-report.json artifact for details"
-            # Don't fail yet - pip-audit will be the final arbiter
-          else
-            echo "  Status: ✅ NO VULNERABILITIES"
-          fi
         continue-on-error: true
 
       - name: Run pip-audit (PyPA Official Audit)
@@ -447,7 +427,6 @@ jobs:
           echo "=========================================="
           echo ""
           echo "📦 Dependency Audit Results:"
-          echo "  Safety vulnerabilities: ${{ steps.safety-check.outputs.vulnerabilities_found || '0' }}"
           echo "  pip-audit total: ${{ steps.pip-audit-check.outputs.total_vulnerabilities || '0' }}"
           echo "  pip-audit critical (CVEs): ${{ steps.pip-audit-check.outputs.critical_vulnerabilities || '0' }}"
           echo ""
@@ -466,7 +445,6 @@ jobs:
           name: security-reports
           path: |
             bandit-report.json
-            safety-report.json
             pip-audit-report.json
           retention-days: 30
 
@@ -478,6 +456,7 @@ jobs:
   linting:
     name: 📝 Code Quality
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: preparation
 
     steps:
@@ -504,12 +483,13 @@ jobs:
         run: |
           echo "🔍 Running Ruff linter..."
           ruff check src/ tests/ --output-format=github
-        continue-on-error: true
 
       - name: Run Ruff Formatter Check
         run: |
           echo "📝 Checking code formatting..."
           ruff format --check src/ tests/
+        # Todavía no bloquea: 118 ficheros sin formatear en develop (28 sep 2026).
+        # Pasa a bloquear en cuanto una PR solo de formato los deje a cero.
         continue-on-error: true
 
   # ================================
@@ -520,6 +500,7 @@ jobs:
   type_checking:
     name: 🔬 Type Checking
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: preparation
 
     steps:
@@ -546,7 +527,6 @@ jobs:
         run: |
           echo "🔬 Running Mypy type checker..."
           mypy src/ --show-error-codes --pretty
-        continue-on-error: true
 
   # ================================
   # JOB 7: BUILD & CONTAINER SCAN
@@ -558,6 +538,10 @@ jobs:
   build:
     name: 🐳 Build Docker
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write  # Subida del SARIF de Trivy
     needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking]
     # Solo ejecutar si todos los jobs críticos pasaron (success)
     if: |
@@ -696,6 +680,7 @@ jobs:
   snyk_scan:
     name: 🐍 Snyk Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: preparation
 
     steps:
@@ -804,6 +789,7 @@ jobs:
   sbom_generation:
     name: 📦 SBOM Generation
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: preparation
     permissions:
       contents: write  # Required for GitHub Dependency Graph REST API submission
@@ -937,6 +923,7 @@ jobs:
   gpg_verification:
     name: 🔏 GPG Signature Verification
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: preparation
 
     steps:
@@ -1044,6 +1031,7 @@ jobs:
   pipeline_summary:
     name: 📊 Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan, sbom_generation, gpg_verification]
     if: always()
 
@@ -1131,7 +1119,7 @@ jobs:
             echo "| **🧪 Testing** | Unit Tests (Python 3.11/3.12) | $(get_emoji "$UNIT_TESTS") | ~900+ tests, ~45s |"
             echo "| **🧪 Testing** | Integration Tests | $(get_emoji "$INTEGRATION_TESTS") | ~72+ tests, PostgreSQL |"
             echo "| **🧪 Testing** | Security Tests | $(get_emoji "$SECURITY_TESTS") | CSRF, XSS, SQLi, Auth |"
-            echo "| **🔒 Security** | Security Checks | $(get_emoji "$SECURITY_CHECKS") | Bandit, Safety, pip-audit |"
+            echo "| **🔒 Security** | Security Checks | $(get_emoji "$SECURITY_CHECKS") | Bandit, pip-audit, Gitleaks |"
             echo "| **🔒 Security** | Snyk Scan | $(get_emoji "$SNYK_SCAN") | SCA + SAST |"
             echo "| **🔒 Security** | GPG Verification | $(get_emoji "$GPG_VERIFY") | Commit signatures |"
             echo "| **📦 Supply Chain** | SBOM Generation | $(get_emoji "$SBOM_GEN") | CycloneDX 1.6 |"
@@ -1227,13 +1215,13 @@ jobs:
               echo "**Failed Checks:**"
               [ "$LINTING" == "failure" ] && echo "- ❌ **Linting** — Code style issues detected (Ruff)"
               [ "$TYPE_CHECKING" == "failure" ] && echo "- ❌ **Type Checking** — Type annotation errors (Mypy)"
-              [ "$SECURITY_CHECKS" == "failure" ] && echo "- ❌ **Security Checks** — Dependency vulnerabilities (Safety, pip-audit)"
+              [ "$SECURITY_CHECKS" == "failure" ] && echo "- ❌ **Security Checks** — Dependency vulnerabilities (pip-audit)"
               echo ""
               echo "### 📋 Action Required"
               echo ""
               echo "1. 🔍 **Fix Code Quality**: Run \`ruff check src/ tests/\` locally"
               echo "2. 📝 **Fix Type Errors**: Run \`mypy src/\` locally"
-              echo "3. 🔒 **Update Dependencies**: Check \`pip-audit\` and \`safety\` reports"
+              echo "3. 🔒 **Update Dependencies**: Check the \`pip-audit\` report"
               echo "4. ✅ **Verify Locally**: Ensure all checks pass before pushing"
               echo ""
               echo "> ⚠️ **Note**: Build will run automatically once quality checks pass."
@@ -1260,7 +1248,7 @@ jobs:
               echo "- ✅ **GPG Signatures** — All commits properly signed"
               echo ""
               echo "**Security Scans:**"
-              echo "- ✅ **Dependency Audit** — No critical CVEs (pip-audit, Safety)"
+              echo "- ✅ **Dependency Audit** — No critical CVEs (pip-audit)"
               echo "- ✅ **Code Analysis** — Clean SAST scan (Snyk Code)"
               echo "- ✅ **Container Scan** — No HIGH/CRITICAL vulnerabilities (Trivy)"
               echo "- ✅ **SBOM Generated** — Supply chain transparency (CycloneDX)"
