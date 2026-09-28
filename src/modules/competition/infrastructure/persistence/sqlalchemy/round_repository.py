@@ -4,6 +4,7 @@ from datetime import date
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.round_repository_interface import (
     RoundRepositoryInterface,

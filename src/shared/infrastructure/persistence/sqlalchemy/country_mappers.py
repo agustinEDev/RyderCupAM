@@ -6,6 +6,7 @@ Este mapper es parte del shared domain y se usa en múltiples módulos.
 
 from sqlalchemy import Boolean, Column, ForeignKey, String, Table
 from sqlalchemy.types import CHAR, TypeDecorator
+
 from src.shared.domain.entities.country import Country
 from src.shared.domain.value_objects.country_code import CountryCode
 

@@ -6,6 +6,7 @@ Implementación concreta del repositorio de inscripciones usando SQLAlchemy asyn
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.enrollment_repository_interface import (
     EnrollmentRepositoryInterface,

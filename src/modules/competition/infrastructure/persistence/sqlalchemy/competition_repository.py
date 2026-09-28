@@ -9,6 +9,7 @@ from datetime import date
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.competition_golf_course import (
     CompetitionGolfCourse,

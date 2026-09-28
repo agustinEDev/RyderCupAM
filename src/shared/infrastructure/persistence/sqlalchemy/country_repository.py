@@ -10,6 +10,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.shared.domain.entities.country import Country
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,

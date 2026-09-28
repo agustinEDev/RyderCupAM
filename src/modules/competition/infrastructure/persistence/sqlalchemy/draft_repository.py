@@ -2,6 +2,7 @@
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.modules.competition.domain.entities.draft import Draft
 from src.modules.competition.domain.repositories.draft_repository_interface import (
     DraftRepositoryInterface,
