@@ -2,6 +2,7 @@
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.repositories.hole_score_repository_interface import (
     HoleScoreRepositoryInterface,

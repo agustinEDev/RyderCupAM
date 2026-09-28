@@ -20,6 +20,10 @@
 # añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
 ruff==0.14.7
 
+# import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
+# Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
+import-linter==2.15
+
 # ================================
 # TYPE CHECKING
 # ================================

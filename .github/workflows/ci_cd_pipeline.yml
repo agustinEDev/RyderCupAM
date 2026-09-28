@@ -951,6 +951,8 @@ jobs:
           gpg --list-keys
 
       - name: Verify Commit Signatures
+        env:
+          PR_BASE: ${{ github.base_ref }}  # Empty on push events
         run: |
           echo "🔍 Verifying GPG signatures on commits..."
           chmod +x scripts/verify-gpg-signatures.sh
@@ -964,6 +966,21 @@ jobs:
           echo "   Commits included: Those added in this specific push event"
           echo "   Base (before push): $BASE_REF"
           echo "   Head (after push): $HEAD_REF"
+
+          # Force push (rebase, amend): "before" is the rewritten commit, which no
+          # longer exists in this clone, and the script died with exit 128. Verify
+          # every commit the PR adds over its base branch instead: after a rebase
+          # all of them are new, not just the last one.
+          if [ -n "$BASE_REF" ] && [ "$BASE_REF" != "0000000000000000000000000000000000000000" ] \
+             && ! git cat-file -e "${BASE_REF}^{commit}" 2>/dev/null; then
+            echo "⚠️  Base $BASE_REF no longer exists (rewritten by a force push)"
+            if [ -n "$PR_BASE" ] && MERGE_BASE=$(git merge-base "origin/$PR_BASE" "$HEAD_REF" 2>/dev/null); then
+              echo "   Verifying every commit since the merge-base with $PR_BASE: $MERGE_BASE"
+              BASE_REF="$MERGE_BASE"
+            else
+              BASE_REF=""  # Falls through to the initial-push handling below
+            fi
+          fi
 
           # Handle initial push or forced push (no previous commit)
           if [ "$BASE_REF" == "0000000000000000000000000000000000000000" ] || [ -z "$BASE_REF" ]; then
