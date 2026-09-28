@@ -68,9 +68,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    # La etiqueta es flotante (3.12-slim): los parches del SO ya entran en cada
-    # build. Lo que propondrá es el salto de Python (3.12 → 3.13…), que es una
-    # decisión: la matriz del CI prueba 3.11 y 3.12, así que ampliarla va en esa PR.
+    # El FROM va fijado por digest (python:3.12-slim@sha256:…): Dependabot propone
+    # cada semana el digest nuevo de 3.12-slim, que es como entran los parches del
+    # SO. También propondrá saltos de Python (3.12 → 3.13…), que son una decisión:
+    # la matriz del CI prueba 3.11 y 3.12, así que ampliarla va en esa PR.
 
   # Acciones de GitHub usadas en los workflows
   - package-ecosystem: "github-actions"
