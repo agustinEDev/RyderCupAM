@@ -1,0 +1,68 @@
+version: 2
+updates:
+  # Dependencias de Python: requirements.txt (producción) y requirements-dev.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    target-branch: "develop"  # GitFlow: dependabot → develop → release → main
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      # Menores y parches juntos, en una sola PR semanal
+      minor-updates:
+        update-types:
+          - "minor"
+          - "patch"
+    # Las majors llegan cada una en su PR y se revisan a mano. Ojo con estas:
+    # - bcrypt: es el hash de las contraseñas; una major puede cambiar el formato
+    # - sqlalchemy / alembic / asyncpg: toda la persistencia y las migraciones
+    # - fastapi / starlette / pydantic: el contrato de la API
+
+  # Imagen base del Dockerfile (python:3.12-slim): la mayoría de alertas de Trivy
+  # son paquetes del sistema operativo de esta imagen
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    # La etiqueta es flotante (3.12-slim): los parches del SO ya entran en cada
+    # build. Lo que propondrá es el salto de Python (3.12 → 3.13…), que es una
+    # decisión: la matriz del CI prueba 3.11 y 3.12, así que ampliarla va en esa PR.
+
+  # Acciones de GitHub usadas en los workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    labels:
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns:
+          - "*"
