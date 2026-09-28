@@ -43,7 +43,7 @@ sqlalchemy[mypy]>=2.0.31
 
 # Bandit - Encuentra problemas de seguridad comunes en código Python
 # Detecta: SQL injection, uso de eval(), contraseñas hardcodeadas, etc.
-bandit[toml]>=1.7.9
+bandit[toml]>=1.9.4
 
 # safety se retiró el 28 sep 2026: nunca tumbaba el CI (continue-on-error),
 # pip-audit ya era el árbitro, y arrastraba cuatro paquetes con CVEs recurrentes
