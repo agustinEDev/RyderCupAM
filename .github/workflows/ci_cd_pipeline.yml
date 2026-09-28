@@ -673,7 +673,8 @@ jobs:
   # JOB 8: DEPENDENCY REVIEW
   # ================================
   # Sustituye a Snyk (cuota agotada desde hace meses). Solo en PRs: falla si la PR
-  # añade o sube una dependencia con una vulnerabilidad conocida, moderada o más.
+  # añade o sube una dependencia con una vulnerabilidad conocida, moderada o más,
+  # o con una licencia vetada (Snyk también revisaba licencias).
   # Lo que ya está en develop lo vigilan pip-audit (Security Checks) y Dependabot;
   # el código, CodeQL.
 
@@ -692,6 +693,19 @@ jobs:
         with:
           fail-on-severity: moderate
           comment-summary-in-pr: never
+          # Lista de PERMITIDAS, no de prohibidas: con deny-licenses (obsoleta) una
+          # expresión compuesta como "GPL-3.0 AND GPL-3.0-only" pasaba sin aviso
+          # (probado el 28 sep con una PR de prueba). Fuera quedan la GPL y la AGPL:
+          # la AGPL obligaría a publicar el código del servicio. La LGPL se admite
+          # porque psycopg2 es LGPL-3.0 y usarla desde un servidor no obliga a nada
+          # (el frontend sí veta la LGPL-3.0: su código se distribuye al navegador).
+          # Solo mira las dependencias de runtime que la PR añade o cambia; una
+          # licencia desconocida (NOASSERTION) se informa pero no falla.
+          allow-licenses: >-
+            MIT, MIT-CMU, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, 0BSD, ISC,
+            PSF-2.0, Python-2.0, CNRI-Python, MPL-2.0, Unlicense, CC0-1.0, Zlib, HPND,
+            BlueOak-1.0.0, LGPL-2.0-only, LGPL-2.0-or-later, LGPL-2.1-only,
+            LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later
 
   # ================================
   # JOB 9: SBOM GENERATION
