@@ -115,11 +115,14 @@ class TestRefreshTokenEndpoint:
             - Response body contiene mensaje de error
         """
         # Given: Cliente nuevo sin refresh token cookie
-        from httpx import AsyncClient as FreshClient
+        from httpx import (
+            ASGITransport,
+            AsyncClient as FreshClient,
+        )
 
         from main import app
 
-        async with FreshClient(app=app, base_url="http://test") as fresh_client:
+        async with FreshClient(transport=ASGITransport(app=app), base_url="http://test") as fresh_client:
             # When: Intentar renovar sin refresh token
             response = await fresh_client.post("/api/v1/auth/refresh-token")
 
