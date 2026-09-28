@@ -72,7 +72,7 @@ msgpack==1.2.1
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
 # que a su vez entra con las herramientas de auditoría: ya no existe en producción)
 # Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
-zipp==3.19.1
+zipp==4.1.0
 
 # ================================
 # TESTING
