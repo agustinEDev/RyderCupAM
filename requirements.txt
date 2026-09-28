@@ -50,7 +50,7 @@ asyncpg==0.31.0
 
 # greenlet - Librería para concurrencia ligera (micro-hilos)
 # Requerido por SQLAlchemy para puentear sus componentes internos síncronos en un entorno async
-greenlet==3.0.3
+greenlet==3.5.6
 
 
 # ================================
