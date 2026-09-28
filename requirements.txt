@@ -34,7 +34,7 @@ python-dotenv==1.2.3
 
 # SQLAlchemy - El ORM (Object-Relational Mapper) más potente de Python
 # Permite interactuar con la base de datos usando objetos Python en lugar de SQL
-sqlalchemy==2.0.31
+sqlalchemy==2.1.0
 
 # psycopg2-binary - Adaptador (driver) para conectar SQLAlchemy con PostgreSQL
 # Es la librería puente entre nuestra aplicación y la base de datos
