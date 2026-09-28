@@ -673,7 +673,8 @@ jobs:
   # JOB 8: DEPENDENCY REVIEW
   # ================================
   # Sustituye a Snyk (cuota agotada desde hace meses). Solo en PRs: falla si la PR
-  # añade o sube una dependencia con una vulnerabilidad conocida, moderada o más.
+  # añade o sube una dependencia con una vulnerabilidad conocida, moderada o más,
+  # o con una licencia vetada (Snyk también revisaba licencias).
   # Lo que ya está en develop lo vigilan pip-audit (Security Checks) y Dependabot;
   # el código, CodeQL.
 
@@ -692,6 +693,13 @@ jobs:
         with:
           fail-on-severity: moderate
           comment-summary-in-pr: never
+          # Misma política que el check de licencias del frontend. La AGPL es la que
+          # obliga a publicar el código de un servicio web; las GPL/LGPL 3.0 se
+          # vetan por coherencia con el frontend. Solo mira las dependencias que la
+          # PR añade o cambia.
+          deny-licenses: >-
+            AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later,
+            GPL-3.0-only, GPL-3.0-or-later, LGPL-3.0-only, LGPL-3.0-or-later
 
   # ================================
   # JOB 9: SBOM GENERATION
