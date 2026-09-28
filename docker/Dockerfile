@@ -9,7 +9,13 @@
 # 1. Imagen base: Python ligera
 # Actualizado a 3.12-slim para resolver CVE-2026-42496 (CRITICAL) y CVE-2026-42497, CVE-2026-9538 (HIGH)
 # en paquetes del OS base de la imagen debian 3.11-slim
-FROM python:3.12-slim
+# Fijada por digest (28 sep 2026): con la etiqueta flotante, un build con caché podía
+# reutilizar una capa vieja de la imagen y quedarse sin los parches de Debian, y
+# Dependabot no tenía nada que proponer. Ahora cada build usa exactamente esta
+# imagen, y Dependabot (ecosistema docker) abre una PR semanal cuando cambia el
+# digest de 3.12-slim, con su CI y su Trivy. Digest del índice multiplataforma:
+# vale para Render (amd64) y para el Kind en un Mac (arm64).
+FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
 
 # 2. Instalar dependencias del sistema
 # netcat-openbsd: Para verificar conexión con PostgreSQL (opcional en producción)
