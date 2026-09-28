@@ -126,7 +126,7 @@ radon>=6.0.1
 # cyclonedx-bom - Genera Software Bill of Materials (SBOM) en formato CycloneDX
 # Cumple con OWASP A08:2021 Software and Data Integrity Failures
 # Permite auditoría completa de la cadena de suministro de software
-cyclonedx-bom>=4.0.0
+cyclonedx-bom>=7.4.0
 
 # pip-tools - Herramientas para gestión de dependencias con pip
 # pip-compile: Genera requirements.lock con hashes SHA256 para verificación de integridad
