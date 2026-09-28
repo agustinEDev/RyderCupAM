@@ -8,7 +8,8 @@
 # - en una PR contra main, el job FALLA si hay algo que pida acción, para que se
 #   vea antes de mergear (no es check obligatorio: se decide al mergear);
 # - si hay avisos ALTOS o CRÍTICOS CON ARREGLO, abre o actualiza la issue
-#   "Snyk: revisión periódica"; si ya no hay, la cierra. Lo que no tiene arreglo
+#   "Snyk: revisión periódica"; si ya no hay, la cierra. Si no pudo analizar
+#   (token caducado a los 90 días, cuota, red), también lo dice en la issue. Lo que no tiene arreglo
 #   (paquetes de Debian sin parchear) se lista pero no abre la issue.
 #
 # La imagen se analiza CONSTRUIDA, en linux/amd64 como en Render: el proyecto
@@ -115,8 +116,22 @@ jobs:
             else
               gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/body.md"
             fi
-          elif [ -n "$ISSUE" ] && [ "$INCOMPLETE" != "true" ]; then
-            # Solo se cierra con un análisis completo: sin resultado no hay nada que dar por bueno
+          elif [ "$INCOMPLETE" = "true" ]; then
+            # Sin resultado (token caducado a los 90 días, cuota, red): se avisa en la
+            # issue, o nadie lo ve. Nunca se cierra: no hay nada que dar por bueno
+            {
+              echo "⚠️ **Snyk no ha podido analizarlo todo.** Si el motivo es de autenticación,"
+              echo "el \`SNYK_TOKEN\` ha caducado (dura 90 días): crea otro en app.snyk.io/account"
+              echo "y guárdalo con \`pbpaste | gh secret set SNYK_TOKEN -R ${{ github.repository }}\`."
+              echo
+              cat "$RUNNER_TEMP/body.md"
+            } > "$RUNNER_TEMP/incomplete.md"
+            if [ -n "$ISSUE" ]; then
+              gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/incomplete.md"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/incomplete.md"
+            fi
+          elif [ -n "$ISSUE" ]; then
             gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/body.md"
             gh issue close "$ISSUE" --reason completed
           fi
