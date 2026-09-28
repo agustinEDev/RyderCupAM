@@ -25,7 +25,7 @@ uvicorn[standard]==0.30.0
 
 # python-dotenv - Utilidad para cargar variables de entorno desde un fichero .env
 # Actualizado a 1.2.2 para resolver CVE-2026-28684 (Symlink Attack)
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 
 
 # ================================
@@ -38,7 +38,7 @@ sqlalchemy==2.0.31
 
 # psycopg2-binary - Adaptador (driver) para conectar SQLAlchemy con PostgreSQL
 # Es la librería puente entre nuestra aplicación y la base de datos
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.13
 
 # Alembic - Herramienta para migraciones de bases de datos con SQLAlchemy
 # Permite versionar y aplicar cambios en el esquema de la base de datos
@@ -71,7 +71,7 @@ PyJWT==2.13.0
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
 # Basado en Flask-Limiter, soporta memoria local y Redis como backend
-slowapi==0.1.9
+slowapi==0.1.10
 
 # secure - Security Headers HTTP para FastAPI
 # Añade automáticamente headers de seguridad (CSP, HSTS, X-Frame-Options, etc.)
@@ -108,7 +108,7 @@ urllib3==2.7.0
 # - CVE-2026-69247 (fixed in 50.0.0)
 # - CVE-2026-69248 (fixed in 49.0.0)
 # - CVE-2026-69249 (fixed in 49.0.0)
-cryptography==50.0.0
+cryptography==50.0.1
 
 # setuptools - Build system y package installer
 # Nadie lo declara como dependencia en producción: los paquetes que lo piden lo hacen desde
