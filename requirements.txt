@@ -46,7 +46,7 @@ alembic==1.13.2
 
 # asyncpg - Driver asíncrono para PostgreSQL, necesario para SQLAlchemy en modo async
 # Es la alternativa a psycopg2 para operaciones no bloqueantes con la base de datos
-asyncpg==0.29.0
+asyncpg==0.31.0
 
 # greenlet - Librería para concurrencia ligera (micro-hilos)
 # Requerido por SQLAlchemy para puentear sus componentes internos síncronos en un entorno async
