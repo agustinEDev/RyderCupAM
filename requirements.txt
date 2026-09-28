@@ -66,7 +66,7 @@ bcrypt==4.2.0
 # (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
 # Actualizado a 2.13.0 para resolver:
 # - PYSEC-2026-175, -176, -177, -178, -179 (Improper Verification of Cryptographic Signature)
-PyJWT==2.13.0
+PyJWT==2.15.0
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
