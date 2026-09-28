@@ -83,7 +83,7 @@ secure==0.3.0
 # Captura automáticamente excepciones, errores y métricas de rendimiento
 # Integraciones: FastAPI, SQLAlchemy, Redis
 # Cumple con OWASP Top 10: A09 (Logging & Monitoring)
-sentry-sdk[fastapi]==2.19.2
+sentry-sdk[fastapi]==2.70.0
 
 # jinja2 - Motor de plantillas (dependencia de RUNTIME, no opcional)
 # NO se usa directamente en el código, y por eso parece prescindible: no lo es.
