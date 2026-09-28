@@ -135,4 +135,4 @@ cyclonedx-bom>=7.4.0
 pip-tools>=7.6.1
 
 # PRUEBA TEMPORAL: dependencia AGPL para comprobar que Dependency Review la bloquea
-PyMuPDF==1.24.10
+ghostscript==0.7
