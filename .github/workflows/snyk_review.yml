@@ -1,0 +1,126 @@
+# ================================
+# SNYK - REVISIÓN SEMANAL Y EN CADA RELEASE O HOTFIX
+# ================================
+# Segunda opinión fuera de la pipeline: Snyk ya no corre en cada PR (cuota
+# agotada, #415), pero su base de vulnerabilidades a veces se adelanta a la de
+# GitHub. Cada semana, y en cada PR contra main (release o hotfix), lanza el CLI (unos 2 tests por ejecución) y:
+# - deja un resumen en la ejecución;
+# - en una PR contra main, el job FALLA si hay algo que pida acción, para que se
+#   vea antes de mergear (no es check obligatorio: se decide al mergear);
+# - si hay avisos ALTOS o CRÍTICOS CON ARREGLO, abre o actualiza la issue
+#   "Snyk: revisión periódica"; si ya no hay, la cierra. Lo que no tiene arreglo
+#   (paquetes de Debian sin parchear) se lista pero no abre la issue.
+#
+# La imagen se analiza CONSTRUIDA, en linux/amd64 como en Render: el proyecto
+# "docker/Dockerfile" del panel de Snyk solo leía el FROM y daba críticas que la
+# imagen real no tenía (28 sep 2026).
+#
+# Necesita el secreto SNYK_TOKEN. No usa `snyk monitor`: no crea proyectos.
+
+name: Snyk (weekly and releases)
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # lunes, 06:00 UTC
+  # En GitFlow toda PR contra main es una release o un hotfix
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SNYK_CLI_VERSION: '1.1305.2'
+  ISSUE_TITLE: 'Snyk: revisión periódica'
+
+jobs:
+  snyk:
+    name: 🐍 Snyk review
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies and Snyk CLI
+        run: |
+          pip install -r requirements.txt
+          npm install --global "snyk@${SNYK_CLI_VERSION}"
+
+      - name: Build the production image (linux/amd64)
+        run: docker build --platform linux/amd64 -f docker/Dockerfile -t rydercupam:snyk .
+
+      - name: Snyk tests
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          # Snyk sale con 1 si encuentra algo y con 2 si no pudo analizar (cuota,
+          # red). Ninguno corta el job: el resumen dice qué pasó en cada caso.
+          snyk test --file=requirements.txt --package-manager=pip --command=python \
+            --json > "$RUNNER_TEMP/deps.json" || true
+          snyk container test rydercupam:snyk --file=docker/Dockerfile \
+            --platform=linux/amd64 --json > "$RUNNER_TEMP/image.json" || true
+
+      - name: Summarize
+        id: summary
+        run: |
+          python .github/scripts/snyk_summary.py \
+            "Dependencias (requirements.txt)=$RUNNER_TEMP/deps.json" \
+            "Imagen de producción (docker/Dockerfile)=$RUNNER_TEMP/image.json" \
+            | tee "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the release PR if something needs action
+        if: github.event_name == 'pull_request'
+        env:
+          ACTIONABLE: ${{ steps.summary.outputs.actionable }}
+          INCOMPLETE: ${{ steps.summary.outputs.incomplete }}
+        run: |
+          if [ "$INCOMPLETE" = "true" ]; then
+            echo "::warning::Snyk could not analyse everything (quota, token or network). See the summary."
+          fi
+          if [ "$ACTIONABLE" -gt 0 ]; then
+            echo "::error::Snyk found $ACTIONABLE high or critical finding(s) that need action. See the summary."
+            exit 1
+          fi
+
+      - name: Open, update or close the tracking issue
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTIONABLE: ${{ steps.summary.outputs.actionable }}
+          INCOMPLETE: ${{ steps.summary.outputs.incomplete }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          ISSUE=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$ISSUE_TITLE\") | .number" | head -1)
+          { cat "$RUNNER_TEMP/summary.md"; echo; echo "Ejecución: $RUN_URL"; } > "$RUNNER_TEMP/body.md"
+
+          if [ "$ACTIONABLE" -gt 0 ]; then
+            if [ -n "$ISSUE" ]; then
+              gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/body.md"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -n "$ISSUE" ] && [ "$INCOMPLETE" != "true" ]; then
+            # Solo se cierra con un análisis completo: sin resultado no hay nada que dar por bueno
+            gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/body.md"
+            gh issue close "$ISSUE" --reason completed
+          fi
+
+          if [ "$INCOMPLETE" = "true" ]; then
+            echo "::warning::Snyk could not analyse everything (quota, token or network). See the summary."
+          fi
