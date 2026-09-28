@@ -186,3 +186,6 @@ tzdata==2026.4
 # fronteras de husos del mundo en 3 MB y sin dependencias; la alternativa
 # habitual, `timezonefinder`, arrastra numpy
 tzfpy==2.1.0
+
+# PRUEBA TEMPORAL (runtime): paquete GPL-3.0 para comprobar que Dependency Review lo bloquea
+ghostscript==0.7
