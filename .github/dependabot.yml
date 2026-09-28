@@ -16,11 +16,35 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    # El primer grupo único (25 paquetes, #397) no instalaba y mezclaba un salto de
+    # ruff con SQLAlchemy 2.1 y uvicorn 0.54: si algo rompe, no se sabe qué. Ahora:
+    # - herramientas de desarrollo: juntas, menores y parches
+    # - librerías de producción: parches juntos; cada menor en su propia PR
+    # - ruff y mypy: siempre solos. Son checks bloqueantes con versión exacta, y
+    #   subirlos es decidir qué hacer con sus reglas nuevas
     groups:
-      # Menores y parches juntos, en una sola PR semanal
-      minor-updates:
+      dev-tools:
+        patterns:
+          - "pytest*"
+          - "pip-audit"
+          - "pip-tools"
+          - "bandit*"
+          - "cyclonedx*"
+          - "import-linter"
+          - "msgpack"
+          - "zipp"
+          - "pygments"
+          - "coverage*"
         update-types:
           - "minor"
+          - "patch"
+      runtime-patches:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "ruff"
+          - "mypy"
+        update-types:
           - "patch"
     # Las majors llegan cada una en su PR y se revisan a mano. Ojo con estas:
     # - bcrypt: es el hash de las contraseñas; una major puede cambiar el formato

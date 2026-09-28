@@ -120,7 +120,7 @@ cryptography==50.0.0
 # - CVE-2022-40897 (Regular Expression DoS - CVSS 5.9 MEDIUM)
 # - CVE-2025-47273 (Directory Traversal en _download_url - CVSS 6.8 MEDIUM)
 # - CVE-2026-59890 (Improper Handling of Unicode Encoding - MEDIUM)
-setuptools==83.0.0
+setuptools==84.0.0
 
 # idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
