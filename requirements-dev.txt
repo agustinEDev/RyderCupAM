@@ -32,7 +32,7 @@ import-linter==2.15
 # Analiza el código usando type hints para detectar errores antes de runtime
 # Esencial para proyectos grandes con arquitectura clean
 # Versión EXACTA, por lo mismo que ruff: es un check bloqueante del CI
-mypy==1.20.2
+mypy==2.3.1
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
 sqlalchemy[mypy]>=2.0.31
@@ -43,7 +43,7 @@ sqlalchemy[mypy]>=2.0.31
 
 # Bandit - Encuentra problemas de seguridad comunes en código Python
 # Detecta: SQL injection, uso de eval(), contraseñas hardcodeadas, etc.
-bandit[toml]>=1.7.9
+bandit[toml]>=1.9.4
 
 # safety se retiró el 28 sep 2026: nunca tumbaba el CI (continue-on-error),
 # pip-audit ya era el árbitro, y arrastraba cuatro paquetes con CVEs recurrentes
@@ -72,7 +72,7 @@ msgpack==1.2.1
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
 # que a su vez entra con las herramientas de auditoría: ya no existe en producción)
 # Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
-zipp==3.19.1
+zipp==4.1.0
 
 # ================================
 # TESTING
@@ -126,10 +126,10 @@ radon>=6.0.1
 # cyclonedx-bom - Genera Software Bill of Materials (SBOM) en formato CycloneDX
 # Cumple con OWASP A08:2021 Software and Data Integrity Failures
 # Permite auditoría completa de la cadena de suministro de software
-cyclonedx-bom>=4.0.0
+cyclonedx-bom>=7.4.0
 
 # pip-tools - Herramientas para gestión de dependencias con pip
 # pip-compile: Genera requirements.lock con hashes SHA256 para verificación de integridad
 # pip-sync: Sincroniza el entorno con el lock file
 # Previene ataques de dependency substitution
-pip-tools>=7.4.0
+pip-tools>=7.6.1
