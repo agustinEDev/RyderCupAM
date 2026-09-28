@@ -124,7 +124,7 @@ setuptools==84.0.0
 
 # idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
-idna==3.15
+idna==3.20
 
 # mako - Template library (dependencia transitiva de alembic)
 # Fijada explícitamente para resolver CVE-2026-44307
