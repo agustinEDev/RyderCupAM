@@ -693,13 +693,19 @@ jobs:
         with:
           fail-on-severity: moderate
           comment-summary-in-pr: never
-          # Misma política que el check de licencias del frontend. La AGPL es la que
-          # obliga a publicar el código de un servicio web; las GPL/LGPL 3.0 se
-          # vetan por coherencia con el frontend. Solo mira las dependencias que la
-          # PR añade o cambia.
-          deny-licenses: >-
-            AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later,
-            GPL-3.0-only, GPL-3.0-or-later, LGPL-3.0-only, LGPL-3.0-or-later
+          # Lista de PERMITIDAS, no de prohibidas: con deny-licenses (obsoleta) una
+          # expresión compuesta como "GPL-3.0 AND GPL-3.0-only" pasaba sin aviso
+          # (probado el 28 sep con una PR de prueba). Fuera quedan la GPL y la AGPL:
+          # la AGPL obligaría a publicar el código del servicio. La LGPL se admite
+          # porque psycopg2 es LGPL-3.0 y usarla desde un servidor no obliga a nada
+          # (el frontend sí veta la LGPL-3.0: su código se distribuye al navegador).
+          # Solo mira las dependencias de runtime que la PR añade o cambia; una
+          # licencia desconocida (NOASSERTION) se informa pero no falla.
+          allow-licenses: >-
+            MIT, MIT-CMU, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, 0BSD, ISC,
+            PSF-2.0, Python-2.0, CNRI-Python, MPL-2.0, Unlicense, CC0-1.0, Zlib, HPND,
+            BlueOak-1.0.0, LGPL-2.0-only, LGPL-2.0-or-later, LGPL-2.1-only,
+            LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later
 
   # ================================
   # JOB 9: SBOM GENERATION
