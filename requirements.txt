@@ -5,18 +5,18 @@
 # FastAPI - Framework web moderno para crear APIs REST
 # Características: validación automática, documentación auto-generada, type hints
 # Actualizado a 0.136.3 (compatible con starlette 1.x)
-fastapi==0.136.3
+fastapi==0.141.1
 
 # starlette - ASGI framework (dependencia transitiva de fastapi)
 # Pinado explícitamente a 1.3.1 para resolver:
 # - PYSEC-2026-161 (Host header validation, fixed in 1.0.1)
 # - CVE-2026-54282 (fixed in 1.3.1)
 # - CVE-2026-54283 (fixed in 1.3.1)
-starlette==1.3.1
+starlette==1.7.0
 
 # Uvicorn - Servidor ASGI de alto rendimiento para ejecutar aplicaciones FastAPI
 # [standard] incluye extras: watchfiles (auto-reload), websockets, colorama (logs coloridos)
-uvicorn[standard]==0.30.0
+uvicorn[standard]==0.54.0
 
 
 # ================================
@@ -25,7 +25,7 @@ uvicorn[standard]==0.30.0
 
 # python-dotenv - Utilidad para cargar variables de entorno desde un fichero .env
 # Actualizado a 1.2.2 para resolver CVE-2026-28684 (Symlink Attack)
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 
 
 # ================================
@@ -34,23 +34,23 @@ python-dotenv==1.2.2
 
 # SQLAlchemy - El ORM (Object-Relational Mapper) más potente de Python
 # Permite interactuar con la base de datos usando objetos Python en lugar de SQL
-sqlalchemy==2.0.31
+sqlalchemy==2.1.0
 
 # psycopg2-binary - Adaptador (driver) para conectar SQLAlchemy con PostgreSQL
 # Es la librería puente entre nuestra aplicación y la base de datos
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.13
 
 # Alembic - Herramienta para migraciones de bases de datos con SQLAlchemy
 # Permite versionar y aplicar cambios en el esquema de la base de datos
-alembic==1.13.2
+alembic==1.20.0
 
 # asyncpg - Driver asíncrono para PostgreSQL, necesario para SQLAlchemy en modo async
 # Es la alternativa a psycopg2 para operaciones no bloqueantes con la base de datos
-asyncpg==0.29.0
+asyncpg==0.31.0
 
 # greenlet - Librería para concurrencia ligera (micro-hilos)
 # Requerido por SQLAlchemy para puentear sus componentes internos síncronos en un entorno async
-greenlet==3.0.3
+greenlet==3.5.6
 
 
 # ================================
@@ -66,12 +66,12 @@ bcrypt==4.2.0
 # (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
 # Actualizado a 2.13.0 para resolver:
 # - PYSEC-2026-175, -176, -177, -178, -179 (Improper Verification of Cryptographic Signature)
-PyJWT==2.13.0
+PyJWT==2.15.0
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
 # Basado en Flask-Limiter, soporta memoria local y Redis como backend
-slowapi==0.1.9
+slowapi==0.1.10
 
 # secure - Security Headers HTTP para FastAPI
 # Añade automáticamente headers de seguridad (CSP, HSTS, X-Frame-Options, etc.)
@@ -83,7 +83,7 @@ secure==0.3.0
 # Captura automáticamente excepciones, errores y métricas de rendimiento
 # Integraciones: FastAPI, SQLAlchemy, Redis
 # Cumple con OWASP Top 10: A09 (Logging & Monitoring)
-sentry-sdk[fastapi]==2.19.2
+sentry-sdk[fastapi]==2.70.0
 
 # jinja2 - Motor de plantillas (dependencia de RUNTIME, no opcional)
 # NO se usa directamente en el código, y por eso parece prescindible: no lo es.
@@ -97,7 +97,7 @@ jinja2==3.1.6
 # urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
 # Actualizado a 2.7.0 para resolver:
 # - PYSEC-2026-141, PYSEC-2026-142 (decompression bomb y unlimited decompression chain)
-urllib3==2.7.0
+urllib3==2.8.0
 
 # cryptography - Primitivas criptográficas de bajo nivel (dependencia transitiva)
 # Actualizado a 48.0.1 para resolver:
@@ -108,7 +108,7 @@ urllib3==2.7.0
 # - CVE-2026-69247 (fixed in 50.0.0)
 # - CVE-2026-69248 (fixed in 49.0.0)
 # - CVE-2026-69249 (fixed in 49.0.0)
-cryptography==50.0.0
+cryptography==50.0.1
 
 # setuptools - Build system y package installer
 # Nadie lo declara como dependencia en producción: los paquetes que lo piden lo hacen desde
@@ -124,15 +124,15 @@ setuptools==83.0.0
 
 # idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
-idna==3.15
+idna==3.20
 
 # mako - Template library (dependencia transitiva de alembic)
 # Fijada explícitamente para resolver CVE-2026-44307
-mako==1.3.12
+mako==1.4.3
 
 # click - Command line interface creation kit (dependencia transitiva de uvicorn)
 # Fijada explícitamente para resolver SNYK-PYTHON-CLICK-16347201 (Command Injection)
-click==8.3.3
+click==8.5.0
 
 
 # ================================
@@ -151,7 +151,7 @@ Pillow==12.3.0
 # el que un iPhone guarda TODAS las fotos de su fototeca, así que sin esto la
 # única forma de poner un avatar desde un iPhone era hacer una foto nueva: la
 # cámara del navegador entrega JPEG y la fototeca entrega HEIC (BE #232)
-pillow-heif==1.5.0
+pillow-heif==1.8.0
 
 
 # ================================
@@ -164,13 +164,13 @@ email-validator==2.3.0
 
 # httpx - Cliente HTTP asíncrono para testear endpoints de FastAPI
 # Alternativa moderna a `requests` con soporte para async/await
-httpx==0.27.0
+httpx==0.28.1
 
 # requests - Cliente HTTP síncrono estándar de Python
 # Utilizado para integración con servicios externos (Mailgun, RFEG)
 # Actualizado a 2.33.0 para resolver:
 # - MEDIUM (CVSS 4.1): Insecure Temporary File (CWE-377)
-requests==2.33.0
+requests==2.34.2
 
 # tzdata - Base de datos de zonas horarias para `zoneinfo`
 # La anotación de un partido abre a una hora LOCAL del campo (BE #305), y

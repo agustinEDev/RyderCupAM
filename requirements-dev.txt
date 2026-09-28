@@ -18,7 +18,7 @@
 # Versión EXACTA: el CI la usa como check bloqueante, y con un rango cada release
 # nueva de ruff puede traer reglas y poner el CI en rojo sin tocar código (la 0.16
 # añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
-ruff==0.14.7
+ruff==0.16.9
 
 # import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
 # Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
@@ -35,7 +35,7 @@ import-linter==2.15
 mypy==1.20.2
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
-sqlalchemy[mypy]>=2.0.31
+sqlalchemy[mypy]>=2.1.0
 
 # ================================
 # SEGURIDAD
@@ -53,7 +53,7 @@ bandit[toml]>=1.7.9
 # Escanea contra PyPI Advisory Database y OSV (Open Source Vulnerabilities)
 # Alternativa oficial mantenida por Python Packaging Authority
 # Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
-pip-audit==2.10.0
+pip-audit==2.10.1
 
 # ================================
 # PINS TRANSITIVOS DE LAS HERRAMIENTAS DE AUDITORÍA
@@ -67,7 +67,7 @@ pip-audit==2.10.0
 
 # msgpack - Serialización binaria (dependencia transitiva de pip-audit > cachecontrol)
 # Fijada explícitamente para resolver SNYK-PYTHON-MSGPACK-17391445 (Use After Free)
-msgpack==1.2.1
+msgpack==1.2.2
 
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
 # que a su vez entra con las herramientas de auditoría: ya no existe en producción)
@@ -85,7 +85,7 @@ zipp==3.19.1
 # pytest - Framework de testing moderno y potente
 # Más simple que unittest, mejor output de errores, fixtures potentes
 # Actualizado a 9.0.3 para resolver CVE-2025-71176 (arbitrary code execution via deserialization)
-pytest==9.0.3
+pytest==9.1.1
 
 # pytest-json-report - Plugin para pytest que genera reportes en formato JSON
 # Esencial para el análisis programático de los resultados de los tests
@@ -109,7 +109,7 @@ pytest-cov
 # Estaba pinneado en requirements.txt solo porque pytest lo arrastraba hasta producción.
 # Al mover el bloque de test, su único consumidor viene aquí, y el pin con él.
 # Fijada explícitamente para resolver CVE-2026-4539
-pygments==2.20.0
+pygments==2.21.0
 
 # ================================
 # ANÁLISIS DE CÓDIGO
