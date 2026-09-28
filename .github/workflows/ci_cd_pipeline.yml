@@ -13,7 +13,7 @@
 # 6. Linting - Ruff (linter + formatter)
 # 7. Type Checking - Mypy
 # 8. Build - Docker + Trivy container scan
-# 9. Snyk Scan - SCA + SAST
+# 9. Dependency Review - blocks PRs that add a vulnerable dependency
 # 10. SBOM Generation - CycloneDX SBOM + dependency graph
 # 11. GPG Signature Verification - Validates all commits are signed
 # 12. Summary - Reporte final
@@ -670,114 +670,28 @@ jobs:
           retention-days: 7
 
   # ================================
-  # JOB 8: SNYK SECURITY SCAN
+  # JOB 8: DEPENDENCY REVIEW
   # ================================
-  # Escanea vulnerabilidades con Snyk (SCA + SAST)
-  # - Snyk Test: Vulnerabilidades en dependencias (requirements.txt)
-  # - Snyk Code: Vulnerabilidades en código fuente (src/)
-  # Requiere SNYK_TOKEN en GitHub Secrets
+  # Sustituye a Snyk (cuota agotada desde hace meses). Solo en PRs: falla si la PR
+  # añade o sube una dependencia con una vulnerabilidad conocida, moderada o más.
+  # Lo que ya está en develop lo vigilan pip-audit (Security Checks) y Dependabot;
+  # el código, CodeQL.
 
-  snyk_scan:
-    name: 🐍 Snyk Security Scan
+  dependency_review:
+    name: 🔎 Dependency Review
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: preparation
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
-      - name: Setup Python
-        uses: actions/setup-python@v7
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v5
         with:
-          python-version: '3.12'
-
-      - name: Restore pip cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run Snyk Test (Dependency Scan)
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high --json-file-output=snyk-dependencies-report.json
-
-      - name: Run Snyk Code (SAST - Source Code Analysis)
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: code test
-          args: --severity-threshold=high --json-file-output=snyk-code-report.json
-
-      - name: Generate Snyk Summary
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "🐍 SNYK SECURITY SCAN SUMMARY"
-          echo "=========================================="
-          echo ""
-
-          # Dependencies scan results
-          if [ -f snyk-dependencies-report.json ]; then
-            DEPS_ISSUES=$(jq '.vulnerabilities | length' snyk-dependencies-report.json 2>/dev/null || echo "0")
-            echo "📦 Dependencies Scan:"
-            echo "  Issues found: $DEPS_ISSUES"
-          else
-            echo "📦 Dependencies Scan: No report generated"
-          fi
-
-          # Code scan results
-          if [ -f snyk-code-report.json ]; then
-            CODE_ISSUES=$(jq '.runs[0].results | length' snyk-code-report.json 2>/dev/null || echo "0")
-            echo "🔍 Code Analysis (SAST):"
-            echo "  Issues found: $CODE_ISSUES"
-          else
-            echo "🔍 Code Analysis (SAST): No report generated"
-          fi
-
-          echo "=========================================="
-
-      - name: Check if Snyk Reports Exist
-        id: check-snyk-reports
-        if: always()
-        run: |
-          if [ -f snyk-dependencies-report.json ] || [ -f snyk-code-report.json ]; then
-            echo "reports_exist=true" >> $GITHUB_OUTPUT
-            echo "✅ Snyk reports found, will upload as artifacts"
-          else
-            echo "reports_exist=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No Snyk reports generated (no vulnerabilities or scan failed)"
-          fi
-
-      - name: Upload Snyk Reports
-        uses: actions/upload-artifact@v7
-        if: always() && steps.check-snyk-reports.outputs.reports_exist == 'true'
-        with:
-          name: snyk-security-reports
-          path: |
-            snyk-dependencies-report.json
-            snyk-code-report.json
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Snyk Monitor (Track in Dashboard)
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: monitor
+          fail-on-severity: moderate
+          comment-summary-in-pr: never
 
   # ================================
   # JOB 9: SBOM GENERATION
@@ -1049,7 +963,7 @@ jobs:
     name: 📊 Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, snyk_scan, sbom_generation, gpg_verification]
+    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking, build, dependency_review, sbom_generation, gpg_verification]
     if: always()
 
     steps:
@@ -1083,7 +997,7 @@ jobs:
           INTEGRATION_TESTS="${{ needs.integration_tests.result }}"
           SECURITY_TESTS="${{ needs.security_tests.result }}"
           SECURITY_CHECKS="${{ needs.security_checks.result }}"
-          SNYK_SCAN="${{ needs.snyk_scan.result }}"
+          DEPENDENCY_REVIEW="${{ needs.dependency_review.result }}"
           SBOM_GEN="${{ needs.sbom_generation.result }}"
           GPG_VERIFY="${{ needs.gpg_verification.result }}"
           LINTING="${{ needs.linting.result }}"
@@ -1093,9 +1007,9 @@ jobs:
           # Calculate metrics
           # Note: TOTAL_JOBS counts functional jobs (excludes preparation + summary)
           TOTAL_JOBS=10
-          SUCCESS_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "success" | wc -l)
-          FAILURE_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "failure" | wc -l)
-          SKIPPED_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $SNYK_SCAN $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "skipped" | wc -l)
+          SUCCESS_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "success" | wc -l)
+          FAILURE_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "failure" | wc -l)
+          SKIPPED_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "skipped" | wc -l)
 
           # Sanitize commit message for markdown table
           # COMMIT_MSG_INPUT is passed via env: block to avoid bash injection from multiline messages
@@ -1137,7 +1051,7 @@ jobs:
             echo "| **🧪 Testing** | Integration Tests | $(get_emoji "$INTEGRATION_TESTS") | ~72+ tests, PostgreSQL |"
             echo "| **🧪 Testing** | Security Tests | $(get_emoji "$SECURITY_TESTS") | CSRF, XSS, SQLi, Auth |"
             echo "| **🔒 Security** | Security Checks | $(get_emoji "$SECURITY_CHECKS") | Bandit, pip-audit, Gitleaks |"
-            echo "| **🔒 Security** | Snyk Scan | $(get_emoji "$SNYK_SCAN") | SCA + SAST |"
+            echo "| **🔒 Security** | Dependency Review | $(get_emoji "$DEPENDENCY_REVIEW") | PRs: no vulnerable dependency added |"
             echo "| **🔒 Security** | GPG Verification | $(get_emoji "$GPG_VERIFY") | Commit signatures |"
             echo "| **📦 Supply Chain** | SBOM Generation | $(get_emoji "$SBOM_GEN") | CycloneDX 1.6 |"
             echo "| **📝 Quality** | Code Linting | $(get_emoji "$LINTING") | Ruff checks |"
@@ -1266,7 +1180,7 @@ jobs:
               echo ""
               echo "**Security Scans:**"
               echo "- ✅ **Dependency Audit** — No critical CVEs (pip-audit)"
-              echo "- ✅ **Code Analysis** — Clean SAST scan (Snyk Code)"
+              echo "- ✅ **Code Analysis** — Clean SAST scan (CodeQL)"
               echo "- ✅ **Container Scan** — No HIGH/CRITICAL vulnerabilities (Trivy)"
               echo "- ✅ **SBOM Generated** — Supply chain transparency (CycloneDX)"
               echo ""
