@@ -15,7 +15,10 @@
 # Ruff - Linter y formateador ultra-rápido escrito en Rust
 # Reemplaza: flake8, isort, pydocstyle, pyupgrade, autoflake
 # Ventajas: 10-100x más rápido, configuración simple, todo-en-uno
-ruff>=0.6.0
+# Versión EXACTA: el CI la usa como check bloqueante, y con un rango cada release
+# nueva de ruff puede traer reglas y poner el CI en rojo sin tocar código (la 0.16
+# añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
+ruff==0.14.7
 
 # ================================
 # TYPE CHECKING
@@ -24,7 +27,8 @@ ruff>=0.6.0
 # Mypy - Verificador estático de tipos para Python
 # Analiza el código usando type hints para detectar errores antes de runtime
 # Esencial para proyectos grandes con arquitectura clean
-mypy>=1.11.0,<2.0.0
+# Versión EXACTA, por lo mismo que ruff: es un check bloqueante del CI
+mypy==1.20.2
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
 sqlalchemy[mypy]>=2.0.31
