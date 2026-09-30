@@ -10,8 +10,12 @@
 # contrato en verde hasta el siguiente push.
 name: API contract label
 
+# pull_request_target y no pull_request: en una PR de Dependabot (o de un fork)
+# el token de pull_request es de solo lectura, y relanzar un job pide
+# actions: write. Es seguro porque aquí no se hace checkout ni se ejecuta nada
+# de la PR: solo se llama a `gh` con el SHA, que va por env (CodeRabbit, #445)
 on:
-  pull_request:
+  pull_request_target:
     branches: [main, develop]
     types: [labeled, unlabeled]
 
@@ -29,6 +33,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      EVENT_ACTION: ${{ github.event.action }}
     steps:
       - name: Re-run the contract job of this commit
         run: |
@@ -49,4 +54,4 @@ jobs:
             exit 1
           fi
           gh run rerun "$RUN" -R "$GITHUB_REPOSITORY" --job "$JOB"
-          echo "Re-ran '📜 API contract' (run $RUN) after the label was ${{ github.event.action }}."
+          echo "Re-ran '📜 API contract' (run $RUN) after the label was ${EVENT_ACTION}."
