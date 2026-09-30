@@ -67,7 +67,11 @@ def main(argv: list[str]) -> int:
     if con_arreglo:
         for linea in con_arreglo:
             print(f"::error::Vulnerabilidad con arreglo: {linea}")
-        print(f"{len(con_arreglo)} con arreglo: subir esas versiones en requirements.txt.")
+        print(
+            f"{len(con_arreglo)} con arreglo: subir esas versiones en requirements.txt o "
+            "requirements-dev.txt. Si es pip o una dependencia indirecta, fijarla ahí o subir "
+            "el paquete que la trae."
+        )
         return VULNERABLE
 
     print(f"Sin vulnerabilidades con arreglo ({len(sin_arreglo)} sin arreglo, solo aviso).")

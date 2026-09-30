@@ -23,6 +23,13 @@ updates:
     # - ruff y mypy: siempre solos. Son checks bloqueantes con versión exacta, y
     #   subirlos es decidir qué hacer con sus reglas nuevas
     groups:
+      # Las de seguridad, todas en UNA PR: pip-audit revisa el entorno entero,
+      # así que con dos avisos a la vez cada PR suelta fallaba por el otro y
+      # ninguna se podía mergear (revisión local de la #446)
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
       dev-tools:
         patterns:
           - "pytest*"

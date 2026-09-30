@@ -20,6 +20,8 @@ SUCCESS» sin haber ejecutado un solo test.
     S9   falla Dependency Review con el build en verde     | 1
     S10  Security Checks cancelado con el build en verde   | 1
     S11  build saltado con lo demás en verde               | 1
+    J1   el script lee exactamente los jobs de sus `needs`, y son los de aquí
+         (un job que no está en `needs` da "" en GitHub: dejaría de contar callado)
 """
 
 import re
@@ -89,7 +91,8 @@ def test_the_summary_fails_whenever_a_required_check_did_not_pass(
     resultados = {**_OK, **cambios}
     script = re.sub(
         r"\$\{\{\s*needs\.(\w+)\.result\s*\}\}",
-        lambda m: resultados.get(m.group(1), "success"),
+        # Como en GitHub: un job fuera de `needs` no tiene resultado
+        lambda m: resultados.get(m.group(1), ""),
         _script_del_resumen(),
     )
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
@@ -110,3 +113,18 @@ def test_the_summary_fails_whenever_a_required_check_did_not_pass(
     )
 
     assert proceso.returncode == esperado, f"{caso}: {proceso.stderr[-500:]}"
+
+
+def test_j1_the_summary_reads_exactly_the_jobs_it_needs():
+    """
+    GIVEN: El paso de resumen y la lista `needs` de su job
+    WHEN: Se comparan los jobs que lee con los que espera y con los de este test
+    THEN: Son los mismos: renombrar o quitar uno no lo deja fuera sin avisar
+    """
+    flujo = yaml.safe_load(_WORKFLOW.read_text())
+    necesita = set(flujo["jobs"]["pipeline_summary"]["needs"])
+    leidos = set(re.findall(r"needs\.(\w+)\.result", _script_del_resumen()))
+
+    assert leidos == necesita
+    assert necesita == set(_JOBS)
+    assert necesita <= set(flujo["jobs"])
