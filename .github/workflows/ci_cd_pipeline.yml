@@ -58,13 +58,23 @@ jobs:
   # Coverage: XML + HTML reports
 
   unit_tests:
-    name: 🧪 Unit Tests (Python ${{ matrix.python-version }})
+    name: 🧪 Unit Tests (Python ${{ matrix.python-version }}${{ matrix.experimental && ' · experimental' || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # 3.13 y 3.14 se prueban sin bloquear (30 sep 2026): antes de pasar la imagen
+    # de producción a una versión nueva (Dependabot #423 propone 3.14) hay que
+    # saber si el código y las dependencias funcionan. Si falla sale en rojo, pero no impide mergear; los
+    # checks obligatorios siguen siendo 3.11 y 3.12.
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.11', '3.12']
+        include:
+          - python-version: '3.13'
+            experimental: true
+          - python-version: '3.14'
+            experimental: true
 
     steps:
       - name: Checkout Code
