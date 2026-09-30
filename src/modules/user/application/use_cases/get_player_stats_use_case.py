@@ -187,10 +187,8 @@ class GetPlayerStatsUseCase:
         quick_rounds = await self._collect_quick_match_rounds(user_id, golf_course_id, handicap)
 
         async with self._competition_uow:
-            competition_matches = (
-                await self._competition_uow.matches.find_completed_for_player(
-                    user_id, limit=MAX_ROUNDS_AGGREGATED
-                )
+            competition_matches = await self._competition_uow.matches.find_completed_for_player(
+                user_id, limit=MAX_ROUNDS_AGGREGATED
             )
             rounds_by_match = await self._rounds_by_match(competition_matches)
             if golf_course_id is not None:
@@ -307,9 +305,7 @@ class GetPlayerStatsUseCase:
                 if course is None:
                     continue
 
-                scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(
-                    match.id
-                )
+                scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(match.id)
                 # El score nulo (la raya: hoyo recogido) NO se filtra, a
                 # diferencia del camino de competicion de mas abajo: en partida
                 # rapida es un hoyo jugado, y el calculador lo computa como
@@ -327,9 +323,7 @@ class GetPlayerStatsUseCase:
                 if played is None:
                     continue
 
-                holes = [
-                    HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
-                ]
+                holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
                 # Son DOS hándicaps distintos y no se pueden compartir:
                 #
                 # - La media de la casa usa el hándicap con el que se jugó, y en
@@ -441,9 +435,7 @@ class GetPlayerStatsUseCase:
                 # El diferencial mide los mismos hoyos que la media, no el campo
                 # entero: en media vuelta, los otros nueve no se jugaron
                 played = self._computable_holes(scores_by_hole, hole_card) or []
-                holes = [
-                    HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played
-                ]
+                holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
                 results.append(
                     _ComputableRound(
                         played_on=round_.round_date,
@@ -685,18 +677,14 @@ class GetPlayerStatsUseCase:
         bogey neto, que es lo que el WHS manda anotar en un hoyo sin terminar.
         Un hoyo que nadie tocó no está en `scores_by_hole` y no entra.
         """
-        strokes_basis = self._calculator.resolve_strokes_basis(
-            handicap, None, allowance_percentage
-        )
+        strokes_basis = self._calculator.resolve_strokes_basis(handicap, None, allowance_percentage)
 
         outcomes = []
         for hole in holes:
             if hole.hole_number not in scores_by_hole:
                 continue
 
-            strokes_received = self._calculator.allocate_strokes(
-                strokes_basis, hole.stroke_index
-            )
+            strokes_received = self._calculator.allocate_strokes(strokes_basis, hole.stroke_index)
             score = scores_by_hole[hole.hole_number]
             gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR if score is None else score
             computable = (

@@ -157,6 +157,4 @@ def test_external_id_longer_than_limit_is_rejected():
     THEN: Falla, porque no cabría en la columna
     """
     with pytest.raises(ValueError, match="at most 100 characters"):
-        CourseProvenance(
-            source=CourseSource.RFEG, external_id="9" * 101, imported_at=IMPORTED_AT
-        )
+        CourseProvenance(source=CourseSource.RFEG, external_id="9" * 101, imported_at=IMPORTED_AT)

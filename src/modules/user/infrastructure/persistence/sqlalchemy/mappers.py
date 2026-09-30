@@ -178,7 +178,11 @@ users_table = Table(
     Column("gender", GenderDecorator(), nullable=True),
     # Avatar fields (v2.3.0)
     Column(
-        "avatar_source", AvatarSourceDecorator(), nullable=False, default="NONE", server_default="NONE"
+        "avatar_source",
+        AvatarSourceDecorator(),
+        nullable=False,
+        default="NONE",
+        server_default="NONE",
     ),
     Column("avatar_preset_id", Integer, nullable=True),
     # Feed de actividad (BE #175): cuándo miró el feed por última vez, de donde

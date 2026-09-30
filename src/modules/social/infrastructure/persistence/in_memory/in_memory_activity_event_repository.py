@@ -51,9 +51,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
             # pasar de pagina
             if before_id is not None:
                 encontrados = [
-                    e
-                    for e in encontrados
-                    if (e.occurred_at, str(e.id)) < (before, str(before_id))
+                    e for e in encontrados if (e.occurred_at, str(e.id)) < (before, str(before_id))
                 ]
             else:
                 encontrados = [e for e in encontrados if e.occurred_at < before]
@@ -62,9 +60,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         return encontrados[:limit]
 
     async def count_for_users_since(self, user_ids: list[UserId], since: datetime) -> int:
-        return len(
-            [e for e in self._events if e.user_id in user_ids and e.occurred_at > since]
-        )
+        return len([e for e in self._events if e.user_id in user_ids and e.occurred_at > since])
 
     async def exists_for_match(self, match_id: str) -> bool:
         return any(e.source_match_id == match_id for e in self._events)

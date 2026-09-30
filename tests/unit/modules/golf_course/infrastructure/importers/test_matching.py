@@ -139,9 +139,7 @@ def test_a_renamed_course_is_recognised_but_needs_confirmation():
 
     Es lo que evita duplicar un campo porque la federación le cambió el nombre.
     """
-    existing = build_existing(
-        name="Prueba - Nombre Viejo", external_id="915:PRUEBA NOMBRE VIEJO"
-    )
+    existing = build_existing(name="Prueba - Nombre Viejo", external_id="915:PRUEBA NOMBRE VIEJO")
 
     match = find_match(build_course(), [existing])
 

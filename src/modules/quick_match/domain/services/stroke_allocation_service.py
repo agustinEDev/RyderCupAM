@@ -175,9 +175,7 @@ class StrokeAllocationService:
         """
         result = {}
         for p in participants:
-            ph = self._playing_handicap(
-                p, handicaps, tee_ratings, allowance, allow_negative=True
-            )
+            ph = self._playing_handicap(p, handicaps, tee_ratings, allowance, allow_negative=True)
             result[p.participant_id] = self._build(
                 p.participant_id, ph, self._holes_for(p, holes_by_stroke_index, by_tee)
             )
@@ -276,9 +274,7 @@ class StrokeAllocationService:
                     p.participant_id,
                     allocated,
                     holes_by_stroke_index,
-                    display_handicap=self._playing_handicap(
-                        p, handicaps, tee_ratings, allowance
-                    ),
+                    display_handicap=self._playing_handicap(p, handicaps, tee_ratings, allowance),
                 )
         return result
 

@@ -46,8 +46,6 @@ class RemoveFriendUseCase:
                         "Only the user who blocked can remove this relationship."
                     )
             elif not friendship.involves_user(user_id):
-                raise NotFriendshipParticipantError(
-                    "You are not a participant of this friendship."
-                )
+                raise NotFriendshipParticipantError("You are not a participant of this friendship.")
 
             await self._uow.friendships.remove(friendship)

@@ -247,9 +247,7 @@ class TestSiLaRelacionSeRenombra:
 class TestSiLaCompeticionDesapareceAlRecargar:
     """Un borrado concurrente no puede reventar el listado entero."""
 
-    async def test_no_toca_la_relacion_sin_cargar_si_la_recarga_no_la_encuentra(
-        self, monkeypatch
-    ):
+    async def test_no_toca_la_relacion_sin_cargar_si_la_recarga_no_la_encuentra(self, monkeypatch):
         """Devolver la original seria el MissingGreenlet que esto viene a evitar.
 
         Sus campos siguen sin cargar, asi que tocarlos tumba la peticion. Sin

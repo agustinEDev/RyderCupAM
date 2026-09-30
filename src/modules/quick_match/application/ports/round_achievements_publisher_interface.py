@@ -17,9 +17,7 @@ class RoundAchievementsPublisherInterface(ABC):
     """
 
     @abstractmethod
-    async def capture_best_differentials(
-        self, user_ids: list[UserId]
-    ) -> dict[str, float | None]:
+    async def capture_best_differentials(self, user_ids: list[UserId]) -> dict[str, float | None]:
         """El mejor diferencial de cada jugador antes de cerrar la vuelta."""
 
     @abstractmethod

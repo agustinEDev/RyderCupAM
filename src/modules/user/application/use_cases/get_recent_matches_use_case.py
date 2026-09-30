@@ -115,9 +115,7 @@ class GetRecentMatchesUseCase:
         self._golf_course_uow = golf_course_uow
         self._calculator = stableford_calculator or StablefordCalculator()
         self._scoring_service = scoring_service or ScoringService()
-        self._stroke_allocation_service = (
-            stroke_allocation_service or StrokeAllocationService()
-        )
+        self._stroke_allocation_service = stroke_allocation_service or StrokeAllocationService()
 
     async def execute(
         self, user_id: UserId, limit: int = DEFAULT_LIMIT
@@ -341,15 +339,15 @@ class GetRecentMatchesUseCase:
             tournament_name=None,
             result=result,
             score=score,
-            stableford_points=None if side_strokes else (
-                totals.stableford_points if totals else None
-            ),
-            total_strokes=side_strokes[0] if side_strokes else (
-                totals.total_strokes if totals else None
-            ),
-            holes_played=side_strokes[1] if side_strokes else (
-                totals.holes_played if totals else None
-            ),
+            stableford_points=None
+            if side_strokes
+            else (totals.stableford_points if totals else None),
+            total_strokes=side_strokes[0]
+            if side_strokes
+            else (totals.total_strokes if totals else None),
+            holes_played=side_strokes[1]
+            if side_strokes
+            else (totals.holes_played if totals else None),
             partners=partners,
             opponents=opponents,
         )
@@ -491,9 +489,7 @@ class GetRecentMatchesUseCase:
                 for participant_id, holes in raw.scores_by_participant.items()
                 if hole_number in holes
             }
-            if not hole_is_complete(
-                scores, team_a_ids, team_b_ids, raw.match.match_format
-            ):
+            if not hole_is_complete(scores, team_a_ids, team_b_ids, raw.match.match_format):
                 continue
 
             def net(pid, hole=hole_number, values=scores):
@@ -648,9 +644,7 @@ class GetRecentMatchesUseCase:
 
         holes = [
             HoleSetup(hole.number, hole.par, hole.stroke_index)
-            for hole in course.hole_card_for(
-                raw.participant.tee_color, raw.participant.tee_gender
-            )
+            for hole in course.hole_card_for(raw.participant.tee_color, raw.participant.tee_gender)
         ]
         # En una partida scratch nadie recibe golpes, tampoco para los puntos
         # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a

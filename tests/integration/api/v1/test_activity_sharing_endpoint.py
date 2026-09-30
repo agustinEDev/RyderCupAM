@@ -19,9 +19,7 @@ class TestSetActivitySharing:
         )
         set_auth_cookies(client, user["cookies"])
 
-        response = await client.put(
-            "/api/v1/social/activity-sharing", json={"enabled": False}
-        )
+        response = await client.put("/api/v1/social/activity-sharing", json={"enabled": False})
 
         assert response.status_code == 200
         data = response.json()
@@ -37,9 +35,7 @@ class TestSetActivitySharing:
         )
         set_auth_cookies(client, user["cookies"])
 
-        response = await client.put(
-            "/api/v1/social/activity-sharing", json={"enabled": True}
-        )
+        response = await client.put("/api/v1/social/activity-sharing", json={"enabled": True})
 
         assert response.status_code == 200
         assert response.json() == {"share_activity": True, "removed_events": 0}
@@ -49,9 +45,7 @@ class TestSetActivitySharing:
         """Given nadie autenticado / When se llama / Then no se permite."""
         client.cookies.clear()
 
-        response = await client.put(
-            "/api/v1/social/activity-sharing", json={"enabled": False}
-        )
+        response = await client.put("/api/v1/social/activity-sharing", json={"enabled": False})
 
         assert response.status_code == 401
 

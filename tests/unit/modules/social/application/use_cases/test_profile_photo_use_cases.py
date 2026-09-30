@@ -79,9 +79,7 @@ async def _create_user(user_uow) -> User:
 
 
 async def _hacer_amigos(social_uow, a: User, b: User) -> None:
-    friendship = Friendship.create(
-        id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id
-    )
+    friendship = Friendship.create(id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id)
     friendship.accept()
     async with social_uow:
         await social_uow.friendships.add(friendship)
@@ -116,9 +114,7 @@ class TestSubir:
 
         assert foto.caption is None
 
-    async def test_el_tope_rechaza_en_vez_de_borrar_la_mas_antigua(
-        self, social_uow, user_uow
-    ):
+    async def test_el_tope_rechaza_en_vez_de_borrar_la_mas_antigua(self, social_uow, user_uow):
         """
         Given una galeria llena / When se sube otra / Then se rechaza y **no se
         pierde ninguna**: cada foto es una decision del jugador, no historial.
@@ -134,9 +130,7 @@ class TestSubir:
         async with social_uow:
             assert await social_uow.profile_photos.count_by_user(ana.id) == MAX_PHOTOS_PER_PROFILE
 
-    async def test_un_archivo_enorme_se_rechaza_antes_de_procesarlo(
-        self, social_uow, user_uow
-    ):
+    async def test_un_archivo_enorme_se_rechaza_antes_de_procesarlo(self, social_uow, user_uow):
         """Given un archivo por encima del tope / When se sube / Then se rechaza."""
         ana = await _create_user(user_uow)
 
@@ -234,9 +228,7 @@ class TestServirLaImagen:
                 str(ana.id.value), str(luis.id.value), foto.id
             )
 
-    async def test_una_foto_que_no_es_del_dueno_de_la_ruta_no_se_sirve(
-        self, social_uow, user_uow
-    ):
+    async def test_una_foto_que_no_es_del_dueno_de_la_ruta_no_se_sirve(self, social_uow, user_uow):
         """
         Given la foto de un amigo pedida bajo la ruta de otro amigo / When se
         pide / Then no se sirve: sin esta comprobacion, un id valido se colaria
@@ -283,10 +275,7 @@ class TestBorrar:
         """Given una galeria llena / When se borra una / Then ya cabe otra."""
         ana = await _create_user(user_uow)
         subir = _subir(social_uow, user_uow)
-        fotos = [
-            await subir.execute(str(ana.id.value), RAW)
-            for _ in range(MAX_PHOTOS_PER_PROFILE)
-        ]
+        fotos = [await subir.execute(str(ana.id.value), RAW) for _ in range(MAX_PHOTOS_PER_PROFILE)]
 
         await DeleteProfilePhotoUseCase(social_uow).execute(str(ana.id.value), fotos[0].id)
         await subir.execute(str(ana.id.value), RAW)

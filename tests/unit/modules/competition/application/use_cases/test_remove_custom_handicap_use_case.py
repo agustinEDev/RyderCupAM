@@ -87,9 +87,7 @@ class TestRemoveCustomHandicapUseCase:
         await set_competition_status(uow, created.id, "ACTIVE")
 
         use_case = RemoveCustomHandicapUseCase(uow)
-        response = await use_case.execute(
-            str(enrollment.id.value), admin_user_id, is_admin=True
-        )
+        response = await use_case.execute(str(enrollment.id.value), admin_user_id, is_admin=True)
 
         assert response.custom_handicap is None
 

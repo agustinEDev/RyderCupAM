@@ -170,8 +170,8 @@ class PublishTournamentAchievementsUseCase:
                 otros_torneos = set()
                 for partido in partidos:
                     if partido.round_id not in rounds:
-                        rounds[partido.round_id] = (
-                            await self._competition_uow.rounds.find_by_id(partido.round_id)
+                        rounds[partido.round_id] = await self._competition_uow.rounds.find_by_id(
+                            partido.round_id
                         )
                     ronda = rounds[partido.round_id]
                     if ronda is None:

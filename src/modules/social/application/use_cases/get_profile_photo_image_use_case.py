@@ -39,9 +39,7 @@ class GetProfilePhotoImageUseCase:
     def __init__(self, social_uow: SocialUnitOfWorkInterface):
         self._social_uow = social_uow
 
-    async def execute(
-        self, viewer_id_raw: str, owner_id_raw: str, photo_id_raw: str
-    ) -> PhotoImage:
+    async def execute(self, viewer_id_raw: str, owner_id_raw: str, photo_id_raw: str) -> PhotoImage:
         viewer_id = UserId(viewer_id_raw)
         owner_id = UserId(owner_id_raw)
         photo_id = ProfilePhotoId(photo_id_raw)

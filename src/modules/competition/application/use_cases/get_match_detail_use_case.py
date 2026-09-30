@@ -42,12 +42,8 @@ class GetMatchDetailUseCase:
             id=match.id.value,
             round_id=match.round_id.value,
             match_number=match.match_number,
-            team_a_players=[
-                MatchPlayerResponseDTO.from_domain(p) for p in match.team_a_players
-            ],
-            team_b_players=[
-                MatchPlayerResponseDTO.from_domain(p) for p in match.team_b_players
-            ],
+            team_a_players=[MatchPlayerResponseDTO.from_domain(p) for p in match.team_a_players],
+            team_b_players=[MatchPlayerResponseDTO.from_domain(p) for p in match.team_b_players],
             status=match.status.value,
             handicap_strokes_given=match.handicap_strokes_given,
             strokes_given_to_team=match.strokes_given_to_team,

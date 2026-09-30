@@ -226,7 +226,9 @@ def _caso_de_uso(uow, user_repo, scoring_service, ahora=None, campos=None):
 
 class TestSeAbreSola:
     @pytest.mark.asyncio
-    async def test_1_ya_es_la_hora_se_abre_y_guarda_el_golpe(self, uow, user_repo, scoring_service, campos):
+    async def test_1_ya_es_la_hora_se_abre_y_guarda_el_golpe(
+        self, uow, user_repo, scoring_service, campos
+    ):
         _c, _r, match, a, b = await _monta(uow)
 
         uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
@@ -284,7 +286,9 @@ class TestSeAbreSola:
             assert (await uow.matches.find_by_id(match.id)).status == MatchStatus.IN_PROGRESS
 
     @pytest.mark.asyncio
-    async def test_12_un_golpe_de_hace_dias_abre_igual(self, uow, user_repo, scoring_service, campos):
+    async def test_12_un_golpe_de_hace_dias_abre_igual(
+        self, uow, user_repo, scoring_service, campos
+    ):
         """Sin tope por arriba: un golpe atascado en un movil sin cobertura entra."""
         _c, _r, match, a, b = await _monta(uow)
 
@@ -332,7 +336,9 @@ class TestNoSeAbre:
     async def test_11_el_dia_anterior_tampoco(self, uow, user_repo, scoring_service, campos):
         _c, _r, match, a, b = await _monta(uow)
 
-        uc = _caso_de_uso(uow, user_repo, scoring_service, datetime(2026, 9, 19, 9, 0, tzinfo=UTC), campos)
+        uc = _caso_de_uso(
+            uow, user_repo, scoring_service, datetime(2026, 9, 19, 9, 0, tzinfo=UTC), campos
+        )
         with pytest.raises(ScoringNotOpenYetError):
             await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
@@ -403,7 +409,9 @@ class TestNoSeAbre:
             await uc.execute(str(match.id), 1, _body(b), a.user_id)
 
     @pytest.mark.asyncio
-    async def test_7_un_partido_terminado_no_se_reabre(self, uow, user_repo, scoring_service, campos):
+    async def test_7_un_partido_terminado_no_se_reabre(
+        self, uow, user_repo, scoring_service, campos
+    ):
         _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.COMPLETED)
 
         uc = _caso_de_uso(uow, user_repo, scoring_service, DESPUES, campos)
@@ -468,9 +476,7 @@ class TestElHusoSaleDelCampo:
             assert (await uow.matches.find_by_id(match.id)).status == MatchStatus.SCHEDULED
 
     @pytest.mark.asyncio
-    async def test_9b_sin_campo_tampoco_se_inventa_una_hora(
-        self, uow, user_repo, scoring_service
-    ):
+    async def test_9b_sin_campo_tampoco_se_inventa_una_hora(self, uow, user_repo, scoring_service):
         """Sin repositorio de campos —no deberia pasar— no se abre nada."""
         _c, _r, match, a, b = await _monta(uow)
 
@@ -512,9 +518,7 @@ class TestElHusoSaleDelCampo:
         )
 
         horas = {
-            r.id: r.scoring_opens_at.astimezone(UTC)
-            for dia in respuesta.days
-            for r in dia.rounds
+            r.id: r.scoring_opens_at.astimezone(UTC) for dia in respuesta.days for r in dia.rounds
         }
         assert horas[ronda_peninsula.id.value] == datetime(2026, 9, 20, 4, 0, tzinfo=UTC)
         assert horas[ronda_canarias.id.value] == datetime(2026, 9, 20, 5, 0, tzinfo=UTC)
@@ -577,7 +581,9 @@ class TestNoSeAbreDosVeces:
         assert len(hoyos) == 36, "no se vuelven a crear los hoyos"
 
     @pytest.mark.asyncio
-    async def test_5c_para_abrirlo_se_bloquea_su_fila(self, uow, user_repo, scoring_service, campos):
+    async def test_5c_para_abrirlo_se_bloquea_su_fila(
+        self, uow, user_repo, scoring_service, campos
+    ):
         """
         El bloqueo es lo unico que corta la carrera de dos primeros golpes: en
         memoria no se nota, asi que lo que se comprueba es que el camino de
@@ -679,7 +685,9 @@ class TestNoSeAbreDosVeces:
                 await uc._abre_si_toca(copia_vieja, JUSTO)
 
     @pytest.mark.asyncio
-    async def test_quien_no_juega_el_partido_no_lo_abre(self, uow, user_repo, scoring_service, campos):
+    async def test_quien_no_juega_el_partido_no_lo_abre(
+        self, uow, user_repo, scoring_service, campos
+    ):
         """
         Abrir bloquea la fila, crea 36 filas y arranca la ronda: eso no lo
         dispara alguien que solo acerto el identificador, y el rechazo de «aun no
@@ -698,7 +706,9 @@ class TestNoSeAbreDosVeces:
 
 class TestLoQueSeLeDiceAlCliente:
     @pytest.mark.asyncio
-    async def test_10_la_vista_trae_la_hora_de_apertura(self, uow, user_repo, scoring_service, campos):
+    async def test_10_la_vista_trae_la_hora_de_apertura(
+        self, uow, user_repo, scoring_service, campos
+    ):
         """Para poder ofrecer «Anotar» sin adivinar si alguien pulso START."""
         _c, _r, match, a, b = await _monta(uow)
 
@@ -727,7 +737,9 @@ class TestLoQueSeLeDiceAlCliente:
         assert rondas[0].scoring_opens_at.astimezone(UTC) == JUSTO
 
     @pytest.mark.asyncio
-    async def test_9_sin_fecha_la_vista_no_inventa_una_hora(self, uow, user_repo, scoring_service, campos):
+    async def test_9_sin_fecha_la_vista_no_inventa_una_hora(
+        self, uow, user_repo, scoring_service, campos
+    ):
         _c, _r, match, a, b = await _monta(uow, estado_partido=MatchStatus.IN_PROGRESS)
         async with uow:
             round_entity = await uow.rounds.find_by_id(match.round_id)

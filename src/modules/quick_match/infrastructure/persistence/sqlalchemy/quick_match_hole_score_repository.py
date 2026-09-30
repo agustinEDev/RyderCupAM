@@ -26,9 +26,7 @@ class SQLAlchemyQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInter
     async def update(self, hole_score: QuickMatchHoleScore) -> None:
         self._session.add(hole_score)
 
-    async def find_by_id(
-        self, hole_score_id: QuickMatchHoleScoreId
-    ) -> QuickMatchHoleScore | None:
+    async def find_by_id(self, hole_score_id: QuickMatchHoleScoreId) -> QuickMatchHoleScore | None:
         return await self._session.get(QuickMatchHoleScore, hole_score_id)
 
     async def find_by_match_hole_and_participant(

@@ -60,9 +60,7 @@ async def _create_user(user_uow, share_activity: bool = True) -> User:
 
 
 async def _hacer_amigos(social_uow, a: User, b: User) -> None:
-    friendship = Friendship.create(
-        id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id
-    )
+    friendship = Friendship.create(id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id)
     friendship.accept()
     async with social_uow:
         await social_uow.friendships.add(friendship)
@@ -93,9 +91,7 @@ async def test_un_amigo_ve_la_actividad(social_uow, user_uow):
     await _hacer_amigos(social_uow, yo, amigo)
     await _publica(social_uow, amigo, "match-1")
 
-    resultado = await _use_case(social_uow, user_uow).execute(
-        str(yo.id.value), str(amigo.id.value)
-    )
+    resultado = await _use_case(social_uow, user_uow).execute(str(yo.id.value), str(amigo.id.value))
 
     assert len(resultado.events) == 1
     assert resultado.events[0].source_match_id == "match-1"
@@ -114,9 +110,7 @@ async def test_un_desconocido_no_ve_la_actividad(social_uow, user_uow):
     await _publica(social_uow, extranio, "match-1")
 
     with pytest.raises(ActivityNotVisibleError):
-        await _use_case(social_uow, user_uow).execute(
-            str(yo.id.value), str(extranio.id.value)
-        )
+        await _use_case(social_uow, user_uow).execute(str(yo.id.value), str(extranio.id.value))
 
 
 async def test_un_jugador_que_no_existe_da_un_error_distinto(social_uow, user_uow):
@@ -153,9 +147,7 @@ async def test_puedo_ver_mi_propia_actividad(social_uow, user_uow):
     yo = await _create_user(user_uow)
     await _publica(social_uow, yo, "match-1")
 
-    resultado = await _use_case(social_uow, user_uow).execute(
-        str(yo.id.value), str(yo.id.value)
-    )
+    resultado = await _use_case(social_uow, user_uow).execute(str(yo.id.value), str(yo.id.value))
 
     assert len(resultado.events) == 1
 
@@ -170,9 +162,7 @@ async def test_solo_sale_la_actividad_del_jugador_pedido(social_uow, user_uow):
     await _publica(social_uow, uno, "de-uno")
     await _publica(social_uow, otro, "de-otro")
 
-    resultado = await _use_case(social_uow, user_uow).execute(
-        str(yo.id.value), str(uno.id.value)
-    )
+    resultado = await _use_case(social_uow, user_uow).execute(str(yo.id.value), str(uno.id.value))
 
     assert [e.source_match_id for e in resultado.events] == ["de-uno"]
 
@@ -211,8 +201,6 @@ async def test_puedo_ver_mi_historial_con_la_publicacion_apagada(social_uow, use
     yo = await _create_user(user_uow, share_activity=False)
     await _publica(social_uow, yo, "match-1")
 
-    resultado = await _use_case(social_uow, user_uow).execute(
-        str(yo.id.value), str(yo.id.value)
-    )
+    resultado = await _use_case(social_uow, user_uow).execute(str(yo.id.value), str(yo.id.value))
 
     assert len(resultado.events) == 1

@@ -29,9 +29,7 @@ class TestGetMyAvatarUploadImageUseCase:
         await uow.avatar_uploads.save(upload)
         use_case = GetMyAvatarUploadImageUseCase(uow)
 
-        image_bytes, content_type = await use_case.execute(
-            str(user_id.value), str(upload.id.value)
-        )
+        image_bytes, content_type = await use_case.execute(str(user_id.value), str(upload.id.value))
 
         assert image_bytes == b"photo-bytes"
         assert content_type == "image/jpeg"

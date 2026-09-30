@@ -65,9 +65,7 @@ async def _create_user(user_uow, handicap: float | None = None, active: bool = T
 
 
 async def _hacer_amigos(social_uow, a: User, b: User) -> Friendship:
-    friendship = Friendship.create(
-        id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id
-    )
+    friendship = Friendship.create(id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id)
     friendship.accept()
     async with social_uow:
         await social_uow.friendships.add(friendship)
@@ -228,9 +226,7 @@ class TestLoQueDeVerdadNoEsta:
         ana = await _create_user(user_uow)
 
         with pytest.raises(ProfileNotVisibleError):
-            await _use_case(social_uow, user_uow, stats).execute(
-                str(ana.id.value), str(uuid4())
-            )
+            await _use_case(social_uow, user_uow, stats).execute(str(ana.id.value), str(uuid4()))
 
     async def test_una_cuenta_dada_de_baja_no_se_ve_ni_siendo_amigos(
         self, social_uow, user_uow, stats
@@ -292,9 +288,7 @@ class TestLoQueDeVerdadNoEsta:
 
 
 class TestContadorDeAmigos:
-    async def test_cuenta_los_amigos_del_perfil_no_los_mios(
-        self, social_uow, user_uow, stats
-    ):
+    async def test_cuenta_los_amigos_del_perfil_no_los_mios(self, social_uow, user_uow, stats):
         """
         Given un jugador con dos amigos / When miro su perfil / Then el contador
         dice dos, aunque yo no tenga ninguno mas.

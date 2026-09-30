@@ -90,9 +90,7 @@ class UpdateProfileUseCase:
                 if request.alias:
                     owner = await self._uow.users.find_by_alias(request.alias)
                     if owner and owner.id != user.id:
-                        raise AliasAlreadyTakenError(
-                            f"El alias '{request.alias}' ya está en uso."
-                        )
+                        raise AliasAlreadyTakenError(f"El alias '{request.alias}' ya está en uso.")
 
                 # Actualizar perfil (entity valida y emite eventos)
                 user.update_profile(
@@ -113,9 +111,7 @@ class UpdateProfileUseCase:
             # verdad es el índice único. Solo se traduce SU violación;
             # cualquier otra se deja subir como está
             if "ix_users_alias_lower" in str(e.orig):
-                raise AliasAlreadyTakenError(
-                    f"El alias '{request.alias}' ya está en uso."
-                ) from e
+                raise AliasAlreadyTakenError(f"El alias '{request.alias}' ya está en uso.") from e
             raise
 
         # Construir respuesta

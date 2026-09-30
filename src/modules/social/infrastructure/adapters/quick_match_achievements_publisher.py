@@ -29,9 +29,7 @@ class QuickMatchAchievementsPublisher(RoundAchievementsPublisherInterface):
         self._publish = publish_use_case
         self._differentials = differentials
 
-    async def capture_best_differentials(
-        self, user_ids: list[UserId]
-    ) -> dict[str, float | None]:
+    async def capture_best_differentials(self, user_ids: list[UserId]) -> dict[str, float | None]:
         return {
             str(user_id.value): await self._differentials.best_differential(user_id)
             for user_id in user_ids

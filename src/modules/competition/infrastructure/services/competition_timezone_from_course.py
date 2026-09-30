@@ -123,8 +123,6 @@ class CompetitionTimezoneFromCourse(ICompetitionTimezone):
         """La zona de ese campo, o `None` si no existe o no la tiene."""
         campo = await self._golf_courses.find_by_id(golf_course_id)
         if campo is None:
-            logger.warning(
-                "Se pidio la zona de un campo que no existe: %s", golf_course_id.value
-            )
+            logger.warning("Se pidio la zona de un campo que no existe: %s", golf_course_id.value)
             return None
         return campo.timezone

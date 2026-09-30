@@ -78,7 +78,9 @@ class SetNamePreferenceUseCase:
 
             # 2. Verificar que es el dueño
             if enrollment.user_id != user_id:
-                raise NotOwnerError("Solo puedes elegir cómo se te muestra en tu propia inscripción")
+                raise NotOwnerError(
+                    "Solo puedes elegir cómo se te muestra en tu propia inscripción"
+                )
 
             # 3. Establecer preferencia
             enrollment.set_name_preference(request.use_real_name)

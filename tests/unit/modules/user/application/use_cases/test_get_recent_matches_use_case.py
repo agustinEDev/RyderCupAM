@@ -794,9 +794,7 @@ class TestCompetitionMatch:
         assert home.result == "LOST"
         assert away.result == "WON"
 
-    async def test_has_no_scoring_format(
-        self, user_uow, competition_uow, qm_uow, golf_course_uow
-    ):
+    async def test_has_no_scoring_format(self, user_uow, competition_uow, qm_uow, golf_course_uow):
         """MEDAL/STABLEFORD es el eje de las partidas rápidas; aquí no aplica."""
         player = await create_user(user_uow, "Home")
         rival = await create_user(user_uow, "Away")
@@ -1039,9 +1037,7 @@ class TestMatchesLeftOutOfStats:
 
         assert feed.matches[0].excluded_from_stats is False
 
-    async def test_the_flag_is_personal(
-        self, user_uow, competition_uow, qm_uow, golf_course_uow
-    ):
+    async def test_the_flag_is_personal(self, user_uow, competition_uow, qm_uow, golf_course_uow):
         excluder = await create_user(user_uow, "Excluder", handicap=0)
         other = await create_user(user_uow, "Other", handicap=0)
         course = await create_golf_course(golf_course_uow, excluder.id)
@@ -1131,9 +1127,7 @@ class TestParPorBarra:
     @staticmethod
     async def _course_with_longer_red(golf_course_uow, creator_id):
         """Rojas juegan par 5 los hoyos 1 y 2; la tarjeta del campo, par 4."""
-        red_holes = [
-            Hole(number=i, par=5 if i in (1, 2) else 4, stroke_index=i) for i in HOLES
-        ]
+        red_holes = [Hole(number=i, par=5 if i in (1, 2) else 4, stroke_index=i) for i in HOLES]
         tees = [
             Tee(
                 color=TeeColor.YELLOW,

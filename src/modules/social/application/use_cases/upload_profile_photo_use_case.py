@@ -80,9 +80,7 @@ class UploadProfilePhotoUseCase:
         # sesion abierta. Y en un hilo aparte porque Pillow es sincrono: sin eso,
         # redimensionar una foto bloquearia TODAS las peticiones del proceso
         # mientras dura
-        processed = await asyncio.to_thread(
-            self._image_processor.process_gallery_image, raw_bytes
-        )
+        processed = await asyncio.to_thread(self._image_processor.process_gallery_image, raw_bytes)
 
         photo = ProfilePhoto.create(
             user_id=user_id, image_data=processed, content_type="image/jpeg", caption=caption

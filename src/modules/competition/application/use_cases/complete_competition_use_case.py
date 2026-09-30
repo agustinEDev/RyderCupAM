@@ -98,9 +98,7 @@ class CompleteCompetitionUseCase:
             # 3. Los inscritos, para preguntar por su marca previa fuera de aqui
             inscritos = [
                 enrollment.user_id
-                for enrollment in await self._uow.enrollments.find_by_competition(
-                    competition_id
-                )
+                for enrollment in await self._uow.enrollments.find_by_competition(competition_id)
             ]
 
         # 4. Fuera de la transaccion a proposito: preguntar por el mejor

@@ -725,9 +725,7 @@ class TestGenerateMatchesUseCase:
         round_entity = await self._create_round_pending_matches(
             uow, competition, golf_course_id, MatchFormat.SINGLES
         )
-        await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 2, 2, TeeColor.YELLOW
-        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 2, 2, TeeColor.YELLOW)
 
         # Mock golf course con tee AMATEUR + MALE
         mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])
@@ -1039,9 +1037,7 @@ class TestGenerateMatchesUseCase:
         )
 
         # Crear equipos con tee_color que NO esta en el campo
-        await self._create_teams_and_enrollments_with_tees(
-            uow, competition, 1, 1, TeeColor.WHITE
-        )
+        await self._create_teams_and_enrollments_with_tees(uow, competition, 1, 1, TeeColor.WHITE)
 
         # Mock golf course con SOLO AMATEUR+MALE (no CHAMPIONSHIP)
         mock_gc = self._build_mock_golf_course([(TeeColor.YELLOW, Gender.MALE)])

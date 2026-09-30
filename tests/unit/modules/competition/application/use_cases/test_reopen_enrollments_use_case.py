@@ -149,7 +149,6 @@ class TestReopenEnrollmentsUseCase:
         )
         created = await create_use_case.execute(create_request, creator_id)
 
-
         use_case = ReopenEnrollmentsUseCase(uow)
         request = ReopenEnrollmentsRequestDTO(competition_id=created.id)
 

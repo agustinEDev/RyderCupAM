@@ -221,7 +221,9 @@ class TestGetQuickMatchUseCase:
         assert detail.standing.holes_played == 1
         assert detail.standing.leading_team is None
 
-    async def test_registered_participant_handicap_comes_from_user_profile(self, qm_uow, user_uow, golf_course_uow):
+    async def test_registered_participant_handicap_comes_from_user_profile(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
         creator = await create_user(user_uow, "creator-hcp@test.com", handicap=12.4)
         other = await create_user(user_uow, "other-hcp@test.com", handicap=None)
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
@@ -447,9 +449,7 @@ class TestFoursomesScoresOneBallPerSide:
     """
 
     async def _players(self, user_uow, tag):
-        return [
-            await create_user(user_uow, unique_email(f"{tag}-{i}")) for i in range(4)
-        ]
+        return [await create_user(user_uow, unique_email(f"{tag}-{i}")) for i in range(4)]
 
     async def test_hole_counts_with_one_score_per_side(self, qm_uow, user_uow, golf_course_uow):
         creator, partner, rival_a, rival_b = await self._players(user_uow, "foursomes-ok")
@@ -470,7 +470,9 @@ class TestFoursomesScoresOneBallPerSide:
         assert detail.standing.leading_team == "A"
         assert detail.standing.status == "1UP"
 
-    async def test_the_partner_may_be_the_one_who_enters_it(self, qm_uow, user_uow, golf_course_uow):
+    async def test_the_partner_may_be_the_one_who_enters_it(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
         creator, partner, rival_a, rival_b = await self._players(user_uow, "foursomes-partner")
         qm = await _create_team_match(
             qm_uow, MatchFormat.FOURSOMES, creator.id, partner.id, [rival_a.id, rival_b.id]
@@ -531,9 +533,7 @@ class TestQuickMatchShowsTheAlias:
     tarjeta. Si aquí saliera el nombre legal, el alias no serviría de nada.
     """
 
-    async def test_a_participant_is_shown_by_their_alias(
-        self, qm_uow, user_uow, golf_course_uow
-    ):
+    async def test_a_participant_is_shown_by_their_alias(self, qm_uow, user_uow, golf_course_uow):
         creator = await create_user(user_uow, unique_email("alias"))
         other = await create_user(user_uow, unique_email("alias"))
         async with user_uow:
@@ -565,9 +565,7 @@ class TestQuickMatchShowsTheAlias:
 
         assert detail.scoring_assignments[0].scorer_name == "Anotador"
 
-    async def test_a_guest_keeps_the_name_that_was_typed(
-        self, qm_uow, user_uow, golf_course_uow
-    ):
+    async def test_a_guest_keeps_the_name_that_was_typed(self, qm_uow, user_uow, golf_course_uow):
         """
         Un invitado no tiene cuenta, así que tampoco alias.
 

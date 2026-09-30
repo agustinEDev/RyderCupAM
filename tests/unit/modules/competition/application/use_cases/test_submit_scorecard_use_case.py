@@ -311,10 +311,10 @@ class TestSubmitScorecardHappyPath:
 class TestUnaTarjetaPorBando:
     """BE #377: en foursomes la tarjeta es del bando.
 
-        #   caso                                          | esperado
-        ----|---------------------------------------------|---------------------------
-        U1  entrega uno de cada bando                     | el partido se cierra
-        U2  el compañero intenta entregarla otra vez      | se rechaza, diciendo por qué
+    #   caso                                          | esperado
+    ----|---------------------------------------------|---------------------------
+    U1  entrega uno de cada bando                     | el partido se cierra
+    U2  el compañero intenta entregarla otra vez      | se rechaza, diciendo por qué
     """
 
     def _foursomes(self, uow):
@@ -365,4 +365,3 @@ class TestUnaTarjetaPorBando:
 
         assert respuesta.match_complete is True
         assert (await uow.matches.find_by_id(match.id)).status.value == "COMPLETED"
-

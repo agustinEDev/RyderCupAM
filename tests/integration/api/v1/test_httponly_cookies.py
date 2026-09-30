@@ -310,7 +310,9 @@ class TestHttpOnlyCookies:
 
         from main import app
 
-        async with FreshClient(transport=ASGITransport(app=app), base_url="http://test") as fresh_client:
+        async with FreshClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as fresh_client:
             # When: Request a endpoint protegido sin autenticación
             response = await fresh_client.get("/api/v1/auth/current-user")
 

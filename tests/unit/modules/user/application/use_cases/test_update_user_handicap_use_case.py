@@ -261,9 +261,7 @@ class TestHandicapLookupIgnoresTheAlias:
         await uow.commit()
 
         # `default=None`: si preguntara por el alias, no encontraría nada
-        handicap_service = MockHandicapService(
-            handicaps={"Rafael Nadal Parera": 2.5}, default=None
-        )
+        handicap_service = MockHandicapService(handicaps={"Rafael Nadal Parera": 2.5}, default=None)
         use_case = UpdateUserHandicapUseCase(uow, handicap_service)
 
         result = await use_case.execute(user.id)

@@ -663,9 +663,7 @@ class GolfCourse:
             # heredar el viejo haria que aprobarla abriese a la hora de antes
             timezone=timezone if location is not None else (timezone or self.timezone),
             provenance=provenance if provenance is not None else self.provenance,
-            physical_holes=(
-                physical_holes if physical_holes is not None else self.physical_holes
-            ),
+            physical_holes=(physical_holes if physical_holes is not None else self.physical_holes),
         )
 
         # Reconstruir clone con campos especiales (link al original, status PENDING)

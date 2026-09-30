@@ -68,9 +68,7 @@ async def get_player_profile(
     try:
         return await use_case.execute(str(current_user.id), str(user_id))
     except ProfileNotVisibleError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND
-        ) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND) from e
 
 
 @router.get(
@@ -95,9 +93,7 @@ async def get_player_activity(
             str(current_user.id), str(user_id), limit=limit, cursor=cursor
         )
     except ProfileNotVisibleError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND
-        ) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=PROFILE_NOT_FOUND) from e
     except ActivityNotVisibleError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 

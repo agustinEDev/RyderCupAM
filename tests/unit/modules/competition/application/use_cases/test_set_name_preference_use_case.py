@@ -56,9 +56,7 @@ class TestSetNamePreferenceUseCase:
         enrollment = await create_approved_enrollment(uow, created.id, player_id)
 
         use_case = SetNamePreferenceUseCase(uow)
-        request = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment.id.value, use_real_name=True
-        )
+        request = SetNamePreferenceRequestDTO(enrollment_id=enrollment.id.value, use_real_name=True)
         response = await use_case.execute(request, player_id)
 
         assert response.use_real_name is True
@@ -102,9 +100,7 @@ class TestSetNamePreferenceUseCase:
         enrollment = await create_approved_enrollment(uow, created.id, player_id)
 
         use_case = SetNamePreferenceUseCase(uow)
-        request = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment.id.value, use_real_name=True
-        )
+        request = SetNamePreferenceRequestDTO(enrollment_id=enrollment.id.value, use_real_name=True)
 
         with pytest.raises(NotOwnerError):
             await use_case.execute(request, creator_id)
@@ -148,9 +144,7 @@ class TestSetNamePreferenceUseCase:
             await set_competition_status(uow, created.id, status)
 
         use_case = SetNamePreferenceUseCase(uow)
-        request = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment.id.value, use_real_name=True
-        )
+        request = SetNamePreferenceRequestDTO(enrollment_id=enrollment.id.value, use_real_name=True)
 
         response = await use_case.execute(request, player_id)
         assert response.use_real_name is True
@@ -179,9 +173,7 @@ class TestSetNamePreferenceUseCase:
             await uow.commit()
 
         use_case = SetNamePreferenceUseCase(uow)
-        request = SetNamePreferenceRequestDTO(
-            enrollment_id=enrollment.id.value, use_real_name=True
-        )
+        request = SetNamePreferenceRequestDTO(enrollment_id=enrollment.id.value, use_real_name=True)
 
         response = await use_case.execute(request, player_id)
         assert response.use_real_name is True

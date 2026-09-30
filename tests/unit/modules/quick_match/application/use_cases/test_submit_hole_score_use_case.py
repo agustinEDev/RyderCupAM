@@ -105,9 +105,7 @@ class TestSubmitQuickMatchHoleScoreUseCase:
         creator = await create_user(user_uow, "creator5@test.com")
         other = await create_user(user_uow, "other5@test.com")
         # Solo el creador es anotador; `other` es participante pero no anotador.
-        qm = await _create_in_progress_match(
-            qm_uow, creator.id, other.id, scorer_ids=None
-        )
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id, scorer_ids=None)
 
         use_case = SubmitQuickMatchHoleScoreUseCase(qm_uow)
         with pytest.raises(NotAScorerError):

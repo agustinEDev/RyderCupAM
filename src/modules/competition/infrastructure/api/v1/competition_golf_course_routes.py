@@ -101,7 +101,9 @@ async def add_golf_course_to_competition(
             golf_course_id=golf_course_body.golf_course_id,
         )
 
-        response = await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
+        response = await use_case.execute(
+            request_dto, current_user_id, is_admin=current_user.is_admin
+        )
 
         return response
 
@@ -146,7 +148,9 @@ async def remove_golf_course_from_competition(
             golf_course_id=golf_course_id,
         )
 
-        response = await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
+        response = await use_case.execute(
+            request_dto, current_user_id, is_admin=current_user.is_admin
+        )
 
         return response
 
@@ -182,7 +186,9 @@ async def reorder_golf_courses(
             golf_course_ids=reorder_body.golf_course_ids,
         )
 
-        response = await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
+        response = await use_case.execute(
+            request_dto, current_user_id, is_admin=current_user.is_admin
+        )
 
         return response
 

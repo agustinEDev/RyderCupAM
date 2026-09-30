@@ -88,9 +88,7 @@ class ParticipantIdType(sqlalchemy.types.TypeDecorator[ParticipantId]):
             return None
         return value.value
 
-    def process_result_value(
-        self, value: uuid.UUID | None, dialect: Any
-    ) -> ParticipantId | None:
+    def process_result_value(self, value: uuid.UUID | None, dialect: Any) -> ParticipantId | None:
         if value is None:
             return None
         return ParticipantId(value)
@@ -141,9 +139,7 @@ class QuickMatchStatusType(sqlalchemy.types.TypeDecorator[QuickMatchStatus]):
             return None
         return value.value
 
-    def process_result_value(
-        self, value: str | None, dialect: Any
-    ) -> QuickMatchStatus | None:
+    def process_result_value(self, value: str | None, dialect: Any) -> QuickMatchStatus | None:
         if value is None:
             return None
         return QuickMatchStatus(value)
@@ -264,9 +260,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                     handicap=p.get("handicap"),
                     custom_handicap=p.get("custom_handicap"),
                     team=p.get("team"),
-                    tee_color=(
-                        TeeColor(p["tee_color"]) if p.get("tee_color") else None
-                    ),
+                    tee_color=(TeeColor(p["tee_color"]) if p.get("tee_color") else None),
                     tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
                 )
             )

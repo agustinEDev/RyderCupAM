@@ -67,7 +67,6 @@ class TestListMyInvitationsUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-
         return created
 
     async def _add_invitation(

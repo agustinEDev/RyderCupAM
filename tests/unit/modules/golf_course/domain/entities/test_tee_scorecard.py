@@ -23,10 +23,7 @@ PAR_72 = [4, 5, 4, 4, 3, 4, 5, 4, 3, 3, 4, 5, 4, 4, 3, 4, 5, 4]
 def build_holes(pars: list[int] | None = None, meters: int | None = 350) -> list[Hole]:
     """Construye una tarjeta de 18 hoyos con índices 1-18."""
     pars = pars or PAR_72
-    return [
-        Hole(number=i + 1, par=pars[i], stroke_index=i + 1, meters=meters)
-        for i in range(18)
-    ]
+    return [Hole(number=i + 1, par=pars[i], stroke_index=i + 1, meters=meters) for i in range(18)]
 
 
 def build_course(
