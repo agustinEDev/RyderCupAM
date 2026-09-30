@@ -945,6 +945,10 @@ jobs:
     name: 📜 API Contract
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Solo en PRs: compara con la rama base (github.base_ref), que en un push no
+    # existe. Al moverlo aquí desde su workflow propio (#434), el push a develop
+    # fallaba con `fatal: invalid reference: origin/`.
+    if: github.event_name == 'pull_request'
     env:
       OASDIFF_VERSION: '1.32.1'
 
@@ -1210,7 +1214,7 @@ jobs:
               [ "$SECURITY_TESTS" == "failure" ] && echo "- ❌ **Security Tests** — Security vulnerabilities found (CSRF, XSS, SQLi, Auth)"
               [ "$GPG_VERIFY" == "failure" ] && echo "- ❌ **GPG Verification** — Unsigned or invalid commit signatures detected"
               [ "$ARCHITECTURE" == "failure" ] && echo "- ❌ **Architecture Contracts** — An import breaks a layer rule (see .importlinter)"
-              [ "$API_CONTRACT" == "failure" ] && echo "- ❌ **API Contract** — Breaking API change without the api-breaking label"
+              [ "$API_CONTRACT" == "failure" ] && echo "- ❌ **API Contract** — A breaking API change without the api-breaking label, or the comparison could not run (see the job log)"
               [ "$OWASP" == "failure" ] && echo "- ❌ **OWASP Top 10 (Semgrep)** — Security finding in the code (see the Security tab)"
               echo ""
               echo "### 📋 Action Required"
