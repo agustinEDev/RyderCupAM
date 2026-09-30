@@ -132,7 +132,7 @@ mako==1.4.3
 
 # click - Command line interface creation kit (dependencia transitiva de uvicorn)
 # Fijada explícitamente para resolver SNYK-PYTHON-CLICK-16347201 (Command Injection)
-click==8.3.3
+click==8.5.0
 
 
 # ================================
