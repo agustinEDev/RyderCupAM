@@ -14,7 +14,7 @@ from .domain_event import DomainEvent
 EventType = TypeVar("EventType", bound=DomainEvent)
 
 
-class EventHandler(Generic[EventType], ABC):  # noqa: UP046
+class EventHandler(Generic[EventType], ABC):
     """
     Interfaz base para todos los handlers de eventos de dominio.
 

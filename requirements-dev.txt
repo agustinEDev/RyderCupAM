@@ -18,7 +18,7 @@
 # Versión EXACTA: el CI la usa como check bloqueante, y con un rango cada release
 # nueva de ruff puede traer reglas y poner el CI en rojo sin tocar código (la 0.16
 # añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
-ruff==0.14.7
+ruff==0.16.9
 
 # import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
 # Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
