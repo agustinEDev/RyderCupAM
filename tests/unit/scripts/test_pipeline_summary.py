@@ -22,6 +22,8 @@ SUCCESS» sin haber ejecutado un solo test.
     S11  build saltado con lo demás en verde               | 1
     J1   el script lee exactamente los jobs de sus `needs`, y son los de aquí
          (un job que no está en `needs` da "" en GitHub: dejaría de contar callado)
+    L1   un check obligatorio cancelado sale en la lista de lo que no pasó
+         (salía «FAILED» sin decir cuál: CodeRabbit en la #446)
 """
 
 import re
@@ -69,6 +71,31 @@ ESCENARIOS = [
     ("S10", {"security_checks": "cancelled"}, 1),
     ("S11", {"build": "skipped"}, 1),
 ]
+
+
+def _ejecutar(tmp_path, resultados):
+    script = re.sub(
+        r"\$\{\{\s*needs\.(\w+)\.result\s*\}\}",
+        lambda m: resultados.get(m.group(1), ""),
+        _script_del_resumen(),
+    )
+    script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
+    fichero = tmp_path / "resumen.sh"
+    fichero.write_text(script)
+    salida = tmp_path / "summary.md"
+    salida.write_text("")
+    proceso = subprocess.run(
+        ["bash", "-e", str(fichero)],
+        env={
+            "GITHUB_STEP_SUMMARY": str(salida),
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
+            "PATH": "/usr/bin:/bin",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proceso, salida.read_text()
 
 
 def _script_del_resumen() -> str:
@@ -128,3 +155,31 @@ def test_j1_the_summary_reads_exactly_the_jobs_it_needs():
     assert leidos == necesita
     assert necesita == set(_JOBS)
     assert necesita <= set(flujo["jobs"])
+
+
+_EN_LA_LISTA = [
+    ("unit_tests", "**Unit Tests**"),
+    ("integration_tests", "**Integration Tests**"),
+    ("security_tests", "**Security Tests**"),
+    ("gpg_verification", "**GPG Verification**"),
+    ("architecture", "**Architecture Contracts**"),
+    ("api_contract", "**API Contract**"),
+    ("owasp_semgrep", "**OWASP Top 10 (Semgrep)**"),
+    ("linting", "**Lint & format**"),
+    ("type_checking", "**Types**"),
+    ("security_checks", "**Security Checks**"),
+    ("dependency_review", "**Dependency Review**"),
+]
+
+
+@pytest.mark.parametrize(("job", "texto"), _EN_LA_LISTA, ids=[j for j, _ in _EN_LA_LISTA])
+def test_l1_a_cancelled_required_check_is_listed(tmp_path, job, texto):
+    """
+    GIVEN: Un check obligatorio cancelado y lo demás en verde
+    WHEN: Se ejecuta el resumen
+    THEN: Sale con 1 y ese check aparece en la lista de lo que no pasó
+    """
+    proceso, resumen = _ejecutar(tmp_path, {**_OK, job: "cancelled"})
+
+    assert proceso.returncode == 1
+    assert f"❌ {texto}" in resumen
