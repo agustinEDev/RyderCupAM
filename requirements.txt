@@ -16,7 +16,7 @@ starlette==1.7.0
 
 # Uvicorn - Servidor ASGI de alto rendimiento para ejecutar aplicaciones FastAPI
 # [standard] incluye extras: watchfiles (auto-reload), websockets, colorama (logs coloridos)
-uvicorn[standard]==0.30.0
+uvicorn[standard]==0.54.0
 
 
 # ================================
