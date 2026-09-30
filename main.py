@@ -22,7 +22,6 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E4
 from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
-from secure import Secure  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
@@ -90,6 +89,7 @@ from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
+from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
 )
@@ -220,27 +220,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 # ================================
 # SECURITY HEADERS MIDDLEWARE
 # ================================
-# Instanciar configuración de security headers
-secure_headers = Secure()
-
-
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     """
     Middleware para añadir Security Headers HTTP a todas las respuestas.
 
-    OWASP Top 10 2021 Coverage:
-    - A02: Cryptographic Failures (HSTS fuerza cifrado HTTPS)
-    - A05: Security Misconfiguration
+    La política (y el porqué de cada cabecera) vive en
+    src/shared/infrastructure/http/security_headers.py, con sus tests.
     """
     response = await call_next(request)
-    # Algunas rutas (p.ej. las imágenes de preset de avatar, assets estáticos
-    # inmutables) fijan su propio Cache-Control antes de llegar aquí; sin esto,
-    # el Cache-Control: no-store por defecto de `secure` lo pisaría siempre.
-    route_cache_control = response.headers.get("cache-control")
-    secure_headers.framework.fastapi(response)
-    if route_cache_control is not None:
-        response.headers["cache-control"] = route_cache_control
+    apply_security_headers(response)
     return response
 
 
