@@ -15,7 +15,7 @@
 # imagen, y Dependabot (ecosistema docker) abre una PR semanal cuando cambia el
 # digest de 3.12-slim, con su CI y su Trivy. Digest del índice multiplataforma:
 # vale para Render (amd64) y para el Kind en un Mac (arm64).
-FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
 
 # 2. Instalar dependencias del sistema
 # netcat-openbsd: Para verificar conexión con PostgreSQL (opcional en producción)
