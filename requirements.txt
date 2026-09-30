@@ -5,14 +5,14 @@
 # FastAPI - Framework web moderno para crear APIs REST
 # Características: validación automática, documentación auto-generada, type hints
 # Actualizado a 0.136.3 (compatible con starlette 1.x)
-fastapi==0.136.3
+fastapi==0.141.1
 
 # starlette - ASGI framework (dependencia transitiva de fastapi)
 # Pinado explícitamente a 1.3.1 para resolver:
 # - PYSEC-2026-161 (Host header validation, fixed in 1.0.1)
 # - CVE-2026-54282 (fixed in 1.3.1)
 # - CVE-2026-54283 (fixed in 1.3.1)
-starlette==1.3.1
+starlette==1.7.0
 
 # Uvicorn - Servidor ASGI de alto rendimiento para ejecutar aplicaciones FastAPI
 # [standard] incluye extras: watchfiles (auto-reload), websockets, colorama (logs coloridos)
@@ -50,7 +50,7 @@ asyncpg==0.31.0
 
 # greenlet - Librería para concurrencia ligera (micro-hilos)
 # Requerido por SQLAlchemy para puentear sus componentes internos síncronos en un entorno async
-greenlet==3.0.3
+greenlet==3.5.6
 
 
 # ================================
@@ -124,11 +124,11 @@ setuptools==84.0.0
 
 # idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
-idna==3.15
+idna==3.20
 
 # mako - Template library (dependencia transitiva de alembic)
 # Fijada explícitamente para resolver CVE-2026-44307
-mako==1.3.12
+mako==1.4.3
 
 # click - Command line interface creation kit (dependencia transitiva de uvicorn)
 # Fijada explícitamente para resolver SNYK-PYTHON-CLICK-16347201 (Command Injection)
@@ -170,7 +170,7 @@ httpx==0.28.1
 # Utilizado para integración con servicios externos (Mailgun, RFEG)
 # Actualizado a 2.33.0 para resolver:
 # - MEDIUM (CVSS 4.1): Insecure Temporary File (CWE-377)
-requests==2.33.0
+requests==2.34.2
 
 # tzdata - Base de datos de zonas horarias para `zoneinfo`
 # La anotación de un partido abre a una hora LOCAL del campo (BE #305), y
