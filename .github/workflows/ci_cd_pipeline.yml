@@ -35,8 +35,15 @@ on:
       - 'LICENSE'
   pull_request:
     branches: [main, develop]
-    # labeled/unlabeled: poner o quitar `api-breaking` vuelve a evaluar el contrato de la API
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # Sin labeled/unlabeled: Dependabot pone dos etiquetas al abrir, cada una
+    # lanzaba el pipeline entero y la concurrencia cancelaba las anteriores; los
+    # checks obligatorios cancelados dejaban la PR bloqueada (BE #444). El job
+    # del contrato lee `api-breaking` en el momento: tras ponerla, se relanza
+    # ese job a mano («Re-run»). Quitarla NO vuelve a poner el contrato en rojo
+    # hasta el siguiente push: aceptado (un solo desarrollador, decidido el 30
+    # sep 2026). Un workflow que relanzaba solo se descartó en la #445: esperar
+    # al pipeline y relanzarlo abría carreras
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 # Permissions for security scanning
@@ -1019,6 +1026,9 @@ jobs:
     # existe. Al moverlo aquí desde su workflow propio (#434), el push a develop
     # fallaba con `fatal: invalid reference: origin/`.
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read  # leer la etiqueta api-breaking en el momento
     env:
       OASDIFF_VERSION: '1.32.1'
 
@@ -1063,7 +1073,8 @@ jobs:
 
       - name: Check for breaking changes
         env:
-          ALLOW_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'api-breaking') }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set +e
           oasdiff breaking "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/revision.json" --fail-on ERR > report.txt
@@ -1091,11 +1102,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$CODE" -ne 0 ]; then
+            # Las etiquetas de AHORA, no las del evento: al relanzar el job tras
+            # poner la etiqueta, el evento sigue siendo el de antes. Solo se
+            # preguntan aquí, para que un fallo de la API no tumbe una PR sin
+            # cambios incompatibles; si falla, el paso falla (set -e)
+            ALLOW_BREAKING=$(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --json labels \
+              --jq '[.labels[].name] | index("api-breaking") != null')
             if [ "$ALLOW_BREAKING" = "true" ]; then
               echo "::warning::Breaking API changes accepted by the 'api-breaking' label. Plan both deploys back to back."
               exit 0
             fi
-            echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label and plan the release (backend first, both deploys back to back)."
+            echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label, re-run this job and plan the release (backend first, both deploys back to back)."
             exit 1
           fi
 
