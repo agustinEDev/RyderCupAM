@@ -59,7 +59,7 @@ greenlet==3.5.6
 
 # bcrypt - Librería para hashing de contraseñas
 # Implementa el algoritmo bcrypt, un estándar para el almacenamiento seguro de claves
-bcrypt==4.2.0
+bcrypt==5.0.0
 
 # PyJWT - Librería para crear y verificar tokens JWT (JSON Web Tokens)
 # Alternativa activamente mantenida a python-jose, elimina dependencias vulnerables
