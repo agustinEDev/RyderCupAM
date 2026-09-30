@@ -60,12 +60,14 @@ jobs:
   unit_tests:
     name: 🧪 Unit ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
-    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
-    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
-    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
-    # podría mergear código sin probar.
+    # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
+    # de la columna 1 FALLA, esta se salta: no se gastan minutos de tests en una PR
+    # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
+    # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
+    # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
+    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 15
     # 3.13 y 3.14 se prueban sin bloquear (30 sep 2026): antes de pasar la imagen
     # de producción a una versión nueva (Dependabot #423 propone 3.14) hay que
@@ -139,12 +141,14 @@ jobs:
     # de pasar la imagen de producción a esa versión (Dependabot #423).
     name: 🗄️ Integration ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
-    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
-    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
-    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
-    # podría mergear código sin probar.
+    # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
+    # de la columna 1 FALLA, esta se salta: no se gastan minutos de tests en una PR
+    # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
+    # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
+    # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
+    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
@@ -225,12 +229,14 @@ jobs:
     # de pasar la imagen de producción a esa versión (Dependabot #423).
     name: 🔐 Security tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
-    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
-    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
-    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
-    # podría mergear código sin probar.
+    # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
+    # de la columna 1 FALLA, esta se salta: no se gastan minutos de tests en una PR
+    # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
+    # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
+    # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
+    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
@@ -539,12 +545,14 @@ jobs:
   build:
     name: 🐳 Docker + Trivy
     runs-on: ubuntu-24.04
-    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
-    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
-    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
-    # podría mergear código sin probar.
+    # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
+    # de la columna 1 FALLA, esta se salta: no se gastan minutos de tests en una PR
+    # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
+    # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
+    # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
+    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 25
     permissions:
       contents: read
