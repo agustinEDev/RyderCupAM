@@ -97,7 +97,7 @@ jinja2==3.1.6
 # urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
 # Actualizado a 2.7.0 para resolver:
 # - PYSEC-2026-141, PYSEC-2026-142 (decompression bomb y unlimited decompression chain)
-urllib3==2.7.0
+urllib3==2.8.0
 
 # cryptography - Primitivas criptográficas de bajo nivel (dependencia transitiva)
 # Actualizado a 48.0.1 para resolver:
