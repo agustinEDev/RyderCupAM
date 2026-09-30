@@ -72,8 +72,8 @@ jobs:
     # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
     # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
     # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
-    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
-    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    # solo se salta (API contract o Dependency Review en un push) no cuenta como fallo.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 15
     # 3.13 y 3.14 se prueban sin bloquear (30 sep 2026): antes de pasar la imagen
@@ -153,8 +153,8 @@ jobs:
     # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
     # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
     # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
-    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
-    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    # solo se salta (API contract o Dependency Review en un push) no cuenta como fallo.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
@@ -241,8 +241,8 @@ jobs:
     # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
     # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
     # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
-    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
-    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    # solo se salta (API contract o Dependency Review en un push) no cuenta como fallo.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
@@ -370,73 +370,30 @@ jobs:
 
       - name: Run pip-audit (PyPA Official Audit)
         id: pip-audit-check
+        # Cada herramienta corre aunque falle la anterior: que Bandit se queje no
+        # debe esconder una dependencia vulnerable ni un secreto
+        if: ${{ !cancelled() }}
         run: |
-          echo "🔍 Running pip-audit - Official PyPA vulnerability scanner..."
-          echo "Using PyPI Advisory Database + OSV"
-
-          # Generate JSON report (exit code 1 if vulns found)
+          # Para aceptar una vulnerabilidad concreta (sin arreglo instalable, por
+          # ejemplo): `--ignore-vuln <ID>` en las dos llamadas, con el motivo aquí.
+          # El informe JSON lo decide la puerta; el markdown es para leerlo en el log.
+          # pip-audit sale con 1 si encuentra algo: quien decide es la puerta, que
+          # también falla (con 2) si el informe no llega a escribirse
           pip-audit --format json --output pip-audit-report.json || true
-
-          # Run pip-audit for screen output
-          # Exit codes: 0 = no vulns, 1 = vulns found
-          set +e
-          pip-audit --format markdown
-          PIP_AUDIT_EXIT=$?
-          set -e
-
-          # Parse results
-          # Count only CVEs that have a fix available (pragmatic approach)
-          CRITICAL_COUNT=$(jq '[.dependencies[].vulns[]] | map(select(.id | startswith("CVE"))) | map(select(.fix_versions | length > 0)) | length' pip-audit-report.json 2>/dev/null || echo "0")
-          # Count CVEs without fix (for monitoring only)
-          NO_FIX_COUNT=$(jq '[.dependencies[].vulns[]] | map(select(.id | startswith("CVE"))) | map(select(.fix_versions | length == 0)) | length' pip-audit-report.json 2>/dev/null || echo "0")
-          TOTAL_VULNS=$(jq '[.dependencies[].vulns[]] | length' pip-audit-report.json 2>/dev/null || echo "0")
-
-          echo "critical_vulnerabilities=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
-          echo "no_fix_vulnerabilities=$NO_FIX_COUNT" >> $GITHUB_OUTPUT
-          echo "total_vulnerabilities=$TOTAL_VULNS" >> $GITHUB_OUTPUT
-
-          echo ""
-          echo "📊 pip-audit Summary:"
-          echo "  Total vulnerabilities: $TOTAL_VULNS"
-          echo "  CVEs with fix available: $CRITICAL_COUNT"
-          echo "  CVEs without fix (monitoring): $NO_FIX_COUNT"
-
-          # Fail if critical vulnerabilities WITH FIX found
-          if [ "$CRITICAL_COUNT" -gt "0" ]; then
-            echo "  Status: ❌ CRITICAL VULNERABILITIES FOUND"
-            echo ""
-            echo "❌ SECURITY ALERT: Found $CRITICAL_COUNT CVEs with fixes available"
-            echo "This pipeline will FAIL to prevent vulnerable code from being deployed"
-            echo ""
-            echo "📋 Action Required:"
-            echo "  1. Review pip-audit-report.json artifact"
-            echo "  2. Update vulnerable packages: pip install <package>==<fixed-version>"
-            echo "  3. Run locally: pip-audit"
-            echo "  4. Commit updated requirements.txt"
-            exit 1
-          elif [ "$NO_FIX_COUNT" -gt "0" ]; then
-            echo "  Status: ⚠️ CVEs WITHOUT FIX DETECTED (not blocking)"
-            echo ""
-            echo "⚠️ INFO: Found $NO_FIX_COUNT CVEs without available fixes"
-            echo "These are monitored but do not block deployment"
-            echo "Review pip-audit-report.json for details and consider alternatives"
-          elif [ "$TOTAL_VULNS" -gt "0" ]; then
-            echo "  Status: ⚠️ VULNERABILITIES DETECTED (non-CVE)"
-            echo ""
-            echo "⚠️ WARNING: Found $TOTAL_VULNS non-CVE vulnerabilities"
-            echo "Consider updating these packages when possible"
-          else
-            echo "  Status: ✅ NO VULNERABILITIES"
-          fi
+          pip-audit --format markdown || true
+          # Cualquier identificador con arreglo bloquea (PYSEC, GHSA, CVE...): hasta el
+          # 30 sep 2026 solo contaba «CVE*» y dejaba pasar casi todo
+          python .github/scripts/pip_audit_gate.py pip-audit-report.json
 
       - name: Check for Secrets with Gitleaks
+        if: ${{ !cancelled() }}
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_NOTIFY_USER_LIST: ""
-        continue-on-error: true
+        # Bloquea: un secreto en un commit de la PR no entra (antes solo avisaba)
 
       - name: Generate Security Summary
         if: always()
@@ -446,15 +403,16 @@ jobs:
           echo "=========================================="
           echo ""
           echo "📦 Dependency Audit Results:"
-          echo "  pip-audit total: ${{ steps.pip-audit-check.outputs.total_vulnerabilities || '0' }}"
-          echo "  pip-audit critical (CVEs): ${{ steps.pip-audit-check.outputs.critical_vulnerabilities || '0' }}"
+          echo "  pip-audit total: ${{ steps.pip-audit-check.outputs.total_vulnerabilities || 'n/a' }}"
+          echo "  pip-audit with a fix (blocking): ${{ steps.pip-audit-check.outputs.fixable_vulnerabilities || 'n/a' }}"
+          echo "  pip-audit without a fix (warning): ${{ steps.pip-audit-check.outputs.unfixable_vulnerabilities || 'n/a' }}"
           echo ""
 
-          if [ "${{ steps.pip-audit-check.outputs.critical_vulnerabilities }}" == "0" ]; then
-            echo "✅ Dependency audit PASSED - No critical vulnerabilities"
-          else
-            echo "❌ Dependency audit FAILED - Critical vulnerabilities found"
-          fi
+          case "${{ steps.pip-audit-check.outcome }}" in
+            success) echo "✅ Dependency audit PASSED - No vulnerability with a fix" ;;
+            failure) echo "❌ Dependency audit FAILED - See the pip-audit step" ;;
+            *) echo "⏭️ Dependency audit did not run" ;;
+          esac
           echo "=========================================="
 
       - name: Upload Security Reports
@@ -557,8 +515,8 @@ jobs:
     # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
     # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
     # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
-    # solo se salta (API contract en un push, SBOM en una PR) no cuenta como fallo.
-    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    # solo se salta (API contract o Dependency Review en un push) no cuenta como fallo.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 25
     permissions:
@@ -634,14 +592,16 @@ jobs:
 
       - name: Run Trivy Container Security Scan
         id: trivy_scan
-        uses: aquasecurity/trivy-action@master
+        # Fijada por commit: una etiqueta de esta acción ya se ha secuestrado antes
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        # Solo informa (pestaña Security); la puerta es el paso de abajo
         continue-on-error: true
         with:
           image-ref: 'rydercupam:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
-          exit-code: '0'  # No bloquear pipeline por ahora
+          exit-code: '0'
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -649,13 +609,20 @@ jobs:
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: Run Trivy Scan (Table Output)
-        uses: aquasecurity/trivy-action@master
+      - name: Trivy gate (CRITICAL with a fix)
+        # Bloquea las CRÍTICAS que ya tienen arreglo (decidido el 30 sep 2026). Las
+        # que no lo tienen no se pueden arreglar subiendo nada: siguen en el SARIF
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: 'rydercupam:${{ github.sha }}'
           format: 'table'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '0'
+          severity: 'CRITICAL'
+          ignore-unfixed: true
+          # Solo vulnerabilidades: un «secreto» de Trivy en site-packages no debe
+          # tumbar el build (los secretos del repo los vigila Gitleaks). Para
+          # aceptar una vulnerabilidad concreta, un .trivyignore con el motivo
+          scanners: 'vuln'
+          exit-code: '1'
 
       - name: Generate Trivy Summary
         if: always()
@@ -665,7 +632,7 @@ jobs:
           echo "=========================================="
           echo ""
           echo "Scanned image: rydercupam:${{ github.sha }}"
-          echo "Severities checked: HIGH, CRITICAL"
+          echo "Reported (Security tab): HIGH, CRITICAL · Blocking: CRITICAL with a fix"
           echo ""
           echo "Trivy scans for:"
           echo "  - OS package vulnerabilities (apt, apk)"
@@ -1284,7 +1251,9 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
           # Determine overall status
-          if [ "$UNIT_TESTS" == "failure" ] || [ "$INTEGRATION_TESTS" == "failure" ] || [ "$SECURITY_TESTS" == "failure" ] || [ "$GPG_VERIFY" == "failure" ] || [ "$ARCHITECTURE" == "failure" ] || [ "$API_CONTRACT" == "failure" ] || [ "$OWASP" == "failure" ]; then
+          # Todo lo obligatorio cuenta, y un cancelado no es un aprobado
+          no_paso() { [ "$1" == "failure" ] || [ "$1" == "cancelled" ]; }
+          if no_paso "$UNIT_TESTS" || no_paso "$INTEGRATION_TESTS" || no_paso "$SECURITY_TESTS" || no_paso "$GPG_VERIFY" || no_paso "$ARCHITECTURE" || no_paso "$API_CONTRACT" || no_paso "$OWASP" || no_paso "$LINTING" || no_paso "$TYPE_CHECKING" || no_paso "$SECURITY_CHECKS" || no_paso "$DEPENDENCY_REVIEW"; then
             {
               echo "---"
               echo ""
@@ -1296,13 +1265,17 @@ jobs:
               echo ""
               echo "The following critical test suites did not pass:"
               echo ""
-              [ "$UNIT_TESTS" == "failure" ] && echo "- ❌ **Unit Tests** — Core business logic validation failed"
-              [ "$INTEGRATION_TESTS" == "failure" ] && echo "- ❌ **Integration Tests** — Database/API integration issues detected"
-              [ "$SECURITY_TESTS" == "failure" ] && echo "- ❌ **Security Tests** — Security vulnerabilities found (CSRF, XSS, SQLi, Auth)"
-              [ "$GPG_VERIFY" == "failure" ] && echo "- ❌ **GPG Verification** — Unsigned or invalid commit signatures detected"
-              [ "$ARCHITECTURE" == "failure" ] && echo "- ❌ **Architecture Contracts** — An import breaks a layer rule (see .importlinter)"
-              [ "$API_CONTRACT" == "failure" ] && echo "- ❌ **API Contract** — A breaking API change without the api-breaking label, or the comparison could not run (see the job log)"
-              [ "$OWASP" == "failure" ] && echo "- ❌ **OWASP Top 10 (Semgrep)** — Security finding in the code (see the Security tab)"
+              no_paso "$UNIT_TESTS" && echo "- ❌ **Unit Tests** — Core business logic validation failed"
+              no_paso "$INTEGRATION_TESTS" && echo "- ❌ **Integration Tests** — Database/API integration issues detected"
+              no_paso "$SECURITY_TESTS" && echo "- ❌ **Security Tests** — Security vulnerabilities found (CSRF, XSS, SQLi, Auth)"
+              no_paso "$GPG_VERIFY" && echo "- ❌ **GPG Verification** — Unsigned or invalid commit signatures detected"
+              no_paso "$ARCHITECTURE" && echo "- ❌ **Architecture Contracts** — An import breaks a layer rule (see .importlinter)"
+              no_paso "$API_CONTRACT" && echo "- ❌ **API Contract** — A breaking API change without the api-breaking label, or the comparison could not run (see the job log)"
+              no_paso "$OWASP" && echo "- ❌ **OWASP Top 10 (Semgrep)** — Security finding in the code (see the Security tab)"
+              no_paso "$LINTING" && echo "- ❌ **Lint & format** — Ruff (\`ruff check src/ tests/\`, \`ruff format --check\`)"
+              no_paso "$TYPE_CHECKING" && echo "- ❌ **Types** — mypy"
+              no_paso "$SECURITY_CHECKS" && echo "- ❌ **Security Checks** — Bandit, pip-audit (a vulnerability with a fix) or Gitleaks"
+              no_paso "$DEPENDENCY_REVIEW" && echo "- ❌ **Dependency Review** — A new dependency with a vulnerability or a license outside the allow-list"
               echo ""
               echo "### 📋 Action Required"
               echo ""
@@ -1335,7 +1308,7 @@ jobs:
               echo "**Common Causes:**"
               echo "- ❌ Dockerfile syntax errors"
               echo "- ❌ Missing dependencies in requirements.txt"
-              echo "- ❌ Trivy detected HIGH/CRITICAL vulnerabilities"
+              echo "- ❌ Trivy detected a CRITICAL vulnerability with a fix"
               echo "- ❌ Alembic migrations validation failed"
               echo ""
               echo "### 📋 Action Required"
@@ -1346,22 +1319,19 @@ jobs:
               echo "4. 🔄 **Push Fix**: Commit changes and re-trigger pipeline"
             } >> $GITHUB_STEP_SUMMARY
             exit 1
-          elif [ "$BUILD" == "skipped" ]; then
+          elif [ "$BUILD" == "skipped" ] || [ "$BUILD" == "cancelled" ]; then
+            # Tests y build solo se saltan si algo de la primera columna no pasó:
+            # sin ellos no hay nada que dar por bueno
             {
               echo "---"
               echo ""
-              echo "## ⚠️ Pipeline Status: **PARTIAL SUCCESS**"
+              echo "## ❌ Pipeline Status: **FAILED**"
               echo ""
-              echo "![Status](https://img.shields.io/badge/pipeline-PARTIAL-yellow?style=for-the-badge)"
+              echo "![Status](https://img.shields.io/badge/pipeline-FAILED-red?style=for-the-badge)"
               echo ""
-              echo "### ⏭️ Build Skipped"
+              echo "### ⏭️ Tests and build did not run"
               echo ""
-              echo "Docker build was skipped because quality checks failed."
-              echo ""
-              echo "**Failed Checks:**"
-              [ "$LINTING" == "failure" ] && echo "- ❌ **Linting** — Code style issues detected (Ruff)"
-              [ "$TYPE_CHECKING" == "failure" ] && echo "- ❌ **Type Checking** — Type annotation errors (Mypy)"
-              [ "$SECURITY_CHECKS" == "failure" ] && echo "- ❌ **Security Checks** — Dependency vulnerabilities (pip-audit)"
+              echo "They were skipped or cancelled: the run was cancelled, or a check in the first column did not finish."
               echo ""
               echo "### 📋 Action Required"
               echo ""
@@ -1370,9 +1340,9 @@ jobs:
               echo "3. 🔒 **Update Dependencies**: Check the \`pip-audit\` report"
               echo "4. ✅ **Verify Locally**: Ensure all checks pass before pushing"
               echo ""
-              echo "> ⚠️ **Note**: Build will run automatically once quality checks pass."
+              echo "> ⚠️ **Note**: Tests and build run again once the first column passes."
             } >> $GITHUB_STEP_SUMMARY
-            exit 0
+            exit 1
           else
             {
               echo "---"
@@ -1396,7 +1366,7 @@ jobs:
               echo "**Security Scans:**"
               echo "- ✅ **Dependency Audit** — No critical CVEs (pip-audit)"
               echo "- ✅ **Code Analysis** — Clean SAST scan (CodeQL)"
-              echo "- ✅ **Container Scan** — No HIGH/CRITICAL vulnerabilities (Trivy)"
+              echo "- ✅ **Container Scan** — No CRITICAL vulnerability with a fix (Trivy)"
               echo "- ✅ **SBOM Generated** — Supply chain transparency (CycloneDX)"
               echo ""
               echo "---"
