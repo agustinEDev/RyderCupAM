@@ -58,8 +58,14 @@ jobs:
   # Coverage: XML + HTML reports
 
   unit_tests:
-    name: 🧪 Unit Tests (Python ${{ matrix.python-version }}${{ matrix.experimental && ' · experimental' || '' }})
+    name: 🧪 Unit ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
+    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
+    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
+    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
+    # podría mergear código sin probar.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    if: ${{ !cancelled() }}
     timeout-minutes: 15
     # 3.13 y 3.14 se prueban sin bloquear (30 sep 2026): antes de pasar la imagen
     # de producción a una versión nueva (Dependabot #423 propone 3.14) hay que
@@ -131,8 +137,14 @@ jobs:
     # 3.12 conserva el nombre exacto (es el que miran los checks obligatorios);
     # 3.14 se prueba sin bloquear, en la misma base de datos de servicio, antes
     # de pasar la imagen de producción a esa versión (Dependabot #423).
-    name: 🗄️ Integration Tests${{ matrix.experimental && ' (Python 3.14 · experimental)' || '' }}
+    name: 🗄️ Integration ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
+    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
+    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
+    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
+    # podría mergear código sin probar.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    if: ${{ !cancelled() }}
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
@@ -211,8 +223,14 @@ jobs:
     # 3.12 conserva el nombre exacto (es el que miran los checks obligatorios);
     # 3.14 se prueba sin bloquear, en la misma base de datos de servicio, antes
     # de pasar la imagen de producción a esa versión (Dependabot #423).
-    name: 🔐 Security Tests${{ matrix.experimental && ' (Python 3.14 · experimental)' || '' }}
+    name: 🔐 Security tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
+    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
+    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
+    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
+    # podría mergear código sin probar.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    if: ${{ !cancelled() }}
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
@@ -442,7 +460,7 @@ jobs:
   # Verifica calidad de código con Ruff
 
   linting:
-    name: 📝 Code Quality
+    name: 📝 Lint & format
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -482,7 +500,7 @@ jobs:
   # Verifica consistencia de tipos con Mypy
 
   type_checking:
-    name: 🔬 Type Checking
+    name: 🔬 Types (mypy)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -519,8 +537,14 @@ jobs:
   # Trivy: Escanea vulnerabilidades en imagen Docker (OS + Python packages)
 
   build:
-    name: 🐳 Build Docker
+    name: 🐳 Docker + Trivy
     runs-on: ubuntu-24.04
+    # Columna 2 del gráfico: espera a la de análisis estático SOLO para ordenarlo
+    # (30 sep 2026). Se ejecuta siempre, aunque algo de la columna 1 falle o se
+    # salte: un check obligatorio «saltado» cuenta como aprobado en GitHub, y se
+    # podría mergear código sin probar.
+    needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification, sbom_generation]
+    if: ${{ !cancelled() }}
     timeout-minutes: 25
     permissions:
       contents: read
@@ -701,7 +725,7 @@ jobs:
   # Ejecuta solo en main/develop para evitar overhead en feature branches
 
   sbom_generation:
-    name: 📦 SBOM Generation
+    name: 📦 SBOM
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -834,7 +858,7 @@ jobs:
   # Ejecuta en todos los pushes y PRs (security critical)
 
   gpg_verification:
-    name: 🔏 GPG Signature Verification
+    name: 🔏 Signed commits
     runs-on: ubuntu-24.04
     timeout-minutes: 5
 
@@ -959,7 +983,7 @@ jobs:
   # gráfico del pipeline y en su resumen. Ver .importlinter y la etiqueta api-breaking.
 
   architecture:
-    name: 🏛️ Architecture Contracts
+    name: 🏛️ Architecture
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -980,7 +1004,7 @@ jobs:
         run: lint-imports
 
   api_contract:
-    name: 📜 API Contract
+    name: 📜 API contract
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Solo en PRs: compara con la rama base (github.base_ref), que en un push no
@@ -1072,7 +1096,7 @@ jobs:
   # código estaba limpio) y sube el SARIF a la pestaña Security. Complementa a
   # CodeQL y a Bandit.
   owasp_semgrep:
-    name: 🛡️ OWASP Top 10 (Semgrep)
+    name: 🛡️ OWASP (Semgrep)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
