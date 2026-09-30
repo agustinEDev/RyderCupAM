@@ -237,9 +237,7 @@ class TestQueSePublica:
             tarjeta[hoyo] = PAR - 1
         match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
 
-        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
-            str(match.id.value)
-        )
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
 
         eventos = await _feed_de(social_uow, user)
         birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
@@ -257,9 +255,7 @@ class TestQueSePublica:
         tarjeta[7] = 1
         match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
 
-        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
-            str(match.id.value)
-        )
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
 
         tipos = [e.type for e in await _feed_de(social_uow, user)]
         assert ActivityEventType.HOLE_IN_ONE in tipos
@@ -318,14 +314,12 @@ class TestQueSePublica:
         match = await _played_match(qm_uow, course, user)
         differentials = _DifferentialsStub({str(user.id.value): 12.4})
 
-        await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow, differentials
-        ).execute(str(match.id.value), best_differential_before={str(user.id.value): 15.1})
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
+            str(match.id.value), best_differential_before={str(user.id.value): 15.1}
+        )
 
         records = [
-            e
-            for e in await _feed_de(social_uow, user)
-            if e.type == ActivityEventType.PERSONAL_BEST
+            e for e in await _feed_de(social_uow, user) if e.type == ActivityEventType.PERSONAL_BEST
         ]
         assert len(records) == 1
         assert records[0].payload["differential"] == "12.4"
@@ -340,9 +334,9 @@ class TestQueSePublica:
         match = await _played_match(qm_uow, course, user)
         differentials = _DifferentialsStub({str(user.id.value): 15.1})
 
-        await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow, differentials
-        ).execute(str(match.id.value), best_differential_before={str(user.id.value): 15.1})
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
+            str(match.id.value), best_differential_before={str(user.id.value): 15.1}
+        )
 
         tipos = [e.type for e in await _feed_de(social_uow, user)]
         assert ActivityEventType.PERSONAL_BEST not in tipos
@@ -359,9 +353,9 @@ class TestQueSePublica:
         match = await _played_match(qm_uow, course, user)
         differentials = _DifferentialsStub({str(user.id.value): 15.1})
 
-        await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow, differentials
-        ).execute(str(match.id.value), best_differential_before={str(user.id.value): None})
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
+            str(match.id.value), best_differential_before={str(user.id.value): None}
+        )
 
         tipos = [e.type for e in await _feed_de(social_uow, user)]
         assert ActivityEventType.PERSONAL_BEST not in tipos
@@ -388,9 +382,7 @@ class TestQuienPublica:
             others=[QuickMatchParticipant.for_user(amigo.id)],
         )
 
-        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
-            str(match.id.value)
-        )
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
 
         assert [e.type for e in await _feed_de(social_uow, creador)].count(
             ActivityEventType.BIRDIE
@@ -407,9 +399,9 @@ class TestQuienPublica:
         course = await _create_course(golf_course_uow, callado.id)
         match = await _played_match(qm_uow, course, callado)
 
-        publicados = await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow
-        ).execute(str(match.id.value))
+        publicados = await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(match.id.value)
+        )
 
         assert publicados == 0
         assert await _feed_de(social_uow, callado) == []
@@ -428,9 +420,9 @@ class TestQuienPublica:
         )
         match = await _played_match(qm_uow, course, user, others=[invitado])
 
-        publicados = await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow
-        ).execute(str(match.id.value))
+        publicados = await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(match.id.value)
+        )
 
         assert publicados == 1  # solo el NEW_COURSE del registrado
 
@@ -449,9 +441,9 @@ class TestQueNoSePublica:
         tarjeta[3] = PAR - 1
         match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
 
-        publicados = await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow
-        ).execute(str(match.id.value))
+        publicados = await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(match.id.value)
+        )
 
         assert publicados == 0
 
@@ -465,9 +457,7 @@ class TestQueNoSePublica:
         tarjeta[2] = PAR - 1
         match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
 
-        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
-            str(match.id.value)
-        )
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
 
         eventos = await _feed_de(social_uow, user)
         birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
@@ -485,9 +475,9 @@ class TestQueNoSePublica:
         course = await _create_course(golf_course_uow, user.id)
         match = await _played_match(qm_uow, course, user, complete=False)
 
-        publicados = await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow
-        ).execute(str(match.id.value))
+        publicados = await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(match.id.value)
+        )
 
         assert publicados == 0
 
@@ -495,9 +485,9 @@ class TestQueNoSePublica:
         self, social_uow, qm_uow, golf_course_uow, user_uow
     ):
         """Given un id que no existe / When se publica / Then devuelve cero sin fallar."""
-        publicados = await _use_case(
-            social_uow, qm_uow, golf_course_uow, user_uow
-        ).execute(str(uuid4()))
+        publicados = await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(uuid4())
+        )
 
         assert publicados == 0
 
@@ -588,9 +578,7 @@ class TestParPorBarra:
             tee_gender=Gender.FEMALE,
         )
 
-        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
-            str(match.id.value)
-        )
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
 
         eventos = await _feed_de(social_uow, user)
         birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]

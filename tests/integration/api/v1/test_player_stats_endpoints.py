@@ -259,9 +259,7 @@ class TestScoreDifferentials:
     """
 
     @pytest.mark.asyncio
-    async def test_a_round_from_a_known_tee_yields_its_differential(
-        self, client: AsyncClient
-    ):
+    async def test_a_round_from_a_known_tee_yields_its_differential(self, client: AsyncClient):
         """
         18 hoyos a 5 golpes, sin hándicap en el perfil, son 90 golpes ajustados
         (ningún hoyo llega a doble bogey neto).
@@ -275,9 +273,7 @@ class TestScoreDifferentials:
             client, "stats_diff@test.com", "P@ssw0rd123!", "Diff", "Player"
         )
         course_id = await _approved_golf_course(client, admin, player)
-        await _played_medal_match(
-            client, player, course_id, tee_color="YELLOW", tee_gender="MALE"
-        )
+        await _played_medal_match(client, player, course_id, tee_color="YELLOW", tee_gender="MALE")
 
         set_auth_cookies(client, player["cookies"])
         body = (await client.get("/api/v1/users/me/stats")).json()
@@ -291,9 +287,7 @@ class TestScoreDifferentials:
         assert body["handicap_trend"] is None
 
     @pytest.mark.asyncio
-    async def test_a_round_without_a_tee_counts_but_has_no_differential(
-        self, client: AsyncClient
-    ):
+    async def test_a_round_without_a_tee_counts_but_has_no_differential(self, client: AsyncClient):
         """
         Las partidas creadas antes de que el frontend exigiera el tee siguen
         contando para la media. Los dos contadores dejan verlo.

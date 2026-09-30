@@ -42,9 +42,7 @@ ACCENTS, STOPWORDS, ACRONYMS, LOWERCASE_PARTICLES = _load_name_tables()
 def strip_accents(text: str) -> str:
     """Quita las tildes de un texto, para comparar sin depender de ellas."""
     return "".join(
-        char
-        for char in unicodedata.normalize("NFD", text)
-        if unicodedata.category(char) != "Mn"
+        char for char in unicodedata.normalize("NFD", text) if unicodedata.category(char) != "Mn"
     )
 
 

@@ -80,9 +80,7 @@ def distance_in_meters(
     lat1, lon1, lat2, lon2 = map(
         radians, (first_latitude, first_longitude, second_latitude, second_longitude)
     )
-    half_chord = (
-        sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((lon2 - lon1) / 2) ** 2
-    )
+    half_chord = sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((lon2 - lon1) / 2) ** 2
     return 2 * EARTH_RADIUS_METERS * asin(sqrt(half_chord))
 
 

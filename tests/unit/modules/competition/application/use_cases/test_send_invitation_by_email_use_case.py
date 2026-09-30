@@ -85,7 +85,6 @@ class TestSendInvitationByEmailUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-
         return created
 
     async def _create_draft_competition(self, comp_uow, creator_id):
@@ -162,11 +161,14 @@ class TestSendInvitationByEmailUseCase:
         admin = await self._create_user(user_uow, email="admin@test.com")
         created = await self._create_draft_competition(comp_uow, creator.id)
         uc = SendInvitationByEmailUseCase(comp_uow, user_uow)
-        result = await uc.execute(SendInvitationByEmailRequestDTO(
+        result = await uc.execute(
+            SendInvitationByEmailRequestDTO(
                 competition_id=created.id,
                 inviter_id=admin.id.value,
                 invitee_email="invitee@test.com",
-            ), is_admin=True)
+            ),
+            is_admin=True,
+        )
 
         assert result.status == "PENDING"
         assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE

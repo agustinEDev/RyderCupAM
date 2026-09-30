@@ -129,9 +129,7 @@ async def test_does_not_let_work_pile_up_in_the_executor_queue():
     def blocked():
         release.wait(timeout=5)
 
-    tasks = [
-        asyncio.create_task(run_bcrypt(blocked)) for _ in range(MAX_CONCURRENCY * 10)
-    ]
+    tasks = [asyncio.create_task(run_bcrypt(blocked)) for _ in range(MAX_CONCURRENCY * 10)]
     try:
         await asyncio.sleep(0.2)  # deja que todas intenten entrar
         queued = _executor._work_queue.qsize()

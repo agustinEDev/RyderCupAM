@@ -73,9 +73,7 @@ class EnrollmentOpeningService:
         return datetime.combine(dia, time(0, 0), tzinfo=zone)
 
     @staticmethod
-    def is_due(
-        start_date: date | None, days_before: int | None, timezone: str | None
-    ) -> bool:
+    def is_due(start_date: date | None, days_before: int | None, timezone: str | None) -> bool:
         """
         Indica si ya paso la hora de abrir.
 

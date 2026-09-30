@@ -265,4 +265,3 @@ class TestResolveNames:
         assert GoogleOAuthService._resolve_names(
             {"given_name": "  Ada  ", "family_name": "  Lovelace  "}, "ada@example.com"
         ) == ("Ada", "Lovelace")
-

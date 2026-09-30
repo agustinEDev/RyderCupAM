@@ -50,9 +50,7 @@ class TestSetupModeEnLaCompeticion:
     def test_se_elige_al_crearla(self, modo):
         assert _competicion(setup_mode=modo).setup_mode == modo
 
-    @pytest.mark.parametrize(
-        "estado", [CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE]
-    )
+    @pytest.mark.parametrize("estado", [CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE])
     def test_se_cambia_mientras_las_inscripciones_siguen_abiertas(self, estado):
         competicion = _competicion(status=estado)
 
@@ -156,4 +154,3 @@ class TestElModoMandaSobreElReparto:
         competicion.update_info(team_assignment=TeamAssignment.AUTOMATIC)
 
         assert competicion.team_assignment == TeamAssignment.AUTOMATIC
-

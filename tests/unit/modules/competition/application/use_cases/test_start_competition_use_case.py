@@ -34,7 +34,6 @@ from tests.unit.modules.competition.application.use_cases.helpers import USUARIO
 pytestmark = pytest.mark.asyncio
 
 
-
 async def _con_una_sesion(uow, competition_id) -> None:
     """Una sesión: sin ninguna no hay torneo que iniciar (#710, 25 sep)."""
     async with uow:
@@ -47,6 +46,7 @@ async def _con_una_sesion(uow, competition_id) -> None:
                 match_format=MatchFormat.SINGLES,
             )
         )
+
 
 class TestStartCompetitionUseCase:
     """Suite de tests para el caso de uso StartCompetitionUseCase."""

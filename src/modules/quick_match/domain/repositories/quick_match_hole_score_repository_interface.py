@@ -22,9 +22,7 @@ class QuickMatchHoleScoreRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(
-        self, hole_score_id: QuickMatchHoleScoreId
-    ) -> QuickMatchHoleScore | None:
+    async def find_by_id(self, hole_score_id: QuickMatchHoleScoreId) -> QuickMatchHoleScore | None:
         pass
 
     @abstractmethod

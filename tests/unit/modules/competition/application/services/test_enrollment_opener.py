@@ -99,9 +99,7 @@ class TestAbrirLasQueToquen:
         await _guardar(uow, toca, espera, sin_programar)
 
         async with uow:
-            await EnrollmentOpener.abrir_las_que_toquen(
-                [toca, espera, sin_programar], uow, zona
-            )
+            await EnrollmentOpener.abrir_las_que_toquen([toca, espera, sin_programar], uow, zona)
 
         assert toca.status == CompetitionStatus.ACTIVE
         assert espera.status == CompetitionStatus.DRAFT

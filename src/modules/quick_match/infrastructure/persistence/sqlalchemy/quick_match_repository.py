@@ -128,9 +128,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_for_user(
-        self, user_id: UserId, status: QuickMatchStatus | None = None
-    ) -> int:
+    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
         conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
         if status is not None:
             conditions.append(QuickMatch._status == status)
@@ -148,9 +146,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
     async def exists_created_by(self, creator_id: UserId) -> bool:
         """True si el usuario ha creado alguna partida rapida."""
         stmt = (
-            select(func.count())
-            .select_from(QuickMatch)
-            .where(QuickMatch._creator_id == creator_id)
+            select(func.count()).select_from(QuickMatch).where(QuickMatch._creator_id == creator_id)
         )
         result = await self._session.execute(stmt)
         return (result.scalar() or 0) > 0

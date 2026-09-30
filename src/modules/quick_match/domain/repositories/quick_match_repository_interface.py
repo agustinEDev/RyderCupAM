@@ -61,9 +61,7 @@ class QuickMatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def count_for_user(
-        self, user_id: UserId, status: QuickMatchStatus | None = None
-    ) -> int:
+    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
         pass
 
     @abstractmethod

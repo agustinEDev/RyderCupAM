@@ -450,9 +450,7 @@ class Competition:
         que no puede es repartirlos la aplicacion a espaldas del organizador.
         """
         return (
-            TeamAssignment.AUTOMATIC
-            if setup_mode == SetupMode.AUTOMATIC
-            else TeamAssignment.MANUAL
+            TeamAssignment.AUTOMATIC if setup_mode == SetupMode.AUTOMATIC else TeamAssignment.MANUAL
         )
 
     def accepts_enrollment_requests(self) -> bool:

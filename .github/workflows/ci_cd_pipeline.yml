@@ -437,9 +437,6 @@ jobs:
         run: |
           echo "📝 Checking code formatting..."
           ruff format --check src/ tests/
-        # Todavía no bloquea: 118 ficheros sin formatear en develop (28 sep 2026).
-        # Pasa a bloquear en cuanto una PR solo de formato los deje a cero.
-        continue-on-error: true
 
   # ================================
   # JOB 6: TYPE CHECKING

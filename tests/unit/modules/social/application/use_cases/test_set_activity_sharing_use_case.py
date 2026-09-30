@@ -92,9 +92,7 @@ async def test_apagarlo_no_toca_lo_de_los_demas(user_uow, social_uow):
     await _publica(social_uow, ana, "match-1")
     await _publica(social_uow, luis, "match-2")
 
-    await SetActivitySharingUseCase(user_uow, social_uow).execute(
-        str(ana.id.value), enabled=False
-    )
+    await SetActivitySharingUseCase(user_uow, social_uow).execute(str(ana.id.value), enabled=False)
 
     assert await _feed_de(social_uow, ana) == []
     assert len(await _feed_de(social_uow, luis)) == 1
@@ -104,9 +102,7 @@ async def test_apagarlo_deja_el_interruptor_guardado(user_uow, social_uow):
     """Given un jugador / When lo apaga / Then su perfil lo recuerda."""
     user = await _create_user(user_uow)
 
-    await SetActivitySharingUseCase(user_uow, social_uow).execute(
-        str(user.id.value), enabled=False
-    )
+    await SetActivitySharingUseCase(user_uow, social_uow).execute(str(user.id.value), enabled=False)
 
     async with user_uow:
         guardado = await user_uow.users.find_by_id(user.id)
@@ -155,6 +151,4 @@ async def test_lo_retirado_no_vuelve_al_encenderlo_de_nuevo(user_uow, social_uow
 async def test_un_jugador_que_no_existe_falla(user_uow, social_uow):
     """Given un id que no existe / When se cambia el interruptor / Then falla."""
     with pytest.raises(UserNotFoundError):
-        await SetActivitySharingUseCase(user_uow, social_uow).execute(
-            str(uuid4()), enabled=False
-        )
+        await SetActivitySharingUseCase(user_uow, social_uow).execute(str(uuid4()), enabled=False)

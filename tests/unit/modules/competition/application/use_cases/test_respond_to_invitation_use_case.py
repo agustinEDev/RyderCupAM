@@ -94,7 +94,6 @@ class TestRespondToInvitationUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-
         return created
 
     async def _create_pending_invitation(
@@ -312,9 +311,7 @@ class TestRespondToInvitationUseCase:
 
         assert result.status == "DECLINED"
 
-    async def test_the_response_names_the_inviter_as_in_this_competition(
-        self, comp_uow, user_uow
-    ):
+    async def test_the_response_names_the_inviter_as_in_this_competition(self, comp_uow, user_uow):
         """La misma invitación que «Mis invitaciones»: el mismo nombre (#710)."""
         creator = await self._create_user(
             user_uow, email="rc@test.com", first_name="Agustin", last_name="Estevez"

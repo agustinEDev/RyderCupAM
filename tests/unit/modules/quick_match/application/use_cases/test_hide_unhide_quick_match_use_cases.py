@@ -58,9 +58,7 @@ class TestHideQuickMatchUseCase:
 
         use_case = HideQuickMatchUseCase(qm_uow, user_uow)
         await use_case.execute(
-            HideQuickMatchRequestDTO(
-                quick_match_id=qm.id.value, requester_id=other.user_id.value
-            )
+            HideQuickMatchRequestDTO(quick_match_id=qm.id.value, requester_id=other.user_id.value)
         )
 
         stored = await qm_uow.quick_matches.find_by_id(qm.id)

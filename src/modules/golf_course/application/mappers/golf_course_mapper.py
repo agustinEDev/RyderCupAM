@@ -52,9 +52,7 @@ class GolfCourseMapper:
                 identifier=tee_dto.identifier,
                 course_rating=tee_dto.course_rating,
                 slope_rating=tee_dto.slope_rating,
-                holes=(
-                    GolfCourseMapper.to_domain_holes(tee_dto.holes) if tee_dto.holes else []
-                ),
+                holes=(GolfCourseMapper.to_domain_holes(tee_dto.holes) if tee_dto.holes else []),
             )
             for tee_dto in tee_dtos
         ]

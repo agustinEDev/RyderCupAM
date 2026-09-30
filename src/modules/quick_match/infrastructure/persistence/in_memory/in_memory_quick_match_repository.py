@@ -79,9 +79,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
 
-    async def count_for_user(
-        self, user_id: UserId, status: QuickMatchStatus | None = None
-    ) -> int:
+    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
         return sum(
             1 for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
         )

@@ -40,9 +40,7 @@ class ActivityEventTypeType(sqlalchemy.types.TypeDecorator[ActivityEventType]):
             return None
         return value.value
 
-    def process_result_value(
-        self, value: str | None, dialect: Any
-    ) -> ActivityEventType | None:
+    def process_result_value(self, value: str | None, dialect: Any) -> ActivityEventType | None:
         if value is None:
             return None
         return ActivityEventType(value)
@@ -77,9 +75,7 @@ activity_events_table = Table(
     # arriba empieza por user_id, asi que no le sirve
     Index("ix_activity_events_source_match", "source_match_id"),
     # Reprocesar una partida no debe duplicar sus entradas
-    UniqueConstraint(
-        "user_id", "source_match_id", "type", name="uq_activity_events_match_type"
-    ),
+    UniqueConstraint("user_id", "source_match_id", "type", name="uq_activity_events_match_type"),
 )
 
 

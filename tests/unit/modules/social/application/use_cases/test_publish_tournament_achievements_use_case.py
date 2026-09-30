@@ -294,9 +294,7 @@ async def test_el_primer_torneo_se_publica_una_sola_vez(
     player = await _create_user(user_uow)
     rival = await _create_user(user_uow)
     course = await _create_course(golf_course_uow, player.id)
-    competition, _ = await _completed_tournament(
-        competition_uow, course, player, rival, matches=3
-    )
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival, matches=3)
 
     await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
         str(competition.id.value)
@@ -330,9 +328,7 @@ async def test_cada_partido_lleva_su_propia_entrada(
         str(competition.id.value)
     )
 
-    birdies = [
-        e for e in await _feed_de(social_uow, player) if e.type == ActivityEventType.BIRDIE
-    ]
+    birdies = [e for e in await _feed_de(social_uow, player) if e.type == ActivityEventType.BIRDIE]
     assert len(birdies) == 2
     assert {e.source_match_id for e in birdies} == {str(p.id.value) for p in partidos}
 
@@ -381,9 +377,9 @@ async def test_un_torneo_sin_cerrar_no_publica(
         competition_uow, course, player, rival, complete=False
     )
 
-    publicados = await _use_case(
-        social_uow, competition_uow, golf_course_uow, user_uow
-    ).execute(str(competition.id.value))
+    publicados = await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
 
     assert publicados == 0
 
@@ -401,9 +397,9 @@ async def test_una_tarjeta_incompleta_no_llega_al_feed(
         competition_uow, course, player, rival, scores_by_hole=tarjeta
     )
 
-    publicados = await _use_case(
-        social_uow, competition_uow, golf_course_uow, user_uow
-    ).execute(str(competition.id.value))
+    publicados = await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
 
     assert publicados == 0
 
@@ -412,9 +408,9 @@ async def test_un_torneo_que_no_existe_no_rompe(
     social_uow, competition_uow, golf_course_uow, user_uow
 ):
     """Given un id que no existe / When se publica / Then devuelve cero sin fallar."""
-    publicados = await _use_case(
-        social_uow, competition_uow, golf_course_uow, user_uow
-    ).execute(str(uuid4()))
+    publicados = await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(uuid4())
+    )
 
     assert publicados == 0
 

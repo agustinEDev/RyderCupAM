@@ -56,7 +56,9 @@ class TestSetAvatarPresetUseCase:
         use_case = SetAvatarPresetUseCase(uow)
 
         with pytest.raises(UserNotFoundError):
-            await use_case.execute(str(UserId.generate().value), SetAvatarPresetRequestDTO(preset_id=1))
+            await use_case.execute(
+                str(UserId.generate().value), SetAvatarPresetRequestDTO(preset_id=1)
+            )
 
     async def test_dto_rejects_preset_id_out_of_range(self):
         with pytest.raises(ValidationError):

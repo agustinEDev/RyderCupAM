@@ -276,12 +276,10 @@ class TestFoursomes:
         )
 
         assert (
-            result[a1.participant_id].strokes_by_hole
-            == result[a2.participant_id].strokes_by_hole
+            result[a1.participant_id].strokes_by_hole == result[a2.participant_id].strokes_by_hole
         )
         assert (
-            result[b1.participant_id].strokes_by_hole
-            == result[b2.participant_id].strokes_by_hole
+            result[b1.participant_id].strokes_by_hole == result[b2.participant_id].strokes_by_hole
         )
         # Solo recibe el equipo de mayor CH promedio
         assert result[a1.participant_id].strokes_by_hole == {}
@@ -301,7 +299,10 @@ class TestFourball:
 
         result = service.allocate(
             participants=players,
-            handicaps={p.participant_id: Decimal(str(hi)) for p, hi in zip(players, [5, 15, 20, 25], strict=True)},
+            handicaps={
+                p.participant_id: Decimal(str(hi))
+                for p, hi in zip(players, [5, 15, 20, 25], strict=True)
+            },
             tee_ratings={("YELLOW", "MALE"): MEIS_AMARILLAS_M},
             holes_by_stroke_index=_holes_by_stroke_index(),
             match_format=MatchFormat.FOURBALL,

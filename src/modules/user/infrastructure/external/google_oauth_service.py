@@ -139,4 +139,3 @@ class GoogleOAuthService(IGoogleOAuthService):
         # ("@dominio") dejaría el mismo hueco que se está cerrando
         fallback = email.split("@", 1)[0].strip() or "Usuario"
         return given or fallback, family or fallback
-

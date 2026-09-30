@@ -115,12 +115,8 @@ class ScoringBreakdownCalculator:
             gross_distribution=self._distribution(hole.gross_to_par for hole in holes),
             net_distribution=self._distribution(hole.net_to_par for hole in holes),
             by_par=self._by_par(holes),
-            front_nine=self._nine(
-                [hole for hole in holes if hole.number <= FRONT_NINE_LAST_HOLE]
-            ),
-            back_nine=self._nine(
-                [hole for hole in holes if hole.number > FRONT_NINE_LAST_HOLE]
-            ),
+            front_nine=self._nine([hole for hole in holes if hole.number <= FRONT_NINE_LAST_HOLE]),
+            back_nine=self._nine([hole for hole in holes if hole.number > FRONT_NINE_LAST_HOLE]),
             by_course=self._by_course(rounds),
         )
 
@@ -186,9 +182,7 @@ class ScoringBreakdownCalculator:
         for round_ in rounds:
             if round_.golf_course_id is None or not round_.holes:
                 continue
-            _, vueltas = por_campo.setdefault(
-                round_.golf_course_id, (round_.golf_course_name, [])
-            )
+            _, vueltas = por_campo.setdefault(round_.golf_course_id, (round_.golf_course_name, []))
             vueltas.append(cls._round_to_par_over_eighteen(round_.holes))
 
         return sorted(

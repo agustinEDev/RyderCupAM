@@ -23,9 +23,7 @@ from src.shared.domain.value_objects.gender import Gender
 
 def _card(stroke_indices, pars=None):
     pars = pars or [4] * 18
-    return [
-        Hole(number=i + 1, par=pars[i], stroke_index=stroke_indices[i]) for i in range(18)
-    ]
+    return [Hole(number=i + 1, par=pars[i], stroke_index=stroke_indices[i]) for i in range(18)]
 
 
 def _course(tees, holes=None):
@@ -52,10 +50,20 @@ class TestPerTeeCard:
         backward = _card(list(range(18, 0, -1)))
         course = _course(
             [
-                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
-                    slope_rating=140, holes=forward),
-                Tee(color=TeeColor.YELLOW, gender=Gender.FEMALE, course_rating=79.4,
-                    slope_rating=147, holes=backward),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=73.1,
+                    slope_rating=140,
+                    holes=forward,
+                ),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.FEMALE,
+                    course_rating=79.4,
+                    slope_rating=147,
+                    holes=backward,
+                ),
             ],
             holes=forward,
         )
@@ -69,8 +77,9 @@ class TestPerTeeCard:
     def test_falls_back_to_the_course_order_without_a_card(self):
         course = _course(
             [
-                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
-                    slope_rating=140),
+                Tee(
+                    color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1, slope_rating=140
+                ),
             ]
         )
 
@@ -100,10 +109,20 @@ class TestPerTeePar:
         par_70 = _card(list(range(1, 19)), pars=[3, 3] + [4] * 16)
         course = _course(
             [
-                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
-                    slope_rating=140, holes=par_72),
-                Tee(color=TeeColor.RED, gender=Gender.FEMALE, course_rating=71.0,
-                    slope_rating=130, holes=par_70),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=73.1,
+                    slope_rating=140,
+                    holes=par_72,
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    course_rating=71.0,
+                    slope_rating=130,
+                    holes=par_70,
+                ),
             ],
             holes=par_72,
         )
@@ -127,10 +146,20 @@ class TestFoursomesTeamCard:
         backward = _card(list(range(18, 0, -1)))
         course = _course(
             [
-                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
-                    slope_rating=140, holes=forward),
-                Tee(color=TeeColor.RED, gender=Gender.FEMALE, course_rating=71.0,
-                    slope_rating=130, holes=backward),
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=Gender.MALE,
+                    course_rating=73.1,
+                    slope_rating=140,
+                    holes=forward,
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    course_rating=71.0,
+                    slope_rating=130,
+                    holes=backward,
+                ),
             ],
             holes=forward,
         )
@@ -163,8 +192,13 @@ class TestUnratableTee:
             course_type=CourseType.PITCH_AND_PUTT,
             creator_id=UserId.generate(),
             tees=[
-                Tee(color=TeeColor.ORANGE, gender=Gender.MALE, course_rating=54.9,
-                    slope_rating=91, holes=par_58),
+                Tee(
+                    color=TeeColor.ORANGE,
+                    gender=Gender.MALE,
+                    course_rating=54.9,
+                    slope_rating=91,
+                    holes=par_58,
+                ),
             ],
             holes=par_58,
         )
@@ -187,10 +221,10 @@ class TestUnratableTee:
         """
         course = _course(
             [
-                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
-                    slope_rating=140),
-                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0,
-                    slope_rating=130),
+                Tee(
+                    color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1, slope_rating=140
+                ),
+                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0, slope_rating=130),
             ]
         )
         # Se fuerza sobre la entidad ya construida: `Tee` no deja crear una
@@ -201,6 +235,7 @@ class TestUnratableTee:
 
         assert ("YELLOW", "MALE") not in context.tee_ratings
         assert ("WHITE", "MALE") in context.tee_ratings
+
     def test_the_warning_says_the_round_cannot_be_generated(self, caplog):
         """
         El aviso decia que los jugadores de esa barra jugarian con su Handicap
@@ -209,10 +244,10 @@ class TestUnratableTee:
         """
         course = _course(
             [
-                Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1,
-                    slope_rating=140),
-                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0,
-                    slope_rating=130),
+                Tee(
+                    color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=73.1, slope_rating=140
+                ),
+                Tee(color=TeeColor.WHITE, gender=Gender.MALE, course_rating=71.0, slope_rating=130),
             ]
         )
         object.__setattr__(course.tees[0], "course_rating", 30.0)

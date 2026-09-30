@@ -466,9 +466,7 @@ class TestRemoveCustomHandicap:
         assert response.json()["custom_handicap"] is None
 
     @pytest.mark.asyncio
-    async def test_remove_custom_handicap_by_admin_not_creator_succeeds(
-        self, client: AsyncClient
-    ):
+    async def test_remove_custom_handicap_by_admin_not_creator_succeeds(self, client: AsyncClient):
         """Admin (no creador) puede eliminar el handicap personalizado."""
         creator = await create_authenticated_user(
             client, "creator14b@test.com", "P@ssw0rd123!", "Creator", "FourteenB"

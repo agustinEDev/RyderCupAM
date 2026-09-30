@@ -511,7 +511,9 @@ class TestQuickMatchFullFlow:
 
     @pytest.mark.asyncio
     async def test_full_flow_singles(self, client: AsyncClient):
-        admin = await create_admin_user(client, "qm_admin2@test.com", "P@ssw0rd123!", "Admin", "Two")
+        admin = await create_admin_user(
+            client, "qm_admin2@test.com", "P@ssw0rd123!", "Admin", "Two"
+        )
         creator = await create_authenticated_user(
             client, "qm_creator3@test.com", "P@ssw0rd123!", "Creator", "Three"
         )
@@ -561,15 +563,15 @@ class TestQuickMatchFullFlow:
         assert detail["standing"]["holes_played"] == 1
 
         set_auth_cookies(client, creator["cookies"])
-        complete_response = await client.post(
-            f"/api/v1/quick-matches/{quick_match_id}/complete"
-        )
+        complete_response = await client.post(f"/api/v1/quick-matches/{quick_match_id}/complete")
         assert complete_response.status_code == 200
         assert complete_response.json()["status"] == "COMPLETED"
 
     @pytest.mark.asyncio
     async def test_add_non_friend_returns_403(self, client: AsyncClient):
-        admin = await create_admin_user(client, "qm_admin3@test.com", "P@ssw0rd123!", "Admin", "Three")
+        admin = await create_admin_user(
+            client, "qm_admin3@test.com", "P@ssw0rd123!", "Admin", "Three"
+        )
         creator = await create_authenticated_user(
             client, "qm_creator4@test.com", "P@ssw0rd123!", "Creator", "Four"
         )
@@ -594,7 +596,9 @@ class TestQuickMatchFullFlow:
 
     @pytest.mark.asyncio
     async def test_list_my_quick_matches(self, client: AsyncClient):
-        admin = await create_admin_user(client, "qm_admin4@test.com", "P@ssw0rd123!", "Admin", "Four")
+        admin = await create_admin_user(
+            client, "qm_admin4@test.com", "P@ssw0rd123!", "Admin", "Four"
+        )
         creator = await create_authenticated_user(
             client, "qm_creator5@test.com", "P@ssw0rd123!", "Creator", "Five"
         )
@@ -618,7 +622,9 @@ class TestQuickMatchGuestsAndScoringAssignment:
 
     @pytest.mark.asyncio
     async def test_add_guest_and_proxy_score(self, client: AsyncClient):
-        admin = await create_admin_user(client, "qm_admin5@test.com", "P@ssw0rd123!", "Admin", "Five")
+        admin = await create_admin_user(
+            client, "qm_admin5@test.com", "P@ssw0rd123!", "Admin", "Five"
+        )
         creator = await create_authenticated_user(
             client, "qm_creator6@test.com", "P@ssw0rd123!", "Creator", "Six"
         )
@@ -675,7 +681,9 @@ class TestQuickMatchGuestsAndScoringAssignment:
 
     @pytest.mark.asyncio
     async def test_non_scorer_cannot_self_submit(self, client: AsyncClient):
-        admin = await create_admin_user(client, "qm_admin6@test.com", "P@ssw0rd123!", "Admin", "Six")
+        admin = await create_admin_user(
+            client, "qm_admin6@test.com", "P@ssw0rd123!", "Admin", "Six"
+        )
         creator = await create_authenticated_user(
             client, "qm_creator7@test.com", "P@ssw0rd123!", "Creator", "Seven"
         )
@@ -710,7 +718,9 @@ class TestQuickMatchGuestsAndScoringAssignment:
 
     @pytest.mark.asyncio
     async def test_start_without_creator_as_scorer_returns_422(self, client: AsyncClient):
-        admin = await create_admin_user(client, "qm_admin7@test.com", "P@ssw0rd123!", "Admin", "Seven")
+        admin = await create_admin_user(
+            client, "qm_admin7@test.com", "P@ssw0rd123!", "Admin", "Seven"
+        )
         creator = await create_authenticated_user(
             client, "qm_creator8@test.com", "P@ssw0rd123!", "Creator", "Eight"
         )
@@ -781,7 +791,9 @@ class TestQuickMatchSetParticipantHandicap:
 
         assert response.status_code == 200, response.text
         updated_dto = next(
-            p for p in response.json()["participants"] if p["participant_id"] == friend_dto["participant_id"]
+            p
+            for p in response.json()["participants"]
+            if p["participant_id"] == friend_dto["participant_id"]
         )
         assert updated_dto["handicap"] == 16.4
 
@@ -844,8 +856,7 @@ class TestQuickMatchSetParticipantHandicap:
         assert first_patch.status_code == 200, first_patch.text
 
         second_patch = await client.patch(
-            f"/api/v1/quick-matches/{quick_match_id}/participants/{friend_participant_id}"
-            "/handicap",
+            f"/api/v1/quick-matches/{quick_match_id}/participants/{friend_participant_id}/handicap",
             json={"handicap": 20.0},
         )
         assert second_patch.status_code == 200, second_patch.text
@@ -882,14 +893,15 @@ class TestQuickMatchSetParticipantHandicap:
         )["participant_id"]
 
         response = await client.patch(
-            f"/api/v1/quick-matches/{quick_match_id}/participants/{guest_participant_id}"
-            "/handicap",
+            f"/api/v1/quick-matches/{quick_match_id}/participants/{guest_participant_id}/handicap",
             json={"handicap": 20.1},
         )
 
         assert response.status_code == 200, response.text
         updated_dto = next(
-            p for p in response.json()["participants"] if p["participant_id"] == guest_participant_id
+            p
+            for p in response.json()["participants"]
+            if p["participant_id"] == guest_participant_id
         )
         assert updated_dto["handicap"] == 20.1
 
@@ -933,8 +945,7 @@ class TestQuickMatchSetParticipantHandicap:
 
         set_auth_cookies(client, friend["cookies"])
         response = await client.patch(
-            f"/api/v1/quick-matches/{quick_match_id}/participants/{friend_participant_id}"
-            "/handicap",
+            f"/api/v1/quick-matches/{quick_match_id}/participants/{friend_participant_id}/handicap",
             json={"handicap": 10.0},
         )
 
@@ -970,8 +981,7 @@ class TestQuickMatchSetParticipantHandicap:
         )
 
         response = await client.patch(
-            f"/api/v1/quick-matches/{quick_match_id}/participants/{guest_participant_id}"
-            "/handicap",
+            f"/api/v1/quick-matches/{quick_match_id}/participants/{guest_participant_id}/handicap",
             json={"handicap": 10.0},
         )
 
@@ -995,8 +1005,7 @@ class TestQuickMatchSetParticipantHandicap:
         quick_match_id = create_response.json()["id"]
 
         response = await client.patch(
-            f"/api/v1/quick-matches/{quick_match_id}/participants/{creator['user']['id']}"
-            "/handicap",
+            f"/api/v1/quick-matches/{quick_match_id}/participants/{creator['user']['id']}/handicap",
             json={"handicap": 99},
         )
 
@@ -1101,8 +1110,8 @@ class TestQuickMatchHideFromHistory:
 
     @pytest.mark.asyncio
     async def test_hide_a_non_participant_match_returns_404(self, client: AsyncClient):
-        _admin, _creator, _friend, quick_match_id = (
-            await self._create_match_with_two_participants(client)
+        _admin, _creator, _friend, quick_match_id = await self._create_match_with_two_participants(
+            client
         )
         outsider = await create_authenticated_user(
             client, "qm_outsider_hide1@test.com", "P@ssw0rd123!", "Outsider", "HideOne"

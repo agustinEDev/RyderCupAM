@@ -42,9 +42,7 @@ class TestAvatarPresetsPublicEndpoints:
         assert response.content.startswith(b"\xff\xd8\xff")
 
     @pytest.mark.asyncio
-    async def test_get_avatar_preset_image_has_long_lived_cache_headers(
-        self, client: AsyncClient
-    ):
+    async def test_get_avatar_preset_image_has_long_lived_cache_headers(self, client: AsyncClient):
         response = await client.get("/api/v1/avatar-presets/5/image")
 
         assert response.status_code == 200
@@ -67,9 +65,7 @@ class TestSetAndGetActiveAvatar:
         )
         set_auth_cookies(client, user["cookies"])
 
-        set_response = await client.post(
-            "/api/v1/users/me/avatar/preset", json={"preset_id": 3}
-        )
+        set_response = await client.post("/api/v1/users/me/avatar/preset", json={"preset_id": 3})
         assert set_response.status_code == 200
         assert set_response.json()["avatar_source"] == "PRESET"
         assert set_response.json()["avatar_preset_id"] == 3

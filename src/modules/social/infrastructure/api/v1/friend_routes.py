@@ -240,6 +240,4 @@ async def set_activity_sharing(
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
-    return ActivitySharingResponseDTO(
-        share_activity=payload.enabled, removed_events=removed
-    )
+    return ActivitySharingResponseDTO(share_activity=payload.enabled, removed_events=removed)
