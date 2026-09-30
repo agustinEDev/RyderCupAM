@@ -35,7 +35,7 @@ import-linter==2.15
 mypy==2.3.1
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
-sqlalchemy[mypy]>=2.0.31
+sqlalchemy[mypy]>=2.1.1
 
 # ================================
 # SEGURIDAD
