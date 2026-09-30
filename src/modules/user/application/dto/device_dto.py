@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # logout inmediato. DeviceFingerprint.create() exige una IP sintácticamente
 # válida, de ahí "0.0.0.0" (ya reconocida como sentinel en el resto del código)
 # en vez de un string arbitrario como "unknown".
-UNRESOLVED_IP_PLACEHOLDER = "0.0.0.0"
+UNRESOLVED_IP_PLACEHOLDER = "0.0.0.0"  # nosec B104 - valor de relleno para una IP sin resolver, no una escucha en todas las interfaces
 
 # ======================================================================================
 # DTO para el Caso de Uso: Register/Update Device
