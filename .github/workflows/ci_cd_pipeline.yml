@@ -4,19 +4,18 @@
 # Pipeline completo de integración continua y despliegue continuo
 # Ejecuta tests, security checks, linting y type checking en paralelo
 #
-# Jobs (12 en paralelo):
-# 1. Preparation - Setup Python + dependencies cache
-# 2. Unit Tests - 662 tests (Python 3.11 + 3.12)
-# 3. Integration Tests - 72 tests (con PostgreSQL)
-# 4. Security Tests - 45+ tests (CSRF, XSS, SQLi, Auth Bypass)
-# 5. Security Checks - Bandit, pip-audit, Gitleaks
-# 6. Linting - Ruff (linter + formatter)
-# 7. Type Checking - Mypy
-# 8. Build - Docker + Trivy container scan
-# 9. Dependency Review - blocks PRs that add a vulnerable dependency
-# 10. SBOM Generation - CycloneDX SBOM + dependency graph
-# 11. GPG Signature Verification - Validates all commits are signed
-# 12. Summary - Reporte final
+# Jobs (todos en paralelo; el resumen espera al resto):
+# 1. Unit Tests - 662 tests (Python 3.11 + 3.12)
+# 2. Integration Tests - 72 tests (con PostgreSQL)
+# 3. Security Tests - 45+ tests (CSRF, XSS, SQLi, Auth Bypass)
+# 4. Security Checks - Bandit, pip-audit, Gitleaks
+# 5. Linting - Ruff (linter + formatter)
+# 6. Type Checking - Mypy
+# 7. Build - Docker + Trivy container scan
+# 8. Dependency Review - blocks PRs that add a vulnerable dependency
+# 9. SBOM Generation - CycloneDX SBOM + dependency graph
+# 10. GPG Signature Verification - Validates all commits are signed
+# 11. Summary - Reporte final
 
 name: CI/CD Pipeline
 
@@ -47,51 +46,6 @@ concurrency:
 
 jobs:
   # ================================
-  # JOB 1: PREPARATION
-  # ================================
-  # Configura el entorno, instala dependencias y cachea para los demás jobs
-
-  preparation:
-    name: 🔧 Preparation
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      python-version: ${{ steps.setup-python.outputs.python-version }}
-      cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
-
-      - name: Setup Python
-        id: setup-python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-
-      - name: Cache pip dependencies
-        id: cache-deps
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-
-      - name: Show Environment Info
-        run: |
-          echo "Python version: $(python --version)"
-          echo "Pip version: $(pip --version)"
-          echo "Cache hit: ${{ steps.cache-deps.outputs.cache-hit }}"
-          echo "Installed packages:"
-          pip list
-
-  # ================================
   # JOB 2: UNIT TESTS
   # ================================
   # Ejecuta 662+ tests unitarios (sin base de datos)
@@ -102,7 +56,6 @@ jobs:
     name: 🧪 Unit Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: preparation
     strategy:
       fail-fast: false
       matrix:
@@ -163,7 +116,6 @@ jobs:
     name: 🗄️ Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: preparation
 
     services:
       postgres:
@@ -233,7 +185,6 @@ jobs:
     name: 🔐 Security Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: preparation
 
     services:
       postgres:
@@ -318,7 +269,6 @@ jobs:
     name: 🔒 Security Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: preparation
 
     steps:
       - name: Checkout Code
@@ -457,7 +407,6 @@ jobs:
     name: 📝 Code Quality
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: preparation
 
     steps:
       - name: Checkout Code
@@ -501,7 +450,6 @@ jobs:
     name: 🔬 Type Checking
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: preparation
 
     steps:
       - name: Checkout Code
@@ -542,12 +490,9 @@ jobs:
     permissions:
       contents: read
       security-events: write  # Subida del SARIF de Trivy
-    needs: [unit_tests, integration_tests, security_tests, security_checks, linting, type_checking]
-    # Solo ejecutar si todos los jobs críticos pasaron (success)
-    if: |
-      needs.unit_tests.result == 'success' &&
-      needs.integration_tests.result == 'success' &&
-      needs.security_tests.result == 'success'
+    # Sin needs (28 sep 2026): la imagen nunca se publica (push: false), así que no
+    # hay nada que proteger esperando a los tests, y esperar le sumaba 1,5 min al
+    # camino crítico. Build Docker sigue siendo check obligatorio por sí mismo.
 
     steps:
       - name: Checkout Code
@@ -718,7 +663,6 @@ jobs:
     name: 📦 SBOM Generation
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: preparation
     permissions:
       contents: write  # Required for GitHub Dependency Graph REST API submission
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.ref, 'release/')
@@ -852,7 +796,6 @@ jobs:
     name: 🔏 GPG Signature Verification
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: preparation
 
     steps:
       - name: Checkout Code
@@ -1019,7 +962,7 @@ jobs:
           BUILD="${{ needs.build.result }}"
 
           # Calculate metrics
-          # Note: TOTAL_JOBS counts functional jobs (excludes preparation + summary)
+          # Note: TOTAL_JOBS counts functional jobs (excludes the summary)
           TOTAL_JOBS=10
           SUCCESS_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "success" | wc -l)
           FAILURE_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD" | grep -o "failure" | wc -l)
