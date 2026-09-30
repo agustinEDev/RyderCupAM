@@ -1,0 +1,52 @@
+# Poner o quitar la etiqueta `api-breaking` vuelve a evaluar el contrato de la API.
+#
+# El pipeline ya no se lanza con las etiquetas: Dependabot pone dos al abrir y
+# cada una lo lanzaba entero; la concurrencia cancelaba las anteriores y los
+# checks obligatorios cancelados dejaban la PR bloqueada (BE #444). Aquí solo
+# cuenta esa etiqueta, y solo se relanza el job del contrato (con los que
+# dependen de él), que la lee en el momento.
+#
+# Sin esto, quitar la etiqueta para rechazar un cambio incompatible dejaba el
+# contrato en verde hasta el siguiente push.
+name: API contract label
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  rerun_contract:
+    name: Re-run API contract
+    if: github.event.label.name == 'api-breaking'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Re-run the contract job of this commit
+        run: |
+          # La más reciente que no se canceló: una cancelada no llega a tener el job
+          RUN=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci_cd_pipeline.yml \
+            --commit "$HEAD_SHA" --event pull_request --limit 20 --json databaseId,conclusion \
+            --jq '[.[] | select(.conclusion != "cancelled")][0].databaseId // empty')
+          if [ -z "$RUN" ]; then
+            echo "::error::No CI/CD Pipeline run for $HEAD_SHA. Push a commit or re-run the pipeline by hand."
+            exit 1
+          fi
+          # Una ejecución en marcha no se puede relanzar: se espera a que acabe
+          gh run watch "$RUN" -R "$GITHUB_REPOSITORY" > /dev/null || true
+          JOB=$(gh run view "$RUN" -R "$GITHUB_REPOSITORY" --json jobs \
+            --jq '.jobs[] | select(.name == "📜 API contract") | .databaseId')
+          if [ -z "$JOB" ]; then
+            echo "::error::Run $RUN has no '📜 API contract' job."
+            exit 1
+          fi
+          gh run rerun "$RUN" -R "$GITHUB_REPOSITORY" --job "$JOB"
+          echo "Re-ran '📜 API contract' (run $RUN) after the label was ${{ github.event.action }}."

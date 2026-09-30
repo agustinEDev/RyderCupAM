@@ -35,8 +35,12 @@ on:
       - 'LICENSE'
   pull_request:
     branches: [main, develop]
-    # labeled/unlabeled: poner o quitar `api-breaking` vuelve a evaluar el contrato de la API
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # Sin labeled/unlabeled: Dependabot pone dos etiquetas al abrir, cada una
+    # lanzaba el pipeline entero y la concurrencia cancelaba las anteriores; los
+    # checks obligatorios cancelados dejaban la PR bloqueada (BE #444). Poner o
+    # quitar `api-breaking` relanza solo el job del contrato
+    # (api_contract_label.yml), que lee la etiqueta en el momento
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 # Permissions for security scanning
@@ -1019,6 +1023,9 @@ jobs:
     # existe. Al moverlo aquí desde su workflow propio (#434), el push a develop
     # fallaba con `fatal: invalid reference: origin/`.
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read  # leer la etiqueta api-breaking en el momento
     env:
       OASDIFF_VERSION: '1.32.1'
 
@@ -1063,8 +1070,13 @@ jobs:
 
       - name: Check for breaking changes
         env:
-          ALLOW_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'api-breaking') }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # Las etiquetas de AHORA, no las del evento: al relanzarlo por la
+          # etiqueta (api_contract_label.yml), el evento sigue siendo el de antes
+          ALLOW_BREAKING=$(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --json labels \
+            --jq '[.labels[].name] | index("api-breaking") != null')
           set +e
           oasdiff breaking "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/revision.json" --fail-on ERR > report.txt
           CODE=$?
@@ -1095,7 +1107,7 @@ jobs:
               echo "::warning::Breaking API changes accepted by the 'api-breaking' label. Plan both deploys back to back."
               exit 0
             fi
-            echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label and plan the release (backend first, both deploys back to back)."
+            echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label (this job re-runs by itself) and plan the release (backend first, both deploys back to back)."
             exit 1
           fi
 
