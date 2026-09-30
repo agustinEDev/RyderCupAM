@@ -686,6 +686,12 @@ jobs:
             PSF-2.0, Python-2.0, CNRI-Python, MPL-2.0, Unlicense, CC0-1.0, Zlib, HPND,
             BlueOak-1.0.0, LGPL-2.0-only, LGPL-2.0-or-later, LGPL-2.1-only,
             LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later
+          # Excepciones, paquete a paquete y con su motivo (una licencia de GitHub que
+          # no coincide con la del paquete instalado):
+          # - secure: GitHub registra CC-BY-SA-2.5/4.0 AND MIT, por textos del repo;
+          #   el paquete que se instala declara MIT (License-Expression y su fichero
+          #   LICENSE; deps.dev también dice MIT). Comprobado el 30 sep 2026, #441.
+          allow-dependencies-licenses: pkg:pypi/secure
 
   # ================================
   # JOB 9: SBOM GENERATION
