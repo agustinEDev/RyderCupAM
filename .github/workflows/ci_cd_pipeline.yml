@@ -37,9 +37,10 @@ on:
     branches: [main, develop]
     # Sin labeled/unlabeled: Dependabot pone dos etiquetas al abrir, cada una
     # lanzaba el pipeline entero y la concurrencia cancelaba las anteriores; los
-    # checks obligatorios cancelados dejaban la PR bloqueada (BE #444). Poner o
-    # quitar `api-breaking` relanza solo el job del contrato
-    # (api_contract_label.yml), que lee la etiqueta en el momento
+    # checks obligatorios cancelados dejaban la PR bloqueada (BE #444). El job
+    # del contrato lee `api-breaking` en el momento: tras ponerla o quitarla,
+    # se relanza ese job a mano («Re-run»). Un workflow que lo hacía solo se
+    # descartó en la #445: esperar al pipeline y relanzarlo abría carreras
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -1073,8 +1074,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Las etiquetas de AHORA, no las del evento: al relanzarlo por la
-          # etiqueta (api_contract_label.yml), el evento sigue siendo el de antes
+          # Las etiquetas de AHORA, no las del evento: al relanzar el job tras
+          # poner la etiqueta, el evento sigue siendo el de antes
           ALLOW_BREAKING=$(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --json labels \
             --jq '[.labels[].name] | index("api-breaking") != null')
           set +e
@@ -1107,7 +1108,7 @@ jobs:
               echo "::warning::Breaking API changes accepted by the 'api-breaking' label. Plan both deploys back to back."
               exit 0
             fi
-            echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label (this job re-runs by itself) and plan the release (backend first, both deploys back to back)."
+            echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label, re-run this job and plan the release (backend first, both deploys back to back)."
             exit 1
           fi
 
