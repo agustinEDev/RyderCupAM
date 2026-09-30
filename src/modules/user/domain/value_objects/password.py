@@ -48,6 +48,11 @@ class Password:
 
     MIN_LENGTH = 12  # OWASP recomienda 12+ desde 2024 (antes era 8)
     MAX_LENGTH = 128  # Límite técnico razonable
+    # bcrypt solo usa los primeros 72 BYTES. bcrypt 4 recortaba el resto en silencio;
+    # bcrypt 5 lanza ValueError. Se recorta aquí, igual que hacía bcrypt 4, para que
+    # los hashes guardados sigan valiendo. Una contraseña de 128 caracteres, o de
+    # menos con eñes o acentos (2 bytes cada uno), pasa de 72 bytes.
+    BCRYPT_MAX_BYTES = 72
     hashed_value: str
 
     @classmethod
@@ -79,6 +84,11 @@ class Password:
         hashed = cls._hash_password(plain_password)
         return cls(hashed)
 
+    @classmethod
+    def _bcrypt_bytes(cls, plain_password: str) -> bytes:
+        """Los bytes que ve bcrypt: la contraseña en UTF-8, recortada a 72 bytes."""
+        return plain_password.encode("utf-8")[: cls.BCRYPT_MAX_BYTES]
+
     @staticmethod
     def _hash_password(plain_password: str) -> str:
         """Hashea password con bcrypt y salt."""
@@ -87,7 +97,7 @@ class Password:
         # 12 rounds en producción: ~200ms por hash (seguro según OWASP)
         rounds = 4 if os.getenv("TESTING") == "true" else 12
         salt = bcrypt.gensalt(rounds=rounds)
-        hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
+        hashed = bcrypt.hashpw(Password._bcrypt_bytes(plain_password), salt)
         return hashed.decode("utf-8")
 
     @staticmethod
@@ -163,7 +173,9 @@ class Password:
     def verify(self, plain_password: str) -> bool:
         """Verifica si un password plano coincide con el hash."""
         try:
-            return bcrypt.checkpw(plain_password.encode("utf-8"), self.hashed_value.encode("utf-8"))
+            return bcrypt.checkpw(
+                self._bcrypt_bytes(plain_password), self.hashed_value.encode("utf-8")
+            )
         except Exception:
             return False
 
