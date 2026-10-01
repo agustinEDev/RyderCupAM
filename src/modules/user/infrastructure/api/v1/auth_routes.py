@@ -3,6 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 
 from src.config.csrf_config import generate_csrf_token
 from src.config.dependencies import (
@@ -885,8 +886,16 @@ async def validate_reset_token(
         - SIEMPRE retorna 200 OK (nunca 404)
         - NO incluye email del usuario por seguridad
     """
-    # Crear request DTO
-    request_dto = ValidateResetTokenRequestDTO(token=token)
+    # Un token con una longitud imposible es un token inválido más: la ruta
+    # promete 200 con valid=False, no un 500 (BE #453). Mismo mensaje que el
+    # caso de uso, para que la longitud no revele nada distinto
+    try:
+        request_dto = ValidateResetTokenRequestDTO(token=token)
+    except ValidationError:
+        return ValidateResetTokenResponseDTO(
+            valid=False,
+            message="Token de reseteo inválido o expirado. Solicita un nuevo enlace.",
+        )
 
     # Ejecutar use case
     response = await use_case.execute(request_dto)
