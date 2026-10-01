@@ -728,6 +728,14 @@ jobs:
         if: matrix.comprobacion == 'trivy' && steps.trivy_scan.outcome == 'success' && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
+          # Categoría fija: sin ella GitHub la deriva del job y de los valores de
+          # la matriz, y cada cambio de matriz o de nombre deja una configuración
+          # vieja que avisa en cada PR de «configuration not found» (pasó con
+          # #457). Las viejas hay que borrarlas a mano en Security → Tool status
+          # → Trivy, DESPUÉS de que trivy-image haya subido en esa rama (en main,
+          # tras la siguiente release); antes, sus alertas se cerrarían y se
+          # volverían a abrir
+          category: trivy-image
 
       - name: Trivy gate (CRITICAL with a fix)
         id: trivy_gate
