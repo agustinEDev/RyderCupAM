@@ -100,8 +100,8 @@ async def _setup_scheduled_match(uow: InMemoryUnitOfWork):
     mock_comp = MagicMock()
     mock_comp.id = competition_id
     mock_comp.name = "Test Cup"
-    mock_comp.team_1_name = "Team A"
-    mock_comp.team_2_name = "Team B"
+    mock_comp.ryder_cup.team_1_name = "Team A"
+    mock_comp.ryder_cup.team_2_name = "Team B"
     uow._competitions._competitions[competition_id] = mock_comp
 
     return competition_id, player_a, player_b
@@ -250,8 +250,8 @@ def _competicion(uow):
     comp = MagicMock()
     comp.id = competition_id
     comp.name = "Test Cup"
-    comp.team_1_name = "Europa"
-    comp.team_2_name = "Estados Unidos"
+    comp.ryder_cup.team_1_name = "Europa"
+    comp.ryder_cup.team_2_name = "Estados Unidos"
     uow._competitions._competitions[competition_id] = comp
     return competition_id
 

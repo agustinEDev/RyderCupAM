@@ -20,13 +20,15 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.services.draft_room import DraftRoom
-from src.modules.competition.domain.entities.competition import CaptainMissingError
 from src.modules.competition.domain.entities.draft import EQUIPOS, Draft
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainMissingError,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -99,7 +101,7 @@ class StartDraftUseCase:
             # El draft ES los capitanes eligiendo: sin los dos no hay quien elija.
             # `captains_for_team_split` avisa si falta uno; si no hay ninguno, la
             # sala no tiene sentido
-            capitanes = competition.captains_for_team_split()
+            capitanes = competition.ryder_cup.captains_for_team_split()
             if capitanes is None:
                 raise CaptainMissingError(
                     "Nombra a los dos capitanes antes de abrir la sala de draft"

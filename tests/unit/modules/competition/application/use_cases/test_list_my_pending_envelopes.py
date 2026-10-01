@@ -123,7 +123,8 @@ async def _montar(
     async with uow:
         competicion = await uow.competitions.find_by_id(comp_id)
         if modo is not None:
-            competicion._setup_mode = modo
+            # Ya CLOSED, el dominio no deja cambiar el modo: se fuerza en la pieza
+            competicion._ryder_cup = competicion.ryder_cup.with_setup_mode(modo)
         competicion.name_captains(equipo_a[0], equipo_b[0], todos, has_teams=False)
         await uow.competitions.update(competicion)
         if con_equipos:

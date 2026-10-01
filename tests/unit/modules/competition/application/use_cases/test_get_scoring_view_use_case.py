@@ -134,8 +134,8 @@ async def _setup(uow, course: GolfCourse | None):
 
     mock_comp = MagicMock()
     mock_comp.id = mock_round.competition_id
-    mock_comp.team_1_name = "Team A"
-    mock_comp.team_2_name = "Team B"
+    mock_comp.ryder_cup.team_1_name = "Team A"
+    mock_comp.ryder_cup.team_2_name = "Team B"
     uow._competitions._competitions[mock_comp.id] = mock_comp
 
     gc_repo = AsyncMock()

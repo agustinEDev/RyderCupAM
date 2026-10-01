@@ -72,7 +72,7 @@ class NameViceCaptainUseCase:
             if not (
                 is_admin
                 or competition.is_creator(user_id)
-                or competition.is_captain_of(request.team, user_id)
+                or competition.ryder_cup.is_captain_of(request.team, user_id)
             ):
                 raise NotCaptainOrCreatorError(
                     "Solo el capitán del equipo o el organizador eligen al subcapitán"

@@ -14,9 +14,7 @@ from datetime import date
 import pytest
 
 from src.modules.competition.domain.entities.competition import (
-    CaptainMissingError,
     CaptainNotEnrolledError,
-    CaptainOnWrongTeamError,
     CaptainsLockedError,
     Competition,
     CompetitionStateError,
@@ -31,6 +29,10 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainMissingError,
+    CaptainOnWrongTeamError,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 
@@ -74,8 +76,8 @@ class TestNameCaptains:
 
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
 
-        assert competicion.team_a_captain_id == ANA
-        assert competicion.team_b_captain_id == BEA
+        assert competicion.ryder_cup.team_a_captain_id == ANA
+        assert competicion.ryder_cup.team_b_captain_id == BEA
         assert competicion.status == CompetitionStatus.CLOSED
         # El mismo evento que cerrar a mano: quien escuche el cierre, se entera
         assert [e.total_enrollments for e in _cierres(competicion)] == [12]
@@ -92,7 +94,7 @@ class TestNameCaptains:
 
         competicion.name_captains(CARLA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
 
-        assert competicion.team_a_captain_id == CARLA
+        assert competicion.ryder_cup.team_a_captain_id == CARLA
         assert competicion.status == CompetitionStatus.CLOSED
         assert _cierres(competicion) == []
 
@@ -107,7 +109,7 @@ class TestNameCaptains:
         with pytest.raises(CaptainsLockedError):
             competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=True)
 
-        assert competicion.team_a_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id is None
         assert competicion.status == estado
 
     @pytest.mark.parametrize(
@@ -126,7 +128,7 @@ class TestNameCaptains:
         with pytest.raises(CompetitionStateError):
             competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
 
-        assert competicion.team_a_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id is None
         assert competicion.status == estado
 
     def test_la_misma_persona_no_capitanea_los_dos_equipos(self):
@@ -140,7 +142,7 @@ class TestNameCaptains:
         with pytest.raises(ValueError, match="distint"):
             competicion.name_captains(ANA, ANA, approved_player_ids=INSCRITOS, has_teams=False)
 
-        assert competicion.team_a_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id is None
         assert competicion.status == CompetitionStatus.ACTIVE
 
     @pytest.mark.parametrize("cual", ["A", "B"])
@@ -153,7 +155,7 @@ class TestNameCaptains:
         with pytest.raises(CaptainNotEnrolledError):
             competicion.name_captains(a, b, approved_player_ids=INSCRITOS, has_teams=False)
 
-        assert competicion.team_a_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id is None
         assert competicion.status == CompetitionStatus.ACTIVE
 
     def test_nace_sin_capitanes(self):
@@ -164,8 +166,8 @@ class TestNameCaptains:
         """
         competicion = _competicion(CompetitionStatus.ACTIVE)
 
-        assert competicion.team_a_captain_id is None
-        assert competicion.team_b_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id is None
+        assert competicion.ryder_cup.team_b_captain_id is None
 
 
 class TestHandleWithdrawalBeforeTheDraft:
@@ -185,8 +187,8 @@ class TestHandleWithdrawalBeforeTheDraft:
 
         assert competicion.handle_withdrawal(ANA) is True
 
-        assert competicion.team_a_captain_id is None
-        assert competicion.team_b_captain_id == BEA
+        assert competicion.ryder_cup.team_a_captain_id is None
+        assert competicion.ryder_cup.team_b_captain_id == BEA
 
     def test_libera_el_puesto_del_capitan_b(self):
         """
@@ -198,8 +200,8 @@ class TestHandleWithdrawalBeforeTheDraft:
 
         assert competicion.handle_withdrawal(BEA) is True
 
-        assert competicion.team_a_captain_id == ANA
-        assert competicion.team_b_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id == ANA
+        assert competicion.ryder_cup.team_b_captain_id is None
 
     def test_quien_no_es_capitan_no_cambia_nada(self):
         """
@@ -211,7 +213,10 @@ class TestHandleWithdrawalBeforeTheDraft:
 
         assert competicion.handle_withdrawal(CARLA) is False
 
-        assert (competicion.team_a_captain_id, competicion.team_b_captain_id) == (ANA, BEA)
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_b_captain_id,
+        ) == (ANA, BEA)
 
 
 class TestCaptainsForTeamSplit:
@@ -219,7 +224,7 @@ class TestCaptainsForTeamSplit:
 
     def test_sin_capitanes_no_hay_nadie_fijo(self):
         """El flujo viejo convive durante la transición: reparte a todos."""
-        assert _competicion(CompetitionStatus.CLOSED).captains_for_team_split() is None
+        assert _competicion(CompetitionStatus.CLOSED).ryder_cup.captains_for_team_split() is None
 
     def test_con_los_dos_devuelve_la_pareja(self):
         """
@@ -230,7 +235,7 @@ class TestCaptainsForTeamSplit:
         competicion = _competicion(CompetitionStatus.ACTIVE)
         competicion.name_captains(ANA, BEA, approved_player_ids=INSCRITOS, has_teams=False)
 
-        assert competicion.captains_for_team_split() == (ANA, BEA)
+        assert competicion.ryder_cup.captains_for_team_split() == (ANA, BEA)
 
     @pytest.mark.parametrize("se_va", ["A", "B"])
     def test_con_uno_solo_no_se_reparte_cojo(self, se_va):
@@ -244,7 +249,7 @@ class TestCaptainsForTeamSplit:
         competicion.handle_withdrawal(ANA if se_va == "A" else BEA)
 
         with pytest.raises(CaptainMissingError):
-            competicion.captains_for_team_split()
+            competicion.ryder_cup.captains_for_team_split()
 
 
 class TestCheckCaptainsPlacement:
@@ -262,7 +267,7 @@ class TestCheckCaptainsPlacement:
         When: cada uno aparece en su equipo
         Then: se acepta
         """
-        self._con_capitanes().check_captains_placement([ANA, CARLA], [BEA])
+        self._con_capitanes().ryder_cup.check_captains_placement([ANA, CARLA], [BEA])
 
     @pytest.mark.parametrize(
         ("equipo_a", "equipo_b"),
@@ -276,7 +281,7 @@ class TestCheckCaptainsPlacement:
         Then: se rechaza
         """
         with pytest.raises(CaptainOnWrongTeamError):
-            self._con_capitanes().check_captains_placement(equipo_a, equipo_b)
+            self._con_capitanes().ryder_cup.check_captains_placement(equipo_a, equipo_b)
 
     def test_sin_capitanes_no_se_comprueba_nada(self):
         """
@@ -284,7 +289,7 @@ class TestCheckCaptainsPlacement:
         When: se comprueba cualquier reparto
         Then: se acepta: es el flujo de antes
         """
-        _competicion(CompetitionStatus.CLOSED).check_captains_placement([BEA], [ANA])
+        _competicion(CompetitionStatus.CLOSED).ryder_cup.check_captains_placement([BEA], [ANA])
 
     def test_con_uno_solo_tampoco_se_acepta(self):
         """
@@ -296,7 +301,7 @@ class TestCheckCaptainsPlacement:
         competicion.handle_withdrawal(BEA)
 
         with pytest.raises(CaptainMissingError):
-            competicion.check_captains_placement([ANA], [CARLA])
+            competicion.ryder_cup.check_captains_placement([ANA], [CARLA])
 
 
 # ======================================================================================
@@ -336,8 +341,8 @@ class TestNameViceCaptain:
         competicion.name_vice_captain("A", CARLA, team_player_ids=EQUIPO_A, has_teams=True)
         competicion.name_vice_captain("B", EVA, team_player_ids=EQUIPO_B, has_teams=True)
 
-        assert competicion.team_a_vice_captain_id == CARLA
-        assert competicion.team_b_vice_captain_id == EVA
+        assert competicion.ryder_cup.team_a_vice_captain_id == CARLA
+        assert competicion.ryder_cup.team_b_vice_captain_id == EVA
 
     def test_elegir_otro_sustituye_al_anterior(self):
         """
@@ -350,7 +355,7 @@ class TestNameViceCaptain:
 
         competicion.name_vice_captain("A", DANI, team_player_ids=EQUIPO_A, has_teams=True)
 
-        assert competicion.team_a_vice_captain_id == DANI
+        assert competicion.ryder_cup.team_a_vice_captain_id == DANI
 
     def test_antes_del_draft_no_hay_equipo_del_que_elegir(self):
         """
@@ -374,7 +379,7 @@ class TestNameViceCaptain:
         with pytest.raises(CaptainOnWrongTeamError):
             competicion.name_vice_captain("A", EVA, team_player_ids=EQUIPO_A, has_teams=True)
 
-        assert competicion.team_a_vice_captain_id is None
+        assert competicion.ryder_cup.team_a_vice_captain_id is None
 
     def test_el_capitan_no_es_su_propio_subcapitan(self):
         """
@@ -428,7 +433,7 @@ class TestFillCaptain:
 
         competicion.fill_captain("A", DANI, team_player_ids=EQUIPO_A, has_teams=True)
 
-        assert competicion.team_a_captain_id == DANI
+        assert competicion.ryder_cup.team_a_captain_id == DANI
 
     def test_si_era_el_subcapitan_deja_de_serlo(self):
         """Sin capitán, el organizador puede nombrar subcapitán y luego ascenderlo."""
@@ -437,7 +442,10 @@ class TestFillCaptain:
 
         competicion.fill_captain("A", DANI, team_player_ids=EQUIPO_A, has_teams=True)
 
-        assert (competicion.team_a_captain_id, competicion.team_a_vice_captain_id) == (DANI, None)
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_a_vice_captain_id,
+        ) == (DANI, None)
 
     def test_sustituye_a_un_capitan_que_ya_no_sigue_inscrito(self):
         """Se retiró con el torneo en marcha (entonces no se toca nada) y volvió a CLOSED."""
@@ -446,7 +454,7 @@ class TestFillCaptain:
 
         competicion.fill_captain("A", DANI, team_player_ids=sin_ana, has_teams=True)
 
-        assert competicion.team_a_captain_id == DANI
+        assert competicion.ryder_cup.team_a_captain_id == DANI
 
     def test_no_sirve_para_cambiar_a_un_capitan_que_sigue(self):
         """
@@ -459,7 +467,7 @@ class TestFillCaptain:
         with pytest.raises(CaptainsLockedError):
             competicion.fill_captain("A", DANI, team_player_ids=EQUIPO_A, has_teams=True)
 
-        assert competicion.team_a_captain_id == ANA
+        assert competicion.ryder_cup.team_a_captain_id == ANA
 
     def test_antes_del_draft_se_nombran_los_dos(self):
         """
@@ -483,7 +491,7 @@ class TestFillCaptain:
         with pytest.raises(CaptainOnWrongTeamError):
             competicion.fill_captain("A", EVA, team_player_ids=EQUIPO_A, has_teams=True)
 
-        assert competicion.team_a_captain_id is None
+        assert competicion.ryder_cup.team_a_captain_id is None
 
     def test_con_el_torneo_en_marcha_no(self):
         """
@@ -510,7 +518,10 @@ class TestHandleWithdrawal:
 
         assert competicion.handle_withdrawal(ANA) is True
 
-        assert (competicion.team_a_captain_id, competicion.team_a_vice_captain_id) == (CARLA, None)
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_a_vice_captain_id,
+        ) == (CARLA, None)
 
     def test_si_se_va_el_capitan_b_asciende_el_suyo(self):
         """
@@ -523,7 +534,10 @@ class TestHandleWithdrawal:
 
         competicion.handle_withdrawal(BEA)
 
-        assert (competicion.team_b_captain_id, competicion.team_b_vice_captain_id) == (EVA, None)
+        assert (
+            competicion.ryder_cup.team_b_captain_id,
+            competicion.ryder_cup.team_b_vice_captain_id,
+        ) == (EVA, None)
 
     def test_sin_subcapitan_el_puesto_queda_libre(self):
         """
@@ -535,7 +549,10 @@ class TestHandleWithdrawal:
 
         competicion.handle_withdrawal(BEA)
 
-        assert (competicion.team_a_captain_id, competicion.team_b_captain_id) == (ANA, None)
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_b_captain_id,
+        ) == (ANA, None)
 
     def test_si_se_va_el_subcapitan_su_puesto_queda_libre(self):
         """
@@ -548,7 +565,10 @@ class TestHandleWithdrawal:
 
         assert competicion.handle_withdrawal(CARLA) is True
 
-        assert (competicion.team_a_captain_id, competicion.team_a_vice_captain_id) == (ANA, None)
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_a_vice_captain_id,
+        ) == (ANA, None)
 
     def test_si_se_va_otro_no_cambia_nada(self):
         """
@@ -560,7 +580,10 @@ class TestHandleWithdrawal:
 
         assert competicion.handle_withdrawal(DANI) is False
 
-        assert (competicion.team_a_captain_id, competicion.team_b_captain_id) == (ANA, BEA)
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_b_captain_id,
+        ) == (ANA, BEA)
 
     @pytest.mark.parametrize("estado", [CompetitionStatus.IN_PROGRESS, CompetitionStatus.COMPLETED])
     def test_con_el_torneo_en_marcha_no_se_toca_nada(self, estado):
@@ -569,7 +592,7 @@ class TestHandleWithdrawal:
 
         assert competicion.handle_withdrawal(ANA) is False
 
-        assert competicion.team_a_captain_id == ANA
+        assert competicion.ryder_cup.team_a_captain_id == ANA
 
 
 class TestTeamsReassigned:
@@ -581,9 +604,12 @@ class TestTeamsReassigned:
 
         competicion.teams_reassigned()
 
-        assert competicion.team_a_vice_captain_id is None
-        assert competicion.team_b_vice_captain_id is None
-        assert (competicion.team_a_captain_id, competicion.team_b_captain_id) == (ANA, BEA)
+        assert competicion.ryder_cup.team_a_vice_captain_id is None
+        assert competicion.ryder_cup.team_b_vice_captain_id is None
+        assert (
+            competicion.ryder_cup.team_a_captain_id,
+            competicion.ryder_cup.team_b_captain_id,
+        ) == (ANA, BEA)
 
 
 class TestIsCaptainOf:
@@ -595,10 +621,10 @@ class TestIsCaptainOf:
         """
         competicion = _repartida()
 
-        assert competicion.is_captain_of("A", ANA) is True
-        assert competicion.is_captain_of("B", BEA) is True
-        assert competicion.is_captain_of("A", BEA) is False
-        assert competicion.is_captain_of("B", CARLA) is False
+        assert competicion.ryder_cup.is_captain_of("A", ANA) is True
+        assert competicion.ryder_cup.is_captain_of("B", BEA) is True
+        assert competicion.ryder_cup.is_captain_of("A", BEA) is False
+        assert competicion.ryder_cup.is_captain_of("B", CARLA) is False
 
     def test_sin_capitan_nadie_lo_es(self):
         """
@@ -606,4 +632,4 @@ class TestIsCaptainOf:
         When: se pregunta por Ana
         Then: no lo es de ninguno
         """
-        assert _competicion(CompetitionStatus.CLOSED).is_captain_of("A", ANA) is False
+        assert _competicion(CompetitionStatus.CLOSED).ryder_cup.is_captain_of("A", ANA) is False

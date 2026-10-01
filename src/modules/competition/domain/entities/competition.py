@@ -39,6 +39,7 @@ from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
 from ..value_objects.play_mode import PlayMode
+from ..value_objects.ryder_cup_setup import CaptainOnWrongTeamError, RyderCupSetup
 from ..value_objects.setup_mode import SetupMode
 from ..value_objects.team_assignment import TeamAssignment
 from ..value_objects.visibility import Visibility
@@ -81,18 +82,6 @@ class CaptainNotEnrolledError(Exception):
 
 class TeamsNotAssignedError(Exception):
     """Todavia no hay equipos repartidos, y esto se elige dentro de un equipo."""
-
-    pass
-
-
-class CaptainMissingError(Exception):
-    """Hay un solo capitan: el otro se dio de baja y falta nombrarlo."""
-
-    pass
-
-
-class CaptainOnWrongTeamError(Exception):
-    """Un capitan no esta en el equipo que capitanea."""
 
     pass
 
@@ -156,8 +145,9 @@ class Competition:
         visibility: Visibility = Visibility.PRIVATE,
         setup_mode: SetupMode = SetupMode.RYDER_CUP,
     ):
-        # Validaciones de invariantes
-        self._validate_team_names(team_1_name, team_2_name)
+        # Validaciones de invariantes. Equipos, modo de montaje, reparto y
+        # capitanes son de la Ryder Cup: viven en su pieza (RyderCupAM#251)
+        self._ryder_cup = RyderCupSetup.create(team_1_name, team_2_name, setup_mode)
         self._validate_max_players(max_players)
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
@@ -168,29 +158,17 @@ class Competition:
         self._name = name
         self._dates = dates
         self._location = location
-        self._team_1_name = team_1_name
-        self._team_2_name = team_2_name
         self._play_mode = play_mode
         self._max_players = max_players
-        self._team_assignment = team_assignment
         self._max_playing_handicap = max_playing_handicap
         self._enrollment_opens_days_before = enrollment_opens_days_before
         self._visibility = visibility
-        # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
-        self._setup_mode = setup_mode
-        self._team_assignment = self._reparto_del_modo(setup_mode)
         self._validate_enrollment_opening(enrollment_opens_days_before)
         self._status = status
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
         self._golf_courses: list[CompetitionGolfCourse] = []
-        # Uno por equipo, y siempre dos de los inscritos (BE #320)
-        self._team_a_captain_id: UserId | None = None
-        self._team_b_captain_id: UserId | None = None
-        # Cada capitan elige al suyo tras el draft, y asciende si el capitan se va
-        self._team_a_vice_captain_id: UserId | None = None
-        self._team_b_vice_captain_id: UserId | None = None
 
     @classmethod
     def create(
@@ -244,18 +222,6 @@ class Competition:
         return competition
 
     @staticmethod
-    def _validate_team_names(team_1_name: str, team_2_name: str) -> None:
-        """Valida que los nombres de equipos sean válidos."""
-        if not team_1_name or not team_1_name.strip():
-            raise ValueError("El nombre del equipo 1 no puede estar vacío")
-
-        if not team_2_name or not team_2_name.strip():
-            raise ValueError("El nombre del equipo 2 no puede estar vacío")
-
-        if team_1_name.strip().lower() == team_2_name.strip().lower():
-            raise ValueError("Los nombres de los equipos deben ser diferentes")
-
-    @staticmethod
     def _validate_max_players(max_players: int) -> None:
         """Valida que max_players esté en rango válido."""
         if not MIN_PLAYERS <= max_players <= MAX_PLAYERS:
@@ -295,12 +261,9 @@ class Competition:
         return self._location
 
     @property
-    def team_1_name(self) -> str:
-        return self._team_1_name
-
-    @property
-    def team_2_name(self) -> str:
-        return self._team_2_name
+    def ryder_cup(self) -> RyderCupSetup:
+        """Equipos, modo de montaje, reparto y capitanes: lo que es solo de la Ryder Cup."""
+        return self._ryder_cup
 
     @property
     def play_mode(self) -> PlayMode:
@@ -309,10 +272,6 @@ class Competition:
     @property
     def max_players(self) -> int:
         return self._max_players
-
-    @property
-    def team_assignment(self) -> TeamAssignment:
-        return self._team_assignment
 
     @property
     def max_playing_handicap(self) -> int | None:
@@ -387,22 +346,6 @@ class Competition:
                 f"{MAX_ENROLLMENT_OPENING_DAYS} días antes del torneo. Recibido: {dias}."
             )
 
-    def _update_team_names(self, team_1_name: str | None, team_2_name: str | None) -> None:
-        """Cambia los nombres de los equipos, validandolos como pareja.
-
-        Se validan juntos porque la regla es de los dos —no pueden llamarse
-        igual—, asi que cambiar uno solo tambien hay que mirarlo contra el otro.
-        """
-        updated_team_1 = team_1_name if team_1_name is not None else self._team_1_name
-        updated_team_2 = team_2_name if team_2_name is not None else self._team_2_name
-        self._validate_team_names(updated_team_1, updated_team_2)
-
-        if team_1_name is not None:
-            self._team_1_name = team_1_name
-
-        if team_2_name is not None:
-            self._team_2_name = team_2_name
-
     def schedule_enrollment_opening(self, dias: int | None) -> None:
         """Programa —o desprograma— la apertura de las inscripciones.
 
@@ -432,26 +375,6 @@ class Competition:
     def visibility(self) -> Visibility:
         """Quien puede ver esta competicion y pedir sitio en ella."""
         return self._visibility
-
-    @property
-    def setup_mode(self) -> SetupMode:
-        """Cuanto monta la aplicacion por su cuenta (FE #695)."""
-        return self._setup_mode
-
-    @staticmethod
-    def _reparto_del_modo(setup_mode: SetupMode) -> "TeamAssignment":
-        """Como se reparten los equipos, segun el modo (FE #695, 22 sep).
-
-        El reparto dejo de preguntarse aparte: un campo propio podia
-        contradecir al modo —«todo automatico» con el reparto a mano—, y la
-        ficha devolvia las dos cosas.
-
-        En estilo RyderCup los equipos salen del draft, o se ponen a mano: lo
-        que no puede es repartirlos la aplicacion a espaldas del organizador.
-        """
-        return (
-            TeamAssignment.AUTOMATIC if setup_mode == SetupMode.AUTOMATIC else TeamAssignment.MANUAL
-        )
 
     def accepts_enrollment_requests(self) -> bool:
         """Indica si un desconocido puede pedir plaza por su cuenta.
@@ -666,30 +589,6 @@ class Competition:
     # CAPITANES (BE #320)
     # ===========================================
 
-    @property
-    def team_a_captain_id(self) -> UserId | None:
-        """El capitan del equipo A, o None si no hay."""
-        return self._team_a_captain_id
-
-    @property
-    def team_b_captain_id(self) -> UserId | None:
-        """El capitan del equipo B, o None si no hay."""
-        return self._team_b_captain_id
-
-    @property
-    def team_a_vice_captain_id(self) -> UserId | None:
-        """El subcapitan del equipo A, o None si no hay."""
-        return self._team_a_vice_captain_id
-
-    @property
-    def team_b_vice_captain_id(self) -> UserId | None:
-        """El subcapitan del equipo B, o None si no hay."""
-        return self._team_b_vice_captain_id
-
-    def is_captain_of(self, team: str, user_id: UserId) -> bool:
-        """Indica si ese jugador capitanea ese equipo ("A" o "B")."""
-        return self._captain(team) == user_id
-
     def name_captains(
         self,
         team_a: UserId,
@@ -738,8 +637,7 @@ class Competition:
                 "Los equipos ya estan repartidos: cambiar un capitan obligaria a rehacerlos"
             )
 
-        self._team_a_captain_id = team_a
-        self._team_b_captain_id = team_b
+        self._ryder_cup = self._ryder_cup.with_captains(team_a, team_b)
         if self._status == CompetitionStatus.ACTIVE:
             self.close_enrollments(total_enrollments=len(approved_player_ids))
         else:
@@ -771,9 +669,9 @@ class Competition:
             CaptainOnWrongTeamError: Si no es de ese equipo
         """
         self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
-        if player == self._captain(team):
+        if player == self._ryder_cup.captain(team):
             raise ValueError("El capitán no puede ser también su subcapitán")
-        self._set_vice_captain(team, player)
+        self._ryder_cup = self._ryder_cup.with_vice_captain(team, player)
         self._updated_at = datetime.now()
 
     def fill_captain(
@@ -799,16 +697,12 @@ class Competition:
             CaptainsLockedError: Si el capitan de ese equipo sigue en el torneo
         """
         self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
-        if self._captain(team) in team_player_ids:
+        if self._ryder_cup.captain(team) in team_player_ids:
             raise CaptainsLockedError(
                 "Ese equipo ya tiene capitán: solo se cubre el puesto de uno que se fue"
             )
-        if team == "A":
-            self._team_a_captain_id = player
-        else:
-            self._team_b_captain_id = player
-        if self._vice_captain(team) == player:
-            self._set_vice_captain(team, None)
+        # Si era el subcapitán de ese equipo, la pieza deja ese puesto libre
+        self._ryder_cup = self._ryder_cup.with_captain(team, player)
         self._updated_at = datetime.now()
 
     def handle_withdrawal(self, user_id: UserId) -> bool:
@@ -826,21 +720,12 @@ class Competition:
         """
         if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
             return False
-        for team in ("A", "B"):
-            if user_id == self._captain(team):
-                ascendido = self._vice_captain(team)
-                if team == "A":
-                    self._team_a_captain_id = ascendido
-                else:
-                    self._team_b_captain_id = ascendido
-                self._set_vice_captain(team, None)
-                self._updated_at = datetime.now()
-                return True
-            if user_id == self._vice_captain(team):
-                self._set_vice_captain(team, None)
-                self._updated_at = datetime.now()
-                return True
-        return False
+        despues = self._ryder_cup.after_withdrawal(user_id)
+        if despues is None:
+            return False
+        self._ryder_cup = despues
+        self._updated_at = datetime.now()
+        return True
 
     def teams_reassigned(self) -> None:
         """Al repartir de nuevo, los subcapitanes quedan libres.
@@ -848,31 +733,7 @@ class Competition:
         Se eligen entre los del equipo, y el equipo ha cambiado: el draft
         automatico puede haber movido a un subcapitan al otro lado.
         """
-        self._team_a_vice_captain_id = None
-        self._team_b_vice_captain_id = None
-
-    def _captain(self, team: str) -> UserId | None:
-        """El capitán de ese equipo; valida antes que el equipo sea A o B."""
-        self._comprobar_equipo(team)
-        return self._team_a_captain_id if team == "A" else self._team_b_captain_id
-
-    def _vice_captain(self, team: str) -> UserId | None:
-        """El subcapitán de ese equipo; valida antes que el equipo sea A o B."""
-        self._comprobar_equipo(team)
-        return self._team_a_vice_captain_id if team == "A" else self._team_b_vice_captain_id
-
-    def _set_vice_captain(self, team: str, player: UserId | None) -> None:
-        """Pone o vacía el subcapitán de un equipo ya validado."""
-        if team == "A":
-            self._team_a_vice_captain_id = player
-        else:
-            self._team_b_vice_captain_id = player
-
-    @staticmethod
-    def _comprobar_equipo(team: str) -> None:
-        """Solo hay dos equipos: A y B."""
-        if team not in ("A", "B"):
-            raise ValueError(f"El equipo tiene que ser A o B, no {team!r}")
+        self._ryder_cup = self._ryder_cup.without_vice_captains()
 
     def _comprobar_dentro_del_equipo(
         self,
@@ -882,7 +743,7 @@ class Competition:
         has_teams: bool,
     ) -> None:
         """Lo comun a elegir capitan o subcapitan dentro de un equipo ya repartido."""
-        self._comprobar_equipo(team)
+        RyderCupSetup.check_team(team)
         if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
             raise CompetitionStateError(
                 f"Con el torneo en marcha ya no se cambia. Estado actual: {self._status.value}"
@@ -893,43 +754,6 @@ class Competition:
             )
         if player not in team_player_ids:
             raise CaptainOnWrongTeamError(f"Tiene que ser un jugador del equipo {team}")
-
-    def captains_for_team_split(self) -> tuple[UserId, UserId] | None:
-        """Los capitanes que quedan fijos al repartir equipos.
-
-        Sin ninguno, None: el reparto de siempre, porque el flujo viejo convive
-        con el nuevo durante la transicion. Con uno solo —el otro se dio de
-        baja— no se reparte cojo: un equipo quedaria sin capitan.
-
-        Raises:
-            CaptainMissingError: Si solo hay uno
-        """
-        if self._team_a_captain_id is None and self._team_b_captain_id is None:
-            return None
-        if self._team_a_captain_id is None or self._team_b_captain_id is None:
-            raise CaptainMissingError(
-                "Falta un capitán: se dio de baja. Nombra a otro antes de repartir equipos"
-            )
-        return self._team_a_captain_id, self._team_b_captain_id
-
-    def check_captains_placement(
-        self, team_a_player_ids: list[UserId], team_b_player_ids: list[UserId]
-    ) -> None:
-        """Comprueba que cada capitan esta en el equipo que capitanea.
-
-        Hasta BE #320 nada lo garantizaba: la figura no existia. Sin capitanes
-        no hay nada que comprobar.
-
-        Raises:
-            CaptainMissingError: Si solo hay uno
-            CaptainOnWrongTeamError: Si alguno no esta en su equipo
-        """
-        capitanes = self.captains_for_team_split()
-        if capitanes is None:
-            return
-        capitan_a, capitan_b = capitanes
-        if capitan_a not in team_a_player_ids or capitan_b not in team_b_player_ids:
-            raise CaptainOnWrongTeamError("Cada capitán tiene que estar en el equipo que capitanea")
 
     def reopen_enrollments(self) -> None:
         """
@@ -1005,7 +829,7 @@ class Competition:
             self._max_players = max_players
 
         if team_assignment is not None:
-            self._team_assignment = team_assignment
+            self._ryder_cup = self._ryder_cup.with_team_assignment(team_assignment)
 
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
@@ -1020,11 +844,11 @@ class Competition:
         # entera si ya hay rondas—, asi que una reabierta con calendario ya no
         # cambia de modo
         if setup_mode is not None:
-            self._setup_mode = setup_mode
             # El modo manda: si llegan los dos, el reparto sale de el
-            self._team_assignment = self._reparto_del_modo(setup_mode)
+            self._ryder_cup = self._ryder_cup.with_setup_mode(setup_mode)
 
-        self._update_team_names(team_1_name, team_2_name)
+        if team_1_name is not None or team_2_name is not None:
+            self._ryder_cup = self._ryder_cup.with_team_names(team_1_name, team_2_name)
 
         self._updated_at = datetime.now()
 
