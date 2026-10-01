@@ -128,33 +128,37 @@ class CompetitionDTOMapper:
             # Config
             max_players=competition.max_players,
             team_assignment=(
-                competition.team_assignment.value
-                if hasattr(competition.team_assignment, "value")
-                else competition.team_assignment
+                competition.ryder_cup.team_assignment.value
+                if hasattr(competition.ryder_cup.team_assignment, "value")
+                else competition.ryder_cup.team_assignment
             ),
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.setup_mode),
+            setup_mode=str(competition.ryder_cup.setup_mode),
             team_a_captain_id=(
-                competition.team_a_captain_id.value if competition.team_a_captain_id else None
+                competition.ryder_cup.team_a_captain_id.value
+                if competition.ryder_cup.team_a_captain_id
+                else None
             ),
             team_b_captain_id=(
-                competition.team_b_captain_id.value if competition.team_b_captain_id else None
+                competition.ryder_cup.team_b_captain_id.value
+                if competition.ryder_cup.team_b_captain_id
+                else None
             ),
             team_a_vice_captain_id=(
-                competition.team_a_vice_captain_id.value
-                if competition.team_a_vice_captain_id
+                competition.ryder_cup.team_a_vice_captain_id.value
+                if competition.ryder_cup.team_a_vice_captain_id
                 else None
             ),
             team_b_vice_captain_id=(
-                competition.team_b_vice_captain_id.value
-                if competition.team_b_vice_captain_id
+                competition.ryder_cup.team_b_vice_captain_id.value
+                if competition.ryder_cup.team_b_vice_captain_id
                 else None
             ),
             # Teams
-            team_1_name=competition.team_1_name,
-            team_2_name=competition.team_2_name,
+            team_1_name=competition.ryder_cup.team_1_name,
+            team_2_name=competition.ryder_cup.team_2_name,
             # Campos calculados
             is_creator=is_creator,
             enrolled_count=enrolled_count,
@@ -175,10 +179,10 @@ class CompetitionDTOMapper:
 
         return CaptaincyResponseDTO(
             id=competition.id.value,
-            team_a_captain_id=valor(competition.team_a_captain_id),
-            team_b_captain_id=valor(competition.team_b_captain_id),
-            team_a_vice_captain_id=valor(competition.team_a_vice_captain_id),
-            team_b_vice_captain_id=valor(competition.team_b_vice_captain_id),
+            team_a_captain_id=valor(competition.ryder_cup.team_a_captain_id),
+            team_b_captain_id=valor(competition.ryder_cup.team_b_captain_id),
+            team_a_vice_captain_id=valor(competition.ryder_cup.team_a_vice_captain_id),
+            team_b_vice_captain_id=valor(competition.ryder_cup.team_b_vice_captain_id),
         )
 
     @staticmethod

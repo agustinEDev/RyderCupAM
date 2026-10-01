@@ -27,11 +27,13 @@ from src.modules.competition.application.use_cases.start_draft_use_case import (
     DraftAlreadyStartedError,
     StartDraftUseCase,
 )
-from src.modules.competition.domain.entities.competition import CaptainMissingError
 from src.modules.competition.domain.entities.draft import (
     DraftNotRunningError,
     NotYourTurnError,
     PlayerAlreadyPickedError,
+)
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainMissingError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId

@@ -165,8 +165,8 @@ class TestSubmitHoleScoreValidation:
         # Mock competition for scoring view
         mock_comp = MagicMock()
         mock_comp.id = mock_round.competition_id
-        mock_comp.team_1_name = "Team A"
-        mock_comp.team_2_name = "Team B"
+        mock_comp.ryder_cup.team_1_name = "Team A"
+        mock_comp.ryder_cup.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
@@ -218,8 +218,8 @@ class TestSubmitHoleScoreValidation:
         # Mock competition for scoring view
         mock_comp = MagicMock()
         mock_comp.id = mock_round.competition_id
-        mock_comp.team_1_name = "Team A"
-        mock_comp.team_2_name = "Team B"
+        mock_comp.ryder_cup.team_1_name = "Team A"
+        mock_comp.ryder_cup.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
@@ -276,8 +276,8 @@ class TestSubmitHoleScoreHappyPath:
         # Mock competition for scoring view
         mock_comp = MagicMock()
         mock_comp.id = mock_round.competition_id
-        mock_comp.team_1_name = "Team A"
-        mock_comp.team_2_name = "Team B"
+        mock_comp.ryder_cup.team_1_name = "Team A"
+        mock_comp.ryder_cup.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
@@ -328,8 +328,8 @@ async def _match_with_hole_rows(uow, hole_number=1):
 
     mock_comp = MagicMock()
     mock_comp.id = mock_round.competition_id
-    mock_comp.team_1_name = "Team A"
-    mock_comp.team_2_name = "Team B"
+    mock_comp.ryder_cup.team_1_name = "Team A"
+    mock_comp.ryder_cup.team_2_name = "Team B"
     uow._competitions._competitions[mock_comp.id] = mock_comp
 
     return match, a, b
@@ -514,8 +514,8 @@ class TestLaBolaDelBandoEnFoursomes:
         await uow.matches.update(match)
         mock_comp = MagicMock()
         mock_comp.id = mock_round.competition_id
-        mock_comp.team_1_name = "Team A"
-        mock_comp.team_2_name = "Team B"
+        mock_comp.ryder_cup.team_1_name = "Team A"
+        mock_comp.ryder_cup.team_2_name = "Team B"
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)

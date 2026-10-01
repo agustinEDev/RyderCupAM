@@ -87,7 +87,10 @@ async def test_nombrarlos_cierra_las_inscripciones_y_los_guarda():
 
     competicion = await _competicion(uow, comp_id)
     assert competicion.status == CompetitionStatus.CLOSED
-    assert (competicion.team_a_captain_id, competicion.team_b_captain_id) == (ana, bea)
+    assert (competicion.ryder_cup.team_a_captain_id, competicion.ryder_cup.team_b_captain_id) == (
+        ana,
+        bea,
+    )
     assert respuesta.status == "CLOSED"
     assert (respuesta.team_a_captain_id, respuesta.team_b_captain_id) == (ana.value, bea.value)
 
@@ -112,7 +115,7 @@ async def test_el_organizador_puede_nombrarse_a_si_mismo():
 
     await NameCaptainsUseCase(uow).execute(_peticion(comp_id, creator_id, ana), creator_id)
 
-    assert (await _competicion(uow, comp_id)).team_a_captain_id == creator_id
+    assert (await _competicion(uow, comp_id)).ryder_cup.team_a_captain_id == creator_id
 
 
 async def test_un_admin_puede_nombrarlos_en_la_de_otro():
@@ -184,7 +187,7 @@ async def test_un_capitan_tiene_que_ser_un_inscrito_aprobado(como):
 
     competicion = await _competicion(uow, comp_id)
     assert competicion.status == CompetitionStatus.ACTIVE
-    assert competicion.team_a_captain_id is None
+    assert competicion.ryder_cup.team_a_captain_id is None
 
 
 async def test_el_capitan_a_tambien_se_comprueba():

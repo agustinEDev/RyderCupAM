@@ -138,10 +138,10 @@ class AssignTeamsUseCase:
         """Reparte los equipos; las reglas de los capitanes son del dominio (BE #320)."""
         if mode == TeamAssignmentMode.MANUAL:
             team_a_ids, team_b_ids = self._manual_assign(request, enrollments)
-            competition.check_captains_placement(team_a_ids, team_b_ids)
+            competition.ryder_cup.check_captains_placement(team_a_ids, team_b_ids)
             return team_a_ids, team_b_ids
 
-        capitanes = competition.captains_for_team_split()
+        capitanes = competition.ryder_cup.captains_for_team_split()
         players = await self._players_for_draft(enrollments)
         if capitanes is None:
             results = self._draft_service.assign_teams(players)

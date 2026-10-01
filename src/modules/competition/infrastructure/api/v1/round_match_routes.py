@@ -150,12 +150,12 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
     RoundNotModifiableError as UpdateRoundNotModifiableError,
     UpdateRoundUseCase,
 )
-from src.modules.competition.domain.entities.competition import (
-    CaptainMissingError,
-    CaptainOnWrongTeamError,
-)
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
+)
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainMissingError,
+    CaptainOnWrongTeamError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId

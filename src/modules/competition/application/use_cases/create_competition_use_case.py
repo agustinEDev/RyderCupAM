@@ -191,15 +191,15 @@ class CreateCompetitionUseCase:
             # Play Mode
             play_mode=competition.play_mode.value,
             # Nombres de equipos
-            team_1_name=competition.team_1_name,
-            team_2_name=competition.team_2_name,
+            team_1_name=competition.ryder_cup.team_1_name,
+            team_2_name=competition.ryder_cup.team_2_name,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.team_assignment.value,
+            team_assignment=competition.ryder_cup.team_assignment.value,
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.setup_mode),
+            setup_mode=str(competition.ryder_cup.setup_mode),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

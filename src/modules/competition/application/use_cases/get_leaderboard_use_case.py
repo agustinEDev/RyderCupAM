@@ -138,8 +138,8 @@ class GetLeaderboardUseCase:
                         )
                     )
 
-            team_a_name = getattr(competition, "team_1_name", None) or "Team A"
-            team_b_name = getattr(competition, "team_2_name", None) or "Team B"
+            team_a_name = competition.ryder_cup.team_1_name
+            team_b_name = competition.ryder_cup.team_2_name
 
             return LeaderboardResponseDTO(
                 competition_id=str(competition.id),
