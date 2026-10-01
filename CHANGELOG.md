@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.23.3] - 2026-10-01
+
+Una corrección en la validación del enlace de restablecer la contraseña y el CI
+de Trivy ordenado. Va con el frontend **2.38.2**, sin cambios de contrato.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato: la ruta ya
+prometía responder siempre 200 con `valid`. Orden de siempre, este primero.
+
+### Fixed
+
+- **Un token de restablecer la contraseña con una longitud imposible responde
+  «inválido» en vez de un 500** (#453, #462). `GET /auth/validate-reset-token/{token}`
+  construía su DTO (32-100 caracteres) dentro de la ruta, y un enlace recortado
+  al copiarlo daba un error 500 y un evento en Sentry (visto en producción el
+  1 oct). Ahora responde `valid: false` con el mismo mensaje que un token
+  desconocido, así que la longitud no delata nada. Los errores de base de datos
+  siguen llegando a Sentry.
+
+### Changed
+
+- **Trivy sube sus resultados con una categoría fija, `trivy-image`** (#461). La
+  categoría salía del nombre del job y de la matriz, y cambió dos veces en dos
+  días al reorganizar el CI: GitHub avisaba de configuraciones abandonadas. Las
+  viejas se han borrado en `develop`; las de `main`, después de esta release.
+
 ## [2.23.2] - 2026-10-01
 
 Sin cambios en la API ni en el código de la aplicación: es el CI que nace de la
