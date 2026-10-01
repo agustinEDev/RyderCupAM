@@ -193,7 +193,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 - ✅ **GitHub Issues Integration** - Submissions create issues in the project repository via GitHub REST API
 - ✅ **Category Mapping** - BUG, FEATURE, QUESTION, OTHER → GitHub labels (bug, enhancement, question, other)
 - ✅ **Input Sanitization** - HTML/XSS prevention on all fields
-- ✅ **Rate Limiting** - 3 requests per hour per IP
+- ✅ **Rate Limiting** - 10 requests per hour per network
 - ✅ 1 endpoint: `POST /api/v1/support/contact`
 
 ### Security Features (v1.13.1)

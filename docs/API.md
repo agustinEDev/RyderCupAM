@@ -1026,7 +1026,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 - **Public endpoint**: No authentication required
 - **CSRF exempt**: No session to protect
-- **Rate limited**: 3 requests/hour per IP (SlowAPI)
+- **Rate limited**: 10 requests/hour per network (SlowAPI, `CONTACT_LIMIT`)
 - **Input sanitization**: All fields sanitized via `sanitize_html()` before creating issue
 - **GitHub Integration**: Creates issues in configured repo via REST API (`GH_ISSUES_TOKEN` + `GITHUB_ISSUES_REPO`)
 - **Error handling**: Returns 502 Bad Gateway if GitHub API fails
