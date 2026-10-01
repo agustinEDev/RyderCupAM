@@ -22,8 +22,11 @@ SUCCESS» sin haber ejecutado un solo test.
     S11  build saltado con lo demás en verde               | 1
     J1   el script lee exactamente los jobs de sus `needs`, y son los de aquí
          (un job que no está en `needs` da "" en GitHub: dejaría de contar callado)
-    L1   un check obligatorio cancelado sale en la lista de lo que no pasó
-         (salía «FAILED» sin decir cuál: CodeRabbit en la #446)
+    L1   un check obligatorio fallado o cancelado sale con su estado en la tabla
+         (salía «FAILED» sin decir cuál: CodeRabbit en la #446). Desde el 1 oct
+         2026 el resumen es una tabla índice, una fila por check: ya no hay lista
+    V1   el veredicto cuenta los checks que no pasaron
+    V2   una ejecución en verde lo dice y tiene una fila por check
 """
 
 import re
@@ -157,29 +160,68 @@ def test_j1_the_summary_reads_exactly_the_jobs_it_needs():
     assert necesita <= set(flujo["jobs"])
 
 
-_EN_LA_LISTA = [
-    ("unit_tests", "**Unit Tests**"),
-    ("integration_tests", "**Integration Tests**"),
-    ("security_tests", "**Security Tests**"),
-    ("gpg_verification", "**GPG Verification**"),
-    ("architecture", "**Architecture Contracts**"),
-    ("api_contract", "**API Contract**"),
-    ("owasp_semgrep", "**OWASP Top 10 (Semgrep)**"),
-    ("linting", "**Lint & format**"),
-    ("type_checking", "**Types**"),
-    ("security_checks", "**Security Checks**"),
-    ("dependency_review", "**Dependency Review**"),
+_FILAS = [
+    ("unit_tests", "🧪 Unit tests"),
+    ("integration_tests", "🗄️ Integration tests"),
+    ("security_tests", "🔐 Security tests"),
+    ("gpg_verification", "🔏 Signed commits"),
+    ("architecture", "🏛️ Architecture"),
+    ("api_contract", "📜 API contract"),
+    ("owasp_semgrep", "🛡️ OWASP (Semgrep)"),
+    ("linting", "📝 Lint & format"),
+    ("type_checking", "🔬 Types (mypy)"),
+    ("security_checks", "🔒 Security Checks"),
+    ("dependency_review", "🔎 Dependency Review"),
+    ("build", "🐳 Image"),
 ]
+_NO_PASA = {"failure": "❌ failure", "cancelled": "⏹️ cancelled"}
 
 
-@pytest.mark.parametrize(("job", "texto"), _EN_LA_LISTA, ids=[j for j, _ in _EN_LA_LISTA])
-def test_l1_a_cancelled_required_check_is_listed(tmp_path, job, texto):
+def _fila(resumen, nombre):
+    filas = [linea for linea in resumen.splitlines() if linea.startswith(f"| {nombre}")]
+    assert len(filas) == 1, f"{nombre}: {filas}"
+    return filas[0]
+
+
+@pytest.mark.parametrize("resultado", list(_NO_PASA))
+@pytest.mark.parametrize(("job", "nombre"), _FILAS, ids=[j for j, _ in _FILAS])
+def test_l1_a_required_check_that_did_not_pass_is_named(tmp_path, job, nombre, resultado):
     """
-    GIVEN: Un check obligatorio cancelado y lo demás en verde
+    GIVEN: Un check obligatorio fallado o cancelado y lo demás en verde
     WHEN: Se ejecuta el resumen
-    THEN: Sale con 1 y ese check aparece en la lista de lo que no pasó
+    THEN: Sale con 1, el veredicto dice que falló y la fila de ese check lleva su estado
     """
-    proceso, resumen = _ejecutar(tmp_path, {**_OK, job: "cancelled"})
+    proceso, resumen = _ejecutar(tmp_path, {**_OK, job: resultado})
 
     assert proceso.returncode == 1
-    assert f"❌ {texto}" in resumen
+    assert resumen.startswith("## ❌ Pipeline failed — 1 check did not pass")
+    assert _fila(resumen, nombre).endswith(f"| {_NO_PASA[resultado]} |")
+
+
+def test_v1_the_verdict_counts_the_checks_that_did_not_pass(tmp_path):
+    """
+    GIVEN: Lint fallado, tipos cancelados y tests y build saltados por ello
+    WHEN: Se ejecuta el resumen
+    THEN: El veredicto dice 2 checks y avisa de que tests y build no corrieron
+    """
+    proceso, resumen = _ejecutar(
+        tmp_path, {**_OK, **_SIN_COLUMNA_2, "linting": "failure", "type_checking": "cancelled"}
+    )
+
+    assert proceso.returncode == 1
+    assert resumen.startswith("## ❌ Pipeline failed — 2 checks did not pass")
+    assert "Tests and build are skipped" in resumen
+
+
+def test_v2_a_green_run_says_so_and_lists_every_check(tmp_path):
+    """
+    GIVEN: Todos los jobs en verde
+    WHEN: Se ejecuta el resumen
+    THEN: Dice que pasó y cada check tiene su fila en verde
+    """
+    proceso, resumen = _ejecutar(tmp_path, _OK)
+
+    assert proceso.returncode == 0
+    assert resumen.startswith("## ✅ Pipeline passed")
+    for _, nombre in [*_FILAS, ("sbom_generation", "📦 SBOM")]:
+        assert _fila(resumen, nombre).endswith("| ✅ success |")

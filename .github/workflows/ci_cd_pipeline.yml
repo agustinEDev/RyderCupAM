@@ -118,7 +118,9 @@ jobs:
       - name: Run Unit Tests with Coverage
         run: |
           echo "Running unit tests on Python ${{ matrix.python-version }}..."
-          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-report=html
+          # El JUnit XML solo lo lee la tarjeta del resumen (no cambia qué pasa o falla)
+          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-report=html \
+            --junitxml="$RUNNER_TEMP/junit.xml"
 
       - name: Upload Coverage Report (XML)
         if: matrix.python-version == '3.12'
@@ -135,6 +137,18 @@ jobs:
           name: coverage-report-html
           path: htmlcov/
           retention-days: 7
+
+      # Tarjeta en el resumen de la ejecución: qué hace el job y qué ha salido
+      - name: Summary card
+        if: always()
+        run: |
+          RESULT=$(python3 .github/scripts/ci_results.py pytest "$RUNNER_TEMP/junit.xml" coverage.xml || true)
+          python3 .github/scripts/summary_card.py \
+            --title '🧪 Unit tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}' \
+            --what 'Runs the unit tests (domain and use cases, no database) with coverage on this Python version.${{ matrix.experimental && ' Experimental: a failure is shown but does not block the merge.' || '' }}' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'The failing tests are in the "Run Unit Tests with Coverage" step log. Reproduce with: pytest tests/unit/ -q' || true
 
   # ================================
   # JOB 3: INTEGRATION TESTS
@@ -220,7 +234,19 @@ jobs:
           DOCS_PASSWORD: testpassword123
         run: |
           echo "Running integration tests (with database)..."
-          pytest tests/integration/ -v --maxfail=5
+          pytest tests/integration/ -v --maxfail=5 --junitxml="$RUNNER_TEMP/junit.xml"
+
+      # Tarjeta en el resumen de la ejecución: qué hace el job y qué ha salido
+      - name: Summary card
+        if: always()
+        run: |
+          RESULT=$(python3 .github/scripts/ci_results.py pytest "$RUNNER_TEMP/junit.xml" || true)
+          python3 .github/scripts/summary_card.py \
+            --title '🗄️ Integration tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}' \
+            --what 'Runs the API, repositories and use cases against a real PostgreSQL after applying every migration.${{ matrix.experimental && ' Experimental: a failure is shown but does not block the merge.' || '' }}' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'If the migrations failed, see the "Run Database Migrations" step; otherwise the failing tests are in the "Run Integration Tests" step log (stops after 5 failures).' || true
 
   # ================================
   # JOB 4: SECURITY TESTS
@@ -309,24 +335,20 @@ jobs:
         run: |
           echo "🔐 Running security tests..."
           echo "Tests: CSRF Protection, XSS Prevention, SQL Injection, Auth Bypass"
-          pytest tests/security/ -v --maxfail=1 --tb=short
+          pytest tests/security/ -v --maxfail=1 --tb=short --junitxml="$RUNNER_TEMP/junit.xml"
 
-      - name: Security Tests Summary
+      # Tarjeta en el resumen de la ejecución (sustituye a la lista fija de antes,
+      # que daba números escritos a mano)
+      - name: Summary card
         if: always()
         run: |
-          echo "=========================================="
-          echo "🔐 SECURITY TESTS SUMMARY"
-          echo "=========================================="
-          echo ""
-          echo "Tests executed:"
-          echo "  - CSRF Protection (11 tests)"
-          echo "  - XSS Prevention (13 tests)"
-          echo "  - SQL Injection (5 tests)"
-          echo "  - Auth Bypass (9 tests)"
-          echo "  - Rate Limiting (7 tests)"
-          echo ""
-          echo "Total: 45+ security tests"
-          echo "=========================================="
+          RESULT=$(python3 .github/scripts/ci_results.py pytest "$RUNNER_TEMP/junit.xml" || true)
+          python3 .github/scripts/summary_card.py \
+            --title '🔐 Security tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}' \
+            --what 'Runs the security test suite (CSRF, XSS, SQL injection, auth bypass, rate limiting) against the API with a real PostgreSQL.${{ matrix.experimental && ' Experimental: a failure is shown but does not block the merge.' || '' }}' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'The first failing test is in the "Run Security Tests" step log (stops at the first failure). Reproduce with: pytest tests/security -n 2' || true
 
   # ================================
   # JOB 5: SECURITY CHECKS
@@ -361,6 +383,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run Bandit (Python Security Linter)
+        id: bandit
         run: |
           echo "🔒 Running Bandit - Python security linter..."
           bandit -r src/ -f json -o bandit-report.json || true
@@ -386,6 +409,7 @@ jobs:
           python .github/scripts/pip_audit_gate.py pip-audit-report.json
 
       - name: Check for Secrets with Gitleaks
+        id: gitleaks
         if: ${{ !cancelled() }}
         uses: gitleaks/gitleaks-action@v3
         env:
@@ -394,26 +418,6 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: false
           GITLEAKS_NOTIFY_USER_LIST: ""
         # Bloquea: un secreto en un commit de la PR no entra (antes solo avisaba)
-
-      - name: Generate Security Summary
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "🔒 SECURITY CHECKS SUMMARY"
-          echo "=========================================="
-          echo ""
-          echo "📦 Dependency Audit Results:"
-          echo "  pip-audit total: ${{ steps.pip-audit-check.outputs.total_vulnerabilities || 'n/a' }}"
-          echo "  pip-audit with a fix (blocking): ${{ steps.pip-audit-check.outputs.fixable_vulnerabilities || 'n/a' }}"
-          echo "  pip-audit without a fix (warning): ${{ steps.pip-audit-check.outputs.unfixable_vulnerabilities || 'n/a' }}"
-          echo ""
-
-          case "${{ steps.pip-audit-check.outcome }}" in
-            success) echo "✅ Dependency audit PASSED - No vulnerability with a fix" ;;
-            failure) echo "❌ Dependency audit FAILED - See the pip-audit step" ;;
-            *) echo "⏭️ Dependency audit did not run" ;;
-          esac
-          echo "=========================================="
 
       - name: Upload Security Reports
         if: always()
@@ -424,6 +428,43 @@ jobs:
             bandit-report.json
             pip-audit-report.json
           retention-days: 30
+
+      # Tarjeta en el resumen de la ejecución, con los números de las tres herramientas
+      - name: Summary card
+        if: always()
+        env:
+          BANDIT_OUTCOME: ${{ steps.bandit.outcome }}
+          AUDIT_OUTCOME: ${{ steps.pip-audit-check.outcome }}
+          AUDIT_TOTAL: ${{ steps.pip-audit-check.outputs.total_vulnerabilities }}
+          AUDIT_FIXABLE: ${{ steps.pip-audit-check.outputs.fixable_vulnerabilities }}
+          AUDIT_UNFIXABLE: ${{ steps.pip-audit-check.outputs.unfixable_vulnerabilities }}
+          GITLEAKS_OUTCOME: ${{ steps.gitleaks.outcome }}
+        run: |
+          if [ "$BANDIT_OUTCOME" = skipped ] || [ -z "$BANDIT_OUTCOME" ]; then
+            BANDIT="Bandit did not run"
+          elif N=$(jq -e '.results | length' bandit-report.json 2>/dev/null); then
+            BANDIT="Bandit: $N issue(s)"
+          else
+            BANDIT="Bandit: no readable report, see the step log"
+          fi
+          if [ -n "$AUDIT_TOTAL" ]; then
+            AUDIT="pip-audit: $AUDIT_TOTAL known vulnerabilities ($AUDIT_FIXABLE with a fix, blocking; $AUDIT_UNFIXABLE without a fix, warning only)"
+          elif [ "$AUDIT_OUTCOME" = skipped ] || [ -z "$AUDIT_OUTCOME" ]; then
+            AUDIT="pip-audit did not run"
+          else
+            AUDIT="pip-audit: no readable report, see the step log"
+          fi
+          case "$GITLEAKS_OUTCOME" in
+            success) LEAKS="Gitleaks: no secrets found" ;;
+            failure) LEAKS="Gitleaks: a secret was found or the scan failed, see its step" ;;
+            *) LEAKS="Gitleaks did not run" ;;
+          esac
+          python3 .github/scripts/summary_card.py \
+            --title '🔒 Security Checks' \
+            --what 'Bandit looks for insecure Python patterns in src/, pip-audit for installed dependencies with known vulnerabilities, and Gitleaks for secrets committed to git.' \
+            --status "${{ job.status }}" \
+            --result "$BANDIT · $AUDIT · $LEAKS" \
+            --if-fails 'Open the failing tool step. Bandit: fix it or add "# nosec <id> - reason" on the line. pip-audit: upgrade the package to the fixed version. Gitleaks: remove the secret and rotate it. Reports are in the security-reports artifact.' || true
 
   # ================================
   # JOB 5: LINTING
@@ -456,14 +497,51 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run Ruff Linter
+        id: lint
         run: |
+          # pipefail: sin él, el tee se comería el código de salida de ruff
+          set -o pipefail
           echo "🔍 Running Ruff linter..."
-          ruff check src/ tests/ --output-format=github
+          ruff check src/ tests/ --output-format=github 2>&1 | tee "$RUNNER_TEMP/ruff-check.txt"
 
       - name: Run Ruff Formatter Check
+        id: format
         run: |
+          set -o pipefail
           echo "📝 Checking code formatting..."
-          ruff format --check src/ tests/
+          ruff format --check src/ tests/ 2>&1 | tee "$RUNNER_TEMP/ruff-format.txt"
+
+      # Tarjeta en el resumen de la ejecución: qué hace el job y qué ha salido
+      - name: Summary card
+        if: always()
+        env:
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          FORMAT_OUTCOME: ${{ steps.format.outcome }}
+        run: |
+          if [ ! -f "$RUNNER_TEMP/ruff-check.txt" ]; then
+            CHECK="ruff check did not run"
+          else
+            N=$(grep -c '^::error' "$RUNNER_TEMP/ruff-check.txt" || true)
+            if [ "$LINT_OUTCOME" = failure ] && [ "$N" = 0 ]; then
+              CHECK="ruff check failed without listing findings, see the step log"
+            else
+              CHECK="ruff check: $N finding(s)"
+            fi
+          fi
+          LINE=$(grep -E '[0-9]+ files? (already formatted|would be reformatted)' "$RUNNER_TEMP/ruff-format.txt" 2>/dev/null | tail -n 1 || true)
+          if [ -n "$LINE" ]; then
+            FORMAT="ruff format: $LINE"
+          elif [ "$FORMAT_OUTCOME" = skipped ] || [ -z "$FORMAT_OUTCOME" ]; then
+            FORMAT="ruff format did not run (the lint step failed first)"
+          else
+            FORMAT="ruff format: could not read its summary, see the step log"
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title '📝 Lint & format' \
+            --what 'Ruff checks src/ and tests/ against the lint rules in ruff.toml and that every file is already formatted. Both block the merge.' \
+            --status "${{ job.status }}" \
+            --result "$CHECK · $FORMAT" \
+            --if-fails 'The findings are annotated on the diff. Fix locally with: ruff check src/ tests/ --fix && ruff format src/ tests/' || true
 
   # ================================
   # JOB 6: TYPE CHECKING
@@ -496,9 +574,30 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run Mypy Type Checker
+        id: mypy
         run: |
+          set -o pipefail
           echo "🔬 Running Mypy type checker..."
-          mypy src/ --show-error-codes --pretty
+          mypy src/ --show-error-codes --pretty 2>&1 | tee "$RUNNER_TEMP/mypy.txt"
+
+      # Tarjeta en el resumen de la ejecución: la última línea de mypy
+      - name: Summary card
+        if: always()
+        run: |
+          LINE=$(grep -E '^(Success: no issues found|Found [0-9]+ errors?) ' "$RUNNER_TEMP/mypy.txt" 2>/dev/null | tail -n 1 || true)
+          if [ -n "$LINE" ]; then
+            RESULT="${LINE#Success: }"
+          elif [ -f "$RUNNER_TEMP/mypy.txt" ]; then
+            RESULT="mypy did not print its summary line, see the step log"
+          else
+            RESULT="mypy did not run"
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title '🔬 Types (mypy)' \
+            --what 'mypy checks the type hints of src/ (settings in mypy.ini), so wrong types are caught before they reach production.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'The errors, with file, line and code, are in the "Run Mypy Type Checker" step log. Reproduce with: mypy src/' || true
 
   # ================================
   # JOB 7: BUILD & CONTAINER SCAN
@@ -563,6 +662,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build Docker Image
+        id: image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -575,6 +675,7 @@ jobs:
           cache-to: ${{ matrix.comprobacion == 'build' && 'type=gha,mode=max' || '' }}
 
       - name: Validate Alembic Migrations Syntax
+        id: alembic_sql
         if: matrix.comprobacion == 'build'
         run: |
           echo "🔍 Validating Alembic migrations syntax (dry-run)..."
@@ -601,6 +702,7 @@ jobs:
       # la v2.23.0 cayó en Render con todo esto en verde (hotfix 2.23.1). Ver
       # .github/scripts/start-like-render.sh
       - name: Start like Render
+        id: render
         if: matrix.comprobacion == 'render'
         run: |
           VERSION=$(python3 -c 'import runpy; print(runpy.run_path("src/config/version.py")["APP_VERSION"])')
@@ -628,6 +730,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Trivy gate (CRITICAL with a fix)
+        id: trivy_gate
         if: matrix.comprobacion == 'trivy'
         # Bloquea las CRÍTICAS que ya tienen arreglo (decidido el 30 sep 2026). Las
         # que no lo tienen no se pueden arreglar subiendo nada: siguen en el SARIF
@@ -643,25 +746,6 @@ jobs:
           scanners: 'vuln'
           exit-code: '1'
 
-      - name: Generate Trivy Summary
-        if: always() && matrix.comprobacion == 'trivy'
-        run: |
-          echo "=========================================="
-          echo "🔍 TRIVY CONTAINER SCAN SUMMARY"
-          echo "=========================================="
-          echo ""
-          echo "Scanned image: rydercupam:${{ github.sha }}"
-          echo "Reported (Security tab): HIGH, CRITICAL · Blocking: CRITICAL with a fix"
-          echo ""
-          echo "Trivy scans for:"
-          echo "  - OS package vulnerabilities (apt, apk)"
-          echo "  - Python package vulnerabilities"
-          echo "  - Known CVEs in base image"
-          echo "  - Misconfigurations"
-          echo ""
-          echo "📊 Results uploaded to GitHub Security tab"
-          echo "=========================================="
-
       - name: Save Docker Image (artifact)
         if: matrix.comprobacion == 'build'
         run: |
@@ -669,12 +753,85 @@ jobs:
           docker save rydercupam:${{ github.sha }} | gzip > rydercupam-image.tar.gz
 
       - name: Upload Docker Image Artifact
+        id: image_artifact
         if: matrix.comprobacion == 'build'
         uses: actions/upload-artifact@v7
         with:
           name: docker-image
           path: rydercupam-image.tar.gz
           retention-days: 7
+
+      # Una tarjeta por entrada de la matriz, en el resumen de la ejecución
+      - name: Summary card
+        if: always()
+        env:
+          COMPROBACION: ${{ matrix.comprobacion }}
+          NOMBRE: ${{ matrix.nombre }}
+          IMAGE_OUTCOME: ${{ steps.image.outcome }}
+          ALEMBIC_OUTCOME: ${{ steps.alembic_sql.outcome }}
+          ARTIFACT_OUTCOME: ${{ steps.image_artifact.outcome }}
+          RENDER_OUTCOME: ${{ steps.render.outcome }}
+          RENDER_SECONDS: ${{ steps.render.outputs.segundos }}
+          RENDER_VERSION: ${{ steps.render.outputs.version }}
+          SCAN_OUTCOME: ${{ steps.trivy_scan.outcome }}
+          GATE_OUTCOME: ${{ steps.trivy_gate.outcome }}
+        run: |
+          if [ "$IMAGE_OUTCOME" != success ]; then
+            RESULT="The image was not built, see the \"Build Docker Image\" step"
+          else
+            case "$COMPROBACION" in
+              build)
+                RESULT="Image rydercupam:${GITHUB_SHA:0:7} built"
+                if [ "$ALEMBIC_OUTCOME" = success ] && [ -f alembic-output.sql ]; then
+                  RESULT="$RESULT · offline migration SQL generated ($(wc -l < alembic-output.sql | tr -d ' ') lines)"
+                else
+                  RESULT="$RESULT · offline migration SQL not generated, see the \"Validate Alembic Migrations Syntax\" step"
+                fi
+                if [ "$ARTIFACT_OUTCOME" = success ]; then RESULT="$RESULT · saved as the docker-image artifact"; fi
+                ;;
+              render)
+                if [ "$RENDER_OUTCOME" = success ] && [ -n "$RENDER_SECONDS" ]; then
+                  RESULT="Migrations ran, /health answered in ${RENDER_SECONDS} s with version ${RENDER_VERSION}"
+                elif [ "$RENDER_OUTCOME" = success ]; then
+                  RESULT="Migrations ran and /health answered with the expected version (timing not reported, see the step log)"
+                else
+                  RESULT="The container did not start, or /health did not answer with the expected version"
+                fi
+                ;;
+              trivy)
+                COUNTS=$(python3 .github/scripts/ci_results.py trivy trivy-results.sarif || true)
+                case "$COUNTS" in
+                  [0-9]*) RESULT="Reported to the Security tab: $COUNTS" ;;
+                  *) RESULT="${COUNTS:-No readable Trivy SARIF, see the step log}" ;;
+                esac
+                case "$GATE_OUTCOME" in
+                  success) RESULT="$RESULT · gate passed: no CRITICAL vulnerability with a fix" ;;
+                  failure) RESULT="$RESULT · gate FAILED: a CRITICAL vulnerability has a fix, or the scan could not run (e.g. its database download), see the step log" ;;
+                  *) RESULT="$RESULT · gate did not run" ;;
+                esac
+                ;;
+            esac
+          fi
+          case "$COMPROBACION" in
+            render)
+              WHAT='Starts the image exactly like Render: entrypoint.sh, alembic upgrade head against a real PostgreSQL with a driverless URL, then uvicorn, and waits for /health to report the expected version.'
+              IF_FAILS='The container log is printed in the "Start like Render" step. Reproduce locally with .github/scripts/start-like-render.sh' ;;
+            trivy)
+              WHAT='Trivy scans the image (OS and Python packages) for HIGH and CRITICAL vulnerabilities; findings go to the Security tab, and only a CRITICAL one that already has a fix blocks.'
+              IF_FAILS='The fixable CRITICAL vulnerabilities are listed in the "Trivy gate" step: upgrade the base image or the package, or accept one in .trivyignore with the reason.' ;;
+            *)
+              WHAT='Builds the production image from docker/Dockerfile, generates the migration SQL offline (alembic upgrade head --sql) and keeps the image as the docker-image artifact.'
+              IF_FAILS='See the failing step: the Dockerfile or requirements for the build, a migration for the offline SQL. Reproduce with: docker build -f docker/Dockerfile .' ;;
+          esac
+          if [ "$IMAGE_OUTCOME" != success ]; then
+            IF_FAILS='The build error is in the "Build Docker Image" step: check docker/Dockerfile and the requirements. Reproduce with: docker build -f docker/Dockerfile .'
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title "$NOMBRE" \
+            --what "$WHAT" \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails "$IF_FAILS" || true
 
   # ================================
   # JOB 8: DEPENDENCY REVIEW
@@ -696,6 +853,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Review dependency changes
+        id: review
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
@@ -719,6 +877,36 @@ jobs:
           #   el paquete que se instala declara MIT (License-Expression y su fichero
           #   LICENSE; deps.dev también dice MIT). Comprobado el 30 sep 2026, #441.
           allow-dependencies-licenses: pkg:pypi/secure
+
+      # Tarjeta en el resumen de la ejecución (solo en PRs: en un push el job se salta)
+      - name: Summary card
+        if: always()
+        env:
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          CHANGES: ${{ steps.review.outputs.dependency-changes }}
+          VULNERABLE: ${{ steps.review.outputs.vulnerable-changes }}
+          LICENSES: ${{ steps.review.outputs.invalid-license-changes }}
+        run: |
+          contar() { printf '%s' "$1" | jq -e 'if type == "array" then length else error end' 2>/dev/null; }
+          # invalid-license-changes es un objeto {forbidden, unresolved, unlicensed}
+          contar_licencias() { printf '%s' "$1" | jq -e 'if type == "array" then length elif type == "object" then ([.[] | arrays | length] | add // 0) else error end' 2>/dev/null; }
+          if N=$(contar "$CHANGES"); then REVIEWED="$N dependency change(s) reviewed"; else REVIEWED="number of changes not reported"; fi
+          case "$REVIEW_OUTCOME" in
+            success) RESULT="Passed: no changed dependency with a moderate or worse vulnerability or a license outside the allow-list ($REVIEWED)" ;;
+            failure)
+              if V=$(contar "$VULNERABLE") && L=$(contar_licencias "$LICENSES"); then
+                RESULT="Failed: $V vulnerable change(s), $L with a license outside the allow-list ($REVIEWED)"
+              else
+                RESULT="Failed, see the step log for the dependency and the reason"
+              fi ;;
+            *) RESULT="The review did not run" ;;
+          esac
+          python3 .github/scripts/summary_card.py \
+            --title '🔎 Dependency Review' \
+            --what 'On pull requests, checks every dependency the PR adds or changes for known vulnerabilities (moderate or worse) and for licenses outside the allow-list.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'Use a version without the vulnerability, or another package if the license is not allowed. Exceptions go in allow-dependencies-licenses with the reason.' || true
 
   # ================================
   # JOB 9: SBOM GENERATION
@@ -841,6 +1029,7 @@ jobs:
           retention-days: 90
 
       - name: Submit SBOM to GitHub Dependency Graph
+        id: submit
         if: github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -852,6 +1041,28 @@ jobs:
             ${{ github.event.repository.name }} \
             ${{ github.sha }} \
             ${{ github.ref }}
+
+      # Tarjeta en el resumen de la ejecución: cuántos componentes lleva el SBOM
+      - name: Summary card
+        if: always()
+        env:
+          SUBMIT_OUTCOME: ${{ steps.submit.outcome }}
+        run: |
+          if N=$(jq -e '(.components // error("sin components")) | length' sbom/sbom.json 2>/dev/null); then
+            RESULT="CycloneDX SBOM with $N components, kept 90 days as the sbom-cyclonedx artifact"
+          else
+            RESULT="No readable SBOM was generated, see the step log"
+          fi
+          case "$SUBMIT_OUTCOME" in
+            success) RESULT="$RESULT · submitted to the GitHub dependency graph" ;;
+            failure) RESULT="$RESULT · submission to the dependency graph FAILED" ;;
+          esac
+          python3 .github/scripts/summary_card.py \
+            --title '📦 SBOM' \
+            --what 'Lists every runtime dependency (direct and transitive) as a CycloneDX SBOM, for supply-chain audits. Informational: it does not block the pipeline.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'See the failing step; the most common cause is a requirements.txt line cyclonedx-py cannot parse.' || true
 
   # ================================
   # JOB 10: GPG SIGNATURE VERIFICATION
@@ -890,6 +1101,7 @@ jobs:
           gpg --list-keys
 
       - name: Verify Commit Signatures
+        id: verify
         env:
           PR_BASE: ${{ github.base_ref }}  # Empty on push events
         run: |
@@ -934,50 +1146,36 @@ jobs:
             fi
           fi
 
-          # Run verification script
-          ./scripts/verify-gpg-signatures.sh "$BASE_REF" "$HEAD_REF"
+          # Run verification script (pipefail: el tee no debe tapar su código de salida)
+          set -o pipefail
+          ./scripts/verify-gpg-signatures.sh "$BASE_REF" "$HEAD_REF" | tee "$RUNNER_TEMP/gpg.txt"
 
-      - name: Generate Verification Summary (Success)
-        if: success()
+      # Tarjeta en el resumen de la ejecución, con las cuentas del script
+      - name: Summary card
+        if: always()
         run: |
-          echo "=========================================="
-          echo "🔏 GPG SIGNATURE VERIFICATION SUMMARY"
-          echo "=========================================="
-          echo ""
-          echo "✅ All commits in this push/PR are signed with valid GPG keys"
-          echo ""
-          echo "🔒 Security:"
-          echo "   - Code integrity verified"
-          echo "   - Author authentication confirmed"
-          echo "   - OWASP A08:2021 compliance"
-          echo ""
-          echo "📖 Policy:"
-          echo "   - All commits MUST be signed with GPG"
-          echo "   - Branch protection enforces this on main/develop"
-          echo ""
-          echo "=========================================="
-
-      - name: Generate Verification Summary (Failure)
-        if: failure()
-        run: |
-          echo "=========================================="
-          echo "🔏 GPG SIGNATURE VERIFICATION SUMMARY"
-          echo "=========================================="
-          echo ""
-          echo "❌ GPG verification FAILED"
-          echo ""
-          echo "⚠️  Found unsigned or invalid commits"
-          echo ""
-          echo "📋 Action Required:"
-          echo "   1. Check the 'Verify Commit Signatures' step output above"
-          echo "   2. Sign unsigned commits: git rebase --exec 'git commit --amend --no-edit -n -S' origin/main"
-          echo "   3. Or amend last commit: git commit --amend --no-edit -S"
-          echo "   4. Force push: git push --force"
-          echo ""
-          echo "📖 Documentation:"
-          echo "   See CLAUDE.md section '🔐 Git Commit Signing' for setup instructions"
-          echo ""
-          echo "=========================================="
+          OUT="$RUNNER_TEMP/gpg.txt"
+          dato() { sed -n -E "s/^ *$1: ([0-9]+).*/\1/p" "$OUT" 2>/dev/null | head -n 1; }
+          TOTAL=$(dato 'Total commits'); VALID=$(dato 'Valid signatures'); MERGES=$(dato 'Merge commits \(signature not required\)')
+          UNSIGNED=$(dato 'Unsigned commits'); INVALID=$(dato 'Invalid signatures')
+          # Anclado al mensaje del script, no a un asunto de commit que lo contenga
+          # (sin los códigos de color que imprime el script)
+          if sed 's/\x1b\[[0-9;]*m//g' "$OUT" 2>/dev/null | grep -qE '^[^[:alnum:]]*No new commits to verify$'; then
+            RESULT="No new commits to verify in this push or PR"
+          elif [ -n "$TOTAL" ] && [ -n "$VALID" ]; then
+            RESULT="$VALID of $TOTAL commit(s) verified (${MERGES:-0} merge commit(s), signature not required)"
+            if [ "${UNSIGNED:-0}" != 0 ] || [ "${INVALID:-0}" != 0 ]; then
+              RESULT="$RESULT · ${UNSIGNED:-0} unsigned, ${INVALID:-0} with an invalid signature"
+            fi
+          else
+            RESULT="Could not read the verification counts, see the \"Verify Commit Signatures\" step"
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title '🔏 Signed commits' \
+            --what 'Checks that every commit added by this push or PR carries a valid GPG signature; main and develop reject unsigned commits.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'The unsigned commits are listed in the "Verify Commit Signatures" step. Sign them with: git rebase --exec "git commit --amend --no-edit -n -S" origin/develop, then force-push.' || true
 
   # ================================
   # ARQUITECTURA Y CONTRATO DE LA API
@@ -1004,7 +1202,26 @@ jobs:
         run: pip install "$(grep -E '^import-linter==' requirements-dev.txt)"
 
       - name: Check architecture contracts
-        run: lint-imports
+        run: |
+          set -o pipefail
+          lint-imports 2>&1 | tee "$RUNNER_TEMP/lint-imports.txt"
+
+      # Tarjeta en el resumen de la ejecución: contratos que se cumplen y que no
+      - name: Summary card
+        if: always()
+        run: |
+          LINE=$(grep -E '^Contracts: [0-9]+ kept, [0-9]+ broken' "$RUNNER_TEMP/lint-imports.txt" 2>/dev/null | tail -n 1 || true)
+          if [ -n "$LINE" ]; then
+            RESULT=$(printf '%s' "$LINE" | sed -E 's/^Contracts: ([0-9]+) kept, ([0-9]+) broken.*/\1 contracts kept, \2 broken/')
+          else
+            RESULT="Could not read the contracts summary, see the step log"
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title '🏛️ Architecture' \
+            --what 'import-linter enforces the layer rules in .importlinter: the domain imports no framework, use cases never import infrastructure, and modules do not reach into each other.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'The broken contract and the offending import chain are in the "Check architecture contracts" step. Reproduce with: lint-imports' || true
 
   api_contract:
     name: 📜 API contract
@@ -1060,6 +1277,7 @@ jobs:
           (cd "$RUNNER_TEMP/base" && python -c "$GEN" "$RUNNER_TEMP/base.json")
 
       - name: Check for breaking changes
+        id: oasdiff
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -1069,16 +1287,13 @@ jobs:
           CODE=$?
           set -e
           cat report.txt
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
+          # El detalle va plegado debajo de la tarjeta del resumen (último paso)
           {
-            echo "## 📜 API contract"
+            echo "<details><summary>oasdiff: breaking changes and changelog</summary>"
             echo ""
-            if [ "$CODE" -eq 0 ]; then
-              echo "✅ No breaking changes against \`${{ github.base_ref }}\`."
-            else
-              echo "❌ Breaking changes against \`${{ github.base_ref }}\`:"
-            fi
-            echo ""
+            echo "Breaking changes:"
             echo '```'
             cat report.txt
             echo '```'
@@ -1087,7 +1302,9 @@ jobs:
             echo '```'
             oasdiff changelog "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/revision.json" || true
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>"
+            echo ""
+          } > "$RUNNER_TEMP/api-contract-detail.md"
 
           if [ "$CODE" -ne 0 ]; then
             # Las etiquetas de AHORA, no las del evento: al relanzar el job tras
@@ -1097,11 +1314,46 @@ jobs:
             ALLOW_BREAKING=$(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" --json labels \
               --jq '[.labels[].name] | index("api-breaking") != null')
             if [ "$ALLOW_BREAKING" = "true" ]; then
+              echo "accepted=true" >> "$GITHUB_OUTPUT"
               echo "::warning::Breaking API changes accepted by the 'api-breaking' label. Plan both deploys back to back."
               exit 0
             fi
             echo "::error::Breaking API changes. If deliberate, add the 'api-breaking' label, re-run this job and plan the release (backend first, both deploys back to back)."
             exit 1
+          fi
+
+      # Tarjeta en el resumen de la ejecución, con el detalle de oasdiff plegado debajo
+      - name: Summary card
+        if: always()
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          CODE: ${{ steps.oasdiff.outputs.code }}
+          ACCEPTED: ${{ steps.oasdiff.outputs.accepted }}
+        run: |
+          # Primera línea de oasdiff: «N changes: E error, W warning, I info»
+          COUNTS=$(grep -m 1 -E '^[0-9]+ changes: [0-9]+ error' report.txt 2>/dev/null || true)
+          COUNTS=${COUNTS:-"no change counts in the report, see the step log"}
+          if [ -z "$CODE" ]; then
+            RESULT="The comparison did not run (oasdiff could not be installed, or the OpenAPI of this PR or of $BASE_REF could not be generated), see the step log"
+          elif [ "$CODE" = 0 ]; then
+            if grep -qE '^[0-9]+ changes:' report.txt 2>/dev/null; then
+              RESULT="No breaking changes against $BASE_REF (oasdiff: $COUNTS)"
+            else
+              RESULT="No breaking changes against $BASE_REF"
+            fi
+          elif [ "$ACCEPTED" = true ]; then
+            RESULT="Breaking changes against $BASE_REF ($COUNTS), accepted by the api-breaking label: release the backend first and both deploys back to back"
+          else
+            RESULT="Breaking changes against $BASE_REF ($COUNTS)"
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title '📜 API contract' \
+            --what 'Compares the OpenAPI of this PR with the base branch (oasdiff) so a change that would break the deployed frontend cannot be merged by accident.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'For a deliberate breaking change, add the api-breaking label and re-run this job, then plan the release: backend first, both deploys back to back. If the comparison did not run, the base branch may import a package this PR removed (see "Generate OpenAPI").' || true
+          if [ -f "$RUNNER_TEMP/api-contract-detail.md" ]; then
+            cat "$RUNNER_TEMP/api-contract-detail.md" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # OWASP Top 10 con Semgrep (p/owasp-top-ten, p/python): SQL construido a mano con
@@ -1130,7 +1382,9 @@ jobs:
         run: pip install "semgrep==${SEMGREP_VERSION}"
 
       - name: Scan (OWASP Top 10, Python)
+        id: semgrep
         run: |
+          set -o pipefail
           # La regla de Django sobre cursor.execute se excluye: aquí todos los casos de
           # uso se llaman con .execute(request...), y no hay Django. La inyección SQL
           # real con SQLAlchemy (text() con f-strings) la cubre avoid-sqlalchemy-text.
@@ -1139,7 +1393,7 @@ jobs:
             --exclude-rule python.django.security.injection.sql.sql-injection-using-db-cursor-execute.sql-injection-db-cursor-execute \
             --metrics off --error \
             --sarif-output=semgrep.sarif \
-            src main.py
+            src main.py 2>&1 | tee "$RUNNER_TEMP/semgrep.txt"
 
       - name: Upload results to the Security tab
         if: always() && hashFiles('semgrep.sarif') != ''
@@ -1147,6 +1401,29 @@ jobs:
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+
+      # Tarjeta en el resumen de la ejecución: hallazgos del SARIF y alcance del escaneo
+      - name: Summary card
+        if: always()
+        run: |
+          if N=$(jq -e '[.runs[].results[]] | length' semgrep.sarif 2>/dev/null); then
+            RESULT="$N finding(s)"
+          else
+            RESULT="No readable SARIF, see the step log"
+          fi
+          # Semgrep cierra con «Ran R rules on F files: N findings.»
+          SCOPE=$(grep -m 1 -oE 'Ran [0-9]+ rules? on [0-9]+ files?' "$RUNNER_TEMP/semgrep.txt" 2>/dev/null || true)
+          if [ -n "$SCOPE" ]; then
+            RESULT="$RESULT · $(printf '%s' "$SCOPE" | sed -E 's/^Ran ([0-9]+) rules? on ([0-9]+) files?/\2 file(s) scanned with \1 rule(s)/')"
+          else
+            RESULT="$RESULT · scan scope not found in the log"
+          fi
+          python3 .github/scripts/summary_card.py \
+            --title '🛡️ OWASP (Semgrep)' \
+            --what 'Semgrep scans src/ and main.py with the OWASP Top 10 and Python rule sets (SQL built from strings, shell=True, eval...). Any finding blocks; findings also go to the Security tab.' \
+            --status "${{ job.status }}" \
+            --result "$RESULT" \
+            --if-fails 'Each finding, with rule, file and line, is in the "Scan (OWASP Top 10, Python)" step and in the Security tab. Fix the code; a false positive gets "# nosemgrep: <rule-id>" with the reason.' || true
 
   # ================================
   # JOB 11: SUMMARY
@@ -1162,31 +1439,9 @@ jobs:
 
     steps:
       - name: Generate Pipeline Summary
-        env:
-          COMMIT_MSG_INPUT: ${{ github.event.head_commit.message || github.event.pull_request.title || 'N/A' }}
         run: |
-          # Function to get emoji for job result
-          get_emoji() {
-            case "$1" in
-              success) echo "✅" ;;
-              failure) echo "❌" ;;
-              skipped) echo "⏭️" ;;
-              cancelled) echo "🚫" ;;
-              *) echo "❓" ;;
-            esac
-          }
-
-          # Function to get status badge
-          get_badge() {
-            case "$1" in
-              success) echo "![success](https://img.shields.io/badge/status-success-brightgreen)" ;;
-              failure) echo "![failure](https://img.shields.io/badge/status-failure-red)" ;;
-              skipped) echo "![skipped](https://img.shields.io/badge/status-skipped-yellow)" ;;
-              *) echo "![unknown](https://img.shields.io/badge/status-unknown-lightgrey)" ;;
-            esac
-          }
-
-          # Collect results
+          # Índice de la ejecución: veredicto, una fila por check y su estado. El
+          # detalle de cada uno está en su propia tarjeta (paso «Summary card»).
           UNIT_TESTS="${{ needs.unit_tests.result }}"
           INTEGRATION_TESTS="${{ needs.integration_tests.result }}"
           SECURITY_TESTS="${{ needs.security_tests.result }}"
@@ -1201,227 +1456,64 @@ jobs:
           API_CONTRACT="${{ needs.api_contract.result }}"
           OWASP="${{ needs.owasp_semgrep.result }}"
 
-          # Calculate metrics
-          # Note: TOTAL_JOBS counts functional jobs (excludes the summary)
-          TOTAL_JOBS=13
-          SUCCESS_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD $ARCHITECTURE $API_CONTRACT $OWASP" | grep -o "success" | wc -l)
-          FAILURE_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD $ARCHITECTURE $API_CONTRACT $OWASP" | grep -o "failure" | wc -l)
-          SKIPPED_COUNT=$(echo "$UNIT_TESTS $INTEGRATION_TESTS $SECURITY_TESTS $SECURITY_CHECKS $DEPENDENCY_REVIEW $SBOM_GEN $GPG_VERIFY $LINTING $TYPE_CHECKING $BUILD $ARCHITECTURE $API_CONTRACT $OWASP" | grep -o "skipped" | wc -l)
-
-          # Sanitize commit message for markdown table
-          # COMMIT_MSG_INPUT is passed via env: block to avoid bash injection from multiline messages
-          if [ -z "$COMMIT_MSG_INPUT" ]; then
-            SANITIZED_COMMIT_MSG="N/A"
-          else
-            # Extract only first line (title) and escape pipe chars for markdown table
-            SANITIZED_COMMIT_MSG=$(echo "$COMMIT_MSG_INPUT" | head -n 1 | sed 's/|/\\|/g')
-          fi
-
-          # Calculate percentages using python (guaranteed available in GitHub Actions)
-          SUCCESS_PERCENT=$(python3 -c "print(f'{($SUCCESS_COUNT * 100) / $TOTAL_JOBS:.1f}')")
-          FAILURE_PERCENT=$(python3 -c "print(f'{($FAILURE_COUNT * 100) / $TOTAL_JOBS:.1f}')")
-          SKIPPED_PERCENT=$(python3 -c "print(f'{($SKIPPED_COUNT * 100) / $TOTAL_JOBS:.1f}')")
-
-          # Generate Markdown Summary
-          {
-            echo "# 🏆 CI/CD Pipeline Execution Report"
-            echo ""
-            echo "## 📋 Pipeline Metadata"
-            echo ""
-            echo "| Property | Value |"
-            echo "|----------|-------|"
-            echo "| **Branch** | \`${{ github.ref_name }}\` |"
-            echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |"
-            echo "| **Commit Message** | $SANITIZED_COMMIT_MSG |"
-            echo "| **Triggered by** | @${{ github.actor }} |"
-            echo "| **Event** | \`${{ github.event_name }}\` |"
-            echo "| **Run Number** | #${{ github.run_number }} |"
-            echo "| **Workflow** | [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
-            echo ""
-            echo "---"
-            echo ""
-            echo "## 📊 Job Execution Results"
-            echo ""
-            echo "| Category | Job | Status | Details |"
-            echo "|----------|-----|--------|---------|"
-            echo "| **🧪 Testing** | Unit Tests (Python 3.11/3.12) | $(get_emoji "$UNIT_TESTS") | ~900+ tests, ~45s |"
-            echo "| **🧪 Testing** | Integration Tests | $(get_emoji "$INTEGRATION_TESTS") | ~72+ tests, PostgreSQL |"
-            echo "| **🧪 Testing** | Security Tests | $(get_emoji "$SECURITY_TESTS") | CSRF, XSS, SQLi, Auth |"
-            echo "| **🛡️ Security** | OWASP Top 10 (Semgrep) | $(get_emoji "$OWASP") | owasp-top-ten + python rules |"
-            echo "| **🔒 Security** | Security Checks | $(get_emoji "$SECURITY_CHECKS") | Bandit, pip-audit, Gitleaks |"
-            echo "| **🔒 Security** | Dependency Review | $(get_emoji "$DEPENDENCY_REVIEW") | PRs: no vulnerable dependency added |"
-            echo "| **🔒 Security** | GPG Verification | $(get_emoji "$GPG_VERIFY") | Commit signatures |"
-            echo "| **📦 Supply Chain** | SBOM Generation | $(get_emoji "$SBOM_GEN") | CycloneDX 1.6 |"
-            echo "| **🏛️ Architecture** | Architecture Contracts | $(get_emoji "$ARCHITECTURE") | Layers, pure domain, no foreign infrastructure |"
-            echo "| **🏛️ Architecture** | API Contract | $(get_emoji "$API_CONTRACT") | No breaking change (or labelled api-breaking) |"
-            echo "| **📝 Quality** | Code Linting | $(get_emoji "$LINTING") | Ruff checks and format |"
-            echo "| **📝 Quality** | Type Checking | $(get_emoji "$TYPE_CHECKING") | Mypy analysis |"
-            echo "| **🐳 Build** | Docker Build & Scan | $(get_emoji "$BUILD") | Trivy scan |"
-            echo ""
-            echo "---"
-            echo ""
-            echo "## 📈 Pipeline Statistics"
-            echo ""
-            echo "| Metric | Count | Percentage |"
-            echo "|--------|-------|------------|"
-            echo "| ✅ **Successful Jobs** | $SUCCESS_COUNT | ${SUCCESS_PERCENT}% |"
-            echo "| ❌ **Failed Jobs** | $FAILURE_COUNT | ${FAILURE_PERCENT}% |"
-            echo "| ⏭️ **Skipped Jobs** | $SKIPPED_COUNT | ${SKIPPED_PERCENT}% |"
-            echo "| 🎯 **Total Jobs** | $TOTAL_JOBS | 100% |"
-            echo ""
-          } >> $GITHUB_STEP_SUMMARY
-
-          # Determine overall status
+          estado() {
+            case "$1" in
+              success) echo "✅ success" ;;
+              failure) echo "❌ failure" ;;
+              cancelled) echo "⏹️ cancelled" ;;
+              skipped) echo "⏭️ skipped" ;;
+              *) echo "❔ ${1:-unknown}" ;;
+            esac
+          }
           # Todo lo obligatorio cuenta, y un cancelado no es un aprobado
           no_paso() { [ "$1" == "failure" ] || [ "$1" == "cancelled" ]; }
-          if no_paso "$UNIT_TESTS" || no_paso "$INTEGRATION_TESTS" || no_paso "$SECURITY_TESTS" || no_paso "$GPG_VERIFY" || no_paso "$ARCHITECTURE" || no_paso "$API_CONTRACT" || no_paso "$OWASP" || no_paso "$LINTING" || no_paso "$TYPE_CHECKING" || no_paso "$SECURITY_CHECKS" || no_paso "$DEPENDENCY_REVIEW"; then
-            {
-              echo "---"
-              echo ""
-              echo "## ❌ Pipeline Status: **FAILED**"
-              echo ""
-              echo "![Status](https://img.shields.io/badge/pipeline-FAILED-red?style=for-the-badge)"
-              echo ""
-              echo "### 🚨 Critical Tests Failed"
-              echo ""
-              echo "The following critical test suites did not pass:"
-              echo ""
-              no_paso "$UNIT_TESTS" && echo "- ❌ **Unit Tests** — Core business logic validation failed"
-              no_paso "$INTEGRATION_TESTS" && echo "- ❌ **Integration Tests** — Database/API integration issues detected"
-              no_paso "$SECURITY_TESTS" && echo "- ❌ **Security Tests** — Security vulnerabilities found (CSRF, XSS, SQLi, Auth)"
-              no_paso "$GPG_VERIFY" && echo "- ❌ **GPG Verification** — Unsigned or invalid commit signatures detected"
-              no_paso "$ARCHITECTURE" && echo "- ❌ **Architecture Contracts** — An import breaks a layer rule (see .importlinter)"
-              no_paso "$API_CONTRACT" && echo "- ❌ **API Contract** — A breaking API change without the api-breaking label, or the comparison could not run (see the job log)"
-              no_paso "$OWASP" && echo "- ❌ **OWASP Top 10 (Semgrep)** — Security finding in the code (see the Security tab)"
-              no_paso "$LINTING" && echo "- ❌ **Lint & format** — Ruff (\`ruff check src/ tests/\`, \`ruff format --check\`)"
-              no_paso "$TYPE_CHECKING" && echo "- ❌ **Types** — mypy"
-              no_paso "$SECURITY_CHECKS" && echo "- ❌ **Security Checks** — Bandit, pip-audit (a vulnerability with a fix) or Gitleaks"
-              no_paso "$DEPENDENCY_REVIEW" && echo "- ❌ **Dependency Review** — A new dependency with a vulnerability or a license outside the allow-list"
-              echo ""
-              echo "### 📋 Action Required"
-              echo ""
-              echo "1. 🔍 **Review Failed Tests**: Click on the failed job(s) above to see detailed logs"
-              echo "2. 🐛 **Fix Issues Locally**: Run tests locally with \`pytest tests/\`"
-              echo "3. ✅ **Verify Fixes**: Ensure all tests pass before pushing"
-              echo "4. 🔄 **Push Changes**: Git commit and push to re-trigger pipeline"
-              echo ""
-              echo "> ⚠️ **Warning**: This PR cannot be merged until all tests pass."
-              echo ""
-              echo "### 📚 Helpful Resources"
-              echo ""
-              echo "- [Testing Guide](../docs/TESTING.md)"
-              echo "- [Troubleshooting](../docs/TROUBLESHOOTING.md)"
-              echo "- [CI/CD Pipeline Docs](../docs/ci-cd/PIPELINE_GUIDE.md)"
-            } >> $GITHUB_STEP_SUMMARY
-            exit 1
-          elif [ "$BUILD" == "failure" ]; then
-            {
-              echo "---"
-              echo ""
-              echo "## ❌ Pipeline Status: **FAILED**"
-              echo ""
-              echo "![Status](https://img.shields.io/badge/pipeline-FAILED-red?style=for-the-badge)"
-              echo ""
-              echo "### 🐳 Docker Build Failed"
-              echo ""
-              echo "The Docker image build or security scan failed."
-              echo ""
-              echo "**Common Causes:**"
-              echo "- ❌ Dockerfile syntax errors"
-              echo "- ❌ Missing dependencies in requirements.txt"
-              echo "- ❌ Trivy detected a CRITICAL vulnerability with a fix"
-              echo "- ❌ Alembic migrations validation failed"
-              echo "- ❌ The image did not start like Render (entrypoint, migrations, /health)"
-              echo ""
-              echo "### 📋 Action Required"
-              echo ""
-              echo "1. 🔍 **Check Build Logs**: Review the failed entry of the Docker matrix (Docker build, Deploy like Render, Trivy)"
-              echo "2. 🐳 **Test Locally**: Run \`docker-compose up --build\` to reproduce"
-              echo "3. 🔒 **Check Trivy Results**: Review vulnerability scan output"
-              echo "4. 🔄 **Push Fix**: Commit changes and re-trigger pipeline"
-            } >> $GITHUB_STEP_SUMMARY
-            exit 1
-          elif [ "$BUILD" == "skipped" ] || [ "$BUILD" == "cancelled" ]; then
-            # Tests y build solo se saltan si algo de la primera columna no pasó:
-            # sin ellos no hay nada que dar por bueno
-            {
-              echo "---"
-              echo ""
-              echo "## ❌ Pipeline Status: **FAILED**"
-              echo ""
-              echo "![Status](https://img.shields.io/badge/pipeline-FAILED-red?style=for-the-badge)"
-              echo ""
-              echo "### ⏭️ Tests and build did not run"
-              echo ""
-              echo "They were skipped or cancelled: the run was cancelled, or a check in the first column did not finish."
-              echo ""
-              echo "### 📋 Action Required"
-              echo ""
-              echo "1. 🔍 **Fix Code Quality**: Run \`ruff check src/ tests/\` locally"
-              echo "2. 📝 **Fix Type Errors**: Run \`mypy src/\` locally"
-              echo "3. 🔒 **Update Dependencies**: Check the \`pip-audit\` report"
-              echo "4. ✅ **Verify Locally**: Ensure all checks pass before pushing"
-              echo ""
-              echo "> ⚠️ **Note**: Tests and build run again once the first column passes."
-            } >> $GITHUB_STEP_SUMMARY
-            exit 1
+
+          # Checks que no pasaron: los obligatorios y el build (el SBOM es informativo)
+          FALLOS=0
+          for RESULTADO in "$UNIT_TESTS" "$INTEGRATION_TESTS" "$SECURITY_TESTS" "$GPG_VERIFY" "$ARCHITECTURE" "$API_CONTRACT" "$OWASP" "$LINTING" "$TYPE_CHECKING" "$SECURITY_CHECKS" "$DEPENDENCY_REVIEW" "$BUILD"; do
+            if no_paso "$RESULTADO"; then FALLOS=$((FALLOS + 1)); fi
+          done
+          # Tests y build solo se saltan si algo de la primera columna no pasó: sin
+          # ellos no hay nada que dar por bueno
+          if [ "$FALLOS" -gt 0 ]; then
+            if [ "$FALLOS" -eq 1 ]; then
+              VEREDICTO="## ❌ Pipeline failed — 1 check did not pass"
+            else
+              VEREDICTO="## ❌ Pipeline failed — $FALLOS checks did not pass"
+            fi
+            SALIDA=1
+          elif [ "$BUILD" == "skipped" ]; then
+            VEREDICTO="## ❌ Pipeline failed — tests and build did not run"
+            SALIDA=1
           else
-            {
-              echo "---"
-              echo ""
-              echo "## ✅ Pipeline Status: **SUCCESS**"
-              echo ""
-              echo "![Status](https://img.shields.io/badge/pipeline-SUCCESS-brightgreen?style=for-the-badge)"
-              echo ""
-              echo "### 🎉 All Checks Passed!"
-              echo ""
-              echo "**Test Coverage:**"
-              echo "- ✅ **900+ Unit Tests** — All business logic validated"
-              echo "- ✅ **72+ Integration Tests** — Database & API working correctly"
-              echo "- ✅ **45+ Security Tests** — No vulnerabilities detected"
-              echo ""
-              echo "**Code Quality:**"
-              echo "- ✅ **Linting** — Code style compliant (Ruff)"
-              echo "- ✅ **Type Checking** — Full type safety (Mypy)"
-              echo "- ✅ **GPG Signatures** — All commits properly signed"
-              echo ""
-              echo "**Security Scans:**"
-              echo "- ✅ **Dependency Audit** — No critical CVEs (pip-audit)"
-              echo "- ✅ **Code Analysis** — Clean SAST scan (CodeQL)"
-              echo "- ✅ **Container Scan** — No CRITICAL vulnerability with a fix (Trivy)"
-              echo "- ✅ **SBOM Generated** — Supply chain transparency (CycloneDX)"
-              echo ""
-              echo "---"
-              echo ""
-              echo "### 🚀 Deployment Ready"
-              echo ""
-              echo "**Docker Image:**"
-              echo "- 📦 **Tag**: \`rydercupam:${GITHUB_SHA:0:7}\`"
-              echo "- 🐳 **Size**: Optimized multi-stage build"
-              echo "- 🔒 **Scanned**: Trivy security validation passed"
-              echo ""
-              echo "**Next Steps (GitFlow):**"
-              echo "1. ✅ **Merge this PR to \`develop\`** — Integration branch for features"
-              echo "2. 🚀 **Auto-deploy to staging** — Staging environment (Render/K8s)"
-              echo "3. 🧪 **Run integration tests** — Validate on staging environment"
-              echo "4. 📊 **Monitor staging metrics** — Check logs, performance, errors"
-              echo "5. 🎯 **When ready for release** — Create PR from \`develop\` → \`main\`"
-              echo "6. 🚢 **Deploy to production** — After \`main\` merge + approval"
-              echo ""
-              echo "> **Note**: Feature branches → \`develop\` → \`main\` (GitFlow workflow)"
-              echo ""
-              echo "### 📊 Quality Metrics"
-              echo ""
-              echo "| Metric | Score |"
-              echo "|--------|-------|"
-              echo "| Test Pass Rate | 100% ✅ |"
-              echo "| Code Coverage | >90% ✅ |"
-              echo "| Security Score | 10/10 ✅ |"
-              echo "| Type Safety | 100% ✅ |"
-              echo ""
-              echo "---"
-              echo ""
-              echo "*Pipeline completed in ~3 minutes (10 functional jobs, 12 total)* ⚡"
-            } >> $GITHUB_STEP_SUMMARY
-            exit 0
+            VEREDICTO="## ✅ Pipeline passed"
+            SALIDA=0
           fi
+
+          {
+            echo "$VEREDICTO"
+            echo ""
+            echo "| Check | What it does | Status |"
+            echo "|-------|--------------|--------|"
+            echo "| 📝 Lint & format | Ruff lint rules and formatting of src/ and tests/ | $(estado "$LINTING") |"
+            echo "| 🔬 Types (mypy) | Static type checking of src/ | $(estado "$TYPE_CHECKING") |"
+            echo "| 🏛️ Architecture | Layer and module import rules (import-linter) | $(estado "$ARCHITECTURE") |"
+            echo "| 📜 API contract | No breaking OpenAPI change against the base branch unless labelled api-breaking (PRs only) | $(estado "$API_CONTRACT") |"
+            echo "| 🛡️ OWASP (Semgrep) | OWASP Top 10 and Python security rules on the code | $(estado "$OWASP") |"
+            echo "| 🔒 Security Checks | Bandit, pip-audit (vulnerable dependencies) and Gitleaks (secrets) | $(estado "$SECURITY_CHECKS") |"
+            echo "| 🔎 Dependency Review | Vulnerabilities and licenses of the dependencies a PR changes (PRs only) | $(estado "$DEPENDENCY_REVIEW") |"
+            echo "| 🔏 Signed commits | Every new commit has a valid GPG signature | $(estado "$GPG_VERIFY") |"
+            echo "| 🧪 Unit tests (3.11, 3.12; 3.13/3.14 experimental) | Domain and use-case tests, with coverage | $(estado "$UNIT_TESTS") |"
+            echo "| 🗄️ Integration tests (3.12; 3.14 experimental) | API and repositories against a real PostgreSQL | $(estado "$INTEGRATION_TESTS") |"
+            echo "| 🔐 Security tests (3.12; 3.14 experimental) | CSRF, XSS, SQL injection, auth bypass and rate limiting | $(estado "$SECURITY_TESTS") |"
+            echo "| 🐳 Image: Docker build, Deploy like Render, Trivy | Builds the image, starts it like Render and scans it for vulnerabilities | $(estado "$BUILD") |"
+            echo "| 📦 SBOM | CycloneDX bill of materials (main, develop, release/*; informational, never blocks) | $(estado "$SBOM_GEN") |"
+            echo ""
+            if [ "$BUILD" == "skipped" ] && [ "$SALIDA" -eq 1 ]; then
+              echo "Tests and build are skipped while a first-column check does not pass; they run again once it does."
+              echo ""
+            fi
+            echo "Details for each check are in its own card on this page."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$SALIDA"
