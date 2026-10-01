@@ -20,6 +20,8 @@
 #   del job por localhost; uvicorn escucha en el 8000 del runner.
 # Sin RED (en local, Docker Desktop): puerto publicado y host.docker.internal.
 # Salidas: 0 arrancó y responde con la versión · 1 no arrancó o no responde
+# Con GITHUB_OUTPUT (el CI) deja ahí `segundos=` (hasta que /health respondió) y
+#   `version=`, para la tarjeta del resumen. En local no hace nada más.
 set -euo pipefail
 
 imagen="${1:?Falta la imagen}"
@@ -53,6 +55,7 @@ docker run -d --name "$nombre" \
   -e PORT=8000 \
   "$imagen" > /dev/null
 
+inicio=$SECONDS
 fin=$((SECONDS + espera_max))
 while [ "$SECONDS" -lt "$fin" ]; do
   if [ "$(docker inspect -f '{{.State.Running}}' "$nombre" 2>/dev/null)" != "true" ]; then
@@ -70,7 +73,11 @@ while [ "$SECONDS" -lt "$fin" ]; do
       echo "::error::/health responde la versión $version y se esperaba $esperada"
       exit 1
     fi
-    echo "✅ Arrancó como en Render (entrypoint, migraciones, uvicorn): /health da $version"
+    segundos=$((SECONDS - inicio))
+    if [ -n "${GITHUB_OUTPUT:-}" ]; then
+      printf 'segundos=%s\nversion=%s\n' "$segundos" "$version" >> "$GITHUB_OUTPUT"
+    fi
+    echo "✅ Arrancó como en Render (entrypoint, migraciones, uvicorn) en ${segundos}s: /health da $version"
     exit 0
   fi
   sleep 2
