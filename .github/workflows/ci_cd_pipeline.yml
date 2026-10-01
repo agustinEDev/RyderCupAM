@@ -11,7 +11,7 @@
 # 4. Security Checks - Bandit, pip-audit, Gitleaks
 # 5. Linting - Ruff (linter + formatter, los dos bloquean)
 # 6. Type Checking - Mypy
-# 7. Build - Docker + Trivy container scan
+# 7. Build - matriz: imagen Docker, arranque como Render y Trivy
 # 8. Dependency Review - blocks PRs that add a vulnerable dependency
 # 9. SBOM Generation - CycloneDX SBOM + dependency graph
 # 10. GPG Signature Verification - Validates all commits are signed
@@ -503,29 +503,46 @@ jobs:
   # ================================
   # JOB 7: BUILD & CONTAINER SCAN
   # ================================
-  # Construye la aplicación Docker + Trivy security scan
+  # Tres comprobaciones de la imagen, cada una en su caja del gráfico (1 oct 2026):
+  # el build (con las migraciones en offline y el artefacto), el arranque como en
+  # Render y Trivy. Cada entrada construye su imagen a la vez, leyendo la caché de
+  # capas (gha) de la ejecución ANTERIOR: si cambian el Dockerfile o los
+  # requirements, las tres construyen desde cero.
   # Solo ejecuta si: unit_tests + integration_tests + security_tests = success
   # Trivy: Escanea vulnerabilidades en imagen Docker (OS + Python packages)
 
   build:
-    name: 🐳 Docker + Trivy
+    name: ${{ matrix.nombre }}
+    strategy:
+      # Las tres a la vez y hasta el final: un fallo de Trivy no esconde si arranca
+      fail-fast: false
+      matrix:
+        include:
+          - comprobacion: build
+            nombre: 🐳 Docker build
+          - comprobacion: render
+            nombre: 🚀 Start like Render
+          - comprobacion: trivy
+            nombre: 🔍 Trivy
     runs-on: ubuntu-24.04
     # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
     # de la columna 1 FALLA, esta se salta: no se gastan minutos de tests en una PR
     # que no se puede mergear. Es seguro porque TODO lo de la columna 1 es check
-    # obligatorio en develop y main: un check obligatorio «saltado» cuenta como
-    # aprobado en GitHub, pero el fallo de la columna 1 ya bloquea el merge. Lo que
-    # solo se salta (API contract o Dependency Review en un push) no cuenta como fallo.
+    # obligatorio en develop y main, y su fallo ya bloquea el merge. Ojo: al ser una
+    # matriz, si se salta no se despliega y sus tres checks se quedan «esperando»
+    # (no cuentan como aprobados). Lo que solo se salta (API contract o Dependency
+    # Review en un push) no cuenta como fallo.
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 25
     permissions:
       contents: read
       security-events: write  # Subida del SARIF de Trivy
-    # La BD de verdad para arrancar como en Render (paso «Start like Render»)
+    # La BD de verdad para arrancar como en Render (paso «Start like Render»).
+    # Solo esa entrada la necesita; con image vacía GitHub no levanta el servicio
     services:
       postgres:
-        image: postgres:15
+        image: ${{ matrix.comprobacion == 'render' && 'postgres:15' || '' }}
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
@@ -554,9 +571,11 @@ jobs:
           load: true
           tags: rydercupam:${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Escribe la caché solo el build; las otras dos la leen
+          cache-to: ${{ matrix.comprobacion == 'build' && 'type=gha,mode=max' || '' }}
 
       - name: Validate Alembic Migrations Syntax
+        if: matrix.comprobacion == 'build'
         run: |
           echo "🔍 Validating Alembic migrations syntax (dry-run)..."
 
@@ -582,12 +601,14 @@ jobs:
       # la v2.23.0 cayó en Render con todo esto en verde (hotfix 2.23.1). Ver
       # .github/scripts/start-like-render.sh
       - name: Start like Render
+        if: matrix.comprobacion == 'render'
         run: |
           VERSION=$(python3 -c 'import runpy; print(runpy.run_path("src/config/version.py")["APP_VERSION"])')
           RED=host bash .github/scripts/start-like-render.sh "rydercupam:${{ github.sha }}" \
             "postgresql://test_user:test_password@localhost:5432/test_db" "$VERSION"
 
       - name: Run Trivy Container Security Scan
+        if: matrix.comprobacion == 'trivy'
         id: trivy_scan
         # Fijada por commit: una etiqueta de esta acción ya se ha secuestrado antes
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
@@ -602,11 +623,12 @@ jobs:
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: steps.trivy_scan.outcome == 'success' && hashFiles('trivy-results.sarif') != ''
+        if: matrix.comprobacion == 'trivy' && steps.trivy_scan.outcome == 'success' && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Trivy gate (CRITICAL with a fix)
+        if: matrix.comprobacion == 'trivy'
         # Bloquea las CRÍTICAS que ya tienen arreglo (decidido el 30 sep 2026). Las
         # que no lo tienen no se pueden arreglar subiendo nada: siguen en el SARIF
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
@@ -622,7 +644,7 @@ jobs:
           exit-code: '1'
 
       - name: Generate Trivy Summary
-        if: always()
+        if: always() && matrix.comprobacion == 'trivy'
         run: |
           echo "=========================================="
           echo "🔍 TRIVY CONTAINER SCAN SUMMARY"
@@ -641,11 +663,13 @@ jobs:
           echo "=========================================="
 
       - name: Save Docker Image (artifact)
+        if: matrix.comprobacion == 'build'
         run: |
           echo "💾 Saving Docker image as artifact..."
           docker save rydercupam:${{ github.sha }} | gzip > rydercupam-image.tar.gz
 
       - name: Upload Docker Image Artifact
+        if: matrix.comprobacion == 'build'
         uses: actions/upload-artifact@v7
         with:
           name: docker-image
@@ -1307,10 +1331,11 @@ jobs:
               echo "- ❌ Missing dependencies in requirements.txt"
               echo "- ❌ Trivy detected a CRITICAL vulnerability with a fix"
               echo "- ❌ Alembic migrations validation failed"
+              echo "- ❌ The image did not start like Render (entrypoint, migrations, /health)"
               echo ""
               echo "### 📋 Action Required"
               echo ""
-              echo "1. 🔍 **Check Build Logs**: Review the 'Build Docker' job logs"
+              echo "1. 🔍 **Check Build Logs**: Review the failed entry of the Docker matrix (Docker build, Start like Render, Trivy)"
               echo "2. 🐳 **Test Locally**: Run \`docker-compose up --build\` to reproduce"
               echo "3. 🔒 **Check Trivy Results**: Review vulnerability scan output"
               echo "4. 🔄 **Push Fix**: Commit changes and re-trigger pipeline"
