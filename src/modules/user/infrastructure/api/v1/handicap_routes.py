@@ -148,19 +148,20 @@ class UpdateMultipleHandicapsResponseDTO(BaseModel):
         "contestar (RyderCupAM#340)."
     ),
 )
+@limiter.limit("10/hour")  # Por usuario (#273): cada vez puede esperar a la RFEG
 async def refresh_own_handicap(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     use_case: RefreshOwnHandicapUseCase = Depends(get_refresh_own_handicap_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
 ) -> RefreshOwnHandicapResponseDTO:
     """
     Refresca el hándicap del usuario autenticado.
 
-    Sin límite propio por hora a propósito: en producción todas las peticiones
-    comparten un solo cubo de rate limit (ADR-038), así que un "5/hour" como el
-    de /update serían cinco refrescos por hora para toda la app, y a este lo
-    llama cada jugador al entrar. Lo acotan la regla de una vez al día (tras un
-    refresco correcto no se vuelve a preguntar a la RFEG hasta mañana), que
-    exige sesión y el límite global.
+    Lo acotan la regla de una vez al día (tras un refresco correcto no se vuelve
+    a preguntar a la RFEG hasta mañana) y un límite de 10/hora por usuario, que
+    frena a quien la RFEG no encuentra: a él se le pregunta en cada llamada, y
+    cada una puede esperar hasta 10 s. El frontend la llama una vez por login
+    (#273; antes no tenía límite porque todo el tráfico compartía uno, ADR-038).
 
     Raises:
         404: Si el usuario autenticado ya no existe
@@ -186,7 +187,7 @@ async def refresh_own_handicap(
         "Cada jugador solo puede actualizar el suyo; un administrador, el de cualquiera."
     ),
 )
-@limiter.limit("5/hour")  # Proteger RFEG API externa: máximo 5 consultas por hora
+@limiter.limit("5/hour")  # Proteger RFEG API externa: 5 consultas por hora y usuario
 async def update_user_handicap(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     handicap_data: UpdateHandicapRequestDTO,

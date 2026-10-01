@@ -540,7 +540,7 @@ from src.shared.infrastructure.http.http_context_validator import get_trusted_cl
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,
 )
-from src.shared.infrastructure.security.cookie_handler import get_cookie_name
+from src.shared.infrastructure.security.cookie_handler import read_access_token
 from src.shared.infrastructure.security.jwt_handler import (
     JWTTokenService,
     verify_access_token,
@@ -933,7 +933,7 @@ security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),  # noqa: ARG001 - declara el esquema Bearer en OpenAPI; el token lo lee read_access_token
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UserResponseDTO:
     """
@@ -977,15 +977,9 @@ async def get_current_user(
         async def protected_route(current_user: UserResponseDTO = Depends(get_current_user)):
             return {"message": f"Hello {current_user.email}"}
     """
-    token: str | None = None
-
-    # PRIORIDAD 1: Intentar leer JWT desde httpOnly cookie (NUEVO - v1.8.0)
-    cookie_name = get_cookie_name()
-    token = request.cookies.get(cookie_name)
-
-    # PRIORIDAD 2 (Fallback): Si no hay cookie, leer desde header Authorization (LEGACY)
-    if not token and credentials:
-        token = credentials.credentials
+    # Cookie httpOnly primero y, si no hay, Authorization: Bearer (LEGACY). La misma
+    # regla con la que el rate limit decide de quién es la petición (#273)
+    token = read_access_token(request)
 
     # Si no hay token en ninguno de los dos lugares, rechazar autenticación
     if not token:

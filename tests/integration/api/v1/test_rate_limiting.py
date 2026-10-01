@@ -94,10 +94,11 @@ class TestRateLimitingRegister:
     @pytest.mark.asyncio
     async def test_register_rate_limit_exceeded_returns_429(self, client: AsyncClient):
         """
-        GIVEN: Un endpoint de register con límite de 3 peticiones/hora
-        WHEN: Se realizan 4 intentos de registro desde la misma IP
-        THEN: Las primeras 3 peticiones son procesadas (201/409/400)
-              La 4ta petición recibe HTTP 429 Too Many Requests
+        GIVEN: Un endpoint de register con límite de 30 peticiones/hora por red
+               (en producción, toda la app: dimensionado para un club, #273)
+        WHEN: Se realizan 31 intentos de registro desde la misma red
+        THEN: Las primeras 30 peticiones son procesadas (201/409/400)
+              La 31.ª recibe HTTP 429 Too Many Requests
         """
         # Payloads para registro (con emails diferentes para evitar 409 Conflict)
         payloads = [
@@ -107,12 +108,12 @@ class TestRateLimitingRegister:
                 "first_name": "Test",
                 "last_name": "User",
             }
-            for i in range(4)
+            for i in range(31)
         ]
 
-        # Realizar 3 peticiones (dentro del límite)
+        # Realizar 30 peticiones (dentro del límite)
         responses = []
-        for i in range(3):
+        for i in range(30):
             response = await client.post("/api/v1/auth/register", json=payloads[i])
             responses.append(response)
             # Esperamos 201 (creado) o 409 (ya existe) o 400 (validación)
@@ -123,12 +124,12 @@ class TestRateLimitingRegister:
                 400,
             ], f"Intento {i + 1} falló con {response.status_code}"
 
-        # 4ta petición debe ser bloqueada por rate limiter
-        response_blocked = await client.post("/api/v1/auth/register", json=payloads[3])
+        # La 31.ª debe ser bloqueada por rate limiter
+        response_blocked = await client.post("/api/v1/auth/register", json=payloads[30])
 
         # Verificar HTTP 429 - ESTO ES LO CRÍTICO
         assert response_blocked.status_code == 429, (
-            f"Esperaba HTTP 429 en la 4ta petición, obtuvo {response_blocked.status_code}"
+            f"Esperaba HTTP 429 en la 31.ª petición, obtuvo {response_blocked.status_code}"
         )
 
         # Verificar que el mensaje indica rate limiting

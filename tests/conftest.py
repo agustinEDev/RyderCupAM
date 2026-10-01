@@ -664,6 +664,22 @@ def mock_external_services():
         yield mock_email
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """
+    Cada test empieza con los contadores del rate limit a cero.
+
+    Los contadores por red los separa el X-Test-Client-ID único de cada test, pero
+    los de email (login, forgot-password) y los de usuario no (RyderCupAM#273): dos
+    tests con el mismo email se pisarían dentro del mismo minuto.
+    """
+    from src.config.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
 # ======================================================================================
 # REUSABLE USER FIXTURES (Performance optimization)
 # ======================================================================================
