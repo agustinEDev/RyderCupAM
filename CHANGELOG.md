@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.23.1] - 2026-10-01
+
+La 2.23.0 no llegó a arrancar en Render: `alembic upgrade head`, que corre en el
+arranque del contenedor, caía con `No module named 'psycopg'` y Render mantuvo
+la 2.22.0. Producción no se cayó.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato. Lleva todo lo de
+la 2.23.0; sus notas siguen valiendo.
+
+### Fixed
+
+- **Las migraciones vuelven a usar psycopg2 con la URL de Render** (hotfix).
+  SQLAlchemy 2.1 cambió el driver por defecto de `postgresql://` de psycopg2 a
+  psycopg (v3), que no está instalado, y la `DATABASE_URL` de Render no lleva
+  driver. `alembic/env.py` solo traducía `+asyncpg` a `+psycopg2`; ahora fija
+  psycopg2 también cuando la URL no dice ninguno, en una sola función para los
+  modos offline y online. Ni el CI ni el Kind lo vieron porque sus URLs llevan
+  `+asyncpg`; un test nuevo ejecuta `alembic upgrade head` con los tres tipos
+  de URL contra un puerto cerrado y exige el error de conexión de psycopg2.
+
+## [2.23.0] - 2026-10-01
+
+Una release sin nada nuevo para el usuario: pone al día las dependencias, tres
+de ellas con cambios de comportamiento que había que absorber en el código,
+cierra tres vulnerabilidades de `urllib3` y deja un CI mucho más estricto. No
+cambia el contrato de la API: `oasdiff` corrió en cada PR y ninguna llevó la
+etiqueta `api-breaking`.
+
+**Notas de despliegue.** Sin migraciones. Al no cambiar el contrato, el orden no
+importa para la compatibilidad, pero se sigue el de siempre: el backend primero y
+el frontend 2.38.0 justo después. **`sentry-sdk` salta de la 2.19 a la 2.70 y el
+Kind no ve nada que dependa de Sentry** (así se rompió la v2.18.0): tras
+desplegar, comprobar en Sentry que siguen llegando errores y transacciones. Por
+**bcrypt 5**, iniciar sesión con una cuenta existente nada más desplegar.
+
+### Changed
+
+- **Dependencias al día** (#406, #416, #436, #450). Los saltos grandes:
+  fastapi 0.136.3 → 0.141.1, starlette 1.3.1 → 1.7.0, uvicorn 0.30.0 → 0.54.0,
+  SQLAlchemy 2.0.31 → 2.1.1, alembic 1.13.2 → 1.20.0, asyncpg 0.29 → 0.31,
+  sentry-sdk 2.19.2 → 2.70.0 y httpx 0.27 → 0.28.1, más parches menores, sin
+  cambios incompatibles en el OpenAPI. De uvicorn, el único valor por defecto que toca el
+  ADR-038 es que `FORWARDED_ALLOW_IPS` confía también en `::1`; el proxy de
+  Render no entra por loopback, así que la IP del cliente se trata igual. De
+  alembic, el SQL offline de todas las migraciones sale idéntico byte a byte, y
+  `alembic.ini` gana `path_separator` antes de que el modo antiguo desaparezca
+  (#451).
+
+- **La imagen base de Docker, fijada por digest** (#421). `python:3.12-slim`
+  era una etiqueta móvil: una build con caché podía salir sin los últimos
+  parches del sistema. Ahora cada cambio llega como PR de Dependabot, con Trivy.
+
+- **Todo el backend formateado con ruff** (#433, #437). Sin cambio de
+  comportamiento: el AST es idéntico salvo la sangría de un docstring.
+
+- **El CI, mucho más estricto** (#394, #395, #396, #415, #418, #419, #420, #422,
+  #434, #435, #438, #439, #443, #445, #446). Ruff, `ruff format` y mypy bloquean
+  con versión fija; `lint-imports` y `oasdiff` en cada PR. Snyk se retira y lo
+  sustituyen Dependency Review (con licencias por lista de permitidas),
+  `pip-audit`, Trivy, CodeQL y una revisión semanal de Snyk. Los controles de
+  seguridad bloquean de verdad: `pip-audit` ante cualquier vulnerabilidad con
+  arreglo, Gitleaks, y Trivy ante un CRITICAL con arreglo. Pipeline en dos
+  columnas, Python 3.13 y 3.14 a prueba sin bloquear, y Dependabot por grupos
+  (las actualizaciones de seguridad, juntas).
+
+### Fixed
+
+- **Contraseñas de más de 72 bytes con bcrypt 5** (#440). bcrypt solo usa los
+  72 primeros bytes; la 4 cortaba en silencio y la 5 lanza un error. Sin el
+  arreglo, registrarse con una contraseña de más de 72 bytes daba un 500 y
+  `verify()` fallaba para siempre: esa cuenta no volvía a entrar. Ahora se corta
+  a 72 bytes al cifrar y al verificar, como hacía la 4, y los hashes existentes
+  siguen verificando.
+
+- **Las mismas cabeceras de seguridad con secure 2** (#441). La 2 quitó la API
+  que usaba el middleware y sus valores por defecto habrían cambiado la política.
+  Se fijan a mano las mismas seis cabeceras de antes, y el `Cache-Control` que
+  pone una ruta (los avatares) se respeta.
+
+- **SQLAlchemy 2.1 y los enums de los campos** (#442). Se quita
+  `create_type=False` de los cuatro enums, porque la 2.1 lo respeta y las tablas
+  ya no se podían crear en los tests. En producción los tipos los crea Alembic.
+
+### Security
+
+- **urllib3 2.7 → 2.8** (#444). Corrige CVE-2026-97687, CVE-2026-97688 y
+  CVE-2026-97689 (TLS de proxies HTTPS ignorado, lectura sin límite de un
+  chunk y bucle infinito con Deflate).
+
 ## [2.22.0] - 2026-09-26
 
 El resto del rediseño de las competiciones: el modo de configuración, los
