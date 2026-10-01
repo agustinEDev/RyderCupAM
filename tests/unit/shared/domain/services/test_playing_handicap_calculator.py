@@ -5,11 +5,13 @@ from typing import ClassVar
 
 import pytest
 
-from src.modules.competition.domain.services.playing_handicap_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import (
+    ALLOWED_ALLOWANCE_PERCENTAGES,
     PlayingHandicapCalculator,
     TeeRating,
+    round_half_up,
 )
-from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class TestTeeRating:
@@ -185,48 +187,6 @@ class TestPlayingHandicapCalculatorBasic:
         assert result == 0
 
 
-class TestPlayingHandicapCalculatorSingles:
-    """Tests para cálculo SINGLES"""
-
-    def test_singles_match_play_uses_100_percent(self):
-        """SINGLES MATCH_PLAY usa 100% allowance por defecto."""
-        calculator = PlayingHandicapCalculator()
-        player_tee = TeeRating(Decimal("72.0"), 120, 72)
-        opponent_tee = TeeRating(Decimal("72.0"), 120, 72)
-
-        player_ph, opponent_ph = calculator.calculate_for_singles(
-            player_hi=Decimal("15.0"),
-            player_tee=player_tee,
-            opponent_hi=Decimal("10.0"),
-            opponent_tee=opponent_tee,
-            handicap_mode=HandicapMode.MATCH_PLAY,
-        )
-
-        # HI=15 con SR=120 → CH = 15×(120/113) + 0 = 15.93 → 16
-        # HI=10 con SR=120 → CH = 10×(120/113) + 0 = 10.62 → 11
-        assert player_ph == 16
-        assert opponent_ph == 11
-
-    def test_singles_custom_allowance_overrides_default(self):
-        """Custom allowance reemplaza el default del modo."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        player_ph, opponent_ph = calculator.calculate_for_singles(
-            player_hi=Decimal("20.0"),
-            player_tee=tee,
-            opponent_hi=Decimal("10.0"),
-            opponent_tee=tee,
-            handicap_mode=HandicapMode.MATCH_PLAY,
-            custom_allowance=90,  # Override 100% default
-        )
-
-        # HI=20 × 90% = 18
-        # HI=10 × 90% = 9
-        assert player_ph == 18
-        assert opponent_ph == 9
-
-
 class TestPlayingHandicapCalculatorSinglesDifferential:
     """Tests para calculate_singles_differential (método diferencial WHS Match Play)."""
 
@@ -267,117 +227,6 @@ class TestPlayingHandicapCalculatorSinglesDifferential:
         assert strokes_b == []
 
 
-class TestPlayingHandicapCalculatorFourball:
-    """Tests para cálculo FOURBALL"""
-
-    def test_fourball_uses_90_percent_default(self):
-        """FOURBALL usa 90% allowance por defecto."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        p1_ph, p2_ph = calculator.calculate_for_fourball(
-            player1_hi=Decimal("20.0"),
-            player1_tee=tee,
-            player2_hi=Decimal("10.0"),
-            player2_tee=tee,
-        )
-
-        # HI=20 × 90% = 18
-        # HI=10 × 90% = 9
-        assert p1_ph == 18
-        assert p2_ph == 9
-
-    def test_fourball_custom_allowance(self):
-        """FOURBALL con allowance personalizado."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        p1_ph, p2_ph = calculator.calculate_for_fourball(
-            player1_hi=Decimal("20.0"),
-            player1_tee=tee,
-            player2_hi=Decimal("10.0"),
-            player2_tee=tee,
-            custom_allowance=85,
-        )
-
-        # HI=20 × 85% = 17
-        # HI=10 × 85% = 8.5 → 9
-        assert p1_ph == 17
-        assert p2_ph == 9
-
-
-class TestPlayingHandicapCalculatorFoursomes:
-    """Tests para cálculo FOURSOMES (golpe alterno)"""
-
-    def test_foursomes_strokes_to_higher_handicap_team(self):
-        """En FOURSOMES, el equipo con mayor CH recibe los strokes."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        # Team 1: avg HI = 15.0 → CH = 15
-        # Team 2: avg HI = 10.0 → CH = 10
-        # Diferencia = 5, 50% = 2.5 → 3 strokes
-        team1_strokes, team2_strokes = calculator.calculate_for_foursomes(
-            team1_hi_avg=Decimal("15.0"),
-            team1_tee=tee,
-            team2_hi_avg=Decimal("10.0"),
-            team2_tee=tee,
-        )
-
-        assert team1_strokes == 3  # Team 1 (mayor CH) recibe strokes
-        assert team2_strokes == 0
-
-    def test_foursomes_lower_handicap_team_receives_zero(self):
-        """El equipo con menor CH no recibe strokes."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        # Team 1: avg HI = 5.0 → CH = 5
-        # Team 2: avg HI = 20.0 → CH = 20
-        # Diferencia = 15, 50% = 7.5 → 8 strokes para Team 2
-        team1_strokes, team2_strokes = calculator.calculate_for_foursomes(
-            team1_hi_avg=Decimal("5.0"),
-            team1_tee=tee,
-            team2_hi_avg=Decimal("20.0"),
-            team2_tee=tee,
-        )
-
-        assert team1_strokes == 0  # Team 1 (menor CH) no recibe nada
-        assert team2_strokes == 8
-
-    def test_foursomes_equal_handicaps_zero_strokes(self):
-        """Con handicaps iguales, nadie recibe strokes."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        team1_strokes, team2_strokes = calculator.calculate_for_foursomes(
-            team1_hi_avg=Decimal("12.0"),
-            team1_tee=tee,
-            team2_hi_avg=Decimal("12.0"),
-            team2_tee=tee,
-        )
-
-        assert team1_strokes == 0
-        assert team2_strokes == 0
-
-    def test_foursomes_custom_allowance(self):
-        """FOURSOMES con allowance personalizado."""
-        calculator = PlayingHandicapCalculator()
-        tee = TeeRating(Decimal("72.0"), 113, 72)
-
-        # Diferencia = 10, con 60% = 6 strokes
-        team1_strokes, team2_strokes = calculator.calculate_for_foursomes(
-            team1_hi_avg=Decimal("20.0"),
-            team1_tee=tee,
-            team2_hi_avg=Decimal("10.0"),
-            team2_tee=tee,
-            custom_allowance=60,
-        )
-
-        assert team1_strokes == 6
-        assert team2_strokes == 0
-
-
 class TestPlayingHandicapCalculatorRealScenarios:
     """Tests con escenarios reales de golf"""
 
@@ -411,13 +260,9 @@ class TestPlayingHandicapCalculatorRealScenarios:
         tee = TeeRating(Decimal("72.5"), 128, 72)
 
         # Jugador A (HI=8.2) vs Jugador B (HI=14.5)
-        ph_a, ph_b = calculator.calculate_for_singles(
-            player_hi=Decimal("8.2"),
-            player_tee=tee,
-            opponent_hi=Decimal("14.5"),
-            opponent_tee=tee,
-            handicap_mode=HandicapMode.MATCH_PLAY,
-        )
+        # Singles: cada uno al 100% (MatchFormat.SINGLES.default_allowance)
+        ph_a = calculator.calculate(Decimal("8.2"), tee, 100)
+        ph_b = calculator.calculate(Decimal("14.5"), tee, 100)
 
         # A: 8.2 × (128/113) + 0.5 = 9.29 + 0.5 = 9.79 → 10
         # B: 14.5 × (128/113) + 0.5 = 16.42 + 0.5 = 16.92 → 17
@@ -438,13 +283,8 @@ class TestPlayingHandicapCalculatorRealScenarios:
 
         # Hombre HI=10 desde championship
         # Mujer HI=18 desde regular
-        ph_man, ph_woman = calculator.calculate_for_singles(
-            player_hi=Decimal("10.0"),
-            player_tee=championship,
-            opponent_hi=Decimal("18.0"),
-            opponent_tee=regular,
-            handicap_mode=HandicapMode.MATCH_PLAY,
-        )
+        ph_man = calculator.calculate(Decimal("10.0"), championship, 100)
+        ph_woman = calculator.calculate(Decimal("18.0"), regular, 100)
 
         # Hombre: 10 × (135/113) + (73-72) = 11.95 + 1 = 12.95 → 13
         # Mujer: 18 × (115/113) + (69.5-72) = 18.31 - 2.5 = 15.81 → 16
@@ -588,3 +428,46 @@ class TestPlayingHandicapCalculatorMaxHandicap:
         )
 
         assert team_b_ph == 20
+
+
+class TestAllowedAllowancePercentages:
+    """
+    Los porcentajes que se pueden elegir a mano (RyderCupAM#165).
+
+    Estaban dos veces, en `Round` (ALLOWED_PERCENTAGES) y en `QuickMatch`
+    (ALLOWED_ALLOWANCE_PERCENTAGES): ahora viven con el cálculo.
+    """
+
+    def test_de_50_a_100_de_5_en_5(self):
+        assert sorted(ALLOWED_ALLOWANCE_PERCENTAGES) == list(range(50, 101, 5))
+
+    def test_los_porcentajes_por_defecto_estan_entre_los_permitidos(self):
+        """Si no, una ronda sin porcentaje propio no se podría editar con el suyo."""
+        for formato in MatchFormat:
+            assert formato.default_allowance in ALLOWED_ALLOWANCE_PERCENTAGES
+
+
+class TestRoundHalfUp:
+    """
+    El redondeo de todo el cálculo de hándicap (RyderCupAM#165).
+
+    Estaba copiado cinco veces: cuatro dentro del calculador y una en la partida
+    rápida. Redondea alejándose del cero, como el frontend. `round()` de Python y
+    `Decimal.to_integral_value()` redondean al par en los .5, y los hándicaps
+    acabados en .5 son de lo más común.
+    """
+
+    @pytest.mark.parametrize(
+        ("valor", "esperado"),
+        [
+            ("20.5", 21),
+            ("21.5", 22),
+            ("2.4", 2),
+            ("2.6", 3),
+            ("-2.5", -3),
+            ("-2.4", -2),
+            ("0", 0),
+        ],
+    )
+    def test_se_aleja_del_cero_en_los_medios(self, valor, esperado):
+        assert round_half_up(Decimal(valor)) == esperado

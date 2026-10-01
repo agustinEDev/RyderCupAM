@@ -5,7 +5,6 @@ from .competition_name import CompetitionName, InvalidCompetitionNameError
 from .date_range import DateRange, InvalidDateRangeError
 from .handicap_mode import HandicapMode
 from .location import InvalidLocationError, Location
-from .match_format import MatchFormat
 from .match_id import MatchId
 from .match_player import MatchPlayer
 from .match_status import MatchStatus
@@ -26,7 +25,6 @@ __all__ = [
     "InvalidDateRangeError",
     "InvalidLocationError",
     "Location",
-    "MatchFormat",
     "MatchId",
     "MatchPlayer",
     "MatchStatus",

@@ -4,13 +4,13 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.use_cases.list_my_quick_matches_use_case import (
     ListMyQuickMatchesUseCase,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.quick_match.conftest import create_user
 
 pytestmark = pytest.mark.asyncio

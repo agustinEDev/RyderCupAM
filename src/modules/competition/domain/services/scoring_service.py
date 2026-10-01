@@ -12,9 +12,9 @@ Contiene la logica de negocio pura para:
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class ScoringService:

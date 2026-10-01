@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.dto.quick_match_dto import SubmitHoleScoreRequestDTO
 from src.modules.quick_match.application.exceptions import (
@@ -26,6 +25,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
 )
 from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.quick_match.conftest import create_user
 
 pytestmark = pytest.mark.asyncio

@@ -21,8 +21,8 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.services.stroke_allocation_service import (

@@ -191,9 +191,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
-from src.modules.competition.domain.services.playing_handicap_calculator import (
-    PlayingHandicapCalculator,
-)
 from src.modules.competition.domain.services.schedule_format_service import (
     ScheduleFormatService,
 )
@@ -534,6 +531,9 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper i
 )
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
+)
+from src.shared.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
 )
 from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.http.http_context_validator import get_trusted_client_ip

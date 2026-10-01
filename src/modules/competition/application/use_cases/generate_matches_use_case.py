@@ -30,14 +30,9 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.playing_handicap_calculator import (
-    PlayingHandicapCalculator,
-    TeeRating,
-)
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_ENROLLMENT,
     MISSING_GENDER,
@@ -58,7 +53,13 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
+    TeeRating,
+)
+from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 logger = logging.getLogger(__name__)
 
@@ -841,11 +842,10 @@ class GenerateMatchesUseCase:
         user_gender = user_gender_map.get(str(user_id.value))
 
         # Auto-resolve tee: (colour, user_gender) → (colour, None) fallback
-        tee_gender = user_gender
-        tee_key = (tee_color.value, tee_gender.value if tee_gender else None)
-        if tee_key not in tee_ratings:
-            tee_key = (tee_color.value, None)
-            tee_gender = None
+        tee_key = tee_key_for(
+            tee_ratings, tee_color.value, user_gender.value if user_gender else None
+        ) or (tee_color.value, None)
+        tee_gender = user_gender if tee_key[1] is not None else None
 
         tee_rating = tee_ratings.get(tee_key)
 
@@ -889,9 +889,8 @@ class GenerateMatchesUseCase:
         """
         if not holes_by_tee or tee_color is None:
             return default
-        color = tee_color.value
         gender = tee_gender.value if tee_gender else None
-        return holes_by_tee.get((color, gender)) or holes_by_tee.get((color, None)) or default
+        return find_tee(holes_by_tee, tee_color.value, gender, default=default)
 
     def _build_match_player(
         self,

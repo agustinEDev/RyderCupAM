@@ -2,7 +2,6 @@
 
 from uuid import uuid4
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.quick_match.domain.services.scoring_coverage_service import (
     ScoringCoverageService,
 )
@@ -10,6 +9,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 def _registered():

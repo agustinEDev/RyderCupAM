@@ -2,9 +2,9 @@
 
 from uuid import uuid4
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.quick_match.domain.services.hole_completion_service import hole_is_complete
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 A1 = ParticipantId(uuid4())
 A2 = ParticipantId(uuid4())

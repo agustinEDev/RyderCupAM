@@ -8,7 +8,6 @@ from datetime import UTC, date, datetime
 
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
 )
@@ -16,14 +15,8 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-
-# Porcentajes de allowance permitidos (50-100 en incrementos de 5)
-ALLOWED_PERCENTAGES = frozenset(range(50, 101, 5))  # {50, 55, 60, ..., 95, 100}
-
-# Allowances por defecto según WHS (Ryder Cup = Match Play)
-SINGLES_ALLOWANCE: int = 100  # Match Play
-FOURBALL_ALLOWANCE: int = 90
-FOURSOMES_ALLOWANCE: int = 50  # Se aplica a la DIFERENCIA entre equipos
+from src.shared.domain.services.playing_handicap_calculator import ALLOWED_ALLOWANCE_PERCENTAGES
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class Round:
@@ -104,9 +97,12 @@ class Round:
             ValueError: Si allowance_percentage fuera del rango válido
         """
         # Validar allowance_percentage si se proporciona (50-100 en incrementos de 5)
-        if allowance_percentage is not None and allowance_percentage not in ALLOWED_PERCENTAGES:
+        if (
+            allowance_percentage is not None
+            and allowance_percentage not in ALLOWED_ALLOWANCE_PERCENTAGES
+        ):
             raise ValueError(
-                f"allowance_percentage must be one of {sorted(ALLOWED_PERCENTAGES)}, "
+                f"allowance_percentage must be one of {sorted(ALLOWED_ALLOWANCE_PERCENTAGES)}, "
                 f"got {allowance_percentage}"
             )
 
@@ -339,9 +335,9 @@ class Round:
         if clear_allowance:
             self._allowance_percentage = None
         elif allowance_percentage is not None:
-            if allowance_percentage not in ALLOWED_PERCENTAGES:
+            if allowance_percentage not in ALLOWED_ALLOWANCE_PERCENTAGES:
                 raise ValueError(
-                    f"allowance_percentage must be one of {sorted(ALLOWED_PERCENTAGES)}, "
+                    f"allowance_percentage must be one of {sorted(ALLOWED_ALLOWANCE_PERCENTAGES)}, "
                     f"got {allowance_percentage}"
                 )
             self._allowance_percentage = allowance_percentage
@@ -383,13 +379,7 @@ class Round:
         if self._allowance_percentage is not None:
             return self._allowance_percentage
 
-        if self._match_format == MatchFormat.SINGLES:
-            return SINGLES_ALLOWANCE
-
-        if self._match_format == MatchFormat.FOURBALL:
-            return FOURBALL_ALLOWANCE
-
-        return FOURSOMES_ALLOWANCE
+        return self._match_format.default_allowance
 
     # ==================== Properties ====================
 

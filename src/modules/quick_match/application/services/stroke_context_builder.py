@@ -11,8 +11,8 @@ import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
 
 logger = logging.getLogger(__name__)
 

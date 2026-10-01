@@ -7,12 +7,10 @@ from decimal import Decimal
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
 from src.modules.competition.domain.services.score_differential_calculator import (
     PlayedRound,
     ScoreDifferentialCalculator,
 )
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -39,7 +37,9 @@ from src.modules.user.domain.services.scoring_breakdown_calculator import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.value_objects.hole_outcome import HoleOutcome
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único

@@ -23,14 +23,16 @@ El reparto depende del formato, siguiendo el WHS igual que `competition`:
 """
 
 from dataclasses import dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
-from src.modules.competition.domain.services.playing_handicap_calculator import (
+from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
+    round_half_up,
 )
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.services.tee_lookup import find_tee
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_participant import QuickMatchParticipant
@@ -311,7 +313,7 @@ class StrokeAllocationService:
             # El allowance se aplica igual: sin el, quien no tiene barra
             # valorable jugaria al 100% de su handicap mientras el resto de la
             # partida juega al 95%, y saldria ganando por no tener datos.
-            rounded = self._round_half_up(hi * Decimal(allowance) / Decimal(100))
+            rounded = round_half_up(hi * Decimal(allowance) / Decimal(100))
             return rounded if allow_negative else max(0, rounded)
 
         if allow_negative:
@@ -331,7 +333,7 @@ class StrokeAllocationService:
 
         tee_rating = self._tee_rating_for(participant, tee_ratings)
         if tee_rating is None:
-            return max(0, self._round_half_up(hi))
+            return max(0, round_half_up(hi))
 
         return self._calculator.calculate_course_handicap(hi, tee_rating)
 
@@ -356,9 +358,8 @@ class StrokeAllocationService:
         if participant.tee_color is None:
             return None
 
-        color = participant.tee_color.value
         gender = participant.tee_gender.value if participant.tee_gender else None
-        return tee_ratings.get((color, gender)) or tee_ratings.get((color, None))
+        return find_tee(tee_ratings, participant.tee_color.value, gender)
 
     @staticmethod
     def _holes_for(
@@ -374,9 +375,8 @@ class StrokeAllocationService:
         """
         if participant.tee_color is None:
             return default
-        color = participant.tee_color.value
         gender = participant.tee_gender.value if participant.tee_gender else None
-        return by_tee.get((color, gender)) or by_tee.get((color, None)) or default
+        return find_tee(by_tee, participant.tee_color.value, gender, default=default)
 
     def _build(
         self,
@@ -397,18 +397,6 @@ class StrokeAllocationService:
             allocated if display_handicap is None else display_handicap,
             self.allocate_by_hole(allocated, holes_by_stroke_index),
         )
-
-    @staticmethod
-    def _round_half_up(value: Decimal) -> int:
-        """
-        Redondea alejandose del cero, como `PlayingHandicapCalculator`.
-
-        `Decimal.to_integral_value()` usa ROUND_HALF_EVEN por defecto: 20.5 -> 20
-        y 21.5 -> 22. Todo el resto del calculo de handicap usa ROUND_HALF_UP, y
-        el frontend tambien, asi que dejarlo al default partia el empate para el
-        lado contrario en los handicaps acabados en .5, que son de lo mas comun.
-        """
-        return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     @staticmethod
     def allocate_by_hole(playing_handicap: int, holes_by_stroke_index: list[int]) -> dict[int, int]:

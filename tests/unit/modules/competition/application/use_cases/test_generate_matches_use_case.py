@@ -37,7 +37,6 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_TEE_COLOR,
     NO_GOLF_COURSE,
@@ -61,6 +60,7 @@ from src.modules.user.domain.value_objects.handicap import Handicap
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 pytestmark = pytest.mark.asyncio
 
