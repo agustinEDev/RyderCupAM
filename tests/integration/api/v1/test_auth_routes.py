@@ -350,3 +350,37 @@ class TestAuthRoutes:
         assert "8 characters" not in response_data["detail"]
         assert "min_length" not in response_data["detail"]
         assert "password" not in response_data["detail"].lower()
+
+
+class TestValidateResetTokenMalformed:
+    """
+    BE #453: un token con una longitud imposible daba 500 y un evento de error
+    en Sentry, porque la ruta construye el DTO (32-100 caracteres) dentro del
+    manejador. La ruta promete responder siempre 200 con valid=True/False, y un
+    token mal formado no es más que un token inválido.
+
+        #   token                      | respuesta
+        ----|---------------------------|-------------------------------------
+        M1  15 caracteres (corto)      | 200, valid=False, el mensaje de siempre
+        M2  101 caracteres (largo)     | 200, valid=False, el mensaje de siempre
+        M3  48 caracteres desconocido  | 200, valid=False (lo que ya hacía)
+    """
+
+    MENSAJE_INVALIDO = "Token de reseteo inválido o expirado. Solicita un nuevo enlace."
+
+    @pytest.mark.parametrize(
+        "token",
+        ["token-falso-123", "a" * 101, "b" * 48],
+        ids=["M1-corto", "M2-largo", "M3-desconocido"],
+    )
+    async def test_a_malformed_token_is_just_invalid(self, client: AsyncClient, token: str):
+        """
+        GIVEN: Un token de reseteo que no existe, con cualquier longitud
+        WHEN: Se valida con GET /api/v1/auth/validate-reset-token/{token}
+        THEN: 200 con valid=False y el mismo mensaje que cualquier token
+              inválido: la longitud no revela nada distinto
+        """
+        response = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"valid": False, "message": self.MENSAJE_INVALIDO}
