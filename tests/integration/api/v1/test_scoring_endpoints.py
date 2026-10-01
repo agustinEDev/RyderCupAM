@@ -714,9 +714,7 @@ class TestAperturaAutomatica:
         assert vista["scoring_opens_at"] is not None
         hoyo_1 = next(e for e in vista["scores"] if e["hole_number"] == 1)
         mio = next(
-            j
-            for j in hoyo_1["player_scores"]
-            if j["user_id"] == ctx["player_a"]["user"]["id"]
+            j for j in hoyo_1["player_scores"] if j["user_id"] == ctx["player_a"]["user"]["id"]
         )
         assert mio["own_score"] == 4, "el golpe tiene que quedar guardado, no caer en la nada"
 
@@ -753,9 +751,7 @@ class TestAperturaAutomatica:
         assert abre.isoformat() in cuerpo["detail"]
 
     @pytest.mark.asyncio
-    async def test_los_dos_jugadores_anotan_tras_abrirse(
-        self, client: AsyncClient, monkeypatch
-    ):
+    async def test_los_dos_jugadores_anotan_tras_abrirse(self, client: AsyncClient, monkeypatch):
         """El segundo golpe no vuelve a abrir el partido ni pierde lo suyo."""
         ctx = await setup_match_in_progress(client, start_match=False)
         self._con_apertura(monkeypatch, datetime.now(UTC) - timedelta(hours=1))

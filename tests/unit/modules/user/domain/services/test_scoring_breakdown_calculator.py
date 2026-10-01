@@ -172,9 +172,7 @@ class TestNueves:
 
     def test_quien_solo_juega_la_ida_no_tiene_media_de_vuelta(self):
         """None, no cero: no haber jugado no es haber jugado en par."""
-        vuelta = RoundOutcome(
-            golf_course_id=None, golf_course_name=None, holes=[hoyo(1, 4, 4)]
-        )
+        vuelta = RoundOutcome(golf_course_id=None, golf_course_name=None, holes=[hoyo(1, 4, 4)])
 
         assert ScoringBreakdownCalculator().compute([vuelta]).back_nine is None
 
@@ -182,9 +180,7 @@ class TestNueves:
 class TestPorCampo:
     def test_ordena_los_campos_de_mejor_a_peor(self):
         facil = vuelta_de_par([4] * 18, [4] * 18, golf_course_id="c1", golf_course_name="Fácil")
-        dificil = vuelta_de_par(
-            [4] * 18, [6] * 18, golf_course_id="c2", golf_course_name="Difícil"
-        )
+        dificil = vuelta_de_par([4] * 18, [6] * 18, golf_course_id="c2", golf_course_name="Difícil")
 
         por_campo = ScoringBreakdownCalculator().compute([dificil, facil]).by_course
 

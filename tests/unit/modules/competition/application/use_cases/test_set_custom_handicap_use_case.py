@@ -132,7 +132,9 @@ class TestSetCustomHandicapUseCase:
         with pytest.raises(EnrollmentNotFoundError):
             await use_case.execute(request, creator_id)
 
-    async def test_should_raise_competition_not_found(self, uow: InMemoryUnitOfWork, creator_id: UserId):
+    async def test_should_raise_competition_not_found(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId
+    ):
         """
         Given: Un enrollment cuya competición no existe
         When: Se intenta establecer el hándicap

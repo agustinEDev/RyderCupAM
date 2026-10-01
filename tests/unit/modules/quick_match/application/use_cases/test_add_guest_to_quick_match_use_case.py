@@ -112,9 +112,7 @@ class TestAddGuestToQuickMatchUseCase:
         assert guest_dto.tee_color == "YELLOW"
         assert guest_dto.tee_gender == "MALE"
 
-    async def test_add_guest_with_tee_not_on_course_raises(
-        self, qm_uow, golf_course_uow, user_uow
-    ):
+    async def test_add_guest_with_tee_not_on_course_raises(self, qm_uow, golf_course_uow, user_uow):
         creator = await create_user(user_uow, "creator4@test.com")
         qm = await _create_pending_match(qm_uow, golf_course_uow, creator.id)
 

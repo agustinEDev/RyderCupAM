@@ -485,7 +485,6 @@ class TestUpdateCompetitionUseCase:
         )
         created = await create_use_case.execute(create_request, creator_id)
 
-
         return created
 
     async def _create_scheduled(self, uow, creator_id, dias):
@@ -701,9 +700,7 @@ class TestUpdateCompetitionUseCase:
 
         assert await self._cap_of(uow, created.id) == dentro
 
-    async def test_the_cap_can_always_grow(
-        self, uow: InMemoryUnitOfWork, creator_id: UserId
-    ):
+    async def test_the_cap_can_always_grow(self, uow: InMemoryUnitOfWork, creator_id: UserId):
         """Subirlo no deja a nadie fuera, asi que no hay nada que comprobar."""
         created = await self._create_and_open(uow, creator_id, max_players=12)
         await self._approve_enrollments(uow, created.id, 6)

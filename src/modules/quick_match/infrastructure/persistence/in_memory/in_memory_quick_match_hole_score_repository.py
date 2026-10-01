@@ -24,9 +24,7 @@ class InMemoryQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInterfa
         if hole_score.id in self._hole_scores:
             self._hole_scores[hole_score.id] = hole_score
 
-    async def find_by_id(
-        self, hole_score_id: QuickMatchHoleScoreId
-    ) -> QuickMatchHoleScore | None:
+    async def find_by_id(self, hole_score_id: QuickMatchHoleScoreId) -> QuickMatchHoleScore | None:
         return self._hole_scores.get(hole_score_id)
 
     async def find_by_match_hole_and_participant(
@@ -42,8 +40,6 @@ class InMemoryQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInterfa
         return None
 
     async def find_by_match(self, quick_match_id: QuickMatchId) -> list[QuickMatchHoleScore]:
-        results = [
-            hs for hs in self._hole_scores.values() if hs.quick_match_id == quick_match_id
-        ]
+        results = [hs for hs in self._hole_scores.values() if hs.quick_match_id == quick_match_id]
         results.sort(key=lambda x: x.hole_number)
         return results

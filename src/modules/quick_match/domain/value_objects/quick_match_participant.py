@@ -134,8 +134,7 @@ class QuickMatchParticipant:
 
     def __eq__(self, other) -> bool:
         return (
-            isinstance(other, QuickMatchParticipant)
-            and self.participant_id == other.participant_id
+            isinstance(other, QuickMatchParticipant) and self.participant_id == other.participant_id
         )
 
     def __hash__(self) -> int:

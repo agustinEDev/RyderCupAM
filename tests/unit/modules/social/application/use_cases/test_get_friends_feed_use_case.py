@@ -72,9 +72,7 @@ async def _create_user(user_uow, share_activity: bool = True) -> User:
 
 
 async def _hacer_amigos(social_uow, a: User, b: User) -> Friendship:
-    friendship = Friendship.create(
-        id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id
-    )
+    friendship = Friendship.create(id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id)
     friendship.accept()
     async with social_uow:
         await social_uow.friendships.add(friendship)
@@ -177,9 +175,7 @@ class TestQueSeVe:
 
         assert feed.events == []
 
-    async def test_sin_amigos_ni_logros_propios_el_feed_llega_vacio(
-        self, social_uow, user_uow
-    ):
+    async def test_sin_amigos_ni_logros_propios_el_feed_llega_vacio(self, social_uow, user_uow):
         """Given un jugador recien llegado / When pide el feed / Then llega vacio."""
         yo = await _create_user(user_uow)
 
@@ -417,9 +413,7 @@ class TestAvisoDeNovedades:
 
 
 class TestCursorManipulado:
-    async def test_un_cursor_con_zona_horaria_no_tumba_la_peticion(
-        self, social_uow, user_uow
-    ):
+    async def test_un_cursor_con_zona_horaria_no_tumba_la_peticion(self, social_uow, user_uow):
         """
         Given un cursor con desfase horario / When se pide el feed / Then
         responde en vez de reventar.
@@ -519,13 +513,9 @@ class TestElCampo:
         yo = await _create_user(user_uow)
         amigo = await _create_user(user_uow)
         await _hacer_amigos(social_uow, yo, amigo)
-        await _publica(
-            social_uow, amigo, "match-1", payload={"golf_course_id": "not-a-uuid"}
-        )
+        await _publica(social_uow, amigo, "match-1", payload={"golf_course_id": "not-a-uuid"})
 
-        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(
-            str(yo.id.value)
-        )
+        feed = await _use_case(social_uow, user_uow, golf_course_uow).execute(str(yo.id.value))
 
         assert len(feed.events) == 1
         assert feed.courses == {}

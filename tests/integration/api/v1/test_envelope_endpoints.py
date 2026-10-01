@@ -85,7 +85,7 @@ class TestLasRutasDeLosSobres:
             client, "sobres-4@test.com", "P@ssw0rd123!", "Sobres", "Cuatro"
         )
         set_auth_cookies(client, usuario["cookies"])
-        app.dependency_overrides[get_reveal_envelopes_use_case] = lambda: _Rechaza()
+        app.dependency_overrides[get_reveal_envelopes_use_case] = _Rechaza
         try:
             respuesta = await client.post(f"/api/v1/competitions/rounds/{uuid4()}/envelopes/reveal")
         finally:

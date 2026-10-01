@@ -177,4 +177,3 @@ class TestHeicFromAnIPhonePhotoLibrary:
 
         with pytest.raises(InvalidAvatarImageError, match="demasiado grande"):
             processor.process_avatar_image(self._heic_bytes(200, 200))
-

@@ -49,9 +49,9 @@ _executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENCY, thread_name_prefix="
 # Un semáforo por event loop. `asyncio.Semaphore` se ata al loop en el que se usa por
 # primera vez, así que uno global rompería en cuanto hubiera más de uno (los tests crean
 # uno por test). El diccionario es débil para que un loop cerrado no se quede retenido.
-_admission_gates: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, asyncio.Semaphore
-] = weakref.WeakKeyDictionary()
+_admission_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _admission_gate(loop: asyncio.AbstractEventLoop) -> asyncio.Semaphore:

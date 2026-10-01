@@ -86,9 +86,9 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             else:
                 stmt = stmt.where(ActivityEvent._occurred_at < before)
 
-        stmt = stmt.order_by(
-            ActivityEvent._occurred_at.desc(), ActivityEvent._id.desc()
-        ).limit(limit)
+        stmt = stmt.order_by(ActivityEvent._occurred_at.desc(), ActivityEvent._id.desc()).limit(
+            limit
+        )
 
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
@@ -118,8 +118,6 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         return result.first() is not None
 
     async def delete_for_user(self, user_id: UserId) -> int:
-        stmt = delete(activity_events_table).where(
-            activity_events_table.c.user_id == user_id
-        )
+        stmt = delete(activity_events_table).where(activity_events_table.c.user_id == user_id)
         result = await self._session.execute(stmt)
         return result.rowcount or 0

@@ -1,9 +1,9 @@
 """Tipos de evento que se publican en el feed de los amigos."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ActivityEventType(str, Enum):
+class ActivityEventType(StrEnum):
     """
     Lo que se publica en el feed.
 

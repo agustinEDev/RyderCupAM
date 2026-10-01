@@ -117,9 +117,7 @@ class TestFindByUserIdsAndCompetition:
         await _enroll(db_session, competition_id, not_wanted, use_real_name=True)
 
         repo = SQLAlchemyEnrollmentRepository(db_session)
-        found = await repo.find_by_user_ids_and_competition(
-            [wanted_a, wanted_b], competition_id
-        )
+        found = await repo.find_by_user_ids_and_competition([wanted_a, wanted_b], competition_id)
 
         by_user = {e.user_id: e for e in found}
         assert set(by_user) == {wanted_a, wanted_b}

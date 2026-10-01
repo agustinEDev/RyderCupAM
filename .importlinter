@@ -1,0 +1,159 @@
+# ================================
+# CONTRATOS DE ARQUITECTURA (import-linter)
+# ================================
+# Se comprueban en el CI (workflow "Architecture & API Contract") y en local con:
+#   lint-imports
+#
+# Qué protegen, y de dónde sale cada regla:
+# - Capas: dentro de cada módulo, infrastructure puede importar application y
+#   domain; application solo domain; domain nada de las otras dos. Es la regla del
+#   CLAUDE.md "los casos de uso nunca importan de infrastructure" (refactor del
+#   16 nov 2025), que hasta ahora solo se comprobaba en revisión.
+# - Dominio puro: el dominio no conoce FastAPI, SQLAlchemy ni Pydantic.
+# - Entre módulos se comparte dominio (p. ej. MatchFormat), nunca infraestructura:
+#   cada módulo define sus propios decoradores de persistencia. Los imports
+#   INDIRECTOS se permiten porque todos pasan por src.config.dependencies, la
+#   composition root, que es el único sitio donde se ensambla todo.
+# - Dominio y aplicación no importan esa composition root. Sí pueden leer
+#   configuración (src.config.settings, csrf_config).
+#
+# Si un contrato falla, la salida dice qué import lo rompe. No se relaja el
+# contrato sin decidirlo: añadir una excepción es una decisión de arquitectura.
+
+[importlinter]
+root_packages =
+    src
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = Capas: infrastructure > application > domain, en cada módulo y en shared
+type = layers
+layers =
+    infrastructure
+    application
+    domain
+containers =
+    src.modules.competition
+    src.modules.golf_course
+    src.modules.quick_match
+    src.modules.social
+    src.modules.support
+    src.modules.user
+    src.shared
+
+[importlinter:contract:domain-pure]
+name = El dominio no depende de frameworks
+type = forbidden
+source_modules =
+    src.modules.competition.domain
+    src.modules.golf_course.domain
+    src.modules.quick_match.domain
+    src.modules.social.domain
+    src.modules.support.domain
+    src.modules.user.domain
+    src.shared.domain
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    pydantic
+    asyncpg
+
+[importlinter:contract:competition-no-foreign-infra]
+name = competition no importa la infraestructura de otro módulo
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    src.modules.competition
+forbidden_modules =
+    src.modules.golf_course.infrastructure
+    src.modules.quick_match.infrastructure
+    src.modules.social.infrastructure
+    src.modules.support.infrastructure
+    src.modules.user.infrastructure
+
+[importlinter:contract:golf_course-no-foreign-infra]
+name = golf_course no importa la infraestructura de otro módulo
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    src.modules.golf_course
+forbidden_modules =
+    src.modules.competition.infrastructure
+    src.modules.quick_match.infrastructure
+    src.modules.social.infrastructure
+    src.modules.support.infrastructure
+    src.modules.user.infrastructure
+
+[importlinter:contract:quick_match-no-foreign-infra]
+name = quick_match no importa la infraestructura de otro módulo
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    src.modules.quick_match
+forbidden_modules =
+    src.modules.competition.infrastructure
+    src.modules.golf_course.infrastructure
+    src.modules.social.infrastructure
+    src.modules.support.infrastructure
+    src.modules.user.infrastructure
+
+[importlinter:contract:social-no-foreign-infra]
+name = social no importa la infraestructura de otro módulo
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    src.modules.social
+forbidden_modules =
+    src.modules.competition.infrastructure
+    src.modules.golf_course.infrastructure
+    src.modules.quick_match.infrastructure
+    src.modules.support.infrastructure
+    src.modules.user.infrastructure
+
+[importlinter:contract:support-no-foreign-infra]
+name = support no importa la infraestructura de otro módulo
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    src.modules.support
+forbidden_modules =
+    src.modules.competition.infrastructure
+    src.modules.golf_course.infrastructure
+    src.modules.quick_match.infrastructure
+    src.modules.social.infrastructure
+    src.modules.user.infrastructure
+
+[importlinter:contract:user-no-foreign-infra]
+name = user no importa la infraestructura de otro módulo
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    src.modules.user
+forbidden_modules =
+    src.modules.competition.infrastructure
+    src.modules.golf_course.infrastructure
+    src.modules.quick_match.infrastructure
+    src.modules.social.infrastructure
+    src.modules.support.infrastructure
+
+[importlinter:contract:no-composition-root]
+name = Dominio y aplicación no importan la composition root (src.config.dependencies)
+type = forbidden
+source_modules =
+    src.modules.competition.domain
+    src.modules.competition.application
+    src.modules.golf_course.domain
+    src.modules.golf_course.application
+    src.modules.quick_match.domain
+    src.modules.quick_match.application
+    src.modules.social.domain
+    src.modules.social.application
+    src.modules.support.domain
+    src.modules.support.application
+    src.modules.user.domain
+    src.modules.user.application
+    src.shared.domain
+    src.shared.application
+forbidden_modules =
+    src.config.dependencies

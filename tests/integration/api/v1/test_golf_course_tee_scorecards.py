@@ -82,9 +82,7 @@ class TestTeeScorecards:
         assert response.status_code == 201, response.text
         course_id = response.json()["id"]
 
-        detail = await client.get(
-            f"/api/v1/golf-courses/{course_id}", cookies=user["cookies"]
-        )
+        detail = await client.get(f"/api/v1/golf-courses/{course_id}", cookies=user["cookies"])
         assert detail.status_code == 200, detail.text
         tees = detail.json()["tees"]
 
@@ -145,9 +143,7 @@ class TestTeeScorecards:
         assert response.status_code == 201, response.text
         course_id = response.json()["id"]
 
-        detail = await client.get(
-            f"/api/v1/golf-courses/{course_id}", cookies=user["cookies"]
-        )
+        detail = await client.get(f"/api/v1/golf-courses/{course_id}", cookies=user["cookies"])
         tees = detail.json()["tees"]
         assert len(tees) == 2
         assert all(len(tee["holes"]) == 18 for tee in tees)

@@ -89,7 +89,6 @@ class TestSendInvitationByUserIdUseCase:
         )
         created = await create_uc.execute(request, creator_id)
 
-
         return created
 
     async def _create_draft_competition(self, comp_uow, creator_id):
@@ -152,11 +151,14 @@ class TestSendInvitationByUserIdUseCase:
         admin = await self._create_user(user_uow, email="admin@test.com")
         created = await self._create_draft_competition(comp_uow, creator.id)
         uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
-        result = await uc.execute(SendInvitationByUserIdRequestDTO(
+        result = await uc.execute(
+            SendInvitationByUserIdRequestDTO(
                 competition_id=created.id,
                 inviter_id=admin.id.value,
                 invitee_user_id=invitee.id.value,
-            ), is_admin=True)
+            ),
+            is_admin=True,
+        )
 
         assert result.status == "PENDING"
         assert await self._status_of(comp_uow, created.id) == CompetitionStatus.ACTIVE
@@ -182,11 +184,13 @@ class TestSendInvitationByUserIdUseCase:
         comp_uow.competitions.update = espia
 
         uc = SendInvitationByUserIdUseCase(comp_uow, user_uow)
-        await uc.execute(SendInvitationByUserIdRequestDTO(
+        await uc.execute(
+            SendInvitationByUserIdRequestDTO(
                 competition_id=created.id,
                 inviter_id=creator.id.value,
                 invitee_user_id=invitee.id.value,
-            ))
+            )
+        )
 
         assert CompetitionStatus.ACTIVE in guardadas
 

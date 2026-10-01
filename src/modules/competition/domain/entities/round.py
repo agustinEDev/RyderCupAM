@@ -234,9 +234,7 @@ class Round:
         cambiarle los golpes reescribiría hoyos ya jugados.
         """
         if self._status != RoundStatus.SCHEDULED:
-            raise ValueError(
-                f"Cannot reopen a round in status {self._status}. Expected SCHEDULED"
-            )
+            raise ValueError(f"Cannot reopen a round in status {self._status}. Expected SCHEDULED")
         self._status = RoundStatus.PENDING_MATCHES
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
@@ -258,8 +256,7 @@ class Round:
         """
         if self._status not in (RoundStatus.SCHEDULED, RoundStatus.IN_PROGRESS):
             raise ValueError(
-                f"Cannot reset a round in status {self._status}. "
-                "Expected SCHEDULED or IN_PROGRESS"
+                f"Cannot reset a round in status {self._status}. Expected SCHEDULED or IN_PROGRESS"
             )
         self._status = RoundStatus.PENDING_MATCHES
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)

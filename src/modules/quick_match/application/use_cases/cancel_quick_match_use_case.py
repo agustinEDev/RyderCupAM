@@ -29,9 +29,7 @@ class CancelQuickMatchUseCase:
         requester_id = UserId(requester_id_raw)
 
         async with self._uow:
-            quick_match = await self._uow.quick_matches.find_by_id(
-                QuickMatchId(quick_match_id_raw)
-            )
+            quick_match = await self._uow.quick_matches.find_by_id(QuickMatchId(quick_match_id_raw))
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {quick_match_id_raw}")
 

@@ -356,9 +356,7 @@ class TestUserRoutes:
         headers = {"Authorization": f"Bearer {auth_data['token']}"}
         await client.patch("/api/v1/users/profile", json={"alias": "Fugaz"}, headers=headers)
 
-        respuesta = await client.patch(
-            "/api/v1/users/profile", json={"alias": ""}, headers=headers
-        )
+        respuesta = await client.patch("/api/v1/users/profile", json={"alias": ""}, headers=headers)
 
         assert respuesta.status_code == status.HTTP_200_OK
         assert respuesta.json()["user"]["display_name"] == "Agustin Estevez"
@@ -417,9 +415,7 @@ class TestUserRoutes:
         assert [u["alias"] for u in users] == ["Chuchi"]
         assert users[0]["full_name"] == "Agustin Estevez"
 
-    async def test_autocomplete_carries_a_null_alias_when_there_is_none(
-        self, client: AsyncClient
-    ):
+    async def test_autocomplete_carries_a_null_alias_when_there_is_none(self, client: AsyncClient):
         """Quien no tiene alias sale igual, con el campo a null."""
         await create_authenticated_user(
             client, "auto3.test@example.com", "s3cur3P@ssw0rd!", "Ana", "Buscable"
@@ -516,9 +512,7 @@ class TestUserRoutes:
         headers = {"Authorization": f"Bearer {token}"}
         await client.patch("/api/v1/users/profile", json={"alias": "Borrable"}, headers=headers)
 
-        response = await client.patch(
-            "/api/v1/users/profile", json={"alias": ""}, headers=headers
-        )
+        response = await client.patch("/api/v1/users/profile", json={"alias": ""}, headers=headers)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["user"]["alias"] is None

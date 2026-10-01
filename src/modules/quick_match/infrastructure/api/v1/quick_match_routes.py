@@ -649,7 +649,9 @@ async def submit_hole_score(
     hole_number: Annotated[int, Path(ge=1, le=18)],
     body: SubmitHoleScoreBody,
     current_user: UserResponseDTO = Depends(get_current_user),
-    use_case: SubmitQuickMatchHoleScoreUseCase = Depends(get_submit_quick_match_hole_score_use_case),
+    use_case: SubmitQuickMatchHoleScoreUseCase = Depends(
+        get_submit_quick_match_hole_score_use_case
+    ),
 ):
     try:
         request_dto = SubmitHoleScoreRequestDTO(

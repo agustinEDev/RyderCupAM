@@ -296,9 +296,7 @@ class TestAdminDeleteUser:
         response = await client.delete(f"/api/v1/admin/users/{target['user']['id']}")
         assert response.status_code == 204, response.text
 
-        list_response = await client.get(
-            "/api/v1/admin/users", params={"search": "target_del_inv"}
-        )
+        list_response = await client.get("/api/v1/admin/users", params={"search": "target_del_inv"})
         assert list_response.json()["total_count"] == 0
 
     @pytest.mark.asyncio

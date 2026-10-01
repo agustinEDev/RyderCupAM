@@ -34,9 +34,7 @@ class FriendshipIdType(sqlalchemy.types.TypeDecorator[FriendshipId]):
             return None
         return str(value.value)
 
-    def process_result_value(
-        self, value: str | None, dialect: Any
-    ) -> FriendshipId | None:
+    def process_result_value(self, value: str | None, dialect: Any) -> FriendshipId | None:
         if value is None:
             return None
         return FriendshipId(uuid.UUID(value))
@@ -70,9 +68,7 @@ class FriendshipStatusType(sqlalchemy.types.TypeDecorator[FriendshipStatus]):
             return None
         return value.value
 
-    def process_result_value(
-        self, value: str | None, dialect: Any
-    ) -> FriendshipStatus | None:
+    def process_result_value(self, value: str | None, dialect: Any) -> FriendshipStatus | None:
         if value is None:
             return None
         return FriendshipStatus(value)

@@ -22,9 +22,7 @@ from src.modules.quick_match.domain.services.stableford_calculator import (
 def _course(pars: list[int] | None = None) -> list[HoleSetup]:
     """18 hoyos con stroke index 1..18 en orden."""
     pars = pars or [4] * 18
-    return [
-        HoleSetup(hole_number=i + 1, par=pars[i], stroke_index=i + 1) for i in range(18)
-    ]
+    return [HoleSetup(hole_number=i + 1, par=pars[i], stroke_index=i + 1) for i in range(18)]
 
 
 class TestAllocateStrokes:
@@ -83,9 +81,7 @@ class TestAllocateStrokes:
         negativos. ROUND_HALF_UP de Decimal se aleja del cero y daría otro
         resultado para -2.5, con un golpe de diferencia.
         """
-        assert (
-            StablefordCalculator.allocate_strokes(handicap, 1) == expected_rounded_effect
-        )
+        assert StablefordCalculator.allocate_strokes(handicap, 1) == expected_rounded_effect
 
 
 class TestHolePoints:
@@ -285,9 +281,7 @@ class TestResolveStrokesBasis:
 class TestFormatToPar:
     """Notación de golf."""
 
-    @pytest.mark.parametrize(
-        ("to_par", "expected"), [(0, "PAR"), (3, "+3"), (-2, "-2"), (1, "+1")]
-    )
+    @pytest.mark.parametrize(("to_par", "expected"), [(0, "PAR"), (3, "+3"), (-2, "-2"), (1, "+1")])
     def test_formats_like_a_scoreboard(self, to_par, expected):
         assert StablefordCalculator.format_to_par(to_par) == expected
 
@@ -306,16 +300,49 @@ class TestParityWithTheFrontend:
     """
 
     PARS: ClassVar[list[int]] = [4, 5, 3, 4, 4, 3, 5, 4, 4, 4, 3, 5, 4, 4, 3, 4, 5, 4]
-    STROKE_INDEXES: ClassVar[list[int]] = [7, 3, 15, 1, 11, 17, 5, 9, 13, 8, 16, 2, 10, 6, 18, 12, 4, 14]
+    STROKE_INDEXES: ClassVar[list[int]] = [
+        7,
+        3,
+        15,
+        1,
+        11,
+        17,
+        5,
+        9,
+        13,
+        8,
+        16,
+        2,
+        10,
+        6,
+        18,
+        12,
+        4,
+        14,
+    ]
     SCORES: ClassVar[dict[int, int]] = {
-        1: 5, 2: 6, 3: 4, 4: 6, 5: 5, 6: 3, 7: 6, 8: 5, 9: 4,
-        10: 5, 11: 4, 12: 7, 13: 5, 14: 4, 15: 3, 16: 5, 17: 6, 18: 5,
+        1: 5,
+        2: 6,
+        3: 4,
+        4: 6,
+        5: 5,
+        6: 3,
+        7: 6,
+        8: 5,
+        9: 4,
+        10: 5,
+        11: 4,
+        12: 7,
+        13: 5,
+        14: 4,
+        15: 3,
+        16: 5,
+        17: 6,
+        18: 5,
     }
 
     def _holes(self) -> list[HoleSetup]:
-        return [
-            HoleSetup(i + 1, self.PARS[i], self.STROKE_INDEXES[i]) for i in range(18)
-        ]
+        return [HoleSetup(i + 1, self.PARS[i], self.STROKE_INDEXES[i]) for i in range(18)]
 
     @pytest.mark.parametrize(
         ("handicap", "points", "gross", "net", "to_par"),
@@ -327,9 +354,7 @@ class TestParityWithTheFrontend:
             (-2, 18, 88, 90, 18),  # plus: cede golpes, juega peor que su bruto
         ],
     )
-    def test_matches_the_values_the_frontend_produces(
-        self, handicap, points, gross, net, to_par
-    ):
+    def test_matches_the_values_the_frontend_produces(self, handicap, points, gross, net, to_par):
         calculator = StablefordCalculator()
 
         totals = calculator.compute_participant_totals(
@@ -352,9 +377,7 @@ class TestParityWithTheFrontend:
             (12.4, 30, 89, 78, 6),
         ],
     )
-    def test_a_picked_up_hole_matches_the_frontend_too(
-        self, handicap, points, gross, net, to_par
-    ):
+    def test_a_picked_up_hole_matches_the_frontend_too(self, handicap, points, gross, net, to_par):
         """
         La raya es la parte mas facil de que los dos motores se separen: no hay
         numero anotado del que tirar, asi que cada lado tiene que inventar el

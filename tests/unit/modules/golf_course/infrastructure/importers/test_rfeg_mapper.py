@@ -35,7 +35,12 @@ def build_card(pars=None, meters_front=None, meters_back=None):
     meters_back = meters_back if meters_back is not None else list(range(200, 290, 10))
     meters = meters_front + meters_back
     return [
-        {"number": index + 1, "par": pars[index], "stroke_index": index + 1, "meters": meters[index]}
+        {
+            "number": index + 1,
+            "par": pars[index],
+            "stroke_index": index + 1,
+            "meters": meters[index],
+        }
         for index in range(18)
     ]
 
@@ -167,9 +172,15 @@ def test_the_external_id_ignores_accents_and_case():
 
 @pytest.mark.parametrize(
     "total_par,expected",
-    [(54, CourseType.PITCH_AND_PUTT), (60, CourseType.PITCH_AND_PUTT),
-     (61, CourseType.EXECUTIVE), (65, CourseType.EXECUTIVE),
-     (66, CourseType.STANDARD_18), (72, CourseType.STANDARD_18), (76, CourseType.STANDARD_18)],
+    [
+        (54, CourseType.PITCH_AND_PUTT),
+        (60, CourseType.PITCH_AND_PUTT),
+        (61, CourseType.EXECUTIVE),
+        (65, CourseType.EXECUTIVE),
+        (66, CourseType.STANDARD_18),
+        (72, CourseType.STANDARD_18),
+        (76, CourseType.STANDARD_18),
+    ],
 )
 def test_the_type_comes_from_the_total_par(total_par, expected):
     """

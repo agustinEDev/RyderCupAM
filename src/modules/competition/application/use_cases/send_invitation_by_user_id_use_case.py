@@ -53,7 +53,9 @@ class SendInvitationByUserIdUseCase:
         self._user_uow = user_uow
         self._email_service = email_service
 
-    async def execute(self, request: SendInvitationByUserIdRequestDTO, is_admin: bool = False) -> InvitationResponseDTO:
+    async def execute(
+        self, request: SendInvitationByUserIdRequestDTO, is_admin: bool = False
+    ) -> InvitationResponseDTO:
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
             inviter_id = UserId(request.inviter_id)

@@ -38,7 +38,10 @@ class TestRemoveFriendUseCase:
         requester = UserId(uuid4())
         addressee = UserId(uuid4())
         friendship = await self._add(
-            uow, Friendship.create(id=FriendshipId.generate(), requester_id=requester, addressee_id=addressee)
+            uow,
+            Friendship.create(
+                id=FriendshipId.generate(), requester_id=requester, addressee_id=addressee
+            ),
         )
 
         use_case = RemoveFriendUseCase(uow)
@@ -51,7 +54,10 @@ class TestRemoveFriendUseCase:
         requester = UserId(uuid4())
         addressee = UserId(uuid4())
         friendship = await self._add(
-            uow, Friendship.create(id=FriendshipId.generate(), requester_id=requester, addressee_id=addressee)
+            uow,
+            Friendship.create(
+                id=FriendshipId.generate(), requester_id=requester, addressee_id=addressee
+            ),
         )
 
         use_case = RemoveFriendUseCase(uow)

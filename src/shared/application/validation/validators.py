@@ -302,8 +302,7 @@ class AliasValidator:
 
         if not cls.ALIAS_REGEX.match(normalized):
             raise ValueError(
-                f"{field_name} solo puede contener letras, números, espacios y los signos "
-                f". _ -"
+                f"{field_name} solo puede contener letras, números, espacios y los signos . _ -"
             )
 
         # Un alias de solo signos —"...", "-_-"— no identifica a nadie y no

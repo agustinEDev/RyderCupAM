@@ -9,7 +9,7 @@
 # - autoflake (remover imports sin usar)
 
 # Versión mínima de Python que soporta el proyecto
-target-version = "py312"
+target-version = "py311"  # La MÍNIMA soportada: el CI prueba 3.11 y 3.12. Con py312, ruff proponía sintaxis (PEP 695) que no existe en 3.11
 
 # Longitud máxima de línea (PEP 8 recomienda 79, pero 100 es más práctico)
 line-length = 100
@@ -54,6 +54,7 @@ ignore = [
     "E501",   # line-too-long (ya lo controlamos con line-length)
     "B008",   # do-not-perform-function-calls-in-argument-defaults (común en FastAPI)
     "PLR0913", # too-many-arguments (común en casos de uso)
+    "PLR0917", # too-many-positional-arguments: la misma que PLR0913 contada en posicionales (ruff 0.16, 143 avisos)
     "ARG002", # unused-method-argument (común en interfaces/protocolos)
     "RET504", # unnecessary-assign (a veces mejora la legibilidad)
 ]

@@ -207,9 +207,7 @@ async def _get_user_competitions(
     # abre de paso, y filtrar por el estado viejo tiraria la recien abierta
     await EnrollmentOpener.abrir_las_que_toquen(visibles, uow, use_case.zona_del_campo)
 
-    return created_competitions + _filtrar_inscritas(
-        visibles, status_filter, enrollment_status_map
-    )
+    return created_competitions + _filtrar_inscritas(visibles, status_filter, enrollment_status_map)
 
 
 async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow, is_admin=False):
@@ -493,7 +491,9 @@ async def update_competition(
         current_user_id = UserId(str(current_user.id))
         competition_vo_id = CompetitionId(competition_id)
 
-        await use_case.execute(competition_vo_id, competition_data, current_user_id, is_admin=current_user.is_admin)
+        await use_case.execute(
+            competition_vo_id, competition_data, current_user_id, is_admin=current_user.is_admin
+        )
 
         async with uow, user_uow:
             competition = await uow.competitions.find_by_id(competition_vo_id)

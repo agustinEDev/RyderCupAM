@@ -183,10 +183,7 @@ async def submit_hole_score(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={
-                "detail": (
-                    "La anotacion de este partido abre a las "
-                    f"{e.opens_at.isoformat()}"
-                ),
+                "detail": (f"La anotacion de este partido abre a las {e.opens_at.isoformat()}"),
                 "error_code": ScoringNotOpenYetError.error_code,
                 "scoring_opens_at": e.opens_at.isoformat(),
             },
@@ -348,7 +345,10 @@ async def concede_match(
     try:
         current_user_id = UserId(current_user.id)
         return await use_case.execute(
-            str(match_id), current_user_id, body.conceding_team, body.reason,
+            str(match_id),
+            current_user_id,
+            body.conceding_team,
+            body.reason,
             is_admin=current_user.is_admin,
         )
 

@@ -183,14 +183,10 @@ class ListCompetitionsUseCase:
         # UNA consulta por quien mira, no una por competicion: el listado trae
         # hasta 100 y el endpoint llama una vez por cada estado del filtro
         inscripciones = await self._uow.enrollments.find_by_user(quien)
-        dentro_de = {
-            e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER
-        }
+        dentro_de = {e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER}
 
         visibles = {c.id for c in publicas}
-        visibles |= {
-            c.id for c in privadas if c.creator_id == quien or c.id in dentro_de
-        }
+        visibles |= {c.id for c in privadas if c.creator_id == quien or c.id in dentro_de}
         # En el orden en que venian, que es el que decidio la consulta
         return [c for c in competitions if c.id in visibles]
 
@@ -213,7 +209,6 @@ class ListCompetitionsUseCase:
         if status:
             status_enum = CompetitionStatus(status.upper())
             competitions = await self._uow.competitions.find_by_status(status_enum)
-
 
             # Si además hay filtro por creator_id, filtrar en memoria
             if creator_id:

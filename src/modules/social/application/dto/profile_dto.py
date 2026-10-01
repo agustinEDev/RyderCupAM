@@ -75,9 +75,7 @@ class PlayerProfileResponseDTO(BaseModel):
     friendship: FriendshipStateDTO = Field(
         description="En que punto esta tu relacion con el, para saber que boton ofrecer"
     )
-    is_friend: bool = Field(
-        default=False, description="Atajo de `friendship.status == ACCEPTED`"
-    )
+    is_friend: bool = Field(default=False, description="Atajo de `friendship.status == ACCEPTED`")
     email: str | None = Field(
         default=None,
         description=(
@@ -87,9 +85,7 @@ class PlayerProfileResponseDTO(BaseModel):
     )
     handicap: float | None = Field(
         default=None,
-        description=(
-            "Solo uno mismo y sus amigos. None si no lo sois o si no lo ha fijado"
-        ),
+        description=("Solo uno mismo y sus amigos. None si no lo sois o si no lo ha fijado"),
     )
     stats: PlayerStatsResponseDTO | None = Field(
         default=None,

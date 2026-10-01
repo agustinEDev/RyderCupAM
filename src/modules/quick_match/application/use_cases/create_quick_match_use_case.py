@@ -49,7 +49,9 @@ class CreateQuickMatchUseCase:
         creator_tee_color = (
             TeeColor(request.creator_tee_color) if request.creator_tee_color else None
         )
-        creator_tee_gender = Gender(request.creator_tee_gender) if request.creator_tee_gender else None
+        creator_tee_gender = (
+            Gender(request.creator_tee_gender) if request.creator_tee_gender else None
+        )
 
         async with self._golf_course_uow:
             golf_course = await self._golf_course_uow.golf_courses.find_by_id(golf_course_id)

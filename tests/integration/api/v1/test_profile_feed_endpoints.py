@@ -234,9 +234,7 @@ class TestActividad:
         assert respuesta.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_un_amigo_sin_logros_devuelve_lista_vacia_no_error(
-        self, client: AsyncClient
-    ):
+    async def test_un_amigo_sin_logros_devuelve_lista_vacia_no_error(self, client: AsyncClient):
         """Given un amigo que no ha publicado nada / When se pide / Then 200 y vacio."""
         ana = await create_authenticated_user(
             client, "act_c@test.com", "P@ssw0rd123!", "Ana", "Garcia"

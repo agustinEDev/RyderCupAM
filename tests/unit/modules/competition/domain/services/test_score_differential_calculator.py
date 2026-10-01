@@ -22,9 +22,7 @@ def _round(adjusted_gross_score: int, slope: int = 113, course_rating: str = "72
     """Una vuelta desde un tee cualquiera; por defecto, slope neutro."""
     return PlayedRound(
         adjusted_gross_score=adjusted_gross_score,
-        tee_rating=TeeRating(
-            course_rating=Decimal(course_rating), slope_rating=slope, par=72
-        ),
+        tee_rating=TeeRating(course_rating=Decimal(course_rating), slope_rating=slope, par=72),
     )
 
 
@@ -47,14 +45,10 @@ class TestDifferential:
 
     def test_a_hard_course_shrinks_the_differential(self):
         # Mismos 85 golpes, pero desde un tee más difícil: la vuelta vale más
-        assert ScoreDifferentialCalculator.differential(
-            _round(85, slope=140)
-        ) == Decimal("10.5")
+        assert ScoreDifferentialCalculator.differential(_round(85, slope=140)) == Decimal("10.5")
 
     def test_an_easy_course_stretches_the_differential(self):
-        assert ScoreDifferentialCalculator.differential(
-            _round(85, slope=100)
-        ) == Decimal("14.7")
+        assert ScoreDifferentialCalculator.differential(_round(85, slope=100)) == Decimal("14.7")
 
     def test_the_rating_decimals_carry_into_the_result(self):
         # 85 - 71.4 = 13.6, en slope neutro
@@ -133,9 +127,7 @@ class TestEstimatedIndex:
         assert result == Decimal("8.1")
 
     def test_a_plus_player_gets_a_negative_index(self):
-        result = ScoreDifferentialCalculator.estimated_index(
-            _differentials(["-1.0", "0.5", "1.0"])
-        )
+        result = ScoreDifferentialCalculator.estimated_index(_differentials(["-1.0", "0.5", "1.0"]))
         assert result == Decimal("-3.0")
 
 

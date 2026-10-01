@@ -38,7 +38,5 @@ class TzfpyTimezoneResolver(ITimezoneResolver):
         except Exception:
             # Un punto sin zona conocida no puede tumbar el alta de un campo: se
             # queda sin apertura automatica y la pantalla lo avisa
-            logger.warning(
-                "No se pudo resolver la zona horaria de (%s, %s)", latitude, longitude
-            )
+            logger.warning("No se pudo resolver la zona horaria de (%s, %s)", latitude, longitude)
             return None

@@ -163,9 +163,7 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
         una vez con quien la pidio y quien la recibio, y el usuario puede estar
         en cualquiera de los dos lados.
         """
-        stmt = select(
-            friendships_table.c.requester_id, friendships_table.c.addressee_id
-        ).where(
+        stmt = select(friendships_table.c.requester_id, friendships_table.c.addressee_id).where(
             and_(
                 friendships_table.c.status == FriendshipStatus.ACCEPTED,
                 or_(

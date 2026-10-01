@@ -175,10 +175,10 @@ class SearchUsersItemDTO(BaseModel):
         ),
     )
     avatar_source: str = Field(default="", description="De donde sale su foto de perfil.")
-    avatar_preset_id: int | None = Field(default=None, description="Avatar predefinido, si usa uno.")
-    has_avatar_upload: bool = Field(
-        default=False, description="Si tiene foto propia subida."
+    avatar_preset_id: int | None = Field(
+        default=None, description="Avatar predefinido, si usa uno."
     )
+    has_avatar_upload: bool = Field(default=False, description="Si tiene foto propia subida.")
 
     model_config = ConfigDict(from_attributes=True)
 

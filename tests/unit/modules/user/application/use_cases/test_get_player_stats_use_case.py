@@ -296,9 +296,7 @@ class TestEmptyAccount:
     ):
         user = await create_user(user_uow, unique_email("empty"))
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
         assert stats.tournaments_total == 0
@@ -310,9 +308,7 @@ class TestEmptyAccount:
         """Sin rondas no hay media que dar; cero significaría jugar al par."""
         user = await create_user(user_uow, unique_email("empty"))
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.scoring_avg is None
 
@@ -326,9 +322,7 @@ class TestHandicap:
     ):
         user = await create_user(user_uow, unique_email("hcp"), handicap=12.4)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.handicap == 12.4
 
@@ -341,9 +335,7 @@ class TestHandicap:
         """
         user = await create_user(user_uow, unique_email("trend"), handicap=10.0)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.handicap_trend is None
 
@@ -359,9 +351,7 @@ class TestRoundsAndAverage:
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 1
 
@@ -376,9 +366,7 @@ class TestRoundsAndAverage:
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.scoring_avg == 18.0
 
@@ -390,9 +378,7 @@ class TestRoundsAndAverage:
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.scoring_avg == 0.0
 
@@ -427,9 +413,7 @@ class TestFoursomesIsNotAPersonalRound:
             tee_gender=Gender.MALE,
         )
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
 
@@ -441,9 +425,7 @@ class TestFoursomesIsNotAPersonalRound:
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 1
 
@@ -493,9 +475,7 @@ class TestIncompleteQuickMatchCards:
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=9)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 1
         assert stats.scoring_avg == 18.0
@@ -510,9 +490,7 @@ class TestIncompleteQuickMatchCards:
             qm_uow, course, user, strokes_per_hole=5, holes=list(range(10, 19))
         )
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 1
         assert stats.scoring_avg == 18.0
@@ -529,9 +507,7 @@ class TestIncompleteQuickMatchCards:
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=9)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 2
         assert stats.scoring_avg == 18.0
@@ -543,9 +519,7 @@ class TestIncompleteQuickMatchCards:
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, holes_played=10)
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
         assert stats.scoring_avg is None
@@ -564,9 +538,7 @@ class TestIncompleteQuickMatchCards:
             qm_uow, course, user, strokes_per_hole=5, holes=[1, 2, 3, 4, 5, 6, 7, 8, 18]
         )
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
 
@@ -600,9 +572,7 @@ class TestIncompleteQuickMatchCards:
                 )
             await qm_uow.commit()
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
         assert stats.scoring_avg is None
@@ -625,9 +595,7 @@ class TestCompetitionScorecards:
         player = await create_user(user_uow, unique_email("comp"), handicap=0)
         rival = await create_user(user_uow, unique_email("rival"), handicap=0)
         course = await create_golf_course(golf_course_uow, player.id)
-        await _played_competition_match(
-            competition_uow, course, player, rival, strokes_per_hole=5
-        )
+        await _played_competition_match(competition_uow, course, player, rival, strokes_per_hole=5)
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
             player.id
@@ -666,9 +634,7 @@ class TestCompetitionScorecards:
         rival = await create_user(user_uow, unique_email("rival"), handicap=0)
         course = await create_golf_course(golf_course_uow, player.id)
         await _played_quick_match(qm_uow, course, player, strokes_per_hole=5)
-        await _played_competition_match(
-            competition_uow, course, player, rival, strokes_per_hole=4
-        )
+        await _played_competition_match(competition_uow, course, player, rival, strokes_per_hole=4)
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
             player.id
@@ -787,9 +753,7 @@ class TestCompetitionScorecards:
         await _played_competition_match(
             competition_uow, course, recoge, rival, strokes_per_hole=5, picked_up_holes=[7]
         )
-        await _played_competition_match(
-            competition_uow, course, firma, rival, strokes_per_hole=5
-        )
+        await _played_competition_match(competition_uow, course, firma, rival, strokes_per_hole=5)
 
         use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
         con_raya = await use_case.execute(recoge.id)
@@ -827,9 +791,7 @@ class TestCompetitionScorecards:
         player = await create_user(user_uow, unique_email("disaster"), handicap=0)
         rival = await create_user(user_uow, unique_email("rival"), handicap=0)
         course = await create_golf_course(golf_course_uow, player.id)
-        await _played_competition_match(
-            competition_uow, course, player, rival, strokes_per_hole=10
-        )
+        await _played_competition_match(competition_uow, course, player, rival, strokes_per_hole=10)
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
             player.id
@@ -876,9 +838,7 @@ class TestHiddenMatches:
             await qm_uow.quick_matches.update(stored)
             await qm_uow.commit()
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
         assert stats.scoring_avg is None
@@ -895,9 +855,7 @@ class TestHiddenMatches:
         course = await create_golf_course(golf_course_uow, hider.id)
 
         other_participant = QuickMatchParticipant.for_user(other.id)
-        match = await _played_quick_match(
-            qm_uow, course, hider, others=[other_participant]
-        )
+        match = await _played_quick_match(qm_uow, course, hider, others=[other_participant])
 
         async with qm_uow:
             stored = await qm_uow.quick_matches.find_by_id(match.id)
@@ -936,9 +894,7 @@ class TestMatchesLeftOutOfStats:
             await qm_uow.quick_matches.update(stored)
             await qm_uow.commit()
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_played == 0
         assert stats.scoring_avg is None
@@ -970,9 +926,7 @@ class TestMatchesLeftOutOfStats:
         other = await create_user(user_uow, unique_email("other"), handicap=0)
         course = await create_golf_course(golf_course_uow, excluder.id)
         other_participant = QuickMatchParticipant.for_user(other.id)
-        match = await _played_quick_match(
-            qm_uow, course, excluder, others=[other_participant]
-        )
+        match = await _played_quick_match(qm_uow, course, excluder, others=[other_participant])
 
         async with qm_uow:
             stored = await qm_uow.quick_matches.find_by_id(match.id)
@@ -1186,9 +1140,7 @@ class TestScoreDifferentials:
         player = await create_user(user_uow, unique_email("tourney"), handicap=10.0)
         rival = await create_user(user_uow, unique_email("rival"), handicap=10.0)
         course = await create_golf_course(golf_course_uow, player.id)
-        await _played_competition_match(
-            competition_uow, course, player, rival, strokes_per_hole=5
-        )
+        await _played_competition_match(competition_uow, course, player, rival, strokes_per_hole=5)
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
             player.id
@@ -1408,9 +1360,7 @@ class TestParPorBarra:
             tee_gender=Gender.FEMALE,
         )
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.scoring_avg == -2.0
 
@@ -1442,9 +1392,7 @@ class TestParPorBarra:
             scores_by_hole=tarjeta,
         )
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.best_differential == 1.7
 
@@ -1502,9 +1450,7 @@ class TestParPorBarra:
             tee_gender=Gender.FEMALE,
         )
 
-        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
-            user.id
-        )
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.rounds_with_differential == 1
         assert stats.best_differential is not None

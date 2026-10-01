@@ -47,8 +47,10 @@ class SQLAlchemyUserAvatarUploadRepository(UserAvatarUploadRepositoryInterface):
     async def count_by_user(self, user_id: UserId) -> int:
         # COUNT(*) en el servidor: evita traer y materializar cada fila (con su
         # BYTEA de imagen) solo para contar cuántas hay.
-        stmt = select(func.count()).select_from(user_avatar_uploads_table).where(
-            user_avatar_uploads_table.c.user_id == str(user_id.value)
+        stmt = (
+            select(func.count())
+            .select_from(user_avatar_uploads_table)
+            .where(user_avatar_uploads_table.c.user_id == str(user_id.value))
         )
         result = await self._session.execute(stmt)
         return result.scalar_one()

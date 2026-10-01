@@ -3,6 +3,7 @@
 from sqlalchemy import cast, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,

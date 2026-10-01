@@ -38,6 +38,7 @@ class FakeZona:
     async def for_competition(self, competition) -> str | None:
         return self._zona if competition.golf_courses else None
 
+
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
 

@@ -87,8 +87,7 @@ async def _read_upload_within_limit(file: UploadFile, max_bytes: int) -> bytes:
         buffer.extend(chunk)
         if len(buffer) > max_bytes:
             raise AvatarUploadTooLargeError(
-                f"El archivo supera el tamaño máximo permitido "
-                f"({max_bytes // (1024 * 1024)}MB)"
+                f"El archivo supera el tamaño máximo permitido ({max_bytes // (1024 * 1024)}MB)"
             )
     return bytes(buffer)
 

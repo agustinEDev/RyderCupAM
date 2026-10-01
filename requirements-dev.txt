@@ -15,7 +15,14 @@
 # Ruff - Linter y formateador ultra-rápido escrito en Rust
 # Reemplaza: flake8, isort, pydocstyle, pyupgrade, autoflake
 # Ventajas: 10-100x más rápido, configuración simple, todo-en-uno
-ruff>=0.6.0
+# Versión EXACTA: el CI la usa como check bloqueante, y con un rango cada release
+# nueva de ruff puede traer reglas y poner el CI en rojo sin tocar código (la 0.16
+# añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
+ruff==0.16.9
+
+# import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
+# Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
+import-linter==2.15
 
 # ================================
 # TYPE CHECKING
@@ -24,10 +31,11 @@ ruff>=0.6.0
 # Mypy - Verificador estático de tipos para Python
 # Analiza el código usando type hints para detectar errores antes de runtime
 # Esencial para proyectos grandes con arquitectura clean
-mypy>=1.11.0,<2.0.0
+# Versión EXACTA, por lo mismo que ruff: es un check bloqueante del CI
+mypy==2.3.1
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
-sqlalchemy[mypy]>=2.0.31
+sqlalchemy[mypy]>=2.1.1
 
 # ================================
 # SEGURIDAD
@@ -35,71 +43,36 @@ sqlalchemy[mypy]>=2.0.31
 
 # Bandit - Encuentra problemas de seguridad comunes en código Python
 # Detecta: SQL injection, uso de eval(), contraseñas hardcodeadas, etc.
-bandit[toml]>=1.7.9
+bandit[toml]>=1.9.4
 
-# safety - Auditoría de vulnerabilidades en dependencias
-# Escanea el proyecto contra Safety DB (40K+ vulnerabilidades conocidas)
-# Detecta CVEs en dependencias directas y transitivas
-# Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
-safety==3.7.0
+# safety se retiró el 28 sep 2026: nunca tumbaba el CI (continue-on-error),
+# pip-audit ya era el árbitro, y arrastraba cuatro paquetes con CVEs recurrentes
+# (nltk, authlib, marshmallow, filelock) que solo existían por él.
 
 # pip-audit - Auditoría oficial de PyPA para dependencias
 # Escanea contra PyPI Advisory Database y OSV (Open Source Vulnerabilities)
 # Alternativa oficial mantenida por Python Packaging Authority
 # Cumple con OWASP Top 10: A06 (Vulnerable and Outdated Components)
-pip-audit==2.10.0
+pip-audit==2.10.1
 
 # ================================
 # PINS TRANSITIVOS DE LAS HERRAMIENTAS DE AUDITORÍA
 # ================================
-# Ninguno de estos lo usa la aplicación: los arrastran safety y pip-audit, que
+# Ninguno de estos lo usa la aplicación: los arrastra pip-audit, que
 # solo se ejecutan aquí y en el job "Security Checks" del CI. Viven en este
 # fichero para que la imagen de producción no los instale (#289).
 # Comprobado con `pip show <paquete>`: su "Required-by" es exclusivamente de dev.
 # Los que sí necesita producción se quedan en requirements.txt — click (uvicorn),
 # urllib3 (requests, sentry-sdk) y mako (alembic).
 
-# filelock - Sincronización de archivos mediante locks (dependencia transitiva de virtualenv/safety)
-# Fijada explícitamente para resolver CVE-2025-68146 (TOCTOU race condition) y CVE-2026-22701
-filelock==3.20.3
-
-# authlib - OAuth and OpenID Connect library (dependencia transitiva de safety)
-# NO la usa el login con Google del proyecto: nada en src/ la importa.
-# Fijada explícitamente para resolver:
-# - CVE-2025-61920 (DoS via large base64 tokens)
-# - CVE-2025-62706 (DoS via zip bomb decompression)
-# - CVE-2025-68158 (Login CSRF vulnerability - fixed in 1.6.6)
-# - CRITICAL (CVSS 9.3): Improper Verification of Cryptographic Signature (x2, fixed in 1.6.7 + 1.6.9)
-# - HIGH (CVSS 8.7): Not Failing Securely - Failing Open (fixed in 1.6.9)
-# - HIGH (CVSS 8.3): Timing Attack (fixed in 1.6.9)
-# - PYSEC-2026-25 (Improper Verification of Cryptographic Signature - fixed in 1.6.11)
-# - PYSEC-2026-188 (fixed in 1.6.12)
-authlib==1.6.12
-
-# marshmallow - Object serialization/deserialization library (dependencia transitiva de safety)
-# Fijada explícitamente para resolver CVE-2025-68480 (DoS via Asymmetric Resource Consumption)
-marshmallow==3.26.2
-
-# nltk - Natural Language Toolkit (dependencia transitiva de safety)
-# Sin versión parcheada para CVE-2026-81726 (GHSA-8mgp-746c-j5xp): 3.10.3 es la última
-# y sigue afectada. No la importa ningún módulo, así que la vía es no llevarla a producción.
-# OJO: esto NO la saca del CI. Los pasos de auditoría corren `pip-audit` y `safety scan`
-# contra el entorno instalado, que aquí sigue incluyendo nltk, así que la próxima CVE suya
-# CON versión de arreglo volverá a poner el pipeline en rojo igual que hoy.
-# Fijada explícitamente para resolver:
-# - PYSEC-2026-96, -97, -98, -99, CVE-2026-33230, CVE-2026-33231, GHSA-rf74-v2fm-23pw
-# - CVE-2026-54293, CVE-2026-12243, CVE-2026-12252 (path traversal / firma criptográfica, GHSA Dependabot #29/#31)
-# - CVE-2026-72818 (arreglada en 3.10.1) y CVE-2026-78680, -12876, -81723, -71513 (en 3.10.3)
-nltk==3.10.3
-
 # msgpack - Serialización binaria (dependencia transitiva de pip-audit > cachecontrol)
 # Fijada explícitamente para resolver SNYK-PYTHON-MSGPACK-17391445 (Use After Free)
-msgpack==1.2.1
+msgpack==1.2.2
 
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
 # que a su vez entra con las herramientas de auditoría: ya no existe en producción)
 # Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
-zipp==3.19.1
+zipp==4.1.0
 
 # ================================
 # TESTING
@@ -112,7 +85,7 @@ zipp==3.19.1
 # pytest - Framework de testing moderno y potente
 # Más simple que unittest, mejor output de errores, fixtures potentes
 # Actualizado a 9.0.3 para resolver CVE-2025-71176 (arbitrary code execution via deserialization)
-pytest==9.0.3
+pytest==9.1.1
 
 # pytest-json-report - Plugin para pytest que genera reportes en formato JSON
 # Esencial para el análisis programático de los resultados de los tests
@@ -136,7 +109,7 @@ pytest-cov
 # Estaba pinneado en requirements.txt solo porque pytest lo arrastraba hasta producción.
 # Al mover el bloque de test, su único consumidor viene aquí, y el pin con él.
 # Fijada explícitamente para resolver CVE-2026-4539
-pygments==2.20.0
+pygments==2.21.0
 
 # ================================
 # ANÁLISIS DE CÓDIGO
@@ -153,10 +126,10 @@ radon>=6.0.1
 # cyclonedx-bom - Genera Software Bill of Materials (SBOM) en formato CycloneDX
 # Cumple con OWASP A08:2021 Software and Data Integrity Failures
 # Permite auditoría completa de la cadena de suministro de software
-cyclonedx-bom>=4.0.0
+cyclonedx-bom>=7.4.0
 
 # pip-tools - Herramientas para gestión de dependencias con pip
 # pip-compile: Genera requirements.lock con hashes SHA256 para verificación de integridad
 # pip-sync: Sincroniza el entorno con el lock file
 # Previene ataques de dependency substitution
-pip-tools>=7.4.0
+pip-tools>=7.6.1
