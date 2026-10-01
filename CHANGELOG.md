@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.23.1] - 2026-10-01
+
+La 2.23.0 no llegó a arrancar en Render: `alembic upgrade head`, que corre en el
+arranque del contenedor, caía con `No module named 'psycopg'` y Render mantuvo
+la 2.22.0. Producción no se cayó.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato. Lleva todo lo de
+la 2.23.0; sus notas siguen valiendo.
+
+### Fixed
+
+- **Las migraciones vuelven a usar psycopg2 con la URL de Render** (hotfix).
+  SQLAlchemy 2.1 cambió el driver por defecto de `postgresql://` de psycopg2 a
+  psycopg (v3), que no está instalado, y la `DATABASE_URL` de Render no lleva
+  driver. `alembic/env.py` solo traducía `+asyncpg` a `+psycopg2`; ahora fija
+  psycopg2 también cuando la URL no dice ninguno, en una sola función para los
+  modos offline y online. Ni el CI ni el Kind lo vieron porque sus URLs llevan
+  `+asyncpg`; un test nuevo ejecuta `alembic upgrade head` con los tres tipos
+  de URL contra un puerto cerrado y exige el error de conexión de psycopg2.
+
 ## [2.23.0] - 2026-10-01
 
 Una release sin nada nuevo para el usuario: pone al día las dependencias, tres
