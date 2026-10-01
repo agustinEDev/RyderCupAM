@@ -521,7 +521,7 @@ jobs:
           - comprobacion: build
             nombre: 🐳 Docker build
           - comprobacion: render
-            nombre: 🚀 Start like Render
+            nombre: 🚀 Deploy like Render
           - comprobacion: trivy
             nombre: 🔍 Trivy
     runs-on: ubuntu-24.04
@@ -538,7 +538,7 @@ jobs:
     permissions:
       contents: read
       security-events: write  # Subida del SARIF de Trivy
-    # La BD de verdad para arrancar como en Render (paso «Start like Render»).
+    # La BD de verdad para arrancar como en Render (entrada «Deploy like Render»).
     # Solo esa entrada la necesita; con image vacía GitHub no levanta el servicio
     services:
       postgres:
@@ -1335,7 +1335,7 @@ jobs:
               echo ""
               echo "### 📋 Action Required"
               echo ""
-              echo "1. 🔍 **Check Build Logs**: Review the failed entry of the Docker matrix (Docker build, Start like Render, Trivy)"
+              echo "1. 🔍 **Check Build Logs**: Review the failed entry of the Docker matrix (Docker build, Deploy like Render, Trivy)"
               echo "2. 🐳 **Test Locally**: Run \`docker-compose up --build\` to reproduce"
               echo "3. 🔒 **Check Trivy Results**: Review vulnerability scan output"
               echo "4. 🔄 **Push Fix**: Commit changes and re-trigger pipeline"
