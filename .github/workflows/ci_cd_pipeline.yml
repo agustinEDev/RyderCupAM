@@ -522,9 +522,21 @@ jobs:
     permissions:
       contents: read
       security-events: write  # Subida del SARIF de Trivy
-    # Sin needs (28 sep 2026): la imagen nunca se publica (push: false), así que no
-    # hay nada que proteger esperando a los tests, y esperar le sumaba 1,5 min al
-    # camino crítico. Build Docker sigue siendo check obligatorio por sí mismo.
+    # La BD de verdad para arrancar como en Render (paso «Start like Render»)
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Code
@@ -564,31 +576,16 @@ jobs:
             exit 1
           fi
 
-      - name: Test Application Startup (without DB)
+      # El camino de Render, de principio a fin: entrypoint.sh → alembic upgrade
+      # head contra una BD real con una URL SIN driver → uvicorn → /health con la
+      # versión. El paso anterior lo saltaba (--entrypoint uvicorn, URL +asyncpg) y
+      # la v2.23.0 cayó en Render con todo esto en verde (hotfix 2.23.1). Ver
+      # .github/scripts/start-like-render.sh
+      - name: Start like Render
         run: |
-          echo "🐳 Testing FastAPI application can start..."
-          # Override entrypoint to skip migrations and start app directly
-          docker run --name test-container -d -p 8000:8000 \
-            -e DATABASE_URL=postgresql+asyncpg://dummy:dummy@localhost/dummy \
-            --entrypoint uvicorn \
-            rydercupam:${{ github.sha }} \
-            main:app --host 0.0.0.0 --port 8000
-
-          echo "Waiting for FastAPI to start..."
-          sleep 5
-
-          # Check if container is running
-          if docker ps | grep test-container; then
-            echo "✅ FastAPI application started successfully"
-            docker logs test-container | head -20
-            docker stop test-container
-            docker rm test-container
-          else
-            echo "❌ FastAPI failed to start"
-            docker logs test-container
-            docker rm -f test-container || true
-            exit 1
-          fi
+          VERSION=$(python3 -c 'import runpy; print(runpy.run_path("src/config/version.py")["APP_VERSION"])')
+          RED=host bash .github/scripts/start-like-render.sh "rydercupam:${{ github.sha }}" \
+            "postgresql://test_user:test_password@localhost:5432/test_db" "$VERSION"
 
       - name: Run Trivy Container Security Scan
         id: trivy_scan
