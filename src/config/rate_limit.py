@@ -38,8 +38,8 @@ LOGIN_ATTEMPTS_LIMIT = "60/minute"  # techo de intentos: cada login cuesta un bc
 GOOGLE_LOGIN_LIMIT = "30/minute"
 REGISTER_LIMIT = "30/hour"
 EMAIL_SENDING_LIMIT = "30/hour"  # forgot-password y resend-verification
-RESET_PASSWORD_LIMIT = "20/hour"
-VALIDATE_RESET_TOKEN_LIMIT = "30/hour"
+RESET_PASSWORD_LIMIT = "20/hour"  # nosec B105 - a rate limit, not a password
+VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 CONTACT_LIMIT = "10/hour"
 
 # Topes que no van por red
