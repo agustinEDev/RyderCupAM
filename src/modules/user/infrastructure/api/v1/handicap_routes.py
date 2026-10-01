@@ -39,6 +39,10 @@ from src.modules.user.domain.errors.handicap_errors import (
     HandicapServiceUnavailableError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.security.authorization import (
+    require_admin,
+    require_self_or_admin,
+)
 
 router = APIRouter(prefix="/handicaps")
 
@@ -178,7 +182,8 @@ async def refresh_own_handicap(
     description=(
         "Busca y actualiza el hándicap de un usuario consultando la RFEG. "
         "Si el usuario no tiene hándicap registrado en la RFEG y se proporciona "
-        "manual_handicap, se usará ese valor."
+        "manual_handicap, se usará ese valor. "
+        "Cada jugador solo puede actualizar el suyo; un administrador, el de cualquiera."
     ),
 )
 @limiter.limit("5/hour")  # Proteger RFEG API externa: máximo 5 consultas por hora
@@ -186,7 +191,7 @@ async def update_user_handicap(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     handicap_data: UpdateHandicapRequestDTO,
     use_case: UpdateUserHandicapUseCase = Depends(get_update_handicap_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Actualiza el hándicap de un usuario buscándolo en la RFEG.
@@ -199,9 +204,12 @@ async def update_user_handicap(
         Usuario actualizado con su hándicap
 
     Raises:
+        403: Si no es el propio usuario ni un admin
         404: Si el usuario no existe o no se encuentra su hándicap en RFEG
         503: Si el servicio RFEG no está disponible
     """
+    require_self_or_admin(current_user, handicap_data.user_id)
+
     try:
         user_id = UserId(handicap_data.user_id)
         result = await use_case.execute(user_id, handicap_data.manual_handicap)
@@ -230,13 +238,14 @@ async def update_user_handicap(
     summary="Actualizar hándicaps de múltiples usuarios",
     description=(
         "Actualiza los hándicaps de una lista de usuarios. "
-        "Útil para actualizar todos los participantes de una competición antes de iniciarla."
+        "Útil para actualizar todos los participantes de una competición antes de iniciarla. "
+        "Solo administradores."
     ),
 )
 async def update_multiple_handicaps(
     request: UpdateMultipleHandicapsRequestDTO,
     use_case: UpdateMultipleHandicapsUseCase = Depends(get_update_multiple_handicaps_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Actualiza los hándicaps de múltiples usuarios.
@@ -252,7 +261,12 @@ async def update_multiple_handicaps(
 
     Returns:
         Estadísticas de la operación (total, actualizados, errores, etc.)
+
+    Raises:
+        403: Si no es un admin
     """
+    require_admin(current_user)
+
     user_ids = [UserId(uid) for uid in request.user_ids]
     stats = await use_case.execute(user_ids)
 
@@ -276,13 +290,14 @@ async def update_multiple_handicaps(
     description=(
         "Actualiza el hándicap de un usuario con un valor manual proporcionado. "
         "Este endpoint NO consulta la RFEG, actualiza directamente con el valor dado. "
-        "Útil para administradores o para jugadores no federados."
+        "Útil para jugadores no federados. "
+        "Cada jugador solo puede cambiar el suyo; un administrador, el de cualquiera."
     ),
 )
 async def update_user_handicap_manually(
     request: UpdateHandicapManuallyRequestDTO,
     use_case: UpdateUserHandicapManuallyUseCase = Depends(get_update_handicap_manually_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Actualiza el hándicap de un usuario manualmente (sin consultar RFEG).
@@ -295,9 +310,12 @@ async def update_user_handicap_manually(
         Usuario actualizado con su nuevo hándicap
 
     Raises:
+        403: Si no es el propio usuario ni un admin
         404: Si el usuario no existe
         400: Si el hándicap no está en el rango válido
     """
+    require_self_or_admin(current_user, request.user_id)
+
     user_id = UserId(request.user_id)
 
     try:

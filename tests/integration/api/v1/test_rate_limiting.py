@@ -172,13 +172,14 @@ class TestRateLimitingHandicap:
 
         token = login_response.json().get("access_token")
         auth_headers = {"Authorization": f"Bearer {token}"}
+        own_id = login_response.json()["user"]["id"]
 
         # Limpiar rate limiter después del setup de autenticación
         limiter.reset()
 
-        # Payload para actualización de handicap
+        # Payload sobre el propio usuario: el de otro da 403 (#341)
         payload = {
-            "user_id": "123e4567-e89b-12d3-a456-426614174000",
+            "user_id": own_id,
             "manual_handicap": 15.5,
         }
 

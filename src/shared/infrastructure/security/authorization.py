@@ -24,6 +24,8 @@ Usage:
         # ... resto de lógica
 """
 
+from uuid import UUID
+
 from fastapi import HTTPException, status
 
 from src.modules.competition.domain.entities.competition import Competition
@@ -171,6 +173,27 @@ def require_admin(user: UserResponseDTO) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have administrator privileges",
+        )
+
+
+def require_self_or_admin(user: UserResponseDTO, target_user_id: UUID) -> None:
+    """
+    Guard que requiere actuar sobre uno mismo o ser administrador.
+
+    Se comprueba antes de buscar al usuario destino: así un id ajeno da 403 exista
+    o no, y la respuesta no sirve para averiguar qué ids existen (RyderCupAM#341).
+
+    Args:
+        user: Usuario actual autenticado (DTO)
+        target_user_id: Usuario sobre el que se quiere actuar
+
+    Raises:
+        HTTPException: 403 Forbidden si no es él mismo ni admin
+    """
+    if user.id != target_user_id and not is_admin(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only perform this action on yourself",
         )
 
 

@@ -37,6 +37,7 @@ from src.shared.infrastructure.security.authorization import (
     require_admin,
     require_creator_or_admin,
     require_player_in_competition,
+    require_self_or_admin,
 )
 
 # ======================================================================================
@@ -257,6 +258,42 @@ def test_require_creator_or_admin_raises_403_for_unauthorized_user(regular_user,
 
     assert exc_info.value.status_code == 403
     assert "creator or an administrator" in exc_info.value.detail.lower()
+
+
+# ======================================================================================
+# TESTS: require_self_or_admin() (RyderCupAM#341)
+# ======================================================================================
+
+
+def test_require_self_or_admin_succeeds_for_the_user_themselves(regular_user):
+    """
+    Given: Un usuario NO admin
+    When: Actúa sobre su propio id
+    Then: No lanza excepción
+    """
+    require_self_or_admin(regular_user, regular_user.id)
+
+
+def test_require_self_or_admin_succeeds_for_admin_on_another_user(admin_user):
+    """
+    Given: Un usuario admin
+    When: Actúa sobre el id de otro usuario
+    Then: No lanza excepción (admin override)
+    """
+    require_self_or_admin(admin_user, uuid4())
+
+
+def test_require_self_or_admin_raises_403_for_another_user(regular_user, creator_user):
+    """
+    Given: Un usuario NO admin
+    When: Actúa sobre el id de otro usuario
+    Then: Lanza HTTPException 403 Forbidden
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        require_self_or_admin(regular_user, creator_user.id)
+
+    assert exc_info.value.status_code == 403
+    assert "yourself" in exc_info.value.detail.lower()
 
 
 # ======================================================================================
