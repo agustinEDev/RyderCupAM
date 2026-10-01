@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.23.2] - 2026-10-01
+
+Sin cambios en la API ni en el código de la aplicación: es el CI que nace de la
+2.23.0, que no arrancó en Render con todas las comprobaciones en verde.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato. Nada que vigilar
+en Render más allá de lo de siempre (`/health` con la versión).
+
+### Changed
+
+- **El CI arranca la imagen como lo hace Render** (#456). Con su `entrypoint.sh`
+  real, `alembic upgrade head` contra un Postgres de verdad con una
+  `DATABASE_URL` sin driver, el entorno de producción y un DSN de Sentry, y
+  espera a que `/health` responda con la versión. Antes el CI validaba las
+  migraciones en offline y arrancaba la app saltándose el entrypoint, con URLs
+  `+asyncpg`: el camino que cayó en la 2.23.0 no lo recorría nadie. Probado en
+  rojo con la imagen 2.23.0, que falla con el mismo error que dio Render.
+- **La imagen se comprueba en tres cajas del gráfico** (#457): «🐳 Docker
+  build», «🚀 Deploy like Render» y «🔍 Trivy», en paralelo y obligatorias.
+- **Cada comprobación explica qué hace y qué ha encontrado** en la página de
+  resumen de la ejecución (#458), con cifras reales de cada herramienta (tests y
+  cobertura, hallazgos de ruff, mypy, Semgrep y Bandit, vulnerabilidades,
+  commits firmados, segundos hasta `/health`, CRITICAL y HIGH de Trivy). El
+  «📊 Summary» final es un índice de una fila por comprobación, con el mismo
+  criterio de aprobado que antes.
+
 ## [2.23.1] - 2026-10-01
 
 La 2.23.0 no llegó a arrancar en Render: `alembic upgrade head`, que corre en el
