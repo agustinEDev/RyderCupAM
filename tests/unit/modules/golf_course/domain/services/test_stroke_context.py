@@ -518,6 +518,44 @@ class TestRepeatedTeeThatCannotBeRated:
         assert context.tee_ratings[("OTHER", "MALE")].course_rating == Decimal("72.0")
 
 
+class TestRepeatedTeeWithoutAValidCard:
+    """
+    Lo mismo con la tarjeta (CodeRabbit en la #476): si la última de dos salidas
+    repetidas no trae tarjeta válida, la de la anterior no vale.
+    `GolfCourse.hole_card_for` resuelve la última y cae a la del campo, así que
+    el reparto también tiene que caer al orden del campo.
+    """
+
+    def test_the_course_order_is_used_instead_of_the_previous_card(self):
+        backward = _card(list(range(18, 0, -1)))
+        course = _course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=142,
+                    holes=backward,
+                ),
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Combinada",
+                    course_rating=72.0,
+                    slope_rating=133,
+                    holes=_card(list(range(1, 19))),
+                ),
+            ]
+        )
+        object.__setattr__(course.tees[1].holes[0], "stroke_index", None)
+
+        context = StrokeContextBuilder.build(course)
+
+        assert ("OTHER", "MALE") not in context.holes_by_tee
+        assert context.holes_for(TeeColor.OTHER, Gender.MALE) == context.holes_by_stroke_index
+
+
 class TestHolesForTee:
     """
     La regla de `holes_for`, suelta para quien lleva los datos planos

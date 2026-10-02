@@ -143,6 +143,11 @@ class StrokeContextBuilder:
             tee_card = _card_for(tee)
             if tee_card:
                 holes_by_tee[key] = tee_card
+            else:
+                # Misma regla que con la valoración: si la última de dos salidas
+                # repetidas no trae tarjeta válida, la de la anterior no vale y
+                # se cae al orden del campo, como `GolfCourse.hole_card_for`.
+                holes_by_tee.pop(key, None)
 
         return StrokeContext(
             tee_ratings=tee_ratings,
