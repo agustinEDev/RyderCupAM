@@ -25,10 +25,10 @@ from src.modules.competition.domain.value_objects.competition_status import (
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 
 def build_competition(**overrides) -> Competition:

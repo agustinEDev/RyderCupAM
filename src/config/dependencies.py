@@ -532,6 +532,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper i
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
 )
@@ -1600,8 +1601,13 @@ def get_submit_quick_match_hole_score_use_case(
 
 
 def get_scoring_service() -> ScoringService:
-    """Proveedor del servicio de dominio ScoringService."""
+    """Proveedor del servicio de dominio ScoringService (match play + lo de la Ryder)."""
     return ScoringService()
+
+
+def get_match_play_scoring() -> MatchPlayScoring:
+    """Proveedor de las reglas del match play, sin lo de la Ryder (RyderCupAM#165)."""
+    return MatchPlayScoring()
 
 
 def get_scoring_coverage_service() -> ScoringCoverageService:
@@ -1620,7 +1626,7 @@ def get_submit_quick_match_proxy_hole_score_use_case(
 def get_get_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    scoring_service: ScoringService = Depends(get_scoring_service),
+    scoring_service: MatchPlayScoring = Depends(get_match_play_scoring),
     coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetQuickMatchUseCase:

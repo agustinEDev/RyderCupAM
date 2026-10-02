@@ -9,7 +9,6 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -25,11 +24,6 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 from src.modules.quick_match.domain.services.hole_completion_service import (
     hole_is_complete,
 )
-from src.modules.quick_match.domain.services.stableford_calculator import (
-    NET_DOUBLE_BOGEY_OVER_PAR,
-    HoleSetup,
-    StablefordCalculator,
-)
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
 )
@@ -38,7 +32,6 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.application.dto.player_stats_dto import (
     RecentMatchDTO,
     RecentMatchesResponseDTO,
@@ -48,7 +41,14 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
+from src.shared.domain.services.stroke_play_scoring import (
+    NET_DOUBLE_BOGEY_OVER_PAR,
+    HoleSetup,
+    StrokePlayScoring,
+)
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 DEFAULT_LIMIT = 10
 
@@ -105,16 +105,16 @@ class GetRecentMatchesUseCase:
         competition_uow: CompetitionUnitOfWorkInterface,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
-        stableford_calculator: StablefordCalculator | None = None,
-        scoring_service: ScoringService | None = None,
+        stroke_play_scoring: StrokePlayScoring | None = None,
+        scoring_service: MatchPlayScoring | None = None,
         stroke_allocation_service: StrokeAllocationService | None = None,
     ):
         self._user_uow = user_uow
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
-        self._calculator = stableford_calculator or StablefordCalculator()
-        self._scoring_service = scoring_service or ScoringService()
+        self._calculator = stroke_play_scoring or StrokePlayScoring()
+        self._scoring_service = scoring_service or MatchPlayScoring()
         self._stroke_allocation_service = stroke_allocation_service or StrokeAllocationService()
 
     async def execute(
@@ -545,7 +545,7 @@ class GetRecentMatchesUseCase:
 
         Normalmente hay una sola: el frontend guarda la bola a nombre del primer
         jugador del bando, la anote quien la anote. Si llegan dos se toma la
-        MENOR, que es la que usa `ScoringService._best_ball` para adjudicar el
+        MENOR, que es la que usa `MatchPlayScoring._best_ball` para adjudicar el
         hoyo: contar aquí una y adjudicar con la otra dejaría la partida con
         unos golpes que no explican su resultado. Lo que nunca se hace es
         sumarlas, porque comparten bola y eso doblaría la vuelta.
@@ -582,7 +582,7 @@ class GetRecentMatchesUseCase:
             if not anotaciones:
                 continue
 
-            # El menor de los números, que es lo que hace `ScoringService._best_ball`
+            # El menor de los números, que es lo que hace `MatchPlayScoring._best_ball`
             # al decidir el hoyo. Normalmente solo hay uno —la bola se guarda a
             # nombre del primero del bando—, pero si llegan dos que no coinciden,
             # contar aquí uno y adjudicar el hoyo con el otro dejaría la misma

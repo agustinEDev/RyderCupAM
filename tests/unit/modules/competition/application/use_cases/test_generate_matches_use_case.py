@@ -44,7 +44,6 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
     NOT_ENOUGH_PLAYERS,
     PLAYERS_WITHOUT_TEE,
 )
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
@@ -61,6 +60,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = pytest.mark.asyncio
 

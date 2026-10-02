@@ -25,10 +25,10 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
 )
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.infrastructure.security.authorization import (
     can_modify_competition,
     is_admin,

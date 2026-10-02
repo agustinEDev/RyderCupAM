@@ -14,7 +14,6 @@ from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, S
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR
 
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
@@ -28,10 +27,11 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
 
 # ============================================================================

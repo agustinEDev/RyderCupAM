@@ -55,7 +55,6 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
 )
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
@@ -75,6 +74,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
+from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
     start_mappers as start_country_mappers,
 )

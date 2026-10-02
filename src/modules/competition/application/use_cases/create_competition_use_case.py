@@ -22,12 +22,12 @@ from src.modules.competition.domain.value_objects.competition_name import (
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 
 class CompetitionAlreadyExistsError(Exception):

@@ -27,7 +27,6 @@ from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMat
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
 )
@@ -50,6 +49,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 )
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 pytestmark = pytest.mark.asyncio
 

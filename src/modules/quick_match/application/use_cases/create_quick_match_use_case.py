@@ -1,6 +1,5 @@
 """Caso de Uso: Crear una Partida Rapida."""
 
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -22,13 +21,14 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
     QuickMatchUnitOfWorkInterface,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 
 class CreateQuickMatchUseCase:
