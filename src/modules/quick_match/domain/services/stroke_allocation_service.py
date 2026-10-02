@@ -25,7 +25,6 @@ El reparto depende del formato, siguiendo el WHS igual que `competition`:
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
@@ -33,6 +32,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
 )
 from src.shared.domain.services.tee_lookup import find_tee
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_participant import QuickMatchParticipant

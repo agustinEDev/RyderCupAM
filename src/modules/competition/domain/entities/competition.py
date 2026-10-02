@@ -12,6 +12,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 from ..entities.competition_golf_course import CompetitionGolfCourse
 from ..events.competition_activated_event import CompetitionActivatedEvent
@@ -38,7 +39,6 @@ from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
-from ..value_objects.play_mode import PlayMode
 from ..value_objects.ryder_cup_setup import CaptainOnWrongTeamError, RyderCupSetup
 from ..value_objects.setup_mode import SetupMode
 from ..value_objects.team_assignment import TeamAssignment

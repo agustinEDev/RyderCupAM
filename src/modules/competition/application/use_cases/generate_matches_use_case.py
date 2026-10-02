@@ -45,7 +45,6 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
     MatchGenerationBlock,
 )
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -60,6 +59,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
 from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 logger = logging.getLogger(__name__)
 

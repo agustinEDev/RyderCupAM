@@ -11,11 +11,11 @@ from decimal import Decimal
 
 import pytest
 
-from src.modules.competition.domain.services.score_differential_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.score_differential_calculator import (
     PlayedRound,
     ScoreDifferentialCalculator,
 )
-from src.shared.domain.services.playing_handicap_calculator import TeeRating
 
 
 def _round(adjusted_gross_score: int, slope: int = 113, course_rating: str = "72.0") -> PlayedRound:

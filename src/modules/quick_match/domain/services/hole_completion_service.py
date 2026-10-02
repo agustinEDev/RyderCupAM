@@ -27,7 +27,7 @@ def hole_is_complete(
     cambiar con la que falte— dejaba sin puntuar cualquier tarjeta llevada como
     se juega: el partido entero se quedaba sin un solo hoyo valido.
 
-    Ojo con quien decide luego el hoyo: `ScoringService._best_ball` no mira el
+    Ojo con quien decide luego el hoyo: `MatchPlayScoring._best_ball` no mira el
     formato y devuelve el MENOR de los scores que reciba. En foursomes hay uno
     solo porque la bola del bando se guarda a nombre de un unico participante
     —el primero del bando, lo anote quien lo anote—, no porque el motor sepa que

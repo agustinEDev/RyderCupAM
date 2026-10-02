@@ -8,7 +8,6 @@ from .location import InvalidLocationError, Location
 from .match_id import MatchId
 from .match_player import MatchPlayer
 from .match_status import MatchStatus
-from .play_mode import PlayMode
 from .round_id import RoundId
 from .round_status import RoundStatus
 from .schedule_config_mode import ScheduleConfigMode
@@ -28,7 +27,6 @@ __all__ = [
     "MatchId",
     "MatchPlayer",
     "MatchStatus",
-    "PlayMode",
     "RoundId",
     "RoundStatus",
     "ScheduleConfigMode",

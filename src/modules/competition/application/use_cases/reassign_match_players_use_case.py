@@ -22,7 +22,6 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
@@ -33,6 +32,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
 )
 from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 
 class MatchNotScheduledError(Exception):

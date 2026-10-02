@@ -2,7 +2,6 @@
 
 from decimal import Decimal
 
-from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -40,6 +39,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 
 TOTAL_HOLES = 18
 
@@ -51,7 +51,7 @@ class GetQuickMatchUseCase:
         self,
         uow: QuickMatchUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
-        scoring_service: ScoringService,
+        scoring_service: MatchPlayScoring,
         coverage_service: ScoringCoverageService,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         stroke_allocation_service: StrokeAllocationService | None = None,
@@ -284,7 +284,7 @@ class GetQuickMatchUseCase:
         Score neto del hoyo, o None si el jugador recogio la bola.
 
         La raya se propaga tal cual en vez de convertirse en un numero: asi
-        `ScoringService.calculate_hole_winner` la ve como bando sin bola y le
+        `MatchPlayScoring.calculate_hole_winner` la ve como bando sin bola y le
         da el hoyo al rival, que es la regla de match play. Ese servicio ya
         trabaja con `list[int | None]` porque competicion lo necesitaba, asi
         que aqui no hay nada que anadirle.

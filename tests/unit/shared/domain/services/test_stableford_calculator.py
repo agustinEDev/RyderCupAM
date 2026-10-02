@@ -12,11 +12,11 @@ from typing import ClassVar
 
 import pytest
 
-from src.modules.quick_match.domain.services.stableford_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.stableford_calculator import (
     HoleSetup,
     StablefordCalculator,
 )
-from src.shared.domain.services.playing_handicap_calculator import TeeRating
 
 
 def _course(pars: list[int] | None = None) -> list[HoleSetup]:

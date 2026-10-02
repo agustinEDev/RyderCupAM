@@ -23,9 +23,9 @@ from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMat
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from tests.unit.modules.quick_match.conftest import create_user
 
 pytestmark = pytest.mark.asyncio
