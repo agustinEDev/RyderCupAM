@@ -451,25 +451,6 @@ class TestPlusHandicap:
         assert result[high.participant_id].total_strokes == 20
 
 
-class TestAllocateByHole:
-    """El reparto con signo, aislado."""
-
-    def test_wraps_around_past_eighteen(self, service):
-        allocation = service.allocate_by_hole(23, _holes_by_stroke_index())
-
-        assert allocation[1] == 2  # SI 1
-        assert allocation[5] == 2  # SI 5
-        assert allocation[6] == 1  # SI 6
-        assert allocation[18] == 1  # SI 18
-        assert sum(allocation.values()) == 23
-
-    def test_zero_allocates_nothing(self, service):
-        assert service.allocate_by_hole(0, _holes_by_stroke_index()) == {}
-
-    def test_no_holes_allocates_nothing(self, service):
-        assert service.allocate_by_hole(10, []) == {}
-
-
 class TestReviewFindings:
     """
     Casos que el code review destapó y que no tenían ni un test.

@@ -10,6 +10,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -508,54 +509,17 @@ class GetPlayerStatsUseCase:
         """
         Ratings del tee que se jugó, o None si no se puede saber.
 
-        El tee se identifica por categoría y género, que es su clave única en el
-        campo: los tees no tienen id propio. El par no vive en el tee, sale de
-        sumar los hoyos.
+        Los resuelve la misma pieza que reparte los golpes (BE #165): misma
+        reserva a la barra sin género, misma barra cuando hay dos repetidas y
+        el mismo par (el de la barra, o el del campo si el suyo no cabe en el
+        WHS). Antes había aquí una copia que buscaba la barra exacta, y una
+        vuelta desde una barra sin género se quedaba sin diferencial.
 
         Un tee cuyos ratings no entran en los límites del WHS devuelve None en
-        lugar de propagar el error: el catálogo de campos admite un rango de
-        Course Rating más ancho que el que el sistema acepta para calcular, y
-        una estadística no es motivo para tumbar la respuesta entera.
+        lugar de propagar el error: una estadística no es motivo para tumbar la
+        respuesta entera.
         """
-        if tee_color is None:
-            return None
-
-        tee = next(
-            (
-                candidate
-                for candidate in course.tees
-                if candidate.color == tee_color and candidate.gender == tee_gender
-            ),
-            None,
-        )
-        if tee is None:
-            return None
-
-        course_rating = Decimal(str(tee.course_rating))
-        course_par = sum(hole.par for hole in course.reference_card)
-        try:
-            return TeeRating(
-                course_rating=course_rating,
-                slope_rating=tee.slope_rating,
-                # El par es el de la barra: entra en el Course Handicap como
-                # (CR - Par), así que con la tarjeta de referencia el jugador de
-                # otra barra sale con una base de golpes que no es la suya, y
-                # con ella el tope de doble bogey neto y el diferencial.
-                par=tee.par_total if tee.holes else course_par,
-            )
-        except (ValueError, TypeError):
-            # Una barra con el par fuera del rango WHS es un dato suelto del
-            # importador, no una vuelta que no se jugó: se valora contra el par
-            # del campo en vez de perder la vuelta y con ella el diferencial.
-            # Mismo criterio que `TeeContextBuilder._rating_for`.
-            try:
-                return TeeRating(
-                    course_rating=course_rating,
-                    slope_rating=tee.slope_rating,
-                    par=course_par,
-                )
-            except (ValueError, TypeError):
-                return None
+        return StrokeContextBuilder.build(course).rating_for(tee_color, tee_gender)
 
     # ==================== Lectura de tarjetas ====================
 

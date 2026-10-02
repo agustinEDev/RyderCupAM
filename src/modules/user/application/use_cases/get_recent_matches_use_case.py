@@ -14,9 +14,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.quick_match.application.services.stroke_context_builder import (
-    StrokeContextBuilder,
-)
+from src.modules.quick_match.application.services.course_context import course_context_for
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -431,7 +429,7 @@ class GetRecentMatchesUseCase:
         if course is None:
             return {}
 
-        context = StrokeContextBuilder.build(course)
+        context = course_context_for(course)
         handicaps = {}
         for participant in raw.match.participants:
             if participant.is_guest:
@@ -448,7 +446,7 @@ class GetRecentMatchesUseCase:
             handicaps=handicaps,
             tee_ratings=context.tee_ratings,
             holes_by_stroke_index=context.holes_by_stroke_index,
-            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
+            holes_by_stroke_index_by_tee=context.holes_by_tee,
             match_format=raw.match.match_format,
             allowance_percentage=raw.match.get_effective_allowance(),
             play_mode=raw.match.play_mode,

@@ -12,6 +12,8 @@ El resultado se redondea al entero más cercano (0.5 redondea hacia arriba).
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
+from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
+
 # Porcentajes que se pueden elegir a mano (50-100, de 5 en 5). Estaban dos veces,
 # en `Round` y en `QuickMatch` (RyderCupAM#165); los por defecto los da MatchFormat
 ALLOWED_ALLOWANCE_PERCENTAGES = frozenset(range(50, 101, 5))
@@ -255,13 +257,9 @@ class PlayingHandicapCalculator:
         """
         diff = ph_a - ph_b
         if diff > 0:
-            return PlayingHandicapCalculator.compute_strokes_received(
-                diff, holes_by_stroke_index
-            ), []
+            return holes_receiving_strokes(diff, holes_by_stroke_index), []
         if diff < 0:
-            return [], PlayingHandicapCalculator.compute_strokes_received(
-                -diff, holes_by_stroke_index
-            )
+            return [], holes_receiving_strokes(-diff, holes_by_stroke_index)
         return [], []
 
     @staticmethod
@@ -315,44 +313,6 @@ class PlayingHandicapCalculator:
         if team_b_avg > team_a_avg:
             return 0, strokes
         return 0, 0
-
-    @staticmethod
-    def compute_strokes_received(
-        playing_handicap: int,
-        holes_by_stroke_index: list[int],
-    ) -> list[int]:
-        """
-        Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index.
-
-        Distribuye strokes siguiendo el orden de stroke index de los hoyos.
-        Si playing_handicap > 18, se vuelve a recorrer la lista (wrap-around),
-        generando entradas duplicadas para hoyos que reciben más de un golpe.
-
-        Ejemplo: PH=29 con 18 hoyos → los primeros 11 hoyos por SI aparecen
-        2 veces (2 strokes), los últimos 7 aparecen 1 vez (1 stroke).
-
-        Use strokes_on_hole(hole_number, strokes_received) para obtener
-        el conteo de strokes en un hoyo específico.
-
-        Args:
-            playing_handicap: Playing Handicap calculado del jugador
-            holes_by_stroke_index: Números de hoyo ordenados por stroke index
-
-        Returns:
-            Lista de números de hoyo donde el jugador recibe golpe
-            (puede contener duplicados si PH > 18)
-        """
-        if not holes_by_stroke_index or playing_handicap <= 0:
-            return []
-
-        result: list[int] = []
-        remaining = playing_handicap
-        while remaining > 0:
-            take = min(remaining, len(holes_by_stroke_index))
-            result.extend(holes_by_stroke_index[:take])
-            remaining -= take
-
-        return result
 
     def _calculate_course_handicap(
         self,

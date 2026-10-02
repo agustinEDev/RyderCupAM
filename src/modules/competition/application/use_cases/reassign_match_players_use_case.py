@@ -11,9 +11,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     NotCompetitionCreatorError,
 )
-from src.modules.competition.application.services.tee_context_builder import (
-    TeeContextBuilder,
-)
+from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -23,6 +21,7 @@ from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -30,7 +29,8 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
-from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
+from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
+from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -182,7 +182,7 @@ class ReassignMatchPlayersUseCase:
                     "Se requiere un campo de golf para el modo HANDICAP. "
                     "Asocie un campo de golf aprobado a la competición."
                 )
-            context = TeeContextBuilder.build(golf_course)
+            context = course_context_for(golf_course)
             tee_ratings = context.tee_ratings
             holes_by_stroke_index = context.holes_by_stroke_index
             holes_by_tee = context.holes_by_tee
@@ -203,14 +203,6 @@ class ReassignMatchPlayersUseCase:
             user_gender_map,
             holes_by_tee,
         )
-
-    @staticmethod
-    def _holes_for_tee(tee_color, tee_gender, holes_by_tee, default):
-        """Orden de dificultad de la barra que juega el jugador (ver TeeContext)."""
-        if not holes_by_tee or tee_color is None:
-            return default
-        gender = tee_gender.value if tee_gender else None
-        return find_tee(holes_by_tee, tee_color.value, gender, default=default)
 
     def _build_match_player(
         self,
@@ -267,9 +259,9 @@ class ReassignMatchPlayersUseCase:
         playing_handicap = self._calculator.calculate(
             handicap_index, tee_rating, allowance, max_playing_handicap
         )
-        strokes_received = self._calculator.compute_strokes_received(
+        strokes_received = holes_receiving_strokes(
             playing_handicap,
-            self._holes_for_tee(tee_color, tee_gender, holes_by_tee, holes_by_stroke_index),
+            holes_for_tee(holes_by_tee, tee_color, tee_gender, holes_by_stroke_index),
         )
         return MatchPlayer.create(
             user_id=uid,

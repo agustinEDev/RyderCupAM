@@ -17,13 +17,11 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopePairings,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
-from src.modules.competition.application.services.tee_context_builder import (
-    TeeContextBuilder,
-)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -48,6 +46,7 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.services.handicap_service import HandicapService
@@ -56,7 +55,8 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
-from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
+from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
+from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -552,7 +552,7 @@ class GenerateMatchesUseCase:
             )
 
         if golf_course and not is_scratch:
-            context = TeeContextBuilder.build(golf_course)
+            context = course_context_for(golf_course)
             tee_ratings = context.tee_ratings
             holes_by_stroke_index = context.holes_by_stroke_index
             holes_by_tee = context.holes_by_tee
@@ -859,8 +859,8 @@ class GenerateMatchesUseCase:
 
         return tee_color, tee_gender, tee_rating, handicap_index
 
-    @classmethod
-    def _team_holes(cls, team_ids, player_data, holes_by_tee, default):
+    @staticmethod
+    def _team_holes(team_ids, player_data, holes_by_tee, default):
         """
         Orden de dificultad de un equipo de FOURSOMES.
 
@@ -876,21 +876,7 @@ class GenerateMatchesUseCase:
         if len(tees) != 1:
             return default
         tee_color, tee_gender = next(iter(tees))
-        return cls._holes_for_tee(tee_color, tee_gender, holes_by_tee, default)
-
-    @staticmethod
-    def _holes_for_tee(tee_color, tee_gender, holes_by_tee, default):
-        """
-        Orden de dificultad de la barra que juega el jugador.
-
-        Cae al del campo cuando la barra no trae tarjeta propia. Misma reserva de
-        genero que `_resolve_player_data`, para que las dos resuelvan la misma
-        barra.
-        """
-        if not holes_by_tee or tee_color is None:
-            return default
-        gender = tee_gender.value if tee_gender else None
-        return find_tee(holes_by_tee, tee_color.value, gender, default=default)
+        return holes_for_tee(holes_by_tee, tee_color, tee_gender, default)
 
     def _build_match_player(
         self,
@@ -930,9 +916,9 @@ class GenerateMatchesUseCase:
         playing_handicap = calculator.calculate(
             handicap_index, tee_rating, allowance, max_playing_handicap
         )
-        strokes_received = calculator.compute_strokes_received(
+        strokes_received = holes_receiving_strokes(
             playing_handicap,
-            self._holes_for_tee(tee_color, tee_gender, holes_by_tee, holes_by_stroke_index),
+            holes_for_tee(holes_by_tee, tee_color, tee_gender, holes_by_stroke_index),
         )
 
         return MatchPlayer.create(
@@ -1032,8 +1018,8 @@ class GenerateMatchesUseCase:
             uid_str = str(uid.value)
             tee_color, tee_gen, _, hi = player_data[uid_str]
             ph = differential_phs[uid_str]
-            strokes = calculator.compute_strokes_received(
-                ph, self._holes_for_tee(tee_color, tee_gen, holes_by_tee, holes_by_stroke_index)
+            strokes = holes_receiving_strokes(
+                ph, holes_for_tee(holes_by_tee, tee_color, tee_gen, holes_by_stroke_index)
             )
             return MatchPlayer.create(
                 user_id=uid,
@@ -1117,8 +1103,8 @@ class GenerateMatchesUseCase:
 
         # Cada uno recibe en los hoyos de SU barra: solo uno de los dos recibe,
         # asi que no hay conflicto entre dos ordenes distintos.
-        holes_a = self._holes_for_tee(tee_color_a, tee_gen_a, holes_by_tee, holes_by_stroke_index)
-        holes_b = self._holes_for_tee(tee_color_b, tee_gen_b, holes_by_tee, holes_by_stroke_index)
+        holes_a = holes_for_tee(holes_by_tee, tee_color_a, tee_gen_a, holes_by_stroke_index)
+        holes_b = holes_for_tee(holes_by_tee, tee_color_b, tee_gen_b, holes_by_stroke_index)
         strokes_a, _ = calculator.calculate_singles_differential(ph_a, ph_b, holes_a)
         _, strokes_b = calculator.calculate_singles_differential(ph_a, ph_b, holes_b)
 
@@ -1235,11 +1221,11 @@ class GenerateMatchesUseCase:
         #    y por tanto un solo orden de dificultad. Se usa el de la barra del
         #    equipo cuando los dos juegan la misma; si juegan barras distintas no
         #    hay una tarjeta que sea "la del equipo" y se cae a la del campo.
-        team_a_strokes = calculator.compute_strokes_received(
+        team_a_strokes = holes_receiving_strokes(
             team_a_ph,
             self._team_holes(team_a_ids, player_data, holes_by_tee, holes_by_stroke_index),
         )
-        team_b_strokes = calculator.compute_strokes_received(
+        team_b_strokes = holes_receiving_strokes(
             team_b_ph,
             self._team_holes(team_b_ids, player_data, holes_by_tee, holes_by_stroke_index),
         )
