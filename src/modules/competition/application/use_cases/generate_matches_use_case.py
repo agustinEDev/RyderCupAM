@@ -56,6 +56,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
+from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
 from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -930,7 +931,7 @@ class GenerateMatchesUseCase:
         playing_handicap = calculator.calculate(
             handicap_index, tee_rating, allowance, max_playing_handicap
         )
-        strokes_received = calculator.compute_strokes_received(
+        strokes_received = holes_receiving_strokes(
             playing_handicap,
             self._holes_for_tee(tee_color, tee_gender, holes_by_tee, holes_by_stroke_index),
         )
@@ -1032,7 +1033,7 @@ class GenerateMatchesUseCase:
             uid_str = str(uid.value)
             tee_color, tee_gen, _, hi = player_data[uid_str]
             ph = differential_phs[uid_str]
-            strokes = calculator.compute_strokes_received(
+            strokes = holes_receiving_strokes(
                 ph, self._holes_for_tee(tee_color, tee_gen, holes_by_tee, holes_by_stroke_index)
             )
             return MatchPlayer.create(
@@ -1235,11 +1236,11 @@ class GenerateMatchesUseCase:
         #    y por tanto un solo orden de dificultad. Se usa el de la barra del
         #    equipo cuando los dos juegan la misma; si juegan barras distintas no
         #    hay una tarjeta que sea "la del equipo" y se cae a la del campo.
-        team_a_strokes = calculator.compute_strokes_received(
+        team_a_strokes = holes_receiving_strokes(
             team_a_ph,
             self._team_holes(team_a_ids, player_data, holes_by_tee, holes_by_stroke_index),
         )
-        team_b_strokes = calculator.compute_strokes_received(
+        team_b_strokes = holes_receiving_strokes(
             team_b_ph,
             self._team_holes(team_b_ids, player_data, holes_by_tee, holes_by_stroke_index),
         )

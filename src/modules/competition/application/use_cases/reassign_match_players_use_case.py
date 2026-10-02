@@ -30,6 +30,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
+from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
 from src.shared.domain.services.tee_lookup import find_tee, tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -267,7 +268,7 @@ class ReassignMatchPlayersUseCase:
         playing_handicap = self._calculator.calculate(
             handicap_index, tee_rating, allowance, max_playing_handicap
         )
-        strokes_received = self._calculator.compute_strokes_received(
+        strokes_received = holes_receiving_strokes(
             playing_handicap,
             self._holes_for_tee(tee_color, tee_gender, holes_by_tee, holes_by_stroke_index),
         )

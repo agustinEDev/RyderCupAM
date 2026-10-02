@@ -30,6 +30,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     TeeRating,
     round_half_up,
 )
+from src.shared.domain.services.stroke_allocation import allocate_by_hole
 from src.shared.domain.services.tee_lookup import find_tee
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -395,40 +396,8 @@ class StrokeAllocationService:
         return ParticipantStrokes(
             participant_id,
             allocated if display_handicap is None else display_handicap,
-            self.allocate_by_hole(allocated, holes_by_stroke_index),
+            allocate_by_hole(allocated, holes_by_stroke_index),
         )
-
-    @staticmethod
-    def allocate_by_hole(playing_handicap: int, holes_by_stroke_index: list[int]) -> dict[int, int]:
-        """
-        Reparte un Playing Handicap con signo sobre los hoyos del campo.
-
-        Positivo: se reparte del hoyo mas dificil (stroke index 1) al mas facil,
-        dando la vuelta cuando pasa del numero de hoyos.
-        Negativo (handicap plus): se cede empezando por el mas facil y hacia
-        atras, que es lo que manda la Regla WHS 8.2.
-
-        Solo devuelve los hoyos con golpe, para no arrastrar 18 ceros.
-        """
-        total_holes = len(holes_by_stroke_index)
-        if total_holes == 0 or playing_handicap == 0:
-            return {}
-
-        sign = 1 if playing_handicap > 0 else -1
-        magnitude = abs(playing_handicap)
-        base, remainder = divmod(magnitude, total_holes)
-
-        allocation: dict[int, int] = {}
-        for position, hole_number in enumerate(holes_by_stroke_index):
-            stroke_index = position + 1
-            count = base
-            if sign > 0:
-                count += 1 if remainder >= stroke_index else 0
-            else:
-                count += 1 if remainder >= (total_holes + 1 - stroke_index) else 0
-            if count:
-                allocation[hole_number] = sign * count
-        return allocation
 
     @staticmethod
     def _no_strokes(participant_id: ParticipantId) -> ParticipantStrokes:
