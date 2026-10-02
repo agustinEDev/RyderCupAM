@@ -12,25 +12,23 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.services.course_context import course_context_for
+from src.modules.competition.application.services.match_players_builder import (
+    MatchPlayersBuilder,
+)
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
-from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
-from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
-from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
-from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -79,6 +77,7 @@ class ReassignMatchPlayersUseCase:
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
+        self._match_players = MatchPlayersBuilder()
 
     async def execute(
         self, request: ReassignMatchPlayersRequestDTO, user_id: UserId, is_admin: bool = False
@@ -115,37 +114,27 @@ class ReassignMatchPlayersUseCase:
                 holes_by_tee,
             ) = await self._build_handicap_data(round_entity, is_scratch, all_player_ids)
 
-            # 7. Construir nuevos MatchPlayers
-            team_a_players = [
-                self._build_match_player(
-                    uid,
-                    enrollment_map,
-                    tee_ratings,
-                    allowance,
-                    is_scratch,
-                    user_handicap_map,
-                    holes_by_stroke_index,
-                    user_gender_map,
-                    competition.max_playing_handicap,
-                    holes_by_tee,
-                )
-                for uid in request.team_a_player_ids
-            ]
-            team_b_players = [
-                self._build_match_player(
-                    uid,
-                    enrollment_map,
-                    tee_ratings,
-                    allowance,
-                    is_scratch,
-                    user_handicap_map,
-                    holes_by_stroke_index,
-                    user_gender_map,
-                    competition.max_playing_handicap,
-                    holes_by_tee,
-                )
-                for uid in request.team_b_player_ids
-            ]
+            # 7. Construir nuevos MatchPlayers, con el reparto de su formato:
+            #    el mismo que al generar (BE #477). Sin inscripción aprobada no
+            #    se sabe desde qué barra juega ni con qué hándicap.
+            for uid in [*request.team_a_player_ids, *request.team_b_player_ids]:
+                if str(uid) not in enrollment_map:
+                    raise PlayerNotEnrolledError(f"El jugador {uid} no tiene inscripción aprobada")
+            team_a_players, team_b_players = self._match_players.build(
+                round_entity.match_format,
+                [UserId(uid) for uid in request.team_a_player_ids],
+                [UserId(uid) for uid in request.team_b_player_ids],
+                enrollment_map,
+                tee_ratings,
+                self._calculator,
+                allowance,
+                is_scratch,
+                user_handicap_map,
+                holes_by_stroke_index,
+                user_gender_map,
+                competition.max_playing_handicap,
+                holes_by_tee,
+            )
 
             # 8. Eliminar partido viejo y crear nuevo
             await self._uow.matches.delete(match.id)
@@ -202,73 +191,6 @@ class ReassignMatchPlayersUseCase:
             user_handicap_map,
             user_gender_map,
             holes_by_tee,
-        )
-
-    def _build_match_player(
-        self,
-        uid_value,
-        enrollment_map,
-        tee_ratings,
-        allowance,
-        is_scratch,
-        user_handicap_map,
-        holes_by_stroke_index,
-        user_gender_map,
-        max_playing_handicap=None,
-        holes_by_tee=None,
-    ) -> MatchPlayer:
-        """Construye un MatchPlayer con handicap calculado y tee auto-resuelto."""
-        uid = UserId(uid_value)
-        enrollment = enrollment_map.get(str(uid_value))
-        if not enrollment:
-            raise PlayerNotEnrolledError(f"El jugador {uid_value} no tiene inscripción aprobada")
-        tee_color = enrollment.tee_color if enrollment.tee_color else TeeColor.YELLOW
-        user_gender = user_gender_map.get(str(uid_value))
-
-        # Auto-resolve tee: (color, user_gender) → (color, None)
-        tee_key = tee_key_for(
-            tee_ratings, tee_color.value, user_gender.value if user_gender else None
-        ) or (tee_color.value, None)
-        tee_gender = user_gender if tee_key[1] is not None else None
-
-        if is_scratch:
-            return MatchPlayer.create(
-                user_id=uid,
-                playing_handicap=0,
-                tee_color=tee_color,
-                strokes_received=[],
-                tee_gender=tee_gender,
-            )
-
-        # Handicap fallback: custom_handicap > user.handicap > 0
-        if enrollment.custom_handicap is not None:
-            handicap_index = enrollment.custom_handicap
-        elif str(uid_value) in user_handicap_map:
-            handicap_index = user_handicap_map[str(uid_value)]
-        else:
-            handicap_index = Decimal("0")
-
-        tee_rating = tee_ratings.get(tee_key)
-        if tee_rating is None:
-            raise ValueError(
-                f"No se encontró tee rating para el jugador {uid_value} "
-                f"(tee_key: {tee_key}) en el campo de golf. "
-                f"Verifique que el campo tiene un tee configurado para "
-                f"color={tee_color.value}, género={tee_gender}"
-            )
-        playing_handicap = self._calculator.calculate(
-            handicap_index, tee_rating, allowance, max_playing_handicap
-        )
-        strokes_received = holes_receiving_strokes(
-            playing_handicap,
-            holes_for_tee(holes_by_tee, tee_color, tee_gender, holes_by_stroke_index),
-        )
-        return MatchPlayer.create(
-            user_id=uid,
-            playing_handicap=playing_handicap,
-            tee_color=tee_color,
-            strokes_received=strokes_received,
-            tee_gender=tee_gender,
         )
 
     async def _validate(self, request, user_id, is_admin: bool = False):

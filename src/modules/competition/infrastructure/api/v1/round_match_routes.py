@@ -600,6 +600,7 @@ async def reassign_match_players(
         PlayerNotInTeamError,
         ReassignNoTeamAssignmentError,
         ReassignPlayerNotEnrolledError,
+        TeeColorNotFoundError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
