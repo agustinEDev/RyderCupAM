@@ -97,9 +97,9 @@ async def create_user(user_uow, email: str, handicap: float | None = None):
     return user
 
 
-async def create_golf_course(golf_course_uow, creator_id):
+async def create_golf_course(golf_course_uow, creator_id, tees=None):
     """Campo de par 72: 18 hoyos de par 4, stroke index 1 a 18."""
-    tees = [
+    tees = tees or [
         Tee(
             color=TeeColor.YELLOW,
             gender=Gender.MALE,
@@ -978,6 +978,47 @@ class TestScoreDifferentials:
         assert stats.differentials == [18.1]
         assert stats.rounds_with_differential == 1
         assert stats.best_differential == 18.1
+
+    async def test_a_genderless_tee_rates_the_round_of_any_gender(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Un campo dado de alta a mano suele tener la barra sin género, y el
+        jugador siempre llega con color y género. El reparto ya caía a esa barra;
+        las estadísticas la buscaban exacta, no la encontraban y la vuelta se
+        quedaba sin diferencial. Desde la pieza común (BE #165, 2 oct 2026)
+        resuelven la misma barra que el reparto.
+
+        Mismos números que desde la amarilla masculina: (113 / 125) x (90 - 70.0) = 18.1
+        """
+        player = await create_user(user_uow, unique_email("genderless"), handicap=10.0)
+        course = await create_golf_course(
+            golf_course_uow,
+            player.id,
+            tees=[
+                Tee(
+                    color=TeeColor.YELLOW,
+                    gender=None,
+                    identifier="Yellow",
+                    course_rating=70.0,
+                    slope_rating=125,
+                )
+            ],
+        )
+        await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.differentials == [18.1]
 
     async def test_the_same_round_is_worth_more_from_a_harder_tee(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
