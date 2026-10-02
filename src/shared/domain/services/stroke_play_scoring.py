@@ -29,11 +29,6 @@ from src.shared.domain.services.playing_handicap_calculator import (
 )
 from src.shared.domain.services.stroke_allocation import strokes_on_hole
 
-# El catálogo solo admite campos de 18 hoyos: `GolfCourse` lo valida como
-# invariante y rechaza cualquier otro número. Por eso el reparto de golpes es
-# una constante y no se deriva del campo. El día que se admitan campos de nueve
-# hay que derivarlo de los hoyos recibidos, aquí y en la inversión del 19.
-
 # Doble bogey neto: el tope por hoyo que el WHS aplica a lo que puntúa para
 # hándicap (Regla 3.1)
 NET_DOUBLE_BOGEY_OVER_PAR = 2

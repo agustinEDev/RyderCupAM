@@ -78,7 +78,10 @@ class StrokeContext:
         return holes_for_tee(self.holes_by_tee, tee_color, tee_gender, self.holes_by_stroke_index)
 
     def rating_for(self, tee_color: TeeColor | None, tee_gender: Gender | None) -> TeeRating | None:
-        """Valoración de una barra, con la misma reserva sin género que el orden."""
+        """
+        Valoración de la barra que juega el jugador, con la misma reserva sin
+        género que el orden; None si esa barra no se puede valorar.
+        """
         if tee_color is None:
             return None
         gender = tee_gender.value if tee_gender else None
@@ -119,6 +122,12 @@ class StrokeContextBuilder:
             if rating is not None:
                 tee_ratings[key] = rating
             else:
+                # Con dos salidas repetidas (#190) manda la última, que es la
+                # que da la tarjeta (`GolfCourse.hole_card_for`). Si ella no se
+                # puede valorar, la valoración de la anterior no vale: los
+                # golpes saldrían de una barra y la tarjeta de otra. Decidido
+                # el 2 oct 2026.
+                tee_ratings.pop(key, None)
                 # Fuera del contexto en vez de tumbar la construcción entera:
                 # el resto del campo sigue sirviendo.
                 unrated.append(

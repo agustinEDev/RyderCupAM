@@ -14,6 +14,9 @@ al más fácil, dando la vuelta cuando pasa del número de hoyos. Uno negativo
 
 from collections.abc import Sequence
 
+# El catálogo solo admite campos de 18 hoyos: `GolfCourse` lo valida como
+# invariante. Por eso el reparto de un hoyo suelto supone 18 por defecto; el
+# reparto entero ya se mide con los hoyos que recibe.
 HOLES_PER_ROUND = 18
 
 

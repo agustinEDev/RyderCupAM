@@ -426,6 +426,97 @@ class TestRatingFor:
 
         assert rating.course_rating == Decimal("72.0")
 
+    def test_a_repeated_tee_that_cannot_be_rated_gives_no_rating(self):
+        """
+        Si la última de dos salidas repetidas no se puede valorar, no hay
+        valoración: la de la primera iría con la tarjeta de la última, que es
+        la que resuelve `GolfCourse.hole_card_for`. Lo encontró la revisión
+        local de la B1.
+        """
+        course = _course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=142,
+                ),
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Combinada",
+                    course_rating=72.0,
+                    slope_rating=133,
+                ),
+            ]
+        )
+        object.__setattr__(course.tees[1], "course_rating", 30.0)
+
+        assert StrokeContextBuilder.build(course).rating_for(TeeColor.OTHER, Gender.MALE) is None
+
+
+class TestRepeatedTeeThatCannotBeRated:
+    """
+    Dos salidas repetidas (#190) y la última, la que resuelve
+    `GolfCourse.hole_card_for`, no se puede valorar. Si quedara la valoración de
+    la primera, competición y partida rápida calcularían los golpes con una
+    barra y los repartirían con la tarjeta de otra. Decidido el 2 oct 2026: esa
+    barra queda sin valorar para todos, como cualquier barra sin valorar.
+    """
+
+    def test_no_tee_rating_survives_for_that_key(self):
+        course = _course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=142,
+                ),
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Combinada",
+                    course_rating=72.0,
+                    slope_rating=133,
+                ),
+            ]
+        )
+        object.__setattr__(course.tees[1], "course_rating", 30.0)
+
+        context = StrokeContextBuilder.build(course)
+
+        assert ("OTHER", "MALE") not in context.tee_ratings
+        assert [t.course_rating for t in context.unrated_tees] == [Decimal("30.0")]
+
+    def test_a_repeated_tee_rated_last_keeps_its_rating(self):
+        """Al revés no hay problema: la última se valora y es la que manda."""
+        course = _course(
+            [
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Championship",
+                    course_rating=74.0,
+                    slope_rating=142,
+                ),
+                Tee(
+                    color=TeeColor.OTHER,
+                    gender=Gender.MALE,
+                    identifier="Combinada",
+                    course_rating=72.0,
+                    slope_rating=133,
+                ),
+            ]
+        )
+        object.__setattr__(course.tees[0], "course_rating", 30.0)
+
+        context = StrokeContextBuilder.build(course)
+
+        assert context.tee_ratings[("OTHER", "MALE")].course_rating == Decimal("72.0")
+
 
 class TestHolesForTee:
     """
