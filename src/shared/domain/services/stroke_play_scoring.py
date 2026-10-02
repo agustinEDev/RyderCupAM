@@ -11,7 +11,7 @@ Domain Service: StrokePlayScoring.
 Calcula puntos Stableford y totales de golpes de los participantes de una
 partida rápida. Puro, sin IO.
 
-Portado del `StrokePlayScoring` del frontend (BE #128), que hasta ahora era
+Portado del `StablefordCalculator.js` del frontend (BE #128), que hasta ahora era
 el único sitio donde vivían estas reglas. Mientras las dos implementaciones
 coexistan, `tests/unit/shared/domain/services/
 test_stroke_play_scoring.py` fija la paridad con los valores que el frontend
