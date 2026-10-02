@@ -12,11 +12,23 @@ El resultado se redondea al entero más cercano (0.5 redondea hacia arriba).
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-from src.modules.competition.domain.entities.round import (
-    FOURBALL_ALLOWANCE,
-    FOURSOMES_ALLOWANCE,
-)
-from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+# Porcentajes que se pueden elegir a mano (50-100, de 5 en 5). Estaban dos veces,
+# en `Round` y en `QuickMatch` (RyderCupAM#165); los por defecto los da MatchFormat
+ALLOWED_ALLOWANCE_PERCENTAGES = frozenset(range(50, 101, 5))
+
+
+def round_half_up(value: Decimal) -> int:
+    """
+    El redondeo de todo el cálculo de hándicap: los .5 se alejan del cero.
+
+    20.5 -> 21, 21.5 -> 22 y -2.5 -> -3, que es lo que hace
+    `roundHalfAwayFromZero` en el frontend. `round()` de Python y
+    `Decimal.to_integral_value()` redondean al par en los .5 (20.5 -> 20), y los
+    hándicaps acabados en .5 son de lo más común. Estaba copiado cinco veces
+    (RyderCupAM#165).
+    """
+    return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
 
 # Slope Rating neutral (valor estándar del sistema WHS)
 NEUTRAL_SLOPE = 113
@@ -154,78 +166,7 @@ class PlayingHandicapCalculator:
         allowance_factor = Decimal(allowance_percentage) / Decimal(100)
         playing_handicap_raw = course_handicap * allowance_factor
 
-        # ROUND_HALF_UP de Decimal redondea alejándose del cero (-2.5 -> -3),
-        # que es justo lo que hace `roundHalfAwayFromZero` en el frontend
-        return int(playing_handicap_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-    def calculate_for_singles(
-        self,
-        player_hi: Decimal,
-        player_tee: TeeRating,
-        opponent_hi: Decimal,
-        opponent_tee: TeeRating,
-        handicap_mode: HandicapMode,
-        custom_allowance: int | None = None,
-    ) -> tuple[int, int]:
-        """
-        Calcula los Playing Handicaps para un partido SINGLES.
-
-        En SINGLES, los strokes se dan basados en la DIFERENCIA
-        entre los playing handicaps de ambos jugadores.
-
-        Args:
-            player_hi: Handicap Index del jugador
-            player_tee: TeeRating del jugador
-            opponent_hi: Handicap Index del oponente
-            opponent_tee: TeeRating del oponente
-            handicap_mode: MATCH_PLAY (100%)
-            custom_allowance: Allowance personalizado (opcional)
-
-        Returns:
-            Tuple (player_ph, opponent_ph) con Playing Handicaps
-        """
-        allowance = (
-            custom_allowance if custom_allowance is not None else handicap_mode.default_allowance()
-        )
-
-        player_ph = self.calculate(player_hi, player_tee, allowance)
-        opponent_ph = self.calculate(opponent_hi, opponent_tee, allowance)
-
-        return player_ph, opponent_ph
-
-    def calculate_for_fourball(
-        self,
-        player1_hi: Decimal,
-        player1_tee: TeeRating,
-        player2_hi: Decimal,
-        player2_tee: TeeRating,
-        custom_allowance: int | None = None,
-    ) -> tuple[int, int]:
-        """
-        Calcula los Playing Handicaps para un equipo en FOURBALL (método legacy individual).
-
-        En FOURBALL (mejor bola), cada jugador usa su propio
-        Playing Handicap. El allowance por defecto es 90%.
-
-        NOTA: Para match play fourball, usar calculate_fourball_differential()
-        que aplica el método WHS de diferencias respecto al menor handicap.
-
-        Args:
-            player1_hi: Handicap Index del jugador 1
-            player1_tee: TeeRating del jugador 1
-            player2_hi: Handicap Index del jugador 2
-            player2_tee: TeeRating del jugador 2
-            custom_allowance: Allowance personalizado (opcional)
-
-        Returns:
-            Tuple (player1_ph, player2_ph) con Playing Handicaps
-        """
-        allowance = custom_allowance if custom_allowance is not None else FOURBALL_ALLOWANCE
-
-        player1_ph = self.calculate(player1_hi, player1_tee, allowance)
-        player2_ph = self.calculate(player2_hi, player2_tee, allowance)
-
-        return player1_ph, player2_ph
+        return round_half_up(playing_handicap_raw)
 
     def calculate_course_handicap(
         self,
@@ -245,7 +186,7 @@ class PlayingHandicapCalculator:
             Course Handicap redondeado (>= 0)
         """
         raw = self._calculate_course_handicap(handicap_index, tee_rating)
-        return max(0, int(raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP)))
+        return max(0, round_half_up(raw))
 
     @staticmethod
     def calculate_fourball_differential(
@@ -283,9 +224,7 @@ class PlayingHandicapCalculator:
         result: dict[str, int] = {}
         for user_id, ch in player_course_handicaps:
             diff = ch - lowest_ch
-            ph = int(
-                (Decimal(str(diff)) * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-            )
+            ph = round_half_up(Decimal(str(diff)) * allowance)
             if max_playing_handicap is not None:
                 ph = min(ph, max_playing_handicap)
             result[user_id] = ph
@@ -367,7 +306,7 @@ class PlayingHandicapCalculator:
 
         difference = abs(team_a_avg - team_b_avg)
         allowance = Decimal(str(allowance_percentage)) / Decimal("100")
-        strokes = int((difference * allowance).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        strokes = round_half_up(difference * allowance)
         if max_playing_handicap is not None:
             strokes = min(strokes, max_playing_handicap)
 
@@ -376,66 +315,6 @@ class PlayingHandicapCalculator:
         if team_b_avg > team_a_avg:
             return 0, strokes
         return 0, 0
-
-    def calculate_for_foursomes(
-        self,
-        team1_hi_avg: Decimal,
-        team1_tee: TeeRating,
-        team2_hi_avg: Decimal,
-        team2_tee: TeeRating,
-        custom_allowance: int | None = None,
-    ) -> tuple[int, int]:
-        """
-        Calcula los Playing Handicaps para equipos en FOURSOMES.
-
-        En FOURSOMES (golpe alterno), se usa el promedio de los
-        Handicap Index de cada equipo. El allowance (default 50%)
-        se aplica a la DIFERENCIA entre los course handicaps de
-        los equipos, no a cada handicap individual.
-
-        Fórmula WHS para FOURSOMES:
-        1. Calcular Course Handicap combinado de cada equipo
-        2. Calcular diferencia: |CH_team1 - CH_team2|
-        3. Aplicar 50% a la diferencia
-        4. El equipo con mayor CH recibe los strokes
-
-        Args:
-            team1_hi_avg: Promedio de Handicap Index del equipo 1
-            team1_tee: TeeRating del equipo 1 (ambos deben jugar mismo tee)
-            team2_hi_avg: Promedio de Handicap Index del equipo 2
-            team2_tee: TeeRating del equipo 2
-            custom_allowance: Allowance personalizado (opcional, default 50%)
-
-        Returns:
-            Tuple (team1_strokes, team2_strokes) donde el equipo con
-            mayor Course Handicap recibe strokes y el otro recibe 0.
-
-        Example:
-            Team A: avg HI = 15.0, CH = 17
-            Team B: avg HI = 10.0, CH = 11
-            Diferencia = 6, 50% = 3 strokes
-            Resultado: (3, 0) - Team A recibe 3 strokes
-        """
-        allowance = custom_allowance if custom_allowance is not None else FOURSOMES_ALLOWANCE
-
-        # Calcular Course Handicaps (sin allowance, para calcular diferencia)
-        team1_ch = self._calculate_course_handicap(team1_hi_avg, team1_tee)
-        team2_ch = self._calculate_course_handicap(team2_hi_avg, team2_tee)
-
-        # Calcular diferencia y aplicar allowance
-        difference = abs(team1_ch - team2_ch)
-        allowance_factor = Decimal(allowance) / Decimal(100)
-        strokes_raw = difference * allowance_factor
-
-        # Redondear strokes
-        strokes = int(strokes_raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-        # Asignar strokes al equipo con mayor CH
-        if team1_ch > team2_ch:
-            return strokes, 0
-        if team2_ch > team1_ch:
-            return 0, strokes
-        return 0, 0  # Mismo CH, nadie recibe strokes
 
     @staticmethod
     def compute_strokes_received(

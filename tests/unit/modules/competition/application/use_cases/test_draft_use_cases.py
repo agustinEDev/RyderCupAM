@@ -699,9 +699,9 @@ async def _crear_ronda(uow, comp_id):
     from datetime import date
 
     from src.modules.competition.domain.entities.round import Round
-    from src.modules.competition.domain.value_objects.match_format import MatchFormat
     from src.modules.competition.domain.value_objects.session_type import SessionType
     from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+    from src.shared.domain.value_objects.match_format import MatchFormat
 
     async with uow:
         ronda = Round.create(

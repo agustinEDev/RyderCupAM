@@ -70,7 +70,6 @@ from src.modules.competition.domain.value_objects.invitation_id import Invitatio
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
 )
@@ -103,6 +102,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (

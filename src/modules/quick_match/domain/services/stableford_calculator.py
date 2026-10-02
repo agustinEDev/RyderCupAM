@@ -16,7 +16,7 @@ Puntos por hoyo: max(0, 2 - (neto - par)).
 from dataclasses import dataclass
 from decimal import ROUND_FLOOR, Decimal
 
-from src.modules.competition.domain.services.playing_handicap_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )

@@ -15,8 +15,9 @@ import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.tee_lookup import find_tee
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,9 @@ class TeeContext:
         """
         if tee_color is None:
             return self.holes_by_stroke_index
-        color = tee_color.value
         gender = tee_gender.value if tee_gender else None
-        return (
-            self.holes_by_tee.get((color, gender))
-            or self.holes_by_tee.get((color, None))
-            or self.holes_by_stroke_index
+        return find_tee(
+            self.holes_by_tee, tee_color.value, gender, default=self.holes_by_stroke_index
         )
 
 

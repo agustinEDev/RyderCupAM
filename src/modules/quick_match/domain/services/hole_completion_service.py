@@ -7,7 +7,7 @@ seguia exigiendo los cuatro scores y dejaba **todas** las partidas de foursomes
 sin resultado mientras el detalle ya las puntuaba. Vive aqui una sola vez.
 """
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 from ..value_objects.participant_id import ParticipantId
 
