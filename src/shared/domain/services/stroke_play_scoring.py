@@ -86,8 +86,8 @@ class StrokePlayScoring:
         if tee_rating is None:
             return Decimal(str(handicap))
 
-        # Sin acotar: un jugador plus cede golpes (Regla WHS 8.2)
-        playing_handicap = self._playing_handicap_calculator.calculate_unbounded(
+        # Un jugador plus tiene Playing Handicap negativo y cede golpes
+        playing_handicap = self._playing_handicap_calculator.calculate(
             Decimal(str(handicap)), tee_rating, allowance_percentage
         )
         return Decimal(playing_handicap)

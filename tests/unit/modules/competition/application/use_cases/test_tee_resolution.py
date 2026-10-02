@@ -101,3 +101,38 @@ class TestElJugadorGuardaLaBarraConLaQueJuega:
         """Un 400 con un mensaje que dice la barra que falta."""
         with pytest.raises(TeeColorNotFoundError, match="tee rating"):
             _jugador_construido({("RED", None): AMARILLAS_SIN_GENERO}, Gender.MALE)
+
+
+class TestPlusEnIndividual:
+    """El plus cuenta como negativo también en competición (BE #165)."""
+
+    NEUTRA = TeeRating(Decimal("72.0"), 113, 72)
+
+    def test_el_rival_recibe_la_diferencia_completa(self):
+        plus, diez = UserId(str(uuid4())), UserId(str(uuid4()))
+        inscripciones = {
+            str(plus.value): SimpleNamespace(
+                tee_color=TeeColor.YELLOW, custom_handicap=Decimal("-2.0")
+            ),
+            str(diez.value): SimpleNamespace(
+                tee_color=TeeColor.YELLOW, custom_handicap=Decimal("10.0")
+            ),
+        }
+
+        (jugador_plus,), (jugador_diez,) = MatchPlayersBuilder().build(
+            MatchFormat.SINGLES,
+            [plus],
+            [diez],
+            inscripciones,
+            {("YELLOW", None): self.NEUTRA},
+            PlayingHandicapCalculator(),
+            100,
+            False,
+            {},
+            HOYOS,
+            {},
+        )
+
+        assert jugador_plus.playing_handicap == -2
+        assert list(jugador_plus.strokes_received) == []
+        assert len(jugador_diez.strokes_received) == 12
