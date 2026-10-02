@@ -46,3 +46,32 @@ async def test_a_tee_without_rating_is_a_400_with_its_message(client: AsyncClien
 
     assert respuesta.status_code == 400, respuesta.text
     assert "tee rating" in respuesta.json()["detail"]
+
+
+async def test_the_wrong_number_of_players_is_a_400_with_its_message(client: AsyncClient):
+    """Un lado sin los jugadores de su formato (revisión local de la #477)."""
+    from main import app
+    from src.config.dependencies import get_reassign_match_players_use_case
+    from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
+        WrongNumberOfPlayersError,
+    )
+
+    class _Descuadrado:
+        async def execute(self, *args, **kwargs):
+            raise WrongNumberOfPlayersError("Un partido SINGLES lleva 1 jugador(es) por equipo")
+
+    usuario = await create_authenticated_user(
+        client, "reasignar-2@test.com", "P@ssw0rd123!", "Reasignar", "Dos"
+    )
+    set_auth_cookies(client, usuario["cookies"])
+    app.dependency_overrides[get_reassign_match_players_use_case] = _Descuadrado
+    try:
+        respuesta = await client.put(
+            f"/api/v1/competitions/matches/{uuid4()}/players",
+            json={"team_a_player_ids": [str(uuid4())], "team_b_player_ids": []},
+        )
+    finally:
+        app.dependency_overrides.pop(get_reassign_match_players_use_case, None)
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert "por equipo" in respuesta.json()["detail"]

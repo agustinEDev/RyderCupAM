@@ -27,6 +27,7 @@ from src.modules.competition.application.services.match_players_builder import (
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     PlayerNotEnrolledError,
     ReassignMatchPlayersUseCase,
+    WrongNumberOfPlayersError,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -76,6 +77,8 @@ async def _reassign(
     team_b_handicaps: list[str],
     tee_color: TeeColor = TeeColor.YELLOW,
     enrolled: bool = True,
+    sent_a: int | None = None,
+    sent_b: int | None = None,
 ):
     """
     Monta una competición con hándicap, un partido ya generado con otros
@@ -87,7 +90,7 @@ async def _reassign(
     """
     uow = InMemoryUnitOfWork()
     creator_id = UserId(uuid4())
-    per_side = len(team_a_handicaps)
+    per_side = max(len(team_a_handicaps), len(team_b_handicaps))
 
     competition = Competition.create(
         id=CompetitionId(uuid4()),
@@ -109,8 +112,8 @@ async def _reassign(
     # Los que estaban en el partido (con cualquier hándicap) y los que entran
     old_a = [UserId(uuid4()) for _ in range(per_side)]
     old_b = [UserId(uuid4()) for _ in range(per_side)]
-    new_a = [UserId(uuid4()) for _ in range(per_side)]
-    new_b = [UserId(uuid4()) for _ in range(per_side)]
+    new_a = [UserId(uuid4()) for _ in team_a_handicaps]
+    new_b = [UserId(uuid4()) for _ in team_b_handicaps]
     handicaps = dict(
         zip(
             [*old_a, *old_b, *new_a, *new_b],
@@ -193,8 +196,8 @@ async def _reassign(
     response = await use_case.execute(
         ReassignMatchPlayersRequestDTO(
             match_id=match.id.value,
-            team_a_player_ids=[u.value for u in new_a],
-            team_b_player_ids=[u.value for u in new_b],
+            team_a_player_ids=[u.value for u in new_a[: sent_a if sent_a is not None else None]],
+            team_b_player_ids=[u.value for u in new_b[: sent_b if sent_b is not None else None]],
         ),
         creator_id,
     )
@@ -270,3 +273,27 @@ class TestLikeGenerating:
         """
         with pytest.raises(PlayerNotEnrolledError):
             await _reassign(MatchFormat.SINGLES, ["10"], ["18"], enrolled=False)
+
+
+class TestPlayersPerSide:
+    """
+    Cada lado trae exactamente los jugadores de su formato (revisión local de
+    la #477). El reparto individual lee el primero de cada lado: sin esto, un
+    2 contra 2 en individual se guardaba en silencio como 1 contra 1.
+    """
+
+    async def test_two_per_side_in_singles(self):
+        with pytest.raises(WrongNumberOfPlayersError):
+            await _reassign(MatchFormat.SINGLES, ["10", "12"], ["18", "20"])
+
+    async def test_uneven_sides(self):
+        with pytest.raises(WrongNumberOfPlayersError):
+            await _reassign(MatchFormat.FOURBALL, ["10", "12"], ["18", "20"], sent_b=1)
+
+    async def test_an_empty_side(self):
+        with pytest.raises(WrongNumberOfPlayersError):
+            await _reassign(MatchFormat.SINGLES, ["10"], ["18"], sent_a=0)
+
+    async def test_one_per_side_in_fourball(self):
+        with pytest.raises(WrongNumberOfPlayersError):
+            await _reassign(MatchFormat.FOURBALL, ["10"], ["18"])

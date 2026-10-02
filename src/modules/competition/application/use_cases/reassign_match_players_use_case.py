@@ -57,6 +57,12 @@ class PlayerNotEnrolledError(Exception):
     pass
 
 
+class WrongNumberOfPlayersError(Exception):
+    """Un lado no trae los jugadores que pide el formato del partido."""
+
+    pass
+
+
 class ReassignMatchPlayersUseCase:
     """
     Caso de uso para reasignar jugadores de un partido.
@@ -91,6 +97,20 @@ class ReassignMatchPlayersUseCase:
                 round_entity.competition_id
             )
             self._validate_team_membership(team_assignment, request)
+
+            # 5b. Cada lado, exactamente los jugadores de su formato. El reparto
+            #     individual lee el primero de cada lado: sin esto, un 2 contra 2
+            #     en individual se guardaba en silencio como 1 contra 1.
+            per_side = round_entity.match_format.players_per_team()
+            if (
+                len(request.team_a_player_ids) != per_side
+                or len(request.team_b_player_ids) != per_side
+            ):
+                raise WrongNumberOfPlayersError(
+                    f"Un partido {round_entity.match_format.value} lleva {per_side} "
+                    f"jugador(es) por equipo; llegaron {len(request.team_a_player_ids)} "
+                    f"y {len(request.team_b_player_ids)}"
+                )
 
             # 6. Obtener enrollments y campo para recalcular handicaps
             enrollments = await self._uow.enrollments.find_by_competition_and_status(

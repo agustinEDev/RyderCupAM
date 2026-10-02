@@ -135,6 +135,7 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
     PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
     PlayerNotInTeamError,
     ReassignMatchPlayersUseCase,
+    WrongNumberOfPlayersError,
 )
 from src.modules.competition.application.use_cases.update_match_status_use_case import (
     CompetitionNotInProgressError as StatusNotInProgressError,
@@ -601,6 +602,7 @@ async def reassign_match_players(
         ReassignNoTeamAssignmentError,
         ReassignPlayerNotEnrolledError,
         TeeColorNotFoundError,
+        WrongNumberOfPlayersError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
