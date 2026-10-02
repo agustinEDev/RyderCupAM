@@ -26,10 +26,10 @@ from src.modules.competition.domain.value_objects.competition_name import (
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # En el orden del día, para nombrarlas como se juegan
 _ORDEN_DE_FRANJA = {SessionType.MORNING: 0, SessionType.AFTERNOON: 1, SessionType.EVENING: 2}

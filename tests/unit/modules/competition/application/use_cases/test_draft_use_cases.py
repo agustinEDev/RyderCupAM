@@ -36,7 +36,6 @@ from src.modules.competition.application.use_cases.start_draft_use_case import (
     DraftAlreadyStartedError,
     StartDraftUseCase,
 )
-from src.modules.competition.domain.entities.competition import CaptainMissingError
 from src.modules.competition.domain.entities.draft import (
     DraftNotRunningError,
     NotYourTurnError,
@@ -46,6 +45,9 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainMissingError,
+)
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
@@ -697,9 +699,9 @@ async def _crear_ronda(uow, comp_id):
     from datetime import date
 
     from src.modules.competition.domain.entities.round import Round
-    from src.modules.competition.domain.value_objects.match_format import MatchFormat
     from src.modules.competition.domain.value_objects.session_type import SessionType
     from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+    from src.shared.domain.value_objects.match_format import MatchFormat
 
     async with uow:
         ronda = Round.create(

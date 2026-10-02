@@ -165,7 +165,7 @@ class EnvelopeDesk:
         decide la entidad, que es donde vive esa regla.
         """
         for team in ("A", "B"):
-            if competition.is_captain_of(team, user_id):
+            if competition.ryder_cup.is_captain_of(team, user_id):
                 return team
         return None
 

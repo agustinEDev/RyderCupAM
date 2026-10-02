@@ -22,12 +22,12 @@ from src.modules.competition.domain.value_objects.competition_name import (
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 
 class CompetitionAlreadyExistsError(Exception):
@@ -191,15 +191,15 @@ class CreateCompetitionUseCase:
             # Play Mode
             play_mode=competition.play_mode.value,
             # Nombres de equipos
-            team_1_name=competition.team_1_name,
-            team_2_name=competition.team_2_name,
+            team_1_name=competition.ryder_cup.team_1_name,
+            team_2_name=competition.ryder_cup.team_2_name,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.team_assignment.value,
+            team_assignment=competition.ryder_cup.team_assignment.value,
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.setup_mode),
+            setup_mode=str(competition.ryder_cup.setup_mode),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

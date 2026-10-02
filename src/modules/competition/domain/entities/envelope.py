@@ -20,10 +20,10 @@ from datetime import datetime
 from decimal import Decimal
 
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.envelope_id import EnvelopeId
-from ..value_objects.match_format import MatchFormat
 from ..value_objects.round_id import RoundId
 
 EQUIPOS = ("A", "B")

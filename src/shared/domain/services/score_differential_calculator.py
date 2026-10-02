@@ -25,7 +25,7 @@ de competición.
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-from src.modules.competition.domain.services.playing_handicap_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import (
     NEUTRAL_SLOPE,
     TeeRating,
 )

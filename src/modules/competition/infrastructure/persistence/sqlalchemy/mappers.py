@@ -70,21 +70,17 @@ from src.modules.competition.domain.value_objects.invitation_id import Invitatio
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.ryder_cup_setup import RyderCupSetup
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
-from src.modules.competition.domain.value_objects.team_assignment import (
-    TeamAssignment as TeamAssignmentVO,
-)
 from src.modules.competition.domain.value_objects.team_assignment_id import (
     TeamAssignmentId,
 )
@@ -105,6 +101,8 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (
@@ -1200,18 +1198,33 @@ def start_competition_mappers():
                 # ID and scalar fields → private attrs
                 "_id": competitions_table.c.id,
                 "_creator_id": competitions_table.c.creator_id,
-                "_team_1_name": competitions_table.c.team_1_name,
-                "_team_2_name": competitions_table.c.team_2_name,
                 "_play_mode": competitions_table.c.play_mode,
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
-                "_setup_mode": competitions_table.c.setup_mode,
-                "_team_a_captain_id": competitions_table.c.team_a_captain_id,
-                "_team_b_captain_id": competitions_table.c.team_b_captain_id,
-                "_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
-                "_team_b_vice_captain_id": competitions_table.c.team_b_vice_captain_id,
+                # Lo que es solo de la Ryder Cup, en su pieza (RyderCupAM#251). Es
+                # inmutable: SQLAlchemy no ve un cambio hecho dentro de un composite,
+                # asi que la entidad la sustituye entera en cada cambio
+                "_rc_team_1_name": competitions_table.c.team_1_name,
+                "_rc_team_2_name": competitions_table.c.team_2_name,
+                "_rc_setup_mode": competitions_table.c.setup_mode,
+                "_rc_team_assignment": competitions_table.c.team_assignment,
+                "_rc_team_a_captain_id": competitions_table.c.team_a_captain_id,
+                "_rc_team_b_captain_id": competitions_table.c.team_b_captain_id,
+                "_rc_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
+                "_rc_team_b_vice_captain_id": competitions_table.c.team_b_vice_captain_id,
+                "_ryder_cup": composite(
+                    RyderCupSetup.from_columns,
+                    "_rc_team_1_name",
+                    "_rc_team_2_name",
+                    "_rc_setup_mode",
+                    "_rc_team_assignment",
+                    "_rc_team_a_captain_id",
+                    "_rc_team_b_captain_id",
+                    "_rc_team_a_vice_captain_id",
+                    "_rc_team_b_vice_captain_id",
+                ),
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs
@@ -1245,11 +1258,6 @@ def start_competition_mappers():
                 "_status": composite(
                     lambda s: CompetitionStatus(s) if s else CompetitionStatus.DRAFT,
                     "_status_value",
-                ),
-                "_team_assignment_value": competitions_table.c.team_assignment,
-                "_team_assignment": composite(
-                    lambda t: TeamAssignmentVO(t) if t else TeamAssignmentVO.MANUAL,
-                    "_team_assignment_value",
                 ),
                 # Relationships
                 "_golf_courses": relationship(

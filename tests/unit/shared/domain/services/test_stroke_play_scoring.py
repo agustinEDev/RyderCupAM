@@ -1,5 +1,5 @@
 """
-Tests del StablefordCalculator (BE #128).
+Tests del StrokePlayScoring, antes StablefordCalculator (BE #128, #165).
 
 Estas reglas vivían solo en el frontend (`StablefordCalculator.js`) y ahora
 existen por duplicado. Mientras las dos implementaciones coexistan, el riesgo
@@ -12,10 +12,10 @@ from typing import ClassVar
 
 import pytest
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
-from src.modules.quick_match.domain.services.stableford_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.stroke_play_scoring import (
     HoleSetup,
-    StablefordCalculator,
+    StrokePlayScoring,
 )
 
 
@@ -29,10 +29,10 @@ class TestAllocateStrokes:
     """Reparto de golpes por hoyo."""
 
     def test_no_handicap_receives_no_strokes(self):
-        assert StablefordCalculator.allocate_strokes(None, 1) == 0
+        assert StrokePlayScoring.allocate_strokes(None, 1) == 0
 
     def test_scratch_receives_no_strokes(self):
-        assert StablefordCalculator.allocate_strokes(Decimal("0"), 1) == 0
+        assert StrokePlayScoring.allocate_strokes(Decimal("0"), 1) == 0
 
     @pytest.mark.parametrize(
         ("handicap", "stroke_index", "expected"),
@@ -48,7 +48,7 @@ class TestAllocateStrokes:
         ],
     )
     def test_allocates_by_difficulty(self, handicap, stroke_index, expected):
-        assert StablefordCalculator.allocate_strokes(handicap, stroke_index) == expected
+        assert StrokePlayScoring.allocate_strokes(handicap, stroke_index) == expected
 
     @pytest.mark.parametrize(
         ("handicap", "stroke_index", "expected"),
@@ -64,7 +64,7 @@ class TestAllocateStrokes:
         self, handicap, stroke_index, expected
     ):
         """Regla WHS 8.2: al plus se le quitan golpes empezando por el más fácil."""
-        assert StablefordCalculator.allocate_strokes(handicap, stroke_index) == expected
+        assert StrokePlayScoring.allocate_strokes(handicap, stroke_index) == expected
 
     @pytest.mark.parametrize(
         ("handicap", "expected_rounded_effect"),
@@ -81,7 +81,7 @@ class TestAllocateStrokes:
         negativos. ROUND_HALF_UP de Decimal se aleja del cero y daría otro
         resultado para -2.5, con un golpe de diferencia.
         """
-        assert StablefordCalculator.allocate_strokes(handicap, 1) == expected_rounded_effect
+        assert StrokePlayScoring.allocate_strokes(handicap, 1) == expected_rounded_effect
 
 
 class TestHolePoints:
@@ -101,10 +101,10 @@ class TestHolePoints:
         ],
     )
     def test_points_follow_net_score_against_par(self, gross, par, strokes, expected):
-        assert StablefordCalculator.hole_points(gross, par, strokes) == expected
+        assert StrokePlayScoring.hole_points(gross, par, strokes) == expected
 
     def test_hole_without_score_gives_no_points(self):
-        assert StablefordCalculator.hole_points(None, 4, 0) == 0
+        assert StrokePlayScoring.hole_points(None, 4, 0) == 0
 
 
 class TestComputeParticipantTotals:
@@ -112,7 +112,7 @@ class TestComputeParticipantTotals:
 
     def test_only_counts_holes_with_a_score(self):
         """Una partida a medias puntúa por lo jugado, no por lo que falta."""
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         totals = calculator.compute_participant_totals(
             handicap=0, holes=_course(), scores_by_hole={1: 4, 2: 4, 3: 4}
@@ -124,7 +124,7 @@ class TestComputeParticipantTotals:
         assert totals.stableford_points == 6
 
     def test_scratch_round_at_par(self):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores = dict.fromkeys(range(1, 19), 4)
 
         totals = calculator.compute_participant_totals(
@@ -137,7 +137,7 @@ class TestComputeParticipantTotals:
 
     def test_handicap_player_gets_net_credit(self):
         """18 de hándicap: un golpe por hoyo, así que 5 brutos son par neto."""
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores = dict.fromkeys(range(1, 19), 5)
 
         totals = calculator.compute_participant_totals(
@@ -150,7 +150,7 @@ class TestComputeParticipantTotals:
         assert totals.to_par == 0
 
     def test_participant_without_handicap_gets_no_strokes(self):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores = dict.fromkeys(range(1, 19), 5)
 
         totals = calculator.compute_participant_totals(
@@ -161,7 +161,7 @@ class TestComputeParticipantTotals:
         assert totals.stableford_points == 18  # bogey en todos: 1 punto por hoyo
 
     def test_no_scores_at_all_is_an_empty_round_not_an_error(self):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         totals = calculator.compute_participant_totals(
             handicap=10, holes=_course(), scores_by_hole={}
@@ -176,18 +176,18 @@ class TestNetDoubleBogeyCap:
     """Regla WHS 3.1: lo que puntúa para hándicap tiene techo por hoyo."""
 
     def test_a_normal_hole_is_left_alone(self):
-        assert StablefordCalculator.adjusted_gross(5, par=4, strokes_received=0) == 5
+        assert StrokePlayScoring.adjusted_gross(5, par=4, strokes_received=0) == 5
 
     def test_a_disaster_hole_is_capped_at_net_double_bogey(self):
         """Un 11 en un par 4 sin golpes cuenta como 6, no como 11."""
-        assert StablefordCalculator.adjusted_gross(11, par=4, strokes_received=0) == 6
+        assert StrokePlayScoring.adjusted_gross(11, par=4, strokes_received=0) == 6
 
     def test_the_cap_rises_with_the_strokes_received(self):
         """Con dos golpes en el hoyo, el techo sube a par + 2 + 2."""
-        assert StablefordCalculator.adjusted_gross(11, par=4, strokes_received=2) == 8
+        assert StrokePlayScoring.adjusted_gross(11, par=4, strokes_received=2) == 8
 
     def test_the_cap_is_off_by_default_so_the_scorecard_shows_real_strokes(self):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores = {**dict.fromkeys(range(1, 18), 4), 18: 11}
 
         totals = calculator.compute_participant_totals(
@@ -199,7 +199,7 @@ class TestNetDoubleBogeyCap:
 
     def test_the_cap_limits_what_a_single_hole_can_do_to_the_average(self):
         """Los mismos 11 golpes, ya topados: el hoyo aporta +2 y no +7."""
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores = {**dict.fromkeys(range(1, 18), 4), 18: 11}
 
         totals = calculator.compute_participant_totals(
@@ -215,7 +215,7 @@ class TestNetDoubleBogeyCap:
 
     def test_capping_does_not_move_the_stableford_points(self):
         """Un hoyo en net double bogey ya vale cero; peor sigue valiendo cero."""
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores = {**dict.fromkeys(range(1, 18), 4), 18: 11}
 
         raw = calculator.compute_participant_totals(
@@ -236,12 +236,12 @@ class TestResolveStrokesBasis:
 
     def test_without_a_tee_the_raw_handicap_is_used(self):
         """Quien no eligió tee juega su hándicap directamente."""
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         assert calculator.resolve_strokes_basis(12.4, None, 100) == Decimal("12.4")
 
     def test_with_a_tee_the_playing_handicap_is_used(self):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         tee = TeeRating(course_rating=Decimal("71.8"), slope_rating=133, par=72)
 
         basis = calculator.resolve_strokes_basis(12.4, tee, 100)
@@ -254,7 +254,7 @@ class TestResolveStrokesBasis:
         `calculate()` acota a cero y dejaría al plus sin ceder golpes; el
         frontend no acota, y es su resultado el que se ve hoy en la app.
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         tee = TeeRating(course_rating=Decimal("71.8"), slope_rating=133, par=72)
 
         basis = calculator.resolve_strokes_basis(-2.0, tee, 100)
@@ -262,13 +262,13 @@ class TestResolveStrokesBasis:
         assert basis < 0
 
     def test_no_handicap_gives_no_basis(self):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         assert calculator.resolve_strokes_basis(None, None, 100) is None
 
     def test_allowance_reduces_the_basis(self):
         """El allowance recorta el hándicap de juego (Fourball 90 %, Foursomes 50 %)."""
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         tee = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
 
         full = calculator.resolve_strokes_basis(20.0, tee, 100)
@@ -283,7 +283,7 @@ class TestFormatToPar:
 
     @pytest.mark.parametrize(("to_par", "expected"), [(0, "PAR"), (3, "+3"), (-2, "-2"), (1, "+1")])
     def test_formats_like_a_scoreboard(self, to_par, expected):
-        assert StablefordCalculator.format_to_par(to_par) == expected
+        assert StrokePlayScoring.format_to_par(to_par) == expected
 
 
 class TestParityWithTheFrontend:
@@ -355,7 +355,7 @@ class TestParityWithTheFrontend:
         ],
     )
     def test_matches_the_values_the_frontend_produces(self, handicap, points, gross, net, to_par):
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         totals = calculator.compute_participant_totals(
             handicap=handicap, holes=self._holes(), scores_by_hole=self.SCORES
@@ -384,7 +384,7 @@ class TestParityWithTheFrontend:
         mismo. Los valores salen de la misma vuelta de arriba con el hoyo 1
         recogido.
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores: dict[int, int | None] = dict(self.SCORES)
         scores[1] = None
 
@@ -414,7 +414,7 @@ class TestPickedUpHole:
         When se agregan los totales
         Then el hoyo cuenta como jugado, con su par
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         totals = calculator.compute_participant_totals(
             handicap=0, holes=_course(), scores_by_hole={1: 4, 2: None}
@@ -429,7 +429,7 @@ class TestPickedUpHole:
         When se cuentan los puntos
         Then aporta cero, que es lo que vale recoger en Stableford
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         con_raya = calculator.compute_participant_totals(
             handicap=0, holes=_course(), scores_by_hole={1: 4, 2: None}
@@ -446,7 +446,7 @@ class TestPickedUpHole:
         When se suman los golpes
         Then cuenta 6, el doble bogey neto, y no cero
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         totals = calculator.compute_participant_totals(
             handicap=0, holes=_course(), scores_by_hole={1: None}
@@ -466,7 +466,7 @@ class TestPickedUpHole:
         allowance: la misma vuelta llegaba a dar 89 o 90 segun con que reparto
         se mirara.
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         scratch = calculator.compute_participant_totals(
             handicap=0, holes=_course(), scores_by_hole={1: None}
@@ -488,7 +488,7 @@ class TestPickedUpHole:
         Es la trampa del cambio: `scores_by_hole.get(2)` devuelve None en los
         dos casos y significan lo contrario.
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
 
         totals = calculator.compute_participant_totals(
             handicap=0, holes=_course(), scores_by_hole={1: 4}
@@ -506,7 +506,7 @@ class TestPickedUpHole:
         Sin esto la vuelta con raya daria un diferencial mejor de lo jugado,
         que es justo lo que la Regla 3.1 evita.
         """
-        calculator = StablefordCalculator()
+        calculator = StrokePlayScoring()
         scores: dict[int, int | None] = dict.fromkeys(range(1, 19), 4)
         scores[1] = None
 

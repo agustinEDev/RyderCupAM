@@ -129,7 +129,10 @@ class DraftRoom:
         )
         capitanes = [
             uid
-            for uid in (competition.team_a_captain_id, competition.team_b_captain_id)
+            for uid in (
+                competition.ryder_cup.team_a_captain_id,
+                competition.ryder_cup.team_b_captain_id,
+            )
             if uid is not None
         ]
         return await DraftRoster.de_los_inscritos(enrollments, self._user_repo, capitanes)

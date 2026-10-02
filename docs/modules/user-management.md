@@ -195,9 +195,11 @@ UserUnitOfWorkInterface
 - Dual support: cookies (priority 1) + headers (legacy)
 
 ### Rate Limiting
-- Login: 5 attempts/minute per IP
-- Register: 3 attempts/hour per IP
+- Routes with a session count per user (verified access token); anonymous routes count per network (#273, ADR-038)
+- Login: 5 attempts/minute per email, 30 failed logins/minute per network, 60/minute ceiling
+- Register: 30/hour per network
 - RFEG API: 5 calls/hour per user
+- Full table: [API.md, Rate Limits per Endpoint](../API.md#rate-limits-per-endpoint)
 
 ### Security Logging (Audit Trail)
 - Logs in `logs/security_audit.log` (structured JSON)

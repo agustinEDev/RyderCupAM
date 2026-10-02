@@ -32,6 +32,7 @@ from jwt.exceptions import InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config.settings import settings
+from src.shared.infrastructure.security.cookie_handler import read_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +59,9 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         Returns:
             Token JWT o None si no se encuentra
         """
-        # 1. Intentar cookie httpOnly (prioridad 1)
-        token = request.cookies.get("access_token")
-        if token:
-            return token
-
-        # 2. Intentar header Authorization (backward compatibility)
-        authorization = request.headers.get("Authorization")
-        if authorization and authorization.startswith("Bearer "):
-            return authorization.replace("Bearer ", "")
-
-        return None
+        # Cookie httpOnly primero y después Authorization: Bearer, la misma regla
+        # que get_current_user
+        return read_access_token(request)
 
     def _decode_token(self, token: str) -> dict | None:
         """

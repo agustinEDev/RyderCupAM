@@ -999,7 +999,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 | Endpoint | Method | Auth | Rate Limit | Description |
 |----------|--------|------|------------|-------------|
-| `/support/contact` | POST | No | 3/hour | Submit contact form (creates GitHub Issue) |
+| `/support/contact` | POST | No | 10/hour | Submit contact form (creates GitHub Issue) |
 
 ### Main Fields
 
@@ -1026,7 +1026,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 - **Public endpoint**: No authentication required
 - **CSRF exempt**: No session to protect
-- **Rate limited**: 3 requests/hour per IP (SlowAPI)
+- **Rate limited**: 10 requests/hour per network (SlowAPI, `CONTACT_LIMIT`)
 - **Input sanitization**: All fields sanitized via `sanitize_html()` before creating issue
 - **GitHub Integration**: Creates issues in configured repo via REST API (`GH_ISSUES_TOKEN` + `GITHUB_ISSUES_REPO`)
 - **Error handling**: Returns 502 Bad Gateway if GitHub API fails
@@ -1083,15 +1083,24 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 ### Rate Limits per Endpoint
 
-| Endpoint | Limit | Reason |
-|----------|--------|-------|
-| Global | 100/minute | Basic DoS protection |
-| POST /auth/login | 5/minute | Anti brute-force |
-| POST /auth/register | 3/hour | Anti registration spam |
-| POST /auth/resend-verification | 3/hour | Protect Mailgun |
-| POST /handicaps/update | 5/hour | Protect RFEG API |
-| POST /competitions | 10/hour | Anti competition spam |
-| POST /support/contact | 3/hour | Anti contact form spam |
+**Who is counted** (#273, ADR-038): routes that require a session count **per user**, taken from the verified access token. Anonymous routes count **per network**, which in production is Render's proxy for every request: one bucket for the whole app until #466. Login, forgot-password and resend-verification also count **per email**, before the email is looked up.
+
+| Endpoint | Limit | Counted per | Reason |
+|----------|-------|-------------|--------|
+| POST /auth/login | 60/minute | network | Ceiling: every login costs a bcrypt hash |
+| POST /auth/login | 5/minute | email (any network, existing or not) | Anti brute-force |
+| POST /auth/login | 30 failed/minute | network, failures only | Anti credential stuffing; successful logins do not count |
+| POST /auth/google | 30/minute | network | |
+| POST /auth/register | 30/hour | network | Anti registration spam |
+| POST /auth/forgot-password, /auth/resend-verification | 30/hour + 3/hour per email | network + email | Protect Mailgun and the mailbox |
+| POST /auth/reset-password | 20/hour | network | |
+| GET /auth/validate-reset-token/{token} | 30/hour | network | |
+| POST /support/contact | 10/hour | network | Anti contact form spam |
+| POST /handicaps/update | 5/hour | user | Protect RFEG API |
+| POST /handicaps/refresh-mine | 10/hour | user | Each call may wait for RFEG |
+| POST /competitions | 10/hour | user | Anti competition spam |
+
+Routes without a decorator have **no** limit: `default_limits` is not applied without `SlowAPIMiddleware` (#467).
 
 ### HTTP Status Codes
 

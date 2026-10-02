@@ -11,8 +11,8 @@ from decimal import Decimal
 
 import pytest
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
-from src.modules.competition.domain.services.score_differential_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.score_differential_calculator import (
     PlayedRound,
     ScoreDifferentialCalculator,
 )

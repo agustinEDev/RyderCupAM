@@ -1,13 +1,20 @@
 """
-Domain Service: StablefordCalculator.
+StrokePlayScoring - Los totales de una tarjeta de stroke play (RyderCupAM#165).
+
+Antes se llamaba StablefordCalculator, pero no calcula solo el Stableford: el
+bruto, el neto, el resultado respecto al par (Medal) y el tope de doble bogey
+neto también son de aquí. Es la pareja de `MatchPlayScoring`, que decide hoyo a
+hoyo contra un rival.
+
+Domain Service: StrokePlayScoring.
 
 Calcula puntos Stableford y totales de golpes de los participantes de una
 partida rápida. Puro, sin IO.
 
-Portado del `StablefordCalculator` del frontend (BE #128), que hasta ahora era
+Portado del `StablefordCalculator.js` del frontend (BE #128), que hasta ahora era
 el único sitio donde vivían estas reglas. Mientras las dos implementaciones
-coexistan, `tests/unit/modules/quick_match/domain/services/
-test_stableford_calculator.py` fija la paridad con los valores que el frontend
+coexistan, `tests/unit/shared/domain/services/
+test_stroke_play_scoring.py` fija la paridad con los valores que el frontend
 produce hoy.
 
 Puntos por hoyo: max(0, 2 - (neto - par)).
@@ -16,7 +23,7 @@ Puntos por hoyo: max(0, 2 - (neto - par)).
 from dataclasses import dataclass
 from decimal import ROUND_FLOOR, Decimal
 
-from src.modules.competition.domain.services.playing_handicap_calculator import (
+from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
@@ -58,7 +65,7 @@ class ParticipantTotals:
         return self.net_strokes - self.par_played
 
 
-class StablefordCalculator:
+class StrokePlayScoring:
     """Puntuación Stableford y golpes netos de una partida rápida."""
 
     def __init__(self, playing_handicap_calculator: PlayingHandicapCalculator | None = None):

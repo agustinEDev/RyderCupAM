@@ -37,10 +37,12 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
     WithdrawEnrollmentUseCase,
 )
 from src.modules.competition.domain.entities.competition import (
-    CaptainOnWrongTeamError,
     TeamsNotAssignedError,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainOnWrongTeamError,
+)
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -149,7 +151,7 @@ async def test_la_capitana_elige_a_su_subcapitan():
 
     respuesta = await t.subcapitan("A", t.de_a(), t.ana)
 
-    assert (await t.competicion()).team_a_vice_captain_id == t.de_a()
+    assert (await t.competicion()).ryder_cup.team_a_vice_captain_id == t.de_a()
     assert respuesta.team_a_vice_captain_id == t.de_a().value
 
 
@@ -161,7 +163,7 @@ async def test_el_organizador_o_un_admin_tambien_pueden(quien):
 
     await t.subcapitan("B", t.de_b(), persona, admin=quien == "admin")
 
-    assert (await t.competicion()).team_b_vice_captain_id == t.de_b()
+    assert (await t.competicion()).ryder_cup.team_b_vice_captain_id == t.de_b()
 
 
 @pytest.mark.parametrize("quien", ["la otra capitana", "un jugador"])
@@ -177,7 +179,7 @@ async def test_nadie_mas_puede_elegirlo(quien):
     with pytest.raises(NotCaptainOrCreatorError):
         await t.subcapitan("A", t.de_a(), persona)
 
-    assert (await t.competicion()).team_a_vice_captain_id is None
+    assert (await t.competicion()).ryder_cup.team_a_vice_captain_id is None
 
 
 async def test_tiene_que_ser_de_su_equipo():
@@ -231,7 +233,10 @@ async def test_si_se_va_la_capitana_asciende_su_subcapitan():
     await t.retirar(t.ana)
 
     competicion = await t.competicion()
-    assert (competicion.team_a_captain_id, competicion.team_a_vice_captain_id) == (segundo, None)
+    assert (
+        competicion.ryder_cup.team_a_captain_id,
+        competicion.ryder_cup.team_a_vice_captain_id,
+    ) == (segundo, None)
 
 
 async def test_sin_subcapitan_el_organizador_cubre_el_puesto():
@@ -246,7 +251,7 @@ async def test_sin_subcapitan_el_organizador_cubre_el_puesto():
 
     respuesta = await t.cubrir("A", nuevo, t.organizador)
 
-    assert (await t.competicion()).team_a_captain_id == nuevo
+    assert (await t.competicion()).ryder_cup.team_a_captain_id == nuevo
     assert respuesta.team_a_captain_id == nuevo.value
 
 
@@ -274,7 +279,7 @@ async def test_repartir_de_nuevo_deja_libres_los_subcapitanes():
 
     await t.repartir()
 
-    assert (await t.competicion()).team_a_vice_captain_id is None
+    assert (await t.competicion()).ryder_cup.team_a_vice_captain_id is None
 
 
 @pytest.mark.parametrize("accion", ["subcapitan", "cubrir"])
@@ -312,7 +317,7 @@ async def test_un_capitan_que_se_fue_en_pleno_torneo_se_puede_sustituir_al_rever
     await t.retirar(t.ana)
     async with t.uow:
         competicion = await t.uow.competitions.find_by_id(t.comp_id)
-        assert competicion.team_a_captain_id == t.ana
+        assert competicion.ryder_cup.team_a_captain_id == t.ana
         competicion.revert_to_closed()
         await t.uow.competitions.update(competicion)
         await t.uow.commit()
@@ -320,4 +325,4 @@ async def test_un_capitan_que_se_fue_en_pleno_torneo_se_puede_sustituir_al_rever
 
     await t.cubrir("A", nuevo, t.organizador)
 
-    assert (await t.competicion()).team_a_captain_id == nuevo
+    assert (await t.competicion()).ryder_cup.team_a_captain_id == nuevo

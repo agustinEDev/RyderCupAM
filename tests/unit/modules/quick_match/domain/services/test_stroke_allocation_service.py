@@ -11,9 +11,6 @@ from decimal import Decimal
 
 import pytest
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
@@ -22,7 +19,10 @@ from src.modules.quick_match.domain.value_objects.participant_id import Particip
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # Golf de Meis (RFEG id 487), recorrido Par 72. Amarillas valoradas por genero.
 MEIS_AMARILLAS_M = TeeRating(course_rating=Decimal("73.1"), slope_rating=140, par=72)

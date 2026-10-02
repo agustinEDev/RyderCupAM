@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from src.config.dependencies import get_submit_contact_use_case
-from src.config.rate_limit import limiter
+from src.config.rate_limit import CONTACT_LIMIT, get_client_identifier, limiter
 from src.modules.support.application.dto.contact_dto import (
     ContactRequestDTO,
     ContactResponseDTO,
@@ -30,9 +30,9 @@ router = APIRouter()
     response_model=ContactResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Submit contact form",
-    description="Sends a contact form submission as a GitHub Issue. Rate limited to 3 per hour.",
+    description="Sends a contact form submission as a GitHub Issue. Rate limited to 10 per hour per network.",
 )
-@limiter.limit("3/hour")
+@limiter.limit(CONTACT_LIMIT, key_func=get_client_identifier)
 async def submit_contact_form(
     request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
     contact_request: ContactRequestDTO,
@@ -41,7 +41,7 @@ async def submit_contact_form(
     """
     Endpoint público para enviar formulario de contacto.
 
-    No requiere autenticación. Rate limited a 3 por hora por IP.
+    No requiere autenticación. Rate limited a 10 por hora por red.
     """
     try:
         return await use_case.execute(contact_request)

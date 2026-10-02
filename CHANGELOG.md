@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.24.0] - 2026-10-02
+
+Seguridad del hándicap, límites de peticiones que dejan entrar a un club entero
+a la vez, y tres refactors que preparan el stroke play (#251) y el reparto de
+golpes según el reglamento (#165). Va con el frontend **2.38.3**, que solo cambia
+Sentry.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato (el check
+`oasdiff` de cada PR lo confirmó). Orden de siempre: este primero. En Render no
+hay variables nuevas. Probado en bloque en el Kind el 2 oct, con una sesión de
+admin y otra de jugador.
+
+### Security
+
+- **Solo el propio jugador o un admin cambian un hándicap** (#465, #341). Las
+  rutas `/handicaps/update` y `/handicaps/update-manual` aceptaban cualquier
+  `user_id` y solo comprobaban que hubiera sesión: cualquier jugador podía
+  ponerle a otro el hándicap que quisiera, y con él los golpes que recibe en una
+  competición. Ahora responden 403 ante un id ajeno, antes de buscarlo, así que
+  un id inexistente tampoco da 404 y no delata qué ids existen.
+  `/handicaps/update-multiple` (consultas a la RFEG en lote) pasa a ser solo de
+  admin; ninguna pantalla la usa.
+
+### Changed
+
+- **Los límites de peticiones cuentan por usuario y el login, por email**
+  (#468, #273). En producción todas las peticiones llegan con la IP del proxy de
+  Render (ADR-038), así que cada límite era uno solo para toda la app: cinco
+  logins por minuto y tres altas por hora para todo el mundo.
+  - Las rutas con sesión cuentan por usuario, sacado del access token con la
+    firma verificada: un token inventado no elige contador.
+  - Las rutas anónimas siguen por red, declarada en cada una; un test recorre
+    todas las rutas de la app y lo exige.
+  - Login: 5 por minuto y email, contados antes de buscar al usuario (el 429 no
+    delata si el email existe), 30 fallos por minuto y red (los aciertos de un
+    club entrando a la vez no cuentan) y un techo de 60 por minuto.
+  - forgot-password y resend-verification: 3 por hora y email.
+  - Topes anónimos para un club: alta 30/hora, Google 30/min, reset 20/hora,
+    validar token 30/hora, contacto 10/hora.
+  - `refresh-mine` tiene su propio límite de 10/hora por usuario, y el 5/hora de
+    `/handicaps/update` pasa a ser por usuario (lo que quedaba de #341).
+
+  Los contadores siguen en la memoria del proceso: correcto con el único proceso
+  que corre hoy Render. Redis queda pendiente en #273 para cuando haya más
+  procesos o instancias. La IP real del cliente, con un secreto de Cloudflare, es
+  #466.
+
+### Refactored
+
+Sin cambio de comportamiento; el arnés de paridad con el frontend, regenerado
+tras cada uno, reproduce los 13 escenarios guardados.
+
+- **Lo que es solo de la Ryder Cup, en su propia pieza** (#471, #251). Equipos,
+  modo de montaje, reparto, capitanes y subcapitanes viven en `RyderCupSetup`,
+  inmutable y guardada en las mismas columnas: un Stableford no la arrastrará.
+- **El hándicap en una sola pieza compartida** (#472, #165). `MatchFormat`, el
+  calculador WHS, `TeeRating`, el redondeo, los porcentajes permitidos y la
+  búsqueda de la barra por color y género (siete copias) viven en `shared`.
+  Fuera tres métodos muertos del calculador.
+- **Las reglas de puntuación, compartidas, y la partida rápida desacoplada de
+  la competición** (#473, #165). `PlayMode`, `ScoringFormat` (con su 95 %),
+  `StrokePlayScoring` (antes `StablefordCalculator`), el diferencial WHS y las
+  reglas del match play (`MatchPlayScoring`, de la que hereda el
+  `ScoringService` de la Ryder) viven en `shared`. Partida rápida y competición
+  ya no se importan nada entre sí, y tres contratos de `lint-imports` lo
+  impiden en el CI.
+
 ## [2.23.3] - 2026-10-01
 
 Una corrección en la validación del enlace de restablecer la contraseña y el CI

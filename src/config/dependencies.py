@@ -191,9 +191,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.location_builder import LocationBuilder
-from src.modules.competition.domain.services.playing_handicap_calculator import (
-    PlayingHandicapCalculator,
-)
 from src.modules.competition.domain.services.schedule_format_service import (
     ScheduleFormatService,
 )
@@ -535,12 +532,16 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper i
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
+from src.shared.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
+)
 from src.shared.infrastructure.email.email_service import EmailService
 from src.shared.infrastructure.http.http_context_validator import get_trusted_client_ip
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,
 )
-from src.shared.infrastructure.security.cookie_handler import get_cookie_name
+from src.shared.infrastructure.security.cookie_handler import read_access_token
 from src.shared.infrastructure.security.jwt_handler import (
     JWTTokenService,
     verify_access_token,
@@ -933,7 +934,7 @@ security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),  # noqa: ARG001 - declara el esquema Bearer en OpenAPI; el token lo lee read_access_token
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UserResponseDTO:
     """
@@ -977,15 +978,9 @@ async def get_current_user(
         async def protected_route(current_user: UserResponseDTO = Depends(get_current_user)):
             return {"message": f"Hello {current_user.email}"}
     """
-    token: str | None = None
-
-    # PRIORIDAD 1: Intentar leer JWT desde httpOnly cookie (NUEVO - v1.8.0)
-    cookie_name = get_cookie_name()
-    token = request.cookies.get(cookie_name)
-
-    # PRIORIDAD 2 (Fallback): Si no hay cookie, leer desde header Authorization (LEGACY)
-    if not token and credentials:
-        token = credentials.credentials
+    # Cookie httpOnly primero y, si no hay, Authorization: Bearer (LEGACY). La misma
+    # regla con la que el rate limit decide de quién es la petición (#273)
+    token = read_access_token(request)
 
     # Si no hay token en ninguno de los dos lugares, rechazar autenticación
     if not token:
@@ -1606,8 +1601,13 @@ def get_submit_quick_match_hole_score_use_case(
 
 
 def get_scoring_service() -> ScoringService:
-    """Proveedor del servicio de dominio ScoringService."""
+    """Proveedor del servicio de dominio ScoringService (match play + lo de la Ryder)."""
     return ScoringService()
+
+
+def get_match_play_scoring() -> MatchPlayScoring:
+    """Proveedor de las reglas del match play, sin lo de la Ryder (RyderCupAM#165)."""
+    return MatchPlayScoring()
 
 
 def get_scoring_coverage_service() -> ScoringCoverageService:
@@ -1626,7 +1626,7 @@ def get_submit_quick_match_proxy_hole_score_use_case(
 def get_get_quick_match_use_case(
     uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    scoring_service: ScoringService = Depends(get_scoring_service),
+    scoring_service: MatchPlayScoring = Depends(get_match_play_scoring),
     coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetQuickMatchUseCase:

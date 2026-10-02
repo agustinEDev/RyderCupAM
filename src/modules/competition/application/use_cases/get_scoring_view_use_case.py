@@ -117,12 +117,8 @@ class GetScoringViewUseCase:
                 decided_result = DecidedResultDTO(**match.decided_result)
             else:
                 decided_result = None
-            team_a_name = (
-                competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
-            )
-            team_b_name = (
-                competition.team_2_name if hasattr(competition, "team_2_name") else "Team B"
-            )
+            team_a_name = competition.ryder_cup.team_1_name
+            team_b_name = competition.ryder_cup.team_2_name
 
             return ScoringViewResponseDTO(
                 match_id=str(match.id),

@@ -8,13 +8,15 @@ competition por composicion, no por herencia ni acoplamiento de persistencia.
 
 from datetime import datetime
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.playing_handicap_calculator import ALLOWED_ALLOWANCE_PERCENTAGES
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 from ..events.quick_match_cancelled_event import QuickMatchCancelledEvent
 from ..events.quick_match_completed_event import QuickMatchCompletedEvent
@@ -45,19 +47,10 @@ from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_id import QuickMatchId
 from ..value_objects.quick_match_participant import QuickMatchParticipant
 from ..value_objects.quick_match_status import QuickMatchStatus
-from ..value_objects.scoring_format import ScoringFormat
 
 MAX_SCORERS = 4
 MAX_NAME_LENGTH = 100
 MAX_FREE_PLAY_PLAYERS = 4
-
-# WHS allowance defaults (%), igual que Round.get_effective_allowance() en `competition`
-# para los formatos por equipos; FREE_PLAY_ALLOWANCE es el estandar WHS de Stroke Play.
-ALLOWED_ALLOWANCE_PERCENTAGES = frozenset(range(50, 101, 5))  # {50, 55, ..., 100}
-SINGLES_ALLOWANCE = 100
-FOURBALL_ALLOWANCE = 90
-FOURSOMES_ALLOWANCE = 50
-FREE_PLAY_ALLOWANCE = 95
 
 
 class QuickMatch:
@@ -329,13 +322,14 @@ class QuickMatch:
         if self._allowance_percentage is not None:
             return self._allowance_percentage
 
-        if self._match_format == MatchFormat.SINGLES:
-            return SINGLES_ALLOWANCE
-        if self._match_format == MatchFormat.FOURBALL:
-            return FOURBALL_ALLOWANCE
-        if self._match_format == MatchFormat.FOURSOMES:
-            return FOURSOMES_ALLOWANCE
-        return FREE_PLAY_ALLOWANCE
+        # Lo saben los formatos (#165): MatchFormat en match play, ScoringFormat en
+        # el partido libre. Exactamente uno de los dos (_validate_format)
+        if self._match_format is not None:
+            return self._match_format.default_allowance
+        if self._scoring_format is not None:
+            return self._scoring_format.default_allowance
+        # No puede pasar: _validate_format exige uno de los dos al crear la partida
+        raise ValueError("Una partida rápida necesita match_format o scoring_format")
 
     @property
     def name(self) -> str | None:

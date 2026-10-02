@@ -17,7 +17,7 @@ Reglas (confirmadas con el usuario):
   cubre a los cuatro participantes y el reparto uniforme no aplica.
 """
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 from ..exceptions.quick_match_violations import InvalidScorerConfigurationViolation
 from ..value_objects.participant_id import ParticipantId

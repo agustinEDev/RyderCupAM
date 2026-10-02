@@ -91,7 +91,6 @@ from src.modules.competition.application.use_cases.start_competition_use_case im
 )
 from src.modules.competition.domain.entities.competition import (
     CaptainNotEnrolledError,
-    CaptainOnWrongTeamError,
     CaptainsLockedError,
     CompetitionStateError,
     TeamsNotAssignedError,
@@ -100,6 +99,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.ryder_cup_setup import (
+    CaptainOnWrongTeamError,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
