@@ -111,6 +111,11 @@ class ReassignMatchPlayersUseCase:
                     f"jugador(es) por equipo; llegaron {len(request.team_a_player_ids)} "
                     f"y {len(request.team_b_player_ids)}"
                 )
+            # Y distintos: dos plazas con el mismo jugador lo guardaban repetido
+            # en su equipo (en foursomes, la media salía solo de su hándicap)
+            for side in (request.team_a_player_ids, request.team_b_player_ids):
+                if len(set(side)) != len(side):
+                    raise WrongNumberOfPlayersError("Hay un jugador repetido en el mismo equipo")
 
             # 6. Obtener enrollments y campo para recalcular handicaps
             enrollments = await self._uow.enrollments.find_by_competition_and_status(

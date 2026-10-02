@@ -79,6 +79,7 @@ async def _reassign(
     enrolled: bool = True,
     sent_a: int | None = None,
     sent_b: int | None = None,
+    repeat_first_a: bool = False,
 ):
     """
     Monta una competición con hándicap, un partido ya generado con otros
@@ -196,7 +197,11 @@ async def _reassign(
     response = await use_case.execute(
         ReassignMatchPlayersRequestDTO(
             match_id=match.id.value,
-            team_a_player_ids=[u.value for u in new_a[: sent_a if sent_a is not None else None]],
+            team_a_player_ids=(
+                [new_a[0].value] * len(new_a)
+                if repeat_first_a
+                else [u.value for u in new_a[: sent_a if sent_a is not None else None]]
+            ),
             team_b_player_ids=[u.value for u in new_b[: sent_b if sent_b is not None else None]],
         ),
         creator_id,
@@ -297,3 +302,12 @@ class TestPlayersPerSide:
     async def test_one_per_side_in_fourball(self):
         with pytest.raises(WrongNumberOfPlayersError):
             await _reassign(MatchFormat.FOURBALL, ["10"], ["18"])
+
+    async def test_the_same_player_twice_on_one_side(self):
+        """
+        Dos plazas y dos ids, pero el mismo jugador (CodeRabbit en la #478): se
+        guardaba repetido en su equipo, y en foursomes la media del equipo salía
+        solo de su hándicap.
+        """
+        with pytest.raises(WrongNumberOfPlayersError, match="repetido"):
+            await _reassign(MatchFormat.FOURBALL, ["10", "12"], ["18", "20"], repeat_first_a=True)
