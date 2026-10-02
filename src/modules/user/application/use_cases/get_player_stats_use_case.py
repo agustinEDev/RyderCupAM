@@ -33,10 +33,10 @@ from src.shared.domain.services.score_differential_calculator import (
     PlayedRound,
     ScoreDifferentialCalculator,
 )
-from src.shared.domain.services.stableford_calculator import (
+from src.shared.domain.services.stroke_play_scoring import (
     NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
-    StablefordCalculator,
+    StrokePlayScoring,
 )
 from src.shared.domain.value_objects.hole_outcome import HoleOutcome
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -107,14 +107,14 @@ class GetPlayerStatsUseCase:
         competition_uow: CompetitionUnitOfWorkInterface,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
-        stableford_calculator: StablefordCalculator | None = None,
+        stroke_play_scoring: StrokePlayScoring | None = None,
         differential_calculator: ScoreDifferentialCalculator | None = None,
     ):
         self._user_uow = user_uow
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
-        self._calculator = stableford_calculator or StablefordCalculator()
+        self._calculator = stroke_play_scoring or StrokePlayScoring()
         self._differentials = differential_calculator or ScoreDifferentialCalculator()
         self._breakdown = ScoringBreakdownCalculator()
 

@@ -42,10 +42,10 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
-from src.shared.domain.services.stableford_calculator import (
+from src.shared.domain.services.stroke_play_scoring import (
     NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
-    StablefordCalculator,
+    StrokePlayScoring,
 )
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
@@ -105,7 +105,7 @@ class GetRecentMatchesUseCase:
         competition_uow: CompetitionUnitOfWorkInterface,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
-        stableford_calculator: StablefordCalculator | None = None,
+        stroke_play_scoring: StrokePlayScoring | None = None,
         scoring_service: MatchPlayScoring | None = None,
         stroke_allocation_service: StrokeAllocationService | None = None,
     ):
@@ -113,7 +113,7 @@ class GetRecentMatchesUseCase:
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
-        self._calculator = stableford_calculator or StablefordCalculator()
+        self._calculator = stroke_play_scoring or StrokePlayScoring()
         self._scoring_service = scoring_service or MatchPlayScoring()
         self._stroke_allocation_service = stroke_allocation_service or StrokeAllocationService()
 
