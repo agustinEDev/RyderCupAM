@@ -136,12 +136,14 @@ class AssignTeamsUseCase:
 
     async def _repartir(self, competition, request, enrollments, mode):
         """Reparte los equipos; las reglas de los capitanes son del dominio (BE #320)."""
+        # Un torneo sin equipos no se reparte (#251)
+        ryder_cup = competition.require_ryder_cup()
         if mode == TeamAssignmentMode.MANUAL:
             team_a_ids, team_b_ids = self._manual_assign(request, enrollments)
-            competition.ryder_cup.check_captains_placement(team_a_ids, team_b_ids)
+            ryder_cup.check_captains_placement(team_a_ids, team_b_ids)
             return team_a_ids, team_b_ids
 
-        capitanes = competition.ryder_cup.captains_for_team_split()
+        capitanes = ryder_cup.captains_for_team_split()
         players = await self._players_for_draft(enrollments)
         if capitanes is None:
             results = self._draft_service.assign_teams(players)
