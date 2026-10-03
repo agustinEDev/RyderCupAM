@@ -87,6 +87,7 @@ from src.modules.competition.domain.value_objects.team_assignment_id import (
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 
@@ -409,6 +410,7 @@ TeeColorDecorator = _create_enum_decorator(TeeColor)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
 VisibilityDecorator = _create_enum_decorator(Visibility)
 SetupModeDecorator = _create_enum_decorator(SetupMode)
+TournamentTypeDecorator = _create_enum_decorator(TournamentType)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
 
@@ -830,11 +832,13 @@ competitions_table = Table(
         ForeignKey(COUNTRIES_CODE_FK, ondelete="RESTRICT"),
         nullable=True,
     ),
-    Column("team_1_name", String(100), nullable=False),
-    Column("team_2_name", String(100), nullable=False),
+    # Lo de la Ryder Cup admite vacío: un Stableford o un Medal no tiene
+    # equipos, ni modo de montaje, ni reparto (RyderCupAM#251)
+    Column("team_1_name", String(100), nullable=True),
+    Column("team_2_name", String(100), nullable=True),
     Column("play_mode", PlayModeDecorator, nullable=False),
     Column("max_players", Integer, nullable=False, default=DEFAULT_MAX_PLAYERS),
-    Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
+    Column("team_assignment", TeamAssignmentModeDecorator, nullable=True),
     Column("status", String(20), nullable=False, default="DRAFT"),
     Column("max_playing_handicap", Integer, nullable=True),
     # Hora LOCAL del campo donde se juega, sin huso a proposito: «las nueve» son
@@ -844,7 +848,9 @@ competitions_table = Table(
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
     # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
-    Column("setup_mode", SetupModeDecorator, nullable=False, server_default="RYDER_CUP"),
+    Column("setup_mode", SetupModeDecorator, nullable=True),
+    # Qué torneo es: de él sale la modalidad. Las de antes, todas Ryder Cup
+    Column("tournament_type", TournamentTypeDecorator, nullable=False, server_default="RYDER_CUP"),
     # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
     Column(
         "team_a_captain_id",
@@ -1203,6 +1209,7 @@ def start_competition_mappers():
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
+                "_tournament_type": competitions_table.c.tournament_type,
                 # Lo que es solo de la Ryder Cup, en su pieza (RyderCupAM#251). Es
                 # inmutable: SQLAlchemy no ve un cambio hecho dentro de un composite,
                 # asi que la entidad la sustituye entera en cada cambio

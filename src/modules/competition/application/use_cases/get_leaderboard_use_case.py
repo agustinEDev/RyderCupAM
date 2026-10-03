@@ -138,8 +138,11 @@ class GetLeaderboardUseCase:
                         )
                     )
 
-            team_a_name = competition.ryder_cup.team_1_name
-            team_b_name = competition.ryder_cup.team_2_name
+            # Hoy son enfrentamientos entre dos equipos: un torneo de stroke
+            # play tendrá los suyos (#251)
+            ryder_cup = competition.require_ryder_cup()
+            team_a_name = ryder_cup.team_1_name
+            team_b_name = ryder_cup.team_2_name
 
             return LeaderboardResponseDTO(
                 competition_id=str(competition.id),

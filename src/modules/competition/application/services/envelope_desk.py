@@ -164,8 +164,10 @@ class EnvelopeDesk:
         cuerpo dejaria entregar el sobre del rival. Quien capitanea que lo
         decide la entidad, que es donde vive esa regla.
         """
+        # Los sobres son de la Ryder: un torneo sin equipos no los tiene (#251)
+        ryder_cup = competition.require_ryder_cup()
         for team in ("A", "B"):
-            if competition.ryder_cup.is_captain_of(team, user_id):
+            if ryder_cup.is_captain_of(team, user_id):
                 return team
         return None
 

@@ -127,38 +127,11 @@ class CompetitionDTOMapper:
             play_mode=competition.play_mode.value,
             # Config
             max_players=competition.max_players,
-            team_assignment=(
-                competition.ryder_cup.team_assignment.value
-                if hasattr(competition.ryder_cup.team_assignment, "value")
-                else competition.ryder_cup.team_assignment
-            ),
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.ryder_cup.setup_mode),
-            team_a_captain_id=(
-                competition.ryder_cup.team_a_captain_id.value
-                if competition.ryder_cup.team_a_captain_id
-                else None
-            ),
-            team_b_captain_id=(
-                competition.ryder_cup.team_b_captain_id.value
-                if competition.ryder_cup.team_b_captain_id
-                else None
-            ),
-            team_a_vice_captain_id=(
-                competition.ryder_cup.team_a_vice_captain_id.value
-                if competition.ryder_cup.team_a_vice_captain_id
-                else None
-            ),
-            team_b_vice_captain_id=(
-                competition.ryder_cup.team_b_vice_captain_id.value
-                if competition.ryder_cup.team_b_vice_captain_id
-                else None
-            ),
-            # Teams
-            team_1_name=competition.ryder_cup.team_1_name,
-            team_2_name=competition.ryder_cup.team_2_name,
+            # Tipo de torneo y lo de la Ryder (vacío si no lo es)
+            **CompetitionDTOMapper.tournament_fields(competition),
             # Campos calculados
             is_creator=is_creator,
             enrolled_count=enrolled_count,
@@ -170,6 +143,38 @@ class CompetitionDTOMapper:
         )
 
     @staticmethod
+    def tournament_fields(competition: Competition) -> dict:
+        """
+        El tipo de torneo, su modalidad y lo que es solo de la Ryder Cup (#251).
+
+        Un solo sitio para las respuestas que lo llevan (la ficha, la de crear y
+        la de editar), que antes lo construían a mano leyendo la pieza de la
+        Ryder como si siempre existiera. En un Stableford o un Medal no existe:
+        sus campos van vacíos.
+        """
+        ryder_cup = competition.ryder_cup
+
+        def valor(user_id: UserId | None):
+            return user_id.value if user_id else None
+
+        return {
+            "tournament_type": str(competition.tournament_type),
+            "modality": str(competition.modality),
+            "team_1_name": ryder_cup.team_1_name if ryder_cup else None,
+            "team_2_name": ryder_cup.team_2_name if ryder_cup else None,
+            "team_assignment": ryder_cup.team_assignment.value if ryder_cup else None,
+            "setup_mode": str(ryder_cup.setup_mode) if ryder_cup else None,
+            "team_a_captain_id": valor(ryder_cup.team_a_captain_id) if ryder_cup else None,
+            "team_b_captain_id": valor(ryder_cup.team_b_captain_id) if ryder_cup else None,
+            "team_a_vice_captain_id": (
+                valor(ryder_cup.team_a_vice_captain_id) if ryder_cup else None
+            ),
+            "team_b_vice_captain_id": (
+                valor(ryder_cup.team_b_vice_captain_id) if ryder_cup else None
+            ),
+        }
+
+    @staticmethod
     def to_captaincy_dto(competition: Competition) -> CaptaincyResponseDTO:
         """Capitanes y subcapitanes de la competición (BE #320)."""
 
@@ -177,12 +182,13 @@ class CompetitionDTOMapper:
             """El UUID del jugador, o None si el puesto está vacío."""
             return user_id.value if user_id else None
 
+        ryder_cup = competition.require_ryder_cup()
         return CaptaincyResponseDTO(
             id=competition.id.value,
-            team_a_captain_id=valor(competition.ryder_cup.team_a_captain_id),
-            team_b_captain_id=valor(competition.ryder_cup.team_b_captain_id),
-            team_a_vice_captain_id=valor(competition.ryder_cup.team_a_vice_captain_id),
-            team_b_vice_captain_id=valor(competition.ryder_cup.team_b_vice_captain_id),
+            team_a_captain_id=valor(ryder_cup.team_a_captain_id),
+            team_b_captain_id=valor(ryder_cup.team_b_captain_id),
+            team_a_vice_captain_id=valor(ryder_cup.team_a_vice_captain_id),
+            team_b_vice_captain_id=valor(ryder_cup.team_b_vice_captain_id),
         )
 
     @staticmethod

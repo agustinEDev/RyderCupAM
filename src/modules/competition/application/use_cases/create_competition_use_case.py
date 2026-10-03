@@ -8,6 +8,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
 )
+from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -121,8 +122,10 @@ class CreateCompetitionUseCase:
             # 6. Construir DateRange
             date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
 
-            # 7. Construir TeamAssignment desde string
-            team_assignment_vo = TeamAssignment(request.team_assignment)
+            # 7. Construir TeamAssignment desde string (solo llega en una Ryder)
+            team_assignment_vo = (
+                TeamAssignment(request.team_assignment) if request.team_assignment else None
+            )
 
             # 8. Crear la entidad Competition usando factory method
             competition = Competition.create(
@@ -140,6 +143,7 @@ class CreateCompetitionUseCase:
                 enrollment_opens_days_before=request.enrollment_opens_days_before,
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
+                tournament_type=request.tournament_type,
             )
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
@@ -190,16 +194,13 @@ class CreateCompetitionUseCase:
             location=str(competition.location),
             # Play Mode
             play_mode=competition.play_mode.value,
-            # Nombres de equipos
-            team_1_name=competition.ryder_cup.team_1_name,
-            team_2_name=competition.ryder_cup.team_2_name,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.ryder_cup.team_assignment.value,
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.ryder_cup.setup_mode),
+            # Tipo de torneo y lo de la Ryder (vacío si no lo es)
+            **CompetitionDTOMapper.tournament_fields(competition),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

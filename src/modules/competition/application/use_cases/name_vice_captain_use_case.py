@@ -69,10 +69,13 @@ class NameViceCaptainUseCase:
                 raise CompetitionNotFoundError(
                     f"No existe competición con ID {request.competition_id}"
                 )
+            # Un torneo sin equipos no tiene subcapitanes: se dice antes de mirar
+            # quién lo pide, también al organizador (#251)
+            ryder_cup = competition.require_ryder_cup()
             if not (
                 is_admin
                 or competition.is_creator(user_id)
-                or competition.ryder_cup.is_captain_of(request.team, user_id)
+                or ryder_cup.is_captain_of(request.team, user_id)
             ):
                 raise NotCaptainOrCreatorError(
                     "Solo el capitán del equipo o el organizador eligen al subcapitán"

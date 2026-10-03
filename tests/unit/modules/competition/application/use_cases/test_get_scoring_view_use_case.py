@@ -136,6 +136,7 @@ async def _setup(uow, course: GolfCourse | None):
     mock_comp.id = mock_round.competition_id
     mock_comp.ryder_cup.team_1_name = "Team A"
     mock_comp.ryder_cup.team_2_name = "Team B"
+    mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
     uow._competitions._competitions[mock_comp.id] = mock_comp
 
     gc_repo = AsyncMock()

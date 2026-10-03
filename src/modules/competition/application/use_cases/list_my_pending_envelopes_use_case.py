@@ -169,7 +169,10 @@ class ListMyPendingEnvelopesUseCase:
             # avisar alli ofrece un paso que ese torneo no tiene. Peor: si el
             # capitan pica y entrega, generar los partidos se bloquea hasta
             # que los sobres se abran
-            if competition.ryder_cup.setup_mode != SetupMode.RYDER_CUP:
+            if (
+                competition.ryder_cup is None
+                or competition.ryder_cup.setup_mode != SetupMode.RYDER_CUP
+            ):
                 continue
             # Cancelar no toca el estado de las rondas, asi que sus sesiones se
             # quedaban avisando hasta que pasaran las fechas

@@ -12,6 +12,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.modality import Modality
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 from ..entities.competition_golf_course import CompetitionGolfCourse
@@ -42,6 +43,7 @@ from ..value_objects.location import Location
 from ..value_objects.ryder_cup_setup import CaptainOnWrongTeamError, RyderCupSetup
 from ..value_objects.setup_mode import SetupMode
 from ..value_objects.team_assignment import TeamAssignment
+from ..value_objects.tournament_type import TournamentType
 from ..value_objects.visibility import Visibility
 
 # Constantes de validación
@@ -60,6 +62,12 @@ MIN_ENROLLMENT_OPENING_DAYS = 1
 MAX_ENROLLMENT_OPENING_DAYS = 14
 MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
+
+
+class TournamentTypeError(ValueError):
+    """Se pide al torneo algo que su tipo no tiene: equipos a un Stableford (#251)."""
+
+    pass
 
 
 class CompetitionStateError(Exception):
@@ -131,11 +139,12 @@ class Competition:
         name: CompetitionName,
         dates: DateRange,
         location: Location,
-        team_1_name: str,
-        team_2_name: str,
+        *,
         play_mode: PlayMode,
+        team_1_name: str | None = None,
+        team_2_name: str | None = None,
         max_players: int = DEFAULT_MAX_PLAYERS,
-        team_assignment: TeamAssignment = TeamAssignment.MANUAL,
+        team_assignment: TeamAssignment | None = None,
         status: CompetitionStatus = CompetitionStatus.DRAFT,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -143,11 +152,16 @@ class Competition:
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
-        setup_mode: SetupMode = SetupMode.RYDER_CUP,
+        setup_mode: SetupMode | None = None,
+        tournament_type: TournamentType = TournamentType.RYDER_CUP,
     ):
         # Validaciones de invariantes. Equipos, modo de montaje, reparto y
-        # capitanes son de la Ryder Cup: viven en su pieza (RyderCupAM#251)
-        self._ryder_cup = RyderCupSetup.create(team_1_name, team_2_name, setup_mode)
+        # capitanes son de la Ryder Cup: viven en su pieza, y un torneo de otro
+        # tipo no la tiene (RyderCupAM#251)
+        self._tournament_type = tournament_type
+        self._ryder_cup: RyderCupSetup | None = self._ryder_cup_for(
+            tournament_type, team_1_name, team_2_name, setup_mode, team_assignment
+        )
         self._validate_max_players(max_players)
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
@@ -178,15 +192,17 @@ class Competition:
         name: CompetitionName,
         dates: DateRange,
         location: Location,
-        team_1_name: str,
-        team_2_name: str,
+        *,
         play_mode: PlayMode,
+        team_1_name: str | None = None,
+        team_2_name: str | None = None,
         max_players: int = DEFAULT_MAX_PLAYERS,
-        team_assignment: TeamAssignment = TeamAssignment.MANUAL,
+        team_assignment: TeamAssignment | None = None,
         max_playing_handicap: int | None = None,
         enrollment_opens_days_before: int | None = None,
         visibility: Visibility = Visibility.PRIVATE,
-        setup_mode: SetupMode = SetupMode.RYDER_CUP,
+        setup_mode: SetupMode | None = None,
+        tournament_type: TournamentType = TournamentType.RYDER_CUP,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -208,6 +224,7 @@ class Competition:
             enrollment_opens_days_before=enrollment_opens_days_before,
             visibility=visibility,
             setup_mode=setup_mode,
+            tournament_type=tournament_type,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -220,6 +237,33 @@ class Competition:
         competition._add_domain_event(event)
 
         return competition
+
+    @staticmethod
+    def _ryder_cup_for(
+        tournament_type: TournamentType,
+        team_1_name: str | None,
+        team_2_name: str | None,
+        setup_mode: SetupMode | None,
+        team_assignment: TeamAssignment | None,
+    ) -> RyderCupSetup | None:
+        """
+        La pieza de la Ryder, o None si el tipo no tiene equipos.
+
+        A un torneo sin equipos no se le tira en silencio lo que trae de ellos:
+        quien los manda cree que existen, y se le dice por qué no.
+
+        El reparto no se pasa a la pieza: sale del modo de montaje (FE #695).
+        Se recibe solo para poder rechazarlo en un torneo sin equipos.
+        """
+        if tournament_type.has_teams:
+            return RyderCupSetup.create(team_1_name, team_2_name, setup_mode or SetupMode.RYDER_CUP)
+        if team_1_name is not None or team_2_name is not None or team_assignment is not None:
+            raise TournamentTypeError(f"Un {tournament_type.label} no tiene equipos")
+        if setup_mode is not None:
+            raise TournamentTypeError(
+                f"Un {tournament_type.label} no tiene modo de montaje: no hay partidos entre equipos"
+            )
+        return None
 
     @staticmethod
     def _validate_max_players(max_players: int) -> None:
@@ -261,8 +305,29 @@ class Competition:
         return self._location
 
     @property
-    def ryder_cup(self) -> RyderCupSetup:
+    def tournament_type(self) -> TournamentType:
+        return self._tournament_type
+
+    @property
+    def modality(self) -> Modality:
+        """Se deriva del tipo: no existe un «stroke play + Ryder Cup»."""
+        return self._tournament_type.modality
+
+    @property
+    def ryder_cup(self) -> RyderCupSetup | None:
         """Equipos, modo de montaje, reparto y capitanes: lo que es solo de la Ryder Cup."""
+        return self._ryder_cup
+
+    def require_ryder_cup(self) -> RyderCupSetup:
+        """
+        La pieza de la Ryder, para lo que solo existe en ella: equipos,
+        capitanes, draft y sobres.
+
+        Raises:
+            TournamentTypeError: Si el torneo no tiene equipos
+        """
+        if self._ryder_cup is None:
+            raise TournamentTypeError(f"Un {self._tournament_type.label} no tiene equipos")
         return self._ryder_cup
 
     @property
@@ -621,6 +686,7 @@ class Competition:
             CaptainsLockedError: Si ya hay equipos repartidos
             CompetitionStateError: Si no esta en ACTIVE ni en CLOSED
         """
+        ryder_cup = self.require_ryder_cup()
         if team_a == team_b:
             raise ValueError("Los capitanes tienen que ser dos jugadores distintos")
         if team_a not in approved_player_ids or team_b not in approved_player_ids:
@@ -637,7 +703,7 @@ class Competition:
                 "Los equipos ya estan repartidos: cambiar un capitan obligaria a rehacerlos"
             )
 
-        self._ryder_cup = self._ryder_cup.with_captains(team_a, team_b)
+        self._ryder_cup = ryder_cup.with_captains(team_a, team_b)
         if self._status == CompetitionStatus.ACTIVE:
             self.close_enrollments(total_enrollments=len(approved_player_ids))
         else:
@@ -668,10 +734,10 @@ class Competition:
             TeamsNotAssignedError: Si todavia no hay equipos
             CaptainOnWrongTeamError: Si no es de ese equipo
         """
-        self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
-        if player == self._ryder_cup.captain(team):
+        ryder_cup = self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
+        if player == ryder_cup.captain(team):
             raise ValueError("El capitán no puede ser también su subcapitán")
-        self._ryder_cup = self._ryder_cup.with_vice_captain(team, player)
+        self._ryder_cup = ryder_cup.with_vice_captain(team, player)
         self._updated_at = datetime.now()
 
     def fill_captain(
@@ -696,13 +762,13 @@ class Competition:
             CaptainOnWrongTeamError: Si no es de ese equipo
             CaptainsLockedError: Si el capitan de ese equipo sigue en el torneo
         """
-        self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
-        if self._ryder_cup.captain(team) in team_player_ids:
+        ryder_cup = self._comprobar_dentro_del_equipo(team, player, team_player_ids, has_teams)
+        if ryder_cup.captain(team) in team_player_ids:
             raise CaptainsLockedError(
                 "Ese equipo ya tiene capitán: solo se cubre el puesto de uno que se fue"
             )
         # Si era el subcapitán de ese equipo, la pieza deja ese puesto libre
-        self._ryder_cup = self._ryder_cup.with_captain(team, player)
+        self._ryder_cup = ryder_cup.with_captain(team, player)
         self._updated_at = datetime.now()
 
     def handle_withdrawal(self, user_id: UserId) -> bool:
@@ -718,6 +784,9 @@ class Competition:
         Returns:
             True si era capitan o subcapitan y algo cambio
         """
+        if self._ryder_cup is None:
+            # Sin equipos no hay capitanes que ascender
+            return False
         if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
             return False
         despues = self._ryder_cup.after_withdrawal(user_id)
@@ -733,7 +802,7 @@ class Competition:
         Se eligen entre los del equipo, y el equipo ha cambiado: el draft
         automatico puede haber movido a un subcapitan al otro lado.
         """
-        self._ryder_cup = self._ryder_cup.without_vice_captains()
+        self._ryder_cup = self.require_ryder_cup().without_vice_captains()
 
     def _comprobar_dentro_del_equipo(
         self,
@@ -741,8 +810,9 @@ class Competition:
         player: UserId,
         team_player_ids: Collection[UserId],
         has_teams: bool,
-    ) -> None:
+    ) -> RyderCupSetup:
         """Lo comun a elegir capitan o subcapitan dentro de un equipo ya repartido."""
+        ryder_cup = self.require_ryder_cup()
         RyderCupSetup.check_team(team)
         if self._status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
             raise CompetitionStateError(
@@ -754,6 +824,7 @@ class Competition:
             )
         if player not in team_player_ids:
             raise CaptainOnWrongTeamError(f"Tiene que ser un jugador del equipo {team}")
+        return ryder_cup
 
     def reopen_enrollments(self) -> None:
         """
@@ -808,6 +879,11 @@ class Competition:
                 f"No se puede modificar la configuración en estado {self._status.value}. "
                 f"Solo mientras las inscripciones están abiertas."
             )
+        toca_la_ryder = any(
+            v is not None for v in (team_1_name, team_2_name, team_assignment, setup_mode)
+        )
+        # Antes de cambiar nada: un Stableford con equipos se rechaza entero
+        ryder_cup = self.require_ryder_cup() if toca_la_ryder else self._ryder_cup
 
         if name is not None:
             self._name = name
@@ -828,8 +904,8 @@ class Competition:
             self._validate_max_players(max_players)
             self._max_players = max_players
 
-        if team_assignment is not None:
-            self._ryder_cup = self._ryder_cup.with_team_assignment(team_assignment)
+        if team_assignment is not None and ryder_cup is not None:
+            ryder_cup = ryder_cup.with_team_assignment(team_assignment)
 
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
@@ -843,12 +919,14 @@ class Competition:
         # Ojo: por la API hay un limite mas estrecho —BE #323 rechaza la edicion
         # entera si ya hay rondas—, asi que una reabierta con calendario ya no
         # cambia de modo
-        if setup_mode is not None:
+        if setup_mode is not None and ryder_cup is not None:
             # El modo manda: si llegan los dos, el reparto sale de el
-            self._ryder_cup = self._ryder_cup.with_setup_mode(setup_mode)
+            ryder_cup = ryder_cup.with_setup_mode(setup_mode)
 
-        if team_1_name is not None or team_2_name is not None:
-            self._ryder_cup = self._ryder_cup.with_team_names(team_1_name, team_2_name)
+        if (team_1_name is not None or team_2_name is not None) and ryder_cup is not None:
+            ryder_cup = ryder_cup.with_team_names(team_1_name, team_2_name)
+
+        self._ryder_cup = ryder_cup
 
         self._updated_at = datetime.now()
 

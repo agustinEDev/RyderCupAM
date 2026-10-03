@@ -167,6 +167,7 @@ class TestSubmitHoleScoreValidation:
         mock_comp.id = mock_round.competition_id
         mock_comp.ryder_cup.team_1_name = "Team A"
         mock_comp.ryder_cup.team_2_name = "Team B"
+        mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
@@ -220,6 +221,7 @@ class TestSubmitHoleScoreValidation:
         mock_comp.id = mock_round.competition_id
         mock_comp.ryder_cup.team_1_name = "Team A"
         mock_comp.ryder_cup.team_2_name = "Team B"
+        mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
@@ -278,6 +280,7 @@ class TestSubmitHoleScoreHappyPath:
         mock_comp.id = mock_round.competition_id
         mock_comp.ryder_cup.team_1_name = "Team A"
         mock_comp.ryder_cup.team_2_name = "Team B"
+        mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
@@ -330,6 +333,7 @@ async def _match_with_hole_rows(uow, hole_number=1):
     mock_comp.id = mock_round.competition_id
     mock_comp.ryder_cup.team_1_name = "Team A"
     mock_comp.ryder_cup.team_2_name = "Team B"
+    mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
     uow._competitions._competitions[mock_comp.id] = mock_comp
 
     return match, a, b
@@ -516,6 +520,7 @@ class TestLaBolaDelBandoEnFoursomes:
         mock_comp.id = mock_round.competition_id
         mock_comp.ryder_cup.team_1_name = "Team A"
         mock_comp.ryder_cup.team_2_name = "Team B"
+        mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
         uow._competitions._competitions[mock_comp.id] = mock_comp
 
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
