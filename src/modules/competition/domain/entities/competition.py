@@ -64,6 +64,12 @@ MIN_PLAYING_HANDICAP = 1
 MAX_PLAYING_HANDICAP = 54
 
 
+class GolfCoursesOutsideLocationError(ValueError):
+    """La ubicación nueva dejaría campos de la competición fuera de sus países."""
+
+    pass
+
+
 class TournamentTypeError(ValueError):
     """Se pide al torneo algo que su tipo no tiene: equipos a un Stableford (#251)."""
 
@@ -866,9 +872,15 @@ class Competition:
         max_playing_handicap: int | None = None,
         visibility: Visibility | None = None,
         setup_mode: SetupMode | None = None,
+        golf_course_countries: Collection[CountryCode] | None = None,
     ) -> None:
         """
         Actualiza la información del torneo, mientras las inscripciones estén abiertas.
+
+        Al cambiar la location hacen falta los países de sus campos de golf: los
+        campos son otro agregado, así que el caso de uso los trae y la regla vive
+        aquí. Una location que deje fuera alguno se rechaza con el motivo, y los
+        campos se quitan antes desde la ficha (Agustín, 3 oct 2026).
 
         Raises:
             CompetitionStateError: Si no está en estado DRAFT
@@ -895,6 +907,7 @@ class Competition:
             self._dates = dates
 
         if location is not None:
+            self._comprobar_que_los_campos_siguen_dentro(location, golf_course_countries)
             self._location = location
 
         if play_mode is not None:
@@ -1124,15 +1137,38 @@ class Competition:
 
     def _is_country_compatible(self, country_code: CountryCode) -> bool:
         """Verifica si un país es compatible con la location de la competición."""
-        if country_code == self._location.main_country:
-            return True
+        return self._country_in(self._location, country_code)
 
-        if self._location.adjacent_country_1 and country_code == self._location.adjacent_country_1:
-            return True
-
-        return bool(
-            self._location.adjacent_country_2 and country_code == self._location.adjacent_country_2
+    @staticmethod
+    def _country_in(location: Location, country_code: CountryCode) -> bool:
+        """Si un país es uno de los de esa location: el principal o un adyacente."""
+        return country_code in (
+            location.main_country,
+            location.adjacent_country_1,
+            location.adjacent_country_2,
         )
+
+    def _comprobar_que_los_campos_siguen_dentro(
+        self, location: Location, golf_course_countries: Collection[CountryCode] | None
+    ) -> None:
+        """
+        Los campos tienen que seguir en los países de la competición.
+
+        Raises:
+            ValueError: Si no se dicen los países de los campos: sin ellos la
+                comprobación se saltaría en silencio
+            GolfCoursesOutsideLocationError: Si alguno queda fuera
+        """
+        if golf_course_countries is None:
+            raise ValueError("Para cambiar la ubicación hacen falta los países de sus campos")
+        fuera = sorted(
+            {c.value for c in golf_course_countries if not self._country_in(location, c)}
+        )
+        if fuera:
+            raise GolfCoursesOutsideLocationError(
+                f"Quita antes desde la ficha los campos de {', '.join(fuera)}: "
+                "quedarían fuera de los países de la competición"
+            )
 
     def has_golf_course(self, golf_course_id: GolfCourseId) -> bool:
         """Verifica si un campo de golf ya está en la competición."""
