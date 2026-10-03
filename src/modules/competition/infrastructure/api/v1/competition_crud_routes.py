@@ -478,7 +478,9 @@ async def get_competition(
     description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Creador o administrador.",
     tags=["Competitions"],
 )
-@limiter.limit("10/hour")
+# Por minuto, como el resto de modificaciones: quien monta su torneo retoca
+# mucho, y cada rechazo de la API también cuenta (Agustín, 4 oct 2026)
+@limiter.limit("10/minute")
 async def update_competition(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,

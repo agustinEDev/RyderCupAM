@@ -308,3 +308,37 @@ class TestRateLimitingCompetition:
         assert "Rate limit exceeded" in response_data["error"], (
             "Mensaje debe indicar 'Rate limit exceeded'"
         )
+
+    @pytest.mark.asyncio
+    async def test_update_competition_rate_limit_is_still_there(self, client: AsyncClient):
+        """
+        R3 · Editar admite 10 por minuto (Agustín, 4 oct 2026): el límite sigue
+        ahí, y la undécima edición seguida recibe 429.
+
+        GIVEN: Una competición del organizador
+        WHEN: La edita 11 veces seguidas
+        THEN: Las 10 primeras pasan y la undécima recibe HTTP 429
+        """
+        from tests.conftest import create_authenticated_user, create_competition
+
+        user = await create_authenticated_user(
+            client, "update_rate_test@example.com", "P@ssw0rd123!", "Update", "Rate"
+        )
+        comp = await create_competition(client, user["cookies"])
+        limiter.reset()
+
+        for i in range(10):
+            response = await client.put(
+                f"/api/v1/competitions/{comp['id']}",
+                json={"name": f"Rate Edit {i}"},
+                cookies=user["cookies"],
+            )
+            assert response.status_code == 200, f"Edición {i + 1}: {response.status_code}"
+
+        response_blocked = await client.put(
+            f"/api/v1/competitions/{comp['id']}",
+            json={"name": "Rate Edit 11"},
+            cookies=user["cookies"],
+        )
+
+        assert response_blocked.status_code == 429
