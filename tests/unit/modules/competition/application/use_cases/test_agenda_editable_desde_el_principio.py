@@ -85,6 +85,16 @@ from src.shared.domain.value_objects.play_mode import PlayMode
 pytestmark = pytest.mark.asyncio
 
 
+class _SinCampos:
+    """Repositorio de campos sin ninguno: estas competiciones no tienen campos."""
+
+    async def find_by_id(self, _golf_course_id):
+        return None
+
+
+_SIN_CAMPOS = _SinCampos()
+
+
 async def _montar(estado="ACTIVE", con_equipos=False, apertura_programada=False):
     """Una competición del 1 al 3 de junio con un campo, en el estado pedido."""
     uow = InMemoryUnitOfWork()
@@ -311,9 +321,9 @@ class TestEditarLaCompeticionConAgenda:
         )
         from src.modules.competition.domain.services.location_builder import LocationBuilder
 
-        return await UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries)).execute(
-            competicion.id, UpdateCompetitionRequestDTO(**cambios), organizador
-        )
+        return await UpdateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), _SIN_CAMPOS
+        ).execute(competicion.id, UpdateCompetitionRequestDTO(**cambios), organizador)
 
     async def test_e1_el_nombre_se_cambia_aunque_haya_agenda(self):
         uow, competicion, organizador, campo = await _montar("ACTIVE")
