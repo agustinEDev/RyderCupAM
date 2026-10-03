@@ -167,8 +167,12 @@ class TestPlayingHandicapCalculatorBasic:
 
         assert result == 11
 
-    def test_calculate_minimum_zero(self):
-        """Playing Handicap nunca es negativo."""
+    def test_a_low_handicap_on_an_easy_course_is_negative(self):
+        """
+        No solo el plus: la fórmula da negativo a un hándicap bajo en un campo
+        con el Course Rating muy por debajo del par (BE #165). Antes se recortaba
+        a 0; ahora ese jugador da golpes, como en el WHS.
+        """
         calculator = PlayingHandicapCalculator()
         tee = TeeRating(
             course_rating=Decimal("68.0"),  # Fácil
@@ -177,14 +181,14 @@ class TestPlayingHandicapCalculatorBasic:
         )
 
         # HI=1.0, CR-Par=-4 → CH = 1×(100/113) + (-4) ≈ -3.1
-        # Con 100% allowance → 0 (mínimo)
+        # Con 100% allowance → -3
         result = calculator.calculate(
             handicap_index=Decimal("1.0"),
             tee_rating=tee,
             allowance_percentage=100,
         )
 
-        assert result == 0
+        assert result == -3
 
 
 class TestPlayingHandicapCalculatorSinglesDifferential:
@@ -471,3 +475,45 @@ class TestRoundHalfUp:
     )
     def test_se_aleja_del_cero_en_los_medios(self, valor, esperado):
         assert round_half_up(Decimal(valor)) == esperado
+
+
+class TestPlusHandicap:
+    """
+    El plus cuenta como negativo (BE #165, decidido el 2 oct 2026).
+
+    `calculate` y `calculate_course_handicap` recortaban a 0, así que en match
+    play un +2 contra un 10 daba 10 golpes en vez de 12: el WHS reparte la
+    diferencia con el plus como negativo y el más bajo juega a 0. Barra neutra
+    (slope 113, CR = par): el Course Handicap es el Handicap Index.
+    """
+
+    NEUTRAL = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
+
+    @pytest.mark.parametrize(
+        ("handicap_index", "allowance", "expected"),
+        [
+            ("-2.0", 100, -2),
+            ("-2.4", 90, -2),  # -2.16
+            ("-2.5", 100, -3),  # el medio se aleja del cero, como en el frontend
+        ],
+    )
+    def test_the_playing_handicap_is_negative(self, handicap_index, allowance, expected):
+        result = PlayingHandicapCalculator().calculate(
+            Decimal(handicap_index), self.NEUTRAL, allowance
+        )
+
+        assert result == expected
+
+    def test_the_cap_only_limits_from_above(self):
+        result = PlayingHandicapCalculator().calculate(
+            Decimal("-2.0"), self.NEUTRAL, 100, max_playing_handicap=10
+        )
+
+        assert result == -2
+
+    def test_the_course_handicap_is_negative(self):
+        result = PlayingHandicapCalculator().calculate_course_handicap(
+            Decimal("-2.0"), self.NEUTRAL
+        )
+
+        assert result == -2

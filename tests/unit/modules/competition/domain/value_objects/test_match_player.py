@@ -44,16 +44,20 @@ class TestMatchPlayerCreate:
         assert player.playing_handicap == 0
         assert len(player.strokes_received) == 0
 
-    def test_create_with_negative_handicap_raises(self):
-        """Error si handicap es negativo."""
-        with pytest.raises(ValueError, match="must be >= 0"):
-            MatchPlayer.create(
-                user_id=UserId.generate(),
-                playing_handicap=-1,
-                tee_color=TeeColor.YELLOW,
-                tee_gender=Gender.MALE,
-                strokes_received=[],
-            )
+    def test_a_plus_player_has_a_negative_playing_handicap(self):
+        """
+        Un plus juega con hándicap negativo (BE #165): en individual se guarda el
+        suyo, y los golpes son la diferencia con el rival.
+        """
+        player = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=-2,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+            strokes_received=[],
+        )
+
+        assert player.playing_handicap == -2
 
     def test_create_with_invalid_hole_number_raises(self):
         """Error si número de hoyo es inválido."""
