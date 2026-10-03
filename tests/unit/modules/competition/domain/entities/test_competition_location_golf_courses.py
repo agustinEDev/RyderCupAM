@@ -59,6 +59,14 @@ def test_l2_si_el_anterior_queda_como_adyacente_si():
     assert competicion.location.main_country == FR
 
 
+def test_l2b_vale_tambien_como_segundo_adyacente():
+    competicion = _competicion(Location(ES))
+
+    competicion.update_info(location=Location(FR, PT, ES), golf_course_countries=[ES])
+
+    assert competicion.location.adjacent_country_2 == ES
+
+
 def test_l3_quitar_un_adyacente_que_tiene_campos_no_se_puede():
     competicion = _competicion(Location(ES, PT))
 
