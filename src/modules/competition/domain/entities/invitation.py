@@ -279,6 +279,21 @@ class Invitation:
         self._responded_at = now
         self._updated_at = now
 
+    def cancel(self) -> None:
+        """La retira quien invita (PENDING -> CANCELLED, BE #359).
+
+        Sin aviso al invitado: en sus invitaciones pasa a cancelada y ya no se
+        puede aceptar.
+        """
+        if not self._status.can_transition_to(InvitationStatus.CANCELLED):
+            raise InvalidInvitationStatusViolation(
+                f"Cannot cancel an invitation in status {self._status.value}."
+            )
+        now = datetime.now()
+        self._status = InvitationStatus.CANCELLED
+        self._responded_at = now
+        self._updated_at = now
+
     def check_expiration(self) -> None:
         """Verifica y actualiza el estado si la invitacion ha expirado."""
         if self._status == InvitationStatus.PENDING and self.is_expired():

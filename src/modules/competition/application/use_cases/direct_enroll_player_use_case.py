@@ -15,6 +15,9 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    al_ocupar_una_plaza,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
@@ -170,6 +173,12 @@ class DirectEnrollPlayerUseCase:
 
             # 7. Persistir
             await self._uow.enrollments.add(enrollment)
+
+            # Si era la última plaza, las invitaciones pendientes se quedan sin
+            # ella ya (BE #359)
+            await al_ocupar_una_plaza(
+                self._uow, competition_id, approved_count, competition.max_players
+            )
 
         # 8. Retornar DTO
         return DirectEnrollPlayerResponseDTO(

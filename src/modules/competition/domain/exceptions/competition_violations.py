@@ -108,7 +108,9 @@ class CompetitionFullViolation(BusinessRuleViolation):
         ... )
     """
 
-    pass
+    # Con codigo, para que la pantalla diga en su idioma por que no se puede
+    # invitar (BE #359)
+    error_code = "COMPETITION_FULL"
 
 
 class InvalidDateRangeViolation(BusinessRuleViolation):
