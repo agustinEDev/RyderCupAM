@@ -132,6 +132,47 @@ class TestDirectEnrollPlayer:
         assert data["status"] == "APPROVED"
 
     @pytest.mark.asyncio
+    async def test_direct_enroll_full_competition_returns_400(self, client: AsyncClient):
+        """Con el cupo lleno no se inscribe a nadie más: 400, como al aprobar (BE #325)."""
+        creator = await create_authenticated_user(
+            client, "creator325@test.com", "P@ssw0rd123!", "Creator", "Cupo"
+        )
+        jugadores = [
+            await create_authenticated_user(
+                client, f"player325-{i}@test.com", "P@ssw0rd123!", "Player", f"Cupo{'abc'[i]}"
+            )
+            for i in range(3)
+        ]
+        start = date.today() + timedelta(days=30)
+        comp = await create_competition(
+            client,
+            creator["cookies"],
+            {
+                "name": f"Cupo {uuid.uuid4().hex[:8]}",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "HANDICAP",
+                # El organizador ya ocupa una al crearla: quedan dos
+                "max_players": 3,
+                "team_assignment": "MANUAL",
+                "visibility": "PUBLIC",
+            },
+        )
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        respuestas = [
+            await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+                cookies=creator["cookies"],
+            )
+            for jugador in jugadores
+        ]
+
+        assert [r.status_code for r in respuestas] == [201, 201, 400]
+
+    @pytest.mark.asyncio
     async def test_direct_enroll_not_creator_returns_403(self, client: AsyncClient):
         """No creador intentando inscribir directamente retorna 403."""
         creator = await create_authenticated_user(
