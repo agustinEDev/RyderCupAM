@@ -10,6 +10,9 @@ from src.modules.competition.application.exceptions import (
     NotInviteeError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    al_ocupar_una_plaza,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -186,6 +189,10 @@ class RespondToInvitationUseCase:
 
         await self._uow.enrollments.add(enrollment)
         await self._uow.invitations.update(invitation)
+
+        await al_ocupar_una_plaza(
+            self._uow, invitation.competition_id, approved_count, competition.max_players
+        )
 
         return enrollment.id.value, str(competition.name)
 

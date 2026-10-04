@@ -106,6 +106,18 @@ class SendInvitationByUserIdUseCase:
                     f"{request.competition_id}."
                 )
 
+            # Solo mientras queden plazas (BE #359): libres = max_players menos
+            # aprobadas. Antes se invitaba a un torneo lleno y quien llegaba tarde
+            # se enteraba al aceptar, sin haber hecho nada mal. Las pendientes no
+            # ocupan plaza: cuando una acepta y llena la ultima, las demas se quedan
+            # sin plaza (ver RespondToInvitationUseCase)
+            approved_count = await self._uow.enrollments.count_approved_by_competition(
+                competition_id
+            )
+            CompetitionPolicy.validate_capacity(
+                approved_count, competition.max_players, competition_id
+            )
+
             # 7. Verificar no invitation PENDING duplicada
             existing_invitation = await self._uow.invitations.find_pending_by_email_and_competition(
                 invitee_email, competition_id

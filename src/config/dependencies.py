@@ -30,6 +30,9 @@ from src.modules.competition.application.use_cases.cancel_competition_use_case i
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
 )
+from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
+    CancelInvitationUseCase,
+)
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
 )
@@ -2305,6 +2308,13 @@ def get_respond_to_invitation_use_case(
 ) -> RespondToInvitationUseCase:
     """Proveedor del caso de uso RespondToInvitationUseCase."""
     return RespondToInvitationUseCase(uow, user_uow)
+
+
+def get_cancel_invitation_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CancelInvitationUseCase:
+    """Proveedor del caso de uso CancelInvitationUseCase (BE #359)."""
+    return CancelInvitationUseCase(uow)
 
 
 def get_list_competition_invitations_use_case(
