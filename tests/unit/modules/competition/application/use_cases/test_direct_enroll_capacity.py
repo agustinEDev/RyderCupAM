@@ -97,9 +97,10 @@ async def test_c1_con_el_cupo_lleno_no_se_inscribe():
         await _inscribe(uow, competicion, organizador, jugador)
 
     async with uow:
-        assert await uow.enrollments.find_by_user_and_competition(
-            UserId(jugador), competicion.id
-        ) is None
+        assert (
+            await uow.enrollments.find_by_user_and_competition(UserId(jugador), competicion.id)
+            is None
+        )
         assert await uow.enrollments.count_approved_by_competition(competicion.id) == 2
 
 
