@@ -1,6 +1,7 @@
 """Tests para UpdateCompetitionUseCase."""
 
 from datetime import date, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     NotCompetitionCreatorError,
     UpdateCompetitionUseCase,
 )
+from src.modules.competition.domain.entities.competition import GolfCoursesOutsideLocationError
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
@@ -32,8 +34,21 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
+
+
+def _campos(**pais_por_id):
+    """Repositorio de campos de mentira: solo sabe el país de cada uno."""
+
+    class _Campos:
+        async def find_by_id(self, golf_course_id):
+            pais = pais_por_id.get(str(golf_course_id.value))
+            return SimpleNamespace(country_code=CountryCode(pais)) if pais else None
+
+    return _Campos()
+
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio
@@ -76,7 +91,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act: Actualizar nombre
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         update_request = UpdateCompetitionRequestDTO(name="Updated Name")
 
         response = await update_use_case.execute(
@@ -118,7 +133,7 @@ class TestUpdateCompetitionUseCase:
             creator_id,
         )
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(countries=["PT"]),
@@ -147,7 +162,7 @@ class TestUpdateCompetitionUseCase:
             creator_id,
         )
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(adjacent_country_1="FR"),
@@ -181,7 +196,7 @@ class TestUpdateCompetitionUseCase:
             creator_id,
         )
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(countries=[]),
@@ -211,7 +226,7 @@ class TestUpdateCompetitionUseCase:
             creator_id,
         )
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(name="Updated"),
@@ -256,7 +271,7 @@ class TestUpdateCompetitionUseCase:
         """
         created = await self._competicion(uow, creator_id, countries=["PT", "FR"])
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(adjacent_country_1="PT"),
@@ -278,7 +293,7 @@ class TestUpdateCompetitionUseCase:
         """
         created = await self._competicion(uow, creator_id, countries=["PT"])
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(adjacent_country_2="FR"),
@@ -293,7 +308,7 @@ class TestUpdateCompetitionUseCase:
         """Cuando llega la lista, manda entera: lo que no está en ella se va."""
         created = await self._competicion(uow, creator_id, countries=["PT", "FR"])
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(countries=["PT"]),
@@ -316,7 +331,7 @@ class TestUpdateCompetitionUseCase:
         """
         created = await self._competicion(uow, creator_id, countries=["PT", "FR"])
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(countries=None),
@@ -335,7 +350,7 @@ class TestUpdateCompetitionUseCase:
         """
         created = await self._competicion(uow, creator_id, countries=["PT"])
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(main_country="FR"),
@@ -366,7 +381,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         update_request = UpdateCompetitionRequestDTO(
             name="Updated",
             start_date=date(2025, 7, 1),
@@ -407,7 +422,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         update_request = UpdateCompetitionRequestDTO(play_mode="HANDICAP")
 
         await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
@@ -427,7 +442,7 @@ class TestUpdateCompetitionUseCase:
         Then: Se lanza CompetitionNotFoundError
         """
         # Arrange
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         fake_id = CompetitionId(uuid4())
         update_request = UpdateCompetitionRequestDTO(name="Test")
 
@@ -461,7 +476,7 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act & Assert: Intentar actualizar con otro usuario
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         other_user = UserId(uuid4())
         update_request = UpdateCompetitionRequestDTO(name="Hacked")
 
@@ -526,7 +541,7 @@ class TestUpdateCompetitionUseCase:
         """
         created = await self._create_and_open(uow, creator_id)
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         result = await update_use_case.execute(
             CompetitionId(created.id), UpdateCompetitionRequestDTO(name="Ya con nombre"), creator_id
         )
@@ -550,7 +565,7 @@ class TestUpdateCompetitionUseCase:
             await uow.competitions.update(competition)
             await uow.commit()
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         update_request = UpdateCompetitionRequestDTO(name="Cannot Update")
 
         with pytest.raises(CompetitionNotEditableError):
@@ -593,7 +608,7 @@ class TestUpdateCompetitionUseCase:
         created = await self._create_and_open(uow, creator_id)
         await self._schedule_a_round(uow, created.id)
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
 
         with pytest.raises(CompetitionNotEditableError):
             await update_use_case.execute(
@@ -608,7 +623,7 @@ class TestUpdateCompetitionUseCase:
         """Sin calendario, que es el caso que motivo todo esto, se sigue pudiendo."""
         created = await self._create_and_open(uow, creator_id)
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id),
             UpdateCompetitionRequestDTO(start_date=date(2025, 8, 1), end_date=date(2025, 8, 3)),
@@ -634,7 +649,7 @@ class TestUpdateCompetitionUseCase:
         # BE #332, porque no significa nada
         dias = 5
         created = await self._create_scheduled(uow, creator_id, dias)
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
 
         await update_use_case.execute(
             CompetitionId(created.id),
@@ -654,7 +669,7 @@ class TestUpdateCompetitionUseCase:
         # BE #332, porque no significa nada
         dias = 5
         created = await self._create_scheduled(uow, creator_id, dias)
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
 
         await update_use_case.execute(
             CompetitionId(created.id), UpdateCompetitionRequestDTO(name="Otro nombre"), creator_id
@@ -677,7 +692,7 @@ class TestUpdateCompetitionUseCase:
         created = await self._create_and_open(uow, creator_id, max_players=12)
         await self._approve_enrollments(uow, created.id, 6)
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
 
         with pytest.raises(CompetitionNotEditableError):
             await update_use_case.execute(
@@ -693,7 +708,7 @@ class TestUpdateCompetitionUseCase:
         # El creador ya cuenta como inscrito desde que crea la competicion
         dentro = await self._approved_count(uow, created.id)
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id), UpdateCompetitionRequestDTO(max_players=dentro), creator_id
         )
@@ -705,7 +720,7 @@ class TestUpdateCompetitionUseCase:
         created = await self._create_and_open(uow, creator_id, max_players=12)
         await self._approve_enrollments(uow, created.id, 6)
 
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         await update_use_case.execute(
             CompetitionId(created.id), UpdateCompetitionRequestDTO(max_players=24), creator_id
         )
@@ -734,10 +749,67 @@ class TestUpdateCompetitionUseCase:
         created = await create_use_case.execute(create_request, creator_id)
 
         # Act
-        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries))
+        update_use_case = UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), _campos())
         update_request = UpdateCompetitionRequestDTO(name="Updated")
 
         await update_use_case.execute(CompetitionId(created.id), update_request, creator_id)
 
         # Assert
         assert uow.committed is True
+
+
+class TestLaUbicacionNoDejaCamposFuera:
+    """
+    Los campos siguen en los países de la competición al editarla (3 oct 2026).
+
+    El país de un campo solo se miraba al añadirlo: pasar la competición a otro
+    país la dejaba con campos de un país que ya no es el suyo.
+    """
+
+    @pytest.fixture
+    def uow(self) -> InMemoryUnitOfWork:
+        return InMemoryUnitOfWork()
+
+    @pytest.fixture
+    def creator_id(self) -> UserId:
+        return UserId(uuid4())
+
+    async def _con_un_campo_de_espana(self, uow, creator_id):
+        creada = await CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        ).execute(
+            CreateCompetitionRequestDTO(
+                name="Original",
+                start_date=date(2030, 6, 1),
+                end_date=date(2030, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+            ),
+            creator_id,
+        )
+        campo = GolfCourseId(uuid4())
+        async with uow:
+            competicion = await uow.competitions.find_by_id(CompetitionId(creada.id))
+            competicion.add_golf_course(campo, CountryCode("ES"))
+            await uow.competitions.update(competicion)
+        return CompetitionId(creada.id), _campos(**{str(campo.value): "ES"})
+
+    async def test_u_l1_pasarla_a_otro_pais_con_un_campo_del_anterior_falla(self, uow, creator_id):
+        competicion, campos = await self._con_un_campo_de_espana(uow, creator_id)
+
+        with pytest.raises(GolfCoursesOutsideLocationError, match="ES"):
+            await UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), campos).execute(
+                competicion, UpdateCompetitionRequestDTO(main_country="FR"), creator_id
+            )
+
+    async def test_u_l2_con_el_anterior_como_adyacente_se_guarda(self, uow, creator_id):
+        competicion, campos = await self._con_un_campo_de_espana(uow, creator_id)
+
+        await UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries), campos).execute(
+            competicion,
+            UpdateCompetitionRequestDTO(main_country="FR", countries=["ES"]),
+            creator_id,
+        )
+
+        guardada = await uow.competitions.find_by_id(competicion)
+        assert str(guardada.location.main_country) == "FR"

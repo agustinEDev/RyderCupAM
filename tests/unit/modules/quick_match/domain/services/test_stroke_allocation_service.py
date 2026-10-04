@@ -418,56 +418,118 @@ class TestPlusHandicap:
         assert strokes.net_score(18, 4) == 5  # cede golpe: su neto empeora
         assert strokes.net_score(1, 4) == 4  # aqui no cede nada
 
-    def test_match_play_still_clamps_each_playing_handicap_at_zero(self, service):
-        """
-        Given un plus contra un handicap alto en match play
-        When se reparte
-        Then el plus juega off scratch y el rival recibe la diferencia completa
+    NEUTRAL = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
 
-        En match play la ventaja la recoge la diferencia entre los dos Playing
-        Handicaps, y el WHS acota cada uno a cero antes de restarlos: nadie cede
-        golpes al campo, se los da al rival.
-        """
-        plus = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE)
-        high = _guest("High", 20.0, TeeColor.YELLOW, Gender.MALE)
-        neutral = TeeRating(course_rating=Decimal("72.0"), slope_rating=113, par=72)
-
-        result = service.allocate(
-            participants=[plus, high],
-            handicaps={
-                plus.participant_id: Decimal("-2.0"),
-                high.participant_id: Decimal("20.0"),
-            },
-            tee_ratings={("YELLOW", "MALE"): neutral},
+    def _allocate(self, service, match_format, players, allowance, tee_ratings=None):
+        participants = [p for p, _ in players]
+        return service.allocate(
+            participants=participants,
+            handicaps={p.participant_id: Decimal(h) for p, h in players},
+            tee_ratings=(
+                tee_ratings if tee_ratings is not None else {("YELLOW", "MALE"): self.NEUTRAL}
+            ),
             holes_by_stroke_index=_holes_by_stroke_index(),
-            match_format=MatchFormat.SINGLES,
-            allowance_percentage=100,
+            match_format=match_format,
+            allowance_percentage=allowance,
             play_mode=PlayMode.HANDICAP,
         )
 
-        assert result[plus.participant_id].playing_handicap == 0
-        assert result[high.participant_id].playing_handicap == 20
+    def test_singles_the_plus_counts_as_negative(self, service):
+        """
+        Given un +2 contra un 20 en individual, al 100 %
+        When se reparte
+        Then el 20 recibe la diferencia completa, 22, y el plus enseña -2
+
+        Hasta el 3 oct 2026 se recortaba cada hándicap a 0 antes de restar (y un
+        comentario lo atribuía al WHS): el 20 recibía 20. Decidido: el plus
+        cuenta como negativo, como en el Apéndice C del WHS (BE #165).
+        """
+        plus = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE)
+        high = _guest("High", 20.0, TeeColor.YELLOW, Gender.MALE)
+
+        result = self._allocate(service, MatchFormat.SINGLES, [(plus, "-2.0"), (high, "20.0")], 100)
+
+        assert result[plus.participant_id].playing_handicap == -2
         assert result[plus.participant_id].strokes_by_hole == {}
-        assert result[high.participant_id].total_strokes == 20
+        assert result[high.participant_id].total_strokes == 22
 
+    def test_fourball_measures_against_the_plus(self, service):
+        """
+        Al 90 % sobre la diferencia con el más bajo, que es el -2:
+        10 -> 10.8 -> 11, 14 -> 14.4 -> 14, 6 -> 7.2 -> 7, el plus 0.
+        """
+        a1 = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE, team="A")
+        a2 = _guest("Diez", 10.0, TeeColor.YELLOW, Gender.MALE, team="A")
+        b1 = _guest("Catorce", 14.0, TeeColor.YELLOW, Gender.MALE, team="B")
+        b2 = _guest("Seis", 6.0, TeeColor.YELLOW, Gender.MALE, team="B")
 
-class TestAllocateByHole:
-    """El reparto con signo, aislado."""
+        result = self._allocate(
+            service,
+            MatchFormat.FOURBALL,
+            [(a1, "-2.0"), (a2, "10.0"), (b1, "14.0"), (b2, "6.0")],
+            90,
+        )
 
-    def test_wraps_around_past_eighteen(self, service):
-        allocation = service.allocate_by_hole(23, _holes_by_stroke_index())
+        assert [result[p.participant_id].total_strokes for p in (a1, a2, b1, b2)] == [
+            0,
+            11,
+            14,
+            7,
+        ]
 
-        assert allocation[1] == 2  # SI 1
-        assert allocation[5] == 2  # SI 5
-        assert allocation[6] == 1  # SI 6
-        assert allocation[18] == 1  # SI 18
-        assert sum(allocation.values()) == 23
+    def test_foursomes_the_plus_lowers_the_team_average(self, service):
+        """Medias 4 (-2 y 10) y 7 (6 y 8): diferencia 3, al 50 % es 1.5 -> 2 para B."""
+        a1 = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE, team="A")
+        a2 = _guest("Diez", 10.0, TeeColor.YELLOW, Gender.MALE, team="A")
+        b1 = _guest("Seis", 6.0, TeeColor.YELLOW, Gender.MALE, team="B")
+        b2 = _guest("Ocho", 8.0, TeeColor.YELLOW, Gender.MALE, team="B")
 
-    def test_zero_allocates_nothing(self, service):
-        assert service.allocate_by_hole(0, _holes_by_stroke_index()) == {}
+        result = self._allocate(
+            service,
+            MatchFormat.FOURSOMES,
+            [(a1, "-2.0"), (a2, "10.0"), (b1, "6.0"), (b2, "8.0")],
+            50,
+        )
 
-    def test_no_holes_allocates_nothing(self, service):
-        assert service.allocate_by_hole(10, []) == {}
+        assert result[a1.participant_id].total_strokes == 0
+        assert result[b1.participant_id].total_strokes == 2
+        assert result[b2.participant_id].total_strokes == 2
+
+    def test_without_a_rateable_tee_the_plus_still_counts(self, service):
+        """Sin barra valorable se usa el index: también negativo."""
+        plus = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE)
+        ten = _guest("Diez", 10.0, TeeColor.YELLOW, Gender.MALE)
+
+        result = self._allocate(
+            service, MatchFormat.SINGLES, [(plus, "-2.0"), (ten, "10.0")], 100, tee_ratings={}
+        )
+
+        assert result[ten.participant_id].total_strokes == 12
+
+    def test_fourball_without_rateable_tees_also_measures_against_the_plus(self, service):
+        """
+        Sin barras valorables, el Course Handicap es el index redondeado, y el
+        del plus también es negativo: al 100 %, 10 -> 12, 14 -> 16, 6 -> 8.
+        """
+        a1 = _guest("Plus", -2.0, TeeColor.YELLOW, Gender.MALE, team="A")
+        a2 = _guest("Diez", 10.0, TeeColor.YELLOW, Gender.MALE, team="A")
+        b1 = _guest("Catorce", 14.0, TeeColor.YELLOW, Gender.MALE, team="B")
+        b2 = _guest("Seis", 6.0, TeeColor.YELLOW, Gender.MALE, team="B")
+
+        result = self._allocate(
+            service,
+            MatchFormat.FOURBALL,
+            [(a1, "-2.0"), (a2, "10.0"), (b1, "14.0"), (b2, "6.0")],
+            100,
+            tee_ratings={},
+        )
+
+        assert [result[p.participant_id].total_strokes for p in (a1, a2, b1, b2)] == [
+            0,
+            12,
+            16,
+            8,
+        ]
 
 
 class TestReviewFindings:

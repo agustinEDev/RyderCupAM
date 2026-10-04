@@ -17,9 +17,7 @@ from src.modules.quick_match.application.exceptions import (
     QuickMatchNotFoundError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
-from src.modules.quick_match.application.services.stroke_context_builder import (
-    StrokeContextBuilder,
-)
+from src.modules.quick_match.application.services.course_context import course_context_for
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -155,13 +153,13 @@ class GetQuickMatchUseCase:
                 for p in quick_match.participants
             }
 
-        context = StrokeContextBuilder.build(golf_course)
+        context = course_context_for(golf_course)
         return self._stroke_allocation_service.allocate(
             participants=quick_match.participants,
             handicaps=self._resolve_handicaps(quick_match, users_by_id),
             tee_ratings=context.tee_ratings,
             holes_by_stroke_index=context.holes_by_stroke_index,
-            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
+            holes_by_stroke_index_by_tee=context.holes_by_tee,
             match_format=quick_match.match_format,
             allowance_percentage=quick_match.get_effective_allowance(),
             play_mode=quick_match.play_mode,

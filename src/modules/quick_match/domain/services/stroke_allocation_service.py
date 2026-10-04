@@ -30,6 +30,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     TeeRating,
     round_half_up,
 )
+from src.shared.domain.services.stroke_allocation import allocate_by_hole
 from src.shared.domain.services.tee_lookup import find_tee
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
@@ -171,13 +172,11 @@ class StrokeAllocationService:
         """
         Cada uno contra el campo: su Playing Handicap individual, entero.
 
-        Aqui el Playing Handicap NO se acota a cero. Un jugador de handicap plus
-        cede golpes al campo (Regla WHS 8.2), y acotarlo dejaria la tarjeta
-        contando una cosa y la clasificacion otra.
+        Un jugador de handicap plus lo tiene negativo y cede golpes al campo.
         """
         result = {}
         for p in participants:
-            ph = self._playing_handicap(p, handicaps, tee_ratings, allowance, allow_negative=True)
+            ph = self._playing_handicap(p, handicaps, tee_ratings, allowance)
             result[p.participant_id] = self._build(
                 p.participant_id, ph, self._holes_for(p, holes_by_stroke_index, by_tee)
             )
@@ -290,7 +289,6 @@ class StrokeAllocationService:
         handicaps: dict[ParticipantId, Decimal | None],
         tee_ratings: dict[tuple[str, str | None], TeeRating],
         allowance: int,
-        allow_negative: bool = False,
     ) -> int:
         """
         Playing Handicap del participante, con allowance aplicado.
@@ -300,9 +298,8 @@ class StrokeAllocationService:
         Handicap Index como Playing Handicap: es una aproximacion, pero deja la
         partida utilizable en vez de tratar al jugador como scratch.
 
-        `allow_negative` deja pasar el handicap plus. En match play no se usa: la
-        diferencia entre dos Playing Handicaps ya recoge la ventaja, y el WHS
-        acota cada uno a cero antes de restarlos.
+        El de un jugador plus es negativo, también en match play: la diferencia
+        con el rival lo cuenta así (BE #165).
         """
         hi = handicaps.get(participant.participant_id)
         if hi is None:
@@ -313,11 +310,8 @@ class StrokeAllocationService:
             # El allowance se aplica igual: sin el, quien no tiene barra
             # valorable jugaria al 100% de su handicap mientras el resto de la
             # partida juega al 95%, y saldria ganando por no tener datos.
-            rounded = round_half_up(hi * Decimal(allowance) / Decimal(100))
-            return rounded if allow_negative else max(0, rounded)
+            return round_half_up(hi * Decimal(allowance) / Decimal(100))
 
-        if allow_negative:
-            return self._calculator.calculate_unbounded(hi, tee_rating, allowance)
         return self._calculator.calculate(hi, tee_rating, allowance)
 
     def _course_handicap(
@@ -333,7 +327,7 @@ class StrokeAllocationService:
 
         tee_rating = self._tee_rating_for(participant, tee_ratings)
         if tee_rating is None:
-            return max(0, round_half_up(hi))
+            return round_half_up(hi)
 
         return self._calculator.calculate_course_handicap(hi, tee_rating)
 
@@ -395,40 +389,8 @@ class StrokeAllocationService:
         return ParticipantStrokes(
             participant_id,
             allocated if display_handicap is None else display_handicap,
-            self.allocate_by_hole(allocated, holes_by_stroke_index),
+            allocate_by_hole(allocated, holes_by_stroke_index),
         )
-
-    @staticmethod
-    def allocate_by_hole(playing_handicap: int, holes_by_stroke_index: list[int]) -> dict[int, int]:
-        """
-        Reparte un Playing Handicap con signo sobre los hoyos del campo.
-
-        Positivo: se reparte del hoyo mas dificil (stroke index 1) al mas facil,
-        dando la vuelta cuando pasa del numero de hoyos.
-        Negativo (handicap plus): se cede empezando por el mas facil y hacia
-        atras, que es lo que manda la Regla WHS 8.2.
-
-        Solo devuelve los hoyos con golpe, para no arrastrar 18 ceros.
-        """
-        total_holes = len(holes_by_stroke_index)
-        if total_holes == 0 or playing_handicap == 0:
-            return {}
-
-        sign = 1 if playing_handicap > 0 else -1
-        magnitude = abs(playing_handicap)
-        base, remainder = divmod(magnitude, total_holes)
-
-        allocation: dict[int, int] = {}
-        for position, hole_number in enumerate(holes_by_stroke_index):
-            stroke_index = position + 1
-            count = base
-            if sign > 0:
-                count += 1 if remainder >= stroke_index else 0
-            else:
-                count += 1 if remainder >= (total_holes + 1 - stroke_index) else 0
-            if count:
-                allocation[hole_number] = sign * count
-        return allocation
 
     @staticmethod
     def _no_strokes(participant_id: ParticipantId) -> ParticipantStrokes:

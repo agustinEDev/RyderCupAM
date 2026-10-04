@@ -293,6 +293,7 @@ async def get_leaderboard(
 
     **Returns:**
     - 200: Leaderboard completo
+    - 400: Un Stableford o Medal, cuya clasificación llega con sus rondas
     - 404: Competicion no encontrada
     """
     try:

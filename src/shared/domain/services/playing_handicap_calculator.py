@@ -12,6 +12,8 @@ El resultado se redondea al entero más cercano (0.5 redondea hacia arriba).
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
+from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
+
 # Porcentajes que se pueden elegir a mano (50-100, de 5 en 5). Estaban dos veces,
 # en `Round` y en `QuickMatch` (RyderCupAM#165); los por defecto los da MatchFormat
 ALLOWED_ALLOWANCE_PERCENTAGES = frozenset(range(50, 101, 5))
@@ -120,6 +122,12 @@ class PlayingHandicapCalculator:
         Fórmula WHS:
         Playing Handicap = (HI x (SR / 113) + (CR - Par)) x Allowance%
 
+        Un jugador plus tiene Playing Handicap negativo, y se deja así (BE #165,
+        decidido el 2 oct 2026): en juego libre cede golpes al campo, y en match
+        play la diferencia con el rival lo cuenta como negativo, como el WHS.
+        Hasta entonces se recortaba a 0 y un +2 contra un 10 daba 10 golpes en
+        vez de 12.
+
         Args:
             handicap_index: Handicap Index del jugador (ej: 12.4)
             tee_rating: Ratings del tee (CR, SR, Par)
@@ -127,46 +135,17 @@ class PlayingHandicapCalculator:
             max_playing_handicap: Límite superior opcional (cap WHS de la competición)
 
         Returns:
-            Playing Handicap redondeado al entero más cercano (>=0), acotado a
-            max_playing_handicap si se proporciona
+            Playing Handicap redondeado al entero más cercano (el medio se aleja
+            del cero), acotado por arriba a max_playing_handicap si se proporciona
         """
-        playing_handicap = self.calculate_unbounded(
-            handicap_index, tee_rating, allowance_percentage
-        )
+        # CH = HI x (SR / 113) + (CR - Par)
+        course_handicap = self._calculate_course_handicap(handicap_index, tee_rating)
 
-        # Playing Handicap no puede ser negativo
-        result = max(0, playing_handicap)
+        allowance_factor = Decimal(allowance_percentage) / Decimal(100)
+        result = round_half_up(course_handicap * allowance_factor)
         if max_playing_handicap is not None:
             result = min(result, max_playing_handicap)
         return result
-
-    def calculate_unbounded(
-        self,
-        handicap_index: Decimal,
-        tee_rating: TeeRating,
-        allowance_percentage: int,
-    ) -> int:
-        """
-        Playing Handicap sin acotar a cero, para jugadores de hándicap plus.
-
-        `calculate()` acota el resultado a >= 0, de modo que un jugador plus no
-        llega a ceder golpes. Eso vale para el flujo de competición, que es
-        donde se usa, pero no para la clasificación Stableford de una partida
-        rápida: ahí un plus sí cede golpes (Regla WHS 8.2), y es lo que el
-        frontend viene calculando y mostrando.
-
-        Se expone como método propio en lugar de cambiar `calculate()` para no
-        alterar el reparto de golpes de las competiciones ya creadas.
-        """
-        # CH = HI x (SR / 113) + (CR - Par)
-        slope_factor = Decimal(tee_rating.slope_rating) / Decimal(NEUTRAL_SLOPE)
-        differential = tee_rating.course_rating - Decimal(tee_rating.par)
-        course_handicap = (handicap_index * slope_factor) + differential
-
-        allowance_factor = Decimal(allowance_percentage) / Decimal(100)
-        playing_handicap_raw = course_handicap * allowance_factor
-
-        return round_half_up(playing_handicap_raw)
 
     def calculate_course_handicap(
         self,
@@ -183,10 +162,10 @@ class PlayingHandicapCalculator:
             tee_rating: Ratings del tee
 
         Returns:
-            Course Handicap redondeado (>= 0)
+            Course Handicap redondeado; negativo para un jugador plus
         """
         raw = self._calculate_course_handicap(handicap_index, tee_rating)
-        return max(0, round_half_up(raw))
+        return round_half_up(raw)
 
     @staticmethod
     def calculate_fourball_differential(
@@ -255,13 +234,9 @@ class PlayingHandicapCalculator:
         """
         diff = ph_a - ph_b
         if diff > 0:
-            return PlayingHandicapCalculator.compute_strokes_received(
-                diff, holes_by_stroke_index
-            ), []
+            return holes_receiving_strokes(diff, holes_by_stroke_index), []
         if diff < 0:
-            return [], PlayingHandicapCalculator.compute_strokes_received(
-                -diff, holes_by_stroke_index
-            )
+            return [], holes_receiving_strokes(-diff, holes_by_stroke_index)
         return [], []
 
     @staticmethod
@@ -315,44 +290,6 @@ class PlayingHandicapCalculator:
         if team_b_avg > team_a_avg:
             return 0, strokes
         return 0, 0
-
-    @staticmethod
-    def compute_strokes_received(
-        playing_handicap: int,
-        holes_by_stroke_index: list[int],
-    ) -> list[int]:
-        """
-        Calcula los hoyos donde el jugador recibe golpe, basado en stroke_index.
-
-        Distribuye strokes siguiendo el orden de stroke index de los hoyos.
-        Si playing_handicap > 18, se vuelve a recorrer la lista (wrap-around),
-        generando entradas duplicadas para hoyos que reciben más de un golpe.
-
-        Ejemplo: PH=29 con 18 hoyos → los primeros 11 hoyos por SI aparecen
-        2 veces (2 strokes), los últimos 7 aparecen 1 vez (1 stroke).
-
-        Use strokes_on_hole(hole_number, strokes_received) para obtener
-        el conteo de strokes en un hoyo específico.
-
-        Args:
-            playing_handicap: Playing Handicap calculado del jugador
-            holes_by_stroke_index: Números de hoyo ordenados por stroke index
-
-        Returns:
-            Lista de números de hoyo donde el jugador recibe golpe
-            (puede contener duplicados si PH > 18)
-        """
-        if not holes_by_stroke_index or playing_handicap <= 0:
-            return []
-
-        result: list[int] = []
-        remaining = playing_handicap
-        while remaining > 0:
-            take = min(remaining, len(holes_by_stroke_index))
-            result.extend(holes_by_stroke_index[:take])
-            remaining -= take
-
-        return result
 
     def _calculate_course_handicap(
         self,

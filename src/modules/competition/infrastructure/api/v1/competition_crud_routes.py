@@ -308,9 +308,11 @@ async def create_competition(
                 team_assignment=enriched_dto.team_assignment,
                 enrollment_opens_days_before=competition.enrollment_opens_days_before,
                 visibility=str(competition.visibility),
-                setup_mode=str(competition.ryder_cup.setup_mode),
-                team_1_name=competition.ryder_cup.team_1_name,
-                team_2_name=competition.ryder_cup.team_2_name,
+                setup_mode=enriched_dto.setup_mode,
+                team_1_name=enriched_dto.team_1_name,
+                team_2_name=enriched_dto.team_2_name,
+                tournament_type=enriched_dto.tournament_type,
+                modality=enriched_dto.modality,
                 is_creator=True,
                 enrolled_count=0,
                 created_at=enriched_dto.created_at,
@@ -476,7 +478,9 @@ async def get_competition(
     description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Creador o administrador.",
     tags=["Competitions"],
 )
-@limiter.limit("10/hour")
+# Por minuto, como el resto de modificaciones: quien monta su torneo retoca
+# mucho, y cada rechazo de la API también cuenta (Agustín, 4 oct 2026)
+@limiter.limit("10/minute")
 async def update_competition(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,

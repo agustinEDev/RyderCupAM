@@ -218,7 +218,11 @@ class GetScheduleUseCase:
         esperan partidos, porque la agenda la lee mucha más gente que la
         página del sobre: el resto no cuesta ni una consulta.
         """
-        if self._sobres is None or competition.ryder_cup.setup_mode != SetupMode.RYDER_CUP:
+        if (
+            self._sobres is None
+            or competition.ryder_cup is None
+            or competition.ryder_cup.setup_mode != SetupMode.RYDER_CUP
+        ):
             return
         for ronda in rounds:
             if ronda.status != RoundStatus.PENDING_MATCHES:

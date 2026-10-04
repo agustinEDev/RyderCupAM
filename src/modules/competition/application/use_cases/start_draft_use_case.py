@@ -101,7 +101,7 @@ class StartDraftUseCase:
             # El draft ES los capitanes eligiendo: sin los dos no hay quien elija.
             # `captains_for_team_split` avisa si falta uno; si no hay ninguno, la
             # sala no tiene sentido
-            capitanes = competition.ryder_cup.captains_for_team_split()
+            capitanes = competition.require_ryder_cup().captains_for_team_split()
             if capitanes is None:
                 raise CaptainMissingError(
                     "Nombra a los dos capitanes antes de abrir la sala de draft"

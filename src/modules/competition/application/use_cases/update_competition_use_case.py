@@ -28,6 +28,9 @@ from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -75,16 +78,33 @@ class UpdateCompetitionUseCase:
     5. Persistir cambios
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, location_builder: LocationBuilder):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        location_builder: LocationBuilder,
+        golf_course_repository: IGolfCourseRepository,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
             location_builder: Domain Service para construir Location
+            golf_course_repository: Campos de golf (otro módulo): al cambiar la
+                ubicación, la entidad necesita el país de los suyos
         """
         self._uow = uow
         self._location_builder = location_builder
+        self._golf_course_repo = golf_course_repository
+
+    async def _paises_de_los_campos(self, competition) -> list:
+        """El país de cada campo de golf de la competición."""
+        paises = []
+        for asociacion in competition.golf_courses:
+            campo = await self._golf_course_repo.find_by_id(asociacion.golf_course_id)
+            if campo is not None:
+                paises.append(campo.country_code)
+        return paises
 
     @staticmethod
     def _campos_de_localizacion(request: UpdateCompetitionRequestDTO) -> set[str]:
@@ -255,8 +275,12 @@ class UpdateCompetitionUseCase:
             # cliente que serializa el formulario entero con sus huecos.
             location = self._campos_de_localizacion(request)
             nueva_location = None
+            paises_de_los_campos = None
             if location:
                 nueva_location = await self._construir_location(request, competition)
+                # Los campos son otro agregado: sus países los trae el caso de uso
+                # y la entidad decide si la ubicación nueva los deja fuera
+                paises_de_los_campos = await self._paises_de_los_campos(competition)
 
             play_mode = PlayMode(request.play_mode) if request.play_mode else None
 
@@ -276,6 +300,7 @@ class UpdateCompetitionUseCase:
                 name=name,
                 dates=dates,
                 location=nueva_location,
+                golf_course_countries=paises_de_los_campos,
                 play_mode=play_mode,
                 max_players=request.max_players,
                 team_assignment=team_assignment,

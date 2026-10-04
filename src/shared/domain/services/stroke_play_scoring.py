@@ -27,12 +27,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
     TeeRating,
 )
-
-# El catálogo solo admite campos de 18 hoyos: `GolfCourse` lo valida como
-# invariante y rechaza cualquier otro número. Por eso el reparto de golpes es
-# una constante y no se deriva del campo. El día que se admitan campos de nueve
-# hay que derivarlo de los hoyos recibidos, aquí y en la inversión del 19.
-HOLES_PER_ROUND = 18
+from src.shared.domain.services.stroke_allocation import strokes_on_hole
 
 # Doble bogey neto: el tope por hoyo que el WHS aplica a lo que puntúa para
 # hándicap (Regla 3.1)
@@ -91,8 +86,8 @@ class StrokePlayScoring:
         if tee_rating is None:
             return Decimal(str(handicap))
 
-        # Sin acotar: un jugador plus cede golpes (Regla WHS 8.2)
-        playing_handicap = self._playing_handicap_calculator.calculate_unbounded(
+        # Un jugador plus tiene Playing Handicap negativo y cede golpes
+        playing_handicap = self._playing_handicap_calculator.calculate(
             Decimal(str(handicap)), tee_rating, allowance_percentage
         )
         return Decimal(playing_handicap)
@@ -111,20 +106,7 @@ class StrokePlayScoring:
         # medio va siempre hacia arriba, tambien en negativos (-2.5 -> -2).
         # ROUND_HALF_UP de Decimal se aleja del cero y daria -3.
         rounded = int((handicap + Decimal("0.5")).to_integral_value(rounding=ROUND_FLOOR))
-        if rounded == 0:
-            return 0
-
-        if rounded > 0:
-            base = rounded // HOLES_PER_ROUND
-            extra = 1 if (rounded % HOLES_PER_ROUND) >= stroke_index else 0
-            return base + extra
-
-        # Jugador plus: la Regla WHS 8.2 quita golpes empezando por el hoyo más
-        # fácil (stroke index más alto) y hacia atrás
-        magnitude = abs(rounded)
-        base = -(magnitude // HOLES_PER_ROUND)
-        extra = -1 if (magnitude % HOLES_PER_ROUND) >= (19 - stroke_index) else 0
-        return base + extra
+        return strokes_on_hole(rounded, stroke_index)
 
     @staticmethod
     def hole_points(gross_score: int | None, par: int, strokes_received: int) -> int:

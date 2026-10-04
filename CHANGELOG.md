@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.25.0] - 2026-10-04
+
+El tipo de torneo (Stableford y Medal junto a la Ryder Cup, #251), un solo reparto
+de golpes por hoyo para todos los módulos (#165) con el hándicap plus contando
+como negativo en match play, y los campos de golf que se gestionan solo desde la
+ficha. Va con el frontend **2.39.0**.
+
+**Notas de despliegue.** Una migración, `a7d3e9f2c4b1`, que se aplica sola al
+arrancar el contenedor: añade `competitions.tournament_type` (las competiciones
+existentes quedan como `RYDER_CUP`) y deja que las columnas de equipos admitan
+vacío. La #480 lleva la etiqueta `api-breaking` de `oasdiff`, pero lo que marca
+(campos de equipos que pueden faltar, el esquema de `setup_mode`) solo afecta a
+los Stableford y Medal, que el frontend de producción no puede crear: la ventana
+hasta desplegar el frontend es inocua. Orden de siempre: este primero, `/health`,
+y después el frontend. Probado en bloque en el Kind el 3 y el 4 oct, con sesiones
+de jugador y de admin.
+
+### Added
+
+- **Tipo de torneo** (#480, #251). La competición guarda `tournament_type`:
+  `RYDER_CUP`, `STABLEFORD` o `MEDAL`, y la modalidad (`MATCH_PLAY` /
+  `STROKE_PLAY`) se deriva de él. Lo de la Ryder (equipos, modo de montaje,
+  reparto, capitanes) vive en su pieza y un Stableford o un Medal no la tiene:
+  pedírsela responde 400 con el motivo («Un Stableford no tiene equipos»).
+  Crear sin tipo sigue siendo la Ryder de siempre.
+
+### Changed
+
+- **Un solo reparto de golpes por hoyo** (#476). Competición, partida rápida y
+  estadísticas usan el mismo reparto y el mismo contexto del campo. Cambios
+  visibles: la partida rápida reintenta con el par del campo y no se cae con una
+  tarjeta mal formada; las estadísticas encuentran la barra aunque no tenga
+  género; con salidas repetidas manda la última, para la valoración y la tarjeta.
+- **Editar una competición admite 10 guardados por minuto**, no por hora (#482).
+  Un organizador que monta su torneo agotaba el límite retocando fechas, cupo y
+  países. Crear y borrar siguen en 10 por hora.
+
+### Fixed
+
+- **El hándicap plus cuenta como negativo en match play** (#479, #165): en el
+  calculador, la partida rápida, el partido y el reparto de golpes, sin
+  recortarlo a 0. También un hándicap bajo en un campo con valoración muy por
+  debajo del par sale negativo. Las competiciones existentes no se recalculan.
+- **Reasignar jugadores usa el reparto del formato** (#478, cierra #477), el
+  mismo que generar los partidos, y exige los jugadores que pide el formato por
+  lado y sin repetidos (400).
+- **Cambiar la ubicación no puede dejar campos fuera de los países de la
+  competición** (#481): responde 400 con «Quita antes desde la ficha los campos
+  de ES…». Los campos se gestionan solo desde la ficha.
+- **La clasificación de un Stableford o un Medal dice que llega con sus rondas**
+  (#483). Respondía «Un Stableford no tiene equipos»; ahora lo comprueba antes de
+  leer rondas y partidos y el 400 dice «La clasificación de un Stableford llega
+  con sus rondas: todavía no se puede consultar».
+
 ## [2.24.0] - 2026-10-02
 
 Seguridad del hándicap, límites de peticiones que dejan entrar a un club entero

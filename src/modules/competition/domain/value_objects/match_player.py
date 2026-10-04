@@ -52,8 +52,7 @@ class MatchPlayer:
 
     def __post_init__(self):
         """Validaciones después de inicialización."""
-        if self.playing_handicap < 0:
-            raise ValueError(f"playing_handicap must be >= 0, got {self.playing_handicap}")
+        # Un jugador plus tiene Playing Handicap negativo (BE #165)
 
         # Validar que strokes_received son números de hoyo válidos (1-18)
         for hole in self.strokes_received:

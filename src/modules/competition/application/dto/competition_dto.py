@@ -21,6 +21,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_PLAYERS,
 )
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.domain.value_objects.visibility import Visibility
 
 # Código ISO de país tal y como lo aceptan `main_country` y los adyacentes. La
@@ -142,16 +143,26 @@ class CreateCompetitionRequestDTO(BaseModel):
         description=MAX_PLAYERS_DESC,
         alias="number_of_players",
     )
-    team_assignment: str = Field(
-        default="MANUAL", description="Asignación de equipos: 'MANUAL' o 'AUTOMATIC'."
+    tournament_type: TournamentType = Field(
+        TournamentType.RYDER_CUP,
+        description=(
+            "Qué torneo es (#251): RYDER_CUP (por defecto), STABLEFORD o MEDAL. "
+            "De él sale la modalidad: match play o stroke play. Un STABLEFORD o "
+            "un MEDAL no tiene equipos, modo de montaje ni reparto: mandarlos es "
+            "un 400 que dice por qué."
+        ),
+    )
+    team_assignment: str | None = Field(
+        default=None,
+        description="Asignación de equipos: 'MANUAL' (por defecto en una Ryder) o 'AUTOMATIC'.",
     )
 
-    # Nombres de equipos (opcional, pero recomendado)
-    team_1_name: str = Field(
-        default="Team 1", min_length=3, max_length=50, description=TEAM_1_NAME_DESC
+    # Nombres de equipos: solo en una Ryder, que si no llegan usa «Team 1» y «Team 2»
+    team_1_name: str | None = Field(
+        default=None, min_length=3, max_length=50, description=TEAM_1_NAME_DESC
     )
-    team_2_name: str = Field(
-        default="Team 2", min_length=3, max_length=50, description=TEAM_2_NAME_DESC
+    team_2_name: str | None = Field(
+        default=None, min_length=3, max_length=50, description=TEAM_2_NAME_DESC
     )
 
     # Límite de hándicap de juego
@@ -174,9 +185,9 @@ class CreateCompetitionRequestDTO(BaseModel):
         Visibility.PRIVATE,
         description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.",
     )
-    setup_mode: SetupMode = Field(
-        SetupMode.RYDER_CUP,
-        description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
+    setup_mode: SetupMode | None = Field(
+        None,
+        description="Solo en una Ryder Cup. Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
     )
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
@@ -227,9 +238,25 @@ class CreateCompetitionRequestDTO(BaseModel):
             raise ValueError("play_mode debe ser 'SCRATCH' o 'HANDICAP'")
 
         # Validar team_assignment
-        if self.team_assignment not in ["MANUAL", "AUTOMATIC"]:
+        if self.team_assignment not in [None, "MANUAL", "AUTOMATIC"]:
             raise ValueError("team_assignment debe ser 'MANUAL' o 'AUTOMATIC'")
 
+        return self
+
+    @model_validator(mode="after")
+    def ryder_cup_defaults(self) -> "CreateCompetitionRequestDTO":
+        """
+        Los valores de siempre, solo para una Ryder Cup (#251).
+
+        El frontend de hoy no manda el tipo ni, a veces, los equipos: tiene que
+        seguir creando la misma Ryder. A un Stableford o un Medal no se le
+        inventa nada; si el cliente manda equipos, los rechaza el dominio.
+        """
+        if self.tournament_type.has_teams:
+            self.team_1_name = self.team_1_name or "Team 1"
+            self.team_2_name = self.team_2_name or "Team 2"
+            self.team_assignment = self.team_assignment or "MANUAL"
+            self.setup_mode = self.setup_mode or SetupMode.RYDER_CUP
         return self
 
 
@@ -268,15 +295,27 @@ class CreateCompetitionResponseDTO(BaseModel):
     )
 
     # Play Mode
+    tournament_type: str = Field(
+        "RYDER_CUP", description="Qué torneo es: RYDER_CUP, STABLEFORD o MEDAL (#251)."
+    )
+    modality: str = Field(
+        "MATCH_PLAY", description="Su modalidad, derivada del tipo: MATCH_PLAY o STROKE_PLAY."
+    )
     play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Nombres de equipos
-    team_1_name: str = Field(..., description=TEAM_1_NAME_DESC)
-    team_2_name: str = Field(..., description=TEAM_2_NAME_DESC)
+    team_1_name: str | None = Field(
+        None, description=TEAM_1_NAME_DESC + " Vacío si no es Ryder Cup."
+    )
+    team_2_name: str | None = Field(
+        None, description=TEAM_2_NAME_DESC + " Vacío si no es Ryder Cup."
+    )
 
     # Config
     max_players: int = Field(..., description=MAX_PLAYERS_DESC)
-    team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
+    team_assignment: str | None = Field(
+        None, description="Tipo de asignación de equipos. Vacío si no es Ryder Cup."
+    )
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
@@ -294,9 +333,9 @@ class CreateCompetitionResponseDTO(BaseModel):
         ...,
         description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.",
     )
-    setup_mode: str = Field(
-        ...,
-        description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
+    setup_mode: str | None = Field(
+        None,
+        description="Vacío si no es Ryder Cup. Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
     )
 
     # Campos calculados
@@ -492,15 +531,27 @@ class CompetitionResponseDTO(BaseModel):
     )
 
     # Play Mode
+    tournament_type: str = Field(
+        "RYDER_CUP", description="Qué torneo es: RYDER_CUP, STABLEFORD o MEDAL (#251)."
+    )
+    modality: str = Field(
+        "MATCH_PLAY", description="Su modalidad, derivada del tipo: MATCH_PLAY o STROKE_PLAY."
+    )
     play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
     # Nombres de equipos
-    team_1_name: str = Field(default="Team 1", description=TEAM_1_NAME_DESC)
-    team_2_name: str = Field(default="Team 2", description=TEAM_2_NAME_DESC)
+    team_1_name: str | None = Field(
+        None, description=TEAM_1_NAME_DESC + " Vacío si no es Ryder Cup."
+    )
+    team_2_name: str | None = Field(
+        None, description=TEAM_2_NAME_DESC + " Vacío si no es Ryder Cup."
+    )
 
     # Config
     max_players: int = Field(..., description=MAX_PLAYERS_DESC)
-    team_assignment: str = Field(..., description="Tipo de asignación de equipos.")
+    team_assignment: str | None = Field(
+        None, description="Tipo de asignación de equipos. Vacío si no es Ryder Cup."
+    )
     max_playing_handicap: int | None = Field(
         None, description="Límite máximo de hándicap de juego (WHS: 1-54)."
     )
@@ -518,9 +569,9 @@ class CompetitionResponseDTO(BaseModel):
         ...,
         description="Quién ve la competición y quién puede pedir sitio. PRIVATE (por defecto): solo se entra por invitación. PUBLIC: se ve al explorar y cualquiera puede pedir plaza.",
     )
-    setup_mode: str = Field(
-        ...,
-        description="Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
+    setup_mode: str | None = Field(
+        None,
+        description="Vacío si no es Ryder Cup. Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
     )
     team_a_captain_id: UUID | None = Field(
         None, description="Capitán del equipo A, o null si no hay (BE #320)."
