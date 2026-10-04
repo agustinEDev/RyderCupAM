@@ -17,7 +17,10 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
 )
-from src.modules.competition.application.dto.enrollment_dto import HandleEnrollmentRequestDTO
+from src.modules.competition.application.dto.enrollment_dto import (
+    DirectEnrollPlayerRequestDTO,
+    HandleEnrollmentRequestDTO,
+)
 from src.modules.competition.application.dto.invitation_dto import (
     RespondInvitationRequestDTO,
     SendInvitationByEmailRequestDTO,
@@ -32,6 +35,9 @@ from src.modules.competition.application.use_cases.cancel_invitation_use_case im
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
     HandleEnrollmentUseCase,
@@ -422,3 +428,19 @@ class TestAlLlenarse:
         await self._aprueba(comp_uow, user_uow, solicitud, creador)
 
         assert await _estado(comp_uow, invitacion) == InvitationStatus.PENDING
+
+    async def test_a5_inscribir_directamente_la_que_llena_deja_sin_plaza_a_las_pendientes(
+        self, comp_uow, user_uow
+    ):
+        creador = await _usuario(user_uow, "creador@test.com")
+        directo = await _usuario(user_uow, "directo@test.com")
+        invitado = await _usuario(user_uow, "invitado@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=2)
+        invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
+
+        await DirectEnrollPlayerUseCase(comp_uow, user_uow.users).execute(
+            DirectEnrollPlayerRequestDTO(competition_id=comp.id, user_id=directo.id.value),
+            creador.id,
+        )
+
+        assert await _estado(comp_uow, invitacion) == InvitationStatus.NO_ROOM
