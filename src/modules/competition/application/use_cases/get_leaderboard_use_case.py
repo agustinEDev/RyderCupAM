@@ -8,6 +8,7 @@ from src.modules.competition.application.dto.scoring_dto import (
 )
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.domain.entities.competition import TournamentTypeError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -41,6 +42,15 @@ class GetLeaderboardUseCase:
             competition = await self._uow.competitions.find_by_id(comp_id)
             if not competition:
                 raise CompetitionNotFoundError(f"No existe competicion con ID {competition_id_str}")
+
+            # Un Stableford o un Medal no tiene todavía su clasificación: se dice
+            # antes de leer rondas y partidos, y con su motivo (Agustín, 4 oct 2026)
+            tipo = competition.tournament_type
+            if not tipo.has_teams:
+                raise TournamentTypeError(
+                    f"La clasificación de un {tipo.label} llega con sus rondas: "
+                    "todavía no se puede consultar"
+                )
 
             rounds = await self._uow.rounds.find_by_competition(comp_id)
 

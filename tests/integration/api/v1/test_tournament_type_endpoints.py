@@ -99,13 +99,16 @@ class TestLoQueSoloExisteEnUnaRyder:
         assert respuesta.status_code == 400, respuesta.text
         assert "no tiene equipos" in respuesta.json()["detail"]
 
-    async def test_la_clasificacion_por_equipos(self, client: AsyncClient):
+    async def test_la_clasificacion_llega_con_sus_rondas(self, client: AsyncClient):
+        # El motivo habla de la clasificación, no de los equipos (Agustín, 4 oct 2026)
         torneo = await self._stableford(client)
 
         respuesta = await client.get(f"/api/v1/competitions/{torneo['id']}/leaderboard")
 
         assert respuesta.status_code == 400, respuesta.text
-        assert "no tiene equipos" in respuesta.json()["detail"]
+        assert respuesta.json()["detail"] == (
+            "La clasificación de un Stableford llega con sus rondas: todavía no se puede consultar"
+        )
 
     async def test_ponerle_equipos_al_editarlo(self, client: AsyncClient):
         torneo = await self._stableford(client)

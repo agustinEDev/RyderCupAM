@@ -23,6 +23,7 @@ from src.modules.competition.domain.value_objects.enrollment_id import Enrollmen
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -100,6 +101,7 @@ async def _setup_scheduled_match(uow: InMemoryUnitOfWork):
     mock_comp = MagicMock()
     mock_comp.id = competition_id
     mock_comp.name = "Test Cup"
+    mock_comp.tournament_type = TournamentType.RYDER_CUP
     mock_comp.ryder_cup.team_1_name = "Team A"
     mock_comp.ryder_cup.team_2_name = "Team B"
     mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
@@ -307,3 +309,71 @@ class TestLeaderboardSaysTheSessionOfEachMatch:
 
         assert view.matches[0].round_date is None
         assert view.matches[0].session_type is None
+
+
+class TestLaClasificacionDeUnStrokePlay:
+    """
+    Un Stableford o un Medal todavía no tiene clasificación (#251).
+
+    Respondía «Un Stableford no tiene equipos», porque la clasificación pedía
+    los equipos sin mirar el tipo. Decidido por Agustín el 4 oct 2026: el motivo
+    dice que la clasificación llega con sus rondas, y se comprueba antes de
+    leer rondas y partidos.
+    """
+
+    @staticmethod
+    async def _stroke_play(uow, tipo):
+        from src.modules.competition.domain.entities.competition import Competition
+        from src.modules.competition.domain.value_objects.competition_name import (
+            CompetitionName,
+        )
+        from src.modules.competition.domain.value_objects.date_range import DateRange
+        from src.modules.competition.domain.value_objects.location import Location
+        from src.shared.domain.value_objects.country_code import CountryCode
+        from src.shared.domain.value_objects.play_mode import PlayMode
+
+        competicion = Competition(
+            id=CompetitionId.generate(),
+            creator_id=UserId.generate(),
+            name=CompetitionName("Torneo del club"),
+            dates=DateRange(date(2030, 6, 1), date(2030, 6, 3)),
+            location=Location(CountryCode("ES")),
+            play_mode=PlayMode.HANDICAP,
+            tournament_type=tipo,
+        )
+        uow._competitions._competitions[competicion.id] = competicion
+        return competicion
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("nombre", ["STABLEFORD", "MEDAL"])
+    async def test_c1_dice_que_su_clasificacion_llega_con_sus_rondas(self, uow, user_repo, nombre):
+        from src.modules.competition.domain.entities.competition import TournamentTypeError
+        from src.modules.competition.domain.value_objects.tournament_type import (
+            TournamentType,
+        )
+
+        tipo = TournamentType(nombre)
+        competicion = await self._stroke_play(uow, tipo)
+        use_case = GetLeaderboardUseCase(uow, user_repo, ScoringService())
+
+        with pytest.raises(TournamentTypeError) as error:
+            await use_case.execute(str(competicion.id))
+
+        assert str(error.value) == (
+            f"La clasificación de un {tipo.label} llega con sus rondas: "
+            "todavía no se puede consultar"
+        )
+
+    @pytest.mark.asyncio
+    async def test_c2_lo_dice_antes_de_leer_rondas(self, uow, user_repo):
+        from src.modules.competition.domain.entities.competition import TournamentTypeError
+        from src.modules.competition.domain.value_objects.tournament_type import (
+            TournamentType,
+        )
+
+        competicion = await self._stroke_play(uow, TournamentType.MEDAL)
+        uow._rounds.find_by_competition = AsyncMock(side_effect=AssertionError("leyó rondas"))
+        use_case = GetLeaderboardUseCase(uow, user_repo, ScoringService())
+
+        with pytest.raises(TournamentTypeError):
+            await use_case.execute(str(competicion.id))
