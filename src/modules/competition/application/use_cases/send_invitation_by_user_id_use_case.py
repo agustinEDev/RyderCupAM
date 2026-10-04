@@ -62,7 +62,10 @@ class SendInvitationByUserIdUseCase:
             invitee_user_id = UserId(request.invitee_user_id)
 
             # 1. Buscar competition
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Con la fila bloqueada (BE #359): una inscripcion que llena la ultima
+            # plaza entre comprobar el cupo y guardar dejaba una pendiente nueva en
+            # un torneo lleno. Mismo orden que las inscripciones
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
 

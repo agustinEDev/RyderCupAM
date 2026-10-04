@@ -38,6 +38,16 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, invitation_id: InvitationId) -> Invitation | None:
+        """La invitacion con su fila bloqueada y releida de la base de datos.
+
+        Para decidir sobre su estado sin que otra transaccion lo cambie entre
+        medias: retirar y aceptar a la vez (BE #359). Quien la use bloquea antes
+        la competicion, siempre en ese orden, para no interbloquearse.
+        """
+        pass
+
+    @abstractmethod
     async def find_by_competition(
         self,
         competition_id: CompetitionId,

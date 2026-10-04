@@ -10,6 +10,7 @@ Decidido con Agustín:
 """
 
 from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -444,3 +445,130 @@ class TestAlLlenarse:
         )
 
         assert await _estado(comp_uow, invitacion) == InvitationStatus.NO_ROOM
+
+
+# ==================== Las carreras (CodeRabbit en la #488) ====================
+
+
+class TestCarreras:
+    """Retirar, aceptar e invitar leen y deciden sobre la misma fila.
+
+    En memoria no hay transacciones: se comprueba que cada flujo bloquea lo que
+    tiene que bloquear, y que decide con lo que lee YA bloqueado. El bloqueo de
+    verdad lo prueba el test del repositorio contra PostgreSQL.
+    """
+
+    @pytest.fixture
+    def comp_uow(self):
+        return CompetitionInMemoryUoW()
+
+    @pytest.fixture
+    def user_uow(self):
+        return UserInMemoryUoW()
+
+    async def _montaje(self, comp_uow, user_uow, plazas=6):
+        creador = await _usuario(user_uow, "creador@test.com")
+        invitado = await _usuario(user_uow, "invitado@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=plazas)
+        invitacion = await _pendiente(comp_uow, comp.id, creador, invitado)
+        return creador, invitado, comp, invitacion
+
+    async def test_r1_invitar_bloquea_la_competicion(self, comp_uow, user_uow):
+        creador = await _usuario(user_uow, "creador@test.com")
+        otro = await _usuario(user_uow, "otro@test.com")
+        comp = await _competicion(comp_uow, creador, plazas=6)
+        comp_uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=comp_uow.competitions.find_by_id_for_update
+        )
+
+        await SendInvitationByUserIdUseCase(comp_uow, user_uow).execute(
+            SendInvitationByUserIdRequestDTO(
+                competition_id=comp.id, inviter_id=creador.id.value, invitee_user_id=otro.id.value
+            )
+        )
+        await SendInvitationByEmailUseCase(comp_uow, user_uow).execute(
+            SendInvitationByEmailRequestDTO(
+                competition_id=comp.id, inviter_id=creador.id.value, invitee_email="x@test.com"
+            )
+        )
+
+        assert comp_uow.competitions.find_by_id_for_update.await_count == 2
+
+    async def test_r2_retirar_bloquea_competicion_e_invitacion(self, comp_uow, user_uow):
+        creador, _, _, invitacion = await self._montaje(comp_uow, user_uow)
+        comp_uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=comp_uow.competitions.find_by_id_for_update
+        )
+        comp_uow.invitations.find_by_id_for_update = AsyncMock(
+            wraps=comp_uow.invitations.find_by_id_for_update
+        )
+
+        await CancelInvitationUseCase(comp_uow).execute(invitacion.id.value, creador.id.value)
+
+        comp_uow.competitions.find_by_id_for_update.assert_awaited()
+        comp_uow.invitations.find_by_id_for_update.assert_awaited()
+
+    async def test_r3_retirar_decide_con_lo_leido_bloqueado(self, comp_uow, user_uow):
+        """La aceptaron entre leerla y bloquearla: no se retira."""
+        creador, _, _, invitacion = await self._montaje(comp_uow, user_uow)
+        real = comp_uow.invitations.find_by_id_for_update
+
+        async def aceptada_entre_medias(invitation_id):
+            leida = await real(invitation_id)
+            leida.accept()
+            return leida
+
+        comp_uow.invitations.find_by_id_for_update = aceptada_entre_medias
+
+        with pytest.raises(InvalidInvitationStatusViolation):
+            await CancelInvitationUseCase(comp_uow).execute(invitacion.id.value, creador.id.value)
+
+        assert await _estado(comp_uow, invitacion) == InvitationStatus.ACCEPTED
+
+    async def test_r4_aceptar_decide_con_lo_leido_bloqueado(self, comp_uow, user_uow):
+        """La retiraron entre la primera lectura y el bloqueo: no se entra."""
+        _, invitado, comp, invitacion = await self._montaje(comp_uow, user_uow)
+        real = comp_uow.invitations.find_by_id_for_update
+
+        async def retirada_entre_medias(invitation_id):
+            leida = await real(invitation_id)
+            leida.cancel()
+            return leida
+
+        comp_uow.invitations.find_by_id_for_update = retirada_entre_medias
+
+        with pytest.raises(InvalidInvitationStatusViolation):
+            await RespondToInvitationUseCase(comp_uow, user_uow).execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitacion.id.value, user_id=invitado.id.value, action="ACCEPT"
+                )
+            )
+
+        async with comp_uow:
+            assert (
+                await comp_uow.enrollments.find_by_user_and_competition(
+                    invitado.id, CompetitionId(comp.id)
+                )
+                is None
+            )
+
+    async def test_r5_rechazar_decide_con_lo_leido_bloqueado(self, comp_uow, user_uow):
+        """La retiraron entre medias: rechazar no la pisa."""
+        _, invitado, _, invitacion = await self._montaje(comp_uow, user_uow)
+        real = comp_uow.invitations.find_by_id_for_update
+
+        async def retirada_entre_medias(invitation_id):
+            leida = await real(invitation_id)
+            leida.cancel()
+            return leida
+
+        comp_uow.invitations.find_by_id_for_update = retirada_entre_medias
+
+        with pytest.raises(InvalidInvitationStatusViolation):
+            await RespondToInvitationUseCase(comp_uow, user_uow).execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitacion.id.value, user_id=invitado.id.value, action="DECLINE"
+                )
+            )
+
+        assert await _estado(comp_uow, invitacion) == InvitationStatus.CANCELLED

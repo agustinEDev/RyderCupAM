@@ -30,6 +30,19 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
     async def find_by_id(self, invitation_id: InvitationId) -> Invitation | None:
         return await self._session.get(Invitation, invitation_id)
 
+    async def find_by_id_for_update(self, invitation_id: InvitationId) -> Invitation | None:
+        # `populate_existing`: sin el, SQLAlchemy devuelve el objeto que la sesion
+        # ya tenia, con el estado de antes del bloqueo (mismo patron que las
+        # competiciones, BE #375)
+        stmt = (
+            select(Invitation)
+            .where(Invitation._id == invitation_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def find_by_competition(
         self,
         competition_id: CompetitionId,
