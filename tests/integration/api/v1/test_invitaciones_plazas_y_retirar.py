@@ -126,6 +126,9 @@ class TestPlazas:
 
         assert respuesta.status_code == 409, respuesta.text
         assert respuesta.json()["error_code"] == "COMPETITION_FULL"
+        # Con un texto fijo, sin datos internos: el de la excepción llevaba el id
+        # de la competición y los recuentos (CodeQL en la #488)
+        assert comp["id"] not in respuesta.json()["detail"]
 
     async def test_la_que_llena_la_ultima_plaza_deja_sin_plaza_a_las_demas(
         self, client: AsyncClient

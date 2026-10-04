@@ -84,6 +84,10 @@ def _validate_status_filter(status_filter: str | None) -> str | None:
 
 
 logger = logging.getLogger(__name__)
+# Lo que se dice al invitar sin plazas (BE #359). La pantalla lo traduce por el
+# `error_code`; esto es para quien lea la API
+SIN_PLAZAS = "The competition is full: there are no places left to invite."
+
 router = APIRouter()
 
 
@@ -158,10 +162,11 @@ async def send_invitation_by_user_id(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
         # Sin plazas no se invita (BE #359): con su codigo en la raiz, para que
-        # la pantalla diga por que en su idioma
+        # la pantalla diga por que en su idioma. Con un texto fijo y no el de la
+        # excepcion, que lleva el id de la competicion y los recuentos (CodeQL)
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"detail": str(e), "error_code": e.error_code},
+            content={"detail": SIN_PLAZAS, "error_code": e.error_code},
         )
 
 
@@ -202,10 +207,11 @@ async def send_invitation_by_email(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
         # Sin plazas no se invita (BE #359): con su codigo en la raiz, para que
-        # la pantalla diga por que en su idioma
+        # la pantalla diga por que en su idioma. Con un texto fijo y no el de la
+        # excepcion, que lleva el id de la competicion y los recuentos (CodeQL)
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"detail": str(e), "error_code": e.error_code},
+            content={"detail": SIN_PLAZAS, "error_code": e.error_code},
         )
 
 
