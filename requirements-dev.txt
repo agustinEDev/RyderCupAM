@@ -67,7 +67,7 @@ pip-audit==2.10.1
 
 # msgpack - Serialización binaria (dependencia transitiva de pip-audit > cachecontrol)
 # Fijada explícitamente para resolver SNYK-PYTHON-MSGPACK-17391445 (Use After Free)
-msgpack==1.2.2
+msgpack==1.2.3
 
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
 # que a su vez entra con las herramientas de auditoría: ya no existe en producción)
