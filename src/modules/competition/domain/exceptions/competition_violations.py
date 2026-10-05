@@ -167,16 +167,18 @@ class InvalidInvitationStatusViolation(BusinessRuleViolation):
 
 
 class InvitationNoRoomViolation(InvalidInvitationStatusViolation):
-    """La invitacion se quedo sin plaza al cerrarse la inscripcion (#710).
+    """La invitacion se quedo sin plaza: al cerrarse la inscripcion (#710) o al
+    ocuparse la ultima plaza (BE #359).
 
     Reabrir no la revive, asi que el motivo tiene que ser cierto con la
-    competicion cerrada o reabierta: decia «la inscripción está cerrada» con
-    ella ACTIVE otra vez (BE #385). Hija de la de estado, para que quien ya la
-    capture no note nada.
+    competicion cerrada, reabierta o llena: decia «la inscripción está cerrada»
+    con ella ACTIVE otra vez (BE #385), y despues «al cerrarse la inscripción»
+    cuando lo que paso es que se lleno. Hija de la de estado, para que quien ya
+    la capture no note nada.
     """
 
     error_code = "INVITATION_NO_ROOM"
-    MENSAJE = "Esta invitación se quedó sin plaza al cerrarse la inscripción"
+    MENSAJE = "Esta invitación se quedó sin plaza"
 
     def __init__(self) -> None:
         super().__init__(self.MENSAJE)
@@ -201,6 +203,15 @@ class AlreadyEnrolledInvitationViolation(BusinessRuleViolation):
 
 
 class InvitationRateLimitViolation(BusinessRuleViolation):
-    """Lanzada cuando se excede el limite de invitaciones por hora para una competicion."""
+    """Lanzada cuando se excede el limite de invitaciones por hora para una competicion.
 
-    pass
+    Con su codigo y el limite que se aplica, para que la pantalla diga cuantas
+    se pueden enviar por hora en su idioma: el 429 generico decia «espera un
+    minuto» con un freno que es de una hora.
+    """
+
+    error_code = "INVITATION_RATE_LIMIT"
+
+    def __init__(self, message: str, limit: int) -> None:
+        super().__init__(message)
+        self.limit = limit

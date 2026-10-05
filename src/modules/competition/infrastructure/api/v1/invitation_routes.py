@@ -87,6 +87,17 @@ logger = logging.getLogger(__name__)
 # Lo que se dice al invitar sin plazas (BE #359). La pantalla lo traduce por el
 # `error_code`; esto es para quien lea la API
 SIN_PLAZAS = "The competition is full: there are no places left to invite."
+# Y al agotar el freno por hora: el texto de la excepcion lleva el id de la
+# competicion. La pantalla lo dice con el `limit`, en su idioma
+FRENO_POR_HORA = "Too many invitations sent in the last hour for this competition."
+
+
+def _freno_por_hora(e: InvitationRateLimitViolation) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": FRENO_POR_HORA, "error_code": e.error_code, "limit": e.limit},
+    )
+
 
 router = APIRouter()
 
@@ -157,7 +168,7 @@ async def send_invitation_by_user_id(
     except DuplicateInvitationViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
+        return _freno_por_hora(e)
     except InvitationCompetitionStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
@@ -202,7 +213,7 @@ async def send_invitation_by_email(
     except DuplicateInvitationViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
+        return _freno_por_hora(e)
     except InvitationCompetitionStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
