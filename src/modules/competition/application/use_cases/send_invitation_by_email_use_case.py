@@ -77,15 +77,6 @@ class SendInvitationByEmailUseCase:
             # 3. Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
 
-            # 3b. Validar rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora)
-            one_hour_ago = datetime.now() - timedelta(hours=1)
-            recent_invitations = await self._uow.invitations.count_by_competition(
-                competition_id, since=one_hour_ago
-            )
-            CompetitionPolicy.validate_invitation_rate(
-                recent_invitations, competition.max_players, competition_id
-            )
-
             # 4. Buscar user por email (puede no existir)
             invitee_user_id = None
             invitee_name = None
@@ -125,6 +116,17 @@ class SendInvitationByEmailUseCase:
             )
             CompetitionPolicy.validate_capacity(
                 approved_count, competition.max_players, competition_id
+            )
+
+            # Rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora), despues
+            # de las plazas: una competicion llena con el freno agotado decia
+            # «espera» cuando lo cierto es que ya no cabe nadie
+            one_hour_ago = datetime.now() - timedelta(hours=1)
+            recent_invitations = await self._uow.invitations.count_by_competition(
+                competition_id, since=one_hour_ago
+            )
+            CompetitionPolicy.validate_invitation_rate(
+                recent_invitations, competition.max_players, competition_id
             )
 
             # 6. Verificar no invitation PENDING duplicada

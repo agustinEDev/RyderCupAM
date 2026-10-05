@@ -268,7 +268,8 @@ class Invitation:
     def reject_for_no_room(self) -> None:
         """Rechaza la invitacion por falta de plazas (PENDING -> NO_ROOM, #710).
 
-        La rechaza la aplicacion al cerrarse la inscripcion, no el invitado.
+        La rechaza la aplicacion, no el invitado: al cerrarse la inscripcion o al
+        ocuparse la ultima plaza (BE #359).
         """
         if not self._status.can_transition_to(InvitationStatus.NO_ROOM):
             raise InvalidInvitationStatusViolation(
