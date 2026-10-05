@@ -25,7 +25,7 @@ uvicorn[standard]==0.54.0
 
 # python-dotenv - Utilidad para cargar variables de entorno desde un fichero .env
 # Actualizado a 1.2.2 para resolver CVE-2026-28684 (Symlink Attack)
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 
 
 # ================================
@@ -34,7 +34,7 @@ python-dotenv==1.2.3
 
 # SQLAlchemy - El ORM (Object-Relational Mapper) más potente de Python
 # Permite interactuar con la base de datos usando objetos Python en lugar de SQL
-sqlalchemy==2.1.1
+sqlalchemy==2.1.2
 
 # psycopg2-binary - Adaptador (driver) para conectar SQLAlchemy con PostgreSQL
 # Es la librería puente entre nuestra aplicación y la base de datos
@@ -66,7 +66,7 @@ bcrypt==5.0.0
 # (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
 # Actualizado a 2.13.0 para resolver:
 # - PYSEC-2026-175, -176, -177, -178, -179 (Improper Verification of Cryptographic Signature)
-PyJWT==2.15.0
+PyJWT==2.15.1
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
@@ -108,7 +108,7 @@ urllib3==2.8.0
 # - CVE-2026-69247 (fixed in 50.0.0)
 # - CVE-2026-69248 (fixed in 49.0.0)
 # - CVE-2026-69249 (fixed in 49.0.0)
-cryptography==50.0.1
+cryptography==50.0.2
 
 # setuptools - Build system y package installer
 # Nadie lo declara como dependencia en producción: los paquetes que lo piden lo hacen desde
