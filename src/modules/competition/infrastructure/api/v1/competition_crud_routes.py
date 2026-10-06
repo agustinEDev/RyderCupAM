@@ -15,6 +15,7 @@ from src.config.dependencies import (
     get_list_competitions_use_case,
     get_uow,
     get_update_competition_use_case,
+    get_update_stroke_play_settings_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
@@ -22,6 +23,8 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
     DeleteCompetitionRequestDTO,
+    StrokePlaySettingsDTO,
+    StrokePlaySettingsResponseDTO,
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
@@ -54,6 +57,10 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     DatesLeaveSessionsOutError,
     UpdateCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
+    UpdateStrokePlaySettingsUseCase,
+)
+from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -313,6 +320,7 @@ async def create_competition(
                 team_2_name=enriched_dto.team_2_name,
                 tournament_type=enriched_dto.tournament_type,
                 modality=enriched_dto.modality,
+                stroke_play=enriched_dto.stroke_play,
                 is_creator=True,
                 enrolled_count=0,
                 created_at=enriched_dto.created_at,
@@ -589,4 +597,38 @@ async def delete_competition(
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionNotDeletableError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.patch(
+    "/{competition_id}/stroke-play",
+    response_model=StrokePlaySettingsResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Cambiar los ajustes del stroke play",
+    description=(
+        "Categorías, jornadas por jugador y regla de la general de un Stableford o un "
+        "Medal (#251). Lo que no llega no se toca; una lista de límites vacía quita las "
+        "categorías. Solo el creador o un admin, y hasta que la competición empieza "
+        "(DRAFT, ACTIVE o CLOSED). En una Ryder Cup es un 400."
+    ),
+)
+async def update_stroke_play_settings(
+    competition_id: UUID,
+    request: StrokePlaySettingsDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: UpdateStrokePlaySettingsUseCase = Depends(get_update_stroke_play_settings_use_case),
+):
+    """Cambia los ajustes del stroke play de una competición."""
+    try:
+        return await use_case.execute(
+            competition_id,
+            request,
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

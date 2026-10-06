@@ -5,8 +5,9 @@ Esta es el agregado raíz del módulo competition.
 Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from datetime import datetime
+from decimal import Decimal
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -40,8 +41,10 @@ from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
 from ..value_objects.location import Location
+from ..value_objects.overall_standing import OverallStanding
 from ..value_objects.ryder_cup_setup import CaptainOnWrongTeamError, RyderCupSetup
 from ..value_objects.setup_mode import SetupMode
+from ..value_objects.stroke_play_setup import StrokePlaySetup
 from ..value_objects.team_assignment import TeamAssignment
 from ..value_objects.tournament_type import TournamentType
 from ..value_objects.visibility import Visibility
@@ -68,6 +71,12 @@ class GolfCoursesOutsideLocationError(ValueError):
     """La ubicación nueva dejaría campos de la competición fuera de sus países."""
 
     pass
+
+
+RYDER_SIN_STROKE_PLAY = (
+    "Una Ryder Cup no tiene categorías, jornadas por jugador ni clasificación general de "
+    "stroke play"
+)
 
 
 class TournamentTypeError(ValueError):
@@ -160,6 +169,9 @@ class Competition:
         visibility: Visibility = Visibility.PRIVATE,
         setup_mode: SetupMode | None = None,
         tournament_type: TournamentType = TournamentType.RYDER_CUP,
+        category_limits: Sequence[Decimal] | None = None,
+        max_matchdays_per_player: int | None = None,
+        overall_standing: OverallStanding | None = None,
     ):
         # Validaciones de invariantes. Equipos, modo de montaje, reparto y
         # capitanes son de la Ryder Cup: viven en su pieza, y un torneo de otro
@@ -168,6 +180,12 @@ class Competition:
         self._ryder_cup: RyderCupSetup | None = self._ryder_cup_for(
             tournament_type, team_1_name, team_2_name, setup_mode, team_assignment
         )
+        # Y lo que es solo del stroke play, en la suya (6 oct 2026)
+        self._stroke_play: StrokePlaySetup | None = self._stroke_play_for(
+            tournament_type, category_limits, max_matchdays_per_player, overall_standing
+        )
+        if self._stroke_play is not None:
+            self._stroke_play.check_fits_in(self._days_of(dates))
         self._validate_max_players(max_players)
         if max_playing_handicap is not None:
             self._validate_max_playing_handicap(max_playing_handicap)
@@ -209,6 +227,9 @@ class Competition:
         visibility: Visibility = Visibility.PRIVATE,
         setup_mode: SetupMode | None = None,
         tournament_type: TournamentType = TournamentType.RYDER_CUP,
+        category_limits: Sequence[Decimal] | None = None,
+        max_matchdays_per_player: int | None = None,
+        overall_standing: OverallStanding | None = None,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -231,6 +252,9 @@ class Competition:
             visibility=visibility,
             setup_mode=setup_mode,
             tournament_type=tournament_type,
+            category_limits=category_limits,
+            max_matchdays_per_player=max_matchdays_per_player,
+            overall_standing=overall_standing,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -270,6 +294,34 @@ class Competition:
                 f"Un {tournament_type.label} no tiene modo de montaje: no hay partidos entre equipos"
             )
         return None
+
+    @staticmethod
+    def _stroke_play_for(
+        tournament_type: TournamentType,
+        category_limits: Sequence[Decimal] | None,
+        max_matchdays_per_player: int | None,
+        overall_standing: OverallStanding | None,
+    ) -> StrokePlaySetup | None:
+        """
+        La pieza del stroke play, o None si el torneo es una Ryder.
+
+        Como con los equipos al revés: a una Ryder no se le tira en silencio lo
+        que trae de stroke play, se le dice por qué no.
+        """
+        if not tournament_type.has_teams:
+            return StrokePlaySetup.create(
+                category_limits, max_matchdays_per_player, overall_standing
+            )
+        if any(
+            v is not None for v in (category_limits, max_matchdays_per_player, overall_standing)
+        ):
+            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
+        return None
+
+    @staticmethod
+    def _days_of(dates: DateRange) -> int:
+        """Los días que dura el torneo, contando el primero y el último."""
+        return dates.duration_days() + 1
 
     @staticmethod
     def _validate_max_players(max_players: int) -> None:
@@ -335,6 +387,47 @@ class Competition:
         if self._ryder_cup is None:
             raise TournamentTypeError(f"Un {self._tournament_type.label} no tiene equipos")
         return self._ryder_cup
+
+    @property
+    def stroke_play(self) -> StrokePlaySetup | None:
+        """Categorías, jornadas por jugador y regla de la general: solo del stroke play."""
+        return self._stroke_play
+
+    def update_stroke_play(
+        self,
+        category_limits: Sequence[Decimal] | None = None,
+        max_matchdays_per_player: int | None = None,
+        overall_standing: OverallStanding | None = None,
+    ) -> StrokePlaySetup:
+        """
+        Cambia los ajustes del stroke play; None es «no lo toques».
+
+        **Hasta que la competición empieza** (DRAFT, ACTIVE y CLOSED): al
+        empezar se fija la categoría de cada jugador, y de ahí en adelante los
+        límites ya no pueden moverse. Es la misma ventana que el hándicap
+        personalizado, que es lo otro de lo que sale la categoría.
+
+        Returns:
+            Los ajustes como quedan
+
+        Raises:
+            TournamentTypeError: Si es una Ryder
+            CompetitionStateError: Si ya ha empezado
+            StrokePlaySettingsError: Si los ajustes no tienen sentido
+        """
+        if self._stroke_play is None:
+            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
+        if not self._status.allows_handicap_edits():
+            raise CompetitionStateError(
+                "Los ajustes del stroke play se cambian hasta que empieza la competición"
+            )
+        nuevos = self._stroke_play.with_changes(
+            category_limits, max_matchdays_per_player, overall_standing
+        )
+        nuevos.check_fits_in(self._days_of(self._dates))
+        self._stroke_play = nuevos
+        self._updated_at = datetime.now()
+        return nuevos
 
     @property
     def play_mode(self) -> PlayMode:
@@ -899,6 +992,11 @@ class Competition:
 
         if name is not None:
             self._name = name
+
+        if dates is not None and self._stroke_play is not None:
+            # Antes de cambiar nada: acortar el torneo no puede dejar fuera
+            # jornadas que un jugador tiene derecho a jugar
+            self._stroke_play.check_fits_in(self._days_of(dates))
 
         if dates is not None:
             # Mover las fechas ya no puede invalidar la apertura: son dias de

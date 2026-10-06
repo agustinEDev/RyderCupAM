@@ -22,7 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import composite, relationship
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -81,6 +81,7 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.domain.value_objects.ryder_cup_setup import RyderCupSetup
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.competition.domain.value_objects.team_assignment_id import (
     TeamAssignmentId,
 )
@@ -851,6 +852,10 @@ competitions_table = Table(
     Column("setup_mode", SetupModeDecorator, nullable=True),
     # Qué torneo es: de él sale la modalidad. Las de antes, todas Ryder Cup
     Column("tournament_type", TournamentTypeDecorator, nullable=False, server_default="RYDER_CUP"),
+    # Lo que es solo del stroke play (6 oct 2026); vacío en una Ryder Cup
+    Column("stroke_category_limits", ARRAY(Numeric(precision=4, scale=1)), nullable=True),
+    Column("stroke_max_matchdays_per_player", Integer, nullable=True),
+    Column("stroke_overall_standing", String(20), nullable=True),
     # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
     Column(
         "team_a_captain_id",
@@ -1231,6 +1236,19 @@ def start_competition_mappers():
                     "_rc_team_b_captain_id",
                     "_rc_team_a_vice_captain_id",
                     "_rc_team_b_vice_captain_id",
+                ),
+                # Y lo que es solo del stroke play, en la suya (6 oct 2026). Igual de
+                # inmutable, por lo mismo
+                "_sp_category_limits": competitions_table.c.stroke_category_limits,
+                "_sp_max_matchdays_per_player": (
+                    competitions_table.c.stroke_max_matchdays_per_player
+                ),
+                "_sp_overall_standing": competitions_table.c.stroke_overall_standing,
+                "_stroke_play": composite(
+                    StrokePlaySetup.from_columns,
+                    "_sp_category_limits",
+                    "_sp_max_matchdays_per_player",
+                    "_sp_overall_standing",
                 ),
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,

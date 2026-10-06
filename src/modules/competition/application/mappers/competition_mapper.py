@@ -7,11 +7,13 @@ from src.modules.competition.application.dto.competition_dto import (
     CompetitionResponseDTO,
     CountryResponseDTO,
     CreatorDTO,
+    StrokePlaySettingsResponseDTO,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -172,7 +174,21 @@ class CompetitionDTOMapper:
             "team_b_vice_captain_id": (
                 valor(ryder_cup.team_b_vice_captain_id) if ryder_cup else None
             ),
+            "stroke_play": (
+                CompetitionDTOMapper.to_stroke_play_dto(competition.stroke_play)
+                if competition.stroke_play
+                else None
+            ),
         }
+
+    @staticmethod
+    def to_stroke_play_dto(ajustes: StrokePlaySetup) -> StrokePlaySettingsResponseDTO:
+        """Los ajustes del stroke play de una competición (#251)."""
+        return StrokePlaySettingsResponseDTO(
+            category_limits=list(ajustes.category_limits),
+            max_matchdays_per_player=ajustes.max_matchdays_per_player,
+            overall_standing=str(ajustes.overall_standing),
+        )
 
     @staticmethod
     def to_captaincy_dto(competition: Competition) -> CaptaincyResponseDTO:

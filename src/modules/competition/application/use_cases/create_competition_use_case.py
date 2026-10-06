@@ -144,6 +144,8 @@ class CreateCompetitionUseCase:
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
                 tournament_type=request.tournament_type,
+                # Solo de un Stableford o un Medal; a una Ryder se le rechaza
+                **self._ajustes_de_stroke_play(request),
             )
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
@@ -205,3 +207,14 @@ class CreateCompetitionUseCase:
             created_at=competition.created_at,
             updated_at=competition.updated_at,
         )
+
+    @staticmethod
+    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict:
+        """Lo que llega de stroke play, tal cual: la pieza pone los valores por defecto."""
+        if request.stroke_play is None:
+            return {}
+        return {
+            "category_limits": request.stroke_play.category_limits,
+            "max_matchdays_per_player": request.stroke_play.max_matchdays_per_player,
+            "overall_standing": request.stroke_play.overall_standing,
+        }
