@@ -15,6 +15,9 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    al_ocupar_una_plaza,
+)
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
 )
@@ -125,6 +128,11 @@ class HandleEnrollmentUseCase:
                     ) from e
                 await exigir_genero(self._user_repo, enrollment.user_id, es_quien_se_apunta=False)
                 enrollment.approve()
+                # Si era la última plaza, las invitaciones pendientes se quedan sin
+                # ella ya (BE #359)
+                await al_ocupar_una_plaza(
+                    self._uow, enrollment.competition_id, approved_count, competition.max_players
+                )
             elif request.action == "REJECT":
                 enrollment.reject()
             else:

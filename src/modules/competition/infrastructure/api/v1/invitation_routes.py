@@ -7,11 +7,12 @@ Endpoints FastAPI para gestion de invitaciones siguiendo Clean Architecture.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from src.config.dependencies import (
+    get_cancel_invitation_use_case,
     get_current_user,
     get_list_competition_invitations_use_case,
     get_list_my_invitations_use_case,
@@ -34,6 +35,9 @@ from src.modules.competition.application.exceptions import (
     NotInviteeError,
 )
 from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
+from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
+    CancelInvitationUseCase,
+)
 from src.modules.competition.application.use_cases.list_competition_invitations_use_case import (
     ListCompetitionInvitationsUseCase,
 )
@@ -80,6 +84,21 @@ def _validate_status_filter(status_filter: str | None) -> str | None:
 
 
 logger = logging.getLogger(__name__)
+# Lo que se dice al invitar sin plazas (BE #359). La pantalla lo traduce por el
+# `error_code`; esto es para quien lea la API
+SIN_PLAZAS = "The competition is full: there are no places left to invite."
+# Y al agotar el freno por hora: el texto de la excepcion lleva el id de la
+# competicion. La pantalla lo dice con el `limit`, en su idioma
+FRENO_POR_HORA = "Too many invitations sent in the last hour for this competition."
+
+
+def _freno_por_hora(e: InvitationRateLimitViolation) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": FRENO_POR_HORA, "error_code": e.error_code, "limit": e.limit},
+    )
+
+
 router = APIRouter()
 
 
@@ -149,9 +168,17 @@ async def send_invitation_by_user_id(
     except DuplicateInvitationViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
+        return _freno_por_hora(e)
     except InvitationCompetitionStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except CompetitionFullViolation as e:
+        # Sin plazas no se invita (BE #359): con su codigo en la raiz, para que
+        # la pantalla diga por que en su idioma. Con un texto fijo y no el de la
+        # excepcion, que lleva el id de la competicion y los recuentos (CodeQL)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": SIN_PLAZAS, "error_code": e.error_code},
+        )
 
 
 @router.post(
@@ -186,9 +213,17 @@ async def send_invitation_by_email(
     except DuplicateInvitationViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e)) from e
+        return _freno_por_hora(e)
     except InvitationCompetitionStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except CompetitionFullViolation as e:
+        # Sin plazas no se invita (BE #359): con su codigo en la raiz, para que
+        # la pantalla diga por que en su idioma. Con un texto fijo y no el de la
+        # excepcion, que lleva el id de la competicion y los recuentos (CodeQL)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": SIN_PLAZAS, "error_code": e.error_code},
+        )
 
 
 @router.get(
@@ -256,6 +291,31 @@ async def respond_to_invitation(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post(
+    "/invitations/{invitation_id}/cancel",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cancel invitation",
+    description=(
+        "Withdraw a pending invitation. Only the competition creator, whoever sent it "
+        "or an admin. The invitee is not notified (BE #359)."
+    ),
+)
+async def cancel_invitation(
+    invitation_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: CancelInvitationUseCase = Depends(get_cancel_invitation_use_case),
+) -> Response:
+    try:
+        await use_case.execute(invitation_id, current_user.id, is_admin=current_user.is_admin)
+    except InvitationNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except InvalidInvitationStatusViolation as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

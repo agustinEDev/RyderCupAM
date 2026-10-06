@@ -268,7 +268,8 @@ class Invitation:
     def reject_for_no_room(self) -> None:
         """Rechaza la invitacion por falta de plazas (PENDING -> NO_ROOM, #710).
 
-        La rechaza la aplicacion al cerrarse la inscripcion, no el invitado.
+        La rechaza la aplicacion, no el invitado: al cerrarse la inscripcion o al
+        ocuparse la ultima plaza (BE #359).
         """
         if not self._status.can_transition_to(InvitationStatus.NO_ROOM):
             raise InvalidInvitationStatusViolation(
@@ -276,6 +277,21 @@ class Invitation:
             )
         now = datetime.now()
         self._status = InvitationStatus.NO_ROOM
+        self._responded_at = now
+        self._updated_at = now
+
+    def cancel(self) -> None:
+        """La retira quien invita (PENDING -> CANCELLED, BE #359).
+
+        Sin aviso al invitado: en sus invitaciones pasa a cancelada y ya no se
+        puede aceptar.
+        """
+        if not self._status.can_transition_to(InvitationStatus.CANCELLED):
+            raise InvalidInvitationStatusViolation(
+                f"Cannot cancel an invitation in status {self._status.value}."
+            )
+        now = datetime.now()
+        self._status = InvitationStatus.CANCELLED
         self._responded_at = now
         self._updated_at = now
 

@@ -62,7 +62,10 @@ class SendInvitationByUserIdUseCase:
             invitee_user_id = UserId(request.invitee_user_id)
 
             # 1. Buscar competition
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Con la fila bloqueada (BE #359): una inscripcion que llena la ultima
+            # plaza entre comprobar el cupo y guardar dejaba una pendiente nueva en
+            # un torneo lleno. Mismo orden que las inscripciones
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(f"Competition not found: {request.competition_id}")
 
@@ -74,15 +77,6 @@ class SendInvitationByUserIdUseCase:
 
             # 3. Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
-
-            # 3b. Validar rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora)
-            one_hour_ago = datetime.now() - timedelta(hours=1)
-            recent_invitations = await self._uow.invitations.count_by_competition(
-                competition_id, since=one_hour_ago
-            )
-            CompetitionPolicy.validate_invitation_rate(
-                recent_invitations, competition.max_players, competition_id
-            )
 
             # 4. Buscar invitee user
             async with self._user_uow:
@@ -105,6 +99,29 @@ class SendInvitationByUserIdUseCase:
                     f"User {request.invitee_user_id} is already enrolled in competition "
                     f"{request.competition_id}."
                 )
+
+            # Solo mientras queden plazas (BE #359): libres = max_players menos
+            # aprobadas. Antes se invitaba a un torneo lleno y quien llegaba tarde
+            # se enteraba al aceptar, sin haber hecho nada mal. Las pendientes no
+            # ocupan plaza: cuando una acepta y llena la ultima, las demas se quedan
+            # sin plaza (ver RespondToInvitationUseCase)
+            approved_count = await self._uow.enrollments.count_approved_by_competition(
+                competition_id
+            )
+            CompetitionPolicy.validate_capacity(
+                approved_count, competition.max_players, competition_id
+            )
+
+            # Rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora), despues
+            # de las plazas: una competicion llena con el freno agotado decia
+            # «espera» cuando lo cierto es que ya no cabe nadie
+            one_hour_ago = datetime.now() - timedelta(hours=1)
+            recent_invitations = await self._uow.invitations.count_by_competition(
+                competition_id, since=one_hour_ago
+            )
+            CompetitionPolicy.validate_invitation_rate(
+                recent_invitations, competition.max_players, competition_id
+            )
 
             # 7. Verificar no invitation PENDING duplicada
             existing_invitation = await self._uow.invitations.find_pending_by_email_and_competition(

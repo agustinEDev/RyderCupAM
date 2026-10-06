@@ -9,15 +9,23 @@ from src.modules.competition.application.dto.enrollment_dto import (
     DirectEnrollPlayerResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionFullError,
     CompetitionNotFoundError,
     InvalidTeeColorError,
     NotCreatorError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    al_ocupar_una_plaza,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.exceptions.competition_violations import (
+    CompetitionFullViolation,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
@@ -92,6 +100,7 @@ class DirectEnrollPlayerUseCase:
             NotCreatorError: Si el solicitante no es el creador
             CompetitionNotActiveError: Si no esta activa
             AlreadyEnrolledError: Si el jugador ya esta inscrito
+            CompetitionFullError: Si no quedan plazas
         """
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
@@ -128,10 +137,25 @@ class DirectEnrollPlayerUseCase:
                     "El jugador ya tiene una inscripcion en esta competicion"
                 )
 
+            # 5. Con plaza: la misma regla que aceptar una invitación y aprobar una
+            # solicitud. Sin ella, el organizador podía pasar del cupo del torneo
+            # y el sorteo y los partidos trabajaban con más jugadores (BE #325)
+            approved_count = await self._uow.enrollments.count_approved_by_competition(
+                competition_id
+            )
+            try:
+                CompetitionPolicy.validate_capacity(
+                    approved_count, competition.max_players, competition_id
+                )
+            except CompetitionFullViolation as e:
+                raise CompetitionFullError(
+                    f"La competición está completa: {competition.max_players} plazas ocupadas."
+                ) from e
+
             # Sin género no se sabe desde qué barras juega (#710)
             await exigir_genero(self._user_repo, player_id, es_quien_se_apunta=False)
 
-            # 5. Crear enrollment con factory method (directamente APPROVED)
+            # 6. Crear enrollment con factory method (directamente APPROVED)
             try:
                 tee_color = TeeColor(request.tee_color) if request.tee_color else None
             except ValueError as e:
@@ -147,8 +171,14 @@ class DirectEnrollPlayerUseCase:
                 tee_color=tee_color,
             )
 
-            # 6. Persistir
+            # 7. Persistir
             await self._uow.enrollments.add(enrollment)
+
+            # Si era la última plaza, las invitaciones pendientes se quedan sin
+            # ella ya (BE #359)
+            await al_ocupar_una_plaza(
+                self._uow, competition_id, approved_count, competition.max_players
+            )
 
         # 8. Retornar DTO
         return DirectEnrollPlayerResponseDTO(

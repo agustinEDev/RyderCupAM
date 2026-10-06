@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.26.0] - 2026-10-06
+
+El cupo de jugadores se respeta en los tres caminos para entrar en una
+competición, y el organizador puede retirar una invitación. Va con el frontend
+**2.40.0**.
+
+**Notas de despliegue.** Sin migraciones: el estado nuevo `CANCELLED` cabe en la
+columna de siempre (`String(20)` sin CHECK). Los cambios de contrato son
+aditivos (un endpoint nuevo, un valor nuevo de estado, un 409 al invitar sin
+plazas, dos campos en el 429 del freno por hora) y `oasdiff` no marcó ninguna PR
+como `api-breaking`. El frontend de producción no puede retirar invitaciones, así
+que no verá ninguna `CANCELLED` hasta desplegar el suyo: la ventana es inocua. Orden de siempre: este primero,
+`/health`, y después el frontend. Probado en bloque en el Kind el 5 y el 6 oct,
+con usuarios desechables (organizador y jugadores) y peticiones simultáneas para
+las carreras de retirar contra aceptar y de la última plaza.
+
+### Added
+
+- **El organizador puede retirar una invitación pendiente** (#488, #359).
+  `POST /api/v1/invitations/{id}/cancel` → 204 y la invitación pasa a
+  `CANCELLED`, un estado final distinto de `DECLINED`. Pueden hacerlo el creador
+  de la competición, quien la envió o un admin; los demás reciben 403, una
+  invitación que no existe 404 y una ya contestada 409 (una caducada sin marcar
+  se guarda como `EXPIRED`). Al invitado no se le avisa.
+
+### Changed
+
+- **Solo se invita con plazas libres** (#488, #359). Plazas libres = cupo menos
+  inscripciones aprobadas; las invitaciones pendientes no ocupan plaza. Sin
+  plazas, invitar por id o por email responde 409 con
+  `error_code: COMPETITION_FULL` y un mensaje fijo, que la pantalla traduce.
+- **Al ocuparse la última plaza, las invitaciones pendientes pasan a
+  `NO_ROOM`** (#488), el estado que ya se usaba al cerrar inscripciones («Sin
+  plaza» en la app). Vale para los tres caminos que ocupan plaza: aceptar una
+  invitación, aprobar una solicitud e inscribir directamente. El motivo dice
+  ahora «Esta invitación se quedó sin plaza», sin dar por hecho que se cerrara
+  la inscripción (#496).
+- **El freno de invitaciones por hora dice qué es** (#496). Su 429 lleva
+  `error_code: INVITATION_RATE_LIMIT` y el `limit` que se aplica (el cupo de la
+  competición, con un techo de 100), con un texto fijo en vez del de la
+  excepción, que llevaba el id de la competición. Y se comprueba después de las
+  plazas: una competición llena con el freno agotado dice que está llena, no
+  «espera».
+
+### Fixed
+
+- **La inscripción directa respeta el cupo** (#487, #325): creaba la inscripción
+  aprobada sin mirar `max_players`. Ahora responde 400 con la competición llena,
+  como al aprobar una solicitud. Ninguna pantalla la usa hoy, pero el endpoint
+  está publicado.
+- **Retirar y aceptar a la vez ya no deja a un jugador inscrito con la
+  invitación retirada** (#488). Retirar, aceptar y rechazar bloquean la
+  competición y después la invitación antes de decidir, siempre en ese orden.
+  Enviar una invitación también bloquea la competición, pero ese bloqueo se
+  suelta antes de guardarla (#497, pendiente): una invitación enviada justo
+  cuando se ocupa la última plaza todavía puede quedar pendiente en una
+  competición llena, y al aceptarla se quedaría sin plaza.
+
 ## [2.25.0] - 2026-10-04
 
 El tipo de torneo (Stableford y Medal junto a la Ryder Cup, #251), un solo reparto

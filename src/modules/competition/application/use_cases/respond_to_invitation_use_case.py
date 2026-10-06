@@ -10,6 +10,9 @@ from src.modules.competition.application.exceptions import (
     NotInviteeError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.invitaciones_al_cerrar import (
+    al_ocupar_una_plaza,
+)
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -113,6 +116,14 @@ class RespondToInvitationUseCase:
             if not self._es_el_invitado(invitation, current_user_id, current_user_email):
                 raise NotInviteeError("You are not the invitee of this invitation.")
 
+            # Se decide con la invitacion releida con su fila bloqueada, y antes la
+            # competicion: el mismo orden que retirar. Sin bloqueo, aceptar y
+            # retirar a la vez leian las dos PENDING, y quedaba un inscrito con la
+            # invitacion retirada; o rechazar pisaba una retirada (CodeRabbit, #488)
+            if action == "ACCEPT":
+                await self._uow.competitions.find_by_id_for_update(invitation.competition_id)
+            invitation = await self._releer_pendiente(invitation_id, bloqueada=True)
+
             # Ejecutar accion
             if action == "ACCEPT":
                 enrollment_id, competition_name = await self._handle_accept(
@@ -124,13 +135,22 @@ class RespondToInvitationUseCase:
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
 
-    async def _releer_pendiente(self, invitation_id: InvitationId) -> Invitation:
+    async def _releer_pendiente(
+        self, invitation_id: InvitationId, bloqueada: bool = False
+    ) -> Invitation:
         """La invitacion de la fase 2, que tiene que seguir pendiente.
 
         El cierre pudo llegar entre las dos fases y dejarla sin plaza: se dice
-        con su codigo, no con el generico (revision local de la BE #385).
+        con su codigo, no con el generico (revision local de la BE #385). Con
+        `bloqueada`, releida con su fila bloqueada: es la lectura con la que se
+        decide (BE #359).
         """
-        invitation = await self._uow.invitations.find_by_id(invitation_id)
+        repo = self._uow.invitations
+        invitation = await (
+            repo.find_by_id_for_update(invitation_id)
+            if bloqueada
+            else repo.find_by_id(invitation_id)
+        )
         if invitation and invitation.status == InvitationStatus.NO_ROOM:
             raise InvitationNoRoomViolation()
         if not invitation or not invitation.is_pending():
@@ -186,6 +206,10 @@ class RespondToInvitationUseCase:
 
         await self._uow.enrollments.add(enrollment)
         await self._uow.invitations.update(invitation)
+
+        await al_ocupar_una_plaza(
+            self._uow, invitation.competition_id, approved_count, competition.max_players
+        )
 
         return enrollment.id.value, str(competition.name)
 

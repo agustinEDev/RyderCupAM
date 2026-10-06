@@ -283,7 +283,8 @@ class CompetitionPolicy:
             raise InvitationRateLimitViolation(
                 f"Competition {competition_id}: Too many invitations sent in the last hour "
                 f"({recent_invitations}/{limite}). "
-                f"Limit is {limite} invitations per hour."
+                f"Limit is {limite} invitations per hour.",
+                limit=limite,
             )
 
     @staticmethod
