@@ -12,6 +12,7 @@ import pytest
 
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     HandicapsDeLaCompeticion,
+    para_jugar_la_ryder,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -89,3 +90,14 @@ class TestHandicapsDeLaCompeticion:
 
         assert await HandicapsDeLaCompeticion.de([], repo) == {}
         repo.find_by_ids.assert_not_awaited()
+
+
+class TestParaJugarLaRyder:
+    """La Ryder juega con cero a quien no tiene hándicap: una regla, no tres copias."""
+
+    def test_sin_handicap_juega_con_cero(self):
+        assert para_jugar_la_ryder(None) == Decimal("0")
+
+    @pytest.mark.parametrize("handicap", [Decimal("14.2"), Decimal("0.0"), Decimal("-2.0")])
+    def test_con_handicap_juega_con_el_suyo(self, handicap):
+        assert para_jugar_la_ryder(handicap) == handicap

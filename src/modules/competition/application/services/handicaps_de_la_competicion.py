@@ -17,6 +17,16 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
+def para_jugar_la_ryder(handicap: Decimal | None) -> Decimal:
+    """
+    El hándicap con el que juega en la Ryder: el suyo, o cero si no tiene.
+
+    La Ryder siempre ha dejado jugar sin hándicap, como scratch. El stroke play
+    no: sin hándicap no hay categoría, y no deja empezar (RyderCupAM#251).
+    """
+    return handicap if handicap is not None else Decimal("0")
+
+
 class HandicapsDeLaCompeticion:
     """El hándicap con el que juega cada inscrito, o None si no tiene ninguno."""
 
@@ -31,7 +41,8 @@ class HandicapsDeLaCompeticion:
             user_repository: De donde sale el hándicap del perfil
 
         Returns:
-            Cada jugador con el hándicap que le cuenta, en el orden recibido
+            Cada jugador con el hándicap que le cuenta. Es un diccionario por
+            jugador: quien necesite el orden recorre sus inscripciones
         """
         inscripciones = list(enrollments)
         sin_propio = [e.user_id for e in inscripciones if e.custom_handicap is None]

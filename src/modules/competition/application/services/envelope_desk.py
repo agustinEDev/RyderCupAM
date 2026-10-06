@@ -20,6 +20,7 @@ from src.modules.competition.application.ports.competition_timezone import (
 )
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     HandicapsDeLaCompeticion,
+    para_jugar_la_ryder,
 )
 from src.modules.competition.application.services.team_roster import TeamRoster
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
@@ -231,10 +232,7 @@ class EnvelopeDesk:
         }
         de_los_jugadores = [inscripciones[uid] for uid in jugadores if uid in inscripciones]
         handicaps = await HandicapsDeLaCompeticion.de(de_los_jugadores, self._user_repo)
-        return [
-            (e.user_id, h if (h := handicaps[e.user_id]) is not None else Decimal("0"))
-            for e in de_los_jugadores
-        ]
+        return [(e.user_id, para_jugar_la_ryder(handicaps[e.user_id])) for e in de_los_jugadores]
 
     @staticmethod
     def comprobar_que_la_sesion_admite_sobres(ronda: Round) -> None:

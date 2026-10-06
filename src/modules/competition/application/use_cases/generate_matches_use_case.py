@@ -1,7 +1,6 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
 import asyncio
-import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -59,8 +58,6 @@ from src.shared.domain.services.playing_handicap_calculator import (
 )
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
-
-logger = logging.getLogger(__name__)
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -180,7 +177,7 @@ class GenerateMatchesUseCase:
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
         self._scoring_service = scoring_service or ScoringService()
-        self._handicap_service = handicap_service
+        self._refresco_rfeg = RefrescoRfeg(handicap_service, user_repository)
         self._match_players = MatchPlayersBuilder()
 
     async def execute(
@@ -562,10 +559,10 @@ class GenerateMatchesUseCase:
                 if user:
                     enrollment = enrollment_map.get(str(pid.value))
                     has_custom_handicap = (
-                        enrollment is not None and enrollment.custom_handicap is not None
+                        enrollment is not None and enrollment.has_custom_handicap()
                     )
                     if not has_custom_handicap and refrescar_handicap_rfeg:
-                        await RefrescoRfeg(self._handicap_service, self._user_repo).si_toca(user)
+                        await self._refresco_rfeg.si_toca(user)
                     if user.handicap is not None:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender

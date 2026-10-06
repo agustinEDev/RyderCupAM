@@ -11,10 +11,10 @@ Los capitanes no entran: nombrarlos ya los fijo en su equipo (RyderCupAm#320).
 """
 
 from collections.abc import Iterable
-from decimal import Decimal
 
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     HandicapsDeLaCompeticion,
+    para_jugar_la_ryder,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.services.snake_draft_service import PlayerForDraft
@@ -49,7 +49,7 @@ class DraftRoster:
         return [
             PlayerForDraft(
                 user_id=e.user_id,
-                handicap=h if (h := handicaps[e.user_id]) is not None else Decimal("0"),
+                handicap=para_jugar_la_ryder(handicaps[e.user_id]),
             )
             for e in entran
         ]
