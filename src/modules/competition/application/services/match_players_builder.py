@@ -99,13 +99,11 @@ class MatchPlayersBuilder:
 
         tee_rating = tee_ratings.get(tee_key)
 
-        # Handicap fallback: custom_handicap > user.handicap > 0
-        if enrollment and enrollment.custom_handicap is not None:
-            handicap_index = enrollment.custom_handicap
-        elif str(user_id.value) in user_handicap_map:
-            handicap_index = user_handicap_map[str(user_id.value)]
-        else:
-            handicap_index = Decimal("0")
+        # El que cuenta en la competición (el propio, si no el del perfil); la
+        # Ryder juega con cero si no hay ninguno
+        del_perfil = user_handicap_map.get(str(user_id.value))
+        que_cuenta = enrollment.handicap_que_cuenta(del_perfil) if enrollment else del_perfil
+        handicap_index = que_cuenta if que_cuenta is not None else Decimal("0")
 
         return tee_color, tee_gender, tee_rating, handicap_index
 

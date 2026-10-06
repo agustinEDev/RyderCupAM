@@ -226,6 +226,20 @@ class Enrollment:
         """Verifica si tiene equipo asignado."""
         return self._team_id is not None
 
+    def handicap_que_cuenta(self, del_perfil: Decimal | None) -> Decimal | None:
+        """
+        El hándicap con el que juega en esta competición (RyderCupAM#251).
+
+        El propio de la inscripción si el organizador le puso uno, y si no el de
+        su perfil. Sin ninguno, None: qué hacer entonces lo decide quien pregunta
+        (la Ryder juega con cero; el stroke play no deja empezar).
+
+        Args:
+            del_perfil: El hándicap del perfil del jugador, si lo tiene
+        """
+        # `is not None` y no `or`: un personalizado de 0,0 es un hándicap
+        return self._custom_handicap if self._custom_handicap is not None else del_perfil
+
     def has_custom_handicap(self) -> bool:
         """Verifica si tiene hándicap personalizado."""
         return self._custom_handicap is not None
