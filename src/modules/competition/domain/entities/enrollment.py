@@ -53,6 +53,7 @@ class Enrollment:
         tee_color: TeeColor | None = None,
         use_real_name: bool = True,
         fixed_handicap: Decimal | None = None,
+        fixed_category: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -73,6 +74,8 @@ class Enrollment:
         # El hándicap de todo el torneo, fijado al cerrar las inscripciones: de
         # él sale su categoría en un stroke play (#251)
         self._fixed_handicap = fixed_handicap
+        # Y su categoría, con la regla de los seis, fijada a la vez (#251)
+        self._fixed_category = fixed_category
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -235,13 +238,20 @@ class Enrollment:
         """El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)."""
         return self._fixed_handicap
 
-    def congelar_handicap(self, handicap: Decimal | None) -> None:
+    @property
+    def fixed_category(self) -> int | None:
+        """Su categoría, fijada al cerrar las inscripciones con la regla de los seis (#251)."""
+        return self._fixed_category
+
+    def congelar_handicap(self, handicap: Decimal | None, categoria: int | None = None) -> None:
         """
-        Fija el hándicap de todo el torneo, al cerrar las inscripciones (#251).
+        Fija el hándicap de todo el torneo y su categoría, al cerrar las inscripciones (#251).
 
         Si se reabren y se vuelven a cerrar, se fija de nuevo con el de ese momento.
+        Y no se mueve aunque luego alguien se retire (decidido el 7 oct 2026).
         """
         self._fixed_handicap = handicap
+        self._fixed_category = categoria
 
     def handicap_que_cuenta(self, del_perfil: Decimal | None) -> Decimal | None:
         """

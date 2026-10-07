@@ -74,8 +74,11 @@ class HandicapsAlCerrar:
                     for u in sin
                 ]
             )
+        categorias = competition.stroke_play.categorias(handicaps)
         for inscripcion in inscripciones:
-            inscripcion.congelar_handicap(handicaps[inscripcion.user_id])
+            inscripcion.congelar_handicap(
+                handicaps[inscripcion.user_id], categorias[inscripcion.user_id]
+            )
             await self._uow.enrollments.update(inscripcion)
 
     async def _de_los_inscritos(self, competition: Competition):

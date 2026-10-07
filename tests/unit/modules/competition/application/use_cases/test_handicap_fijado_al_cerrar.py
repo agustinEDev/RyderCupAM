@@ -310,3 +310,61 @@ class TestLaListaDeInscritos:
         _, categorias = await self._lista(e, torneo)
 
         assert categorias == {}
+
+
+class TestLoQueEncontroCodeReviewEnLaPR2:
+    async def test_devolver_a_cerrada_una_en_juego_no_vuelve_a_fijar(self, e):
+        torneo = await e.torneo()
+        jugador = await e.jugador(torneo, 14.2)
+        await e.cerrar(torneo)
+        await e.iniciar(torneo)
+        e.usuarios.handicaps[jugador] = 2.0
+
+        # El mismo botón de cerrar sirve para volver atrás desde EN JUEGO
+        await e.cerrar(torneo)
+
+        assert (await e.inscripciones(torneo))[jugador].fixed_handicap == Decimal("14.2")
+
+    async def test_la_categoria_se_fija_al_cerrar_y_no_se_mueve_si_alguien_se_retira(self, e):
+        torneo = await e.torneo(limites=("12.0",))
+        bajos = [await e.jugador(torneo, 5.0) for _ in range(5)]  # con el creador, 6
+        altos = [await e.jugador(torneo, 20.0) for _ in range(6)]
+        await e.cerrar(torneo)
+        async with e.uow:
+            retirado = (await e.inscripciones(torneo))[altos[0]]
+            retirado.withdraw()
+            await e.uow.enrollments.update(retirado)
+
+        inscripciones = await e.inscripciones(torneo)
+
+        assert {inscripciones[u].fixed_category for u in bajos} == {1}
+        assert {inscripciones[u].fixed_category for u in altos[1:]} == {2}
+
+    async def test_no_se_aprueba_una_solicitud_despues_de_cerrar(self, e):
+        from src.modules.competition.application.dto.enrollment_dto import (
+            HandleEnrollmentRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
+            HandleEnrollmentUseCase,
+        )
+        from src.modules.competition.domain.entities.enrollment import (
+            Enrollment,
+            EnrollmentStateError,
+        )
+        from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+
+        torneo = await e.torneo()
+        pide = UserId(uuid4())
+        e.usuarios.handicaps[pide] = 14.2
+        solicitud = Enrollment.request(
+            id=EnrollmentId.generate(), competition_id=torneo, user_id=pide
+        )
+        async with e.uow:
+            await e.uow.enrollments.add(solicitud)
+        await e.cerrar(torneo)
+
+        with pytest.raises(EnrollmentStateError, match="cerradas"):
+            await HandleEnrollmentUseCase(e.uow, e.usuarios).execute(
+                HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
+                e.creador,
+            )

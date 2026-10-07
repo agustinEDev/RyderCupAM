@@ -105,10 +105,14 @@ class CloseEnrollmentsUseCase:
 
             # 4. En un Stableford o un Medal se fija el hándicap de cada uno, el de
             #    todo el torneo (7 oct 2026, como la RFEG), y si falta alguno no se
-            #    cierra. Antes de cerrar, pero solo si se puede cerrar: si no, lo
-            #    que hay que decir es el estado, y pedir hándicaps no ayuda
-            se_puede = competition.status.can_transition_to(CompetitionStatus.CLOSED)
-            if competition.stroke_play is not None and se_puede:
+            #    cierra. Solo al cerrar DESDE ABIERTA: este mismo paso devuelve a
+            #    cerrada una competición en juego, y ahí no se puede volver a fijar
+            #    nada a mitad de torneo. Y antes de cerrar: si no se puede, lo que
+            #    hay que decir es el estado
+            if (
+                competition.stroke_play is not None
+                and competition.status is CompetitionStatus.ACTIVE
+            ):
                 await self._handicaps().fijar(competition)
 
             # 4b. Cerrar inscripciones (la entidad valida la transición)
