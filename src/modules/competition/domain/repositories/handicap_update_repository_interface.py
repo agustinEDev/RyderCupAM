@@ -54,3 +54,32 @@ class HandicapUpdateRepositoryInterface(ABC):
         momento: datetime,
     ) -> None:
         """Apunta el resultado de un jugador; si ya tenía, lo sustituye y suma un intento."""
+
+    # La que deja programada el organizador: una por competición (#251)
+
+    @abstractmethod
+    async def programar(
+        self, competition_id: CompetitionId, para: datetime, momento: datetime
+    ) -> None:
+        """Programa la actualización de esa competición; sustituye a la anterior."""
+
+    @abstractmethod
+    async def programada_de(self, competition_id: CompetitionId) -> datetime | None:
+        """Para cuándo está programada, si lo está."""
+
+    @abstractmethod
+    async def anular_programada(self, competition_id: CompetitionId) -> None:
+        """Quita la programada de esa competición, si la hay."""
+
+    @abstractmethod
+    async def programadas_vencidas(self, ahora: datetime) -> list[CompetitionId]:
+        """Las competiciones cuya programada ya ha llegado a su hora."""
+
+    @abstractmethod
+    async def en_curso_sin_actividad_desde(
+        self, limite: datetime
+    ) -> list[ActualizacionDeHandicaps]:
+        """
+        Las que siguen en curso sin haber apuntado nada desde `limite` (ni empezado
+        después): las que se quedaron a medias porque el servidor se reinició.
+        """

@@ -31,3 +31,19 @@ class IHandicapUpdateEmailService(ABC):
         Returns:
             True si se envió
         """
+
+    @abstractmethod
+    async def send_scheduled_handicaps_update_skipped_email(
+        self,
+        to_email: str,
+        organizer_name: str,
+        competition_name: str,
+        competition_id: str,
+        reason: str,
+    ) -> bool:
+        """
+        La actualización programada no se lanzó: a esa hora la ventana estaba cerrada.
+
+        Args:
+            reason: Por qué (el motivo de la ventana)
+        """

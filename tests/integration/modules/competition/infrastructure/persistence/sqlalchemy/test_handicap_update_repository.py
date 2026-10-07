@@ -94,3 +94,52 @@ async def test_apunta_y_lee_con_los_intentos(db_session, creator_id):  # noqa: F
     assert await repo.resultados(otra.id) == {
         creator_id: Intento(ResultadoRefresco.NO_ENCONTRADO, 1)
     }
+
+
+async def test_programar_sustituye_y_anular_borra(db_session, creator_id):  # noqa: F811
+    torneo = await _torneo(db_session, creator_id)
+    repo = SQLAlchemyHandicapUpdateRepository(db_session)
+
+    await repo.programar(torneo, MOMENTO + timedelta(hours=8), MOMENTO)
+    await repo.programar(torneo, MOMENTO + timedelta(hours=9), MOMENTO)
+    await db_session.commit()
+    programada = await repo.programada_de(torneo)
+    await repo.anular_programada(torneo)
+    await db_session.commit()
+
+    assert programada == MOMENTO + timedelta(hours=9)
+    assert await repo.programada_de(torneo) is None
+
+
+async def test_las_programadas_vencidas(db_session, creator_id):  # noqa: F811
+    vencida = await _torneo(db_session, creator_id)
+    futura = await _torneo(db_session, creator_id)
+    repo = SQLAlchemyHandicapUpdateRepository(db_session)
+    await repo.programar(vencida, MOMENTO, MOMENTO - timedelta(hours=1))
+    await repo.programar(futura, MOMENTO + timedelta(minutes=1), MOMENTO)
+    await db_session.commit()
+
+    assert await repo.programadas_vencidas(MOMENTO) == [vencida]
+
+
+async def test_las_en_curso_sin_actividad(db_session, creator_id):  # noqa: F811
+    torneo = await _torneo(db_session, creator_id)
+    repo = SQLAlchemyHandicapUpdateRepository(db_session)
+    parada = ActualizacionDeHandicaps.crear(torneo, OrigenActualizacion.CIERRE, MOMENTO)
+    con_vida = ActualizacionDeHandicaps.crear(torneo, OrigenActualizacion.BOTON, MOMENTO)
+    terminada = ActualizacionDeHandicaps.crear(torneo, OrigenActualizacion.BOTON, MOMENTO)
+    terminada.terminar(pendientes=0, momento=MOMENTO)
+    for a in (parada, con_vida, terminada):
+        await repo.add(a)
+    # La que tiene vida anotó a alguien hace poco; la parada, hace mucho
+    await repo.apuntar(
+        con_vida.id, creator_id, ResultadoRefresco.ACTUALIZADO, MOMENTO + timedelta(minutes=20)
+    )
+    await repo.apuntar(
+        parada.id, creator_id, ResultadoRefresco.ACTUALIZADO, MOMENTO + timedelta(minutes=1)
+    )
+    await db_session.commit()
+
+    sin_actividad = await repo.en_curso_sin_actividad_desde(MOMENTO + timedelta(minutes=15))
+
+    assert [a.id for a in sin_actividad] == [parada.id]

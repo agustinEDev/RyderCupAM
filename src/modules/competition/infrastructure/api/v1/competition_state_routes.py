@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from src.config.dependencies import (
     get_activate_competition_use_case,
     get_actualizar_handicaps_use_case,
+    get_anular_programacion_use_case,
     get_cancel_competition_use_case,
     get_close_enrollments_use_case,
     get_competition_uow,
@@ -17,6 +18,7 @@ from src.config.dependencies import (
     get_fill_captain_use_case,
     get_name_captains_use_case,
     get_name_vice_captain_use_case,
+    get_programar_actualizacion_use_case,
     get_reopen_enrollments_use_case,
     get_revert_competition_status_use_case,
     get_revert_competition_to_in_progress_use_case,
@@ -40,6 +42,8 @@ from src.modules.competition.application.dto.competition_dto import (
     ReopenEnrollmentsRequestDTO,
     RevertCompetitionStatusRequestDTO,
     RevertCompetitionToInProgressRequestDTO,
+    ScheduledHandicapUpdateDTO,
+    ScheduleHandicapUpdateRequestDTO,
     StartCompetitionRequestDTO,
     TeamPlayerBodyDTO,
 )
@@ -87,6 +91,10 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
     NotCaptainOrCreatorError,
+)
+from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
+    AnularProgramacionUseCase,
+    ProgramarActualizacionUseCase,
 )
 from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
     ReopenEnrollmentsUseCase,
@@ -670,3 +678,68 @@ async def update_handicaps(
         started_at=actualizacion.creada,
         resumed=reanudada,
     )
+
+
+@router.put(
+    "/{competition_id}/handicap-updates/schedule",
+    response_model=ScheduledHandicapUpdateDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Programar la actualización de hándicaps",
+    description=(
+        "Una por competición: programar otra vez la sustituye. Futura y dentro de la "
+        "ventana del botón en esa hora. Si al llegar la ventana está cerrada, no se lanza "
+        "y se avisa al organizador."
+    ),
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def schedule_handicap_update(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    body: ScheduleHandicapUpdateRequestDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ProgramarActualizacionUseCase = Depends(get_programar_actualizacion_use_case),
+):
+    """200 con la hora programada; se ve en la ficha (`handicap_update_window.scheduled_at`)."""
+    try:
+        para = await use_case.execute(
+            CompetitionId(competition_id),
+            UserId(str(current_user.id)),
+            body.run_at,
+            is_admin=current_user.is_admin,
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ActualizacionNoPermitidaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except RefrescoDesactivadoError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ScheduledHandicapUpdateDTO(run_at=para)
+
+
+@router.delete(
+    "/{competition_id}/handicap-updates/schedule",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Anular la actualización de hándicaps programada",
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def cancel_scheduled_handicap_update(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: AnularProgramacionUseCase = Depends(get_anular_programacion_use_case),
+):
+    """204 aunque no hubiera ninguna."""
+    try:
+        await use_case.execute(
+            CompetitionId(competition_id),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e

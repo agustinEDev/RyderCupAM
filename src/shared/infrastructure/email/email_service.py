@@ -531,6 +531,82 @@ The Ryder Cup Friends Team
         recipient = f'"{safe_organizer}" <{to_email}>'
         return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
 
+    async def send_scheduled_handicaps_update_skipped_email(
+        self,
+        to_email: str,
+        organizer_name: str,
+        competition_name: str,
+        competition_id: str,
+        reason: str,
+    ) -> bool:
+        """
+        Avisa al organizador de que su actualización programada no se lanzó (#251).
+
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
+        """
+        safe_organizer = self._sanitize_name(organizer_name)
+        safe_competition = self._sanitize_name(competition_name)
+        enlace = f"{settings.FRONTEND_URL}/competitions/{competition_id}"
+
+        subject = (
+            f"No se actualizaron los hándicaps de {safe_competition} | "
+            f"Handicaps of {safe_competition} were not updated"
+        )
+        text_body = f"""
+Hola {safe_organizer},
+
+La actualización de hándicaps que programaste en "{safe_competition}" no se lanzó: {reason}
+
+Puedes programarla de nuevo o usar el botón «Actualizar hándicaps» de la competición cuando se pueda: {enlace}
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_organizer},
+
+The handicap update you scheduled for "{safe_competition}" did not run, because the update window was closed at that time.
+
+You can schedule it again or use the "Update handicaps" button on the competition: {enlace}
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"No se actualizaron los hándicaps de {safe_competition} · "
+            f"Handicaps of {safe_competition} were not updated",
+            etiqueta="Hándicaps",
+            titulo="Tu actualización programada no se lanzó",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_organizer),
+                    ", la actualización de hándicaps que programaste no se lanzó:",
+                ),
+                recuadro(safe_competition, reason),
+                parrafo(
+                    "Puedes programarla de nuevo o usar el botón «Actualizar hándicaps» "
+                    "de la competición cuando se pueda."
+                ),
+            ],
+            boton=Boton("Ver la competición", enlace),
+            ingles=Ingles(
+                frase(
+                    negrita(f"The scheduled handicap update for {safe_competition} did not run"),
+                    ": the update window was closed at that time.",
+                ),
+                Boton("View competition", enlace),
+            ),
+            pie="Te llega porque organizas esta competición en RyderCupFriends. "
+            "You get this because you organise this competition on RyderCupFriends.",
+        )
+
+        recipient = f'"{safe_organizer}" <{to_email}>'
+        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+
     async def send_friend_request_email(
         self,
         to_email: str,

@@ -131,6 +131,10 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
 )
+from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
+    AnularProgramacionUseCase,
+    ProgramarActualizacionUseCase,
+)
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     ReassignMatchPlayersUseCase,
 )
@@ -1828,6 +1832,27 @@ def get_actualizar_handicaps_use_case(
         lanzador,
         reloj=lambda: datetime.now(UTC),
     )
+
+
+def get_programar_actualizacion_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+) -> ProgramarActualizacionUseCase:
+    """Programar la actualización de hándicaps (#251): la ventana se mira en esa hora."""
+    return ProgramarActualizacionUseCase(
+        uow,
+        CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=lambda: datetime.now(UTC),
+        refresco_activo=lanzador is not None,
+    )
+
+
+def get_anular_programacion_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> AnularProgramacionUseCase:
+    """Anular la actualización de hándicaps programada (#251)."""
+    return AnularProgramacionUseCase(uow)
 
 
 def get_ventana_de_actualizacion_use_case(

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,7 @@ from src.modules.competition.domain.services.refresco_de_handicaps_service impor
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     handicap_refreshes_table,
+    handicap_update_schedules_table,
     handicap_updates_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -102,6 +103,56 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
                 },
             )
         )
+
+    async def programar(
+        self, competition_id: CompetitionId, para: datetime, momento: datetime
+    ) -> None:
+        tabla = handicap_update_schedules_table
+        fila = insert(tabla).values(competition_id=competition_id, run_at=para, created_at=momento)
+        await self._session.execute(
+            fila.on_conflict_do_update(
+                index_elements=[tabla.c.competition_id],
+                set_={"run_at": fila.excluded.run_at, "created_at": fila.excluded.created_at},
+            )
+        )
+
+    async def programada_de(self, competition_id: CompetitionId) -> datetime | None:
+        tabla = handicap_update_schedules_table
+        return await self._session.scalar(
+            select(tabla.c.run_at).where(tabla.c.competition_id == competition_id)
+        )
+
+    async def anular_programada(self, competition_id: CompetitionId) -> None:
+        tabla = handicap_update_schedules_table
+        await self._session.execute(delete(tabla).where(tabla.c.competition_id == competition_id))
+
+    async def programadas_vencidas(self, ahora: datetime) -> list[CompetitionId]:
+        tabla = handicap_update_schedules_table
+        result = await self._session.execute(
+            select(tabla.c.competition_id).where(tabla.c.run_at <= ahora).order_by(tabla.c.run_at)
+        )
+        return list(result.scalars())
+
+    async def en_curso_sin_actividad_desde(
+        self, limite: datetime
+    ) -> list[ActualizacionDeHandicaps]:
+        tabla, resultados = handicap_updates_table, handicap_refreshes_table
+        ultima = (
+            select(resultados.c.update_id, func.max(resultados.c.refreshed_at).label("ultima"))
+            .group_by(resultados.c.update_id)
+            .subquery()
+        )
+        actividad = func.coalesce(ultima.c.ultima, tabla.c.created_at)
+        result = await self._session.execute(
+            select(tabla)
+            .outerjoin(ultima, ultima.c.update_id == tabla.c.id)
+            .where(
+                tabla.c.status == str(EstadoActualizacion.EN_CURSO),
+                actividad < limite,
+            )
+            .order_by(tabla.c.created_at)
+        )
+        return [self._entidad(fila) for fila in result]
 
     @staticmethod
     def _fila(actualizacion: ActualizacionDeHandicaps) -> dict:

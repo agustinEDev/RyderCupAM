@@ -12,10 +12,14 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano
+from src.config.refresco_de_handicaps import (
+    CANDADO_DEL_VIGILANTE,
+    LanzadorEnSegundoPlano,
+    VigilanteDeActualizaciones,
+)
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
     EstadoActualizacion,
@@ -160,3 +164,39 @@ async def test_si_la_rfeg_no_contesta_queda_incompleta_y_avisa(db_session):
     assert rfeg.search_handicap.await_count == 3
     avisos.send_handicaps_pending_email.assert_awaited_once()
     assert avisos.send_handicaps_pending_email.await_args.kwargs["to_email"] == str(jugador.email)
+
+
+async def test_el_vigilante_lanza_la_programada_que_llega_a_su_hora(db_session):
+    jugador = await _jugador(db_session, 8.0)
+    torneo = await _medal_cerrado(db_session, [jugador])
+    ahora = datetime.now(UTC)
+    await SQLAlchemyHandicapUpdateRepository(db_session).programar(torneo, ahora, ahora)
+    await db_session.commit()
+    fabrica = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    lanzador = LanzadorEnSegundoPlano(fabrica, _rfeg(13.0), _avisos(), esperar=_sin_pausas)
+
+    atendidas = await VigilanteDeActualizaciones(lanzador, _avisos()).vuelta()
+    await lanzador.esperar_a_todas()
+
+    async with fabrica() as otra:
+        repo = SQLAlchemyHandicapUpdateRepository(otra)
+        ultima = await repo.ultima_de(torneo)
+        programada = await repo.programada_de(torneo)
+    assert atendidas == 1
+    assert programada is None
+    assert ultima.origen is OrigenActualizacion.PROGRAMADA
+    assert ultima.estado is EstadoActualizacion.COMPLETA
+
+
+async def test_con_el_candado_cogido_el_vigilante_se_salta_la_vuelta(db_session):
+    fabrica = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    lanzador = LanzadorEnSegundoPlano(fabrica, _rfeg(13.0), _avisos(), esperar=_sin_pausas)
+
+    async with db_session.bind.connect() as otro_proceso:
+        await otro_proceso.scalar(text("SELECT pg_advisory_lock(:k)"), {"k": CANDADO_DEL_VIGILANTE})
+        resultado = await VigilanteDeActualizaciones(lanzador, _avisos()).vuelta()
+        await otro_proceso.scalar(
+            text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_VIGILANTE}
+        )
+
+    assert resultado is None

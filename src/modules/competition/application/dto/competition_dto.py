@@ -598,6 +598,35 @@ class HandicapUpdateWindowDTO(BaseModel):
         ),
     )
     reason: str | None = Field(None, description="Por qué no, si está cerrada.")
+    scheduled_at: datetime | None = Field(
+        None, description="Si hay una actualización programada, para cuándo (#251)."
+    )
+
+
+class ScheduleHandicapUpdateRequestDTO(BaseModel):
+    """Para cuándo programar la actualización de hándicaps (#251)."""
+
+    run_at: datetime = Field(
+        ...,
+        description=(
+            "Cuándo, con huso (por ejemplo 2030-10-11T03:00:00+02:00). Futuro y dentro "
+            "de la ventana del botón en esa hora."
+        ),
+    )
+
+    @field_validator("run_at")
+    @classmethod
+    def con_huso(cls, v: datetime) -> datetime:
+        """Sin huso no se sabe qué hora es: «las 3:00» de dónde."""
+        if v.tzinfo is None:
+            raise ValueError("La hora tiene que llevar su huso (por ejemplo +02:00 o Z).")
+        return v
+
+
+class ScheduledHandicapUpdateDTO(BaseModel):
+    """La actualización de hándicaps programada."""
+
+    run_at: datetime
 
 
 class HandicapUpdateLaunchedDTO(BaseModel):

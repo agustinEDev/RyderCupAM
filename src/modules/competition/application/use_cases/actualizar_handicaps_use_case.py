@@ -36,6 +36,7 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
     OrigenActualizacion,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -119,17 +120,23 @@ class VentanaDeActualizacionUseCase:
             competition = await self._uow.competitions.find_by_id(competition_id)
             if competition is None or not (is_admin or competition.is_creator(user_id)):
                 return None
-            if not self._refresco_activo:
-                return HandicapUpdateWindowDTO(
-                    open=False,
-                    reason="La actualización con la RFEG solo está encendida en producción.",
-                )
-            ultima = await self._uow.handicap_updates.ultima_de(competition_id)
-            if ultima is not None and ultima.sigue():
-                return HandicapUpdateWindowDTO(
-                    open=False, reason="Ya se están actualizando los hándicaps."
-                )
-            ventana = await ventana_de(self._uow, self._zonas, competition, self._reloj())
+            programada = await self._uow.handicap_updates.programada_de(competition_id)
+            ventana = await self._ventana(competition)
+        return ventana.model_copy(update={"scheduled_at": programada})
+
+    async def _ventana(self, competition: Competition) -> HandicapUpdateWindowDTO:
+        """El botón: apagado, con el motivo, cuando pulsarlo solo daría un 409."""
+        if not self._refresco_activo:
+            return HandicapUpdateWindowDTO(
+                open=False,
+                reason="La actualización con la RFEG solo está encendida en producción.",
+            )
+        ultima = await self._uow.handicap_updates.ultima_de(competition.id)
+        if ultima is not None and ultima.sigue():
+            return HandicapUpdateWindowDTO(
+                open=False, reason="Ya se están actualizando los hándicaps."
+            )
+        ventana = await ventana_de(self._uow, self._zonas, competition, self._reloj())
         return HandicapUpdateWindowDTO(
             open=ventana.abierta, closes_at=ventana.cierra, reason=ventana.motivo
         )

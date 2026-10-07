@@ -39,6 +39,9 @@ from src.modules.competition.application.ports.competition_timezone import (
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
+from src.modules.competition.application.services.avisos_al_organizador import (
+    AvisosAlOrganizador,
+)
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.pendientes_de_actualizar import (
     PendientesDeActualizar,
@@ -113,7 +116,7 @@ class RefrescarHandicapsUseCase:
         """
         self._herramientas = herramientas
         self._handicap_service = handicap_service
-        self._avisos = avisos
+        self._avisos = AvisosAlOrganizador(avisos)
         self._reloj = reloj
         self._esperar = esperar
 
@@ -275,19 +278,5 @@ class RefrescarHandicapsUseCase:
             nombres = await PlayerNames.de_la_competicion(
                 sin_actualizar, competicion.id, h.usuarios, uow
             )
-            organizador = await h.usuarios.find_by_id(competicion.creator_id)
-        await self._avisar(organizador, str(competicion.name), str(competicion.id.value), nombres)
-
-    async def _avisar(self, organizador, competicion: str, competition_id: str, nombres) -> None:
-        if self._avisos is None or organizador is None or organizador.email is None:
-            return
-        try:
-            await self._avisos.send_handicaps_pending_email(
-                to_email=organizador.email.value,
-                organizer_name=organizador.get_full_name(),
-                competition_name=competicion,
-                competition_id=competition_id,
-                pending_names=list(nombres.values()),
-            )
-        except Exception:
-            logger.exception("No se pudo avisar al organizador de %s", competition_id)
+            organizador = await self._avisos.quien(h.usuarios, competicion)
+        await self._avisos.pendientes(organizador, competicion, list(nombres.values()))
