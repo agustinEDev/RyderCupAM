@@ -612,9 +612,11 @@ async def delete_competition(
         "(DRAFT, ACTIVE o CLOSED). En una Ryder Cup es un 400."
     ),
 )
+@limiter.limit("10/minute")
 async def update_stroke_play_settings(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,
-    request: StrokePlaySettingsDTO,
+    ajustes: StrokePlaySettingsDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UpdateStrokePlaySettingsUseCase = Depends(get_update_stroke_play_settings_use_case),
 ):
@@ -622,7 +624,7 @@ async def update_stroke_play_settings(
     try:
         return await use_case.execute(
             competition_id,
-            request,
+            ajustes,
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
         )

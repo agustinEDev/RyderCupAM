@@ -230,3 +230,14 @@ class TestConElArranque:
         )
 
         assert ajustes.category_limits == [Decimal("18.0")]
+
+
+class TestLaPeticion:
+    async def test_una_ryder_con_stroke_play_vacio_tambien_se_rechaza(self):
+        """Mandar `stroke_play` ya es pedir algo que una Ryder no tiene."""
+        with pytest.raises(TournamentTypeError):
+            await _crear(
+                InMemoryUnitOfWork(),
+                tipo=TournamentType.RYDER_CUP,
+                stroke_play=StrokePlaySettingsDTO(),
+            )

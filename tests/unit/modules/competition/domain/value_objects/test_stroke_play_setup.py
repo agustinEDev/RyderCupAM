@@ -138,3 +138,16 @@ class TestGuardarYLeer:
     def test_sin_jornadas_guardadas_no_es_un_stroke_play(self):
         """Una Ryder deja las tres columnas vacías."""
         assert StrokePlaySetup.from_columns(None, None, None) is None
+
+
+class TestUnDecimalSiempre:
+    def test_un_limite_entero_se_guarda_con_su_decimal(self):
+        """Si no, responde «12» al cambiarlo y «12.0» al leerlo de la base de datos."""
+        ajustes = StrokePlaySetup.create(category_limits=[Decimal("12"), Decimal("26")])
+
+        assert [str(v) for v in ajustes.category_limits] == ["12.0", "26.0"]
+
+    def test_al_cambiar_tambien(self):
+        ajustes = StrokePlaySetup.create().with_changes(category_limits=[Decimal("18")])
+
+        assert [str(v) for v in ajustes.category_limits] == ["18.0"]

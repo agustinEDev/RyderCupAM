@@ -81,7 +81,9 @@ class StrokePlaySetup:
         return replace(
             self,
             category_limits=(
-                tuple(category_limits) if category_limits is not None else self.category_limits
+                tuple(self._con_un_decimal(v) for v in category_limits)
+                if category_limits is not None
+                else self.category_limits
             ),
             max_matchdays_per_player=(
                 max_matchdays_per_player
@@ -113,6 +115,17 @@ class StrokePlaySetup:
                 f"Cada jugador puede jugar {self.max_matchdays_per_player} jornadas, "
                 f"pero el torneo dura {days} días"
             )
+
+    @staticmethod
+    def _con_un_decimal(limite: Decimal) -> Decimal:
+        """
+        «12» se guarda como «12.0», que es como vuelve de la base de datos.
+
+        Solo si ya tiene un decimal como mucho: redondear un «12.05» lo dejaría
+        pasar como otro número, y tiene que rechazarse.
+        """
+        con_uno = limite.quantize(UNA_DECIMAL)
+        return con_uno if con_uno == limite else limite
 
     @staticmethod
     def _check_limits(limits: tuple[Decimal, ...]) -> None:

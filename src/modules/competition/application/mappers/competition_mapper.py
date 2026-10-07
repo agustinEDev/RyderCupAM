@@ -187,7 +187,7 @@ class CompetitionDTOMapper:
         return StrokePlaySettingsResponseDTO(
             category_limits=list(ajustes.category_limits),
             max_matchdays_per_player=ajustes.max_matchdays_per_player,
-            overall_standing=str(ajustes.overall_standing),
+            overall_standing=ajustes.overall_standing,
         )
 
     @staticmethod

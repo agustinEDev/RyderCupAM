@@ -97,8 +97,11 @@ class StrokePlaySettingsDTO(BaseModel):
     toma su valor por defecto; al cambiar, lo que no llega no se toca.
     """
 
+    # Un tope generoso para no leer entera una lista desmesurada: el «como mucho
+    # 5 categorías» lo dice el dominio, con su motivo
     category_limits: list[Decimal] | None = Field(
         None,
+        max_length=20,
         description=(
             "Límites superiores de hándicap de las categorías, de menor a mayor y con "
             "un decimal como mucho: [12.0, 26.0] son «hasta 12,0», «de 12,1 a 26,0» y "
@@ -131,7 +134,7 @@ class StrokePlaySettingsResponseDTO(BaseModel):
     max_matchdays_per_player: int = Field(
         ..., description="En cuántas jornadas puede jugar cada jugador."
     )
-    overall_standing: str = Field(..., description="ACCUMULATED o BEST_CARD.")
+    overall_standing: OverallStanding = Field(..., description="ACCUMULATED o BEST_CARD.")
 
 
 class CreateCompetitionRequestDTO(BaseModel):

@@ -20,11 +20,11 @@ from src.modules.competition.domain.value_objects.stroke_play_setup import (
 )
 
 
-async def _tournament_type_error(_request: Request, exc: Exception) -> JSONResponse:
+async def _peticion_sin_sentido(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)})
 
 
 def register_competition_exception_handlers(app: FastAPI) -> None:
     """Registra en la app los errores de competición que se traducen aquí."""
-    app.add_exception_handler(TournamentTypeError, _tournament_type_error)
-    app.add_exception_handler(StrokePlaySettingsError, _tournament_type_error)
+    app.add_exception_handler(TournamentTypeError, _peticion_sin_sentido)
+    app.add_exception_handler(StrokePlaySettingsError, _peticion_sin_sentido)

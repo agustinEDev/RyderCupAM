@@ -989,14 +989,13 @@ class Competition:
         )
         # Antes de cambiar nada: un Stableford con equipos se rechaza entero
         ryder_cup = self.require_ryder_cup() if toca_la_ryder else self._ryder_cup
+        # Ni acortar el torneo puede dejar fuera jornadas que un jugador tiene
+        # derecho a jugar
+        if dates is not None and self._stroke_play is not None:
+            self._stroke_play.check_fits_in(self._days_of(dates))
 
         if name is not None:
             self._name = name
-
-        if dates is not None and self._stroke_play is not None:
-            # Antes de cambiar nada: acortar el torneo no puede dejar fuera
-            # jornadas que un jugador tiene derecho a jugar
-            self._stroke_play.check_fits_in(self._days_of(dates))
 
         if dates is not None:
             # Mover las fechas ya no puede invalidar la apertura: son dias de

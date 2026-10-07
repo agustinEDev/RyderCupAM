@@ -174,3 +174,16 @@ class TestLasFechasNoDejanFueraLasJornadas:
         competicion.update_info(dates=DateRange(date(2030, 6, 5), date(2030, 6, 5)))
 
         assert competicion.dates.end_date == date(2030, 6, 5)
+
+    def test_si_las_fechas_no_valen_no_cambia_nada_mas(self):
+        """La competición no puede quedar a medias: ni el nombre cambia."""
+        competicion = _stroke_play(max_matchdays_per_player=3)
+        nombre = competicion.name
+
+        with pytest.raises(StrokePlaySettingsError):
+            competicion.update_info(
+                name=CompetitionName("Otro nombre"),
+                dates=DateRange(date(2030, 6, 5), date(2030, 6, 5)),
+            )
+
+        assert competicion.name == nombre
