@@ -1,7 +1,6 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
 import asyncio
-import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -26,6 +25,7 @@ from src.modules.competition.application.services.match_players_builder import (
     TeeColorNotFoundError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -58,8 +58,6 @@ from src.shared.domain.services.playing_handicap_calculator import (
 )
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
-
-logger = logging.getLogger(__name__)
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -179,7 +177,7 @@ class GenerateMatchesUseCase:
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
         self._scoring_service = scoring_service or ScoringService()
-        self._handicap_service = handicap_service
+        self._refresco_rfeg = RefrescoRfeg(handicap_service, user_repository)
         self._match_players = MatchPlayersBuilder()
 
     async def execute(
@@ -561,10 +559,10 @@ class GenerateMatchesUseCase:
                 if user:
                     enrollment = enrollment_map.get(str(pid.value))
                     has_custom_handicap = (
-                        enrollment is not None and enrollment.custom_handicap is not None
+                        enrollment is not None and enrollment.has_custom_handicap()
                     )
                     if not has_custom_handicap and refrescar_handicap_rfeg:
-                        await self._maybe_refresh_rfeg_handicap(user)
+                        await self._refresco_rfeg.si_toca(user)
                     if user.handicap is not None:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender
@@ -576,49 +574,6 @@ class GenerateMatchesUseCase:
             user_gender_map,
             holes_by_tee,
         )
-
-    async def _maybe_refresh_rfeg_handicap(self, user) -> None:
-        """
-        HM-1a: refresco best-effort del hándicap RFEG antes de generar partidos.
-
-        Solo para jugadores ES sin hándicap personalizado en la inscripción, y como
-        máximo una vez al día (mismo gate que el refresco en login, HM-2a/c). Errores
-        de red o de persistencia se registran y se ignoran: nunca deben bloquear la
-        generación de partidos.
-        """
-        if self._handicap_service is None:
-            return
-
-        country_code_value = user.country_code.value if user.country_code else None
-        if country_code_value != "ES":
-            return
-
-        now = datetime.now(UTC)
-        if user.handicap_updated_at is not None and user.handicap_updated_at.date() == now.date():
-            return
-
-        try:
-            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
-        except Exception:
-            logger.warning(
-                "RFEG lookup failed for %s during match generation",
-                user.get_full_name(),
-                exc_info=True,
-            )
-            return
-
-        if handicap_value is None:
-            return
-
-        try:
-            user.update_handicap(handicap_value)
-            await self._user_repo.save(user)
-        except Exception:
-            logger.error(
-                "Failed to persist RFEG handicap for %s during match generation",
-                user.get_full_name(),
-                exc_info=True,
-            )
 
     async def _generate_auto(
         self,

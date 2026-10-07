@@ -13,7 +13,6 @@ del jugador aunque jugara la barra sin género pasaban todos los tests. Desde el
 """
 
 from decimal import Decimal
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -22,6 +21,9 @@ from src.modules.competition.application.services.match_players_builder import (
     MatchPlayersBuilder,
     TeeColorNotFoundError,
 )
+from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.playing_handicap_calculator import (
@@ -36,8 +38,14 @@ AMARILLAS_SIN_GENERO = TeeRating(Decimal("70.0"), 120, 72)
 HOYOS = list(range(1, 19))
 
 
-def _inscripcion():
-    return SimpleNamespace(tee_color=TeeColor.YELLOW, custom_handicap=None)
+def _inscripcion(custom_handicap: Decimal | None = None) -> Enrollment:
+    return Enrollment.direct_enroll(
+        id=EnrollmentId.generate(),
+        competition_id=CompetitionId.generate(),
+        user_id=UserId.generate(),
+        custom_handicap=custom_handicap,
+        tee_color=TeeColor.YELLOW,
+    )
 
 
 def _resuelto(tee_ratings, genero):
@@ -111,12 +119,8 @@ class TestPlusEnIndividual:
     def test_el_rival_recibe_la_diferencia_completa(self):
         plus, diez = UserId(str(uuid4())), UserId(str(uuid4()))
         inscripciones = {
-            str(plus.value): SimpleNamespace(
-                tee_color=TeeColor.YELLOW, custom_handicap=Decimal("-2.0")
-            ),
-            str(diez.value): SimpleNamespace(
-                tee_color=TeeColor.YELLOW, custom_handicap=Decimal("10.0")
-            ),
+            str(plus.value): _inscripcion(Decimal("-2.0")),
+            str(diez.value): _inscripcion(Decimal("10.0")),
         }
 
         (jugador_plus,), (jugador_diez,) = MatchPlayersBuilder().build(

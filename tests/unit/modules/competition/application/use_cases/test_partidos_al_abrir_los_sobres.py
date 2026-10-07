@@ -657,7 +657,7 @@ class TestElCableado:
         # La misma Unit of Work: abrir y crear los partidos van juntos
         assert generador._uow is caso._uow
         # Y sin RFEG: al abrir no se llama a la red
-        assert generador._handicap_service is None
+        assert generador._refresco_rfeg._handicap_service is None
 
 
 class TestLaRevisionLocal:
