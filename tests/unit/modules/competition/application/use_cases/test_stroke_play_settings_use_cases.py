@@ -156,7 +156,8 @@ class TestAlCambiar:
                 uuid4(), StrokePlaySettingsDTO(category_limits=[]), CREADOR
             )
 
-    async def test_en_cerrada_aun_se_puede(self):
+    async def test_en_cerrada_ya_no(self):
+        """Al cerrar se fija el hándicap de cada uno y su categoría (7 oct 2026)."""
         uow = InMemoryUnitOfWork()
         competicion_id = await self._stableford(uow)
         async with uow:
@@ -164,11 +165,10 @@ class TestAlCambiar:
             competicion.close_enrollments()
             await uow.competitions.update(competicion)
 
-        respuesta = await UpdateStrokePlaySettingsUseCase(uow).execute(
-            competicion_id.value, StrokePlaySettingsDTO(max_matchdays_per_player=2), CREADOR
-        )
-
-        assert respuesta.max_matchdays_per_player == 2
+        with pytest.raises(CompetitionStateError):
+            await UpdateStrokePlaySettingsUseCase(uow).execute(
+                competicion_id.value, StrokePlaySettingsDTO(max_matchdays_per_player=2), CREADOR
+            )
 
     async def test_empezada_ya_no(self):
         uow = InMemoryUnitOfWork()

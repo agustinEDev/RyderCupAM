@@ -103,10 +103,8 @@ class TestAlCrear:
 
 
 class TestAlCambiar:
-    @pytest.mark.parametrize(
-        "status", [CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED]
-    )
-    def test_hasta_que_empieza_se_puede_cambiar(self, status):
+    @pytest.mark.parametrize("status", [CompetitionStatus.DRAFT, CompetitionStatus.ACTIVE])
+    def test_hasta_que_se_cierran_las_inscripciones_se_puede_cambiar(self, status):
         competicion = _stroke_play(status=status)
 
         competicion.update_stroke_play(category_limits=[Decimal("18.0")])
@@ -115,12 +113,18 @@ class TestAlCambiar:
 
     @pytest.mark.parametrize(
         "status",
-        [CompetitionStatus.IN_PROGRESS, CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED],
+        [
+            CompetitionStatus.CLOSED,
+            CompetitionStatus.IN_PROGRESS,
+            CompetitionStatus.COMPLETED,
+            CompetitionStatus.CANCELLED,
+        ],
     )
-    def test_una_vez_empezada_ya_no(self, status):
+    def test_con_las_inscripciones_cerradas_ya_no(self, status):
+        """Al cerrar se fija el hándicap de cada uno y su categoría (7 oct)."""
         competicion = _stroke_play(status=status)
 
-        with pytest.raises(CompetitionStateError, match="hasta que empieza"):
+        with pytest.raises(CompetitionStateError, match="hasta que se cierran las inscripciones"):
             competicion.update_stroke_play(category_limits=[Decimal("18.0")])
 
     def test_cambiar_un_ajuste_deja_los_otros(self):
@@ -187,3 +191,30 @@ class TestLasFechasNoDejanFueraLasJornadas:
             )
 
         assert competicion.name == nombre
+
+
+class TestCuandoSeTocaElHandicap:
+    """Stroke play: hasta cerrar inscripciones. Ryder: como siempre, hasta empezar."""
+
+    @pytest.mark.parametrize(
+        "status, se_puede",
+        [
+            (CompetitionStatus.DRAFT, True),
+            (CompetitionStatus.ACTIVE, True),
+            (CompetitionStatus.CLOSED, False),
+            (CompetitionStatus.IN_PROGRESS, False),
+        ],
+    )
+    def test_stroke_play(self, status, se_puede):
+        assert _stroke_play(status=status).allows_handicap_edits() is se_puede
+
+    @pytest.mark.parametrize(
+        "status, se_puede",
+        [
+            (CompetitionStatus.ACTIVE, True),
+            (CompetitionStatus.CLOSED, True),
+            (CompetitionStatus.IN_PROGRESS, False),
+        ],
+    )
+    def test_ryder(self, status, se_puede):
+        assert _ryder(status=status).allows_handicap_edits() is se_puede

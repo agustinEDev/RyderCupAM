@@ -31,14 +31,18 @@ from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class UsuariosConGenero:
-    """Todos con género, salvo los que se digan (#710: crear exige el del organizador)."""
+    """
+    Todos con género, salvo los que se digan (#710: crear exige el del organizador).
+
+    Y con hándicap: crear un Stableford o un Medal también lo exige (#251).
+    """
 
     def __init__(self, sin_genero=()):
         self._sin_genero = set(sin_genero)
 
     async def find_by_id(self, user_id):
         genero = None if user_id in self._sin_genero else Gender.MALE
-        return SimpleNamespace(id=user_id, gender=genero)
+        return SimpleNamespace(id=user_id, gender=genero, handicap=SimpleNamespace(value=10.0))
 
 
 USUARIOS_CON_GENERO = UsuariosConGenero()

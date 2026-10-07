@@ -1767,6 +1767,7 @@ def get_activate_competition_use_case(
 
 def get_close_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> CloseEnrollmentsUseCase:
     """
     Proveedor del caso de uso CloseEnrollmentsUseCase.
@@ -1776,7 +1777,8 @@ def get_close_enrollments_use_case(
     2. Crea una instancia de `CloseEnrollmentsUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return CloseEnrollmentsUseCase(uow)
+    # Los usuarios, para el hándicap de cada inscrito en un stroke play (#251)
+    return CloseEnrollmentsUseCase(uow, user_uow.users)
 
 
 def get_name_captains_use_case(
@@ -2000,9 +2002,11 @@ def get_set_name_preference_use_case(
 
 def get_remove_custom_handicap_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> RemoveCustomHandicapUseCase:
     """Proveedor del caso de uso RemoveCustomHandicapUseCase."""
-    return RemoveCustomHandicapUseCase(uow)
+    # Los usuarios: en un stroke play nadie se queda sin hándicap (#251)
+    return RemoveCustomHandicapUseCase(uow, user_uow.users)
 
 
 def get_list_enrollments_use_case(

@@ -52,6 +52,7 @@ class Enrollment:
         custom_handicap: Decimal | None = None,
         tee_color: TeeColor | None = None,
         use_real_name: bool = True,
+        fixed_handicap: Decimal | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -69,6 +70,9 @@ class Enrollment:
         self._custom_handicap = custom_handicap
         self._tee_color = tee_color
         self._use_real_name = use_real_name
+        # El hándicap de todo el torneo, fijado al cerrar las inscripciones: de
+        # él sale su categoría en un stroke play (#251)
+        self._fixed_handicap = fixed_handicap
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -225,6 +229,19 @@ class Enrollment:
     def has_team_assigned(self) -> bool:
         """Verifica si tiene equipo asignado."""
         return self._team_id is not None
+
+    @property
+    def fixed_handicap(self) -> Decimal | None:
+        """El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)."""
+        return self._fixed_handicap
+
+    def congelar_handicap(self, handicap: Decimal | None) -> None:
+        """
+        Fija el hándicap de todo el torneo, al cerrar las inscripciones (#251).
+
+        Si se reabren y se vuelven a cerrar, se fija de nuevo con el de ese momento.
+        """
+        self._fixed_handicap = handicap
 
     def handicap_que_cuenta(self, del_perfil: Decimal | None) -> Decimal | None:
         """

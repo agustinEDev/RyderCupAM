@@ -4,6 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_activate_competition_use_case,
@@ -40,12 +41,16 @@ from src.modules.competition.application.dto.competition_dto import (
     StartCompetitionRequestDTO,
     TeamPlayerBodyDTO,
 )
+from src.modules.competition.application.dto.match_generation_block_dto import BlockedPlayerDTO
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
+)
+from src.modules.competition.application.services.handicaps_al_cerrar import (
+    PlayersWithoutHandicapError,
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
@@ -204,6 +209,8 @@ async def close_enrollments(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CloseNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except PlayersWithoutHandicapError as e:
+        return respuesta_sin_handicap(e)
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -245,6 +252,8 @@ async def start_competition(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except StartNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except PlayersWithoutHandicapError as e:
+        return respuesta_sin_handicap(e)
     except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -585,3 +594,25 @@ async def fill_captain(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DE_CAPITANIA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
+    """
+    Stableford o Medal con inscritos sin hándicap (#251): 400 con la lista.
+
+    En el mismo formato que «jugadores sin barras»: claves y no frases (24 sep),
+    `error_code` en la raíz y `detail` para quien aún no lo lee.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": str(error),
+            "error_code": "PLAYERS_WITHOUT_HANDICAP",
+            "players": [
+                BlockedPlayerDTO(
+                    user_id=p.user_id.value, name=p.name, missing=p.missing
+                ).model_dump(mode="json")
+                for p in error.players
+            ],
+        },
+    )

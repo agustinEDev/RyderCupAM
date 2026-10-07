@@ -37,7 +37,7 @@ from src.modules.competition.application.mappers.competition_mapper import (
 from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
-from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
+from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -333,7 +333,7 @@ async def create_competition(
         InvalidCountryError,
         InvalidCountryCodeError,
         InvalidLocationError,
-        GenderRequiredError,
+        PerfilIncompletoError,
     ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:

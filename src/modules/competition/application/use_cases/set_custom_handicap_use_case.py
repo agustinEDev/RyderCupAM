@@ -95,10 +95,11 @@ class SetCustomHandicapUseCase:
                 )
 
             # 4b. Verificar que la competicion permite editar handicaps (DRAFT/ACTIVE/CLOSED)
-            if not competition.status.allows_handicap_edits():
+            if not competition.allows_handicap_edits():
                 raise HandicapEditNotAllowedError(
-                    "El hándicap personalizado solo puede modificarse mientras la competición "
-                    f"está en DRAFT, ACTIVE o CLOSED. Estado actual: {competition.status.value}"
+                    "El hándicap personalizado ya no se puede cambiar: en un Stableford o un "
+                    "Medal, hasta cerrar las inscripciones; en una Ryder, hasta empezar. "
+                    f"Estado actual: {competition.status.value}"
                 )
 
             # 5. Establecer handicap (la entidad valida el rango)
