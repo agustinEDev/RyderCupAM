@@ -143,3 +143,21 @@ async def test_las_en_curso_sin_actividad(db_session, creator_id):  # noqa: F811
     sin_actividad = await repo.en_curso_sin_actividad_desde(MOMENTO + timedelta(minutes=15))
 
     assert [a.id for a in sin_actividad] == [parada.id]
+
+
+async def test_reanudar_cuenta_como_actividad(db_session, creator_id):  # noqa: F811
+    torneo = await _torneo(db_session, creator_id)
+    repo = SQLAlchemyHandicapUpdateRepository(db_session)
+    vieja = ActualizacionDeHandicaps.crear(torneo, OrigenActualizacion.CIERRE, MOMENTO)
+    await repo.add(vieja)
+    vieja.terminar(pendientes=1, momento=MOMENTO)
+    vieja.reanudar(MOMENTO + timedelta(hours=5))
+    await repo.update(vieja)
+    await db_session.commit()
+
+    # Un minuto después de reanudarla, el límite es «hace 10 minutos»
+    limite = MOMENTO + timedelta(hours=5, minutes=1) - timedelta(minutes=10)
+    sin_actividad = await repo.en_curso_sin_actividad_desde(limite)
+
+    assert sin_actividad == []
+    assert (await repo.find_by_id(vieja.id)).reanudada == MOMENTO + timedelta(hours=5)

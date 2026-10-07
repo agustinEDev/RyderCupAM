@@ -44,7 +44,11 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
         await self._session.execute(
             tabla.update()
             .where(tabla.c.id == str(actualizacion.id))
-            .values(status=str(actualizacion.estado), finished_at=actualizacion.terminada)
+            .values(
+                status=str(actualizacion.estado),
+                finished_at=actualizacion.terminada,
+                resumed_at=actualizacion.reanudada,
+            )
         )
 
     async def find_by_id(self, update_id: uuid.UUID) -> ActualizacionDeHandicaps | None:
@@ -137,19 +141,24 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
         self, limite: datetime
     ) -> list[ActualizacionDeHandicaps]:
         tabla, resultados = handicap_updates_table, handicap_refreshes_table
+        en_curso = tabla.c.status == str(EstadoActualizacion.EN_CURSO)
+        # Solo los resultados de las que están en curso: la tabla crece con cada
+        # actualización y esto se mira cada minuto
         ultima = (
             select(resultados.c.update_id, func.max(resultados.c.refreshed_at).label("ultima"))
+            .where(resultados.c.update_id.in_(select(tabla.c.id).where(en_curso)))
             .group_by(resultados.c.update_id)
             .subquery()
         )
-        actividad = func.coalesce(ultima.c.ultima, tabla.c.created_at)
+        actividad = func.greatest(
+            tabla.c.created_at,
+            func.coalesce(tabla.c.resumed_at, tabla.c.created_at),
+            func.coalesce(ultima.c.ultima, tabla.c.created_at),
+        )
         result = await self._session.execute(
             select(tabla)
             .outerjoin(ultima, ultima.c.update_id == tabla.c.id)
-            .where(
-                tabla.c.status == str(EstadoActualizacion.EN_CURSO),
-                actividad < limite,
-            )
+            .where(en_curso, actividad < limite)
             .order_by(tabla.c.created_at)
         )
         return [self._entidad(fila) for fila in result]
@@ -163,6 +172,7 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
             "status": str(actualizacion.estado),
             "created_at": actualizacion.creada,
             "finished_at": actualizacion.terminada,
+            "resumed_at": actualizacion.reanudada,
         }
 
     @staticmethod
@@ -174,4 +184,5 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
             estado=EstadoActualizacion(fila.status),
             creada=fila.created_at,
             terminada=fila.finished_at,
+            reanudada=fila.resumed_at,
         )

@@ -566,7 +566,7 @@ El equipo de Ryder Cup Friends
 
 Hello {safe_organizer},
 
-The handicap update you scheduled for "{safe_competition}" did not run, because the update window was closed at that time.
+The handicap update you scheduled for "{safe_competition}" did not run. The reason is in the Spanish part above.
 
 You can schedule it again or use the "Update handicaps" button on the competition: {enlace}
 
@@ -596,7 +596,7 @@ The Ryder Cup Friends Team
             ingles=Ingles(
                 frase(
                     negrita(f"The scheduled handicap update for {safe_competition} did not run"),
-                    ": the update window was closed at that time.",
+                    ". The reason is in the Spanish part above.",
                 ),
                 Boton("View competition", enlace),
             ),

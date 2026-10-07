@@ -175,7 +175,7 @@ async def test_el_vigilante_lanza_la_programada_que_llega_a_su_hora(db_session):
     fabrica = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
     lanzador = LanzadorEnSegundoPlano(fabrica, _rfeg(13.0), _avisos(), esperar=_sin_pausas)
 
-    atendidas = await VigilanteDeActualizaciones(lanzador, _avisos()).vuelta()
+    atendidas = await VigilanteDeActualizaciones(lanzador).vuelta()
     await lanzador.esperar_a_todas()
 
     async with fabrica() as otra:
@@ -194,7 +194,7 @@ async def test_con_el_candado_cogido_el_vigilante_se_salta_la_vuelta(db_session)
 
     async with db_session.bind.connect() as otro_proceso:
         await otro_proceso.scalar(text("SELECT pg_advisory_lock(:k)"), {"k": CANDADO_DEL_VIGILANTE})
-        resultado = await VigilanteDeActualizaciones(lanzador, _avisos()).vuelta()
+        resultado = await VigilanteDeActualizaciones(lanzador).vuelta()
         await otro_proceso.scalar(
             text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_VIGILANTE}
         )

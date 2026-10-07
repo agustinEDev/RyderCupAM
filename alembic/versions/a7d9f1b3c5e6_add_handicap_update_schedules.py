@@ -1,8 +1,11 @@
-"""Add handicap_update_schedules (BE #251)
+"""Add handicap_update_schedules and resumed_at (BE #251)
 
 La actualización de hándicaps que deja programada el organizador (decidido el
 7 oct 2026): una por competición, editable y cancelable hasta su hora. La lanza
 el vigilante; si a esa hora la ventana está cerrada, no se lanza y se avisa.
+
+Y `handicap_updates.resumed_at`: reanudar una incompleta cuenta como actividad,
+o el vigilante la tomaría por cortada por un reinicio al momento.
 
 Revision ID: a7d9f1b3c5e6
 Revises: f6c8e0a2b4d5
@@ -35,9 +38,13 @@ def upgrade() -> None:
     op.create_index(
         "ix_handicap_update_schedules_run_at", "handicap_update_schedules", ["run_at"]
     )
+    op.add_column(
+        "handicap_updates", sa.Column("resumed_at", sa.DateTime(timezone=True), nullable=True)
+    )
 
 
 def downgrade() -> None:
     """Quita las programadas."""
+    op.drop_column("handicap_updates", "resumed_at")
     op.drop_index("ix_handicap_update_schedules_run_at", table_name="handicap_update_schedules")
     op.drop_table("handicap_update_schedules")

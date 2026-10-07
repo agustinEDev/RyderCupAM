@@ -9,7 +9,7 @@ al llegar la ventana está cerrada, no se lanza y se avisa al organizador.
 """
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.modules.competition.application.exceptions import (
     ActualizacionNoPermitidaError,
@@ -27,6 +27,10 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# El vigilante pasa cada minuto y la vuelta tarda: lo programado tiene que caber
+# con este margen dentro de la ventana
+MARGEN = timedelta(minutes=2)
 
 
 async def _del_organizador(
@@ -86,6 +90,14 @@ class ProgramarActualizacionUseCase:
             ventana = await ventana_de(self._uow, self._zonas, competition, para)
             if not ventana.abierta:
                 raise ActualizacionNoPermitidaError(f"A esa hora no se podría: {ventana.motivo}")
+            # El vigilante pasa cada minuto: tiene que seguir abierta un rato después
+            con_margen = await ventana_de(self._uow, self._zonas, competition, para + MARGEN)
+            if not con_margen.abierta:
+                raise ActualizacionNoPermitidaError(
+                    "Demasiado justo: prográmala con al menos "
+                    f"{int(MARGEN.total_seconds() // 60)} minutos de margen antes de que "
+                    "se cierre la ventana."
+                )
             await self._uow.handicap_updates.programar(competition_id, para, ahora)
         return para
 

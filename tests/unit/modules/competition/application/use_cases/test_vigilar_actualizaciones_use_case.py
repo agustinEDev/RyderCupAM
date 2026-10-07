@@ -9,7 +9,9 @@ las que un reinicio dejó en curso.
 | Programada a su hora, ventana abierta                 | Se lanza (programada) y deja de estar programada |
 | La última quedó incompleta                            | Se reanuda                                    |
 | Programada a su hora, ventana cerrada                 | No se lanza, se quita y se avisa con el motivo|
-| Programada con una ya en marcha                       | No se lanza otra; se quita                    |
+| Programada con una ya en marcha                       | Espera: se lanza al acabar la otra            |
+| La anularon o cambiaron mientras tanto                | Se respeta: no se lanza                       |
+| Reanudada hace poco                                   | No cuenta como cortada                        |
 | Programada para más tarde                             | Nada                                          |
 | En curso sin actividad desde hace 10 min              | Incompleta, y aviso con quién falta           |
 | En curso sin actividad pero sin nadie pendiente       | Completa, sin aviso                           |
@@ -134,8 +136,8 @@ class TestLasProgramadas:
             assert await e.uow.handicap_updates.programada_de(e.competicion.id) is None
             e.avisos.send_scheduled_handicaps_update_skipped_email.assert_not_awaited()
 
-    async def test_con_una_en_marcha_no_lanza_otra(self, e, caplog):  # noqa: F811
-        """Y sin error: si no, en Postgres se desharía el quitarla y se lanzaría luego otra."""
+    async def test_con_una_en_marcha_espera_a_que_acabe(self, e, caplog):  # noqa: F811
+        """Se lanzará al acabar la otra (Agustín, 8 oct 2026), y sin error en la vuelta."""
         await e.torneo()
         await e.pulsar()
         await _programar(e, A_TIEMPO)
@@ -143,9 +145,27 @@ class TestLasProgramadas:
         await _vuelta(e, A_TIEMPO).execute()
 
         assert "no pudo atender" not in caplog.text
-
         assert len(e.lanzador.lanzadas) == 1
-        assert await e.uow.handicap_updates.programada_de(e.competicion.id) is None
+        assert await e.uow.handicap_updates.programada_de(e.competicion.id) == A_TIEMPO
+
+    async def test_si_la_cambiaron_mientras_tanto_se_respeta(self, e):  # noqa: F811
+        await e.torneo()
+        await _programar(e, A_TIEMPO)
+        # El vigilante la leyó vencida; antes de bloquear, el organizador la pasa a mañana
+        manana = A_TIEMPO + timedelta(days=1)
+        original = e.uow.handicap_updates.programadas_vencidas
+
+        async def la_leyo_y_la_cambiaron(ahora):
+            vencidas = await original(ahora)
+            await e.uow.handicap_updates.programar(e.competicion.id, manana, ahora)
+            return vencidas
+
+        e.uow.handicap_updates.programadas_vencidas = la_leyo_y_la_cambiaron
+
+        await _vuelta(e, A_TIEMPO).execute()
+
+        assert e.lanzador.lanzadas == []
+        assert await e.uow.handicap_updates.programada_de(e.competicion.id) == manana
 
     async def test_la_de_mas_tarde_espera(self, e):  # noqa: F811
         await e.torneo()
@@ -204,6 +224,21 @@ class TestLasCortadas:
         await _vuelta(e, A_TIEMPO + SIN_ACTIVIDAD + timedelta(minutes=1)).execute()
 
         guardada = await e.uow.handicap_updates.find_by_id(viva.id)
+        assert guardada.estado is EstadoActualizacion.EN_CURSO
+
+    async def test_una_reanudada_hace_poco_no_cuenta_como_cortada(self, e):  # noqa: F811
+        """Se reanudó tras horas incompleta: su actividad es la de ahora (code-review 3b-2)."""
+        await e.torneo()
+        vieja = await self._en_curso(e)
+        vieja.terminar(pendientes=1, momento=A_TIEMPO)
+        luego = A_TIEMPO + timedelta(hours=5)
+        vieja.reanudar(luego)
+        async with e.uow:
+            await e.uow.handicap_updates.update(vieja)
+
+        await _vuelta(e, luego + timedelta(minutes=1)).execute()
+
+        guardada = await e.uow.handicap_updates.find_by_id(vieja.id)
         assert guardada.estado is EstadoActualizacion.EN_CURSO
 
     async def test_si_entre_tanto_termino_no_se_toca(self, e):  # noqa: F811

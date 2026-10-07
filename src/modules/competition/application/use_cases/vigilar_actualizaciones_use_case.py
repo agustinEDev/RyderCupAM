@@ -6,7 +6,8 @@ el vigilante está para dos cosas y nada más:
 
 - **Lanzar las programadas** que llegan a su hora, como si el organizador
   pulsara el botón: termina la última si quedó a medias, o empieza otra. Si a
-  esa hora la ventana está cerrada, no se lanza y se le avisa con el motivo.
+  esa hora la ventana está cerrada, no se lanza y se le avisa con el motivo; si
+  hay otra en marcha, espera y se lanza al acabar esa (8 oct 2026).
 - **Recuperar las cortadas por un reinicio**: la pasada corre en una tarea del
   proceso, y si el servidor se reinicia se queda «en curso» para siempre. Sin
   actividad en `SIN_ACTIVIDAD`, se da por terminada: incompleta si falta alguien
@@ -17,7 +18,6 @@ import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
-from src.modules.competition.application.exceptions import ActualizacionEnCursoError
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
@@ -96,21 +96,27 @@ class VigilarActualizacionesUseCase:
         organizador = None
         async with self._herramientas() as h, h.competiciones as uow:
             competicion = await uow.competitions.find_by_id_for_update(competition_id)
-            # Se quita siempre: se lance o no, ya llegó su hora
-            await uow.handicap_updates.anular_programada(competition_id)
-            # Cancelada o terminada: ya no tiene sentido ni avisar
-            if competicion is None or competicion.status.is_final():
+            # Releída bajo el candado: si el organizador la anuló o la cambió
+            # mientras tanto, manda lo suyo
+            para = await uow.handicap_updates.programada_de(competition_id)
+            if para is None or para > ahora:
                 return
+            # Cancelada o terminada: se quita sin avisar, ya no tiene sentido
+            if competicion is None or competicion.status.is_final():
+                await uow.handicap_updates.anular_programada(competition_id)
+                return
+            ultima = await uow.handicap_updates.ultima_de(competition_id)
+            if ultima is not None and ultima.sigue():
+                # Hay una en marcha: espera y se lanza al acabar la otra, con los
+                # datos que pidió el organizador (Agustín, 8 oct 2026)
+                return
+            await uow.handicap_updates.anular_programada(competition_id)
             actualizaciones = ActualizacionesDeHandicaps(uow, self._lanzador)
             ventana = await ventana_de(uow, h.zonas, competicion, ahora)
             if ventana.abierta:
-                try:
-                    lanzada, _ = await actualizaciones.a_mano(
-                        competition_id, OrigenActualizacion.PROGRAMADA, ahora
-                    )
-                except ActualizacionEnCursoError:
-                    # Ya hay una en marcha (el botón, o el cierre): eso ya lo hace
-                    return
+                lanzada, _ = await actualizaciones.a_mano(
+                    competition_id, OrigenActualizacion.PROGRAMADA, ahora
+                )
             else:
                 motivo = ventana.motivo
                 organizador = await self._avisos.quien(h.usuarios, competicion)

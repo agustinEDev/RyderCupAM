@@ -80,7 +80,7 @@ class InMemoryHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
     ) -> list[ActualizacionDeHandicaps]:
         def ultima_actividad(a: ActualizacionDeHandicaps) -> datetime:
             suyas = [m for (u, _), m in self._cuando.items() if u == a.id]
-            return max([a.creada, *suyas])
+            return max([a.creada, *([a.reanudada] if a.reanudada else []), *suyas])
 
         return [
             replace(a)

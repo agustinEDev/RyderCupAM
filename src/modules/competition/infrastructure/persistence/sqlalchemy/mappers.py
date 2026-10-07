@@ -1235,6 +1235,7 @@ handicap_updates_table = Table(
     Column("status", String(20), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("finished_at", DateTime(timezone=True), nullable=True),
+    Column("resumed_at", DateTime(timezone=True), nullable=True),
 )
 
 # La actualización que deja programada el organizador: una por competición (#251)

@@ -46,6 +46,9 @@ class ActualizacionDeHandicaps:
     creada: datetime
     estado: EstadoActualizacion = EstadoActualizacion.EN_CURSO
     terminada: datetime | None = field(default=None)
+    # Cuándo se reanudó por última vez: cuenta como actividad (si no, el vigilante
+    # la tomaría por cortada al momento)
+    reanudada: datetime | None = field(default=None)
 
     @classmethod
     def crear(
@@ -69,7 +72,7 @@ class ActualizacionDeHandicaps:
         self.estado = EstadoActualizacion.INCOMPLETA if pendientes else EstadoActualizacion.COMPLETA
         self.terminada = momento
 
-    def reanudar(self) -> None:
+    def reanudar(self, momento: datetime) -> None:
         """
         Una incompleta vuelve a estar en curso: la pasada termina lo que falta.
 
@@ -80,6 +83,7 @@ class ActualizacionDeHandicaps:
             raise ValueError("Solo se reanuda una actualización incompleta.")
         self.estado = EstadoActualizacion.EN_CURSO
         self.terminada = None
+        self.reanudada = momento
 
     def cortar(self, momento: datetime) -> None:
         """

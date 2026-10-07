@@ -88,6 +88,15 @@ class TestProgramar:
         with pytest.raises(ActualizacionNoPermitidaError, match="salida"):
             await _programar(e, CERCA)
 
+    async def test_pegada_al_cierre_tampoco(self, e):  # noqa: F811
+        """El vigilante pasa cada minuto: hace falta margen para que llegue a tiempo."""
+        await e.torneo()
+        # La ventana cierra a las 6:59 UTC (9:00 en Madrid menos 6 x 10 s)
+        un_minuto_antes = datetime(2030, 10, 11, 6, 58, tzinfo=UTC)
+
+        with pytest.raises(ActualizacionNoPermitidaError, match="margen"):
+            await _programar(e, un_minuto_antes)
+
     async def test_un_jugador_no(self, e):  # noqa: F811
         await e.torneo()
 

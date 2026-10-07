@@ -34,30 +34,36 @@ class AvisosAlOrganizador:
 
     async def pendientes(self, organizador, competition: Competition, nombres: list[str]) -> None:
         """Hay jugadores sin actualizar: que los termine con el botón."""
-        if self._avisos is None or organizador is None:
-            return
-        try:
-            await self._avisos.send_handicaps_pending_email(
-                to_email=organizador.email.value,
-                organizer_name=organizador.get_full_name(),
-                competition_name=str(competition.name),
-                competition_id=str(competition.id.value),
+        if self._avisos is not None:
+            await self._enviar(
+                self._avisos.send_handicaps_pending_email,
+                organizador,
+                competition,
                 pending_names=nombres,
             )
-        except Exception:
-            logger.exception("No se pudo avisar al organizador de %s", competition.id.value)
 
     async def no_lanzada(self, organizador, competition: Competition, motivo: str) -> None:
         """La programada no se lanzó: a su hora la ventana estaba cerrada."""
-        if self._avisos is None or organizador is None:
+        if self._avisos is not None:
+            await self._enviar(
+                self._avisos.send_scheduled_handicaps_update_skipped_email,
+                organizador,
+                competition,
+                reason=motivo,
+            )
+
+    @staticmethod
+    async def _enviar(enviar, organizador, competition: Competition, **lo_suyo) -> None:
+        """Lo común: a quién, de qué competición, y que un fallo no tumbe nada."""
+        if organizador is None:
             return
         try:
-            await self._avisos.send_scheduled_handicaps_update_skipped_email(
+            await enviar(
                 to_email=organizador.email.value,
                 organizer_name=organizador.get_full_name(),
                 competition_name=str(competition.name),
                 competition_id=str(competition.id.value),
-                reason=motivo,
+                **lo_suyo,
             )
         except Exception:
             logger.exception("No se pudo avisar al organizador de %s", competition.id.value)

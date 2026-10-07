@@ -98,7 +98,6 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (  # 
     start_mappers,
 )
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
-from src.shared.infrastructure.email.email_service import EmailService  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
@@ -144,9 +143,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     vigilante = None
     lanzador = get_lanzador_de_actualizaciones()
     if isinstance(lanzador, LanzadorEnSegundoPlano):
-        vigilante = asyncio.create_task(
-            VigilanteDeActualizaciones(lanzador, EmailService()).vigilar()
-        )
+        vigilante = asyncio.create_task(VigilanteDeActualizaciones(lanzador).vigilar())
     yield
     if vigilante is not None:
         vigilante.cancel()

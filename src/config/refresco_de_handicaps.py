@@ -79,7 +79,7 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
     ):
         self.fabrica = fabrica_de_sesiones
         self._handicap_service = handicap_service
-        self._avisos = avisos
+        self.avisos = avisos
         self._esperar = esperar
         # Referencias fuertes: una tarea sin ellas puede desaparecer a medias
         self._tareas: set[asyncio.Task[int | None]] = set()
@@ -95,7 +95,7 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
             return await RefrescarHandicapsUseCase(
                 herramientas=self.herramientas,
                 handicap_service=self._handicap_service,
-                avisos=self._avisos,
+                avisos=self.avisos,
                 reloj=lambda: datetime.now(UTC),
                 esperar=self._esperar,
             ).execute(update_id)
@@ -140,12 +140,11 @@ class VigilanteDeActualizaciones:
     def __init__(
         self,
         lanzador: LanzadorEnSegundoPlano,
-        avisos: IHandicapUpdateEmailService,
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
+        """El correo es el del lanzador: el mismo para la pasada y para el vigilante."""
         self._lanzador = lanzador
-        self._avisos = avisos
         self._esperar = esperar
         self._reloj = reloj
 
@@ -178,11 +177,24 @@ class VigilanteDeActualizaciones:
                 return await VigilarActualizacionesUseCase(
                     herramientas=self._lanzador.herramientas,
                     lanzador=self._lanzador,
-                    avisos=self._avisos,
+                    avisos=self._lanzador.avisos,
                     reloj=self._reloj,
                 ).execute()
             finally:
-                await candado.scalar(
-                    text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_VIGILANTE}
-                )
-                await candado.commit()
+                await self._soltar(candado)
+
+    @staticmethod
+    async def _soltar(candado) -> None:
+        """
+        Suelta el candado; si no puede (un error, o la app apagándose a media
+        vuelta), cierra la conexión, que es lo que lo suelta de verdad. Devolverla
+        al pool con el candado cogido dejaría a todos los procesos sin vigilante.
+        """
+        try:
+            await candado.scalar(
+                text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_VIGILANTE}
+            )
+            await candado.commit()
+        except BaseException:
+            await candado.invalidate()
+            raise
