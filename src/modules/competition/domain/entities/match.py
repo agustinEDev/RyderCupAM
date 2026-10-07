@@ -160,34 +160,6 @@ class Match:
             return handicap_diff, "B"
         return handicap_diff, ""
 
-    def recalcular_jugadores(
-        self, team_a_players: Sequence[MatchPlayer], team_b_players: Sequence[MatchPlayer]
-    ) -> None:
-        """
-        Sustituye los golpes de los MISMOS jugadores, sobre el mismo partido (BE #502).
-
-        A las 3:00 del día de juego puede cambiar el hándicap de alguien, y su
-        partido de hoy ya estaba generado. No se borra y se crea otro, como en
-        la reasignación: los móviles guardan su identificador.
-
-        Raises:
-            ValueError: Si el partido ya ha empezado, o si no son los mismos
-                jugadores en los mismos bandos y en el mismo orden
-        """
-        if self._status != MatchStatus.SCHEDULED:
-            raise ValueError("Solo se recalculan los golpes de un partido sin empezar")
-        mismos = [p.user_id for p in team_a_players] == [
-            p.user_id for p in self._team_a_players
-        ] and [p.user_id for p in team_b_players] == [p.user_id for p in self._team_b_players]
-        if not mismos:
-            raise ValueError("Solo se recalculan los golpes de los mismos jugadores")
-        self._team_a_players = tuple(team_a_players)
-        self._team_b_players = tuple(team_b_players)
-        self._handicap_strokes_given, self._strokes_given_to_team = self._ventaja(
-            team_a_players, team_b_players
-        )
-        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
-
     @classmethod
     def reconstruct(
         cls,
