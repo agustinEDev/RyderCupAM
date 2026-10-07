@@ -28,6 +28,10 @@ se avisa al organizador por correo.
 | Se corta mientras contesta la RFEG                | No corrige el fijado                     |
 | Se corta con el último jugador                    | Sin correo                               |
 | Volver a cerrar desde en juego                    | No lanza otra                            |
+| Nombrar capitanes con inscripciones abiertas      | También la lanza (cierra)                |
+| Cambiar capitanes ya cerrada                      | No lanza otra                            |
+| Al reabrir                                        | La que esté a medias se corta            |
+| Se corta con un jugador fallando                  | No reintenta con él                      |
 | Ryder cerrada                                     | Solo el perfil                           |
 | La RFEG se consulta                               | Sin ninguna transacción abierta          |
 | Un fallo inesperado                               | Se apunta como fallido, y sigue          |
@@ -43,6 +47,8 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     CloseEnrollmentsRequestDTO,
     CreateCompetitionRequestDTO,
+    NameCaptainsRequestDTO,
+    ReopenEnrollmentsRequestDTO,
     StartCompetitionRequestDTO,
     StrokePlaySettingsDTO,
 )
@@ -53,11 +59,17 @@ from src.modules.competition.application.use_cases.close_enrollments_use_case im
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CreateCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.name_captains_use_case import (
+    NameCaptainsUseCase,
+)
 from src.modules.competition.application.use_cases.refrescar_handicaps_use_case import (
     PAUSA_ENTRE_INTENTOS,
     PAUSA_ENTRE_JUGADORES,
     Herramientas,
     RefrescarHandicapsUseCase,
+)
+from src.modules.competition.application.use_cases.reopen_enrollments_use_case import (
+    ReopenEnrollmentsUseCase,
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
@@ -299,6 +311,51 @@ class TestAlCerrar:
 
         assert len(e.lanzador.lanzadas) == 1
 
+    async def test_nombrar_capitanes_con_las_inscripciones_abiertas_tambien_la_lanza(self, e):
+        """Nombrar capitanes cierra las inscripciones de una Ryder por otro camino."""
+        torneo = await e.torneo()
+        otro = await e.inscrito(torneo)
+
+        await NameCaptainsUseCase(e.uow, e.lanzador).execute(
+            NameCaptainsRequestDTO(
+                competition_id=torneo.value,
+                team_a_captain_id=e.creadores[torneo].value,
+                team_b_captain_id=otro.value,
+            ),
+            e.creadores[torneo],
+        )
+
+        ultima = await e.ultima(torneo)
+        assert ultima.origen is OrigenActualizacion.CIERRE
+        assert e.lanzador.lanzadas == [ultima.id]
+        assert e.lanzador.abiertas_al_lanzar == [0]
+
+    async def test_cambiar_capitanes_ya_cerrada_no_lanza_otra(self, e):
+        torneo = await e.torneo()
+        otro = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+
+        await NameCaptainsUseCase(e.uow, e.lanzador).execute(
+            NameCaptainsRequestDTO(
+                competition_id=torneo.value,
+                team_a_captain_id=e.creadores[torneo].value,
+                team_b_captain_id=otro.value,
+            ),
+            e.creadores[torneo],
+        )
+
+        assert len(e.lanzador.lanzadas) == 1
+
+    async def test_al_reabrir_se_corta_la_que_este_a_medias(self, e):
+        torneo = await e.torneo()
+        await e.cerrar(torneo)
+
+        await ReopenEnrollmentsUseCase(e.uow).execute(
+            ReopenEnrollmentsRequestDTO(competition_id=torneo.value), e.creadores[torneo]
+        )
+
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.CORTADA
+
     async def test_al_iniciar_se_corta_la_que_este_a_medias(self, e):
         torneo = await e.torneo()
         await e.cerrar(torneo)
@@ -492,6 +549,21 @@ class TestElHandicapFijado:
 
         assert (await e.ultima(torneo)).estado is EstadoActualizacion.CORTADA
         e.avisos.send_handicaps_pending_email.assert_not_awaited()
+
+    async def test_si_se_corta_no_reintenta_con_ese_jugador(self, e):
+        torneo = await e.torneo()
+        await e.cerrar(torneo)
+
+        async def empieza_y_falla(nombre):
+            if (await e.uow.competitions.find_by_id(torneo)).status.value == "CLOSED":
+                await e.iniciar(torneo)
+            raise TimeoutError
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=empieza_y_falla)
+
+        await e.pasar(torneo)
+
+        assert e.rfeg.search_handicap.await_count == 1
 
     async def test_en_una_ryder_solo_cambia_el_perfil(self, e):
         torneo = await e.torneo()

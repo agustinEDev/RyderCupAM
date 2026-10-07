@@ -477,10 +477,12 @@ async def get_competition(
         # que nació, y así unos equipos salidos del draft se contaban como
         # repartidos a mano
         dto.actual_team_assignment = await get_competition_uc.reparto_real(competition_vo_id)
-        # Solo para quien organiza: cómo va la actualización de hándicaps (#251)
-        dto.handicap_update = await handicaps_uc.execute(
-            competition_vo_id, current_user_id, is_admin=current_user.is_admin
-        )
+        # Solo para quien organiza: cómo va la actualización de hándicaps (#251).
+        # A los demás ni se les pregunta: es la ficha, la que más se pide
+        if dto.is_creator or current_user.is_admin:
+            dto.handicap_update = await handicaps_uc.execute(
+                competition_vo_id, current_user_id, is_admin=current_user.is_admin
+            )
         return dto
 
     except ValueError as e:

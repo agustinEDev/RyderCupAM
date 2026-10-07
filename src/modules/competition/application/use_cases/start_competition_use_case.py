@@ -5,8 +5,6 @@ Permite iniciar una competición (CLOSED → IN_PROGRESS).
 Solo el creador puede realizar esta acción.
 """
 
-from datetime import UTC, datetime
-
 from src.modules.competition.application.dto.competition_dto import (
     StartCompetitionRequestDTO,
     StartCompetitionResponseDTO,
@@ -14,6 +12,9 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
+)
+from src.modules.competition.application.services.actualizaciones_de_handicaps import (
+    ActualizacionesDeHandicaps,
 )
 from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -103,10 +104,7 @@ class StartCompetitionUseCase:
 
             # 4b. La actualización de hándicaps que esté a medias se corta: lo que
             #     no se actualizó antes de empezar se queda como estaba (#251)
-            ultima = await self._uow.handicap_updates.ultima_de(competition.id)
-            if ultima is not None:
-                ultima.cortar(datetime.now(UTC))
-                await self._uow.handicap_updates.update(ultima)
+            await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)

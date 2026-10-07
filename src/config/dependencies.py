@@ -1821,9 +1821,10 @@ def get_handicap_update_status_use_case(
 
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
 ) -> NameCaptainsUseCase:
-    """Proveedor del caso de uso NameCaptainsUseCase (BE #320)."""
-    return NameCaptainsUseCase(uow)
+    """Proveedor del caso de uso NameCaptainsUseCase (BE #320), con el refresco (#251)."""
+    return NameCaptainsUseCase(uow, lanzador)
 
 
 def get_name_vice_captain_use_case(

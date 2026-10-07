@@ -6,7 +6,8 @@ los usuarios, la RFEG y el correo.
 
 Al cerrar las inscripciones, la petición guarda una actualización y la lanza
 aquí, en una tarea del propio proceso de la API: la respuesta no espera a la
-RFEG. Si el servidor se reinicia a mitad, lo pendiente queda apuntado.
+RFEG. Si el servidor se reinicia a mitad, la tarea muere y la actualización
+se queda en curso: detectarlo y avisar llega con el botón del organizador.
 
 **Solo en producción**: apagado por defecto y encendido con
 `HANDICAP_REFRESH_ENABLED=true`, que solo se pone en Render. Así el Kind y el

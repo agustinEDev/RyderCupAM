@@ -131,10 +131,12 @@ class RefrescarHandicapsUseCase:
             return actualizacion is not None and actualizacion.sigue()
 
     async def _refrescar(self, update_id: uuid.UUID, user_id: UserId) -> None:
-        """Hasta 3 intentos con un jugador, con pausa entre uno y otro."""
+        """Hasta 3 intentos con un jugador, con pausa entre uno y otro, mientras siga."""
         for intento in range(MAX_INTENTOS):
             if intento:
                 await self._esperar(PAUSA_ENTRE_INTENTOS)
+                if not await self._sigue(update_id):
+                    return
             if await self._una_vez(update_id, user_id) is not ResultadoRefresco.FALLIDO:
                 return
 
