@@ -72,6 +72,9 @@ from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
 )
+from src.modules.competition.application.services.jugadores_del_partido import (
+    PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
+)
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
     CompetitionNotClosedError as AssignTeamsNotClosedError,
@@ -132,7 +135,6 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
     MatchNotFoundError as ReassignMatchNotFoundError,
     MatchNotScheduledError,
     NoTeamAssignmentError as ReassignNoTeamAssignmentError,
-    PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
     PlayerNotInTeamError,
     ReassignMatchPlayersUseCase,
     WrongNumberOfPlayersError,

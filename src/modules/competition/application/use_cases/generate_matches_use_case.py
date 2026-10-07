@@ -1,6 +1,5 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
-import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -552,9 +551,9 @@ class GenerateMatchesUseCase:
             all_player_ids = list(team_assignment.team_a_player_ids) + list(
                 team_assignment.team_b_player_ids
             )
-            users = await asyncio.gather(
-                *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
-            )
+            # De uno en uno: son consultas sobre la misma sesión, y SQLAlchemy
+            # no admite dos operaciones a la vez en una sesión (era un gather)
+            users = [await self._user_repo.find_by_id(pid) for pid in all_player_ids]
             for pid, user in zip(all_player_ids, users, strict=True):
                 if user:
                     enrollment = enrollment_map.get(str(pid.value))
