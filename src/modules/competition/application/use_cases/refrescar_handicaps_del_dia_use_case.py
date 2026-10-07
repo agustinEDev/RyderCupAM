@@ -41,6 +41,7 @@ from src.modules.competition.application.services.jugadores_del_partido import (
     JugadoresDelPartido,
 )
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -119,7 +120,8 @@ class RefrescarHandicapsDelDiaUseCase:
 
         # En cada vuelta, con TODOS los actualizados del día y no solo los de
         # esta: si una vuelta se corta antes de llegar aquí, la siguiente lo
-        # hace. Solo se escribe el partido cuyos golpes cambian
+        # hace. Solo se escribe el partido cuyos jugadores cambian: sus golpes
+        # o el índice con el que juegan, que el partido enseña y debe ser el vigente
         for competition_id, dia in dias_que_tocan:
             await self._recalcular_los_partidos(competition_id, dia)
         return len(pendientes)
@@ -260,13 +262,17 @@ class RefrescarHandicapsDelDiaUseCase:
                     return
                 jugadores_del_partido = JugadoresDelPartido(h.campos, h.usuarios)
                 for sesion in await uow.rounds.find_by_competition_and_date(competition_id, dia):
-                    for partido in await uow.matches.find_by_round_for_update(sesion.id):
+                    for leido in await uow.matches.find_by_round(sesion.id):
+                        if not self._hay_que_recalcular(leido, actualizados):
+                            continue
+                        # Se bloquea solo el que se va a recalcular, y se vuelve
+                        # a mirar: pudo empezar entre la lectura y el bloqueo. Los
+                        # demás no esperan (la anotación de la mañana abre a las 6)
+                        partido = await uow.matches.find_by_id_for_update(leido.id)
+                        if partido is None or not self._hay_que_recalcular(partido, actualizados):
+                            continue
                         lado_a = [p.user_id for p in partido.team_a_players]
                         lado_b = [p.user_id for p in partido.team_b_players]
-                        if partido.status is not MatchStatus.SCHEDULED or not (
-                            actualizados & {*lado_a, *lado_b}
-                        ):
-                            continue
                         try:
                             async with uow.savepoint():
                                 nuevos_a, nuevos_b = await jugadores_del_partido.construir(
@@ -288,6 +294,12 @@ class RefrescarHandicapsDelDiaUseCase:
                 dia,
                 competition_id,
             )
+
+    @staticmethod
+    def _hay_que_recalcular(partido: Match, actualizados: set[UserId]) -> bool:
+        """Sin empezar y con algún jugador actualizado ese día."""
+        jugadores = {p.user_id for p in (*partido.team_a_players, *partido.team_b_players)}
+        return partido.status is MatchStatus.SCHEDULED and bool(actualizados & jugadores)
 
     async def _apuntar_el_fallo(
         self, user_id: UserId, donde: list[tuple[CompetitionId, date]], ahora: datetime

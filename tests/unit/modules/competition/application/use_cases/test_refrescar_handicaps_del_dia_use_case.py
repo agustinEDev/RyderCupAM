@@ -620,3 +620,53 @@ class TestLoQueEncontroLaRevisionDeLa502b:
         await e.caso(_hora_de_madrid(3)).execute()
 
         assert e.uow.savepoints == 2
+
+
+class TestLoQueEncontroCodeRabbitEnLa504:
+    async def test_solo_se_bloquean_los_partidos_que_se_van_a_recalcular(self, e):
+        """Un golpe anotado a las 6:30 en un partido empezado no espera al recálculo."""
+        torneo = await TestRecalcularLosPartidosDeHoy()._torneo_con_handicap(e)
+        a, b, c, d = [await e.inscrito(torneo) for _ in range(4)]
+        sesion = await e.sesion(torneo)
+        empezado = await e.partido(sesion, a, b, empezado=True)
+        candidato = await e.partido(sesion, c, d)
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+        bloqueados = []
+        original = e.uow.matches.find_by_id_for_update
+
+        async def bloquear(match_id):
+            bloqueados.append(match_id)
+            return await original(match_id)
+
+        async def nunca(_round_id):
+            raise AssertionError("no se bloquea la sesión entera")
+
+        e.uow.matches.find_by_id_for_update = bloquear
+        e.uow.matches.find_by_round_for_update = nunca
+
+        await e.caso(_hora_de_madrid(6, 30)).execute()
+
+        assert bloqueados == [candidato.id]
+        assert empezado.id not in bloqueados
+        recalculado = await e.uow.matches.find_by_id(candidato.id)
+        assert recalculado.team_a_players[0].playing_handicap != 10
+
+    async def test_si_empieza_entre_la_lectura_y_el_bloqueo_no_se_toca(self, e, caplog):
+        partido, _ = await TestRecalcularLosPartidosDeHoy()._partido_de_hoy(e)
+        antes = partido.team_a_players
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+        original = e.uow.matches.find_by_id_for_update
+
+        async def empieza_justo_ahora(match_id):
+            bloqueado = await original(match_id)
+            if bloqueado.status.value == "SCHEDULED":
+                bloqueado.start()
+            return bloqueado
+
+        e.uow.matches.find_by_id_for_update = empieza_justo_ahora
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert (await e.uow.matches.find_by_id(partido.id)).team_a_players == antes
+        # Y sin dejar un error en el registro: no es un fallo, es que empezó
+        assert "No se pudo recalcular" not in caplog.text
