@@ -151,3 +151,59 @@ async def test_no_se_deja_a_nadie_sin_handicap(client: AsyncClient):
     assert con_personalizado.status_code in (200, 201), con_personalizado.text
     assert quitar.status_code == 400, quitar.text
     assert "sin hándicap" in quitar.json()["detail"]
+
+
+class _LanzadorQueApunta:
+    """Apunta lo que se lanzaría; la pasada de verdad tiene sus propios tests."""
+
+    def __init__(self):
+        self.lanzadas = []
+
+    def lanzar(self, update_id) -> None:
+        self.lanzadas.append(update_id)
+
+
+async def test_al_cerrar_la_ficha_ensena_al_organizador_quien_falta(client: AsyncClient):
+    """Con el refresco encendido, al cerrar se lanza y el organizador ve quién falta."""
+    from main import app
+    from src.config.dependencies import get_lanzador_de_actualizaciones
+
+    lanzador = _LanzadorQueApunta()
+    app.dependency_overrides[get_lanzador_de_actualizaciones] = lambda: lanzador
+    try:
+        jugador = await _usuario(client, handicap=20.0)
+        organizador = await _usuario(client, handicap=14.2)
+        competicion = await create_competition(client, organizador["cookies"], _datos())
+        set_auth_cookies(client, organizador["cookies"])
+        await client.post(
+            f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
+            json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
+        )
+        cerrar = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
+
+        ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
+        set_auth_cookies(client, jugador["cookies"])
+        ficha_del_jugador = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
+    finally:
+        app.dependency_overrides.pop(get_lanzador_de_actualizaciones, None)
+
+    assert cerrar.status_code == 200, cerrar.text
+    assert len(lanzador.lanzadas) == 1
+    estado = ficha["handicap_update"]
+    assert (estado["status"], estado["origin"]) == ("IN_PROGRESS", "ENROLLMENTS_CLOSED")
+    assert {p["user_id"] for p in estado["pending_players"]} == {
+        organizador["user"]["id"],
+        jugador["user"]["id"],
+    }
+    assert ficha_del_jugador["handicap_update"] is None
+
+
+async def test_sin_el_refresco_encendido_no_hay_actualizacion(client: AsyncClient):
+    """En los tests (y fuera de producción) al cerrar no se pregunta a la RFEG."""
+    usuario = await _usuario(client, handicap=14.2)
+    competicion = await create_competition(client, usuario["cookies"], _datos())
+
+    await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
+    ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
+
+    assert ficha["handicap_update"] is None

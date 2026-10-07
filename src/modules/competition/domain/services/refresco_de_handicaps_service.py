@@ -1,35 +1,32 @@
 """
-RefrescoDeHandicapsService - Quién se refresca con la RFEG en un día de juego (BE #502).
+RefrescoDeHandicapsService - A quién se pregunta a la RFEG en una actualización (#251).
 
-Decidido con Agustín el 7 oct 2026. La RFEG publica hacia las 0:00-0:30, y un
-jugador puede haber jugado otro torneo la víspera: a las **3:00 hora del campo
-de cada día de juego** se pregunta por el hándicap de quien juega ese día.
+Decidido con Agustín el 7 oct 2026: al cerrar las inscripciones se pregunta a
+la RFEG por el hándicap de cada inscrito, como hace la federación con su base
+de datos al cierre. Sustituye al refresco de las 3:00 de cada día de juego (BE #502).
 
-- **Nunca a quien ya ha empezado hoy** su partido o su partida: su hándicap de
-  hoy ya está fijado. Lo jugado no se toca.
-- **Ni a quien tiene hándicap personalizado**: ese lo puso el organizador.
-- Si el servidor estuvo caído a las 3:00, el primer intento se hace en cuanto
-  vuelve, aunque sea tarde.
-- Lo que la RFEG **no encuentra** no se reintenta; lo que **falla** (no
-  responde) se reintenta en cada vuelta **hasta las 7:00**, antes de que se
-  empiece a jugar.
+- **Nunca a quien tiene hándicap personalizado**: ese lo puso el organizador.
+- Lo que la RFEG ya contestó (actualizado, no encontrado, sin licencia
+  española) no se repite: si una actualización quedó a medias, la siguiente
+  pasada termina solo lo que falta.
+- Lo que **falló** se vuelve a preguntar. Cada pasada hace hasta
+  `MAX_INTENTOS` por jugador.
 
 Aquí solo está la decisión, sin red ni base de datos.
 """
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, time
 from enum import StrEnum
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
-HORA_DEL_REFRESCO = time(3, 0)
-FIN_DE_LOS_REINTENTOS = time(7, 0)
+# Intentos por jugador en cada pasada
+MAX_INTENTOS = 3
 
 
 class ResultadoRefresco(StrEnum):
-    """Qué pasó al preguntar a la RFEG por un jugador, un día de juego."""
+    """Qué pasó al preguntar a la RFEG por un jugador."""
 
     ACTUALIZADO = "ACTUALIZADO"
     NO_ENCONTRADO = "NO_ENCONTRADO"
@@ -42,47 +39,37 @@ class ResultadoRefresco(StrEnum):
 
 @dataclass(frozen=True)
 class Candidato:
-    """Un jugador que juega ese día, con lo que decide si se le pregunta."""
+    """Un inscrito, con lo que decide si se le pregunta."""
 
     user_id: UserId
     handicap_personalizado: bool
-    empezo_hoy: bool
+
+
+@dataclass(frozen=True)
+class Intento:
+    """El último resultado de un jugador en una actualización, y cuántas veces se preguntó."""
+
+    resultado: ResultadoRefresco
+    intentos: int
 
 
 class RefrescoDeHandicapsService:
-    """Cuándo toca refrescar y a quién."""
-
-    @staticmethod
-    def toca(ahora_local: datetime, dia_de_juego: date) -> bool:
-        """
-        Si ya toca refrescar para ese día de juego.
-
-        Args:
-            ahora_local: La hora actual en el huso del campo
-            dia_de_juego: El día en que se juega
-        """
-        return ahora_local.date() == dia_de_juego and ahora_local.time() >= HORA_DEL_REFRESCO
+    """A quién preguntar en esta vuelta."""
 
     @staticmethod
     def a_quien(
-        candidatos: Iterable[Candidato],
-        resultados: Mapping[UserId, ResultadoRefresco],
-        ahora_local: datetime,
+        candidatos: Iterable[Candidato], resultados: Mapping[UserId, ResultadoRefresco]
     ) -> list[UserId]:
         """
-        A quién preguntar en esta vuelta, en el orden de los candidatos.
+        A quién preguntar, en el orden de los candidatos.
 
         Args:
-            candidatos: Quien juega ese día
-            resultados: Lo que ya se le preguntó ese día a cada uno
-            ahora_local: La hora actual en el huso del campo
+            candidatos: Los inscritos de la competición
+            resultados: Lo que ya contestó la RFEG por cada uno en esta actualización
         """
-        reintenta = ahora_local.time() < FIN_DE_LOS_REINTENTOS
-        elegidos = []
-        for candidato in candidatos:
-            if candidato.empezo_hoy or candidato.handicap_personalizado:
-                continue
-            resultado = resultados.get(candidato.user_id)
-            if resultado is None or (resultado is ResultadoRefresco.FALLIDO and reintenta):
-                elegidos.append(candidato.user_id)
-        return elegidos
+        return [
+            c.user_id
+            for c in candidatos
+            if not c.handicap_personalizado
+            and resultados.get(c.user_id, ResultadoRefresco.FALLIDO) is ResultadoRefresco.FALLIDO
+        ]

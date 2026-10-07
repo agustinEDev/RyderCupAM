@@ -13,6 +13,12 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
+    LanzadorDeActualizaciones,
+)
+from src.modules.competition.application.services.actualizaciones_de_handicaps import (
+    ActualizacionesDeHandicaps,
+)
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
@@ -53,6 +59,7 @@ class CloseEnrollmentsUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface | None = None,
+        lanzador: LanzadorDeActualizaciones | None = None,
     ):
         """
         Constructor.
@@ -63,6 +70,8 @@ class CloseEnrollmentsUseCase:
         self._uow = uow
         # Para el hándicap de cada inscrito en un stroke play (#251)
         self._users = user_repository
+        # El refresco con la RFEG en segundo plano; sin él, no hay (fuera de producción)
+        self._actualizaciones = ActualizacionesDeHandicaps(uow, lanzador)
 
     async def execute(
         self, request: CloseEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -116,13 +125,23 @@ class CloseEnrollmentsUseCase:
                 await self._handicaps().fijar(competition)
 
             # 4b. Cerrar inscripciones (la entidad valida la transición)
+            desde_abierta = competition.status is CompetitionStatus.ACTIVE
             competition.close_enrollments(total_enrollments=total_enrollments)
+
+            # 4c. Al cerrar desde ABIERTA se pregunta a la RFEG por todos, en segundo
+            #     plano: una actualización nueva, y la anterior a medias se corta (#251)
+            actualizacion = None
+            if desde_abierta:
+                actualizacion = await self._actualizaciones.al_cerrar(competition.id)
 
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
             # 6. Las invitaciones pendientes se quedan sin plaza (#710)
             await sin_plaza_para_las_pendientes(self._uow, competition_id)
+
+        # 7. Ya guardada, se lanza: la respuesta no espera a la RFEG
+        self._actualizaciones.lanzar(actualizacion)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(

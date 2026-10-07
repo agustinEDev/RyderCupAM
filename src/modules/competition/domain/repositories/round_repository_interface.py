@@ -1,7 +1,6 @@
 """Round Repository Interface - Domain Layer."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Collection
 from datetime import date
 
 from ..entities.round import Round
@@ -46,11 +45,6 @@ class RoundRepositoryInterface(ABC):
         self, competition_id: CompetitionId, round_date: date
     ) -> list[Round]:
         """Busca rondas de una competicion en una fecha especifica."""
-        pass
-
-    @abstractmethod
-    async def find_by_dates(self, dates: Collection[date]) -> list[Round]:
-        """Las sesiones de esos días, de todas las competiciones (BE #502)."""
         pass
 
     @abstractmethod

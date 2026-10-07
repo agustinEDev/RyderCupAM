@@ -554,6 +554,38 @@ class UpdateCompetitionResponseDTO(BaseModel):
 # ======================================================================================
 
 
+class PendingHandicapPlayerDTO(BaseModel):
+    """Un jugador al que falta actualizar el hándicap con la RFEG (#251)."""
+
+    user_id: UUID
+    name: str
+
+
+class HandicapUpdateStatusDTO(BaseModel):
+    """La última actualización de hándicaps con la RFEG de la competición (#251)."""
+
+    status: Literal["IN_PROGRESS", "COMPLETED", "INCOMPLETE", "STOPPED"] = Field(
+        ...,
+        description=(
+            "IN_PROGRESS: preguntando a la RFEG. COMPLETED: todos actualizados. "
+            "INCOMPLETE: alguien se quedó sin actualizar (se avisa al organizador por "
+            "correo). STOPPED: la competición empezó o se volvió a cerrar a mitad."
+        ),
+    )
+    origin: Literal["ENROLLMENTS_CLOSED", "ORGANIZER", "SCHEDULED"] = Field(
+        ..., description="Qué la lanzó: el cierre de inscripciones, el botón o una programada."
+    )
+    started_at: datetime
+    finished_at: datetime | None = None
+    pending_players: list[PendingHandicapPlayerDTO] = Field(
+        default_factory=list,
+        description=(
+            "En curso, quién falta todavía; incompleta, quién se quedó sin actualizar. "
+            "Vacío si está completa o cortada."
+        ),
+    )
+
+
 class CompetitionResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una competición.
@@ -671,6 +703,14 @@ class CompetitionResponseDTO(BaseModel):
             "Solo en la ficha: si quien la mira puede borrarla ahora (creador o admin, "
             "estado que lo permita y nada jugado). Null en los listados, donde no "
             "se calcula para no recorrer los partidos de cada competición."
+        ),
+    )
+    handicap_update: HandicapUpdateStatusDTO | None = Field(
+        None,
+        description=(
+            "Solo en la ficha y solo para el organizador o un admin: la última "
+            "actualización de hándicaps con la RFEG (#251). Null si no hay ninguna, "
+            "para cualquier otro y en los listados."
         ),
     )
 

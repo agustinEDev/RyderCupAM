@@ -13,6 +13,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.actualizaciones_de_handicaps import (
+    ActualizacionesDeHandicaps,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -77,6 +80,10 @@ class ReopenEnrollmentsUseCase:
 
             # 3. Reabrir inscripciones (la entidad valida la transición)
             competition.reopen_enrollments()
+
+            # La actualización de hándicaps que esté a medias se corta: al volver
+            # a cerrar empieza otra (#251)
+            await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)

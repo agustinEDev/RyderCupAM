@@ -12,6 +12,9 @@ import requests
 from fastapi import status
 
 from src.config.settings import settings
+from src.modules.competition.application.ports.handicap_update_email_service_interface import (
+    IHandicapUpdateEmailService,
+)
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
@@ -34,7 +37,9 @@ from src.shared.infrastructure.email.email_layout import (
 logger = logging.getLogger(__name__)
 
 
-class EmailService(IEmailService, IInvitationEmailService, ISocialEmailService):
+class EmailService(
+    IEmailService, IInvitationEmailService, ISocialEmailService, IHandicapUpdateEmailService
+):
     """
     Implementación de IEmailService usando Mailgun.
 
@@ -446,6 +451,85 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
+        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+
+    async def send_handicaps_pending_email(
+        self,
+        to_email: str,
+        organizer_name: str,
+        competition_name: str,
+        competition_id: str,
+        pending_names: list[str],
+    ) -> bool:
+        """
+        Avisa al organizador de que hay hándicaps sin actualizar con la RFEG (#251).
+
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
+        """
+        safe_organizer = self._sanitize_name(organizer_name)
+        safe_competition = self._sanitize_name(competition_name)
+        nombres = [self._sanitize_name(n) for n in pending_names if n]
+        lista = ", ".join(nombres)
+        enlace = f"{settings.FRONTEND_URL}/competitions/{competition_id}"
+
+        subject = (
+            f"Hándicaps sin actualizar en {safe_competition} | "
+            f"Handicaps not updated in {safe_competition}"
+        )
+        text_body = f"""
+Hola {safe_organizer},
+
+Al cerrar las inscripciones de "{safe_competition}" no se pudo actualizar con la RFEG el hándicap de: {lista}.
+
+Siguen con el hándicap que tenían. Puedes volver a intentarlo con el botón «Actualizar hándicaps» de la competición: {enlace}
+
+Saludos,
+El equipo de Ryder Cup Friends
+
+---
+
+Hello {safe_organizer},
+
+When enrollments closed for "{safe_competition}", the RFEG handicap could not be updated for: {lista}.
+
+They keep their previous handicap. You can try again with the "Update handicaps" button on the competition: {enlace}
+
+Best regards,
+The Ryder Cup Friends Team
+        """
+
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"Hándicaps sin actualizar en {safe_competition} · "
+            f"Handicaps not updated in {safe_competition}",
+            etiqueta="Hándicaps",
+            titulo="Hay hándicaps sin actualizar",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_organizer),
+                    ", al cerrar las inscripciones no se pudo actualizar con la RFEG "
+                    "el hándicap de estos jugadores:",
+                ),
+                recuadro(safe_competition, *nombres),
+                parrafo(
+                    "Siguen con el hándicap que tenían. Puedes volver a intentarlo con el "
+                    "botón «Actualizar hándicaps» de la competición."
+                ),
+            ],
+            boton=Boton("Ver la competición", enlace),
+            ingles=Ingles(
+                frase(
+                    negrita(f"Handicaps not updated in {safe_competition}"),
+                    f": {lista}. Try again with the Update handicaps button.",
+                ),
+                Boton("View competition", enlace),
+            ),
+            pie="Te llega porque organizas esta competición en RyderCupFriends. "
+            "You get this because you organise this competition on RyderCupFriends.",
+        )
+
+        recipient = f'"{safe_organizer}" <{to_email}>'
         return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
 
     async def send_friend_request_email(

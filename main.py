@@ -12,8 +12,6 @@ load_dotenv()  # Cargar variables de entorno desde .env
 
 # All imports below must be after load_dotenv() to access environment variables
 
-import asyncio  # noqa: E402
-import contextlib  # noqa: E402
 import secrets  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
@@ -28,7 +26,6 @@ from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from src.config.cors_config import get_cors_config  # noqa: E402
-from src.config.database import async_session_maker  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
@@ -38,7 +35,6 @@ from src.config.version import (  # noqa: E402
     get_deployed_commit,
     get_environment,
 )
-from src.config.vigilantes import vuelta_con_la_base_de_datos  # noqa: E402
 from src.modules.competition.infrastructure.api.exception_handlers import (  # noqa: E402
     register_competition_exception_handlers,
 )
@@ -52,10 +48,6 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     invitation_routes,
     round_match_routes,
     scoring_routes,
-)
-from src.modules.competition.infrastructure.jobs.vigilante_de_handicaps import (  # noqa: E402
-    VigilanteDeHandicaps,
-    debe_vigilar,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
@@ -94,9 +86,6 @@ from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     google_auth_routes,
     handicap_routes,
     user_routes,
-)
-from src.modules.user.infrastructure.external.rfeg_handicap_service import (  # noqa: E402
-    RFEGHandicapService,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers,
@@ -142,19 +131,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_activity_event_mappers()  # Activity feed (depends on User)
     start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
 
-    # El refresco de hándicaps de las 3:00 de cada día de juego (BE #502)
-    vigilante = None
-    if debe_vigilar(os.environ):
-        vigilante = asyncio.create_task(
-            VigilanteDeHandicaps(
-                vuelta_con_la_base_de_datos(async_session_maker, RFEGHandicapService(timeout=10))
-            ).vigilar()
-        )
     yield
-    if vigilante is not None:
-        vigilante.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await vigilante
     print("INFO:     Apagando aplicación...")
 
 

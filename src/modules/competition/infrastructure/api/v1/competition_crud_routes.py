@@ -12,6 +12,7 @@ from src.config.dependencies import (
     get_current_user,
     get_delete_competition_use_case,
     get_get_competition_use_case,
+    get_handicap_update_status_use_case,
     get_list_competitions_use_case,
     get_uow,
     get_update_competition_use_case,
@@ -48,6 +49,9 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.get_handicap_update_status_use_case import (
+    GetHandicapUpdateStatusUseCase,
 )
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
@@ -429,6 +433,7 @@ async def get_competition(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
     delete_uc: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
+    handicaps_uc: GetHandicapUpdateStatusUseCase = Depends(get_handicap_update_status_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
@@ -472,6 +477,12 @@ async def get_competition(
         # que nació, y así unos equipos salidos del draft se contaban como
         # repartidos a mano
         dto.actual_team_assignment = await get_competition_uc.reparto_real(competition_vo_id)
+        # Solo para quien organiza: cómo va la actualización de hándicaps (#251).
+        # A los demás ni se les pregunta: es la ficha, la que más se pide
+        if dto.is_creator or current_user.is_admin:
+            dto.handicap_update = await handicaps_uc.execute(
+                competition_vo_id, current_user_id, is_admin=current_user.is_admin
+            )
         return dto
 
     except ValueError as e:

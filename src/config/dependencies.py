@@ -1,4 +1,5 @@
 import logging
+import os
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends, HTTPException, Request, status
@@ -7,9 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.database import async_session_maker
+from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
 from src.config.settings import settings
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
+)
+from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
+    LanzadorDeActualizaciones,
 )
 from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
     TournamentAchievementsPublisherInterface,
@@ -75,6 +80,9 @@ from src.modules.competition.application.use_cases.get_competition_use_case impo
 from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.get_envelopes_use_case import (
     GetEnvelopesUseCase,
+)
+from src.modules.competition.application.use_cases.get_handicap_update_status_use_case import (
+    GetHandicapUpdateStatusUseCase,
 )
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
@@ -1765,9 +1773,30 @@ def get_activate_competition_use_case(
     return ActivateCompetitionUseCase(uow)
 
 
+_lanzador: LanzadorEnSegundoPlano | None = None
+
+
+def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
+    """
+    El lanzador de actualizaciones de hándicaps, uno para todo el proceso (#251).
+
+    Solo con `HANDICAP_REFRESH_ENABLED` encendido y fuera de los tests: si no,
+    al cerrar no se pregunta a la RFEG.
+    """
+    global _lanzador  # noqa: PLW0603 - uno por proceso, con sus tareas en marcha
+    if not refresco_activado(os.environ):
+        return None
+    if _lanzador is None:
+        _lanzador = LanzadorEnSegundoPlano(
+            async_session_maker, RFEGHandicapService(timeout=10), EmailService()
+        )
+    return _lanzador
+
+
 def get_close_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
 ) -> CloseEnrollmentsUseCase:
     """
     Proveedor del caso de uso CloseEnrollmentsUseCase.
@@ -1777,15 +1806,25 @@ def get_close_enrollments_use_case(
     2. Crea una instancia de `CloseEnrollmentsUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    # Los usuarios, para el hándicap de cada inscrito en un stroke play (#251)
-    return CloseEnrollmentsUseCase(uow, user_uow.users)
+    # Los usuarios, para el hándicap de cada inscrito en un stroke play; y el
+    # refresco con la RFEG en segundo plano, solo en producción (#251)
+    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador)
+
+
+def get_handicap_update_status_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetHandicapUpdateStatusUseCase:
+    """La última actualización de hándicaps, para la ficha del organizador (#251)."""
+    return GetHandicapUpdateStatusUseCase(uow, user_uow.users)
 
 
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
 ) -> NameCaptainsUseCase:
-    """Proveedor del caso de uso NameCaptainsUseCase (BE #320)."""
-    return NameCaptainsUseCase(uow)
+    """Proveedor del caso de uso NameCaptainsUseCase (BE #320), con el refresco (#251)."""
+    return NameCaptainsUseCase(uow, lanzador)
 
 
 def get_name_vice_captain_use_case(

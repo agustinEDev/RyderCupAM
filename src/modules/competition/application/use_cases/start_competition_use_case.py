@@ -13,6 +13,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.actualizaciones_de_handicaps import (
+    ActualizacionesDeHandicaps,
+)
 from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -98,6 +101,10 @@ class StartCompetitionUseCase:
             # 4. Iniciar la competición (la entidad valida la transición). El
             #    hándicap de cada uno ya quedó fijado al cerrar las inscripciones
             competition.start()
+
+            # 4b. La actualización de hándicaps que esté a medias se corta: lo que
+            #     no se actualizó antes de empezar se queda como estaba (#251)
+            await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
