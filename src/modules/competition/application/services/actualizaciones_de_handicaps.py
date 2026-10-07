@@ -15,11 +15,16 @@ guardar, para que la pasada encuentre la actualización.
 
 from datetime import UTC, datetime
 
+from src.modules.competition.application.exceptions import (
+    ActualizacionEnCursoError,
+    RefrescoDesactivadoError,
+)
 from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
     LanzadorDeActualizaciones,
 )
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
+    EstadoActualizacion,
     OrigenActualizacion,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -54,6 +59,34 @@ class ActualizacionesDeHandicaps:
         )
         await self._uow.handicap_updates.add(actualizacion)
         return actualizacion
+
+    async def a_mano(
+        self, competition_id: CompetitionId, origen: OrigenActualizacion, ahora: datetime
+    ) -> tuple[ActualizacionDeHandicaps, bool]:
+        """
+        La que pide el organizador: termina la última si quedó a medias, o empieza otra.
+
+        Returns:
+            La actualización, y si es la última reanudada (True) o una nueva
+
+        Raises:
+            RefrescoDesactivadoError: Si no hay con qué lanzarla
+            ActualizacionEnCursoError: Si ya hay una en marcha
+        """
+        if self._lanzador is None:
+            raise RefrescoDesactivadoError(
+                "La actualización con la RFEG solo está encendida en producción."
+            )
+        ultima = await self._uow.handicap_updates.ultima_de(competition_id)
+        if ultima is not None and ultima.sigue():
+            raise ActualizacionEnCursoError("Ya se están actualizando los hándicaps.")
+        if ultima is not None and ultima.estado is EstadoActualizacion.INCOMPLETA:
+            ultima.reanudar()
+            await self._uow.handicap_updates.update(ultima)
+            return ultima, True
+        actualizacion = ActualizacionDeHandicaps.crear(competition_id, origen, ahora)
+        await self._uow.handicap_updates.add(actualizacion)
+        return actualizacion, False
 
     async def cortar(self, competition_id: CompetitionId, ahora: datetime | None = None) -> None:
         """La que esté a medias se corta; una completa se queda como está."""

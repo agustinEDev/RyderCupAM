@@ -586,6 +586,35 @@ class HandicapUpdateStatusDTO(BaseModel):
     )
 
 
+class HandicapUpdateWindowDTO(BaseModel):
+    """Si el organizador puede actualizar ahora los hándicaps con la RFEG (#251)."""
+
+    open: bool = Field(..., description="Si el botón «Actualizar hándicaps» está activo.")
+    closes_at: datetime | None = Field(
+        None,
+        description=(
+            "Hasta cuándo (10 s por jugador antes de la siguiente salida). Null sin "
+            "horas de salida (Ryder o stroke play sin franjas): hasta iniciar."
+        ),
+    )
+    reason: str | None = Field(None, description="Por qué no, si está cerrada.")
+
+
+class HandicapUpdateLaunchedDTO(BaseModel):
+    """La actualización de hándicaps que acaba de lanzar el organizador (#251)."""
+
+    id: UUID
+    status: Literal["IN_PROGRESS"] = "IN_PROGRESS"
+    origin: Literal["ENROLLMENTS_CLOSED", "ORGANIZER", "SCHEDULED"] = Field(
+        ...,
+        description="La nueva viene del botón; si se reanudó una a medias, conserva la suya.",
+    )
+    started_at: datetime = Field(..., description="Cuándo empezó (la original, si se reanudó).")
+    resumed: bool = Field(
+        ..., description="True si se reanudó una incompleta: solo pregunta por lo pendiente."
+    )
+
+
 class CompetitionResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una competición.
@@ -703,6 +732,13 @@ class CompetitionResponseDTO(BaseModel):
             "Solo en la ficha: si quien la mira puede borrarla ahora (creador o admin, "
             "estado que lo permita y nada jugado). Null en los listados, donde no "
             "se calcula para no recorrer los partidos de cada competición."
+        ),
+    )
+    handicap_update_window: HandicapUpdateWindowDTO | None = Field(
+        None,
+        description=(
+            "Solo en la ficha y solo para el organizador o un admin: si puede "
+            "actualizar ahora los hándicaps con la RFEG (#251)."
         ),
     )
     handicap_update: HandicapUpdateStatusDTO | None = Field(

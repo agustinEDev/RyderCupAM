@@ -45,6 +45,24 @@ class FranjaInvalidaError(Exception):
     pass
 
 
+class ActualizacionNoPermitidaError(Exception):
+    """Fuera de la ventana para actualizar los hándicaps a mano (#251)."""
+
+    pass
+
+
+class ActualizacionEnCursoError(Exception):
+    """Ya hay una actualización de hándicaps en marcha (#251)."""
+
+    pass
+
+
+class RefrescoDesactivadoError(Exception):
+    """La actualización con la RFEG no está encendida en este entorno (#251)."""
+
+    pass
+
+
 class DateOutOfRangeError(Exception):
     """La fecha de la sesión está fuera de las fechas de la competición."""
 

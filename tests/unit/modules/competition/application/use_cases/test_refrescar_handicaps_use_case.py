@@ -38,7 +38,7 @@ se avisa al organizador por correo.
 """
 
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -78,6 +78,7 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     EstadoActualizacion,
     OrigenActualizacion,
 )
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     Intento,
@@ -85,9 +86,12 @@ from src.modules.competition.domain.services.refresco_de_handicaps_service impor
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.helpers import (
@@ -162,6 +166,16 @@ class _Lanzador:
         self.abiertas_al_lanzar.append(self._uow.abiertas)
 
 
+class _Madrid:
+    """Todos los campos, en Madrid."""
+
+    async def for_course(self, _campo):
+        return "Europe/Madrid"
+
+    async def for_competition(self, _competicion):
+        return "Europe/Madrid"
+
+
 class _Escenario:
     def __init__(self):
         self.uow = _UnidadQueCuenta()
@@ -173,6 +187,7 @@ class _Escenario:
         self.lanzador = _Lanzador(self.uow)
         self.esperas: list[float] = []
         self.creadores: dict[CompetitionId, UserId] = {}
+        self.ahora = AHORA
 
     async def esperar(self, segundos: float) -> None:
         self.esperas.append(segundos)
@@ -219,6 +234,19 @@ class _Escenario:
             StartCompetitionRequestDTO(competition_id=torneo.value), self.creadores[torneo]
         )
 
+    async def franja(self, torneo, primera=time(9, 0)) -> None:
+        """Una franja el día del torneo (12 oct), en Madrid."""
+        async with self.uow:
+            await self.uow.rounds.add(
+                Round.create_franja(
+                    competition_id=torneo,
+                    golf_course_id=GolfCourseId.generate(),
+                    round_date=date(2030, 10, 12),
+                    session_type=SessionType.MORNING,
+                    hoja_de_salidas=HojaDeSalidas(primera, time(12, 0), 10, 4),
+                )
+            )
+
     async def mover(self, torneo, transicion: str) -> None:
         """Una transición directa de la competición, sin casos de uso."""
         competicion = await self.uow.competitions.find_by_id(torneo)
@@ -227,14 +255,14 @@ class _Escenario:
 
     @asynccontextmanager
     async def herramientas(self):
-        yield Herramientas(competiciones=self.uow, usuarios=self.usuarios)
+        yield Herramientas(competiciones=self.uow, usuarios=self.usuarios, zonas=_Madrid())
 
     def caso(self) -> RefrescarHandicapsUseCase:
         return RefrescarHandicapsUseCase(
             herramientas=self.herramientas,
             handicap_service=self.rfeg,
             avisos=self.avisos,
-            reloj=lambda: AHORA,
+            reloj=lambda: self.ahora,
             esperar=self.esperar,
         )
 
@@ -574,6 +602,54 @@ class TestElHandicapFijado:
 
         assert e.usuarios.por_id[jugador].handicap.value == 11.2
         assert (await e.inscripciones(torneo))[jugador].fixed_handicap is None
+
+
+class TestLaVentanaCortaLaQueEstaEnMarcha:
+    """
+    «Se corta 10 s por jugador antes de empezar»: el botón Y la que esté en marcha
+    (Agustín, 7 oct 2026). Lo pendiente se queda como estaba.
+    """
+
+    # El 12 a las 9:00 en Madrid son las 7:00 UTC; con 2 jugadores, se cierra 20 s antes
+    CIERRE = datetime(2030, 10, 12, 6, 59, 40, tzinfo=UTC)
+
+    async def test_si_se_cierra_a_mitad_no_pregunta_por_los_demas(self, e):
+        torneo = await e.torneo(tipo="STABLEFORD")
+        segundo = await e.inscrito(torneo, handicap=8.0)
+        await e.franja(torneo)
+        await e.cerrar(torneo)
+
+        async def no_lo_encuentra_y_pasa_la_hora(nombre):
+            # Sin hándicap nuevo no se corrige nada: lo para la comprobación de
+            # antes de preguntar por el siguiente
+            e.ahora = self.CIERRE
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=no_lo_encuentra_y_pasa_la_hora)
+
+        preguntados = await e.pasar(torneo)
+
+        assert preguntados == 1
+        assert (await e.inscripciones(torneo))[segundo].fixed_handicap == Decimal("8.0")
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.CORTADA
+        e.avisos.send_handicaps_pending_email.assert_not_awaited()
+
+    async def test_si_se_cierra_mientras_contesta_la_rfeg_no_cambia_nada(self, e):
+        torneo = await e.torneo(tipo="STABLEFORD")
+        await e.franja(torneo)
+        await e.cerrar(torneo)
+        creador = e.creadores[torneo]
+
+        async def tarda_hasta_el_cierre(nombre):
+            # A las 9:00 en Madrid ya ha salido la primera partida
+            e.ahora = datetime(2030, 10, 12, 7, 0, tzinfo=UTC)
+            return 13.0
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=tarda_hasta_el_cierre)
+
+        await e.pasar(torneo)
+
+        assert (await e.inscripciones(torneo))[creador].fixed_handicap == Decimal("10.0")
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.CORTADA
 
 
 class TestComo:

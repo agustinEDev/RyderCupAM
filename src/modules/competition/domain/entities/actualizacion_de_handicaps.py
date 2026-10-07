@@ -69,6 +69,18 @@ class ActualizacionDeHandicaps:
         self.estado = EstadoActualizacion.INCOMPLETA if pendientes else EstadoActualizacion.COMPLETA
         self.terminada = momento
 
+    def reanudar(self) -> None:
+        """
+        Una incompleta vuelve a estar en curso: la pasada termina lo que falta.
+
+        Raises:
+            ValueError: Si no está incompleta
+        """
+        if self.estado is not EstadoActualizacion.INCOMPLETA:
+            raise ValueError("Solo se reanuda una actualización incompleta.")
+        self.estado = EstadoActualizacion.EN_CURSO
+        self.terminada = None
+
     def cortar(self, momento: datetime) -> None:
         """
         La competición empezó o se cerró de nuevo: lo pendiente ya no se actualiza.

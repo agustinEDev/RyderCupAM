@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_activate_competition_use_case,
+    get_actualizar_handicaps_use_case,
     get_cancel_competition_use_case,
     get_close_enrollments_use_case,
     get_competition_uow,
@@ -31,6 +32,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CompetitionResponseDTO,
     CompleteCompetitionRequestDTO,
     FillCaptainRequestDTO,
+    HandicapUpdateLaunchedDTO,
     NameCaptainsBodyDTO,
     NameCaptainsRequestDTO,
     NameCaptainsResponseDTO,
@@ -43,8 +45,11 @@ from src.modules.competition.application.dto.competition_dto import (
 )
 from src.modules.competition.application.dto.match_generation_block_dto import BlockedPlayerDTO
 from src.modules.competition.application.exceptions import (
+    ActualizacionEnCursoError,
+    ActualizacionNoPermitidaError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
+    RefrescoDesactivadoError,
 )
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
@@ -56,6 +61,9 @@ from src.modules.competition.application.use_cases.activate_competition_use_case
     ActivateCompetitionUseCase,
     CompetitionNotFoundError as ActivateNotFoundError,
     NotCompetitionCreatorError as ActivateNotCreatorError,
+)
+from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
+    ActualizarHandicapsUseCase,
 )
 from src.modules.competition.application.use_cases.cancel_competition_use_case import (
     CancelCompetitionUseCase,
@@ -613,4 +621,52 @@ def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
                 for p in error.players
             ],
         },
+    )
+
+
+# ======================================================================================
+# ACTUALIZAR HÁNDICAPS (#251)
+# ======================================================================================
+
+
+@router.post(
+    "/{competition_id}/handicap-updates",
+    response_model=HandicapUpdateLaunchedDTO,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Actualizar los hándicaps con la RFEG",
+    description=(
+        "El organizador pide a la RFEG los hándicaps de sus jugadores, en segundo plano. "
+        "Si la última quedó a medias, termina solo lo que falta. Desde el cierre de "
+        "inscripciones hasta 10 s por jugador antes de la siguiente salida, nunca con una "
+        "jornada en marcha; en una Ryder, hasta iniciar."
+    ),
+    tags=["Competitions - State Transitions"],
+)
+@limiter.limit("10/minute")
+async def update_handicaps(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ActualizarHandicapsUseCase = Depends(get_actualizar_handicaps_use_case),
+):
+    """202 con la actualización lanzada; cómo va se ve en la ficha (`handicap_update`)."""
+    try:
+        actualizacion, reanudada = await use_case.execute(
+            CompetitionId(competition_id),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ActualizacionNoPermitidaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except (ActualizacionEnCursoError, RefrescoDesactivadoError) as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return HandicapUpdateLaunchedDTO(
+        id=actualizacion.id,
+        origin=actualizacion.origen.value,
+        started_at=actualizacion.creada,
+        resumed=reanudada,
     )

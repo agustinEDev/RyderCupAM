@@ -479,7 +479,7 @@ The Ryder Cup Friends Team
         text_body = f"""
 Hola {safe_organizer},
 
-Al cerrar las inscripciones de "{safe_competition}" no se pudo actualizar con la RFEG el hándicap de: {lista}.
+En "{safe_competition}" no se pudo actualizar con la RFEG el hándicap de: {lista}.
 
 Siguen con el hándicap que tenían. Puedes volver a intentarlo con el botón «Actualizar hándicaps» de la competición: {enlace}
 
@@ -490,7 +490,7 @@ El equipo de Ryder Cup Friends
 
 Hello {safe_organizer},
 
-When enrollments closed for "{safe_competition}", the RFEG handicap could not be updated for: {lista}.
+In "{safe_competition}", the RFEG handicap could not be updated for: {lista}.
 
 They keep their previous handicap. You can try again with the "Update handicaps" button on the competition: {enlace}
 
@@ -508,8 +508,7 @@ The Ryder Cup Friends Team
                 parrafo(
                     "Hola ",
                     negrita(safe_organizer),
-                    ", al cerrar las inscripciones no se pudo actualizar con la RFEG "
-                    "el hándicap de estos jugadores:",
+                    ", no se pudo actualizar con la RFEG el hándicap de estos jugadores:",
                 ),
                 recuadro(safe_competition, *nombres),
                 parrafo(
