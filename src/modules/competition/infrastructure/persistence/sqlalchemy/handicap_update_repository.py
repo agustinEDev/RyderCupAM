@@ -59,7 +59,8 @@ class SQLAlchemyHandicapUpdateRepository(HandicapUpdateRepositoryInterface):
             await self._session.execute(
                 select(tabla)
                 .where(tabla.c.competition_id == competition_id)
-                .order_by(tabla.c.created_at.desc())
+                # Con desempate: dos creadas en el mismo instante no quedan al azar
+                .order_by(tabla.c.created_at.desc(), tabla.c.id.desc())
                 .limit(1)
             )
         ).first()

@@ -85,3 +85,25 @@ class TestActualizacion:
 
         assert actualizacion.estado is EstadoActualizacion.CORTADA
         assert actualizacion.terminada == MOMENTO
+
+
+class TestReanudar:
+    def test_una_incompleta_vuelve_a_estar_en_curso(self):
+        actualizacion = _nueva()
+        actualizacion.terminar(pendientes=1, momento=LUEGO)
+
+        actualizacion.reanudar()
+
+        assert actualizacion.sigue()
+        assert actualizacion.terminada is None
+
+    def test_las_demas_no(self):
+        import pytest
+
+        en_curso, completa, cortada = _nueva(), _nueva(), _nueva()
+        completa.terminar(pendientes=0, momento=LUEGO)
+        cortada.cortar(LUEGO)
+
+        for actualizacion in (en_curso, completa, cortada):
+            with pytest.raises(ValueError, match="incompleta"):
+                actualizacion.reanudar()

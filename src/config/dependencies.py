@@ -1,6 +1,7 @@
 import logging
 import os
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -22,6 +23,10 @@ from src.modules.competition.application.ports.tournament_achievements_publisher
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
+    ActualizarHandicapsUseCase,
+    VentanaDeActualizacionUseCase,
 )
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
@@ -1809,6 +1814,32 @@ def get_close_enrollments_use_case(
     # Los usuarios, para el hándicap de cada inscrito en un stroke play; y el
     # refresco con la RFEG en segundo plano, solo en producción (#251)
     return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador)
+
+
+def get_actualizar_handicaps_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+) -> ActualizarHandicapsUseCase:
+    """El botón «Actualizar hándicaps» del organizador (#251): la zona da la hora de salida."""
+    return ActualizarHandicapsUseCase(
+        uow,
+        CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        lanzador,
+        reloj=lambda: datetime.now(UTC),
+    )
+
+
+def get_ventana_de_actualizacion_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> VentanaDeActualizacionUseCase:
+    """Si el organizador puede actualizar ahora los hándicaps, para la ficha (#251)."""
+    return VentanaDeActualizacionUseCase(
+        uow,
+        CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=lambda: datetime.now(UTC),
+    )
 
 
 def get_handicap_update_status_use_case(

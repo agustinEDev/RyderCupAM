@@ -17,6 +17,7 @@ from src.config.dependencies import (
     get_uow,
     get_update_competition_use_case,
     get_update_stroke_play_settings_use_case,
+    get_ventana_de_actualizacion_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
@@ -39,6 +40,9 @@ from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
+from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
+    VentanaDeActualizacionUseCase,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
     CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
@@ -434,6 +438,7 @@ async def get_competition(
     get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
     delete_uc: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
     handicaps_uc: GetHandicapUpdateStatusUseCase = Depends(get_handicap_update_status_use_case),
+    ventana_uc: VentanaDeActualizacionUseCase = Depends(get_ventana_de_actualizacion_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
@@ -481,6 +486,9 @@ async def get_competition(
         # A los demás ni se les pregunta: es la ficha, la que más se pide
         if dto.is_creator or current_user.is_admin:
             dto.handicap_update = await handicaps_uc.execute(
+                competition_vo_id, current_user_id, is_admin=current_user.is_admin
+            )
+            dto.handicap_update_window = await ventana_uc.execute(
                 competition_vo_id, current_user_id, is_admin=current_user.is_admin
             )
         return dto

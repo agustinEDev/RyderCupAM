@@ -64,7 +64,14 @@ PAUSA_ENTRE_INTENTOS = 5.0
 
 @dataclass(frozen=True)
 class Herramientas:
-    """Lo que hace falta para una parte de la pasada, sobre una misma sesión."""
+    """
+    Lo que hace falta para una parte de la pasada, sobre una misma sesión.
+
+    La competición y los usuarios TIENEN que compartir sesión: el hándicap nuevo
+    del perfil se guarda con los usuarios y se confirma al cerrar la unidad de
+    trabajo de la competición. Con sesiones distintas se perdería sin error
+    (CodeRabbit en la #507).
+    """
 
     competiciones: CompetitionUnitOfWorkInterface
     usuarios: UserRepositoryInterface
