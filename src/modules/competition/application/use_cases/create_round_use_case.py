@@ -5,10 +5,15 @@ from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    AgendaNotEditableError,
     CompetitionNotFoundError,
     DateOutOfRangeError,
     NotCompetitionCreatorError,
+)
+from src.modules.competition.application.services.franjas import (
+    comprobar_agenda,
+    comprobar_solape,
+    comprobar_tipo,
+    hoja_de,
 )
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -69,12 +74,9 @@ class CreateRoundUseCase:
                 raise NotCompetitionCreatorError("Solo el creador puede crear rondas")
 
             # La agenda se edita desde que la competición existe (BE #365): lo
-            # que se protege es la sesión ya jugada, y eso lo mira la sesión
-            if not competition.status.allows_agenda_edits():
-                raise AgendaNotEditableError(
-                    "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
-                    f"Estado actual: {competition.status.value}"
-                )
+            # que se protege es la sesión ya jugada, y eso lo mira la sesión. Las
+            # franjas de un stroke play, hasta iniciar (#251)
+            comprobar_agenda(competition)
 
             # 4. Verificar campo de golf en la competición
             golf_course_id = GolfCourseId(request.golf_course_id)
@@ -104,19 +106,43 @@ class CreateRoundUseCase:
                         f"en la fecha {request.round_date}"
                     )
 
-            # 7. Crear la ronda
-            match_format = MatchFormat(request.match_format)
-            handicap_mode = HandicapMode(request.handicap_mode) if request.handicap_mode else None
-
-            round_entity = Round.create(
-                competition_id=competition_id,
-                golf_course_id=golf_course_id,
-                round_date=request.round_date,
-                session_type=session_type,
-                match_format=match_format,
-                handicap_mode=handicap_mode,
-                allowance_percentage=request.allowance_percentage,
+            # 6b. Franja con su hoja de salidas, o sesión de Ryder con su formato,
+            #     y una franja no se solapa con otra de la jornada (#251)
+            hoja = hoja_de(request.tee_sheet)
+            comprobar_tipo(
+                competition,
+                hoja,
+                con_formato=request.match_format is not None
+                or request.handicap_mode is not None
+                or request.allowance_percentage is not None,
+                trae_formato=request.match_format is not None,
+                exige_formato=True,
             )
+            if hoja is not None:
+                comprobar_solape(hoja, request.round_date, golf_course_id, existing_rounds)
+
+            # 7. Crear la ronda
+            if hoja is not None:
+                round_entity = Round.create_franja(
+                    competition_id=competition_id,
+                    golf_course_id=golf_course_id,
+                    round_date=request.round_date,
+                    session_type=session_type,
+                    hoja_de_salidas=hoja,
+                )
+            else:
+                handicap_mode = (
+                    HandicapMode(request.handicap_mode) if request.handicap_mode else None
+                )
+                round_entity = Round.create(
+                    competition_id=competition_id,
+                    golf_course_id=golf_course_id,
+                    round_date=request.round_date,
+                    session_type=session_type,
+                    match_format=MatchFormat(str(request.match_format)),
+                    handicap_mode=handicap_mode,
+                    allowance_percentage=request.allowance_percentage,
+                )
 
             # 8. Si ya hay equipos asignados, transicionar a PENDING_MATCHES
             existing_assignment = await self._uow.team_assignments.find_by_competition(

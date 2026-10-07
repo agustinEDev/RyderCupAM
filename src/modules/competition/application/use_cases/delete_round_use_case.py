@@ -7,11 +7,13 @@ from src.modules.competition.application.dto.round_match_dto import (
     DeleteRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    AgendaNotEditableError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
     RoundNotFoundError,
     RoundNotModifiableError,
+)
+from src.modules.competition.application.services.franjas import (
+    comprobar_agenda,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -66,12 +68,9 @@ class DeleteRoundUseCase:
                 raise NotCompetitionCreatorError("Solo el creador puede eliminar rondas")
 
             # La agenda se edita desde que la competición existe (BE #365): lo
-            # que se protege es la sesión ya jugada, y eso lo mira la sesión
-            if not competition.status.allows_agenda_edits():
-                raise AgendaNotEditableError(
-                    "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
-                    f"Estado actual: {competition.status.value}"
-                )
+            # que se protege es la sesión ya jugada, y eso lo mira la sesión. Las
+            # franjas de un stroke play, hasta iniciar (#251)
+            comprobar_agenda(competition)
 
             # 5. Verificar ronda modificable
             if not round_entity.can_modify():

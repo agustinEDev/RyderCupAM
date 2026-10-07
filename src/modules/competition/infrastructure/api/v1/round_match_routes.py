@@ -62,6 +62,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
     CompetitionNotFoundError as StatusCompNotFoundError,
+    FranjaInvalidaError,
     NotCompetitionCreatorError as ReassignNotCreatorError,
     NotCompetitionCreatorError as StatusNotCreatorError,
     NotCompetitionCreatorError as WalkoverNotCreatorError,
@@ -213,6 +214,7 @@ async def create_round(
             match_format=body.match_format,
             handicap_mode=body.handicap_mode,
             allowance_percentage=body.allowance_percentage,
+            tee_sheet=body.tee_sheet,
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
@@ -232,6 +234,8 @@ async def create_round(
         CreateRoundGCNotInCompError,
         CreateRoundDuplicateSessionError,
         DateOutOfRangeError,
+        # Franja sin hoja, solapada o con formato; sesión de Ryder sin formato (#251)
+        FranjaInvalidaError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -279,6 +283,7 @@ async def update_round(
             handicap_mode=body.handicap_mode,
             allowance_percentage=body.allowance_percentage,
             clear_allowance=body.clear_allowance,
+            tee_sheet=body.tee_sheet,
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
@@ -300,6 +305,7 @@ async def update_round(
         UpdateRoundNotModifiableError,
         UpdateRoundGCNotInCompError,
         UpdateRoundDuplicateSessionError,
+        FranjaInvalidaError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -843,6 +849,8 @@ async def configure_schedule(
     except (
         # Terminada o cancelada: su agenda ya no se toca (BE #365)
         AgendaNotEditableError,
+        # La agenda automática es de la Ryder (#251)
+        FranjaInvalidaError,
         NoGolfCoursesError,
         # Ya hay sesiones con partidos: sustituirlas se llevaría lo jugado
         ScheduleAlreadyInPlayError,

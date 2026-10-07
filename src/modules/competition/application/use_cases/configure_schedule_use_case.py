@@ -9,9 +9,11 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
     CompetitionNotFoundError,
+    FranjaInvalidaError,
     NotCompetitionCreatorError,
     ScheduleAlreadyInPlayError,
 )
+from src.modules.competition.application.services.franjas import comprobar_agenda
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -72,12 +74,9 @@ class ConfigureScheduleUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede configurar el schedule")
 
-            # 3. La agenda se propone desde que la competición existe (BE #365)
-            if not competition.status.allows_agenda_edits():
-                raise AgendaNotEditableError(
-                    "La agenda solo se puede cambiar hasta que la competición termina "
-                    f"o se cancela. Estado: {competition.status.value}"
-                )
+            # 3. La agenda se propone desde que la competición existe (BE #365);
+            #    las franjas de un stroke play, hasta iniciar (#251)
+            comprobar_agenda(competition)
 
             # MANUAL mode: solo ack
             if request.mode == ScheduleConfigMode.MANUAL:
@@ -86,6 +85,14 @@ class ConfigureScheduleUseCase:
                     mode=ScheduleConfigMode.MANUAL.value,
                     rounds_created=0,
                     message="Modo MANUAL configurado. Cree rondas individualmente.",
+                )
+
+            # AUTOMATIC mode: reparte formatos de Ryder. En un stroke play las
+            # franjas se crean una a una, cada una con su hoja de salidas (#251)
+            if competition.stroke_play is not None:
+                raise FranjaInvalidaError(
+                    "La agenda automática es de la Ryder: en un Stableford o un Medal, "
+                    "crea las franjas una a una con su hoja de salidas."
                 )
 
             # AUTOMATIC mode
