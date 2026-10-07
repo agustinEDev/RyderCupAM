@@ -267,3 +267,12 @@ class TestTheHandicapsPendingEmail:
         _, _, _, cuerpo = _enviado(correo)
         assert "<b>Luis</b>" not in cuerpo
         assert "Copa &amp; Cena" in cuerpo
+
+    @pytest.mark.asyncio
+    async def test_it_does_not_say_it_was_the_close(self, correo):
+        """También la manda una actualización con el botón: no siempre fue al cerrar (#251)."""
+        await correo.send_handicaps_pending_email("org@b.com", "Ana", "Copa", "c-1", ["Luis"])
+        _, _, texto, cuerpo = _enviado(correo)
+        for contenido in (texto, cuerpo):
+            assert "cerrar las inscripciones" not in contenido
+            assert "enrollments closed" not in contenido
