@@ -26,6 +26,7 @@ from src.modules.competition.domain.services.refresco_de_handicaps_service impor
     ResultadoRefresco,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -542,4 +543,30 @@ class TestRecalcularLosPartidosDeHoy:
 
         assert (await e.uow.matches.find_by_id(se_adelanta.id)).team_a_players == antes
         recalculado = await e.uow.matches.find_by_id(sin_empezar.id)
+        assert recalculado.team_a_players[0].playing_handicap != 10
+
+    async def test_un_partido_que_no_se_puede_recalcular_no_impide_los_demas(self, e):
+        """Revisión: un jugador dado de baja tras generarse su partido no para el resto."""
+        torneo = await self._torneo_con_handicap(e)
+        a, b, c, d = [await e.inscrito(torneo) for _ in range(4)]
+        sesion = await e.sesion(torneo)
+        con_baja = await e.partido(sesion, a, b)
+        sin_problema = await e.partido(sesion, c, d)
+        antes = con_baja.team_a_players
+        async with e.uow:
+            inscripcion = next(
+                i
+                for i in await e.uow.enrollments.find_by_competition_and_status(
+                    torneo, EnrollmentStatus.APPROVED
+                )
+                if i.user_id == b
+            )
+            inscripcion.withdraw()
+            await e.uow.enrollments.update(inscripcion)
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert (await e.uow.matches.find_by_id(con_baja.id)).team_a_players == antes
+        recalculado = await e.uow.matches.find_by_id(sin_problema.id)
         assert recalculado.team_a_players[0].playing_handicap != 10

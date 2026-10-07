@@ -251,10 +251,16 @@ class RefrescarHandicapsDelDiaUseCase:
                             jugadores & {*lado_a, *lado_b}
                         ):
                             continue
-                        nuevos_a, nuevos_b = await jugadores_del_partido.construir(
-                            uow, sesion, competicion, lado_a, lado_b
-                        )
-                        partido.recalcular_jugadores(nuevos_a, nuevos_b)
+                        try:
+                            nuevos_a, nuevos_b = await jugadores_del_partido.construir(
+                                uow, sesion, competicion, lado_a, lado_b
+                            )
+                            partido.recalcular_jugadores(nuevos_a, nuevos_b)
+                        except Exception:
+                            # Uno que no se puede (un jugador dado de baja tras
+                            # generarse) se queda como estaba; los demás, no
+                            logger.exception("No se pudo recalcular el partido %s", partido.id)
+                            continue
                         await uow.matches.update(partido)
         except Exception:
             logger.exception(
