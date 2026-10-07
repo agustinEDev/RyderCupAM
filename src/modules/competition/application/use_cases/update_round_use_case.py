@@ -5,17 +5,25 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
-    AgendaNotEditableError,
     CompetitionNotFoundError,
     DateOutOfRangeError,
     NotCompetitionCreatorError,
     RoundNotFoundError,
     RoundNotModifiableError,
 )
+from src.modules.competition.application.services.franjas import (
+    comprobar_agenda,
+    comprobar_solape,
+    comprobar_tipo,
+    hoja_de,
+)
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -80,12 +88,9 @@ class UpdateRoundUseCase:
                 raise NotCompetitionCreatorError("Solo el creador puede actualizar rondas")
 
             # La agenda se edita desde que la competición existe (BE #365): lo
-            # que se protege es la sesión ya jugada, y eso lo mira la sesión
-            if not competition.status.allows_agenda_edits():
-                raise AgendaNotEditableError(
-                    "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
-                    f"Estado actual: {competition.status.value}"
-                )
+            # que se protege es la sesión ya jugada, y eso lo mira la sesión. Las
+            # franjas de un stroke play, hasta iniciar (#251)
+            comprobar_agenda(competition)
 
             # 5. Verificar campo de golf si se cambia
             golf_course_id = None
@@ -125,6 +130,10 @@ class UpdateRoundUseCase:
                             f"Ya existe una sesión {check_session.value} en la fecha {check_date}"
                         )
 
+            # 6b. Una franja solo cambia su hoja (no tiene formato), y no puede
+            #     acabar solapada con otra de su jornada (#251)
+            hoja = await self._comprobar_franja(request, competition, round_entity)
+
             # 7. Actualizar la ronda (validación de estado dentro del dominio)
             session_type = SessionType(request.session_type) if request.session_type else None
             match_format = MatchFormat(request.match_format) if request.match_format else None
@@ -141,6 +150,8 @@ class UpdateRoundUseCase:
                     allowance_percentage=request.allowance_percentage,
                     clear_allowance=request.clear_allowance,
                 )
+                if hoja is not None:
+                    round_entity.cambiar_hoja_de_salidas(hoja)
             except ValueError as e:
                 raise RoundNotModifiableError(str(e)) from e
 
@@ -162,3 +173,30 @@ class UpdateRoundUseCase:
             status=round_entity.status.value,
             updated_at=round_entity.updated_at,
         )
+
+    async def _comprobar_franja(
+        self, request: UpdateRoundRequestDTO, competition: Competition, round_entity: Round
+    ) -> HojaDeSalidas | None:
+        """La hoja nueva, si viene; y que la sesión sigue siendo de su tipo y no choca."""
+        hoja = hoja_de(request.tee_sheet)
+        comprobar_tipo(
+            competition,
+            hoja,
+            con_formato=request.match_format is not None
+            or request.handicap_mode is not None
+            or request.allowance_percentage is not None
+            or request.clear_allowance,
+            exige_formato=False,
+        )
+        hoja_final = hoja or round_entity.hoja_de_salidas
+        if hoja_final is not None and (hoja is not None or request.round_date):
+            dia = request.round_date or round_entity.round_date
+            comprobar_solape(
+                hoja_final,
+                dia,
+                await self._uow.rounds.find_by_competition_and_date(
+                    round_entity.competition_id, dia
+                ),
+                excepto=round_entity.id,
+            )
+        return hoja

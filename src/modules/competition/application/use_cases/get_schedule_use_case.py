@@ -12,6 +12,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     RoundResponseDTO,
     ScheduleDayDTO,
     TeamAssignmentResponseDTO,
+    TeeSheetResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
@@ -24,6 +25,7 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
@@ -165,6 +167,7 @@ class GetScheduleUseCase:
                 else None,
                 allowance_percentage=round_entity.allowance_percentage,
                 effective_allowance=round_entity.get_effective_allowance(),
+                tee_sheet=_hoja(round_entity.hoja_de_salidas),
                 matches=match_dtos,
                 scoring_opens_at=ScoringOpeningService.opens_at(
                     round_entity.round_date,
@@ -208,6 +211,12 @@ class GetScheduleUseCase:
             total_rounds=len(rounds),
             total_matches=total_matches,
             team_assignment=ta_dto,
+            # Lo que caben en todas las franjas de un stroke play (#251)
+            tee_sheet_capacity=(
+                sum(r.hoja_de_salidas.cupo for r in rounds if r.hoja_de_salidas is not None)
+                if competition.stroke_play is not None
+                else None
+            ),
         )
 
     async def _abre_los_sobres_que_tocan(self, competition, rounds) -> None:
@@ -229,3 +238,17 @@ class GetScheduleUseCase:
                 continue
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
             await self._sobres.revelar_si_toca(ronda, competition, sobres)
+
+
+def _hoja(hoja: HojaDeSalidas | None) -> TeeSheetResponseDTO | None:
+    """La hoja de salidas de una franja, con sus horas y su cupo (#251)."""
+    if hoja is None:
+        return None
+    return TeeSheetResponseDTO(
+        first_tee_time=hoja.primera_salida,
+        last_tee_time=hoja.ultima_salida,
+        interval_minutes=hoja.intervalo_minutos,
+        group_size=hoja.jugadores_por_partida,
+        tee_times=hoja.salidas,
+        capacity=hoja.cupo,
+    )

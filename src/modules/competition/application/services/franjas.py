@@ -1,0 +1,120 @@
+"""
+Franjas - Lo común de crear y cambiar sesiones según el tipo de competición (#251).
+
+Decidido con Agustín el 6-7 oct 2026:
+
+- **Una Ryder** tiene sesiones con formato de partido, y su agenda se toca
+  hasta que termina (BE #365).
+- **Un Stableford o un Medal** tiene franjas: individuales al 95 %, con su hoja
+  de salidas, sin solaparse en la misma jornada, y se tocan hasta iniciar.
+
+Aquí se traduce cada regla del dominio a un error de la aplicación, con el
+mismo mensaje para crear, cambiar y borrar.
+"""
+
+from collections.abc import Iterable
+from datetime import date
+
+from src.modules.competition.application.dto.round_match_dto import TeeSheetDTO
+from src.modules.competition.application.exceptions import (
+    AgendaNotEditableError,
+    FranjaInvalidaError,
+)
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.services.franjas_de_la_jornada import FranjasDeLaJornada
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.round_id import RoundId
+
+
+def comprobar_agenda(competition: Competition) -> None:
+    """
+    Raises:
+        AgendaNotEditableError: Si ya no se pueden tocar sus sesiones
+    """
+    if competition.allows_agenda_edits():
+        return
+    if competition.stroke_play is not None:
+        raise AgendaNotEditableError(
+            "Las franjas de un Stableford o un Medal se cambian hasta iniciar la "
+            f"competición. Estado actual: {competition.status.value}"
+        )
+    raise AgendaNotEditableError(
+        "La agenda solo se puede cambiar hasta que la competición termina o se cancela. "
+        f"Estado actual: {competition.status.value}"
+    )
+
+
+def hoja_de(dto: TeeSheetDTO | None) -> HojaDeSalidas | None:
+    """
+    La hoja de salidas que viene en la petición, si viene.
+
+    Raises:
+        FranjaInvalidaError: Si no es posible (intervalo, partida, horas)
+    """
+    if dto is None:
+        return None
+    try:
+        return HojaDeSalidas(
+            primera_salida=dto.first_tee_time,
+            ultima_salida=dto.last_tee_time,
+            intervalo_minutos=dto.interval_minutes,
+            jugadores_por_partida=dto.group_size,
+        )
+    except ValueError as e:
+        raise FranjaInvalidaError(str(e)) from e
+
+
+def comprobar_tipo(
+    competition: Competition,
+    hoja: HojaDeSalidas | None,
+    con_formato: bool,
+    exige_formato: bool,
+) -> None:
+    """
+    Una franja lleva hoja y no formato; una sesión de Ryder, formato y no hoja.
+
+    Args:
+        competition: De qué tipo es
+        hoja: La hoja de salidas que se pide, si se pide
+        con_formato: Si se pide formato de partido, modo de hándicap o allowance
+        exige_formato: Si la sesión de Ryder tiene que traer formato (al crearla)
+
+    Raises:
+        FranjaInvalidaError: Si no le corresponde
+    """
+    if competition.stroke_play is not None:
+        if con_formato:
+            raise FranjaInvalidaError(
+                "Una franja de un Stableford o un Medal no lleva formato de partido ni "
+                "allowance: es individual al 95 %."
+            )
+        if exige_formato:
+            _comprobar(competition, hoja)
+        return
+    if hoja is not None:
+        _comprobar(competition, hoja)
+    if exige_formato and not con_formato:
+        raise FranjaInvalidaError(
+            "Una sesión de Ryder necesita su formato de partido (SINGLES, FOURBALL o FOURSOMES)."
+        )
+
+
+def comprobar_solape(
+    hoja: HojaDeSalidas, dia: date, sesiones: Iterable[Round], excepto: RoundId | None = None
+) -> None:
+    """
+    Raises:
+        FranjaInvalidaError: Si choca con otra franja de esa jornada
+    """
+    try:
+        FranjasDeLaJornada.comprobar(hoja, dia, sesiones, excepto=excepto)
+    except ValueError as e:
+        raise FranjaInvalidaError(str(e)) from e
+
+
+def _comprobar(competition: Competition, hoja: HojaDeSalidas | None) -> None:
+    try:
+        competition.comprobar_hoja_de_salidas(hoja)
+    except ValueError as e:
+        raise FranjaInvalidaError(str(e)) from e

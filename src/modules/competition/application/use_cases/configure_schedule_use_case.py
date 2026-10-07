@@ -9,6 +9,7 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
     CompetitionNotFoundError,
+    FranjaInvalidaError,
     NotCompetitionCreatorError,
     ScheduleAlreadyInPlayError,
 )
@@ -71,6 +72,14 @@ class ConfigureScheduleUseCase:
             # 2. Verificar creador
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede configurar el schedule")
+
+            # 2b. Reparte formatos de Ryder: en un stroke play las franjas se
+            #     crean una a una, cada una con su hoja de salidas (#251)
+            if competition.stroke_play is not None:
+                raise FranjaInvalidaError(
+                    "La agenda automática es de la Ryder: en un Stableford o un Medal, "
+                    "crea las franjas una a una con su hoja de salidas."
+                )
 
             # 3. La agenda se propone desde que la competición existe (BE #365)
             if not competition.status.allows_agenda_edits():

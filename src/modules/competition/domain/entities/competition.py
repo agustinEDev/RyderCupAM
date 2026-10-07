@@ -40,6 +40,7 @@ from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
 from ..value_objects.date_range import DateRange
+from ..value_objects.hoja_de_salidas import HojaDeSalidas
 from ..value_objects.location import Location
 from ..value_objects.overall_standing import OverallStanding
 from ..value_objects.ryder_cup_setup import CaptainOnWrongTeamError, RyderCupSetup
@@ -398,6 +399,35 @@ class Competition:
         if self._stroke_play is not None:
             return self._status.allows_modifications()
         return self._status.allows_handicap_edits()
+
+    def allows_agenda_edits(self) -> bool:
+        """
+        Si se pueden crear, cambiar o borrar sus sesiones.
+
+        En un Stableford o un Medal, sus franjas, hasta iniciar (7 oct 2026). En
+        una Ryder, como siempre, hasta que termina (BE #365).
+        """
+        if self._stroke_play is not None:
+            return self._status.allows_tee_window_edits()
+        return self._status.allows_agenda_edits()
+
+    def comprobar_hoja_de_salidas(self, hoja: HojaDeSalidas | None) -> None:
+        """
+        Una franja de stroke play lleva hoja de salidas; una sesión de Ryder, no (#251).
+
+        Raises:
+            ValueError: Si no le corresponde
+        """
+        if self._stroke_play is not None and hoja is None:
+            raise ValueError(
+                "Cada franja de un Stableford o un Medal necesita su hoja de salidas: "
+                "primera y última salida, intervalo y jugadores por partida."
+            )
+        if self._stroke_play is None and hoja is not None:
+            raise ValueError(
+                "Las sesiones de una Ryder no tienen hoja de salidas: los partidos se "
+                "generan por formato."
+            )
 
     @property
     def stroke_play(self) -> StrokePlaySetup | None:

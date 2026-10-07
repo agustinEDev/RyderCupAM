@@ -39,6 +39,12 @@ class AgendaNotEditableError(Exception):
     pass
 
 
+class FranjaInvalidaError(Exception):
+    """Una franja de stroke play (o una sesión de Ryder) que no puede ser así (#251)."""
+
+    pass
+
+
 class DateOutOfRangeError(Exception):
     """La fecha de la sesión está fuera de las fechas de la competición."""
 

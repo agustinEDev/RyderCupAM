@@ -6,7 +6,7 @@ Sigue el patron Imperative Mapping establecido en el modulo User.
 """
 
 import uuid
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -65,6 +65,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 )
 from src.modules.competition.domain.value_objects.envelope_id import EnvelopeId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.hole_score_id import HoleScoreId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
@@ -592,6 +593,37 @@ class MatchGenerationBlockJsonType(TypeDecorator):
         return MatchGenerationBlock.from_dict(value) if value else None
 
 
+class HojaDeSalidasJsonType(TypeDecorator):
+    """
+    TypeDecorator para la hoja de salidas de una franja de stroke play (#251).
+
+    Una columna opcional: NULL en las sesiones de la Ryder. Las horas, en «HH:MM».
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: HojaDeSalidas | None, dialect) -> dict | None:
+        if value is None:
+            return None
+        return {
+            "first_tee_time": value.primera_salida.strftime("%H:%M"),
+            "last_tee_time": value.ultima_salida.strftime("%H:%M"),
+            "interval_minutes": value.intervalo_minutos,
+            "group_size": value.jugadores_por_partida,
+        }
+
+    def process_result_value(self, value: dict | None, dialect) -> HojaDeSalidas | None:
+        if not value:
+            return None
+        return HojaDeSalidas(
+            primera_salida=time.fromisoformat(value["first_tee_time"]),
+            ultima_salida=time.fromisoformat(value["last_tee_time"]),
+            intervalo_minutos=value["interval_minutes"],
+            jugadores_por_partida=value["group_size"],
+        )
+
+
 class MarkerAssignmentsJsonType(TypeDecorator):
     """
     TypeDecorator para serializar tuple[MarkerAssignment, ...] a/desde JSONB.
@@ -974,6 +1006,8 @@ rounds_table = Table(
     Column("updated_at", DateTime, nullable=False),
     # Por que no se pudieron generar sus partidos al abrir los sobres (BE #361)
     Column("match_generation_block", MatchGenerationBlockJsonType, nullable=True),
+    # La hoja de salidas de una franja de stroke play; NULL en la Ryder (#251)
+    Column("tee_sheet", HojaDeSalidasJsonType, nullable=True),
 )
 
 
@@ -1399,6 +1433,7 @@ def start_competition_mappers():
                 "_created_at": rounds_table.c.created_at,
                 "_updated_at": rounds_table.c.updated_at,
                 "_match_generation_block": rounds_table.c.match_generation_block,
+                "_hoja_de_salidas": rounds_table.c.tee_sheet,
             },
         )
 
