@@ -12,6 +12,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
+from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    ResultadoRefresco,
+)
 
 
 def _jugador(pais: str | None = "ES", actualizado: datetime | None = None):
@@ -101,3 +104,54 @@ class TestRefrescoRfeg:
         await RefrescoRfeg(_servicio(), _repositorio(falla=True)).si_toca(jugador)
 
         jugador.update_handicap.assert_called_once_with(12.3)
+
+
+@pytest.mark.asyncio
+class TestConsultarElDiaDeJuego:
+    """A las 3:00 se pregunta siempre, y se dice qué pasó (BE #502)."""
+
+    async def test_se_pregunta_aunque_ya_se_refrescara_hoy(self):
+        jugador = _jugador(actualizado=datetime.now(UTC))
+        servicio, repo = _servicio(12.3), _repositorio()
+
+        resultado = await RefrescoRfeg(servicio, repo).consultar(jugador)
+
+        assert resultado is ResultadoRefresco.ACTUALIZADO
+        jugador.update_handicap.assert_called_once_with(12.3)
+        repo.save.assert_awaited_once_with(jugador)
+
+    @pytest.mark.parametrize("pais", ["FR", None])
+    async def test_sin_licencia_espanola_no_se_pregunta(self, pais):
+        servicio = _servicio()
+
+        resultado = await RefrescoRfeg(servicio, _repositorio()).consultar(_jugador(pais=pais))
+
+        assert resultado is ResultadoRefresco.SIN_LICENCIA_ESPANOLA
+        servicio.search_handicap.assert_not_awaited()
+
+    async def test_si_no_lo_encuentra_lo_dice_y_no_toca_nada(self):
+        jugador, repo = _jugador(), _repositorio()
+
+        resultado = await RefrescoRfeg(_servicio(respuesta=None), repo).consultar(jugador)
+
+        assert resultado is ResultadoRefresco.NO_ENCONTRADO
+        jugador.update_handicap.assert_not_called()
+        repo.save.assert_not_awaited()
+
+    async def test_si_la_rfeg_no_responde_es_un_fallo(self):
+        jugador = _jugador()
+
+        resultado = await RefrescoRfeg(_servicio(falla=True), _repositorio()).consultar(jugador)
+
+        assert resultado is ResultadoRefresco.FALLIDO
+        jugador.update_handicap.assert_not_called()
+
+    async def test_si_no_se_puede_guardar_es_un_fallo(self):
+        resultado = await RefrescoRfeg(_servicio(), _repositorio(falla=True)).consultar(_jugador())
+
+        assert resultado is ResultadoRefresco.FALLIDO
+
+    async def test_sin_servicio_de_la_rfeg_es_un_fallo(self):
+        assert await RefrescoRfeg(None, _repositorio()).consultar(_jugador()) is (
+            ResultadoRefresco.FALLIDO
+        )

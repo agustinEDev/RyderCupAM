@@ -16,6 +16,9 @@ puso el organizador y la RFEG no lo cambia. Esa decisión es de quien llama.
 import logging
 from datetime import UTC, datetime
 
+from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    ResultadoRefresco,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -43,16 +46,25 @@ class RefrescoRfeg:
 
     async def si_toca(self, user: User) -> None:
         """Refresca y guarda el hándicap del jugador, si es de España y no se hizo hoy."""
-        if self._handicap_service is None:
+        if user.handicap_updated_at is not None and (
+            user.handicap_updated_at.date() == datetime.now(UTC).date()
+        ):
             return
+        await self.consultar(user)
+
+    async def consultar(self, user: User) -> ResultadoRefresco:
+        """
+        Pregunta a la RFEG siempre, sin el límite de una vez al día, y dice qué pasó.
+
+        Es la consulta de las 3:00 de un día de juego (BE #502): puede que el
+        refresco del día se hiciera al entrar, antes de que la RFEG publicara.
+        """
+        if self._handicap_service is None:
+            return ResultadoRefresco.FALLIDO
 
         country_code_value = user.country_code.value if user.country_code else None
         if country_code_value != "ES":
-            return
-
-        now = datetime.now(UTC)
-        if user.handicap_updated_at is not None and user.handicap_updated_at.date() == now.date():
-            return
+            return ResultadoRefresco.SIN_LICENCIA_ESPANOLA
 
         try:
             handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
@@ -62,10 +74,10 @@ class RefrescoRfeg:
                 user.get_full_name(),
                 exc_info=True,
             )
-            return
+            return ResultadoRefresco.FALLIDO
 
         if handicap_value is None:
-            return
+            return ResultadoRefresco.NO_ENCONTRADO
 
         try:
             user.update_handicap(handicap_value)
@@ -76,3 +88,5 @@ class RefrescoRfeg:
                 user.get_full_name(),
                 exc_info=True,
             )
+            return ResultadoRefresco.FALLIDO
+        return ResultadoRefresco.ACTUALIZADO

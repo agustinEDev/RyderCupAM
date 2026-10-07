@@ -1,0 +1,323 @@
+"""
+El refresco de las 3:00 de cada día de juego, de punta a punta (BE #502).
+
+Lo lanza el vigilante cada 15 minutos. Busca los torneos que juegan hoy en el
+huso de su campo, pregunta a la RFEG por quien juega y todavía no ha empezado,
+uno a uno y con pausa, y apunta qué pasó con cada uno.
+"""
+
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from src.modules.competition.application.use_cases.refrescar_handicaps_del_dia_use_case import (
+    PAUSA_ENTRE_CONSULTAS,
+    RefrescarHandicapsDelDiaUseCase,
+)
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.services.refresco_de_handicaps_service import (
+    ResultadoRefresco,
+)
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from tests.unit.modules.competition.application.use_cases.helpers import (
+    create_approved_enrollment,
+    create_competition,
+    set_competition_status,
+)
+
+pytestmark = pytest.mark.asyncio
+
+MADRID = ZoneInfo("Europe/Madrid")
+SABADO = date(2030, 10, 12)
+CAMPO = GolfCourseId(uuid4())
+
+
+def _hora_de_madrid(hora: int, minuto: int = 0, dia: date = SABADO) -> datetime:
+    return datetime(dia.year, dia.month, dia.day, hora, minuto, tzinfo=MADRID).astimezone(UTC)
+
+
+class _Usuarios:
+    """Los jugadores, con lo que mira el refresco: país, nombre y hándicap."""
+
+    def __init__(self):
+        self.por_id: dict[UserId, MagicMock] = {}
+        self.save = AsyncMock()
+
+    def alta(self, pais: str = "ES") -> UserId:
+        user_id = UserId.generate()
+        usuario = MagicMock()
+        usuario.id = user_id
+        usuario.country_code = MagicMock(value=pais)
+        usuario.handicap_updated_at = None
+        usuario.get_full_name.return_value = f"Jugador {user_id}"
+        self.por_id[user_id] = usuario
+        return user_id
+
+    async def find_by_id(self, user_id: UserId):
+        return self.por_id.get(user_id)
+
+
+class _Escenario:
+    def __init__(self):
+        self.uow = InMemoryUnitOfWork()
+        self.usuarios = _Usuarios()
+        self.rfeg = MagicMock()
+        self.rfeg.search_handicap = AsyncMock(return_value=11.2)
+        self.zona = MagicMock()
+        self.zona.for_course = AsyncMock(return_value="Europe/Madrid")
+        self.esperas: list[float] = []
+
+    async def esperar(self, segundos: float) -> None:
+        self.esperas.append(segundos)
+
+    async def torneo(self, estado: str | None = None) -> CompetitionId:
+        respuesta = await create_competition(self.uow, UserId.generate())
+        if estado:
+            await set_competition_status(self.uow, respuesta.id, estado)
+        return CompetitionId(respuesta.id)
+
+    async def inscrito(self, torneo, pais="ES", personalizado=None) -> UserId:
+        user_id = self.usuarios.alta(pais)
+        await create_approved_enrollment(self.uow, torneo.value, user_id, personalizado)
+        return user_id
+
+    async def sesion(self, torneo, dia=SABADO) -> Round:
+        ronda = Round.create(
+            competition_id=torneo,
+            golf_course_id=CAMPO,
+            round_date=dia,
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        async with self.uow:
+            await self.uow.rounds.add(ronda)
+        return ronda
+
+    async def partido(self, ronda, a: UserId, b: UserId, empezado=False) -> Match:
+        def jugador(user_id):
+            return MatchPlayer.create(
+                user_id=user_id,
+                playing_handicap=10,
+                tee_color=TeeColor.YELLOW,
+                tee_gender=Gender.MALE,
+                strokes_received=[],
+            )
+
+        partido = Match.create(
+            round_id=ronda.id,
+            match_number=1,
+            team_a_players=[jugador(a)],
+            team_b_players=[jugador(b)],
+        )
+        if empezado:
+            partido.start()
+        async with self.uow:
+            await self.uow.matches.add(partido)
+        return partido
+
+    def caso(self, ahora: datetime) -> RefrescarHandicapsDelDiaUseCase:
+        return RefrescarHandicapsDelDiaUseCase(
+            unidad_de_trabajo=lambda: (self.uow, self.usuarios),
+            handicap_service=self.rfeg,
+            timezone=self.zona,
+            reloj=lambda: ahora,
+            esperar=self.esperar,
+        )
+
+    def preguntados(self) -> set[str]:
+        return {llamada.args[0] for llamada in self.rfeg.search_handicap.await_args_list}
+
+    def nombre(self, user_id: UserId) -> str:
+        return f"Jugador {user_id}"
+
+
+@pytest.fixture
+def e() -> _Escenario:
+    return _Escenario()
+
+
+class TestCuando:
+    async def test_a_las_tres_del_dia_de_juego_pregunta_por_quien_juega(self, e):
+        torneo = await e.torneo()
+        a, b = await e.inscrito(torneo), await e.inscrito(torneo)
+        await e.partido(await e.sesion(torneo), a, b)
+
+        await e.caso(_hora_de_madrid(3, 5)).execute()
+
+        assert e.preguntados() == {e.nombre(a), e.nombre(b)}
+        assert await e.uow.handicap_refreshes.del_dia(torneo, SABADO) == {
+            a: ResultadoRefresco.ACTUALIZADO,
+            b: ResultadoRefresco.ACTUALIZADO,
+        }
+
+    async def test_antes_de_las_tres_no(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(2, 59)).execute()
+
+        assert e.preguntados() == set()
+
+    @pytest.mark.parametrize("dia", [date(2030, 10, 11), date(2030, 10, 13)])
+    async def test_un_torneo_que_no_juega_hoy_no(self, e, dia):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo, dia=dia)
+
+        await e.caso(_hora_de_madrid(4)).execute()
+
+        assert e.preguntados() == set()
+
+    @pytest.mark.parametrize("estado", ["CANCELLED", "COMPLETED"])
+    async def test_un_torneo_cancelado_o_terminado_no(self, e, estado):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+        await set_competition_status(e.uow, torneo.value, estado)
+
+        await e.caso(_hora_de_madrid(4)).execute()
+
+        assert e.preguntados() == set()
+
+    async def test_sin_zona_del_campo_no_se_sabe_que_hora_es_alli(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+        e.zona.for_course = AsyncMock(return_value=None)
+
+        await e.caso(_hora_de_madrid(4)).execute()
+
+        assert e.preguntados() == set()
+
+
+class TestAQuien:
+    async def test_sin_partidos_de_hoy_todavia_a_todos_los_inscritos(self, e):
+        torneo = await e.torneo()
+        a, b = await e.inscrito(torneo), await e.inscrito(torneo)
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.preguntados() == {e.nombre(a), e.nombre(b)}
+
+    async def test_no_a_quien_ya_empezo_su_partido(self, e):
+        torneo = await e.torneo()
+        a, b, c, d = [await e.inscrito(torneo) for _ in range(4)]
+        ronda = await e.sesion(torneo)
+        await e.partido(ronda, a, b, empezado=True)
+        await e.partido(ronda, c, d)
+
+        await e.caso(_hora_de_madrid(9)).execute()
+
+        assert e.preguntados() == {e.nombre(c), e.nombre(d)}
+
+    async def test_no_a_quien_tiene_handicap_personalizado(self, e):
+        torneo = await e.torneo()
+        propio = await e.inscrito(torneo, personalizado=Decimal("8.0"))
+        otro = await e.inscrito(torneo)
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.preguntados() == {e.nombre(otro)}
+        assert propio not in await e.uow.handicap_refreshes.del_dia(torneo, SABADO)
+
+    async def test_sin_licencia_espanola_no_se_pregunta_pero_queda_apuntado(self, e):
+        torneo = await e.torneo()
+        frances = await e.inscrito(torneo, pais="FR")
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.preguntados() == set()
+        assert await e.uow.handicap_refreshes.del_dia(torneo, SABADO) == {
+            frances: ResultadoRefresco.SIN_LICENCIA_ESPANOLA
+        }
+
+    async def test_quien_juega_dos_torneos_hoy_se_pregunta_una_vez(self, e):
+        primero, segundo = await e.torneo(), await e.torneo()
+        jugador = e.usuarios.alta()
+        for torneo in (primero, segundo):
+            await create_approved_enrollment(e.uow, torneo.value, jugador)
+            await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.rfeg.search_handicap.await_count == 1
+        for torneo in (primero, segundo):
+            assert await e.uow.handicap_refreshes.del_dia(torneo, SABADO) == {
+                jugador: ResultadoRefresco.ACTUALIZADO
+            }
+
+
+class TestComo:
+    async def test_uno_a_uno_con_pausa_entre_consultas(self, e):
+        torneo = await e.torneo()
+        # El creador queda inscrito al crearla: con dos más son tres jugadores
+        for _ in range(2):
+            await e.inscrito(torneo)
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.esperas == [PAUSA_ENTRE_CONSULTAS, PAUSA_ENTRE_CONSULTAS]
+
+    async def test_una_segunda_vuelta_no_repite_a_nadie(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+        await e.caso(_hora_de_madrid(3, 15)).execute()
+
+        assert e.rfeg.search_handicap.await_count == 1
+
+    async def test_lo_fallido_se_reintenta_hasta_las_siete(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+        e.rfeg.search_handicap = AsyncMock(side_effect=ConnectionError("RFEG caída"))
+
+        await e.caso(_hora_de_madrid(3)).execute()
+        await e.caso(_hora_de_madrid(6, 45)).execute()
+        await e.caso(_hora_de_madrid(7)).execute()
+
+        assert e.rfeg.search_handicap.await_count == 2
+
+    async def test_lo_que_no_encuentra_no_se_reintenta(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+        e.rfeg.search_handicap = AsyncMock(return_value=None)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+        await e.caso(_hora_de_madrid(3, 15)).execute()
+
+        assert e.rfeg.search_handicap.await_count == 1
+
+    async def test_un_jugador_que_ya_no_existe_no_para_a_los_demas(self, e):
+        torneo = await e.torneo()
+        borrado = await e.inscrito(torneo)
+        otro = await e.inscrito(torneo)
+        await e.sesion(torneo)
+        del e.usuarios.por_id[borrado]
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.preguntados() == {e.nombre(otro)}

@@ -1,5 +1,6 @@
 """Round Repository - SQLAlchemy Implementation."""
 
+from collections.abc import Collection
 from datetime import date
 
 from sqlalchemy import and_, select
@@ -61,6 +62,17 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
                     Round._round_date == round_date,
                 )
             )
+            .order_by(Round._created_at.asc())
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_by_dates(self, dates: Collection[date]) -> list[Round]:
+        if not dates:
+            return []
+        statement = (
+            select(Round)
+            .where(Round._round_date.in_(list(dates)))
             .order_by(Round._created_at.asc())
         )
         result = await self._session.execute(statement)

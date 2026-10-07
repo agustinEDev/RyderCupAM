@@ -25,6 +25,9 @@ from src.modules.competition.domain.repositories.enrollment_repository_interface
 from src.modules.competition.domain.repositories.envelope_repository_interface import (
     EnvelopeRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.handicap_refresh_repository_interface import (
+    HandicapRefreshRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.hole_score_repository_interface import (
     HoleScoreRepositoryInterface,
 )
@@ -51,6 +54,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_re
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.envelope_repository import (
     SQLAlchemyEnvelopeRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.handicap_refresh_repository import (
+    SQLAlchemyHandicapRefreshRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.hole_score_repository import (
     SQLAlchemyHoleScoreRepository,
@@ -94,6 +100,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._invitations = SQLAlchemyInvitationRepository(session)
         self._hole_scores = SQLAlchemyHoleScoreRepository(session)
         self._drafts = SQLAlchemyDraftRepository(session)
+        self._handicap_refreshes = SQLAlchemyHandicapRefreshRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -134,6 +141,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         return self._hole_scores
+
+    @property
+    def handicap_refreshes(self) -> HandicapRefreshRepositoryInterface:
+        return self._handicap_refreshes
 
     async def __aenter__(self):
         return self

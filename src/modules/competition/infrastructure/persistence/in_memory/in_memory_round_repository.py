@@ -1,5 +1,6 @@
 """In-Memory Round Repository para testing."""
 
+from collections.abc import Collection
 from datetime import date
 
 from src.modules.competition.domain.entities.round import Round
@@ -41,6 +42,9 @@ class InMemoryRoundRepository(RoundRepositoryInterface):
             for r in self._rounds.values()
             if r.competition_id == competition_id and r.round_date == round_date
         ]
+
+    async def find_by_dates(self, dates: Collection[date]) -> list[Round]:
+        return [r for r in self._rounds.values() if r.round_date in dates]
 
     async def delete(self, round_id: RoundId) -> bool:
         if round_id in self._rounds:
