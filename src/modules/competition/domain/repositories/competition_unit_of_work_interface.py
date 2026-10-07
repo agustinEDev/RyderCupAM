@@ -17,6 +17,7 @@ from .competition_repository_interface import CompetitionRepositoryInterface
 from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
 from .envelope_repository_interface import EnvelopeRepositoryInterface
+from .handicap_refresh_repository_interface import HandicapRefreshRepositoryInterface
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
 from .match_repository_interface import MatchRepositoryInterface
@@ -90,6 +91,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         """Acceso al repositorio de hole scores."""
+        pass
+
+    @property
+    @abstractmethod
+    def handicap_refreshes(self) -> HandicapRefreshRepositoryInterface:
+        """Resultados del refresco de las 3:00 de cada día de juego (BE #502)."""
         pass
 
     @abstractmethod

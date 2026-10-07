@@ -1179,6 +1179,28 @@ hole_scores_table = Table(
 )
 
 
+# Lo que pasó al refrescar con la RFEG a cada jugador, cada día de juego (BE #502).
+# Sin entidad mapeada: es un registro, lo escribe y lo lee su repositorio
+handicap_refreshes_table = Table(
+    "handicap_refreshes",
+    metadata,
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("play_date", Date, primary_key=True),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("result", String(30), nullable=False),
+    Column("refreshed_at", DateTime(timezone=True), nullable=False),
+)
+
 # =============================================================================
 # START MAPPERS - Funcion de inicializacion
 # =============================================================================
