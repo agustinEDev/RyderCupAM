@@ -103,7 +103,7 @@ class ReassignMatchPlayersUseCase:
                     raise WrongNumberOfPlayersError("Hay un jugador repetido en el mismo equipo")
 
             # 6-7. Los jugadores nuevos, con el reparto de su formato: el mismo
-            #      que al generar (BE #477) y que al refrescar a las 3:00 (#502)
+            #      que al generar (BE #477)
             team_a_players, team_b_players = await self._jugadores.construir(
                 self._uow,
                 round_entity,

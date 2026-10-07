@@ -1,8 +1,8 @@
 """
 Los jugadores de un partido con el reparto de golpes de su formato (BE #502).
 
-Estaba dentro de la reasignación; el refresco de las 3:00 lo necesita para
-recalcular los partidos de hoy. Trae a los usuarios en una sola consulta: la
+Estaba dentro de la reasignación, y salió a su propio sitio para compartirlo.
+Trae a los usuarios en una sola consulta: la
 reasignación los pedía todos a la vez sobre la misma sesión, y SQLAlchemy no
 admite dos consultas a la vez en una sesión.
 """

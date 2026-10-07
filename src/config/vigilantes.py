@@ -58,12 +58,12 @@ def vuelta_con_la_base_de_datos(
     async def herramientas() -> AsyncIterator[Herramientas]:
         async with fabrica_de_sesiones() as sesion:
             competiciones = SQLAlchemyCompetitionUnitOfWork(sesion)
-            campos = GolfCourseRepository(sesion)
             yield Herramientas(
                 competiciones=competiciones,
                 usuarios=SQLAlchemyUserRepository(sesion),
-                zonas=CompetitionTimezoneFromCourse(campos, competiciones.competitions),
-                campos=campos,
+                zonas=CompetitionTimezoneFromCourse(
+                    GolfCourseRepository(sesion), competiciones.competitions
+                ),
             )
 
     async def vuelta() -> int | None:

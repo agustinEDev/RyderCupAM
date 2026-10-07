@@ -1,8 +1,9 @@
 """
 JugadoresDelPartido - Los jugadores de un partido con el reparto de su formato (BE #502).
 
-Estaba dentro de la reasignación de jugadores, y el refresco de las 3:00 lo
-necesita para recalcular los partidos de hoy: un solo sitio para los dos.
+Estaba dentro de la reasignación de jugadores; salió a su propio sitio para
+compartirlo (BE #502), y es la pieza de quien tenga que construir los dos bandos
+de un partido ya generado.
 
 Trae a los usuarios en **una sola consulta**. La reasignación los pedía todos a
 la vez (`asyncio.gather`) sobre la misma sesión, y SQLAlchemy no admite dos
