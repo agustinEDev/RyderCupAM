@@ -124,8 +124,18 @@ class StrokePlaySetup:
         Solo si ya tiene un decimal como mucho: redondear un «12.05» lo dejaría
         pasar como otro número, y tiene que rechazarse.
         """
+        # Lo que no es un hándicap se deja tal cual para que lo rechace el rango:
+        # cuantizar un 1E+50 o un NaN lanza InvalidOperation, que no es un
+        # ValueError y acabaría en un 500 (CodeRabbit, #501)
+        if not StrokePlaySetup._es_un_handicap(limite):
+            return limite
         con_uno = limite.quantize(UNA_DECIMAL)
         return con_uno if con_uno == limite else limite
+
+    @staticmethod
+    def _es_un_handicap(limite: Decimal) -> bool:
+        """Un número finito dentro del rango de hándicap."""
+        return limite.is_finite() and MIN_LIMIT <= limite <= MAX_LIMIT
 
     @staticmethod
     def _check_limits(limits: tuple[Decimal, ...]) -> None:
@@ -134,7 +144,7 @@ class StrokePlaySetup:
                 f"Como mucho {MAX_CATEGORIES} categorías: {MAX_CATEGORIES - 1} límites"
             )
         for limite in limits:
-            if not MIN_LIMIT <= limite <= MAX_LIMIT:
+            if not StrokePlaySetup._es_un_handicap(limite):
                 raise StrokePlaySettingsError(
                     "Los límites de categoría son hándicaps: entre -10,0 y 54,0"
                 )

@@ -195,3 +195,15 @@ async def test_acortar_el_torneo_por_debajo_de_las_jornadas_es_un_400(client: As
 
     assert respuesta.status_code == 400, respuesta.text
     assert "2 jornadas" in respuesta.json()["detail"]
+
+
+async def test_un_limite_desmesurado_es_un_400_y_no_un_500(client: AsyncClient):
+    """CodeRabbit, #501: redondearlo lanzaba InvalidOperation."""
+    await _usuario(client)
+
+    respuesta = await client.post(
+        "/api/v1/competitions", json=_datos(stroke_play={"category_limits": ["1E+50"]})
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert "entre -10,0 y 54,0" in respuesta.json()["detail"]

@@ -151,3 +151,17 @@ class TestUnDecimalSiempre:
         ajustes = StrokePlaySetup.create().with_changes(category_limits=[Decimal("18")])
 
         assert [str(v) for v in ajustes.category_limits] == ["18.0"]
+
+
+class TestNumerosImposibles:
+    """Lo que no es un hándicap se rechaza con su motivo, nunca con un 500 (CodeRabbit, #501)."""
+
+    @pytest.mark.parametrize("enorme", ["1E+50", "-1E+50", "1E+30"])
+    def test_un_limite_desmesurado_se_rechaza_por_el_rango(self, enorme):
+        with pytest.raises(StrokePlaySettingsError, match="entre -10,0 y 54,0"):
+            StrokePlaySetup.create(category_limits=[Decimal(enorme)])
+
+    @pytest.mark.parametrize("raro", ["NaN", "Infinity", "-Infinity"])
+    def test_lo_que_no_es_un_numero_tambien(self, raro):
+        with pytest.raises(StrokePlaySettingsError, match="entre -10,0 y 54,0"):
+            StrokePlaySetup.create(category_limits=[Decimal(raro)])
