@@ -76,7 +76,11 @@ class SetCustomHandicapUseCase:
                 raise EnrollmentNotFoundError(f"Inscripcion no encontrada: {request.enrollment_id}")
 
             # 2. Obtener competicion
-            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
+            # Bloqueada: un cierre de inscripciones a la vez espera, y este cambio
+            # no se cuela tras fijar los hándicaps (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competicion no encontrada: {enrollment.competition_id}"

@@ -50,13 +50,14 @@ class RemoveCustomHandicapUseCase:
     def __init__(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        user_repository: UserRepositoryInterface | None = None,
+        user_repository: UserRepositoryInterface,
     ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            user_repository: Los perfiles, para no dejar a nadie sin hándicap
         """
         self._uow = uow
         # Para no dejar a nadie sin hándicap en un stroke play (#251)
@@ -91,8 +92,11 @@ class RemoveCustomHandicapUseCase:
             if not enrollment:
                 raise EnrollmentNotFoundError(f"Inscripcion no encontrada: {enrollment_id}")
 
-            # 2. Obtener competicion
-            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
+            # 2. Obtener competicion, bloqueada: un cierre de inscripciones a la vez
+            #    espera, y este cambio no se cuela tras fijar los hándicaps (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competicion no encontrada: {enrollment.competition_id}"
@@ -119,8 +123,7 @@ class RemoveCustomHandicapUseCase:
                 )
 
             # 5b. En un stroke play nadie se queda sin hándicap (#251)
-            if self._users is not None:
-                await exigir_que_no_se_quede_sin(self._users, competition, enrollment.user_id)
+            await exigir_que_no_se_quede_sin(self._users, competition, enrollment.user_id)
 
             # 6. Eliminar handicap personalizado
             enrollment.remove_custom_handicap()

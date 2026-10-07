@@ -254,3 +254,44 @@ class TestElHandicapPersonalizado:
             ),
             e.creador,
         )
+
+
+class TestLoQueEncontroCodeRabbitEnLa506:
+    """Poner o quitar el personalizado lee la competición bloqueada: así no se cuela tras el cierre."""
+
+    async def _espiar(self, e):
+        from unittest.mock import AsyncMock
+
+        e.uow.competitions.find_by_id_for_update = AsyncMock(
+            wraps=e.uow.competitions.find_by_id_for_update
+        )
+        return e.uow.competitions.find_by_id_for_update
+
+    async def test_poner_el_personalizado_bloquea_la_competicion(self, e):
+        torneo = await e.torneo()
+        inscripcion = await e.inscripcion(torneo, e.usuarios.alta(14.2))
+        espia = await self._espiar(e)
+
+        await SetCustomHandicapUseCase(e.uow).execute(
+            SetCustomHandicapRequestDTO(
+                enrollment_id=inscripcion.id.value, custom_handicap=Decimal("9.0")
+            ),
+            e.creador,
+        )
+
+        espia.assert_awaited_once_with(torneo)
+
+    async def test_quitar_el_personalizado_bloquea_la_competicion(self, e):
+        torneo = await e.torneo()
+        inscripcion = await e.inscripcion(torneo, e.usuarios.alta(14.2), Decimal("18.0"))
+        espia = await self._espiar(e)
+
+        await RemoveCustomHandicapUseCase(e.uow, e.usuarios).execute(
+            str(inscripcion.id.value), e.creador
+        )
+
+        espia.assert_awaited_once_with(torneo)
+
+    async def test_quitar_el_personalizado_exige_los_usuarios(self, e):
+        with pytest.raises(TypeError):
+            RemoveCustomHandicapUseCase(e.uow)  # type: ignore[call-arg]

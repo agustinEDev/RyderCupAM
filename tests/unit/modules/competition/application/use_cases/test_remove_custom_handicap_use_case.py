@@ -22,6 +22,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.helpers import (
+    USUARIOS_CON_GENERO,
     create_approved_enrollment,
     create_competition,
     set_competition_status,
@@ -63,7 +64,7 @@ class TestRemoveCustomHandicapUseCase:
         )
         await set_competition_status(uow, created.id, "ACTIVE")
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
         response = await use_case.execute(str(enrollment.id.value), creator_id)
 
         assert response.custom_handicap is None
@@ -86,7 +87,7 @@ class TestRemoveCustomHandicapUseCase:
         )
         await set_competition_status(uow, created.id, "ACTIVE")
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
         response = await use_case.execute(str(enrollment.id.value), admin_user_id, is_admin=True)
 
         assert response.custom_handicap is None
@@ -105,7 +106,7 @@ class TestRemoveCustomHandicapUseCase:
         )
         await set_competition_status(uow, created.id, "ACTIVE")
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
 
         with pytest.raises(NotCreatorError):
             await use_case.execute(str(enrollment.id.value), player_id)
@@ -118,7 +119,7 @@ class TestRemoveCustomHandicapUseCase:
         When: Se intenta eliminar el hándicap
         Then: Se lanza EnrollmentNotFoundError
         """
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
 
         with pytest.raises(EnrollmentNotFoundError):
             await use_case.execute(str(uuid4()), creator_id)
@@ -142,7 +143,7 @@ class TestRemoveCustomHandicapUseCase:
             await uow.enrollments.add(enrollment)
             await uow.commit()
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
 
         with pytest.raises(CompetitionNotFoundError):
             await use_case.execute(str(enrollment.id.value), creator_id)
@@ -166,7 +167,7 @@ class TestRemoveCustomHandicapUseCase:
             await uow.enrollments.add(enrollment)
             await uow.commit()
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
 
         with pytest.raises(EnrollmentStateError):
             await use_case.execute(str(enrollment.id.value), creator_id)
@@ -187,7 +188,7 @@ class TestRemoveCustomHandicapUseCase:
         )
         await set_competition_status(uow, created.id, status)
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
 
         with pytest.raises(HandicapEditNotAllowedError):
             await use_case.execute(str(enrollment.id.value), creator_id)
@@ -211,7 +212,7 @@ class TestRemoveCustomHandicapUseCase:
         if status != "DRAFT":
             await set_competition_status(uow, created.id, status)
 
-        use_case = RemoveCustomHandicapUseCase(uow)
+        use_case = RemoveCustomHandicapUseCase(uow, USUARIOS_CON_GENERO)
         response = await use_case.execute(str(enrollment.id.value), creator_id)
 
         assert response.custom_handicap is None
