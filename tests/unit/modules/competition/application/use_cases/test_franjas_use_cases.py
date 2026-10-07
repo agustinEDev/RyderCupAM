@@ -23,6 +23,8 @@ solaparse, y se tocan hasta iniciar la competición.
 | Cambiar el formato de una franja                   | 400                                |
 | Borrar en stroke play en juego                     | 400                                |
 | La agenda automática en un stroke play             | 400: es de la Ryder                |
+| La agenda en modo manual en un stroke play         | Vale (solo «créalas una a una»)    |
+| La agenda en un stroke play en juego               | 400: hasta iniciar                 |
 | El calendario                                      | Cada franja con su hoja, horas y cupo, y el cupo total |
 """
 
@@ -316,6 +318,30 @@ class TestBorrarYAgenda:
         with pytest.raises(AgendaNotEditableError, match="iniciar"):
             await DeleteRoundUseCase(e.uow).execute(
                 DeleteRoundRequestDTO(round_id=creada.id), e.creador
+            )
+
+    async def test_la_agenda_en_modo_manual_si_vale_en_stroke_play(self, e):
+        """CodeRabbit en la #508: el modo manual solo dice «créalas una a una»."""
+        await e.torneo()
+
+        respuesta = await ConfigureScheduleUseCase(e.uow).execute(
+            ConfigureScheduleRequestDTO(
+                competition_id=e.competicion.id.value, mode=ScheduleConfigMode.MANUAL
+            ),
+            e.creador,
+        )
+
+        assert respuesta.mode == "MANUAL"
+
+    async def test_la_agenda_en_stroke_play_en_juego_ya_no(self, e):
+        await e.torneo(status=CompetitionStatus.IN_PROGRESS)
+
+        with pytest.raises(AgendaNotEditableError, match="iniciar"):
+            await ConfigureScheduleUseCase(e.uow).execute(
+                ConfigureScheduleRequestDTO(
+                    competition_id=e.competicion.id.value, mode=ScheduleConfigMode.MANUAL
+                ),
+                e.creador,
             )
 
     async def test_la_agenda_automatica_es_de_la_ryder(self, e):
