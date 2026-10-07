@@ -1,9 +1,11 @@
 """
 Caso de Uso: Refrescar con la RFEG el hándicap de quien juega hoy (BE #502).
 
-Lo lanza el vigilante cada 15 minutos. Decidido con Agustín el 7 oct 2026: a las
-3:00 hora del campo de cada día de juego, a quien juega ese día y todavía no ha
-empezado, en todas las competiciones. La RFEG publica hacia las 0:00-0:30, y un
+Lo lanza el vigilante cada 15 minutos. Hoy refresca a las 3:00 hora del campo
+de cada día de juego. **Provisional**: el 7 oct 2026 Agustín cambió el modelo
+(el hándicap de un Stableford o Medal se fija al cerrar inscripciones y no cambia
+en todo el torneo; la Ryder deja de tener refresco diario), y este refresco pasa
+a hacerse tras el cierre de inscripciones en una PR siguiente (#251). La RFEG publica hacia las 0:00-0:30, y un
 jugador puede haber jugado otro torneo la víspera.
 
 Cómo, para no molestar a nadie a esas horas:
