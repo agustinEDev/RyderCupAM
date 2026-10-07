@@ -8,22 +8,28 @@ jugador puede haber jugado otro torneo la víspera.
 
 Cómo, para no molestar a nadie a esas horas:
 
-- **Uno a uno y con pausa** entre consultas, cada uno en su propia transacción:
-  un fallo con un jugador no deshace a los demás.
+- **Uno a uno y con pausa** entre consultas, cada uno con sus propias
+  herramientas (sesión nueva): un fallo con un jugador no arrastra a los demás.
+- **La RFEG se consulta sin ninguna transacción abierta**: puede tardar hasta
+  10 s, y mientras tanto no tiene sentido tener una conexión ocupada.
+- **Todo queda apuntado**, también lo que falla de forma inesperada: si no, ese
+  jugador se volvería a consultar cada 15 minutos todo el día.
 - **Cada resultado se apunta**: así ninguna vuelta repite lo hecho, aunque el
   servidor se reinicie, y solo se reintenta lo que falló (hasta las 7:00).
 - Quien juega **dos torneos** el mismo día se pregunta una vez, y el resultado
   se apunta en los dos.
 
-Sin zona horaria del campo no se sabe qué hora es allí, así que esa sesión no
-se refresca: el mismo criterio que la apertura sola de la anotación.
+La hora local sale del campo de la primera sesión del día que tenga zona. Sin
+ninguna, no se sabe qué hora es allí y ese día no se refresca: el mismo
+criterio que la apertura sola de la anotación.
 """
 
 import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
@@ -36,7 +42,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     Candidato,
     RefrescoDeHandicapsService,
+    ResultadoRefresco,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
@@ -51,7 +59,18 @@ logger = logging.getLogger(__name__)
 # Segundos entre una consulta a la RFEG y la siguiente
 PAUSA_ENTRE_CONSULTAS = 2.0
 
-UnidadDeTrabajo = Callable[[], tuple[CompetitionUnitOfWorkInterface, UserRepositoryInterface]]
+
+@dataclass(frozen=True)
+class Herramientas:
+    """Lo que hace falta para una parte de la vuelta, sobre una misma sesión."""
+
+    competiciones: CompetitionUnitOfWorkInterface
+    usuarios: UserRepositoryInterface
+    zonas: ICompetitionTimezone
+
+
+# Da herramientas nuevas cada vez, y las cierra al salir
+FabricaDeHerramientas = Callable[[], AbstractAsyncContextManager[Herramientas]]
 
 
 class RefrescarHandicapsDelDiaUseCase:
@@ -59,24 +78,21 @@ class RefrescarHandicapsDelDiaUseCase:
 
     def __init__(
         self,
-        unidad_de_trabajo: UnidadDeTrabajo,
+        herramientas: FabricaDeHerramientas,
         handicap_service: HandicapService | None,
-        timezone: ICompetitionTimezone,
         reloj: Callable[[], datetime],
         esperar: Callable[[float], Awaitable[None]],
     ):
         """
         Args:
-            unidad_de_trabajo: Da una unidad de trabajo de competición y el
-                repositorio de usuarios de su misma sesión, nuevos cada vez
+            herramientas: Da herramientas nuevas (competición, usuarios y zonas
+                sobre una misma sesión) cada vez que se le piden
             handicap_service: La RFEG
-            timezone: Dice en qué huso está el campo de cada sesión
             reloj: La hora actual, con huso
             esperar: La pausa entre consultas
         """
-        self._unidad_de_trabajo = unidad_de_trabajo
+        self._herramientas = herramientas
         self._handicap_service = handicap_service
-        self._timezone = timezone
         self._reloj = reloj
         self._esperar = esperar
 
@@ -97,8 +113,7 @@ class RefrescarHandicapsDelDiaUseCase:
     async def _pendientes(self, ahora: datetime) -> dict[UserId, list[tuple[CompetitionId, date]]]:
         """A quién preguntar, y en qué torneos y días apuntar lo que salga."""
         pendientes: dict[UserId, list[tuple[CompetitionId, date]]] = defaultdict(list)
-        uow, _ = self._unidad_de_trabajo()
-        async with uow:
+        async with self._herramientas() as h, h.competiciones as uow:
             # Ayer, hoy y mañana en UTC cubren el «hoy» de cualquier huso
             dias = {ahora.date() + timedelta(days=d) for d in (-1, 0, 1)}
             sesiones: dict[tuple[CompetitionId, date], list[Round]] = defaultdict(list)
@@ -106,7 +121,7 @@ class RefrescarHandicapsDelDiaUseCase:
                 sesiones[(sesion.competition_id, sesion.round_date)].append(sesion)
 
             for (competition_id, dia), del_dia in sesiones.items():
-                ahora_local = await self._hora_local(del_dia[0], ahora)
+                ahora_local = await self._hora_local(h.zonas, del_dia, ahora)
                 if ahora_local is None or not RefrescoDeHandicapsService.toca(ahora_local, dia):
                     continue
                 competicion = await uow.competitions.find_by_id(competition_id)
@@ -120,15 +135,16 @@ class RefrescarHandicapsDelDiaUseCase:
                     pendientes[user_id].append((competition_id, dia))
         return pendientes
 
-    async def _hora_local(self, sesion: Round, ahora: datetime) -> datetime | None:
-        zona = await self._timezone.for_course(sesion.golf_course_id)
-        if zona is None:
-            return None
-        try:
-            return ahora.astimezone(ZoneInfo(zona))
-        except (ZoneInfoNotFoundError, ValueError):
-            logger.warning("Zona horaria desconocida en un campo: %s", zona)
-            return None
+    @staticmethod
+    async def _hora_local(
+        zonas: ICompetitionTimezone, sesiones_del_dia: list[Round], ahora: datetime
+    ) -> datetime | None:
+        """La hora en el campo de la primera sesión del día que tenga zona."""
+        for sesion in sesiones_del_dia:
+            zona = zona_del_campo(await zonas.for_course(sesion.golf_course_id))
+            if zona is not None:
+                return ahora.astimezone(zona)
+        return None
 
     @staticmethod
     async def _candidatos(
@@ -172,18 +188,51 @@ class RefrescarHandicapsDelDiaUseCase:
     async def _refrescar(
         self, user_id: UserId, donde: list[tuple[CompetitionId, date]], ahora: datetime
     ) -> None:
-        """Pregunta por un jugador y lo apunta en cada torneo, en su propia transacción."""
-        uow, usuarios = self._unidad_de_trabajo()
+        """
+        Pregunta por un jugador y lo apunta en cada torneo.
+
+        En tres pasos para no tener la transacción abierta mientras la RFEG
+        contesta: leer al jugador, preguntar, y apuntar (que es cuando se
+        guarda también su hándicap nuevo).
+        """
         try:
-            async with uow:
-                jugador = await usuarios.find_by_id(user_id)
+            async with self._herramientas() as h:
+                async with h.competiciones:
+                    jugador = await h.usuarios.find_by_id(user_id)
                 if jugador is None:
-                    return
-                resultado = await RefrescoRfeg(self._handicap_service, usuarios).consultar(jugador)
-                for competition_id, dia in donde:
-                    await uow.handicap_refreshes.apuntar(
-                        competition_id, dia, user_id, resultado, ahora
+                    # Ya no existe: no hay a quién preguntar, ni ahora ni luego
+                    resultado = ResultadoRefresco.NO_ENCONTRADO
+                else:
+                    resultado = await RefrescoRfeg(self._handicap_service, h.usuarios).consultar(
+                        jugador
                     )
+                async with h.competiciones as uow:
+                    await self._apuntar(uow, user_id, donde, resultado, ahora)
         except Exception:
-            # Uno que falla no para a los demás: se reintentará en otra vuelta
             logger.exception("No se pudo refrescar el hándicap de %s", user_id)
+            await self._apuntar_el_fallo(user_id, donde, ahora)
+
+    async def _apuntar_el_fallo(
+        self, user_id: UserId, donde: list[tuple[CompetitionId, date]], ahora: datetime
+    ) -> None:
+        """
+        Un fallo inesperado también se apunta, con herramientas limpias: sin
+        fila, a ese jugador se le volvería a preguntar cada 15 minutos todo el
+        día, sin el corte de las 7:00.
+        """
+        try:
+            async with self._herramientas() as h, h.competiciones as uow:
+                await self._apuntar(uow, user_id, donde, ResultadoRefresco.FALLIDO, ahora)
+        except Exception:
+            logger.exception("Tampoco se pudo apuntar el fallo de %s", user_id)
+
+    @staticmethod
+    async def _apuntar(
+        uow: CompetitionUnitOfWorkInterface,
+        user_id: UserId,
+        donde: list[tuple[CompetitionId, date]],
+        resultado: ResultadoRefresco,
+        ahora: datetime,
+    ) -> None:
+        for competition_id, dia in donde:
+            await uow.handicap_refreshes.apuntar(competition_id, dia, user_id, resultado, ahora)

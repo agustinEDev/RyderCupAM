@@ -8,8 +8,10 @@ algo. Así no hace falta ningún servicio aparte, y si el servidor se reinicia a
 las 3:00, lo hace en cuanto vuelve. La vuelta real, que cruza módulos, se monta
 en `src/config/vigilantes.py`.
 
-Encendido por defecto; apagado en los tests (`TESTING=true`) y con
-`HANDICAP_REFRESH_ENABLED=false`.
+**Solo en producción**: apagado por defecto y encendido con
+`HANDICAP_REFRESH_ENABLED=true`, que solo se pone en Render. Así el Kind y el
+entorno local no preguntan a la RFEG real por los usuarios de prueba. En los
+tests (`TESTING=true`) nunca, aunque se encienda.
 """
 
 import asyncio
@@ -19,14 +21,14 @@ from collections.abc import Awaitable, Callable, Mapping
 logger = logging.getLogger(__name__)
 
 INTERVALO_SEGUNDOS = 15 * 60
-_APAGADO = {"false", "0", "no", "off"}
+_ENCENDIDO = {"true", "1", "yes", "on"}
 
 
 def debe_vigilar(entorno: Mapping[str, str]) -> bool:
-    """Encendido salvo en los tests o si se apaga con `HANDICAP_REFRESH_ENABLED`."""
+    """Solo con `HANDICAP_REFRESH_ENABLED` encendido, y nunca en los tests."""
     if entorno.get("TESTING", "").lower() == "true":
         return False
-    return entorno.get("HANDICAP_REFRESH_ENABLED", "true").strip().lower() not in _APAGADO
+    return entorno.get("HANDICAP_REFRESH_ENABLED", "").strip().lower() in _ENCENDIDO
 
 
 class VigilanteDeHandicaps:
@@ -34,7 +36,7 @@ class VigilanteDeHandicaps:
 
     def __init__(
         self,
-        vuelta: Callable[[], Awaitable[int]],
+        vuelta: Callable[[], Awaitable[int | None]],
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ):
         self._vuelta = vuelta

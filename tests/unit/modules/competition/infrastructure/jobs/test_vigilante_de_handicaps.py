@@ -54,15 +54,18 @@ class TestLaVigilancia:
 
 
 class TestCuandoSeEnciende:
-    def test_encendido_por_defecto(self):
-        assert debe_vigilar({})
+    """Solo en producción: el Kind y el entorno local no preguntan a la RFEG real."""
 
-    def test_apagado_en_los_tests(self):
-        assert not debe_vigilar({"TESTING": "true"})
+    def test_apagado_por_defecto(self):
+        assert not debe_vigilar({})
+
+    def test_apagado_en_los_tests_aunque_se_encienda(self):
+        assert not debe_vigilar({"TESTING": "true", "HANDICAP_REFRESH_ENABLED": "true"})
 
     @pytest.mark.parametrize("valor", ["false", "0", "no", "False"])
     def test_apagado_con_la_variable(self, valor):
         assert not debe_vigilar({"HANDICAP_REFRESH_ENABLED": valor})
 
-    def test_encendido_con_la_variable(self):
-        assert debe_vigilar({"HANDICAP_REFRESH_ENABLED": "true"})
+    @pytest.mark.parametrize("valor", ["true", "True", "1", "yes"])
+    def test_encendido_con_la_variable(self, valor):
+        assert debe_vigilar({"HANDICAP_REFRESH_ENABLED": valor})

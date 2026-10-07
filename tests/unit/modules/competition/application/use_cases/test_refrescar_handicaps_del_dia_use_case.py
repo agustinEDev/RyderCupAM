@@ -6,6 +6,7 @@ huso de su campo, pregunta a la RFEG por quien juega y todavía no ha empezado,
 uno a uno y con pausa, y apunta qué pasó con cada uno.
 """
 
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -16,6 +17,7 @@ import pytest
 
 from src.modules.competition.application.use_cases.refrescar_handicaps_del_dia_use_case import (
     PAUSA_ENTRE_CONSULTAS,
+    Herramientas,
     RefrescarHandicapsDelDiaUseCase,
 )
 from src.modules.competition.domain.entities.match import Match
@@ -44,7 +46,6 @@ pytestmark = pytest.mark.asyncio
 
 MADRID = ZoneInfo("Europe/Madrid")
 SABADO = date(2030, 10, 12)
-CAMPO = GolfCourseId(uuid4())
 
 
 def _hora_de_madrid(hora: int, minuto: int = 0, dia: date = SABADO) -> datetime:
@@ -72,9 +73,26 @@ class _Usuarios:
         return self.por_id.get(user_id)
 
 
+class _UnidadQueCuenta(InMemoryUnitOfWork):
+    """Sabe si hay una transacción abierta, para ver dónde se pregunta a la RFEG."""
+
+    def __init__(self):
+        super().__init__()
+        self.abiertas = 0
+
+    async def __aenter__(self):
+        self.abiertas += 1
+        return await super().__aenter__()
+
+    async def __aexit__(self, *args):
+        self.abiertas -= 1
+        return await super().__aexit__(*args)
+
+
 class _Escenario:
     def __init__(self):
-        self.uow = InMemoryUnitOfWork()
+        self.uow = _UnidadQueCuenta()
+        self.herramientas_pedidas = 0
         self.usuarios = _Usuarios()
         self.rfeg = MagicMock()
         self.rfeg.search_handicap = AsyncMock(return_value=11.2)
@@ -99,7 +117,7 @@ class _Escenario:
     async def sesion(self, torneo, dia=SABADO) -> Round:
         ronda = Round.create(
             competition_id=torneo,
-            golf_course_id=CAMPO,
+            golf_course_id=GolfCourseId(uuid4()),
             round_date=dia,
             session_type=SessionType.MORNING,
             match_format=MatchFormat.SINGLES,
@@ -130,11 +148,15 @@ class _Escenario:
             await self.uow.matches.add(partido)
         return partido
 
+    @asynccontextmanager
+    async def herramientas(self):
+        self.herramientas_pedidas += 1
+        yield Herramientas(competiciones=self.uow, usuarios=self.usuarios, zonas=self.zona)
+
     def caso(self, ahora: datetime) -> RefrescarHandicapsDelDiaUseCase:
         return RefrescarHandicapsDelDiaUseCase(
-            unidad_de_trabajo=lambda: (self.uow, self.usuarios),
+            herramientas=self.herramientas,
             handicap_service=self.rfeg,
-            timezone=self.zona,
             reloj=lambda: ahora,
             esperar=self.esperar,
         )
@@ -246,9 +268,9 @@ class TestAQuien:
         await e.caso(_hora_de_madrid(3)).execute()
 
         assert e.preguntados() == set()
-        assert await e.uow.handicap_refreshes.del_dia(torneo, SABADO) == {
-            frances: ResultadoRefresco.SIN_LICENCIA_ESPANOLA
-        }
+        assert (await e.uow.handicap_refreshes.del_dia(torneo, SABADO))[frances] is (
+            ResultadoRefresco.SIN_LICENCIA_ESPANOLA
+        )
 
     async def test_quien_juega_dos_torneos_hoy_se_pregunta_una_vez(self, e):
         primero, segundo = await e.torneo(), await e.torneo()
@@ -261,9 +283,9 @@ class TestAQuien:
 
         assert e.rfeg.search_handicap.await_count == 1
         for torneo in (primero, segundo):
-            assert await e.uow.handicap_refreshes.del_dia(torneo, SABADO) == {
-                jugador: ResultadoRefresco.ACTUALIZADO
-            }
+            assert (await e.uow.handicap_refreshes.del_dia(torneo, SABADO))[jugador] is (
+                ResultadoRefresco.ACTUALIZADO
+            )
 
 
 class TestComo:
@@ -321,3 +343,67 @@ class TestComo:
         await e.caso(_hora_de_madrid(3)).execute()
 
         assert e.preguntados() == {e.nombre(otro)}
+        assert (await e.uow.handicap_refreshes.del_dia(torneo, SABADO))[borrado] is (
+            ResultadoRefresco.NO_ENCONTRADO
+        )
+
+
+class TestLoQueEncontroLaRevision:
+    """Hallazgos de /code-review en la 502a."""
+
+    async def test_un_fallo_inesperado_queda_apuntado_y_no_se_repite_tras_las_siete(self, e):
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        await e.sesion(torneo)
+        lecturas = []
+
+        async def explota(user_id):
+            lecturas.append(user_id)
+            raise RuntimeError("la sesión se quedó a medias")
+
+        e.usuarios.find_by_id = explota
+
+        await e.caso(_hora_de_madrid(3)).execute()
+        await e.caso(_hora_de_madrid(7, 30)).execute()
+
+        assert (await e.uow.handicap_refreshes.del_dia(torneo, SABADO))[jugador] is (
+            ResultadoRefresco.FALLIDO
+        )
+        assert lecturas.count(jugador) == 1
+
+    async def test_la_rfeg_se_consulta_sin_ninguna_transaccion_abierta(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+        abiertas_al_preguntar = []
+
+        async def rfeg(_nombre):
+            abiertas_al_preguntar.append(e.uow.abiertas)
+            return 11.2
+
+        e.rfeg.search_handicap = rfeg
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert abiertas_al_preguntar and set(abiertas_al_preguntar) == {0}
+
+    async def test_cada_jugador_con_sus_propias_herramientas(self, e):
+        torneo = await e.torneo()
+        await e.inscrito(torneo)
+        await e.sesion(torneo)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        # Una para buscar a quién preguntar, y una por cada uno de los dos jugadores
+        assert e.herramientas_pedidas == 3
+
+    async def test_si_la_primera_sesion_no_tiene_zona_vale_la_de_otra(self, e):
+        torneo = await e.torneo()
+        jugador = await e.inscrito(torneo)
+        sin_zona, con_zona = await e.sesion(torneo), await e.sesion(torneo)
+        zonas = {sin_zona.golf_course_id: None, con_zona.golf_course_id: "Europe/Madrid"}
+        e.zona.for_course = AsyncMock(side_effect=lambda campo: zonas[campo])
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.nombre(jugador) in e.preguntados()

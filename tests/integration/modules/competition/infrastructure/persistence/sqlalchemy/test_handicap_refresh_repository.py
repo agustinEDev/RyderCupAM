@@ -139,3 +139,33 @@ async def test_una_vuelta_real_cableada_contra_postgres(db_session):
     preguntados = await vuelta_con_la_base_de_datos(fabrica, rfeg)()
 
     assert isinstance(preguntados, int)
+
+
+async def test_con_el_candado_cogido_por_otro_proceso_la_vuelta_se_salta(db_session):
+    """Dos procesos a la vez (un despliegue a las 3:00): solo uno pregunta a la RFEG."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from src.config.vigilantes import CANDADO_DEL_REFRESCO, vuelta_con_la_base_de_datos
+
+    rfeg = MagicMock()
+    rfeg.search_handicap = AsyncMock(return_value=None)
+    fabrica = async_sessionmaker(bind=db_session.bind, class_=AsyncSession, expire_on_commit=False)
+    vuelta = vuelta_con_la_base_de_datos(fabrica, rfeg)
+
+    async with db_session.bind.connect() as otro_proceso:
+        cogido = await otro_proceso.scalar(
+            text("SELECT pg_try_advisory_lock(:k)"), {"k": CANDADO_DEL_REFRESCO}
+        )
+        assert cogido
+        try:
+            assert await vuelta() is None
+        finally:
+            await otro_proceso.scalar(
+                text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_REFRESCO}
+            )
+
+    # Suelto, la siguiente vuelta ya se hace
+    assert isinstance(await vuelta(), int)
