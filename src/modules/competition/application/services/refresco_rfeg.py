@@ -56,8 +56,9 @@ class RefrescoRfeg:
         """
         Pregunta a la RFEG siempre, sin el límite de una vez al día, y dice qué pasó.
 
-        Es la consulta de las 3:00 de un día de juego (BE #502): puede que el
-        refresco del día se hiciera al entrar, antes de que la RFEG publicara.
+        Es la de una actualización de hándicaps de una competición (#251): al
+        cerrar las inscripciones cuenta lo que diga la RFEG en ese momento,
+        aunque el jugador ya se refrescara hoy al entrar.
         """
         if self._handicap_service is None:
             return ResultadoRefresco.FALLIDO

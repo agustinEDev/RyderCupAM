@@ -13,22 +13,28 @@ sin él. Si aun así falta alguno, no se cierra y se dice quién: la misma lista
 Una Ryder Cup no pasa por aquí: no tiene categorías.
 """
 
+from decimal import Decimal
+
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     HandicapsDeLaCompeticion,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_HANDICAP,
     BlockedPlayer,
 )
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class PlayersWithoutHandicapError(Exception):
@@ -74,7 +80,35 @@ class HandicapsAlCerrar:
                     for u in sin
                 ]
             )
-        categorias = competition.stroke_play.categorias(handicaps)
+        await self._congelar(competition.stroke_play, inscripciones, handicaps)
+
+    async def corregir(self, competition: Competition, user_id: UserId, handicap: Decimal) -> None:
+        """
+        La RFEG dio otro hándicap tras el cierre: pasa a ser el fijado (#251).
+
+        Solo en un stroke play que siga con las inscripciones cerradas, y solo a
+        quien no tiene personalizado. Las categorías se rehacen con la regla de
+        los seis: antes de empezar todavía pueden cambiar.
+        """
+        if competition.stroke_play is None or competition.status is not CompetitionStatus.CLOSED:
+            return
+        inscripciones = await self._uow.enrollments.find_by_competition_and_status(
+            competition.id, EnrollmentStatus.APPROVED
+        )
+        suya = next((e for e in inscripciones if e.user_id == user_id), None)
+        if suya is None or suya.has_custom_handicap():
+            return
+        handicaps = {e.user_id: handicap if e is suya else e.fixed_handicap for e in inscripciones}
+        await self._congelar(competition.stroke_play, inscripciones, handicaps)
+
+    async def _congelar(
+        self,
+        ajustes: StrokePlaySetup,
+        inscripciones: list[Enrollment],
+        handicaps: dict[UserId, Decimal | None],
+    ) -> None:
+        """Fija el hándicap de cada uno y su categoría, con la regla de los seis."""
+        categorias = ajustes.categorias(handicaps)
         for inscripcion in inscripciones:
             inscripcion.congelar_handicap(
                 handicaps[inscripcion.user_id], categorias[inscripcion.user_id]

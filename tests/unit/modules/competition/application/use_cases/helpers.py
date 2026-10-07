@@ -42,7 +42,15 @@ class UsuariosConGenero:
 
     async def find_by_id(self, user_id):
         genero = None if user_id in self._sin_genero else Gender.MALE
-        return SimpleNamespace(id=user_id, gender=genero, handicap=SimpleNamespace(value=10.0))
+        return SimpleNamespace(
+            id=user_id,
+            gender=genero,
+            handicap=SimpleNamespace(value=10.0),
+            display_name_or_legal=lambda _real=False: f"Jugador {user_id}",
+        )
+
+    async def find_by_ids(self, user_ids):
+        return [await self.find_by_id(u) for u in user_ids]
 
 
 USUARIOS_CON_GENERO = UsuariosConGenero()

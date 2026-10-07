@@ -1182,18 +1182,35 @@ hole_scores_table = Table(
 )
 
 
-# Lo que pasó al refrescar con la RFEG a cada jugador, cada día de juego (BE #502).
-# Sin entidad mapeada: es un registro, lo escribe y lo lee su repositorio
-handicap_refreshes_table = Table(
-    "handicap_refreshes",
+# Las actualizaciones de hándicaps con la RFEG de cada competición (#251).
+# Sin entidad mapeada: las escribe y las lee su repositorio
+handicap_updates_table = Table(
+    "handicap_updates",
     metadata,
+    Column("id", CHAR(36), primary_key=True),
     Column(
         "competition_id",
         CompetitionIdDecorator,
         ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("origin", String(30), nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+)
+
+# Lo que contestó la RFEG por cada jugador en cada actualización, con los intentos
+handicap_refreshes_table = Table(
+    "handicap_refreshes",
+    metadata,
+    Column(
+        "update_id",
+        CHAR(36),
+        ForeignKey("handicap_updates.id", ondelete="CASCADE"),
         primary_key=True,
     ),
-    Column("play_date", Date, primary_key=True),
     Column(
         "user_id",
         UserIdDecorator,
@@ -1201,6 +1218,7 @@ handicap_refreshes_table = Table(
         primary_key=True,
     ),
     Column("result", String(30), nullable=False),
+    Column("attempts", Integer, nullable=False),
     Column("refreshed_at", DateTime(timezone=True), nullable=False),
 )
 
