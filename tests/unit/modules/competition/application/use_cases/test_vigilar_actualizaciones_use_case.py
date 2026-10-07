@@ -119,6 +119,21 @@ class TestLasProgramadas:
         assert aviso["to_email"] == "org@test.com"
         assert "salida" in aviso["reason"]
 
+    async def test_en_una_cancelada_o_terminada_se_quita_sin_avisar(self, e):  # noqa: F811
+        from src.modules.competition.domain.value_objects.competition_status import (
+            CompetitionStatus,
+        )
+
+        for status in (CompetitionStatus.CANCELLED, CompetitionStatus.COMPLETED):
+            await e.torneo(status=status)
+            await _programar(e, A_TIEMPO)
+            vuelta = _vuelta(e, A_TIEMPO)
+
+            await vuelta.execute()
+
+            assert await e.uow.handicap_updates.programada_de(e.competicion.id) is None
+            e.avisos.send_scheduled_handicaps_update_skipped_email.assert_not_awaited()
+
     async def test_con_una_en_marcha_no_lanza_otra(self, e, caplog):  # noqa: F811
         """Y sin error: si no, en Postgres se desharía el quitarla y se lanzaría luego otra."""
         await e.torneo()

@@ -98,7 +98,8 @@ class VigilarActualizacionesUseCase:
             competicion = await uow.competitions.find_by_id_for_update(competition_id)
             # Se quita siempre: se lance o no, ya llegó su hora
             await uow.handicap_updates.anular_programada(competition_id)
-            if competicion is None:
+            # Cancelada o terminada: ya no tiene sentido ni avisar
+            if competicion is None or competicion.status.is_final():
                 return
             actualizaciones = ActualizacionesDeHandicaps(uow, self._lanzador)
             ventana = await ventana_de(uow, h.zonas, competicion, ahora)
