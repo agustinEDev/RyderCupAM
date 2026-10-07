@@ -30,6 +30,8 @@ MISSING_GENDER = "GENDER"
 MISSING_TEE_COLOR = "TEE_COLOR"
 # Emparejado sin la inscripción aprobada: se retiró, o no llegó a aprobarse
 MISSING_ENROLLMENT = "ENROLLMENT"
+# Sin hándicap no hay categoría en un stroke play (#251)
+MISSING_HANDICAP = "HANDICAP"
 
 
 @dataclass(frozen=True)

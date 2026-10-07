@@ -5,6 +5,7 @@ Endpoints FastAPI para gestión de inscripciones siguiendo Clean Architecture.
 """
 
 import logging
+from collections.abc import Mapping
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -64,7 +65,7 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError as HandleNotCreatorError,
     NotCreatorError as RemoveHandicapNotCreatorError,
 )
-from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
+from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
     NotOwnerError as CancelNotOwnerError,
@@ -161,7 +162,9 @@ class EnrollmentDTOMapper:
 
     @staticmethod
     async def to_response_dto(
-        enrollment, user_uow: UserUnitOfWorkInterface | None = None
+        enrollment,
+        user_uow: UserUnitOfWorkInterface | None = None,
+        categorias: Mapping[UserId, int | None] | None = None,
     ) -> EnrollmentResponseDTO:
         """
         Convierte una entidad Enrollment a EnrollmentResponseDTO.
@@ -169,6 +172,8 @@ class EnrollmentDTOMapper:
         Args:
             enrollment: Entidad de dominio
             user_uow: Unit of Work de usuarios para obtener datos del usuario (opcional)
+            categorias: La categoría de cada jugador, si ya está fijada (#251).
+                Sin ella, ni hándicap fijado ni categoría: aún no cuentan
 
         Returns:
             EnrollmentResponseDTO enriquecido con datos del usuario
@@ -189,6 +194,8 @@ class EnrollmentDTOMapper:
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
             tee_color=enrollment.tee_color,
+            fixed_handicap=enrollment.fixed_handicap if categorias else None,
+            category=categorias.get(enrollment.user_id) if categorias else None,
             use_real_name=enrollment.use_real_name,
             created_at=enrollment.created_at,
             updated_at=enrollment.updated_at,
@@ -272,7 +279,7 @@ async def request_enrollment(
         CompetitionFullError,
         EnrollmentClosedError,
         TooManyEnrollmentsError,
-        GenderRequiredError,
+        PerfilIncompletoError,
     ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except CompetitionIsPrivateError as e:
@@ -319,7 +326,7 @@ async def direct_enroll_player(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except DirectNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (DirectCompetitionNotActiveError, CompetitionFullError, GenderRequiredError) as e:
+    except (DirectCompetitionNotActiveError, CompetitionFullError, PerfilIncompletoError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
@@ -352,14 +359,17 @@ async def list_enrollments(
       - handicap, country_code, avatar_url
     """
     try:
-        enrollments = await use_case.execute(
+        # Con la categoría de cada uno, si ya está fijada (#251)
+        enrollments, categorias = await use_case.execute_con_categorias(
             competition_id=str(competition_id), status=status_filter
         )
 
         # Convertir entidades a DTOs enriquecidos con datos de usuario
         result = []
         for enrollment in enrollments:
-            dto = await EnrollmentDTOMapper.to_response_dto(enrollment, user_uow)
+            dto = await EnrollmentDTOMapper.to_response_dto(
+                enrollment, user_uow, categorias=categorias
+            )
             result.append(dto)
 
         return result
@@ -397,7 +407,7 @@ async def approve_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (EnrollmentStateError, CompetitionFullError, GenderRequiredError) as e:
+    except (EnrollmentStateError, CompetitionFullError, PerfilIncompletoError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
@@ -569,6 +579,8 @@ async def remove_custom_handicap(
     except EnrollmentStateError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except HandicapEditNotAllowedError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except PerfilIncompletoError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 

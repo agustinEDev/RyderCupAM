@@ -72,7 +72,8 @@ class StartCompetitionUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Bloqueada, como la lee el primer golpe al arrancarla
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
@@ -94,7 +95,8 @@ class StartCompetitionUseCase:
                     "Añade al menos una sesión antes de iniciar la competición"
                 )
 
-            # 4. Iniciar la competición (la entidad valida la transición)
+            # 4. Iniciar la competición (la entidad valida la transición). El
+            #    hándicap de cada uno ya quedó fijado al cerrar las inscripciones
             competition.start()
 
             # 4. Persistir cambios

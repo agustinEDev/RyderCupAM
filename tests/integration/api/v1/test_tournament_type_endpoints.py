@@ -36,6 +36,11 @@ async def _organizador(client: AsyncClient) -> dict:
         client, f"tipo-{uuid.uuid4().hex[:8]}@test.com", "P@ssw0rd123!", "Tipo", "Torneo"
     )
     set_auth_cookies(client, usuario["cookies"])
+    # Un Stableford o un Medal exige hándicap para crearlo (#251, 7 oct 2026)
+    respuesta = await client.post(
+        "/api/v1/handicaps/update", json={"user_id": usuario["user"]["id"], "manual_handicap": 15.0}
+    )
+    assert respuesta.status_code == 200, respuesta.text
     return usuario
 
 

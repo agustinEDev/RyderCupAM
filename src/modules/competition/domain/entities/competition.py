@@ -388,6 +388,17 @@ class Competition:
             raise TournamentTypeError(f"Un {self._tournament_type.label} no tiene equipos")
         return self._ryder_cup
 
+    def allows_handicap_edits(self) -> bool:
+        """
+        Si se puede tocar el hándicap personalizado de un inscrito.
+
+        En un Stableford o un Medal, hasta cerrar las inscripciones: ahí se fija
+        el de cada uno (7 oct 2026). En una Ryder, como siempre, hasta empezar.
+        """
+        if self._stroke_play is not None:
+            return self._status.allows_modifications()
+        return self._status.allows_handicap_edits()
+
     @property
     def stroke_play(self) -> StrokePlaySetup | None:
         """Categorías, jornadas por jugador y regla de la general: solo del stroke play."""
@@ -402,10 +413,9 @@ class Competition:
         """
         Cambia los ajustes del stroke play; None es «no lo toques».
 
-        **Hasta que la competición empieza** (DRAFT, ACTIVE y CLOSED): al
-        empezar se fija la categoría de cada jugador, y de ahí en adelante los
-        límites ya no pueden moverse. Es la misma ventana que el hándicap
-        personalizado, que es lo otro de lo que sale la categoría.
+        **Hasta que se cierran las inscripciones** (DRAFT y ACTIVE): al cerrar se
+        fija el hándicap de cada jugador y su categoría, como hace la RFEG
+        (decidido el 7 oct 2026).
 
         Returns:
             Los ajustes como quedan
@@ -417,9 +427,11 @@ class Competition:
         """
         if self._stroke_play is None:
             raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
-        if not self._status.allows_handicap_edits():
+        # Al cerrar las inscripciones se fija el hándicap de cada uno y su
+        # categoría: desde ahí, nada que la mueva (7 oct 2026)
+        if not self._status.allows_modifications():
             raise CompetitionStateError(
-                "Los ajustes del stroke play se cambian hasta que empieza la competición"
+                "Los ajustes del stroke play se cambian hasta que se cierran las inscripciones"
             )
         nuevos = self._stroke_play.with_changes(
             category_limits, max_matchdays_per_player, overall_standing

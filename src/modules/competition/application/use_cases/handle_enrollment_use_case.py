@@ -15,9 +15,11 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_ocupar_una_plaza,
 )
+from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
 )
@@ -126,7 +128,23 @@ class HandleEnrollmentUseCase:
                     raise CompetitionFullError(
                         f"La competición está completa: {competition.max_players} plazas ocupadas."
                     ) from e
+                # En un Stableford o un Medal, con las inscripciones cerradas ya no
+                # entra nadie: su hándicap y su categoría están fijados (#251)
+                if competition.stroke_play is not None and not (
+                    competition.status.allows_modifications()
+                ):
+                    raise EnrollmentStateError(
+                        "Las inscripciones están cerradas: para que entre, reábrelas, "
+                        "apruébala y vuelve a cerrarlas."
+                    )
                 await exigir_genero(self._user_repo, enrollment.user_id, es_quien_se_apunta=False)
+                await exigir_handicap(
+                    self._user_repo,
+                    competition,
+                    enrollment.user_id,
+                    es_quien_se_apunta=False,
+                    personalizado=enrollment.custom_handicap,
+                )
                 enrollment.approve()
                 # Si era la última plaza, las invitaciones pendientes se quedan sin
                 # ella ya (BE #359)

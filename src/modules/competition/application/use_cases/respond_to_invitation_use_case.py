@@ -10,6 +10,7 @@ from src.modules.competition.application.exceptions import (
     NotInviteeError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_ocupar_una_plaza,
 )
@@ -180,6 +181,10 @@ class RespondToInvitationUseCase:
         # Sin género no se sabe desde qué barras juega (#710). Antes de aceptar:
         # la invitación se queda pendiente para cuando lo rellene
         await exigir_genero(self._user_uow.users, current_user_id, es_quien_se_apunta=True)
+        # Y en un Stableford o un Medal, su hándicap: de él sale su categoría (#251)
+        await exigir_handicap(
+            self._user_uow.users, competition, current_user_id, es_quien_se_apunta=True
+        )
 
         existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
             current_user_id, invitation.competition_id

@@ -165,3 +165,93 @@ class TestNumerosImposibles:
     def test_lo_que_no_es_un_numero_tambien(self, raro):
         with pytest.raises(StrokePlaySettingsError, match="entre -10,0 y 54,0"):
             StrokePlaySetup.create(category_limits=[Decimal(raro)])
+
+
+class TestCategoriaDeUnHandicap:
+    """«Hasta 12,0» incluye el 12,0 (1c)."""
+
+    @pytest.mark.parametrize(
+        "handicap, categoria",
+        [("12.0", 1), ("12.1", 2), ("26.0", 2), ("26.1", 3), ("-2.0", 1), ("54.0", 3)],
+    )
+    def test_con_limites_de_12_y_26(self, handicap, categoria):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0", "26.0"))
+
+        assert ajustes.category_for(Decimal(handicap)) == categoria
+
+    def test_sin_limites_todos_en_la_primera(self):
+        assert StrokePlaySetup.create().category_for(Decimal("30.0")) == 1
+
+    def test_sin_handicap_no_hay_categoria(self):
+        assert StrokePlaySetup.create(category_limits=_d("12.0")).category_for(None) is None
+
+
+class TestSeisPorCategoria:
+    """Una categoría con menos de 6 se une a la contigua de hándicap más bajo (7 oct)."""
+
+    @staticmethod
+    def _jugadores(*handicaps: str) -> dict:
+        from src.modules.user.domain.value_objects.user_id import UserId
+
+        return {UserId.generate(): (Decimal(h) if h is not None else None) for h in handicaps}
+
+    def test_con_seis_en_cada_una_se_quedan_como_estan(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+        jugadores = self._jugadores(*(["5.0"] * 6 + ["20.0"] * 6))
+
+        categorias = ajustes.categorias(jugadores)
+
+        assert sorted(set(categorias.values())) == [1, 2]
+
+    def test_la_ultima_con_menos_de_seis_se_une_a_la_anterior(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0", "26.0"))
+        jugadores = self._jugadores(*(["5.0"] * 6 + ["20.0"] * 6 + ["30.0"] * 5))
+
+        categorias = ajustes.categorias(jugadores)
+
+        assert sorted(set(categorias.values())) == [1, 2]
+        tercera = [u for u, h in jugadores.items() if h == Decimal("30.0")]
+        assert {categorias[u] for u in tercera} == {2}
+
+    def test_la_primera_con_menos_de_seis_se_une_a_la_segunda(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+        jugadores = self._jugadores(*(["5.0"] * 3 + ["20.0"] * 6))
+
+        assert set(ajustes.categorias(jugadores).values()) == {1}
+
+    def test_en_cascada_hasta_que_todas_tengan_seis(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("5.0", "12.0", "20.0"))
+        jugadores = self._jugadores(*(["3.0"] * 6 + ["8.0"] * 2 + ["15.0"] * 2 + ["25.0"] * 2))
+
+        categorias = ajustes.categorias(jugadores)
+
+        # 8, 15 y 25 (2 cada una) se van juntando hasta tener 6: dos categorías
+        assert sorted(set(categorias.values())) == [1, 2]
+
+    def test_con_menos_de_seis_en_total_una_sola(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+        jugadores = self._jugadores("5.0", "20.0")
+
+        assert set(ajustes.categorias(jugadores).values()) == {1}
+
+    def test_quien_no_tiene_handicap_no_tiene_categoria_ni_cuenta(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+        jugadores = self._jugadores(*(["5.0"] * 6 + ["20.0"] * 6), None)
+        sin = next(u for u, h in jugadores.items() if h is None)
+
+        categorias = ajustes.categorias(jugadores)
+
+        assert categorias[sin] is None
+        assert sorted({c for c in categorias.values() if c}) == [1, 2]
+
+    def test_una_del_medio_se_une_a_la_de_handicap_mas_bajo_y_no_a_la_otra(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("5.0", "12.0"))
+        jugadores = self._jugadores(*(["3.0"] * 6 + ["8.0"] * 3 + ["20.0"] * 6))
+
+        categorias = ajustes.categorias(jugadores)
+
+        segunda = {categorias[u] for u, h in jugadores.items() if h == Decimal("8.0")}
+        primera = {categorias[u] for u, h in jugadores.items() if h == Decimal("3.0")}
+        tercera = {categorias[u] for u, h in jugadores.items() if h == Decimal("20.0")}
+        assert segunda == primera == {1}
+        assert tercera == {2}

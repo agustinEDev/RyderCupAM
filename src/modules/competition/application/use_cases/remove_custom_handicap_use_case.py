@@ -15,11 +15,17 @@ from src.modules.competition.application.exceptions import (
     HandicapEditNotAllowedError,
     NotCreatorError,
 )
+from src.modules.competition.application.services.handicap_obligatorio import (
+    exigir_que_no_se_quede_sin,
+)
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -41,14 +47,21 @@ class RemoveCustomHandicapUseCase:
     - Solo se permite mientras la competicion esta en DRAFT, ACTIVE o CLOSED
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            user_repository: Los perfiles, para no dejar a nadie sin hándicap
         """
         self._uow = uow
+        # Para no dejar a nadie sin hándicap en un stroke play (#251)
+        self._users = user_repository
 
     async def execute(
         self, enrollment_id: str, creator_id: UserId, is_admin: bool = False
@@ -79,8 +92,11 @@ class RemoveCustomHandicapUseCase:
             if not enrollment:
                 raise EnrollmentNotFoundError(f"Inscripcion no encontrada: {enrollment_id}")
 
-            # 2. Obtener competicion
-            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
+            # 2. Obtener competicion, bloqueada: un cierre de inscripciones a la vez
+            #    espera, y este cambio no se cuela tras fijar los hándicaps (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competicion no encontrada: {enrollment.competition_id}"
@@ -99,11 +115,15 @@ class RemoveCustomHandicapUseCase:
                 )
 
             # 5. Verificar que la competicion permite editar handicaps (DRAFT/ACTIVE/CLOSED)
-            if not competition.status.allows_handicap_edits():
+            if not competition.allows_handicap_edits():
                 raise HandicapEditNotAllowedError(
-                    "El hándicap personalizado solo puede modificarse mientras la competición "
-                    f"está en DRAFT, ACTIVE o CLOSED. Estado actual: {competition.status.value}"
+                    "El hándicap personalizado ya no se puede cambiar: en un Stableford o un "
+                    "Medal, hasta cerrar las inscripciones; en una Ryder, hasta empezar. "
+                    f"Estado actual: {competition.status.value}"
                 )
+
+            # 5b. En un stroke play nadie se queda sin hándicap (#251)
+            await exigir_que_no_se_quede_sin(self._users, competition, enrollment.user_id)
 
             # 6. Eliminar handicap personalizado
             enrollment.remove_custom_handicap()

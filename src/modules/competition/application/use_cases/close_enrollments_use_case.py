@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
 )
@@ -20,6 +21,10 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -44,7 +49,11 @@ class CloseEnrollmentsUseCase:
     6. Commit de la transacción
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface | None = None,
+    ):
         """
         Constructor.
 
@@ -52,6 +61,8 @@ class CloseEnrollmentsUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # Para el hándicap de cada inscrito en un stroke play (#251)
+        self._users = user_repository
 
     async def execute(
         self, request: CloseEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -70,6 +81,8 @@ class CloseEnrollmentsUseCase:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
             CompetitionStateError: Si la transición de estado no es válida
+            PlayersWithoutHandicapError: Si en un stroke play falta el de alguien
+                (no se cierra)
         """
         async with self._uow:
             # 1. Buscar la competición
@@ -90,7 +103,19 @@ class CloseEnrollmentsUseCase:
             # 3. Contar inscripciones aprobadas
             total_enrollments = await self._uow.enrollments.count_approved(competition_id)
 
-            # 4. Cerrar inscripciones (la entidad valida la transición)
+            # 4. En un Stableford o un Medal se fija el hándicap de cada uno, el de
+            #    todo el torneo (7 oct 2026, como la RFEG), y si falta alguno no se
+            #    cierra. Solo al cerrar DESDE ABIERTA: este mismo paso devuelve a
+            #    cerrada una competición en juego, y ahí no se puede volver a fijar
+            #    nada a mitad de torneo. Y antes de cerrar: si no se puede, lo que
+            #    hay que decir es el estado
+            if (
+                competition.stroke_play is not None
+                and competition.status is CompetitionStatus.ACTIVE
+            ):
+                await self._handicaps().fijar(competition)
+
+            # 4b. Cerrar inscripciones (la entidad valida la transición)
             competition.close_enrollments(total_enrollments=total_enrollments)
 
             # 5. Persistir cambios
@@ -106,3 +131,8 @@ class CloseEnrollmentsUseCase:
             total_enrollments=total_enrollments,
             closed_at=competition.updated_at,
         )
+
+    def _handicaps(self) -> HandicapsAlCerrar:
+        if self._users is None:
+            raise RuntimeError("Hace falta el repositorio de usuarios para un stroke play")
+        return HandicapsAlCerrar(self._uow, self._users)

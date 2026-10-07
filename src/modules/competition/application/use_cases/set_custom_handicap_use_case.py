@@ -76,7 +76,11 @@ class SetCustomHandicapUseCase:
                 raise EnrollmentNotFoundError(f"Inscripcion no encontrada: {request.enrollment_id}")
 
             # 2. Obtener competicion
-            competition = await self._uow.competitions.find_by_id(enrollment.competition_id)
+            # Bloqueada: un cierre de inscripciones a la vez espera, y este cambio
+            # no se cuela tras fijar los hándicaps (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(
+                enrollment.competition_id
+            )
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competicion no encontrada: {enrollment.competition_id}"
@@ -95,10 +99,11 @@ class SetCustomHandicapUseCase:
                 )
 
             # 4b. Verificar que la competicion permite editar handicaps (DRAFT/ACTIVE/CLOSED)
-            if not competition.status.allows_handicap_edits():
+            if not competition.allows_handicap_edits():
                 raise HandicapEditNotAllowedError(
-                    "El hándicap personalizado solo puede modificarse mientras la competición "
-                    f"está en DRAFT, ACTIVE o CLOSED. Estado actual: {competition.status.value}"
+                    "El hándicap personalizado ya no se puede cambiar: en un Stableford o un "
+                    "Medal, hasta cerrar las inscripciones; en una Ryder, hasta empezar. "
+                    f"Estado actual: {competition.status.value}"
                 )
 
             # 5. Establecer handicap (la entidad valida el rango)

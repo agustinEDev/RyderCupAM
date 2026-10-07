@@ -16,15 +16,20 @@ Decidido con Agustín el 6 oct 2026:
 Cada cambio devuelve una pieza nueva.
 """
 
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from itertools import pairwise
 from typing import Self
 
+from src.modules.user.domain.value_objects.user_id import UserId
+
 from .overall_standing import OverallStanding
 
 MAX_CATEGORIES = 5
+# Una categoría se disputa con 6 jugadores como mínimo, como en la RFEG (7 oct 2026)
+MIN_JUGADORES_POR_CATEGORIA = 6
 MIN_LIMIT = Decimal("-10.0")
 MAX_LIMIT = Decimal("54.0")
 UNA_DECIMAL = Decimal("0.1")
@@ -101,6 +106,53 @@ class StrokePlaySetup:
     def number_of_categories(self) -> int:
         """Cuántas categorías salen de los límites: uno más que límites."""
         return len(self.category_limits) + 1
+
+    def category_for(self, handicap: Decimal | None) -> int | None:
+        """
+        La categoría (1, 2, 3…) de un hándicap; «hasta 12,0» incluye el 12,0.
+
+        Sin hándicap no hay categoría (1c): solo pasa si alguien se lo quitó
+        después de cerrar las inscripciones y la competición arrancó sola.
+        """
+        if handicap is None:
+            return None
+        return 1 + sum(1 for limite in self.category_limits if handicap > limite)
+
+    def categorias(self, handicaps: Mapping[UserId, Decimal | None]) -> dict[UserId, int | None]:
+        """
+        La categoría de cada jugador, con la regla de los seis (7 oct 2026).
+
+        Una categoría con menos de 6 jugadores se une a la contigua de hándicap
+        más bajo (la 1.ª, que no tiene, a la 2.ª), empezando por la de hándicap
+        más alto, y se repite hasta que todas tengan 6 o quede una sola. Las que quedan se numeran 1, 2, 3… Quien no
+        tiene hándicap no tiene categoría ni cuenta para el mínimo.
+        """
+        grupos = [[n] for n in range(1, self.number_of_categories + 1)]
+        nominal = {u: self.category_for(h) for u, h in handicaps.items()}
+        por_categoria = Counter(c for c in nominal.values() if c is not None)
+
+        def jugadores(grupo: list[int]) -> int:
+            return sum(por_categoria[c] for c in grupo)
+
+        while len(grupos) > 1:
+            # Desde la de hándicap más alto: los pocos de abajo se van juntando
+            # hacia arriba, y así se conservan más categorías
+            pequeno = next(
+                (
+                    i
+                    for i in range(len(grupos) - 1, -1, -1)
+                    if jugadores(grupos[i]) < MIN_JUGADORES_POR_CATEGORIA
+                ),
+                None,
+            )
+            if pequeno is None:
+                break
+            destino = pequeno - 1 if pequeno > 0 else 1
+            grupos[destino] = sorted(grupos[destino] + grupos[pequeno])
+            del grupos[pequeno]
+
+        efectiva = {c: i + 1 for i, grupo in enumerate(grupos) for c in grupo}
+        return {u: (efectiva[c] if c is not None else None) for u, c in nominal.items()}
 
     def check_fits_in(self, days: int) -> None:
         """

@@ -10,6 +10,7 @@ from src.modules.competition.application.dto.competition_dto import (
 )
 from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.domain.entities.competition import (
     RYDER_SIN_STROKE_PLAY,
     Competition,
@@ -170,6 +171,10 @@ class CreateCompetitionUseCase:
             # 11. Auto-enroll del creador como jugador APPROVED. Juega, así que
             # su género hace falta como el de cualquier inscrito (#710)
             await exigir_genero(self._user_repo, creator_id, es_quien_se_apunta=True, al_crear=True)
+            # Y en un Stableford o un Medal, su hándicap: de él sale su categoría (#251)
+            await exigir_handicap(
+                self._user_repo, competition, creator_id, es_quien_se_apunta=True, al_crear=True
+            )
             creator_enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,

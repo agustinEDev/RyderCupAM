@@ -2,11 +2,8 @@
 Caso de Uso: Cambiar los ajustes del stroke play (RyderCupAM#251).
 
 Categorías, jornadas por jugador y regla de la general de un Stableford o un
-Medal. Tiene su propio caso de uso, y no va en la edición general, porque se
-pueden cambiar **hasta que la competición empieza** —también con las
-inscripciones cerradas—, mientras que la edición general solo deja hasta que
-se cierran. Es la misma ventana que el hándicap personalizado: de los dos sale
-la categoría que se fija al empezar.
+Medal, hasta que se cierran las inscripciones: ahí se fija el hándicap de cada
+jugador y su categoría (decidido el 7 oct 2026, como hace la RFEG).
 """
 
 from uuid import UUID

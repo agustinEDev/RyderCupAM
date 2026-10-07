@@ -911,6 +911,9 @@ enrollments_table = Table(
     Column("custom_handicap", Numeric(precision=4, scale=1), nullable=True),
     Column("tee_color", TeeColorDecorator, nullable=True),
     Column("use_real_name", Boolean, nullable=False, server_default="true"),
+    # El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)
+    Column("fixed_handicap", Numeric(precision=4, scale=1), nullable=True),
+    Column("fixed_category", Integer, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -1330,6 +1333,8 @@ def start_competition_mappers():
                 "_custom_handicap": enrollments_table.c.custom_handicap,
                 "_tee_color": enrollments_table.c.tee_color,
                 "_use_real_name": enrollments_table.c.use_real_name,
+                "_fixed_handicap": enrollments_table.c.fixed_handicap,
+                "_fixed_category": enrollments_table.c.fixed_category,
                 "_created_at": enrollments_table.c.created_at,
                 "_updated_at": enrollments_table.c.updated_at,
                 # Composite VOs → private attrs

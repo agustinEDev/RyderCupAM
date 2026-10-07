@@ -11,8 +11,15 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import (
     EnrollmentStatus,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
+
+# Desde que se cierran las inscripciones, el hándicap de cada uno está fijado (#251)
+HANDICAP_FIJADO = frozenset(
+    {CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS, CompetitionStatus.COMPLETED}
 )
 
 
@@ -75,3 +82,35 @@ class ListEnrollmentsUseCase:
                 enrollments = await self._uow.enrollments.find_by_competition(comp_id)
 
             return enrollments
+
+    async def execute_con_categorias(
+        self, competition_id: str, status: str | None = None
+    ) -> tuple[list[Enrollment], dict[UserId, int | None]]:
+        """
+        Las inscripciones y, en un stroke play con el hándicap ya fijado (desde
+        que se cierran las inscripciones), la categoría fijada de cada aprobado.
+
+        La categoría se fijó al cerrar, con la regla de los seis: aquí solo se
+        lee, y no se mueve aunque alguien se retire (#251).
+
+        Returns:
+            Las inscripciones, y la categoría de cada aprobado (vacío si no toca)
+        """
+        async with self._uow:
+            comp_id = CompetitionId(competition_id)
+            competition = await self._uow.competitions.find_by_id(comp_id)
+            if not competition:
+                raise CompetitionNotFoundError(f"Competicion no encontrada: {competition_id}")
+            if status:
+                enrollments = await self._uow.enrollments.find_by_competition_and_status(
+                    comp_id, EnrollmentStatus(status.upper())
+                )
+            else:
+                enrollments = await self._uow.enrollments.find_by_competition(comp_id)
+        if competition.stroke_play is None or competition.status not in HANDICAP_FIJADO:
+            return enrollments, {}
+        return enrollments, {
+            e.user_id: e.fixed_category
+            for e in enrollments
+            if e.status is EnrollmentStatus.APPROVED
+        }
