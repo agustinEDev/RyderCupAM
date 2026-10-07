@@ -187,6 +187,9 @@ from src.modules.competition.application.use_cases.update_match_status_use_case 
 from src.modules.competition.application.use_cases.update_round_use_case import (
     UpdateRoundUseCase,
 )
+from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
+    UpdateStrokePlaySettingsUseCase,
+)
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
 )
@@ -1972,6 +1975,13 @@ def get_withdraw_enrollment_use_case(
 ) -> WithdrawEnrollmentUseCase:
     """Proveedor del caso de uso WithdrawEnrollmentUseCase."""
     return WithdrawEnrollmentUseCase(uow)
+
+
+def get_update_stroke_play_settings_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> UpdateStrokePlaySettingsUseCase:
+    """Proveedor del caso de uso UpdateStrokePlaySettingsUseCase (#251)."""
+    return UpdateStrokePlaySettingsUseCase(uow)
 
 
 def get_set_custom_handicap_use_case(

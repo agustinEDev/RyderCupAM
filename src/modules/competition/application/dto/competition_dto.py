@@ -1,6 +1,7 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.domain.value_objects.visibility import Visibility
@@ -87,6 +89,52 @@ class CreatorDTO(BaseModel):
 # ======================================================================================
 # DTO para el Caso de Uso: Crear Competition
 # ======================================================================================
+
+
+class StrokePlaySettingsDTO(BaseModel):
+    """
+    Los ajustes de un Stableford o un Medal (#251). Al crear, lo que no llega
+    toma su valor por defecto; al cambiar, lo que no llega no se toca.
+    """
+
+    # Un tope generoso para no leer entera una lista desmesurada: el «como mucho
+    # 5 categorías» lo dice el dominio, con su motivo
+    category_limits: list[Decimal] | None = Field(
+        None,
+        max_length=20,
+        description=(
+            "Límites superiores de hándicap de las categorías, de menor a mayor y con "
+            "un decimal como mucho: [12.0, 26.0] son «hasta 12,0», «de 12,1 a 26,0» y "
+            "«más de 26,0». Hasta 4 límites (5 categorías). Una lista vacía quita las "
+            "categorías. Solo cuentan en la clasificación neta."
+        ),
+    )
+    max_matchdays_per_player: int | None = Field(
+        None,
+        description=(
+            "En cuántas jornadas puede jugar cada jugador, una franja por jornada. "
+            "Por defecto 1. No puede pasar de los días que dura el torneo."
+        ),
+    )
+    overall_standing: OverallStanding | None = Field(
+        None,
+        description=(
+            "Cómo se calcula la general: ACCUMULATED (por defecto: suma de puntos en "
+            "Stableford, de golpes netos en Medal) o BEST_CARD (la mejor tarjeta)."
+        ),
+    )
+
+
+class StrokePlaySettingsResponseDTO(BaseModel):
+    """Los ajustes de un Stableford o un Medal, tal como están (#251)."""
+
+    category_limits: list[Decimal] = Field(
+        ..., description="Límites superiores de las categorías; vacía si no hay categorías."
+    )
+    max_matchdays_per_player: int = Field(
+        ..., description="En cuántas jornadas puede jugar cada jugador."
+    )
+    overall_standing: OverallStanding = Field(..., description="ACCUMULATED o BEST_CARD.")
 
 
 class CreateCompetitionRequestDTO(BaseModel):
@@ -188,6 +236,15 @@ class CreateCompetitionRequestDTO(BaseModel):
     setup_mode: SetupMode | None = Field(
         None,
         description="Solo en una Ryder Cup. Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
+    )
+
+    stroke_play: StrokePlaySettingsDTO | None = Field(
+        None,
+        description=(
+            "Solo en un STABLEFORD o un MEDAL: categorías, jornadas por jugador y "
+            "regla de la general. Sin esto se crea con los valores por defecto. En "
+            "una Ryder Cup es un 400."
+        ),
     )
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
@@ -300,6 +357,9 @@ class CreateCompetitionResponseDTO(BaseModel):
     )
     modality: str = Field(
         "MATCH_PLAY", description="Su modalidad, derivada del tipo: MATCH_PLAY o STROKE_PLAY."
+    )
+    stroke_play: StrokePlaySettingsResponseDTO | None = Field(
+        None, description="Ajustes del stroke play (#251); vacío en una Ryder Cup."
     )
     play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
@@ -536,6 +596,9 @@ class CompetitionResponseDTO(BaseModel):
     )
     modality: str = Field(
         "MATCH_PLAY", description="Su modalidad, derivada del tipo: MATCH_PLAY o STROKE_PLAY."
+    )
+    stroke_play: StrokePlaySettingsResponseDTO | None = Field(
+        None, description="Ajustes del stroke play (#251); vacío en una Ryder Cup."
     )
     play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 

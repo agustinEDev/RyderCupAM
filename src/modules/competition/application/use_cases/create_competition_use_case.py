@@ -10,7 +10,11 @@ from src.modules.competition.application.dto.competition_dto import (
 )
 from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
-from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.competition import (
+    RYDER_SIN_STROKE_PLAY,
+    Competition,
+    TournamentTypeError,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -144,6 +148,8 @@ class CreateCompetitionUseCase:
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
                 tournament_type=request.tournament_type,
+                # Solo de un Stableford o un Medal; a una Ryder se le rechaza
+                **self._ajustes_de_stroke_play(request),
             )
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
@@ -205,3 +211,17 @@ class CreateCompetitionUseCase:
             created_at=competition.created_at,
             updated_at=competition.updated_at,
         )
+
+    @staticmethod
+    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict:
+        """Lo que llega de stroke play, tal cual: la pieza pone los valores por defecto."""
+        if request.stroke_play is None:
+            return {}
+        # Mandar `stroke_play`, aunque venga vacío, ya es pedir algo que una Ryder no tiene
+        if request.tournament_type.has_teams:
+            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
+        return {
+            "category_limits": request.stroke_play.category_limits,
+            "max_matchdays_per_player": request.stroke_play.max_matchdays_per_player,
+            "overall_standing": request.stroke_play.overall_standing,
+        }
