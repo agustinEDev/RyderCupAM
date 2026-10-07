@@ -1833,12 +1833,14 @@ def get_actualizar_handicaps_use_case(
 def get_ventana_de_actualizacion_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
 ) -> VentanaDeActualizacionUseCase:
     """Si el organizador puede actualizar ahora los hándicaps, para la ficha (#251)."""
     return VentanaDeActualizacionUseCase(
         uow,
         CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
+        refresco_activo=lanzador is not None,
     )
 
 

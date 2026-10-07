@@ -33,6 +33,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from src.modules.competition.application.ports.competition_timezone import (
+    ICompetitionTimezone,
+)
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
@@ -42,6 +45,11 @@ from src.modules.competition.application.services.pendientes_de_actualizar impor
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
+from src.modules.competition.application.services.ventana_de_la_competicion import ventana_de
+from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
+    ActualizacionDeHandicaps,
+)
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -75,6 +83,8 @@ class Herramientas:
 
     competiciones: CompetitionUnitOfWorkInterface
     usuarios: UserRepositoryInterface
+    # Para la ventana: la pasada se corta 10 s por jugador antes de la salida
+    zonas: ICompetitionTimezone
 
 
 # Da herramientas nuevas cada vez, y las cierra al salir
@@ -133,9 +143,33 @@ class RefrescarHandicapsUseCase:
             return await PendientesDeActualizar.de(uow, actualizacion)
 
     async def _sigue(self, update_id: uuid.UUID) -> bool:
+        """Si sigue en curso y con la ventana abierta; si se cerró, se corta (#251)."""
         async with self._herramientas() as h, h.competiciones as uow:
             actualizacion = await uow.handicap_updates.find_by_id(update_id)
-            return actualizacion is not None and actualizacion.sigue()
+            if actualizacion is None or not actualizacion.sigue():
+                return False
+            competicion = await uow.competitions.find_by_id_for_update(actualizacion.competition_id)
+            return await self._dentro_de_la_ventana(uow, h.zonas, competicion, actualizacion)
+
+    async def _dentro_de_la_ventana(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        competicion: Competition | None,
+        actualizacion: ActualizacionDeHandicaps,
+    ) -> bool:
+        """
+        «Se corta 10 s por jugador antes de empezar» vale también para la que está
+        en marcha (Agustín, 7 oct 2026): si la ventana se cerró, se corta, y lo
+        pendiente se queda como estaba.
+        """
+        if competicion is None:
+            return False
+        if (await ventana_de(uow, zonas, competicion, self._reloj())).abierta:
+            return True
+        actualizacion.cortar(self._reloj())
+        await uow.handicap_updates.update(actualizacion)
+        return False
 
     async def _refrescar(self, update_id: uuid.UUID, user_id: UserId) -> None:
         """Hasta 3 intentos con un jugador, con pausa entre uno y otro, mientras siga."""
@@ -173,7 +207,7 @@ class RefrescarHandicapsUseCase:
                         and jugador.handicap is not None
                     ):
                         nuevo = Decimal(str(jugador.handicap.value))
-                        await self._corregir(uow, h.usuarios, update_id, user_id, nuevo)
+                        await self._corregir(uow, h.usuarios, h.zonas, update_id, user_id, nuevo)
                     await uow.handicap_updates.apuntar(update_id, user_id, resultado, self._reloj())
             return resultado
         except Exception:
@@ -181,10 +215,11 @@ class RefrescarHandicapsUseCase:
             await self._apuntar_el_fallo(update_id, user_id)
             return ResultadoRefresco.FALLIDO
 
-    @staticmethod
     async def _corregir(
+        self,
         uow: CompetitionUnitOfWorkInterface,
         usuarios: UserRepositoryInterface,
+        zonas: ICompetitionTimezone,
         update_id: uuid.UUID,
         user_id: UserId,
         nuevo: Decimal,
@@ -192,15 +227,21 @@ class RefrescarHandicapsUseCase:
         """
         En un stroke play que siga cerrado, el hándicap fijado pasa a ser el nuevo.
 
-        Con la competición bloqueada, y solo si la actualización sigue: si a la
-        vez alguien la inicia, una de las dos espera a la otra.
+        Con la competición bloqueada, y solo si la actualización sigue y la
+        ventana está abierta: si a la vez alguien la inicia, una de las dos espera
+        a la otra, y si la RFEG tardó hasta pasado el cierre, no se cambia nada.
         """
         actualizacion = await uow.handicap_updates.find_by_id(update_id)
         if actualizacion is None:
             return
         competicion = await uow.competitions.find_by_id_for_update(actualizacion.competition_id)
         actualizacion = await uow.handicap_updates.find_by_id(update_id)
-        if competicion is not None and actualizacion is not None and actualizacion.sigue():
+        if (
+            competicion is not None
+            and actualizacion is not None
+            and actualizacion.sigue()
+            and await self._dentro_de_la_ventana(uow, zonas, competicion, actualizacion)
+        ):
             await HandicapsAlCerrar(uow, usuarios).corregir(competicion, user_id, nuevo)
 
     async def _apuntar_el_fallo(self, update_id: uuid.UUID, user_id: UserId) -> None:

@@ -651,7 +651,7 @@ async def update_handicaps(
 ):
     """202 con la actualización lanzada; cómo va se ve en la ficha (`handicap_update`)."""
     try:
-        actualizacion = await use_case.execute(
+        actualizacion, reanudada = await use_case.execute(
             CompetitionId(competition_id),
             UserId(str(current_user.id)),
             is_admin=current_user.is_admin,
@@ -668,4 +668,5 @@ async def update_handicaps(
         id=actualizacion.id,
         origin=actualizacion.origen.value,
         started_at=actualizacion.creada,
+        resumed=reanudada,
     )

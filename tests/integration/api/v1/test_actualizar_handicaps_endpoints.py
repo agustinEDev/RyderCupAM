@@ -82,11 +82,14 @@ async def test_el_organizador_la_lanza_y_la_ficha_lo_dice(client: AsyncClient):
 
     assert lanzada.status_code == 202, lanzada.text
     assert lanzada.json()["origin"] == "ORGANIZER"
+    assert lanzada.json()["resumed"] is False
     # La primera sigue en curso (aquí nadie la pasa): la segunda, 409
     assert otra.status_code == 409, otra.text
     assert len(lanzador.lanzadas) == 1
     assert ficha["handicap_update"]["origin"] == "ORGANIZER"
-    assert ficha["handicap_update_window"] == {"open": True, "closes_at": None, "reason": None}
+    # La lanzada sigue en curso (aquí nadie la pasa): el botón, apagado
+    assert ficha["handicap_update_window"]["open"] is False
+    assert "Ya se están" in ficha["handicap_update_window"]["reason"]
 
 
 async def test_sin_el_refresco_encendido_es_un_409(client: AsyncClient):

@@ -609,7 +609,10 @@ class HandicapUpdateLaunchedDTO(BaseModel):
         ...,
         description="La nueva viene del botón; si se reanudó una a medias, conserva la suya.",
     )
-    started_at: datetime
+    started_at: datetime = Field(..., description="Cuándo empezó (la original, si se reanudó).")
+    resumed: bool = Field(
+        ..., description="True si se reanudó una incompleta: solo pregunta por lo pendiente."
+    )
 
 
 class CompetitionResponseDTO(BaseModel):

@@ -31,50 +31,16 @@ from src.modules.competition.application.ports.lanzador_de_actualizaciones impor
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
-from src.modules.competition.application.services.jornadas_de_la_competicion import (
-    JornadasDeLaCompeticion,
-    ZonaDesconocidaError,
-)
+from src.modules.competition.application.services.ventana_de_la_competicion import ventana_de
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
     OrigenActualizacion,
 )
-from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.ventana_de_actualizacion import (
-    Ventana,
-    VentanaDeActualizacion,
-)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-async def ventana_de(
-    uow: CompetitionUnitOfWorkInterface,
-    zonas: ICompetitionTimezone,
-    competition: Competition,
-    ahora: datetime,
-) -> Ventana:
-    """La ventana del botón para una competición, ahora."""
-    try:
-        jornadas = await JornadasDeLaCompeticion.de(
-            await uow.rounds.find_by_competition(competition.id), zonas
-        )
-    except ZonaDesconocidaError as e:
-        return Ventana(False, motivo=str(e))
-    inscritos = await uow.enrollments.find_by_competition_and_status(
-        competition.id, EnrollmentStatus.APPROVED
-    )
-    return VentanaDeActualizacion.calcular(
-        stroke_play=competition.stroke_play is not None,
-        status=competition.status,
-        jornadas=jornadas,
-        jugadores=len(inscritos),
-        ahora=ahora,
-    )
 
 
 class ActualizarHandicapsUseCase:
@@ -94,10 +60,10 @@ class ActualizarHandicapsUseCase:
 
     async def execute(
         self, competition_id: CompetitionId, user_id: UserId, is_admin: bool = False
-    ) -> ActualizacionDeHandicaps:
+    ) -> tuple[ActualizacionDeHandicaps, bool]:
         """
         Returns:
-            La actualización lanzada (nueva, o la incompleta reanudada)
+            La actualización lanzada, y si es la incompleta reanudada (True) o nueva
 
         Raises:
             CompetitionNotFoundError, NotCompetitionCreatorError,
@@ -118,11 +84,11 @@ class ActualizarHandicapsUseCase:
             ventana = await ventana_de(self._uow, self._zonas, competition, ahora)
             if not ventana.abierta:
                 raise ActualizacionNoPermitidaError(ventana.motivo)
-            actualizacion = await self._actualizaciones.a_mano(
+            actualizacion, reanudada = await self._actualizaciones.a_mano(
                 competition_id, OrigenActualizacion.BOTON, ahora
             )
         self._actualizaciones.lanzar(actualizacion)
-        return actualizacion
+        return actualizacion, reanudada
 
 
 class VentanaDeActualizacionUseCase:
@@ -133,10 +99,17 @@ class VentanaDeActualizacionUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         reloj: Callable[[], datetime],
+        refresco_activo: bool = True,
     ):
+        """
+        Args:
+            refresco_activo: Si hay con qué lanzarla: fuera de producción, el
+                botón sale apagado y no responde 409 al pulsarlo
+        """
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        self._refresco_activo = refresco_activo
 
     async def execute(
         self, competition_id: CompetitionId, user_id: UserId, is_admin: bool = False
@@ -146,6 +119,16 @@ class VentanaDeActualizacionUseCase:
             competition = await self._uow.competitions.find_by_id(competition_id)
             if competition is None or not (is_admin or competition.is_creator(user_id)):
                 return None
+            if not self._refresco_activo:
+                return HandicapUpdateWindowDTO(
+                    open=False,
+                    reason="La actualización con la RFEG solo está encendida en producción.",
+                )
+            ultima = await self._uow.handicap_updates.ultima_de(competition_id)
+            if ultima is not None and ultima.sigue():
+                return HandicapUpdateWindowDTO(
+                    open=False, reason="Ya se están actualizando los hándicaps."
+                )
             ventana = await ventana_de(self._uow, self._zonas, competition, self._reloj())
         return HandicapUpdateWindowDTO(
             open=ventana.abierta, closes_at=ventana.cierra, reason=ventana.motivo

@@ -37,6 +37,12 @@ from src.modules.competition.application.use_cases.refrescar_handicaps_use_case 
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
+from src.modules.competition.infrastructure.services.competition_timezone_from_course import (
+    CompetitionTimezoneFromCourse,
+)
+from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
+    GolfCourseRepository,
+)
 from src.modules.user.domain.services.handicap_service import HandicapService
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
@@ -96,9 +102,13 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
 
     @asynccontextmanager
     async def _herramientas(self) -> AsyncIterator[Herramientas]:
-        """Una sesión propia, que comparten la competición y los usuarios."""
+        """Una sesión propia, que comparten la competición, los usuarios y los campos."""
         async with self._fabrica() as sesion:
+            competiciones = SQLAlchemyCompetitionUnitOfWork(sesion)
             yield Herramientas(
-                competiciones=SQLAlchemyCompetitionUnitOfWork(sesion),
+                competiciones=competiciones,
                 usuarios=SQLAlchemyUserRepository(sesion),
+                zonas=CompetitionTimezoneFromCourse(
+                    GolfCourseRepository(sesion), competiciones.competitions
+                ),
             )

@@ -9,6 +9,7 @@ absoluta con la zona de su campo.
 
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
@@ -16,6 +17,7 @@ from src.modules.competition.application.ports.competition_timezone import (
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.ventana_de_actualizacion import Jornada
 from src.modules.competition.domain.services.zona_horaria import zona_del_campo
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 
 class ZonaDesconocidaError(Exception):
@@ -33,11 +35,17 @@ class JornadasDeLaCompeticion:
         """
         por_dia: dict[date, list[datetime]] = defaultdict(list)
         medianoche: dict[date, datetime] = {}
+        por_campo: dict[GolfCourseId, ZoneInfo | None] = {}
         for sesion in sesiones:
             hoja = sesion.hoja_de_salidas
             if hoja is None:
                 continue
-            zona = zona_del_campo(await zonas.for_course(sesion.golf_course_id))
+            # Una consulta por campo, no por franja
+            if sesion.golf_course_id not in por_campo:
+                por_campo[sesion.golf_course_id] = zona_del_campo(
+                    await zonas.for_course(sesion.golf_course_id)
+                )
+            zona = por_campo[sesion.golf_course_id]
             if zona is None:
                 raise ZonaDesconocidaError(
                     "El campo de una franja no tiene zona horaria: no se sabe a qué hora "

@@ -43,6 +43,11 @@ class Ventana:
 class VentanaDeActualizacion:
     """Calcula la ventana del botón de actualizar hándicaps."""
 
+    MOTIVO_ESTADO = (
+        "Los hándicaps se actualizan desde que se cierran las inscripciones hasta que "
+        "termina la competición."
+    )
+
     @staticmethod
     def calcular(
         stroke_play: bool,
@@ -60,14 +65,14 @@ class VentanaDeActualizacion:
             ahora: La hora actual, con huso
         """
         if status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
-            return Ventana(
-                False,
-                motivo="Los hándicaps se actualizan desde que se cierran las inscripciones "
-                "hasta que termina la competición.",
-            )
+            return Ventana(False, motivo=VentanaDeActualizacion.MOTIVO_ESTADO)
         if not stroke_play or not jornadas:
             if status is CompetitionStatus.CLOSED:
                 return Ventana(True)
+            if stroke_play:
+                return Ventana(
+                    False, motivo="Sin franjas, se actualizan hasta iniciar la competición."
+                )
             return Ventana(False, motivo="En una Ryder se actualizan hasta iniciar la competición.")
         return VentanaDeActualizacion._entre_jornadas(jornadas, jugadores, ahora)
 

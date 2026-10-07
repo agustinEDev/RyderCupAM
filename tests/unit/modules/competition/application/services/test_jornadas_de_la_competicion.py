@@ -78,3 +78,23 @@ async def test_una_sesion_sin_hoja_no_cuenta():
     )
 
     assert await JornadasDeLaCompeticion.de([ryder], _Zonas()) == []
+
+
+async def test_pregunta_la_zona_una_vez_por_campo():
+    class _Cuenta(_Zonas):
+        def __init__(self):
+            self.preguntas = 0
+
+        async def for_course(self, campo):
+            self.preguntas += 1
+            return await super().for_course(campo)
+
+    zonas = _Cuenta()
+    sesiones = [
+        _franja(MADRID, SessionType.MORNING, time(9, 0), time(11, 0)),
+        _franja(MADRID, SessionType.AFTERNOON, time(15, 0), time(17, 0)),
+    ]
+
+    await JornadasDeLaCompeticion.de(sesiones, zonas)
+
+    assert zonas.preguntas == 1

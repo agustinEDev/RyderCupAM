@@ -87,6 +87,15 @@ class TestPorEstado:
         assert ventana.abierta
         assert ventana.cierra is None
 
+    def test_stroke_play_en_juego_sin_franjas_no_habla_de_la_ryder(self):
+        ventana = _ventana(
+            datetime(2030, 10, 1, tzinfo=UTC), status=CompetitionStatus.IN_PROGRESS, jornadas=()
+        )
+
+        assert not ventana.abierta
+        assert "Ryder" not in ventana.motivo
+        assert "franjas" in ventana.motivo
+
 
 class TestAntesDeCadaJornada:
     def test_abierta_hasta_diez_segundos_por_jugador_antes_de_la_salida(self):

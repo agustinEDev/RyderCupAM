@@ -156,9 +156,10 @@ class TestElBoton:
     async def test_a_tiempo_crea_una_y_la_lanza(self, e):
         await e.torneo()
 
-        await e.pulsar()
+        _, reanudada = await e.pulsar()
 
         ultima = await e.ultima()
+        assert not reanudada
         assert ultima.origen is OrigenActualizacion.BOTON
         assert ultima.estado is EstadoActualizacion.EN_CURSO
         assert e.lanzador.lanzadas == [ultima.id]
@@ -172,9 +173,10 @@ class TestElBoton:
         async with e.uow:
             await e.uow.handicap_updates.add(incompleta)
 
-        await e.pulsar()
+        _, reanudada = await e.pulsar()
 
         ultima = await e.ultima()
+        assert reanudada
         assert ultima.id == incompleta.id
         assert ultima.estado is EstadoActualizacion.EN_CURSO
         assert ultima.terminada is None
@@ -266,6 +268,39 @@ class TestLaVentanaEnLaFicha:
 
         assert not ventana.open
         assert "salida" in ventana.reason
+
+    async def test_sin_el_refresco_encendido_apagado_y_dice_por_que(self, e):
+        """Si no, el botón saldría activo y respondería 409 (code-review de la 3b)."""
+        await e.torneo()
+
+        ventana = await VentanaDeActualizacionUseCase(
+            e.uow, e.zonas, lambda: A_TIEMPO, refresco_activo=False
+        ).execute(e.competicion.id, e.creador)
+
+        assert not ventana.open
+        assert "producción" in ventana.reason
+
+    async def test_con_una_en_marcha_apagado(self, e):
+        await e.torneo()
+        await e.pulsar()
+
+        ventana = await VentanaDeActualizacionUseCase(e.uow, e.zonas, lambda: A_TIEMPO).execute(
+            e.competicion.id, e.creador
+        )
+
+        assert not ventana.open
+        assert "Ya se están" in ventana.reason
+
+    async def test_por_estado_sin_mirar_las_zonas(self, e):
+        """Con las inscripciones abiertas el motivo es ese, aunque el campo no tenga zona."""
+        await e.torneo(status=CompetitionStatus.ACTIVE)
+        e.zonas.zona = None
+
+        ventana = await VentanaDeActualizacionUseCase(e.uow, e.zonas, lambda: A_TIEMPO).execute(
+            e.competicion.id, e.creador
+        )
+
+        assert "se cierran las inscripciones" in ventana.reason
 
     async def test_a_un_jugador_nada(self, e):
         await e.torneo()

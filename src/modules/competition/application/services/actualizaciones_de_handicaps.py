@@ -62,9 +62,12 @@ class ActualizacionesDeHandicaps:
 
     async def a_mano(
         self, competition_id: CompetitionId, origen: OrigenActualizacion, ahora: datetime
-    ) -> ActualizacionDeHandicaps:
+    ) -> tuple[ActualizacionDeHandicaps, bool]:
         """
         La que pide el organizador: termina la última si quedó a medias, o empieza otra.
+
+        Returns:
+            La actualización, y si es la última reanudada (True) o una nueva
 
         Raises:
             RefrescoDesactivadoError: Si no hay con qué lanzarla
@@ -80,10 +83,10 @@ class ActualizacionesDeHandicaps:
         if ultima is not None and ultima.estado is EstadoActualizacion.INCOMPLETA:
             ultima.reanudar()
             await self._uow.handicap_updates.update(ultima)
-            return ultima
+            return ultima, True
         actualizacion = ActualizacionDeHandicaps.crear(competition_id, origen, ahora)
         await self._uow.handicap_updates.add(actualizacion)
-        return actualizacion
+        return actualizacion, False
 
     async def cortar(self, competition_id: CompetitionId, ahora: datetime | None = None) -> None:
         """La que esté a medias se corta; una completa se queda como está."""
