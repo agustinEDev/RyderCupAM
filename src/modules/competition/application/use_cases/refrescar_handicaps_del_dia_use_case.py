@@ -110,23 +110,29 @@ class RefrescarHandicapsDelDiaUseCase:
             A cuántos jugadores se ha preguntado en esta vuelta
         """
         ahora = self._reloj()
-        pendientes = await self._pendientes(ahora)
+        pendientes, dias_que_tocan = await self._pendientes(ahora)
 
-        actualizados: dict[tuple[CompetitionId, date], set[UserId]] = defaultdict(set)
         for numero, (user_id, donde) in enumerate(pendientes.items()):
             if numero:
                 await self._esperar(PAUSA_ENTRE_CONSULTAS)
-            if await self._refrescar(user_id, donde, ahora) is ResultadoRefresco.ACTUALIZADO:
-                for torneo_y_dia in donde:
-                    actualizados[torneo_y_dia].add(user_id)
+            await self._refrescar(user_id, donde, ahora)
 
-        for (competition_id, dia), jugadores in actualizados.items():
-            await self._recalcular_los_partidos(competition_id, dia, jugadores)
+        # En cada vuelta, con TODOS los actualizados del día y no solo los de
+        # esta: si una vuelta se corta antes de llegar aquí, la siguiente lo
+        # hace. Solo se escribe el partido cuyos golpes cambian
+        for competition_id, dia in dias_que_tocan:
+            await self._recalcular_los_partidos(competition_id, dia)
         return len(pendientes)
 
-    async def _pendientes(self, ahora: datetime) -> dict[UserId, list[tuple[CompetitionId, date]]]:
-        """A quién preguntar, y en qué torneos y días apuntar lo que salga."""
+    async def _pendientes(
+        self, ahora: datetime
+    ) -> tuple[dict[UserId, list[tuple[CompetitionId, date]]], list[tuple[CompetitionId, date]]]:
+        """
+        A quién preguntar (y en qué torneos y días apuntar lo que salga), y los
+        torneos y días en que ya toca refrescar.
+        """
         pendientes: dict[UserId, list[tuple[CompetitionId, date]]] = defaultdict(list)
+        dias_que_tocan: list[tuple[CompetitionId, date]] = []
         async with self._herramientas() as h, h.competiciones as uow:
             # Ayer, hoy y mañana en UTC cubren el «hoy» de cualquier huso
             dias = {ahora.date() + timedelta(days=d) for d in (-1, 0, 1)}
@@ -141,13 +147,14 @@ class RefrescarHandicapsDelDiaUseCase:
                 competicion = await uow.competitions.find_by_id(competition_id)
                 if competicion is None or competicion.status.is_final():
                     continue
+                dias_que_tocan.append((competition_id, dia))
                 candidatos = await self._candidatos(uow, competition_id, del_dia)
                 resultados = await uow.handicap_refreshes.del_dia(competition_id, dia)
                 for user_id in RefrescoDeHandicapsService.a_quien(
                     candidatos, resultados, ahora_local
                 ):
                     pendientes[user_id].append((competition_id, dia))
-        return pendientes
+        return pendientes, dias_que_tocan
 
     @staticmethod
     async def _hora_local(
@@ -228,17 +235,26 @@ class RefrescarHandicapsDelDiaUseCase:
             await self._apuntar_el_fallo(user_id, donde, ahora)
             return ResultadoRefresco.FALLIDO
 
-    async def _recalcular_los_partidos(
-        self, competition_id: CompetitionId, dia: date, jugadores: set[UserId]
-    ) -> None:
+    async def _recalcular_los_partidos(self, competition_id: CompetitionId, dia: date) -> None:
         """
-        Los partidos de ese día, sin empezar, con algún jugador actualizado (502b).
+        Los partidos de ese día, sin empezar, con algún jugador actualizado ese día (502b).
 
         Se leen bloqueados: si alguien empieza uno justo ahora, o ya empezó, se
-        queda como está. Un fallo aquí no deshace el refresco, ya apuntado.
+        queda como está. Cada partido va en su propio savepoint: uno que falla,
+        aunque sea por la base de datos, no deshace los demás. Un fallo aquí no
+        deshace el refresco, ya apuntado, y la vuelta siguiente lo reintenta.
         """
         try:
             async with self._herramientas() as h, h.competiciones as uow:
+                actualizados = {
+                    user_id
+                    for user_id, resultado in (
+                        await uow.handicap_refreshes.del_dia(competition_id, dia)
+                    ).items()
+                    if resultado is ResultadoRefresco.ACTUALIZADO
+                }
+                if not actualizados:
+                    return
                 competicion = await uow.competitions.find_by_id(competition_id)
                 if competicion is None:
                     return
@@ -248,20 +264,24 @@ class RefrescarHandicapsDelDiaUseCase:
                         lado_a = [p.user_id for p in partido.team_a_players]
                         lado_b = [p.user_id for p in partido.team_b_players]
                         if partido.status is not MatchStatus.SCHEDULED or not (
-                            jugadores & {*lado_a, *lado_b}
+                            actualizados & {*lado_a, *lado_b}
                         ):
                             continue
                         try:
-                            nuevos_a, nuevos_b = await jugadores_del_partido.construir(
-                                uow, sesion, competicion, lado_a, lado_b
-                            )
-                            partido.recalcular_jugadores(nuevos_a, nuevos_b)
+                            async with uow.savepoint():
+                                nuevos_a, nuevos_b = await jugadores_del_partido.construir(
+                                    uow, sesion, competicion, lado_a, lado_b
+                                )
+                                if (tuple(nuevos_a), tuple(nuevos_b)) != (
+                                    partido.team_a_players,
+                                    partido.team_b_players,
+                                ):
+                                    partido.recalcular_jugadores(nuevos_a, nuevos_b)
+                                    await uow.matches.update(partido)
                         except Exception:
                             # Uno que no se puede (un jugador dado de baja tras
                             # generarse) se queda como estaba; los demás, no
                             logger.exception("No se pudo recalcular el partido %s", partido.id)
-                            continue
-                        await uow.matches.update(partido)
         except Exception:
             logger.exception(
                 "No se pudieron recalcular los partidos del %s de la competición %s",

@@ -66,8 +66,6 @@ class ReassignMatchPlayersUseCase:
         handicap_calculator: PlayingHandicapCalculator | None = None,
     ):
         self._uow = uow
-        self._gc_repo = golf_course_repository
-        self._user_repo = user_repository
         self._jugadores = JugadoresDelPartido(
             golf_course_repository, user_repository, handicap_calculator
         )

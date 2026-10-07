@@ -113,6 +113,13 @@ class _UnidadQueCuenta(InMemoryUnitOfWork):
     def __init__(self):
         super().__init__()
         self.abiertas = 0
+        self.savepoints = 0
+
+    @asynccontextmanager
+    async def savepoint(self):
+        self.savepoints += 1
+        async with super().savepoint():
+            yield
 
     async def __aenter__(self):
         self.abiertas += 1
@@ -570,3 +577,46 @@ class TestRecalcularLosPartidosDeHoy:
         assert (await e.uow.matches.find_by_id(con_baja.id)).team_a_players == antes
         recalculado = await e.uow.matches.find_by_id(sin_problema.id)
         assert recalculado.team_a_players[0].playing_handicap != 10
+
+
+class TestLoQueEncontroLaRevisionDeLa502b:
+    """Hallazgos de /code-review en el recálculo de los partidos."""
+
+    async def test_si_el_recalculo_falla_se_hace_en_la_vuelta_siguiente(self, e):
+        partido, _ = await TestRecalcularLosPartidosDeHoy()._partido_de_hoy(e)
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+        e.campos.find_by_id = AsyncMock(side_effect=RuntimeError("se cortó el proceso"))
+
+        await e.caso(_hora_de_madrid(3)).execute()
+        assert (await e.uow.matches.find_by_id(partido.id)).team_a_players[0].playing_handicap == 10
+
+        e.campos.find_by_id = AsyncMock(return_value=_campo())
+        await e.caso(_hora_de_madrid(3, 15)).execute()
+
+        recalculado = await e.uow.matches.find_by_id(partido.id)
+        assert recalculado.team_a_players[0].playing_handicap != 10
+        # Sin volver a preguntar a la RFEG: ya estaba apuntado
+        assert e.rfeg.search_handicap.await_count == 2  # sus dos jugadores, una vez
+
+    async def test_si_los_golpes_no_cambian_el_partido_no_se_reescribe(self, e):
+        partido, _ = await TestRecalcularLosPartidosDeHoy()._partido_de_hoy(e)
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+        await e.caso(_hora_de_madrid(3)).execute()
+        recalculado = await e.uow.matches.find_by_id(partido.id)
+        escrito = recalculado.updated_at
+
+        await e.caso(_hora_de_madrid(3, 15)).execute()
+
+        assert (await e.uow.matches.find_by_id(partido.id)).updated_at == escrito
+
+    async def test_cada_partido_en_su_propio_savepoint(self, e):
+        torneo = await TestRecalcularLosPartidosDeHoy()._torneo_con_handicap(e)
+        a, b, c, d = [await e.inscrito(torneo) for _ in range(4)]
+        sesion = await e.sesion(torneo)
+        await e.partido(sesion, a, b)
+        await e.partido(sesion, c, d)
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert e.uow.savepoints == 2
