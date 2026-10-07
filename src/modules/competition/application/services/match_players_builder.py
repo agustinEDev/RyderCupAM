@@ -13,6 +13,9 @@ fuera el formato (BE #477). Ahora generar y reasignar usan esta.
 
 from decimal import Decimal
 
+from src.modules.competition.application.services.handicaps_de_la_competicion import (
+    para_jugar_la_ryder,
+)
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -99,13 +102,11 @@ class MatchPlayersBuilder:
 
         tee_rating = tee_ratings.get(tee_key)
 
-        # Handicap fallback: custom_handicap > user.handicap > 0
-        if enrollment and enrollment.custom_handicap is not None:
-            handicap_index = enrollment.custom_handicap
-        elif str(user_id.value) in user_handicap_map:
-            handicap_index = user_handicap_map[str(user_id.value)]
-        else:
-            handicap_index = Decimal("0")
+        # El que cuenta en la competición: el propio, si no el del perfil
+        del_perfil = user_handicap_map.get(str(user_id.value))
+        handicap_index = para_jugar_la_ryder(
+            enrollment.handicap_que_cuenta(del_perfil) if enrollment else del_perfil
+        )
 
         return tee_color, tee_gender, tee_rating, handicap_index
 
