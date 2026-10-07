@@ -114,16 +114,20 @@ class UpdateRoundUseCase:
                     f"({competition.dates.start_date} - {competition.dates.end_date})"
                 )
 
+            # Las sesiones del día de destino, una sola vez: para el duplicado y
+            # para el solape de una franja (#251)
+            dia = request.round_date or round_entity.round_date
+            del_dia = await self._uow.rounds.find_by_competition_and_date(
+                round_entity.competition_id, dia
+            )
             if request.session_type or request.round_date:
-                check_date = request.round_date or round_entity.round_date
+                check_date = dia
                 check_session = (
                     SessionType(request.session_type)
                     if request.session_type
                     else round_entity.session_type
                 )
-                existing_rounds = await self._uow.rounds.find_by_competition_and_date(
-                    round_entity.competition_id, check_date
-                )
+                existing_rounds = del_dia
                 for existing in existing_rounds:
                     if existing.id != round_entity.id and existing.session_type == check_session:
                         raise DuplicateSessionError(
@@ -132,7 +136,7 @@ class UpdateRoundUseCase:
 
             # 6b. Una franja solo cambia su hoja (no tiene formato), y no puede
             #     acabar solapada con otra de su jornada (#251)
-            hoja = await self._comprobar_franja(request, competition, round_entity)
+            hoja = self._comprobar_franja(request, competition, round_entity, del_dia)
 
             # 7. Actualizar la ronda (validación de estado dentro del dominio)
             session_type = SessionType(request.session_type) if request.session_type else None
@@ -174,10 +178,17 @@ class UpdateRoundUseCase:
             updated_at=round_entity.updated_at,
         )
 
-    async def _comprobar_franja(
-        self, request: UpdateRoundRequestDTO, competition: Competition, round_entity: Round
+    @staticmethod
+    def _comprobar_franja(
+        request: UpdateRoundRequestDTO,
+        competition: Competition,
+        round_entity: Round,
+        del_dia: list[Round],
     ) -> HojaDeSalidas | None:
-        """La hoja nueva, si viene; y que la sesión sigue siendo de su tipo y no choca."""
+        """
+        La hoja nueva, si viene; y que la sesión sigue siendo de su tipo y no choca
+        con otra franja de su jornada y su campo (se cambie la hoja, el día o el campo).
+        """
         hoja = hoja_de(request.tee_sheet)
         comprobar_tipo(
             competition,
@@ -186,17 +197,20 @@ class UpdateRoundUseCase:
             or request.handicap_mode is not None
             or request.allowance_percentage is not None
             or request.clear_allowance,
+            trae_formato=request.match_format is not None,
             exige_formato=False,
         )
         hoja_final = hoja or round_entity.hoja_de_salidas
-        if hoja_final is not None and (hoja is not None or request.round_date):
-            dia = request.round_date or round_entity.round_date
+        if hoja_final is not None and (
+            hoja is not None or request.round_date or request.golf_course_id
+        ):
             comprobar_solape(
                 hoja_final,
-                dia,
-                await self._uow.rounds.find_by_competition_and_date(
-                    round_entity.competition_id, dia
-                ),
+                request.round_date or round_entity.round_date,
+                GolfCourseId(request.golf_course_id)
+                if request.golf_course_id
+                else round_entity.golf_course_id,
+                del_dia,
                 excepto=round_entity.id,
             )
         return hoja

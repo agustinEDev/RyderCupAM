@@ -604,6 +604,7 @@ class HojaDeSalidasJsonType(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value: HojaDeSalidas | None, dialect) -> dict | None:
+        """La hoja a JSON, con las horas en «HH:MM»."""
         if value is None:
             return None
         return {
@@ -614,6 +615,7 @@ class HojaDeSalidasJsonType(TypeDecorator):
         }
 
     def process_result_value(self, value: dict | None, dialect) -> HojaDeSalidas | None:
+        """El JSON a la hoja; NULL en las sesiones de la Ryder."""
         if not value:
             return None
         return HojaDeSalidas(

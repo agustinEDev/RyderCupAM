@@ -184,17 +184,21 @@ class Round:
         Individual y al 95 %, el allowance del stroke play individual: aquí no
         se elige formato ni modo de hándicap.
         """
-        franja = cls.create(
+        now = datetime.now(UTC).replace(tzinfo=None)
+        return cls(
+            id=RoundId.generate(),
             competition_id=competition_id,
             golf_course_id=golf_course_id,
             round_date=round_date,
             session_type=session_type,
             match_format=MatchFormat.SINGLES,
+            status=RoundStatus.PENDING_TEAMS,
+            handicap_mode=None,
             allowance_percentage=STROKE_PLAY_INDIVIDUAL_ALLOWANCE,
+            created_at=now,
+            updated_at=now,
+            hoja_de_salidas=hoja_de_salidas,
         )
-        franja._handicap_mode = None
-        franja._hoja_de_salidas = hoja_de_salidas
-        return franja
 
     # ==================== Business Methods ====================
 

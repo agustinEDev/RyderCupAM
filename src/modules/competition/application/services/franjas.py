@@ -25,6 +25,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.franjas_de_la_jornada import FranjasDeLaJornada
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 
 
 def comprobar_agenda(competition: Competition) -> None:
@@ -69,6 +70,7 @@ def comprobar_tipo(
     competition: Competition,
     hoja: HojaDeSalidas | None,
     con_formato: bool,
+    trae_formato: bool,
     exige_formato: bool,
 ) -> None:
     """
@@ -78,6 +80,7 @@ def comprobar_tipo(
         competition: De qué tipo es
         hoja: La hoja de salidas que se pide, si se pide
         con_formato: Si se pide formato de partido, modo de hándicap o allowance
+        trae_formato: Si se pide, en concreto, el formato de partido
         exige_formato: Si la sesión de Ryder tiene que traer formato (al crearla)
 
     Raises:
@@ -94,21 +97,25 @@ def comprobar_tipo(
         return
     if hoja is not None:
         _comprobar(competition, hoja)
-    if exige_formato and not con_formato:
+    if exige_formato and not trae_formato:
         raise FranjaInvalidaError(
             "Una sesión de Ryder necesita su formato de partido (SINGLES, FOURBALL o FOURSOMES)."
         )
 
 
 def comprobar_solape(
-    hoja: HojaDeSalidas, dia: date, sesiones: Iterable[Round], excepto: RoundId | None = None
+    hoja: HojaDeSalidas,
+    dia: date,
+    campo: GolfCourseId,
+    sesiones: Iterable[Round],
+    excepto: RoundId | None = None,
 ) -> None:
     """
     Raises:
         FranjaInvalidaError: Si choca con otra franja de esa jornada
     """
     try:
-        FranjasDeLaJornada.comprobar(hoja, dia, sesiones, excepto=excepto)
+        FranjasDeLaJornada.comprobar(hoja, dia, campo, sesiones, excepto=excepto)
     except ValueError as e:
         raise FranjaInvalidaError(str(e)) from e
 

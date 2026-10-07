@@ -14,6 +14,7 @@ escribe: así no puede contradecirse con la hoja (decisión 5 de la #251).
 
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from functools import cached_property
 
 INTERVALO_MINIMO = 5
 INTERVALO_MAXIMO = 20
@@ -34,6 +35,11 @@ class HojaDeSalidas:
     jugadores_por_partida: int
 
     def __post_init__(self) -> None:
+        for hora in (self.primera_salida, self.ultima_salida):
+            if hora.second or hora.microsecond or hora.tzinfo is not None:
+                raise HojaDeSalidasInvalidaError(
+                    "Las horas de salida van en HH:MM, hora del campo, sin segundos ni huso."
+                )
         if self.ultima_salida < self.primera_salida:
             raise HojaDeSalidasInvalidaError("La última salida no puede ser anterior a la primera.")
         if not INTERVALO_MINIMO <= self.intervalo_minutos <= INTERVALO_MAXIMO:
@@ -44,9 +50,9 @@ class HojaDeSalidas:
         if self.jugadores_por_partida not in JUGADORES_POR_PARTIDA:
             raise HojaDeSalidasInvalidaError("Las partidas son de 3 o 4 jugadores.")
 
-    @property
+    @cached_property
     def salidas(self) -> list[time]:
-        """Cada hora de salida, de la primera a la última que cabe."""
+        """Cada hora de salida, de la primera a la última que cabe (se calcula una vez)."""
         dia = datetime(2000, 1, 1)
         hora = datetime.combine(dia, self.primera_salida)
         fin = datetime.combine(dia, self.ultima_salida)
@@ -59,6 +65,7 @@ class HojaDeSalidas:
 
     @property
     def numero_de_salidas(self) -> int:
+        """Cuántas salidas hay en la franja."""
         return len(self.salidas)
 
     @property

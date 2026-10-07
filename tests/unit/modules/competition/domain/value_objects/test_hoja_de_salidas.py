@@ -16,7 +16,7 @@ intervalo y tamaño de partida. De ahí salen las horas y el cupo.
 | Una acaba antes de que empiece la otra | No                                 |
 """
 
-from datetime import time
+from datetime import UTC, time
 
 import pytest
 
@@ -72,6 +72,19 @@ class TestLoQueNoVale:
     def test_partida_de_3_o_4(self, partida):
         with pytest.raises(HojaDeSalidasInvalidaError, match="3 o 4"):
             _hoja(partida=partida)
+
+
+class TestLasHoras:
+    """Solo HH:MM, hora del campo: con segundos o huso se validaría una hoja y se guardaría otra."""
+
+    @pytest.mark.parametrize(
+        "hora", [time(8, 0, 30), time(8, 0, 0, 5), time(8, 0, tzinfo=UTC)], ids=str
+    )
+    def test_sin_segundos_ni_huso(self, hora):
+        with pytest.raises(HojaDeSalidasInvalidaError, match="HH:MM"):
+            HojaDeSalidas(hora, time(9, 0), 10, 4)
+        with pytest.raises(HojaDeSalidasInvalidaError, match="HH:MM"):
+            HojaDeSalidas(time(7, 0), hora, 10, 4)
 
 
 class TestSolape:

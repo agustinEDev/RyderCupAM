@@ -14,6 +14,7 @@ Las franjas de un stroke play en el dominio (#251, decidido el 7 oct 2026).
 | Franjas de la jornada que se solapan              | Error con cuál                   |
 | La misma franja al editarla                       | No choca consigo misma           |
 | Otra jornada, misma hora                          | No choca                         |
+| Otro campo, misma hora                            | No choca (es por el tee)         |
 """
 
 from datetime import date, time
@@ -69,10 +70,13 @@ def _hoja(primera="09:00", ultima="12:00") -> HojaDeSalidas:
     return HojaDeSalidas(time.fromisoformat(primera), time.fromisoformat(ultima), 10, 4)
 
 
-def _franja(hoja=None, dia=SABADO, sesion=SessionType.MORNING) -> Round:
+CAMPO = GolfCourseId.generate()
+
+
+def _franja(hoja=None, dia=SABADO, sesion=SessionType.MORNING, campo=CAMPO) -> Round:
     return Round.create_franja(
         competition_id=CompetitionId.generate(),
-        golf_course_id=GolfCourseId.generate(),
+        golf_course_id=campo,
         round_date=dia,
         session_type=sesion,
         hoja_de_salidas=hoja or _hoja(),
@@ -147,14 +151,22 @@ class TestSolape:
         manana = _franja(_hoja("09:00", "12:00"))
 
         with pytest.raises(FranjasSolapadasError, match="MORNING"):
-            FranjasDeLaJornada.comprobar(_hoja("11:00", "14:00"), SABADO, [manana])
+            FranjasDeLaJornada.comprobar(_hoja("11:00", "14:00"), SABADO, CAMPO, [manana])
 
     def test_al_editarla_no_choca_consigo_misma(self):
         manana = _franja(_hoja("09:00", "12:00"))
 
-        FranjasDeLaJornada.comprobar(_hoja("09:30", "12:30"), SABADO, [manana], excepto=manana.id)
+        FranjasDeLaJornada.comprobar(
+            _hoja("09:30", "12:30"), SABADO, CAMPO, [manana], excepto=manana.id
+        )
 
     def test_otra_jornada_a_la_misma_hora_no_choca(self):
         domingo = _franja(_hoja("09:00", "12:00"), dia=date(2030, 10, 13))
 
-        FranjasDeLaJornada.comprobar(_hoja("09:00", "12:00"), SABADO, [domingo])
+        FranjasDeLaJornada.comprobar(_hoja("09:00", "12:00"), SABADO, CAMPO, [domingo])
+
+    def test_en_otro_campo_a_la_misma_hora_no_choca(self):
+        """El solape es por el tee compartido: en otro campo no lo hay (7 oct 2026)."""
+        en_el_otro = _franja(_hoja("09:00", "12:00"), campo=GolfCourseId.generate())
+
+        FranjasDeLaJornada.comprobar(_hoja("09:00", "12:00"), SABADO, CAMPO, [en_el_otro])

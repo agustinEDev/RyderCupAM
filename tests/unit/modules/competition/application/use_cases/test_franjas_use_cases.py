@@ -12,6 +12,8 @@ solaparse, y se tocan hasta iniciar la competición.
 | Crear en stroke play con formato de partido        | 400: la franja no lleva formato    |
 | Crear en una Ryder con hoja                        | 400                                |
 | Crear una Ryder sin formato                        | 400                                |
+| Crear una Ryder con allowance pero sin formato     | 400 (antes 500)                    |
+| Moverla a otro campo donde choca                   | 400                                |
 | Crear solapada con otra de la jornada              | 400, diciendo con cuál             |
 | Crear con hoja imposible (intervalo 30)            | 400                                |
 | Crear en stroke play en juego                      | 400: hasta iniciar                 |
@@ -129,11 +131,11 @@ class _Escenario:
         self.competicion = competicion
         return competicion
 
-    async def crear(self, hoja=None, sesion="MORNING", dia=SABADO, formato=None):
+    async def crear(self, hoja=None, sesion="MORNING", dia=SABADO, formato=None, campo=None):
         return await CreateRoundUseCase(self.uow).execute(
             CreateRoundRequestDTO(
                 competition_id=self.competicion.id.value,
-                golf_course_id=self.campo.value,
+                golf_course_id=(campo or self.campo).value,
                 round_date=dia,
                 session_type=sesion,
                 match_format=formato,
@@ -192,6 +194,22 @@ class TestCrear:
         with pytest.raises(FranjaInvalidaError, match="Ryder"):
             await e.crear(_hoja(), formato="SINGLES")
 
+    async def test_en_una_ryder_con_allowance_y_sin_formato_no(self, e):
+        """Antes acababa en un 500: el allowance contaba como si trajera formato."""
+        await e.torneo(TournamentType.RYDER_CUP)
+
+        with pytest.raises(FranjaInvalidaError, match="formato"):
+            await CreateRoundUseCase(e.uow).execute(
+                CreateRoundRequestDTO(
+                    competition_id=e.competicion.id.value,
+                    golf_course_id=e.campo.value,
+                    round_date=SABADO,
+                    session_type="MORNING",
+                    allowance_percentage=80,
+                ),
+                e.creador,
+            )
+
     async def test_en_una_ryder_sin_formato_no(self, e):
         await e.torneo(TournamentType.RYDER_CUP)
 
@@ -249,6 +267,22 @@ class TestCambiar:
 
         with pytest.raises(FranjaInvalidaError, match="MORNING"):
             await e.cambiar(tarde.id, round_date=DOMINGO)
+
+    async def test_moverla_a_otro_campo_donde_choca_no(self, e):
+        await e.torneo()
+        otro = GolfCourseId(uuid4())
+        e.competicion._golf_courses.append(
+            CompetitionGolfCourse.create(
+                competition_id=e.competicion.id, golf_course_id=otro, display_order=2
+            )
+        )
+        async with e.uow:
+            await e.uow.competitions.update(e.competicion)
+        await e.crear(_hoja("09:00", "12:00"))
+        tarde = await e.crear(_hoja("10:00", "13:00"), sesion="AFTERNOON", campo=otro)
+
+        with pytest.raises(FranjaInvalidaError, match="MORNING"):
+            await e.cambiar(tarde.id, golf_course_id=e.campo.value)
 
     async def test_el_formato_de_una_franja_no(self, e):
         await e.torneo()

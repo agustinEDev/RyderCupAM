@@ -115,10 +115,11 @@ class CreateRoundUseCase:
                 con_formato=request.match_format is not None
                 or request.handicap_mode is not None
                 or request.allowance_percentage is not None,
+                trae_formato=request.match_format is not None,
                 exige_formato=True,
             )
             if hoja is not None:
-                comprobar_solape(hoja, request.round_date, existing_rounds)
+                comprobar_solape(hoja, request.round_date, golf_course_id, existing_rounds)
 
             # 7. Crear la ronda
             if hoja is not None:

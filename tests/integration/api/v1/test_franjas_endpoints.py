@@ -142,3 +142,25 @@ async def test_en_una_ryder_la_hoja_es_un_400_y_el_calendario_no_da_cupo(client:
 
     assert con_hoja.status_code == 400, con_hoja.text
     assert calendario["tee_sheet_capacity"] is None
+
+
+async def test_una_hora_con_segundos_o_huso_es_un_400(client: AsyncClient):
+    usuario, competicion = await _torneo(client)
+    await add_one_session(client, usuario["cookies"], competicion)
+    set_auth_cookies(client, usuario["cookies"])
+    calendario = (await client.get(f"/api/v1/competitions/{competicion['id']}/schedule")).json()
+    base = {
+        "golf_course_id": calendario["days"][0]["rounds"][0]["golf_course_id"],
+        "round_date": competicion["start_date"],
+        "session_type": "AFTERNOON",
+    }
+
+    respuestas = [
+        await client.post(
+            f"/api/v1/competitions/{competicion['id']}/rounds",
+            json={**base, "tee_sheet": {**HOJA, "first_tee_time": hora, "last_tee_time": "17:00"}},
+        )
+        for hora in ("15:00:30", "15:00Z")
+    ]
+
+    assert [r.status_code for r in respuestas] == [400, 400], [r.text for r in respuestas]
