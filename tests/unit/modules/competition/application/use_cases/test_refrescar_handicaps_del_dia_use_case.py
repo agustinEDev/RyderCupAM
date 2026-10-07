@@ -52,6 +52,26 @@ def _hora_de_madrid(hora: int, minuto: int = 0, dia: date = SABADO) -> datetime:
     return datetime(dia.year, dia.month, dia.day, hora, minuto, tzinfo=MADRID).astimezone(UTC)
 
 
+def _campo():
+    """El mismo campo de mentira que usan los tests de la generación de partidos."""
+    tee = MagicMock()
+    tee.color = TeeColor.YELLOW
+    tee.gender = Gender.MALE
+    tee.course_rating = Decimal("71.2")
+    tee.slope_rating = 128
+    hoyos = []
+    for numero in range(1, 19):
+        hoyo = MagicMock()
+        hoyo.number = numero
+        hoyo.par = 4
+        hoyo.stroke_index = numero
+        hoyos.append(hoyo)
+    campo = MagicMock()
+    campo.tees = [tee]
+    campo.reference_card = hoyos
+    return campo
+
+
 class _Usuarios:
     """Los jugadores, con lo que mira el refresco: país, nombre y hándicap."""
 
@@ -65,9 +85,22 @@ class _Usuarios:
         usuario.id = user_id
         usuario.country_code = MagicMock(value=pais)
         usuario.handicap_updated_at = None
+        usuario.handicap = MagicMock(value=10.0)
+        usuario.gender = Gender.MALE
         usuario.get_full_name.return_value = f"Jugador {user_id}"
+
+        def actualizar(valor, usuario=usuario):
+            usuario.handicap = MagicMock(value=valor)
+
+        usuario.update_handicap.side_effect = actualizar
         self.por_id[user_id] = usuario
         return user_id
+
+    def con_handicap(self, user_id: UserId, valor: float) -> None:
+        self.por_id[user_id].handicap = MagicMock(value=valor)
+
+    async def find_by_ids(self, user_ids):
+        return [self.por_id[u] for u in user_ids if u in self.por_id]
 
     async def find_by_id(self, user_id: UserId):
         return self.por_id.get(user_id)
@@ -98,6 +131,8 @@ class _Escenario:
         self.rfeg.search_handicap = AsyncMock(return_value=11.2)
         self.zona = MagicMock()
         self.zona.for_course = AsyncMock(return_value="Europe/Madrid")
+        self.campos = MagicMock()
+        self.campos.find_by_id = AsyncMock(return_value=_campo())
         self.esperas: list[float] = []
 
     async def esperar(self, segundos: float) -> None:
@@ -151,7 +186,9 @@ class _Escenario:
     @asynccontextmanager
     async def herramientas(self):
         self.herramientas_pedidas += 1
-        yield Herramientas(competiciones=self.uow, usuarios=self.usuarios, zonas=self.zona)
+        yield Herramientas(
+            competiciones=self.uow, usuarios=self.usuarios, zonas=self.zona, campos=self.campos
+        )
 
     def caso(self, ahora: datetime) -> RefrescarHandicapsDelDiaUseCase:
         return RefrescarHandicapsDelDiaUseCase(
@@ -394,8 +431,9 @@ class TestLoQueEncontroLaRevision:
 
         await e.caso(_hora_de_madrid(3)).execute()
 
-        # Una para buscar a quién preguntar, y una por cada uno de los dos jugadores
-        assert e.herramientas_pedidas == 3
+        # Una para buscar a quién preguntar, una por cada uno de los dos jugadores
+        # y una para recalcular los partidos de ese torneo y día
+        assert e.herramientas_pedidas == 4
 
     async def test_si_la_primera_sesion_no_tiene_zona_vale_la_de_otra(self, e):
         torneo = await e.torneo()
@@ -407,3 +445,101 @@ class TestLoQueEncontroLaRevision:
         await e.caso(_hora_de_madrid(3)).execute()
 
         assert e.nombre(jugador) in e.preguntados()
+
+
+class TestRecalcularLosPartidosDeHoy:
+    """Los partidos de hoy sin empezar se recalculan con el hándicap nuevo (502b)."""
+
+    async def _torneo_con_handicap(self, e) -> CompetitionId:
+        from src.modules.competition.application.dto.competition_dto import (
+            CreateCompetitionRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.create_competition_use_case import (
+            CreateCompetitionUseCase,
+        )
+        from src.modules.competition.domain.services.location_builder import LocationBuilder
+        from tests.unit.modules.competition.application.use_cases.helpers import (
+            USUARIOS_CON_GENERO,
+        )
+
+        respuesta = await CreateCompetitionUseCase(
+            e.uow, LocationBuilder(e.uow.countries), USUARIOS_CON_GENERO
+        ).execute(
+            CreateCompetitionRequestDTO(
+                name="Ryder con hándicap",
+                start_date=SABADO,
+                end_date=SABADO,
+                main_country="ES",
+                play_mode="HANDICAP",
+            ),
+            UserId.generate(),
+        )
+        return CompetitionId(respuesta.id)
+
+    async def _partido_de_hoy(self, e, empezado=False, dia=SABADO):
+        torneo = await self._torneo_con_handicap(e)
+        a, b = await e.inscrito(torneo), await e.inscrito(torneo)
+        e.usuarios.con_handicap(a, 20.0)
+        e.usuarios.con_handicap(b, 4.0)
+        partido = await e.partido(await e.sesion(torneo, dia=dia), a, b, empezado=empezado)
+        return partido, a
+
+    async def test_un_partido_de_hoy_sin_empezar_se_recalcula_sobre_el_mismo(self, e):
+        partido, a = await self._partido_de_hoy(e)
+        e.rfeg.search_handicap = AsyncMock(return_value=8.0)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        recalculado = await e.uow.matches.find_by_id(partido.id)
+        assert recalculado is not None
+        jugador_a = recalculado.team_a_players[0]
+        assert jugador_a.user_id == a
+        assert jugador_a.playing_handicap != 10  # el de la generación de mentira
+
+    async def test_un_partido_empezado_no_se_toca(self, e):
+        partido, _ = await self._partido_de_hoy(e, empezado=True)
+        antes = partido.team_a_players
+
+        await e.caso(_hora_de_madrid(9)).execute()
+
+        assert (await e.uow.matches.find_by_id(partido.id)).team_a_players == antes
+
+    async def test_si_nadie_se_actualiza_no_se_toca(self, e):
+        partido, _ = await self._partido_de_hoy(e)
+        antes = partido.team_a_players
+        e.rfeg.search_handicap = AsyncMock(return_value=None)
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert (await e.uow.matches.find_by_id(partido.id)).team_a_players == antes
+
+    async def test_si_la_rfeg_falla_no_se_toca(self, e):
+        partido, _ = await self._partido_de_hoy(e)
+        antes = partido.team_a_players
+        e.rfeg.search_handicap = AsyncMock(side_effect=ConnectionError("RFEG caída"))
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert (await e.uow.matches.find_by_id(partido.id)).team_a_players == antes
+
+    async def test_un_partido_que_empieza_durante_el_refresco_no_impide_los_demas(self, e):
+        """Carrera: el partido empieza mientras se pregunta a la RFEG por sus jugadores."""
+        torneo = await self._torneo_con_handicap(e)
+        a, b, c, d = [await e.inscrito(torneo) for _ in range(4)]
+        sesion = await e.sesion(torneo)
+        se_adelanta = await e.partido(sesion, a, b)
+        sin_empezar = await e.partido(sesion, c, d)
+        antes = se_adelanta.team_a_players
+
+        async def rfeg(_nombre):
+            if se_adelanta.status.value == "SCHEDULED":
+                se_adelanta.start()
+            return 8.0
+
+        e.rfeg.search_handicap = rfeg
+
+        await e.caso(_hora_de_madrid(3)).execute()
+
+        assert (await e.uow.matches.find_by_id(se_adelanta.id)).team_a_players == antes
+        recalculado = await e.uow.matches.find_by_id(sin_empezar.id)
+        assert recalculado.team_a_players[0].playing_handicap != 10

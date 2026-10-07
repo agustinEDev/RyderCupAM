@@ -18,6 +18,9 @@ Cómo, para no molestar a nadie a esas horas:
   servidor se reinicie, y solo se reintenta lo que falló (hasta las 7:00).
 - Quien juega **dos torneos** el mismo día se pregunta una vez, y el resultado
   se apunta en los dos.
+- **Los partidos de hoy sin empezar** de quien se actualizó se recalculan con
+  el hándicap nuevo, sobre el mismo partido (502b). Los empezados o jugados no
+  se tocan: lo jugado se queda con el hándicap con el que se jugó.
 
 La hora local sale del campo de la primera sesión del día que tenga zona. Sin
 ninguna, no se sabe qué hora es allí y ese día no se refresca: el mismo
@@ -34,6 +37,9 @@ from datetime import date, datetime, timedelta
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
+from src.modules.competition.application.services.jugadores_del_partido import (
+    JugadoresDelPartido,
+)
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -48,6 +54,7 @@ from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
+from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -67,6 +74,7 @@ class Herramientas:
     competiciones: CompetitionUnitOfWorkInterface
     usuarios: UserRepositoryInterface
     zonas: ICompetitionTimezone
+    campos: IGolfCourseRepository
 
 
 # Da herramientas nuevas cada vez, y las cierra al salir
@@ -104,10 +112,16 @@ class RefrescarHandicapsDelDiaUseCase:
         ahora = self._reloj()
         pendientes = await self._pendientes(ahora)
 
+        actualizados: dict[tuple[CompetitionId, date], set[UserId]] = defaultdict(set)
         for numero, (user_id, donde) in enumerate(pendientes.items()):
             if numero:
                 await self._esperar(PAUSA_ENTRE_CONSULTAS)
-            await self._refrescar(user_id, donde, ahora)
+            if await self._refrescar(user_id, donde, ahora) is ResultadoRefresco.ACTUALIZADO:
+                for torneo_y_dia in donde:
+                    actualizados[torneo_y_dia].add(user_id)
+
+        for (competition_id, dia), jugadores in actualizados.items():
+            await self._recalcular_los_partidos(competition_id, dia, jugadores)
         return len(pendientes)
 
     async def _pendientes(self, ahora: datetime) -> dict[UserId, list[tuple[CompetitionId, date]]]:
@@ -187,7 +201,7 @@ class RefrescarHandicapsDelDiaUseCase:
 
     async def _refrescar(
         self, user_id: UserId, donde: list[tuple[CompetitionId, date]], ahora: datetime
-    ) -> None:
+    ) -> ResultadoRefresco:
         """
         Pregunta por un jugador y lo apunta en cada torneo.
 
@@ -208,9 +222,46 @@ class RefrescarHandicapsDelDiaUseCase:
                     )
                 async with h.competiciones as uow:
                     await self._apuntar(uow, user_id, donde, resultado, ahora)
+            return resultado
         except Exception:
             logger.exception("No se pudo refrescar el hándicap de %s", user_id)
             await self._apuntar_el_fallo(user_id, donde, ahora)
+            return ResultadoRefresco.FALLIDO
+
+    async def _recalcular_los_partidos(
+        self, competition_id: CompetitionId, dia: date, jugadores: set[UserId]
+    ) -> None:
+        """
+        Los partidos de ese día, sin empezar, con algún jugador actualizado (502b).
+
+        Se leen bloqueados: si alguien empieza uno justo ahora, o ya empezó, se
+        queda como está. Un fallo aquí no deshace el refresco, ya apuntado.
+        """
+        try:
+            async with self._herramientas() as h, h.competiciones as uow:
+                competicion = await uow.competitions.find_by_id(competition_id)
+                if competicion is None:
+                    return
+                jugadores_del_partido = JugadoresDelPartido(h.campos, h.usuarios)
+                for sesion in await uow.rounds.find_by_competition_and_date(competition_id, dia):
+                    for partido in await uow.matches.find_by_round_for_update(sesion.id):
+                        lado_a = [p.user_id for p in partido.team_a_players]
+                        lado_b = [p.user_id for p in partido.team_b_players]
+                        if partido.status is not MatchStatus.SCHEDULED or not (
+                            jugadores & {*lado_a, *lado_b}
+                        ):
+                            continue
+                        nuevos_a, nuevos_b = await jugadores_del_partido.construir(
+                            uow, sesion, competicion, lado_a, lado_b
+                        )
+                        partido.recalcular_jugadores(nuevos_a, nuevos_b)
+                        await uow.matches.update(partido)
+        except Exception:
+            logger.exception(
+                "No se pudieron recalcular los partidos del %s de la competición %s",
+                dia,
+                competition_id,
+            )
 
     async def _apuntar_el_fallo(
         self, user_id: UserId, donde: list[tuple[CompetitionId, date]], ahora: datetime
