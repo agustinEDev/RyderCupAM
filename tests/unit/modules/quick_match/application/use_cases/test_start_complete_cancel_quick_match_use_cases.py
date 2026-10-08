@@ -101,6 +101,37 @@ class TestStartQuickMatchUseCase:
             )
 
 
+class TestStartFreezesHandicaps:
+    """BE #514: al empezar se fija el índice de cada uno, y un cambio del perfil ya no lo mueve."""
+
+    async def test_cada_registrado_juega_con_el_de_su_perfil_al_empezar(self, qm_uow, user_uow):
+        creator = await create_user(user_uow, "freeze-creator@test.com", handicap=18.5)
+        rival = await create_user(user_uow, "freeze-rival@test.com", handicap=20.1)
+        qm = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=creator.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        qm.add_participant(QuickMatchParticipant.for_user(rival.id))
+        async with qm_uow:
+            await qm_uow.quick_matches.add(qm)
+
+        await StartQuickMatchUseCase(qm_uow, user_uow).execute(
+            StartQuickMatchRequestDTO(
+                quick_match_id=qm.id.value,
+                requester_id=creator.id.value,
+                scorer_ids=[creator.id.value],
+            )
+        )
+
+        async with qm_uow:
+            guardada = await qm_uow.quick_matches.find_by_id(qm.id)
+        por_usuario = {p.user_id: p for p in guardada.participants}
+        assert por_usuario[creator.id].effective_handicap(profile_handicap=5.0) == 18.5
+        assert por_usuario[rival.id].effective_handicap(profile_handicap=5.0) == 20.1
+
+
 class TestCompleteQuickMatchUseCase:
     async def test_creator_completes_in_progress_match(self, qm_uow, user_uow):
         creator = await create_user(user_uow, "creator4@test.com")

@@ -49,8 +49,23 @@ class StartQuickMatchUseCase:
                 raise NotQuickMatchCreatorError("Only the creator can start the quick match.")
 
             quick_match.start(scorer_ids)
+            # Cada uno juega la partida con el índice que tiene ahora (BE #514):
+            # si no, un cambio posterior del perfil recalculaba sus golpes y sus
+            # puntos en todas las partidas ya jugadas
+            quick_match.freeze_handicaps(await self._profile_handicaps(quick_match))
             await self._uow.quick_matches.update(quick_match)
 
         return await QuickMatchDTOMapper.to_response_dto(
             quick_match, self._user_uow, requester_id=requester_id
         )
+
+    async def _profile_handicaps(self, quick_match) -> dict[UserId, float | None]:
+        """Hándicap del perfil de cada participante registrado, en una sola consulta."""
+        user_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
+        async with self._user_uow:
+            users = await self._user_uow.users.find_by_ids(user_ids)
+        return {
+            user.id: (float(user.handicap.value) if user.handicap else None)
+            for user in users
+            if user.id is not None
+        }
