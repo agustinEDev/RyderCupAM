@@ -129,6 +129,24 @@ class NotMatchPlayerError(Exception):
     pass
 
 
+class NotYourMarkedPlayerError(Exception):
+    """
+    El jugador marcado no es el que le toca marcar a quien anota (BE #520).
+
+    Cada uno marca solo al jugador que le asignó el sorteo de marcadores. Sin
+    esta comprobación uno podía marcarse a sí mismo y dejar su hoyo validado, o
+    pisar lo que le había apuntado su marcador de verdad.
+    """
+
+    error_code = "NOT_YOUR_MARKED_PLAYER"
+    # El texto para el jugador, fijo: la ruta no devuelve el de la excepción
+    # (CodeQL, exposición de información de una excepción)
+    message = "Solo puedes apuntar los golpes del jugador que te toca marcar"
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.message)
+
+
 class ScorecardNotReadyError(Exception):
     """La tarjeta no esta lista para ser entregada (hay hoyos sin validar)."""
 
