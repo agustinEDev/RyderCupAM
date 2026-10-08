@@ -17,10 +17,16 @@ from tests.conftest import (
     add_one_session,
     create_authenticated_user,
     create_competition,
+    plaza_para_todos,
     set_auth_cookies,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _cookies(client: AsyncClient) -> dict:
+    """Las cookies con las que va el cliente (el organizador, en cada cierre)."""
+    return dict(client.cookies)
 
 
 def _datos(**extra) -> dict:
@@ -72,6 +78,7 @@ async def test_al_cerrar_se_fija_y_la_lista_da_la_categoria(client: AsyncClient)
     competicion = await create_competition(client, usuario["cookies"], _datos())
 
     antes = (await _inscritos(client, competicion))[0]
+    await plaza_para_todos(client, _cookies(client), competicion)
     cerrar = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
     despues = (await _inscritos(client, competicion))[0]
 
@@ -86,6 +93,7 @@ async def test_con_las_inscripciones_cerradas_no_se_toca_el_personalizado(client
     usuario = await _usuario(client, handicap=14.2)
     competicion = await create_competition(client, usuario["cookies"], _datos())
     (inscripcion,) = await _inscritos(client, competicion)
+    await plaza_para_todos(client, _cookies(client), competicion)
     await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
 
     respuesta = await client.put(
@@ -101,6 +109,7 @@ async def test_iniciar_no_vuelve_a_fijar(client: AsyncClient):
     competicion = await create_competition(client, usuario["cookies"], _datos())
     await add_one_session(client, usuario["cookies"], competicion)
     set_auth_cookies(client, usuario["cookies"])
+    await plaza_para_todos(client, _cookies(client), competicion)
     await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
     await client.post(
         "/api/v1/handicaps/update",
@@ -119,6 +128,7 @@ async def test_en_una_ryder_nada_de_esto(client: AsyncClient):
     competicion = await create_competition(
         client, usuario["cookies"], _datos(tournament_type="RYDER_CUP", stroke_play=None)
     )
+    await plaza_para_todos(client, _cookies(client), competicion)
     await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
 
     (inscrito,) = await _inscritos(client, competicion)
@@ -179,6 +189,7 @@ async def test_al_cerrar_la_ficha_ensena_al_organizador_quien_falta(client: Asyn
             f"/api/v1/competitions/{competicion['id']}/enrollments/direct",
             json={"competition_id": competicion["id"], "user_id": jugador["user"]["id"]},
         )
+        await plaza_para_todos(client, _cookies(client), competicion)
         cerrar = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
 
         ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
@@ -202,6 +213,8 @@ async def test_sin_el_refresco_encendido_no_hay_actualizacion(client: AsyncClien
     """En los tests (y fuera de producción) al cerrar no se pregunta a la RFEG."""
     usuario = await _usuario(client, handicap=14.2)
     competicion = await create_competition(client, usuario["cookies"], _datos())
+
+    await plaza_para_todos(client, _cookies(client), competicion)
 
     await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
     ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()

@@ -32,6 +32,8 @@ MISSING_TEE_COLOR = "TEE_COLOR"
 MISSING_ENROLLMENT = "ENROLLMENT"
 # Sin hándicap no hay categoría en un stroke play (#251)
 MISSING_HANDICAP = "HANDICAP"
+# Un aprobado de un stroke play sin franja al cerrar las inscripciones (#251)
+MISSING_TEE_WINDOW = "TEE_WINDOW"
 
 
 @dataclass(frozen=True)

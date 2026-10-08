@@ -1113,3 +1113,33 @@ async def add_one_session(client: AsyncClient, cookies: dict, competition: dict)
     sesion = await client.post(f"/api/v1/competitions/{competition['id']}/rounds", json=datos)
     assert sesion.status_code == 201, sesion.text
     return sesion.json()
+
+
+async def plaza_para_todos(client: AsyncClient, cookies: dict, competition: dict) -> None:
+    """Coloca, como organizador, a cada aprobado sin franja en la primera franja (#251).
+
+    Sin franja no se cierran las inscripciones de un Stableford o un Medal. Si la
+    competición no tiene franjas, añade una con `add_one_session`. En una Ryder, nada.
+    """
+    if competition.get("tournament_type", "RYDER_CUP") == "RYDER_CUP":
+        return
+    set_auth_cookies(client, cookies)
+    calendario = (await client.get(f"/api/v1/competitions/{competition['id']}/schedule")).json()
+    franjas = [r for d in calendario.get("days", []) for r in d["rounds"] if r.get("tee_sheet")]
+    if not franjas:
+        await add_one_session(client, cookies, competition)
+        set_auth_cookies(client, cookies)
+        calendario = (await client.get(f"/api/v1/competitions/{competition['id']}/schedule")).json()
+        franjas = [r for d in calendario["days"] for r in d["rounds"] if r.get("tee_sheet")]
+    con_plaza = {u for f in franjas for u in f["tee_sheet"]["player_ids"]}
+    inscritos = (
+        await client.get(f"/api/v1/competitions/{competition['id']}/enrollments?status=APPROVED")
+    ).json()
+    for inscrito in inscritos:
+        if inscrito["user_id"] in con_plaza:
+            continue
+        respuesta = await client.post(
+            f"/api/v1/competitions/rounds/{franjas[0]['id']}/places",
+            json={"user_id": inscrito["user_id"]},
+        )
+        assert respuesta.status_code == 201, respuesta.text

@@ -58,6 +58,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.mappers.competition_mapper import (
     CompetitionDTOMapper,
 )
+from src.modules.competition.application.services.franjas_al_cerrar import (
+    PlayersWithoutTeeWindowError,
+)
 from src.modules.competition.application.services.handicaps_al_cerrar import (
     PlayersWithoutHandicapError,
 )
@@ -225,6 +228,8 @@ async def close_enrollments(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except CloseNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except PlayersWithoutTeeWindowError as e:
+        return respuesta_sin_franja(e)
     except PlayersWithoutHandicapError as e:
         return respuesta_sin_handicap(e)
     except (CompetitionStateError, ValueError) as e:
@@ -608,6 +613,28 @@ async def fill_captain(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except _ERRORES_DE_CAPITANIA as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+def respuesta_sin_franja(error: PlayersWithoutTeeWindowError) -> JSONResponse:
+    """Stableford o Medal con aprobados sin franja (#251): 400 con la lista."""
+    return _con_jugadores(error, "PLAYERS_WITHOUT_TEE_WINDOW", error.players)
+
+
+def _con_jugadores(error: Exception, codigo: str, jugadores) -> JSONResponse:
+    """El formato de «jugadores sin barras»: `error_code` en la raíz y la lista."""
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": str(error),
+            "error_code": codigo,
+            "players": [
+                BlockedPlayerDTO(
+                    user_id=p.user_id.value, name=p.name, missing=p.missing
+                ).model_dump(mode="json")
+                for p in jugadores
+            ],
+        },
+    )
 
 
 def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:

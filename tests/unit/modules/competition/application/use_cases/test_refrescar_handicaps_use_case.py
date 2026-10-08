@@ -97,6 +97,7 @@ from src.shared.domain.value_objects.gender import Gender
 from tests.unit.modules.competition.application.use_cases.helpers import (
     create_approved_enrollment,
     montar_calendario,
+    plaza_para_todos,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -227,6 +228,8 @@ class _Escenario:
         return user_id
 
     async def cerrar(self, torneo, lanzador=True) -> None:
+        # Sin franja no se cierra un stroke play (#251, 8 oct 2026)
+        await plaza_para_todos(self.uow, torneo)
         await CloseEnrollmentsUseCase(
             self.uow, self.usuarios, self.lanzador if lanzador else None
         ).execute(CloseEnrollmentsRequestDTO(competition_id=torneo.value), self.creadores[torneo])

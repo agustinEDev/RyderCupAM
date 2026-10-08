@@ -94,6 +94,8 @@ class GetScheduleUseCase:
 
             # 2. Obtener todas las rondas
             rounds = await self._uow.rounds.find_by_competition(competition_id)
+            # Quién tiene plaza en cada franja de un stroke play (#251)
+            plazas = await self._uow.plazas.de_la_competicion(competition_id)
             await self._abre_los_sobres_que_tocan(competition, rounds)
 
             # 3. Obtener partidos para cada ronda
@@ -167,7 +169,10 @@ class GetScheduleUseCase:
                 else None,
                 allowance_percentage=round_entity.allowance_percentage,
                 effective_allowance=round_entity.get_effective_allowance(),
-                tee_sheet=_hoja(round_entity.hoja_de_salidas),
+                tee_sheet=_hoja(
+                    round_entity.hoja_de_salidas,
+                    [p.user_id.value for p in plazas if p.round_id == round_entity.id],
+                ),
                 matches=match_dtos,
                 scoring_opens_at=ScoringOpeningService.opens_at(
                     round_entity.round_date,
@@ -240,8 +245,8 @@ class GetScheduleUseCase:
             await self._sobres.revelar_si_toca(ronda, competition, sobres)
 
 
-def _hoja(hoja: HojaDeSalidas | None) -> TeeSheetResponseDTO | None:
-    """La hoja de salidas de una franja, con sus horas y su cupo (#251)."""
+def _hoja(hoja: HojaDeSalidas | None, jugadores: list) -> TeeSheetResponseDTO | None:
+    """La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251)."""
     if hoja is None:
         return None
     return TeeSheetResponseDTO(
@@ -251,4 +256,6 @@ def _hoja(hoja: HojaDeSalidas | None) -> TeeSheetResponseDTO | None:
         group_size=hoja.jugadores_por_partida,
         tee_times=hoja.salidas,
         capacity=hoja.cupo,
+        places_taken=len(jugadores),
+        player_ids=jugadores,
     )

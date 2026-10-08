@@ -131,6 +131,10 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
 )
+from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
+    CogerPlazaUseCase,
+    SoltarPlazaUseCase,
+)
 from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
     AnularProgramacionUseCase,
     ProgramarActualizacionUseCase,
@@ -1800,6 +1804,20 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
             async_session_maker, RFEGHandicapService(timeout=10), EmailService()
         )
     return _lanzador
+
+
+def get_coger_plaza_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CogerPlazaUseCase:
+    """Coger plaza en una franja de stroke play (#251)."""
+    return CogerPlazaUseCase(uow)
+
+
+def get_soltar_plaza_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> SoltarPlazaUseCase:
+    """Soltar la plaza en una franja de stroke play (#251)."""
+    return SoltarPlazaUseCase(uow)
 
 
 def get_close_enrollments_use_case(

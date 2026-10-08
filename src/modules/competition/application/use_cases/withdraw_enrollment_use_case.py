@@ -88,6 +88,9 @@ class WithdrawEnrollmentUseCase:
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
 
+            # Y suelta sus plazas en las franjas de un stroke play (#251)
+            await self._uow.plazas.quitar_del_jugador(enrollment.competition_id, enrollment.user_id)
+
             #    Si era capitan, su puesto queda libre
             if competition and competition.handle_withdrawal(enrollment.user_id):
                 await self._uow.competitions.update(competition)

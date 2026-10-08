@@ -22,6 +22,9 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
 from src.modules.competition.domain.services.franjas_de_la_jornada import FranjasDeLaJornada
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -125,3 +128,55 @@ def _comprobar(competition: Competition, hoja: HojaDeSalidas | None) -> None:
         competition.comprobar_hoja_de_salidas(hoja)
     except ValueError as e:
         raise FranjaInvalidaError(str(e)) from e
+
+
+async def comprobar_que_nadie_pierde_su_sitio(
+    uow: CompetitionUnitOfWorkInterface,
+    franja: Round,
+    hoja_nueva: HojaDeSalidas | None,
+    dia_nuevo: date | None,
+) -> None:
+    """
+    Cambiar la forma de una franja vale en cualquier dirección mientras nadie de
+    dentro pierda su sitio (decisión 5 de la #251): ni quedarse sin plaza al
+    achicarla, ni acabar con dos franjas el mismo día al moverla.
+
+    Raises:
+        FranjaInvalidaError: Diciendo por qué
+    """
+    plazas = await uow.plazas.de_la_competicion(franja.competition_id)
+    dentro = [p.user_id for p in plazas if p.round_id == franja.id]
+    if not dentro:
+        return
+    if hoja_nueva is not None and hoja_nueva.cupo < len(dentro):
+        raise FranjaInvalidaError(
+            f"La franja quedaría con {hoja_nueva.cupo} plazas y tiene {len(dentro)} "
+            "jugadores dentro: muévelos antes."
+        )
+    if dia_nuevo is not None and dia_nuevo != franja.round_date:
+        sesiones = {s.id: s for s in await uow.rounds.find_by_competition(franja.competition_id)}
+        chocan = {
+            p.user_id
+            for p in plazas
+            if p.user_id in dentro
+            and p.round_id != franja.id
+            and sesiones[p.round_id].round_date == dia_nuevo
+        }
+        if chocan:
+            raise FranjaInvalidaError(
+                f"{len(chocan)} de sus jugadores ya juega ese día en otra franja: "
+                "como mucho una por jornada."
+            )
+
+
+async def comprobar_que_esta_vacia(uow: CompetitionUnitOfWorkInterface, franja: Round) -> None:
+    """
+    Raises:
+        FranjaInvalidaError: Si alguien tiene plaza en ella: borrarla le quitaría el sitio
+    """
+    plazas = await uow.plazas.de_la_competicion(franja.competition_id)
+    dentro = sum(1 for p in plazas if p.round_id == franja.id)
+    if dentro:
+        raise FranjaInvalidaError(
+            f"La franja tiene {dentro} jugadores con plaza: muévelos o quítalos antes de borrarla."
+        )

@@ -63,6 +63,12 @@ class RefrescoDesactivadoError(Exception):
     pass
 
 
+class PlazaEnFranjaError(Exception):
+    """No se puede coger o soltar esa plaza en la franja (#251), con el motivo."""
+
+    pass
+
+
 class DateOutOfRangeError(Exception):
     """La fecha de la sesión está fuera de las fechas de la competición."""
 

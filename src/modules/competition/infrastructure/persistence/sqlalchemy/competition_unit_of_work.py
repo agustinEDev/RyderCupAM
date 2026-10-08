@@ -37,6 +37,9 @@ from src.modules.competition.domain.repositories.invitation_repository_interface
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.plaza_en_franja_repository_interface import (
+    PlazaEnFranjaRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.round_repository_interface import (
     RoundRepositoryInterface,
 )
@@ -66,6 +69,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.invitation_re
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.match_repository import (
     SQLAlchemyMatchRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.plaza_en_franja_repository import (
+    SQLAlchemyPlazaEnFranjaRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.round_repository import (
     SQLAlchemyRoundRepository,
@@ -101,6 +107,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._hole_scores = SQLAlchemyHoleScoreRepository(session)
         self._drafts = SQLAlchemyDraftRepository(session)
         self._handicap_updates = SQLAlchemyHandicapUpdateRepository(session)
+        self._plazas = SQLAlchemyPlazaEnFranjaRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -145,6 +152,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def handicap_updates(self) -> HandicapUpdateRepositoryInterface:
         return self._handicap_updates
+
+    @property
+    def plazas(self) -> PlazaEnFranjaRepositoryInterface:
+        return self._plazas
 
     async def __aenter__(self):
         return self

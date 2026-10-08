@@ -14,6 +14,7 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
+    comprobar_que_esta_vacia,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -87,6 +88,8 @@ class DeleteRoundUseCase:
                 matches_deleted += 1
 
             # 7. Eliminar la ronda
+            # Una franja con gente dentro no se borra: perderían su sitio (#251)
+            await comprobar_que_esta_vacia(self._uow, round_entity)
             await self._uow.rounds.delete(round_id)
 
         return DeleteRoundResponseDTO(

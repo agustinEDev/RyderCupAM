@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
+    comprobar_que_nadie_pierde_su_sitio,
     comprobar_solape,
     comprobar_tipo,
     hoja_de,
@@ -137,6 +138,10 @@ class UpdateRoundUseCase:
             # 6b. Una franja solo cambia su hoja (no tiene formato), y no puede
             #     acabar solapada con otra de su jornada (#251)
             hoja = self._comprobar_franja(request, competition, round_entity, del_dia)
+            # Y que nadie de dentro pierda su sitio (#251)
+            await comprobar_que_nadie_pierde_su_sitio(
+                self._uow, round_entity, hoja, request.round_date
+            )
 
             # 7. Actualizar la ronda (validación de estado dentro del dominio)
             session_type = SessionType(request.session_type) if request.session_type else None
