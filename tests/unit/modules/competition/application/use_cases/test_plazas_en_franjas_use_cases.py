@@ -205,6 +205,22 @@ class TestElOrganizador:
 
         assert await e.plazas() == {(e.manana.id, jugador)}
 
+    async def test_tambien_se_mueve_a_si_mismo_con_las_inscripciones_cerradas(self, e):
+        """El organizador también juega: sus reglas son las de organizador (revisión 3a)."""
+        await e.torneo(status=CompetitionStatus.CLOSED)
+        async with e.uow:
+            await e.uow.enrollments.add(
+                Enrollment.direct_enroll(
+                    id=EnrollmentId.generate(),
+                    competition_id=e.competicion.id,
+                    user_id=e.creador,
+                )
+            )
+
+        await e.coger(e.manana, e.creador, quien=e.creador)
+
+        assert await e.plazas() == {(e.manana.id, e.creador)}
+
     async def test_en_juego_ya_no(self, e):
         await e.torneo(status=CompetitionStatus.IN_PROGRESS)
         jugador = await e.aprobado()

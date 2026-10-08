@@ -53,7 +53,8 @@ async def _franja_y_competicion(
     organiza = is_admin or competicion.is_creator(quien)
     if not organiza and quien != jugador:
         raise NotCompetitionCreatorError("Solo el organizador elige la franja de otro jugador")
-    if organiza and quien != jugador:
+    # Quien organiza va con sus reglas, también para su propia plaza: también juega
+    if organiza:
         if not competicion.allows_agenda_edits():
             raise PlazaEnFranjaError(
                 "El organizador coloca a los jugadores en las franjas hasta iniciar la competición."
