@@ -300,7 +300,10 @@ class TestResetPasswordInvalidToken:
         )
 
         # Act & Assert
-        with pytest.raises(Exception):  # InvalidPasswordError o ValueError
+        # ValueError y no cualquier excepción: es lo que el endpoint convierte
+        # en un 400 con el motivo. Con `Exception` este test aceptaba el 500
+        # que daba en producción (InvalidPasswordError no era un ValueError)
+        with pytest.raises(ValueError, match="mayúscula"):
             await use_case.execute(request_dto)
 
         # Verificar que la contraseña NO cambió
