@@ -92,10 +92,11 @@ class TestReanudar:
         actualizacion = _nueva()
         actualizacion.terminar(pendientes=1, momento=LUEGO)
 
-        actualizacion.reanudar()
+        actualizacion.reanudar(LUEGO)
 
         assert actualizacion.sigue()
         assert actualizacion.terminada is None
+        assert actualizacion.reanudada == LUEGO
 
     def test_las_demas_no(self):
         import pytest
@@ -106,4 +107,4 @@ class TestReanudar:
 
         for actualizacion in (en_curso, completa, cortada):
             with pytest.raises(ValueError, match="incompleta"):
-                actualizacion.reanudar()
+                actualizacion.reanudar(LUEGO)

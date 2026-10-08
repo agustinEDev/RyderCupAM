@@ -12,6 +12,8 @@ load_dotenv()  # Cargar variables de entorno desde .env
 
 # All imports below must be after load_dotenv() to access environment variables
 
+import asyncio  # noqa: E402
+import contextlib  # noqa: E402
 import secrets  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
@@ -26,7 +28,12 @@ from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from src.config.cors_config import get_cors_config  # noqa: E402
+from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
+from src.config.refresco_de_handicaps import (  # noqa: E402
+    LanzadorEnSegundoPlano,
+    VigilanteDeActualizaciones,
+)
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
 from src.config.version import (  # noqa: E402
@@ -131,7 +138,17 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_activity_event_mappers()  # Activity feed (depends on User)
     start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
 
+    # El vigilante de las actualizaciones de hándicaps: lanza las programadas y
+    # recupera las cortadas por un reinicio. Solo en producción (#251)
+    vigilante = None
+    lanzador = get_lanzador_de_actualizaciones()
+    if isinstance(lanzador, LanzadorEnSegundoPlano):
+        vigilante = asyncio.create_task(VigilanteDeActualizaciones(lanzador).vigilar())
     yield
+    if vigilante is not None:
+        vigilante.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await vigilante
     print("INFO:     Apagando aplicación...")
 
 

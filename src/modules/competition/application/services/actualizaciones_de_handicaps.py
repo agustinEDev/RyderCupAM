@@ -81,7 +81,7 @@ class ActualizacionesDeHandicaps:
         if ultima is not None and ultima.sigue():
             raise ActualizacionEnCursoError("Ya se están actualizando los hándicaps.")
         if ultima is not None and ultima.estado is EstadoActualizacion.INCOMPLETA:
-            ultima.reanudar()
+            ultima.reanudar(ahora)
             await self._uow.handicap_updates.update(ultima)
             return ultima, True
         actualizacion = ActualizacionDeHandicaps.crear(competition_id, origen, ahora)
