@@ -633,7 +633,7 @@ class TestCompetitionScorecards:
             rival,
             strokes_per_hole=5,
             strokes_received_per_hole=1,
-            # Con hándicap: 18 de índice en amarillas son 18 de juego (BE #517)
+            # Con hándicap: 9 de índice del perfil en amarillas son 8 de juego (BE #517)
             play_mode=PlayMode.HANDICAP,
         )
 

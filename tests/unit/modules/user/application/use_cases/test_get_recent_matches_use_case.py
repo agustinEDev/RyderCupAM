@@ -1405,6 +1405,57 @@ class TestTorneoComoVueltaPropia:
 
         assert entry.stableford_points == 39
 
+    async def test_sin_indice_guardado_usa_el_del_perfil(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given un partido sin índice guardado y 18 en el perfil When firma 5 Then 39, como con el guardado."""
+        player = await create_user(user_uow, "TorneoPerfil", handicap=18.0)
+        rival = await create_user(user_uow, "TorneoPerfilR")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.HANDICAP,
+            tee_color=TeeColor.WHITE,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 39
+
+    async def test_una_competicion_scratch_puntua_sin_golpes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given una competición scratch con 18 de índice When firma 5 Then 18 puntos, sin golpes."""
+        player = await create_user(user_uow, "TorneoScratch", handicap=18.0)
+        rival = await create_user(user_uow, "TorneoScratchR")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.SCRATCH,
+            tee_color=TeeColor.WHITE,
+            player_handicaps={player.id: 18.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 18
+
 
 @pytest.mark.asyncio
 class TestMatchName:

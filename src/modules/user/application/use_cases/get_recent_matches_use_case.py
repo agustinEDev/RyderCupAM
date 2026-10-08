@@ -37,20 +37,22 @@ from src.modules.user.application.dto.player_stats_dto import (
     RecentMatchDTO,
     RecentMatchesResponseDTO,
 )
+from src.modules.user.application.services.tournament_round import (
+    is_scratch,
+    tournament_personal_handicap,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
-from src.shared.domain.services.personal_round import personal_playing_handicap
 from src.shared.domain.services.stroke_play_scoring import (
     NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
     StrokePlayScoring,
 )
 from src.shared.domain.value_objects.match_format import MatchFormat
-from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 DEFAULT_LIMIT = 10
@@ -233,7 +235,7 @@ class GetRecentMatchesUseCase:
                     competition_names[round_.competition_id] = (
                         competition.name.value if competition else None
                     )
-                    if competition is not None and competition.play_mode == PlayMode.SCRATCH:
+                    if is_scratch(competition):
                         scratch_competitions.add(round_.competition_id)
 
                 raws.append(
@@ -396,17 +398,12 @@ class GetRecentMatchesUseCase:
         # (el que guardó el partido, o el del perfil) en su barra al 100 %, no
         # con la diferencia con el rival que reparte el partido (BE #517)
         user = users_by_id.get(user_id)
-        index = (
-            own_player.player_handicap
-            if own_player is not None and own_player.player_handicap is not None
-            else (user.handicap.value if user and user.handicap else None)
+        playing_handicap = tournament_personal_handicap(
+            course,
+            own_player,
+            user.handicap.value if user and user.handicap else None,
+            scratch=raw.scratch,
         )
-        tee_rating = (
-            course_context_for(course).rating_for(own_player.tee_color, own_player.tee_gender)
-            if course is not None and own_player is not None
-            else None
-        )
-        playing_handicap = personal_playing_handicap(index, tee_rating, scratch=raw.scratch)
         total_strokes, holes_played, points = self._scorecard_totals(
             raw, hole_card, playing_handicap
         )

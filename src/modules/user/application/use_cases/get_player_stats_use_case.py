@@ -21,6 +21,11 @@ from src.modules.user.application.dto.player_stats_dto import (
     PlayerStatsResponseDTO,
     ScoringBreakdownResponseDTO,
 )
+from src.modules.user.application.services.tournament_round import (
+    is_scratch,
+    tournament_index,
+    tournament_personal_handicap,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -30,7 +35,6 @@ from src.modules.user.domain.services.scoring_breakdown_calculator import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
-from src.shared.domain.services.personal_round import personal_playing_handicap
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.score_differential_calculator import (
     PlayedRound,
@@ -43,7 +47,6 @@ from src.shared.domain.services.stroke_play_scoring import (
 )
 from src.shared.domain.value_objects.hole_outcome import HoleOutcome
 from src.shared.domain.value_objects.match_format import MatchFormat
-from src.shared.domain.value_objects.play_mode import PlayMode
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único
@@ -434,7 +437,7 @@ class GetPlayerStatsUseCase:
                 hole_scores = scorecards.get(match.id, [])
                 player = self._find_match_player(match, user_id)
                 hole_card = self._hole_card(course, player)
-                playing_handicap = self._personal_playing_handicap(
+                playing_handicap = tournament_personal_handicap(
                     course,
                     player,
                     profile_handicap,
@@ -592,26 +595,9 @@ class GetPlayerStatsUseCase:
         scratch = set()
         for competition_id in {r.competition_id for r in rounds_by_match.values() if r}:
             competition = await self._competition_uow.competitions.find_by_id(competition_id)
-            if competition is not None and competition.play_mode == PlayMode.SCRATCH:
+            if is_scratch(competition):
                 scratch.add(competition_id)
         return scratch
-
-    def _personal_playing_handicap(
-        self, course, player, profile_handicap: float | None, *, scratch: bool
-    ) -> int | None:
-        """
-        El hándicap de juego de su vuelta propia en un partido de torneo (BE #517).
-
-        El índice que guardó el partido al generarse (o el del perfil si falta),
-        con su barra, por `personal_playing_handicap`: la misma pieza que mide la
-        vuelta de una partida rápida.
-        """
-        tee_rating = self._tee_rating(
-            course, player.tee_color if player else None, player.tee_gender if player else None
-        )
-        return personal_playing_handicap(
-            self._match_player_handicap(player, profile_handicap), tee_rating, scratch=scratch
-        )
 
     @staticmethod
     def _match_course(match, rounds_by_match: dict) -> GolfCourseId | None:
@@ -765,16 +751,9 @@ class GetPlayerStatsUseCase:
 
     @staticmethod
     def _match_player_handicap(player, profile_handicap: float | None) -> float | None:
-        """
-        Hándicap del jugador en ese partido de torneo.
-
-        `MatchPlayer.player_handicap` es una foto del hándicap en el momento de
-        generar el partido, que es exactamente lo que el WHS quiere para medir
-        una vuelta antigua. Cuando falta, no queda más que el del perfil.
-        """
-        if player is not None and player.player_handicap is not None:
-            return float(player.player_handicap)
-        return profile_handicap
+        """El índice con el que jugó el partido de torneo: ver `tournament_index`."""
+        index = tournament_index(player, profile_handicap)
+        return None if index is None else float(index)
 
     # ==================== Agregación ====================
 

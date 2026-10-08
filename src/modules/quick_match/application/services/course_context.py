@@ -72,17 +72,18 @@ def own_playing_handicap(
     Hándicap de juego del participante en su vuelta propia, contra el campo.
 
     La pendiente y el rating de su barra, como la partida, o el índice si la
-    barra no se puede valorar: `personal_playing_handicap`, la misma pieza que
-    usan el historial y las estadísticas para los partidos de torneo. El historial y las estadísticas puntuaban con el índice tal
-    cual, sin barra, y la misma vuelta daba 28 puntos en el panel y 32 en la
-    partida (BE #513). Al 100 %.
+    barra no se puede valorar, por `personal_playing_handicap`: la misma pieza
+    que mide los partidos de torneo en el historial y las estadísticas. El
+    historial y las estadísticas puntuaban con el índice tal cual, sin barra, y
+    la misma vuelta daba 28 puntos en el panel y 32 en la partida (BE #513).
+    Al 100 %.
 
     En match play también: el partido se decide por la diferencia con el rival,
     pero la vuelta de cada uno se mide contra el campo con su propio hándicap.
 
-    Devuelve None sin hándicap conocido, y 0 en una partida scratch (el reparto
-    no da golpes). Lo devuelto ya es el hándicap de juego: quien lo use no debe
-    volver a pasarlo por la barra ni por el allowance.
+    Devuelve None sin hándicap conocido, y 0 en una partida scratch. Lo devuelto
+    ya es el hándicap de juego: quien lo use no debe volver a pasarlo por la
+    barra ni por el allowance.
     """
     tee_rating = course_context_for(golf_course).rating_for(
         participant.tee_color, participant.tee_gender
