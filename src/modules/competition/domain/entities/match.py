@@ -386,6 +386,26 @@ class Match:
                 return p
         return None
 
+    def may_mark(self, scorer_id: UserId, marked_id: UserId) -> bool:
+        """
+        Si `scorer_id` puede apuntarle los golpes a `marked_id` como marcador (BE #520).
+
+        Solo al jugador que le asignó el sorteo de marcadores. Así nadie se
+        marca a sí mismo —con eso uno validaba su propio hoyo, o pisaba lo que le
+        había apuntado su marcador de verdad—: `MarkerAssignment` ya prohíbe que
+        alguien se tenga asignado. Un partido sin asignaciones (datos viejos) se
+        queda con la regla de fondo del sorteo, el marcador es siempre del
+        equipo contrario, que deja fuera a uno mismo y al compañero.
+        """
+        if self._marker_assignments:
+            return any(
+                assignment.scorer_user_id == scorer_id and assignment.marks_user_id == marked_id
+                for assignment in self._marker_assignments
+            )
+        scorer_team = self.get_player_team(scorer_id)
+        marked_team = self.get_player_team(marked_id)
+        return scorer_team is not None and marked_team is not None and scorer_team != marked_team
+
     def get_all_player_ids(self) -> list[UserId]:
         """Retorna los IDs de todos los jugadores del partido."""
         return [p.user_id for p in (*self._team_a_players, *self._team_b_players)]
