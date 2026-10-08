@@ -143,9 +143,12 @@ class _UnidadQueCuenta(InMemoryUnitOfWork):
     def __init__(self):
         super().__init__()
         self.abiertas = 0
+        self.al_abrir = None
 
     async def __aenter__(self):
         self.abiertas += 1
+        if self.al_abrir is not None:
+            self.al_abrir()
         return await super().__aenter__()
 
     async def __aexit__(self, *args):
@@ -700,3 +703,69 @@ class TestCorregirDirectamente:
         await HandicapsAlCerrar(e.uow, e.usuarios).corregir(competicion, jugador, Decimal("2.0"))
 
         assert (await e.inscripciones(torneo))[jugador].fixed_handicap == Decimal("18.0")
+
+
+class TestCadaApunteConElCandado:
+    """
+    Todo apunte se hace con la competición bloqueada: así no se cuela entre la
+    comprobación y el «cortada por un reinicio» del vigilante (CodeRabbit, #510).
+    """
+
+    def _espiar(self, e):
+        bloqueos = []
+        original = e.uow.competitions.find_by_id_for_update
+
+        async def espia(competition_id):
+            bloqueos.append(competition_id)
+            return await original(competition_id)
+
+        e.uow.competitions.find_by_id_for_update = espia
+        # Solo cuenta el candado de la MISMA transacción que el apunte
+        e.uow.al_abrir = bloqueos.clear
+        return bloqueos
+
+    async def test_tambien_lo_que_no_cambia_el_handicap(self, e):
+        torneo = await e.torneo()
+        await e.cerrar(torneo)
+        e.rfeg.search_handicap = AsyncMock(return_value=None)  # no lo encuentra
+        bloqueos = self._espiar(e)
+        original = e.uow.handicap_updates.apuntar
+        sin_candado = []
+
+        async def apuntar(*args):
+            if not bloqueos:
+                sin_candado.append(args)
+            return await original(*args)
+
+        e.uow.handicap_updates.apuntar = apuntar
+
+        await e.pasar(torneo)
+
+        assert sin_candado == []
+
+    async def test_tambien_el_fallo_inesperado(self, e):
+        torneo = await e.torneo()
+        roto = await e.inscrito(torneo)
+        await e.cerrar(torneo)
+        original_usuario = e.usuarios.find_by_id
+
+        async def revienta(user_id):
+            if user_id == roto:
+                raise RuntimeError("se cayó la base de datos")
+            return await original_usuario(user_id)
+
+        e.usuarios.find_by_id = revienta
+        bloqueos = self._espiar(e)
+        original = e.uow.handicap_updates.apuntar
+        sin_candado = []
+
+        async def apuntar(update_id, user_id, *args):
+            if user_id == roto and not bloqueos:
+                sin_candado.append(user_id)
+            return await original(update_id, user_id, *args)
+
+        e.uow.handicap_updates.apuntar = apuntar
+
+        await e.pasar(torneo)
+
+        assert sin_candado == []

@@ -261,3 +261,29 @@ class TestLasCortadas:
         guardada = await e.uow.handicap_updates.find_by_id(terminada.id)
         assert guardada.estado is EstadoActualizacion.COMPLETA
         e.avisos.send_handicaps_pending_email.assert_not_awaited()
+
+    async def test_si_revivio_antes_del_candado_no_se_toca(self, e):  # noqa: F811
+        """Vuelve a mirar la actividad con la competición bloqueada (CodeRabbit, #510)."""
+        await e.torneo()
+        viva = await self._en_curso(e)
+        ahora = A_TIEMPO + SIN_ACTIVIDAD + timedelta(seconds=1)
+        original = e.uow.handicap_updates.en_curso_sin_actividad_desde
+        llamadas = []
+
+        async def la_vio_parada_y_revivio(limite):
+            llamadas.append(limite)
+            parada = await original(limite)
+            if len(llamadas) == 1:
+                # Entre la consulta y el candado, la pasada apuntó a alguien
+                (inscripcion, *_) = await e.uow.enrollments.find_by_competition(e.competicion.id)
+                await e.uow.handicap_updates.apuntar(
+                    viva.id, inscripcion.user_id, ResultadoRefresco.ACTUALIZADO, ahora
+                )
+            return parada
+
+        e.uow.handicap_updates.en_curso_sin_actividad_desde = la_vio_parada_y_revivio
+
+        await _vuelta(e, ahora).execute()
+
+        guardada = await e.uow.handicap_updates.find_by_id(viva.id)
+        assert guardada.estado is EstadoActualizacion.EN_CURSO

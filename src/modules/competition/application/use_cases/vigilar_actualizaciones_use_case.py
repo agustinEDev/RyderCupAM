@@ -134,6 +134,13 @@ class VigilarActualizacionesUseCase:
             actual = await uow.handicap_updates.find_by_id(actualizacion.id)
             if competicion is None or actual is None or not actual.sigue():
                 return
+            # Otra vez, ya con el candado: si la pasada apuntó a alguien entre
+            # medias, no estaba cortada (CodeRabbit, #510)
+            sigue_parada = await uow.handicap_updates.en_curso_sin_actividad_desde(
+                ahora - SIN_ACTIVIDAD
+            )
+            if actual.id not in {a.id for a in sigue_parada}:
+                return
             pendientes = await PendientesDeActualizar.de(uow, actual)
             actual.terminar(len(pendientes), ahora)
             await uow.handicap_updates.update(actual)

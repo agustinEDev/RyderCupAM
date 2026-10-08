@@ -204,6 +204,9 @@ class RefrescarHandicapsUseCase:
                         jugador
                     )
                 async with h.competiciones as uow:
+                    # Con la competición bloqueada, también si no cambia nada: el
+                    # vigilante la bloquea para dar una por cortada (#510)
+                    await self._bloquear(uow, update_id)
                     if (
                         resultado is ResultadoRefresco.ACTUALIZADO
                         and jugador is not None
@@ -247,10 +250,18 @@ class RefrescarHandicapsUseCase:
         ):
             await HandicapsAlCerrar(uow, usuarios).corregir(competicion, user_id, nuevo)
 
+    @staticmethod
+    async def _bloquear(uow: CompetitionUnitOfWorkInterface, update_id: uuid.UUID) -> None:
+        """La competición de la actualización, bloqueada hasta el final de la transacción."""
+        actualizacion = await uow.handicap_updates.find_by_id(update_id)
+        if actualizacion is not None:
+            await uow.competitions.find_by_id_for_update(actualizacion.competition_id)
+
     async def _apuntar_el_fallo(self, update_id: uuid.UUID, user_id: UserId) -> None:
         """Un fallo inesperado también se apunta, con herramientas limpias."""
         try:
             async with self._herramientas() as h, h.competiciones as uow:
+                await self._bloquear(uow, update_id)
                 await uow.handicap_updates.apuntar(
                     update_id, user_id, ResultadoRefresco.FALLIDO, self._reloj()
                 )
