@@ -128,7 +128,7 @@ class _Escenario:
         )
 
     async def iniciar(self, torneo):
-        return await StartCompetitionUseCase(self.uow).execute(
+        return await StartCompetitionUseCase(self.uow, self.usuarios).execute(
             StartCompetitionRequestDTO(competition_id=torneo.value), self.creador
         )
 

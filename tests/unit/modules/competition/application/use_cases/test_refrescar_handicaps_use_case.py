@@ -236,7 +236,7 @@ class _Escenario:
 
     async def iniciar(self, torneo) -> None:
         await montar_calendario(self.uow, torneo.value, "sin jugar")
-        await StartCompetitionUseCase(self.uow).execute(
+        await StartCompetitionUseCase(self.uow, self.usuarios).execute(
             StartCompetitionRequestDTO(competition_id=torneo.value), self.creadores[torneo]
         )
 

@@ -569,3 +569,19 @@ class TestLoQueEncontroCodeReview:
             )
 
         assert await e.uow.matches.find_by_round(e.manana.id) != []
+
+    async def test_iniciar_un_stroke_play_sin_usuarios_no_se_salta_la_comprobacion(self, e):
+        """CodeRabbit en la #511: sin el repositorio no se puede comprobar, y se dice."""
+        from src.modules.competition.application.dto.competition_dto import (
+            StartCompetitionRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.start_competition_use_case import (
+            StartCompetitionUseCase,
+        )
+
+        await e.torneo(status=CompetitionStatus.CLOSED)
+
+        with pytest.raises(RuntimeError, match="usuarios"):
+            await StartCompetitionUseCase(e.uow).execute(
+                StartCompetitionRequestDTO(competition_id=e.competicion.id.value), e.creador
+            )

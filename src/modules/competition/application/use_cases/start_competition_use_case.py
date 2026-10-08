@@ -110,7 +110,11 @@ class StartCompetitionUseCase:
 
             # 3b. En un stroke play, cada aprobado con su franja, como al cerrar:
             #     tras el cierre se puede mover a la gente (#251)
-            if competition.stroke_play is not None and self._users is not None:
+            if competition.stroke_play is not None:
+                if self._users is None:
+                    raise RuntimeError(
+                        "Hace falta el repositorio de usuarios para iniciar un stroke play"
+                    )
                 await FranjasAlCerrar(self._uow, self._users).comprobar(competition)
 
             # 4. Iniciar la competición (la entidad valida la transición). El
