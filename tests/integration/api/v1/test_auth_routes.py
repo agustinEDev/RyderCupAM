@@ -88,6 +88,34 @@ class TestAuthRoutes:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert motivo in response.json()["detail"]
 
+    async def test_register_with_a_common_password_carries_its_code(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """
+        Given una contraseña de la lista de comunes que cumple todo lo demás
+        When se registra
+        Then 400 con `error_code` PASSWORD_TOO_COMMON en la raíz (BE #519), para traducirlo
+
+        La lista negra se simula: aquí se prueba el código, no la lista (BE #518).
+        """
+        monkeypatch.setattr(
+            "src.modules.user.domain.value_objects.password.is_common_password",
+            lambda candidate: candidate == "Password123!",
+        )
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "policy.common@example.com",
+                "password": "Password123!",
+                "first_name": "Policy",
+                "last_name": "Test",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error_code"] == "PASSWORD_TOO_COMMON"
+        assert response.json()["detail"]
+
     async def test_logout_user_successfully(self, client: AsyncClient):
         """
         Verifica que un usuario autenticado puede hacer logout correctamente.

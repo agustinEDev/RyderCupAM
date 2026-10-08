@@ -36,6 +36,12 @@ class InvalidPasswordError(ValueError):
     usuario leía «Error interno del servidor» en vez de qué le falta.
     """
 
+    def __init__(self, message: str, code: str = "PASSWORD_INVALID"):
+        super().__init__(message)
+        # Una regla, un código (BE #519): el mensaje va en español, y el cliente
+        # necesita algo estable para enseñarlo en el idioma del usuario
+        self.code = code
+
 
 @dataclass(frozen=True)
 class Password:
@@ -82,9 +88,10 @@ class Password:
             True
         """
         # Validar fortaleza ANTES de hashear
-        error_message = cls._validate_password_strength(plain_password)
-        if error_message:
-            raise InvalidPasswordError(error_message)
+        violation = cls._password_violation(plain_password)
+        if violation:
+            code, error_message = violation
+            raise InvalidPasswordError(error_message, code=code)
 
         hashed = cls._hash_password(plain_password)
         return cls(hashed)
@@ -105,8 +112,14 @@ class Password:
         hashed = bcrypt.hashpw(Password._bcrypt_bytes(plain_password), salt)
         return hashed.decode("utf-8")
 
+    @classmethod
+    def _validate_password_strength(cls, password: str) -> str | None:
+        """El mensaje de la primera regla que se rompe, o None si la contraseña vale."""
+        violation = cls._password_violation(password)
+        return violation[1] if violation else None
+
     @staticmethod
-    def _validate_password_strength(password: str) -> str | None:  # noqa: PLR0911
+    def _password_violation(password: str) -> tuple[str, str] | None:  # noqa: PLR0911
         """
         Valida la fortaleza de la contraseña según OWASP ASVS V2.1.
 
@@ -114,8 +127,8 @@ class Password:
             password: Contraseña en texto plano a validar
 
         Returns:
-            None si la contraseña es válida
-            str con mensaje de error si la contraseña no cumple requisitos
+            None si la contraseña es válida; si no, (código, mensaje) de la
+            primera regla que rompe. El código es estable para el cliente (BE #519)
 
         OWASP ASVS V2.1 Requirements:
         - V2.1.1: Longitud mínima 12 caracteres (antes 8)
@@ -125,42 +138,60 @@ class Password:
         """
         # 1. Validar que la contraseña no sea None o vacía
         if not password:
-            return "La contraseña no puede estar vacía"
+            return "PASSWORD_EMPTY", "La contraseña no puede estar vacía"
 
         # 2. Remover espacios leading/trailing (común en copy-paste)
         password_trimmed = password.strip()
         if password_trimmed != password:
-            return "La contraseña no puede tener espacios al inicio o final"
+            return "PASSWORD_EDGE_SPACES", "La contraseña no puede tener espacios al inicio o final"
 
         # 3. Validar longitud mínima (OWASP: 12+ chars)
         if len(password) < Password.MIN_LENGTH:
-            return f"La contraseña debe tener al menos {Password.MIN_LENGTH} caracteres (actualmente: {len(password)})"
+            return (
+                "PASSWORD_TOO_SHORT",
+                f"La contraseña debe tener al menos {Password.MIN_LENGTH} caracteres (actualmente: {len(password)})",
+            )
 
         # 4. Validar longitud máxima (límite técnico)
         if len(password) > Password.MAX_LENGTH:
-            return f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres (actualmente: {len(password)})"
+            return (
+                "PASSWORD_TOO_LONG",
+                f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres (actualmente: {len(password)})",
+            )
 
         # 5. Validar complejidad: al menos 1 mayúscula
         if not any(c.isupper() for c in password):
-            return "La contraseña debe contener al menos una letra mayúscula (A-Z)"
+            return (
+                "PASSWORD_NO_UPPERCASE",
+                "La contraseña debe contener al menos una letra mayúscula (A-Z)",
+            )
 
         # 6. Validar complejidad: al menos 1 minúscula
         if not any(c.islower() for c in password):
-            return "La contraseña debe contener al menos una letra minúscula (a-z)"
+            return (
+                "PASSWORD_NO_LOWERCASE",
+                "La contraseña debe contener al menos una letra minúscula (a-z)",
+            )
 
         # 7. Validar complejidad: al menos 1 número
         if not any(c.isdigit() for c in password):
-            return "La contraseña debe contener al menos un número (0-9)"
+            return "PASSWORD_NO_DIGIT", "La contraseña debe contener al menos un número (0-9)"
 
         # 8. Validar complejidad: al menos 1 carácter especial
         # Caracteres especiales permitidos: !@#$%^&*()_+-=[]{}|;:,.<>?
         special_chars_pattern = r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]"
         if not re.search(special_chars_pattern, password):
-            return "La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)"
+            return (
+                "PASSWORD_NO_SYMBOL",
+                "La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)",
+            )
 
         # 9. Validar contra blacklist de contraseñas comunes (OWASP V2.1.7)
         if is_common_password(password):
-            return "Esta contraseña es demasiado común y fácil de adivinar. Por favor, elige una contraseña más única"
+            return (
+                "PASSWORD_TOO_COMMON",
+                "Esta contraseña es demasiado común y fácil de adivinar. Por favor, elige una contraseña más única",
+            )
 
         # Todas las validaciones pasaron
         return None

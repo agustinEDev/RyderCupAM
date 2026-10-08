@@ -2,6 +2,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
@@ -87,6 +88,8 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
 )
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
+from src.modules.user.domain.value_objects.password import InvalidPasswordError
+from src.modules.user.infrastructure.api.v1.password_errors import password_policy_response
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -179,6 +182,9 @@ async def register_user(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         ) from e
+    except InvalidPasswordError as e:
+        # Con el código de la regla, para traducirlo (BE #519)
+        return password_policy_response(e)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -834,7 +840,7 @@ async def reset_password(
     request: Request,
     reset_data: ResetPasswordRequestDTO,
     use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case),
-) -> ResetPasswordResponseDTO:
+) -> ResetPasswordResponseDTO | JSONResponse:
     """
     Completa el reseteo de contraseña usando el token del email.
 
@@ -869,6 +875,9 @@ async def reset_password(
         # Ejecutar use case (maneja toda la lógica)
         response = await use_case.execute(reset_data)
         return response
+    except InvalidPasswordError as e:
+        # Con el código de la regla, para traducirlo (BE #519)
+        return password_policy_response(e)
     except ValueError as e:
         # Token inválido/expirado o password inválido
         logger.warning(f"Password reset failed: {e!s}")
