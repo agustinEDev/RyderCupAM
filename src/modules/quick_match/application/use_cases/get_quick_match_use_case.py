@@ -170,18 +170,14 @@ class GetQuickMatchUseCase:
         """
         Handicap Index efectivo de cada participante.
 
-        Misma precedencia que el mapper de presentacion: el override manual del
-        creador gana al del perfil, y un invitado solo tiene el manual.
+        La decide el participante (`effective_handicap`), igual que en el mapper
+        de presentación: el fijado al empezar (BE #514) o, en partidas de antes,
+        el manual del invitado, el personalizado o el del perfil.
         """
         handicaps: dict[ParticipantId, Decimal | None] = {}
         for p in quick_match.participants:
-            if p.is_guest:
-                raw = p.handicap
-            elif p.custom_handicap is not None:
-                raw = p.custom_handicap
-            else:
-                user = users_by_id.get(p.user_id)
-                raw = user.handicap.value if user and user.handicap else None
+            user = users_by_id.get(p.user_id) if p.user_id else None
+            raw = p.effective_handicap(user.handicap.value if user and user.handicap else None)
             handicaps[p.participant_id] = None if raw is None else Decimal(str(raw))
         return handicaps
 

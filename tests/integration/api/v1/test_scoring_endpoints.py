@@ -277,6 +277,34 @@ class TestSubmitHoleScore:
         assert b_score["own_submitted"] is False
 
     @pytest.mark.asyncio
+    async def test_marking_yourself_is_a_403_with_its_code_and_saves_nothing(
+        self, client: AsyncClient
+    ):
+        """
+        Given un singles en juego con los marcadores sorteados
+        When el jugador A se pone a sí mismo como marcado
+        Then 403 con `error_code` NOT_YOUR_MARKED_PLAYER en la raíz y su hoyo sin tocar
+
+        BE #520: antes entraba, y su hoyo quedaba validado por él mismo.
+        """
+        ctx = await setup_match_in_progress(client)
+        player_a_id = ctx["player_a"]["user"]["id"]
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 3, "marked_player_id": player_a_id, "marked_score": 3},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error_code"] == "NOT_YOUR_MARKED_PLAYER"
+        view = await client.get(f"/api/v1/competitions/matches/{ctx['match_id']}/scoring-view")
+        hole_1 = next(s for s in view.json()["scores"] if s["hole_number"] == 1)
+        a_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_a_id)
+        assert a_score["own_score"] is None
+        assert a_score["marker_score"] is None
+
+    @pytest.mark.asyncio
     async def test_submit_own_score_only_leaves_the_marked_player_untouched(
         self, client: AsyncClient
     ):

@@ -105,6 +105,16 @@ class TestPasswordValidation:
         with pytest.raises(InvalidPasswordError):  # Falla por longitud (8 chars)
             Password.from_plain_text("password")
 
+    @pytest.mark.parametrize("variante", ["Password123!", "PassWord123!", "pAsSwOrD123!"])
+    def test_common_password_that_meets_the_rest_is_rejected_by_the_blacklist(self, variante):
+        """
+        Given «Password123!» (y sus variantes de mayúsculas), que cumple longitud y complejidad
+        When se crea la contraseña
+        Then la para la lista negra con su motivo: antes se registraba (BE #518)
+        """
+        with pytest.raises(InvalidPasswordError, match="demasiado común"):
+            Password.from_plain_text(variante)
+
     def test_valid_password_formats(self):
         """Debe aceptar diferentes formatos válidos de password (12+ chars, complejidad completa)"""
         valid_passwords = [
