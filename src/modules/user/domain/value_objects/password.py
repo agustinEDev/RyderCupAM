@@ -36,11 +36,12 @@ class InvalidPasswordError(ValueError):
     usuario leía «Error interno del servidor» en vez de qué le falta.
     """
 
-    def __init__(self, message: str, code: str = "PASSWORD_INVALID"):
+    def __init__(self, message: str, error_code: str = "PASSWORD_INVALID"):
         super().__init__(message)
         # Una regla, un código (BE #519): el mensaje va en español, y el cliente
-        # necesita algo estable para enseñarlo en el idioma del usuario
-        self.code = code
+        # necesita algo estable para enseñarlo en el idioma del usuario. Con el
+        # nombre de siempre en el proyecto (`error_code`, como SCORING_NOT_OPEN_YET)
+        self.error_code = error_code
 
 
 @dataclass(frozen=True)
@@ -91,7 +92,7 @@ class Password:
         violation = cls._password_violation(plain_password)
         if violation:
             code, error_message = violation
-            raise InvalidPasswordError(error_message, code=code)
+            raise InvalidPasswordError(error_message, error_code=code)
 
         hashed = cls._hash_password(plain_password)
         return cls(hashed)

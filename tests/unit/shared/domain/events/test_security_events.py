@@ -469,3 +469,15 @@ class TestPasswordResetCompletedAuditEvent:
                 ip_address="unknown",
                 user_agent="unknown",
             )
+
+    def test_a_failed_reset_of_a_known_user_still_needs_the_email(self):
+        """Given un usuario conocido When su reseteo falla sin correo Then se rechaza: la excepción es solo sin usuario."""
+        with pytest.raises(ValueError, match="email"):
+            PasswordResetCompletedAuditEvent(
+                user_id=str(uuid4()),
+                email="",
+                success=False,
+                failure_reason="Password does not meet policy",
+                ip_address="unknown",
+                user_agent="unknown",
+            )

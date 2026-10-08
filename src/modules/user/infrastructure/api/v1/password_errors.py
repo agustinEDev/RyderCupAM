@@ -14,17 +14,9 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 
 
-def password_policy_response(error: InvalidPasswordError) -> JSONResponse:
-    """400 con el motivo y el código de la regla que rompe la contraseña."""
+def coded_bad_request(error: InvalidPasswordError | InvalidResetTokenError) -> JSONResponse:
+    """400 con el motivo y su código: el de la regla de la contraseña o el del token."""
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": str(error), "error_code": error.code},
-    )
-
-
-def reset_token_response(error: InvalidResetTokenError) -> JSONResponse:
-    """400 del token de reseteo inválido, con su código (BE #519): el texto va en español."""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": str(error), "error_code": error.code},
+        content={"detail": str(error), "error_code": error.error_code},
     )

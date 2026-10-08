@@ -365,5 +365,5 @@ class TestPasswordErrorCodes:
         with pytest.raises(InvalidPasswordError) as error:
             Password.from_plain_text(password)
 
-        assert error.value.code == code
+        assert error.value.error_code == code
         assert str(error.value)

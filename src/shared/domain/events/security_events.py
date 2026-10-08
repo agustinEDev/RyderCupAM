@@ -527,10 +527,10 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
         super().__post_init__()
 
         # Validar email. Un intento con un token que no es de nadie no tiene
-        # correo que poner: se audita igual (BE #519). Antes este evento lanzaba
+        # usuario ni correo que poner: se audita igual (BE #519). Antes lanzaba
         # aquí, el intento no quedaba registrado y al usuario le llegaba
         # «email debe ser válido»
-        if self.success and (not self.email or "@" not in self.email):
+        if self.user_id is not None and (not self.email or "@" not in self.email):
             raise ValueError("email debe ser válido")
 
         # Si falló, debe haber una razón (auditoría completa)

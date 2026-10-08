@@ -56,7 +56,7 @@ from src.modules.user.domain.errors.user_errors import (
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.infrastructure.api.v1.password_errors import password_policy_response
+from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -267,7 +267,7 @@ async def update_security(
         ) from e
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)
-        return password_policy_response(e)
+        return coded_bad_request(e)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

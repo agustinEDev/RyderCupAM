@@ -10,7 +10,7 @@ class InvalidResetTokenError(ValueError):
     español («inválido»), y la pantalla buscaba «invalid» y nunca lo encontraba.
     """
 
-    code = "RESET_TOKEN_INVALID"
+    error_code = "RESET_TOKEN_INVALID"
 
     def __init__(self, message: str = "Token de reseteo inválido o expirado"):
         super().__init__(message)

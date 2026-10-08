@@ -229,7 +229,7 @@ class TestResetPasswordInvalidToken:
         # lo que le llegaba al usuario, sin que nadie lo viera
         with pytest.raises(InvalidResetTokenError) as error:
             await use_case.execute(request_dto)
-        assert error.value.code == "RESET_TOKEN_INVALID"
+        assert error.value.error_code == "RESET_TOKEN_INVALID"
 
         # Verificar que NO se envió email
         email_service.send_password_changed_notification.assert_not_called()
