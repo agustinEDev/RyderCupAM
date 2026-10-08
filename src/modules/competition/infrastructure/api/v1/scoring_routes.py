@@ -167,15 +167,12 @@ async def submit_hole_score(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
-    except NotYourMarkedPlayerError:
+    except NotYourMarkedPlayerError as e:
         # Con código propio en la RAÍZ, como SCORING_NOT_OPEN_YET: es un rechazo
         # definitivo (BE #520) y el cliente tiene que poder distinguirlo
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "detail": "Solo puedes apuntar los golpes del jugador que te toca marcar",
-                "error_code": NotYourMarkedPlayerError.error_code,
-            },
+            content={"detail": str(e), "error_code": NotYourMarkedPlayerError.error_code},
         )
     except ScoringNotOpenYetError as e:
         # Con codigo propio y la hora: este rechazo lo arregla ESPERAR, asi que

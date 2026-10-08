@@ -18,6 +18,7 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.domain.entities.hole_score import MAX_HOLE, MIN_HOLE
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -155,7 +156,7 @@ class SubmitHoleScoreUseCase:
         return await view_uc.execute(match_id_str)
 
     @staticmethod
-    def _marked_player(match, user_id: UserId, marked_player_id: str) -> UserId:
+    def _marked_player(match: Match, user_id: UserId, marked_player_id: str) -> UserId:
         """
         El jugador marcado, si es el que le toca marcar a quien anota (BE #520).
 
@@ -174,7 +175,9 @@ class SubmitHoleScoreUseCase:
         if match.find_player(marked) is None:
             raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
         if not match.may_mark(user_id, marked):
-            raise NotYourMarkedPlayerError("No es el jugador que te toca marcar")
+            raise NotYourMarkedPlayerError(
+                "Solo puedes apuntar los golpes del jugador que te toca marcar"
+            )
         return marked
 
     async def _abre_si_toca(self, match, llegada):
