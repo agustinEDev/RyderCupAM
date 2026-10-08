@@ -50,6 +50,11 @@ async def _franja_y_competicion(
     competicion = await uow.competitions.find_by_id_for_update(franja.competition_id)
     if competicion is None:
         raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
+    # Releída con el candado: si a la vez la achicaron, la movieron o la borraron,
+    # cuenta como quedó (code-review de la 3a)
+    franja = await uow.rounds.find_by_id_for_update(round_id)
+    if franja is None:
+        raise RoundNotFoundError(f"No existe la franja {round_id}")
     organiza = is_admin or competicion.is_creator(quien)
     if not organiza and quien != jugador:
         raise NotCompetitionCreatorError("Solo el organizador elige la franja de otro jugador")
@@ -139,5 +144,14 @@ class SoltarPlazaUseCase:
             PlazaEnFranjaError: fuera de plazo
         """
         async with self._uow:
-            await _franja_y_competicion(self._uow, round_id, jugador, quien, is_admin)
+            _, competicion = await _franja_y_competicion(
+                self._uow, round_id, jugador, quien, is_admin
+            )
+            # Tras el cierre nadie se queda sin franja: se le cambia de una a otra,
+            # y para quitarlo del todo se le retira (8 oct 2026)
+            if competicion.status is not CompetitionStatus.ACTIVE:
+                raise PlazaEnFranjaError(
+                    "Con las inscripciones cerradas a un jugador se le cambia de franja, pero no "
+                    "se le deja sin ninguna: para quitarlo, retíralo de la competición."
+                )
             await self._uow.plazas.quitar(round_id, jugador)

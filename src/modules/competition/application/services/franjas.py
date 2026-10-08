@@ -144,8 +144,7 @@ async def comprobar_que_nadie_pierde_su_sitio(
     Raises:
         FranjaInvalidaError: Diciendo por qué
     """
-    plazas = await uow.plazas.de_la_competicion(franja.competition_id)
-    dentro = [p.user_id for p in plazas if p.round_id == franja.id]
+    dentro = [p.user_id for p in await uow.plazas.de_la_franja(franja.id)]
     if not dentro:
         return
     if hoja_nueva is not None and hoja_nueva.cupo < len(dentro):
@@ -155,6 +154,7 @@ async def comprobar_que_nadie_pierde_su_sitio(
         )
     if dia_nuevo is not None and dia_nuevo != franja.round_date:
         sesiones = {s.id: s for s in await uow.rounds.find_by_competition(franja.competition_id)}
+        plazas = await uow.plazas.de_la_competicion(franja.competition_id)
         chocan = {
             p.user_id
             for p in plazas
@@ -174,8 +174,7 @@ async def comprobar_que_esta_vacia(uow: CompetitionUnitOfWorkInterface, franja: 
     Raises:
         FranjaInvalidaError: Si alguien tiene plaza en ella: borrarla le quitaría el sitio
     """
-    plazas = await uow.plazas.de_la_competicion(franja.competition_id)
-    dentro = sum(1 for p in plazas if p.round_id == franja.id)
+    dentro = len(await uow.plazas.de_la_franja(franja.id))
     if dentro:
         raise FranjaInvalidaError(
             f"La franja tiene {dentro} jugadores con plaza: muévelos o quítalos antes de borrarla."

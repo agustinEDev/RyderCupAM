@@ -32,3 +32,6 @@ class InMemoryPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
 
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
         return [p for p in self._plazas if p.competition_id == competition_id]
+
+    async def de_la_franja(self, round_id: RoundId) -> list[PlazaEnFranja]:
+        return [p for p in self._plazas if p.round_id == round_id]

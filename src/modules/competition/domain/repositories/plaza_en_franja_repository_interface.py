@@ -26,3 +26,7 @@ class PlazaEnFranjaRepositoryInterface(ABC):
     @abstractmethod
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
         """Todas las plazas de la competición, por orden de llegada."""
+
+    @abstractmethod
+    async def de_la_franja(self, round_id: RoundId) -> list[PlazaEnFranja]:
+        """Las plazas de una franja, por orden de llegada."""

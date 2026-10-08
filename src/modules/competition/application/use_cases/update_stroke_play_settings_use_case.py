@@ -6,6 +6,7 @@ Medal, hasta que se cierran las inscripciones: ahí se fija el hándicap de cada
 jugador y su categoría (decidido el 7 oct 2026, como hace la RFEG).
 """
 
+from datetime import date
 from uuid import UUID
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -93,7 +94,7 @@ class UpdateStrokePlaySettingsUseCase:
             StrokePlaySettingsError: Si alguien ya juega más jornadas que el nuevo máximo
         """
         sesiones = {s.id: s for s in await self._uow.rounds.find_by_competition(competition_id)}
-        por_jugador: dict = {}
+        por_jugador: dict[UserId, set[date]] = {}
         for plaza in await self._uow.plazas.de_la_competicion(competition_id):
             por_jugador.setdefault(plaza.user_id, set()).add(sesiones[plaza.round_id].round_date)
         mas = max((len(dias) for dias in por_jugador.values()), default=0)

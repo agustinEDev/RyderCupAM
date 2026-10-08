@@ -1919,6 +1919,7 @@ def get_fill_captain_use_case(
 
 def get_start_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> StartCompetitionUseCase:
     """
     Proveedor del caso de uso StartCompetitionUseCase.
@@ -1928,7 +1929,8 @@ def get_start_competition_use_case(
     2. Crea una instancia de `StartCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return StartCompetitionUseCase(uow)
+    # Los usuarios, para nombrar a quien no tenga franja en un stroke play (#251)
+    return StartCompetitionUseCase(uow, user_uow.users)
 
 
 def get_complete_competition_use_case(

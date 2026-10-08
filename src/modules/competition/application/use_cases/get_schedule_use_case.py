@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
@@ -245,7 +246,7 @@ class GetScheduleUseCase:
             await self._sobres.revelar_si_toca(ronda, competition, sobres)
 
 
-def _hoja(hoja: HojaDeSalidas | None, jugadores: list) -> TeeSheetResponseDTO | None:
+def _hoja(hoja: HojaDeSalidas | None, jugadores: list[UUID]) -> TeeSheetResponseDTO | None:
     """La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251)."""
     if hoja is None:
         return None

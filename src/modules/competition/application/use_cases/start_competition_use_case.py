@@ -16,12 +16,16 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
+from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -45,14 +49,20 @@ class StartCompetitionUseCase:
     5. Commit de la transacción
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface | None = None,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            user_repository: Para nombrar a quien no tenga franja en un stroke play
         """
         self._uow = uow
+        self._users = user_repository
 
     async def execute(
         self, request: StartCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -97,6 +107,11 @@ class StartCompetitionUseCase:
                 raise CompetitionStateError(
                     "Añade al menos una sesión antes de iniciar la competición"
                 )
+
+            # 3b. En un stroke play, cada aprobado con su franja, como al cerrar:
+            #     tras el cierre se puede mover a la gente (#251)
+            if competition.stroke_play is not None and self._users is not None:
+                await FranjasAlCerrar(self._uow, self._users).comprobar(competition)
 
             # 4. Iniciar la competición (la entidad valida la transición). El
             #    hándicap de cada uno ya quedó fijado al cerrar las inscripciones

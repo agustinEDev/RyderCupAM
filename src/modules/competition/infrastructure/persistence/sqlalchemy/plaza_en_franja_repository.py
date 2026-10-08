@@ -49,11 +49,15 @@ class SQLAlchemyPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
         )
 
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
+        return await self._donde(tee_window_places_table.c.competition_id == competition_id)
+
+    async def de_la_franja(self, round_id: RoundId) -> list[PlazaEnFranja]:
+        return await self._donde(tee_window_places_table.c.round_id == round_id)
+
+    async def _donde(self, condicion) -> list[PlazaEnFranja]:
         tabla = tee_window_places_table
         result = await self._session.execute(
-            select(tabla)
-            .where(tabla.c.competition_id == competition_id)
-            .order_by(tabla.c.created_at, tabla.c.id)
+            select(tabla).where(condicion).order_by(tabla.c.created_at, tabla.c.id)
         )
         return [
             PlazaEnFranja(

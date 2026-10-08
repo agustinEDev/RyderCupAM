@@ -452,3 +452,120 @@ class TestNadiePierdeSuSitio:
                 StrokePlaySettingsDTO(max_matchdays_per_player=1),
                 e.creador,
             )
+
+
+class TestLoQueEncontroCodeReview:
+    async def test_relee_la_franja_con_el_candado_puesto(self, e):
+        """
+        Primero bloquea la competición y luego relee la franja bloqueada: si a la
+        vez la achican o la mueven, cuenta la de después (code-review de la 3a).
+        """
+        await e.torneo()
+        jugador = await e.aprobado()
+        orden = []
+        bloquear = e.uow.competitions.find_by_id_for_update
+        releer = e.uow.rounds.find_by_id_for_update
+
+        async def bloquea(competition_id):
+            orden.append("competición")
+            return await bloquear(competition_id)
+
+        async def relee(round_id):
+            orden.append("franja")
+            return await releer(round_id)
+
+        e.uow.competitions.find_by_id_for_update = bloquea
+        e.uow.rounds.find_by_id_for_update = relee
+
+        await e.coger(e.manana, jugador)
+
+        assert orden == ["competición", "franja"]
+
+    async def test_tras_el_cierre_no_se_deja_a_nadie_sin_franja(self, e):
+        await e.torneo()
+        jugador = await e.aprobado()
+        await e.coger(e.manana, jugador)
+        e.competicion._status = CompetitionStatus.CLOSED
+        async with e.uow:
+            await e.uow.competitions.update(e.competicion)
+
+        with pytest.raises(PlazaEnFranjaError, match="cambia"):
+            await e.soltar(e.manana, jugador, quien=e.creador)
+
+    async def test_tras_el_cierre_si_se_le_cambia(self, e):
+        await e.torneo(status=CompetitionStatus.CLOSED)
+        jugador = await e.aprobado()
+        await e.coger(e.manana, jugador, quien=e.creador)
+
+        await e.coger(e.tarde, jugador, quien=e.creador, en_lugar_de=e.manana.id)
+
+        assert await e.plazas() == {(e.tarde.id, jugador)}
+
+    async def test_iniciar_tambien_exige_franja_para_todos(self, e):
+        from src.modules.competition.application.dto.competition_dto import (
+            StartCompetitionRequestDTO,
+        )
+        from src.modules.competition.application.services.franjas_al_cerrar import (
+            PlayersWithoutTeeWindowError,
+        )
+        from src.modules.competition.application.use_cases.start_competition_use_case import (
+            StartCompetitionUseCase,
+        )
+        from tests.unit.modules.competition.application.use_cases.helpers import (
+            USUARIOS_CON_GENERO,
+        )
+
+        await e.torneo(status=CompetitionStatus.CLOSED)
+        await e.aprobado()
+
+        with pytest.raises(PlayersWithoutTeeWindowError):
+            await StartCompetitionUseCase(e.uow, USUARIOS_CON_GENERO).execute(
+                StartCompetitionRequestDTO(competition_id=e.competicion.id.value), e.creador
+            )
+
+    async def test_retirarse_en_juego_no_borra_sus_plazas(self, e):
+        await e.torneo()
+        jugador = await e.aprobado()
+        await e.coger(e.manana, jugador)
+        e.competicion._status = CompetitionStatus.IN_PROGRESS
+        async with e.uow:
+            await e.uow.competitions.update(e.competicion)
+        (inscripcion,) = [
+            i
+            for i in await e.uow.enrollments.find_by_competition(e.competicion.id)
+            if i.user_id == jugador
+        ]
+
+        await WithdrawEnrollmentUseCase(e.uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), jugador
+        )
+
+        assert await e.plazas() == {(e.manana.id, jugador)}
+
+    async def test_borrarla_con_gente_no_toca_antes_sus_partidos(self, e):
+        """Se comprueba antes de borrar nada (code-review de la 3a)."""
+        from src.modules.competition.application.dto.round_match_dto import DeleteRoundRequestDTO
+        from src.modules.competition.application.exceptions import FranjaInvalidaError
+        from src.modules.competition.application.use_cases.delete_round_use_case import (
+            DeleteRoundUseCase,
+        )
+        from src.modules.competition.domain.entities.match import Match
+        from tests.unit.modules.competition.application.use_cases.helpers import _jugador
+
+        await e.torneo()
+        await e.coger(e.manana, await e.aprobado())
+        partido = Match.create(
+            round_id=e.manana.id,
+            match_number=1,
+            team_a_players=[_jugador()],
+            team_b_players=[_jugador()],
+        )
+        async with e.uow:
+            await e.uow.matches.add(partido)
+
+        with pytest.raises(FranjaInvalidaError):
+            await DeleteRoundUseCase(e.uow).execute(
+                DeleteRoundRequestDTO(round_id=e.manana.id.value), e.creador
+            )
+
+        assert await e.uow.matches.find_by_round(e.manana.id) != []
