@@ -167,7 +167,7 @@ class TestORMProtection:
         # Intentar crear usuario con caracteres especiales SQL
         register_data = {
             "email": "test';--@example.com",  # Email inválido
-            "password": "Password123!",
+            "password": "Segura-Prueba123!",  # válida: que solo falle el correo
             "first_name": "Test",
             "last_name": "User",
         }
