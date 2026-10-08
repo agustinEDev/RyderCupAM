@@ -60,10 +60,17 @@ class StartQuickMatchUseCase:
         )
 
     async def _profile_handicaps(self, quick_match) -> dict[UserId, float | None]:
-        """Hándicap del perfil de cada participante registrado, en una sola consulta."""
+        """
+        Hándicap del perfil de cada participante registrado, en una sola consulta.
+
+        Sin `async with self._user_uow`: comparte la sesión de la petición y su
+        salida hace commit, que partía «empezar» en dos —la partida quedaba en
+        juego y sin fijar, y soltaba el bloqueo de su fila— (revisión de la BE
+        #514; es el patrón de la BE #497). Se lee dentro de la transacción de la
+        partida, sin cerrarla.
+        """
         user_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
-        async with self._user_uow:
-            users = await self._user_uow.users.find_by_ids(user_ids)
+        users = await self._user_uow.users.find_by_ids(user_ids)
         return {
             user.id: (float(user.handicap.value) if user.handicap else None)
             for user in users

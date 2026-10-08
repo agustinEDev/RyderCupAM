@@ -29,6 +29,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from tests.unit.modules.quick_match.conftest import create_user
 
 pytestmark = pytest.mark.asyncio
@@ -130,6 +131,61 @@ class TestStartFreezesHandicaps:
         por_usuario = {p.user_id: p for p in guardada.participants}
         assert por_usuario[creator.id].effective_handicap(profile_handicap=5.0) == 18.5
         assert por_usuario[rival.id].effective_handicap(profile_handicap=5.0) == 20.1
+
+    async def test_personalizado_invitado_y_sin_handicap_tambien_quedan_fijados(
+        self, qm_uow, user_uow
+    ):
+        creator = await create_user(user_uow, "freeze-c2@test.com", handicap=18.5)
+        sin_handicap = await create_user(user_uow, "freeze-none@test.com", handicap=None)
+        personalizado = await create_user(user_uow, "freeze-custom@test.com", handicap=30.0)
+        qm = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=creator.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=None,
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+        invitado = QuickMatchParticipant.for_guest(
+            first_name="Inv", last_name="Itado", handicap=12.3
+        )
+        for p in (
+            QuickMatchParticipant.for_user(sin_handicap.id),
+            QuickMatchParticipant.for_user(personalizado.id),
+            invitado,
+        ):
+            qm.add_participant(p)
+        qm.set_participant_handicap(
+            QuickMatchParticipant.for_user(personalizado.id).participant_id, 9.0
+        )
+        async with qm_uow:
+            await qm_uow.quick_matches.add(qm)
+
+        await StartQuickMatchUseCase(qm_uow, user_uow).execute(
+            StartQuickMatchRequestDTO(
+                quick_match_id=qm.id.value,
+                requester_id=creator.id.value,
+                scorer_ids=[creator.id.value],
+            )
+        )
+
+        async with qm_uow:
+            guardada = await qm_uow.quick_matches.find_by_id(qm.id)
+        por_id = {p.participant_id: p for p in guardada.participants}
+        assert all(p.handicap_frozen for p in guardada.participants)
+        # Con 40 en el perfil «de hoy» para todos: manda lo fijado
+        assert (
+            por_id[
+                QuickMatchParticipant.for_user(sin_handicap.id).participant_id
+            ].effective_handicap(40.0)
+            is None
+        )
+        assert (
+            por_id[
+                QuickMatchParticipant.for_user(personalizado.id).participant_id
+            ].effective_handicap(40.0)
+            == 9.0
+        )
+        assert por_id[invitado.participant_id].effective_handicap(None) == 12.3
 
 
 class TestCompleteQuickMatchUseCase:

@@ -159,7 +159,7 @@ async def played_quick_match(
     name: str | None = None,
     play_mode: PlayMode = PlayMode.HANDICAP,
     creator_custom_handicap: float | None = None,
-    frozen_creator_handicap: float | None = None,
+    frozen_handicaps: dict | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -191,8 +191,8 @@ async def played_quick_match(
 
     participant_ids = [p.participant_id for p in match.participants]
     match.start(scorer_ids=[participant_ids[0]])
-    if frozen_creator_handicap is not None:
-        match.freeze_handicaps({creator.id: frozen_creator_handicap})
+    if frozen_handicaps is not None:
+        match.freeze_handicaps(frozen_handicaps)
     match.complete()
 
     async with qm_uow:
@@ -1385,7 +1385,7 @@ class TestHandicapFijadoAlEmpezar:
             strokes_per_hole=5,
             creator_tee_color=TeeColor.WHITE,
             creator_tee_gender=Gender.MALE,
-            frozen_creator_handicap=18.0,
+            frozen_handicaps={user.id: 18.0},
         )
 
         entry = (
@@ -1393,6 +1393,34 @@ class TestHandicapFijadoAlEmpezar:
         ).matches[0]
 
         assert entry.stableford_points == 39
+
+    async def test_el_resultado_del_match_play_tambien_usa_lo_fijado(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Singles a la par en golpes brutos. Fijados 5 y 20, el rival recibe la
+        diferencia y gana el partido, aunque hoy los dos perfiles digan 5: con
+        el de hoy salía empatado.
+        """
+        player = await create_user(user_uow, "Bajo", handicap=5.0)
+        rival = await create_user(user_uow, "Alto", handicap=5.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            player,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(rival.id)],
+            strokes_per_hole=5,
+            frozen_handicaps={player.id: 5.0, rival.id: 20.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.result == "LOST"
 
 
 @pytest.mark.asyncio
