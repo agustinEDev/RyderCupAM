@@ -1,6 +1,7 @@
 """Repositorio: las plazas de los jugadores en las franjas de stroke play (#251)."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -30,3 +31,11 @@ class PlazaEnFranjaRepositoryInterface(ABC):
     @abstractmethod
     async def de_la_franja(self, round_id: RoundId) -> list[PlazaEnFranja]:
         """Las plazas de una franja, por orden de llegada."""
+
+    @abstractmethod
+    async def asignadas_sin_ver(self, user_id: UserId) -> list[PlazaEnFranja]:
+        """Las plazas que le asignó la lista de espera y aún no ha visto."""
+
+    @abstractmethod
+    async def marcar_vista(self, round_id: RoundId, user_id: UserId, momento: datetime) -> None:
+        """Ya la vio («Entendido»)."""

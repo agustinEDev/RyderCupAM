@@ -19,6 +19,9 @@ from src.modules.competition.domain.repositories.enrollment_repository_interface
 from src.modules.competition.domain.repositories.envelope_repository_interface import (
     EnvelopeRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.espera_en_franja_repository_interface import (
+    EsperaEnFranjaRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.handicap_update_repository_interface import (
     HandicapUpdateRepositoryInterface,
 )
@@ -51,6 +54,7 @@ from .in_memory_competition_repository import InMemoryCompetitionRepository
 from .in_memory_draft_repository import InMemoryDraftRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
 from .in_memory_envelope_repository import InMemoryEnvelopeRepository
+from .in_memory_espera_en_franja_repository import InMemoryEsperaEnFranjaRepository
 from .in_memory_handicap_update_repository import InMemoryHandicapUpdateRepository
 from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
@@ -76,6 +80,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._hole_scores = InMemoryHoleScoreRepository()
         self._handicap_updates = InMemoryHandicapUpdateRepository()
         self._plazas = InMemoryPlazaEnFranjaRepository()
+        self._esperas = InMemoryEsperaEnFranjaRepository()
         self.committed = False
 
     @property
@@ -97,6 +102,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def plazas(self) -> PlazaEnFranjaRepositoryInterface:
         return self._plazas
+
+    @property
+    def esperas(self) -> EsperaEnFranjaRepositoryInterface:
+        return self._esperas
 
     @property
     def rounds(self) -> RoundRepositoryInterface:

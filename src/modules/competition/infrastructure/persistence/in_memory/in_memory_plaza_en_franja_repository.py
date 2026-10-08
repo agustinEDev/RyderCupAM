@@ -1,5 +1,8 @@
 """Las plazas en franjas, en memoria (tests)."""
 
+from dataclasses import replace
+from datetime import datetime
+
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.repositories.plaza_en_franja_repository_interface import (
     PlazaEnFranjaRepositoryInterface,
@@ -35,3 +38,16 @@ class InMemoryPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
 
     async def de_la_franja(self, round_id: RoundId) -> list[PlazaEnFranja]:
         return [p for p in self._plazas if p.round_id == round_id]
+
+    async def asignadas_sin_ver(self, user_id: UserId) -> list[PlazaEnFranja]:
+        return [
+            p
+            for p in self._plazas
+            if p.user_id == user_id and p.desde_espera is not None and p.vista is None
+        ]
+
+    async def marcar_vista(self, round_id: RoundId, user_id: UserId, momento: datetime) -> None:
+        self._plazas = [
+            replace(p, vista=momento) if p.round_id == round_id and p.user_id == user_id else p
+            for p in self._plazas
+        ]

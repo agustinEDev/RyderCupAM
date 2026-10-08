@@ -90,6 +90,9 @@ class TeeSheetResponseDTO(TeeSheetDTO):
     player_ids: list[UUID] = Field(
         default_factory=list, description="Quién tiene plaza, por orden de llegada (#251)."
     )
+    waiting_ids: list[UUID] = Field(
+        default_factory=list, description="La lista de espera, por orden de llegada (#251)."
+    )
 
 
 class RoundResponseDTO(BaseModel):
@@ -715,3 +718,15 @@ class TeeWindowPlaceResponseDTO(BaseModel):
 
     round_id: UUID
     user_id: UUID
+
+
+class AssignedPlaceDTO(BaseModel):
+    """Una plaza que te asignó la lista de espera y aún no has visto (#251)."""
+
+    competition_id: UUID
+    competition_name: str
+    round_id: UUID
+    round_date: date
+    session_type: str
+    first_tee_time: time
+    assigned_at: datetime

@@ -126,3 +126,42 @@ async def test_borrar_una_franja_con_gente_dentro_es_un_400(client: AsyncClient)
 
     assert respuesta.status_code == 400, respuesta.text
     assert "plaza" in respuesta.json()["detail"]
+
+
+async def test_la_lista_de_espera_de_punta_a_punta(client: AsyncClient):
+    """Llena, alguien espera, se libera una plaza: se le asigna y lo ve hasta «Entendido»."""
+    organizador, competicion, franja = await _stableford_con_franja(client)
+    set_auth_cookies(client, organizador["cookies"])
+    una_salida_de_3 = {
+        "first_tee_time": "09:00",
+        "last_tee_time": "09:00",
+        "interval_minutes": 10,
+        "group_size": 3,
+    }
+    cambio = await client.put(
+        f"/api/v1/competitions/rounds/{franja}", json={"tee_sheet": una_salida_de_3}
+    )
+    assert cambio.status_code == 200, cambio.text
+    dentro = [await _jugador_aprobado(client, organizador, competicion) for _ in range(3)]
+    for jugador in dentro:
+        set_auth_cookies(client, jugador["cookies"])
+        assert (
+            await client.post(f"/api/v1/competitions/rounds/{franja}/places", json={})
+        ).status_code == 201
+    espera = await _jugador_aprobado(client, organizador, competicion)
+    set_auth_cookies(client, espera["cookies"])
+
+    apuntado = await client.post(f"/api/v1/competitions/rounds/{franja}/waiting-list")
+    calendario = (await client.get(f"/api/v1/competitions/{competicion['id']}/schedule")).json()
+    set_auth_cookies(client, dentro[0]["cookies"])
+    await client.delete(f"/api/v1/competitions/rounds/{franja}/places/{dentro[0]['user']['id']}")
+    set_auth_cookies(client, espera["cookies"])
+    asignadas = (await client.get("/api/v1/competitions/me/assigned-places")).json()
+    entendido = await client.post(f"/api/v1/competitions/me/assigned-places/{franja}/acknowledge")
+    despues = (await client.get("/api/v1/competitions/me/assigned-places")).json()
+
+    assert apuntado.status_code == 201, apuntado.text
+    assert calendario["days"][0]["rounds"][0]["tee_sheet"]["waiting_ids"] == [espera["user"]["id"]]
+    assert [a["round_id"] for a in asignadas] == [franja]
+    assert entendido.status_code == 204, entendido.text
+    assert despues == []

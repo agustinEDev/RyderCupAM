@@ -140,6 +140,10 @@ class CloseEnrollmentsUseCase:
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
+            # 5b. Las listas de espera solo funcionan con las inscripciones abiertas (#251)
+            if desde_abierta:
+                await self._uow.esperas.vaciar(competition.id)
+
             # 6. Las invitaciones pendientes se quedan sin plaza (#710)
             await sin_plaza_para_las_pendientes(self._uow, competition_id)
 

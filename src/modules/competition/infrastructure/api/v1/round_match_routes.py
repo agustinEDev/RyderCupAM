@@ -18,10 +18,14 @@ from src.config.dependencies import (
     get_create_round_use_case,
     get_current_user,
     get_declare_walkover_use_case,
+    get_dejar_de_esperar_use_case,
     get_delete_round_use_case,
+    get_entendido_use_case,
+    get_esperar_use_case,
     get_generate_matches_use_case,
     get_get_match_detail_use_case,
     get_get_schedule_use_case,
+    get_mis_plazas_asignadas_use_case,
     get_reassign_match_players_use_case,
     get_soltar_plaza_use_case,
     get_update_match_status_use_case,
@@ -30,6 +34,7 @@ from src.config.dependencies import (
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
+    AssignedPlaceDTO,
     AssignTeamsBodyDTO,
     AssignTeamsRequestDTO,
     AssignTeamsResponseDTO,
@@ -136,6 +141,12 @@ from src.modules.competition.application.use_cases.get_match_detail_use_case imp
 from src.modules.competition.application.use_cases.get_schedule_use_case import (
     CompetitionNotFoundError as GetScheduleNotFoundError,
     GetScheduleUseCase,
+)
+from src.modules.competition.application.use_cases.listas_de_espera_use_case import (
+    DejarDeEsperarUseCase,
+    EntendidoUseCase,
+    EsperarUseCase,
+    MisPlazasAsignadasUseCase,
 )
 from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
     CogerPlazaUseCase,
@@ -947,3 +958,97 @@ async def leave_tee_window_place(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except PlazaEnFranjaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+# ======================================================================================
+# LISTAS DE ESPERA (#251)
+# ======================================================================================
+
+
+@router.post(
+    "/rounds/{round_id}/waiting-list",
+    status_code=status.HTTP_201_CREATED,
+    summary="Apuntarse a la lista de espera de una franja",
+    description=(
+        "Stableford o Medal, mientras las inscripciones están abiertas: en una franja llena, "
+        "de un día en que no se juega. La plaza que se libere se asigna sola al primero."
+    ),
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def join_waiting_list(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: EsperarUseCase = Depends(get_esperar_use_case),
+):
+    """201; 400 con el motivo si no se puede."""
+    yo = UserId(str(current_user.id))
+    try:
+        await use_case.execute(RoundId(round_id), yo, yo)
+    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except PlazaEnFranjaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return {"round_id": str(round_id), "user_id": str(yo.value)}
+
+
+@router.delete(
+    "/rounds/{round_id}/waiting-list/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Salir de la lista de espera de una franja",
+    description="El propio jugador, o el organizador.",
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def leave_waiting_list(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: DejarDeEsperarUseCase = Depends(get_dejar_de_esperar_use_case),
+):
+    """204 aunque no estuviera."""
+    try:
+        await use_case.execute(
+            RoundId(round_id),
+            UserId(str(user_id)),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except StatusNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+
+
+@router.get(
+    "/me/assigned-places",
+    response_model=list[AssignedPlaceDTO],
+    summary="Plazas que me asignó la lista de espera",
+    description="Para «Requiere tu atención»: las que aún no he visto («Entendido»).",
+    tags=["Competitions - Rounds"],
+)
+async def my_assigned_places(
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: MisPlazasAsignadasUseCase = Depends(get_mis_plazas_asignadas_use_case),
+):
+    """Las más antiguas primero."""
+    return await use_case.execute(UserId(str(current_user.id)))
+
+
+@router.post(
+    "/me/assigned-places/{round_id}/acknowledge",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Entendido: ya he visto la plaza que me asignó la lista",
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def acknowledge_assigned_place(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: EntendidoUseCase = Depends(get_entendido_use_case),
+):
+    """204; solo marca la suya."""
+    await use_case.execute(RoundId(round_id), UserId(str(current_user.id)))

@@ -4,11 +4,16 @@ Caso de Uso: Retirar Inscripción (Withdraw Enrollment).
 Permite a un jugador aprobado retirarse de una competición.
 """
 
+from datetime import UTC, datetime
+
 from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import EnrollmentNotFoundError
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -91,9 +96,19 @@ class WithdrawEnrollmentUseCase:
             # Y suelta sus plazas en las franjas de un stroke play, si aún no se
             # juega: empezada, son las del historial de lo jugado (#251)
             if competition is not None and competition.status.allows_tee_window_edits():
+                suyas = [
+                    p.round_id
+                    for p in await self._uow.plazas.de_la_competicion(enrollment.competition_id)
+                    if p.user_id == enrollment.user_id
+                ]
                 await self._uow.plazas.quitar_del_jugador(
                     enrollment.competition_id, enrollment.user_id
                 )
+                # Fuera de las listas, y sus plazas para los que esperan
+                esperas = EsperasDeLaCompeticion(self._uow)
+                await esperas.sacar_de_todas(competition, enrollment.user_id)
+                for round_id in suyas:
+                    await esperas.rellenar(competition, round_id, datetime.now(UTC))
 
             #    Si era capitan, su puesto queda libre
             if competition and competition.handle_withdrawal(enrollment.user_id):

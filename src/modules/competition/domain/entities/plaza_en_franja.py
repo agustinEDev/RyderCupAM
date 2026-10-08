@@ -19,9 +19,25 @@ class PlazaEnFranja:
     round_id: RoundId
     user_id: UserId
     creada: datetime
+    # Si se la asignó la lista de espera, y si ya lo vio en «Requiere tu atención»
+    desde_espera: datetime | None = None
+    vista: datetime | None = None
 
     @classmethod
     def crear(
-        cls, competition_id: CompetitionId, round_id: RoundId, user_id: UserId, momento: datetime
+        cls,
+        competition_id: CompetitionId,
+        round_id: RoundId,
+        user_id: UserId,
+        momento: datetime,
+        desde_espera: bool = False,
     ) -> "PlazaEnFranja":
-        return cls(uuid.uuid4(), competition_id, round_id, user_id, momento)
+        """Una plaza nueva; marcada si viene de la lista de espera (para avisar)."""
+        return cls(
+            uuid.uuid4(),
+            competition_id,
+            round_id,
+            user_id,
+            momento,
+            desde_espera=momento if desde_espera else None,
+        )
