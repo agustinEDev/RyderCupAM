@@ -850,6 +850,7 @@ class TestQuickMatchFreezeHandicaps:
     """
 
     def _empezada(self):
+        """Partida libre empezada con un registrado, uno con personalizado y un invitado."""
         qm = _make_free_play_quick_match()
         registrado = _registered()
         con_personalizado = _registered()
@@ -863,6 +864,7 @@ class TestQuickMatchFreezeHandicaps:
         return qm, registrado, con_personalizado, invitado
 
     def test_cada_uno_juega_con_el_indice_que_tenia_al_empezar(self):
+        """Given fijados When cambia el perfil Then manda lo fijado."""
         qm, registrado, con_personalizado, invitado = self._empezada()
 
         qm.freeze_handicaps(
@@ -880,6 +882,7 @@ class TestQuickMatchFreezeHandicaps:
         assert por_id[invitado.participant_id].effective_handicap(profile_handicap=None) == 12.3
 
     def test_quien_empezo_sin_handicap_sigue_sin_el_aunque_luego_lo_tenga(self):
+        """Given empezó sin hándicap When luego lo tiene Then esa partida sigue sin él."""
         qm, registrado, _, _ = self._empezada()
 
         qm.freeze_handicaps({qm.creator_id: 18.5, registrado.user_id: None})
@@ -897,6 +900,7 @@ class TestQuickMatchFreezeHandicaps:
         assert participante.effective_handicap(profile_handicap=15.0) == 15.0
 
     def test_solo_se_fija_una_vez(self):
+        """Given ya fijada When se fija otra vez Then se rechaza."""
         qm, registrado, _, _ = self._empezada()
         qm.freeze_handicaps({qm.creator_id: 18.5, registrado.user_id: 20.1})
 
@@ -904,6 +908,7 @@ class TestQuickMatchFreezeHandicaps:
             qm.freeze_handicaps({qm.creator_id: 1.0, registrado.user_id: 1.0})
 
     def test_no_se_fija_antes_de_empezar(self):
+        """Given sin empezar When se fija Then se rechaza."""
         qm = _make_free_play_quick_match()
 
         with pytest.raises(InvalidQuickMatchStatusViolation):

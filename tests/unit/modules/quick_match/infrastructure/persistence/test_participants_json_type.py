@@ -14,10 +14,12 @@ TIPO = QuickMatchParticipantsJsonType()
 
 
 def _ida_y_vuelta(participante):
+    """Guarda y vuelve a leer un participante por el JSONB."""
     return TIPO.process_result_value(TIPO.process_bind_param([participante], None), None)[0]
 
 
 def test_el_indice_fijado_sobrevive_al_guardado():
+    """Given fijado a 18,5 When se guarda y se lee Then sigue fijado a 18,5."""
     fijado = QuickMatchParticipant.for_user(UserId(uuid4())).frozen_with(18.5)
 
     leido = _ida_y_vuelta(fijado)
@@ -27,6 +29,7 @@ def test_el_indice_fijado_sobrevive_al_guardado():
 
 
 def test_empezar_sin_handicap_tambien_queda_fijado():
+    """Given fijado sin hándicap When se guarda y se lee Then sigue fijado, sin hándicap."""
     fijado = QuickMatchParticipant.for_user(UserId(uuid4())).frozen_with(None)
 
     leido = _ida_y_vuelta(fijado)

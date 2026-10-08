@@ -56,6 +56,7 @@ class QuickMatchParticipant:
     handicap_frozen: bool = False
 
     def __post_init__(self):
+        """Valida equipo, variante (registrado o invitado), rangos de hándicap y barra."""
         if self.team is not None and self.team not in VALID_TEAMS:
             raise ValueError(f"team debe ser 'A', 'B' o None, recibido: {self.team!r}")
 

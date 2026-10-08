@@ -231,6 +231,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
     cache_ok = True
 
     def process_bind_param(self, value: list | None, dialect: Any) -> list | None:
+        """Participantes a JSONB, con el índice fijado al empezar."""
         if value is None:
             return None
         return [
@@ -251,6 +252,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
         ]
 
     def process_result_value(self, value: list | None, dialect: Any) -> list | None:
+        """JSONB a participantes; sin las claves del fijado, la partida es de antes y no está fijada."""
         if value is None:
             return None
         participants = []

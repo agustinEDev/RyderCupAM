@@ -106,6 +106,7 @@ class TestStartFreezesHandicaps:
     """BE #514: al empezar se fija el índice de cada uno, y un cambio del perfil ya no lo mueve."""
 
     async def test_cada_registrado_juega_con_el_de_su_perfil_al_empezar(self, qm_uow, user_uow):
+        """Given dos registrados When empieza Then cada uno queda con el índice de su perfil de ese momento."""
         creator = await create_user(user_uow, "freeze-creator@test.com", handicap=18.5)
         rival = await create_user(user_uow, "freeze-rival@test.com", handicap=20.1)
         qm = QuickMatch.create(
@@ -135,6 +136,7 @@ class TestStartFreezesHandicaps:
     async def test_personalizado_invitado_y_sin_handicap_tambien_quedan_fijados(
         self, qm_uow, user_uow
     ):
+        """Given personalizado, invitado y sin hándicap When empieza Then los tres quedan fijados."""
         creator = await create_user(user_uow, "freeze-c2@test.com", handicap=18.5)
         sin_handicap = await create_user(user_uow, "freeze-none@test.com", handicap=None)
         personalizado = await create_user(user_uow, "freeze-custom@test.com", handicap=30.0)

@@ -35,6 +35,7 @@ class StartQuickMatchUseCase:
         self._user_uow = user_uow
 
     async def execute(self, request: StartQuickMatchRequestDTO) -> QuickMatchResponseDTO:
+        """Empieza la partida y fija el índice con el que juega cada uno (BE #514)."""
         requester_id = UserId(request.requester_id)
         scorer_ids = [ParticipantId(sid) for sid in request.scorer_ids]
 
