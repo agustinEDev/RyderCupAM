@@ -15,6 +15,7 @@ from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
@@ -64,8 +65,11 @@ class ReassignMatchPlayersUseCase:
         golf_course_repository: IGolfCourseRepository,
         user_repository: UserRepositoryInterface,
         handicap_calculator: PlayingHandicapCalculator | None = None,
+        scoring_service: ScoringService | None = None,
     ):
+        """Recibe el reparto de golpes del partido y el sorteo de marcadores (BE #520)."""
         self._uow = uow
+        self._scoring_service = scoring_service or ScoringService()
         self._jugadores = JugadoresDelPartido(
             golf_course_repository, user_repository, handicap_calculator
         )
@@ -73,6 +77,7 @@ class ReassignMatchPlayersUseCase:
     async def execute(
         self, request: ReassignMatchPlayersRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> ReassignMatchPlayersResponseDTO:
+        """Sustituye los jugadores de un partido programado por uno nuevo, con su reparto y sus marcadores."""
         async with self._uow:
             # 1-4. Validaciones
             match, round_entity, competition = await self._validate(request, user_id, is_admin)
@@ -121,6 +126,15 @@ class ReassignMatchPlayersUseCase:
                 match_number=match.match_number,
                 team_a_players=team_a_players,
                 team_b_players=team_b_players,
+            )
+            # Con sus marcadores sorteados, como al generar (BE #520): sin ellos
+            # la app no lo puede anotar y solo marca el que tiene asignado
+            new_match.set_marker_assignments(
+                self._scoring_service.generate_marker_assignments(
+                    new_match.team_a_players,
+                    new_match.team_b_players,
+                    round_entity.match_format,
+                )
             )
             await self._uow.matches.add(new_match)
 
