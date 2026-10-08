@@ -700,6 +700,29 @@ class QuickMatch:
 
         self.add_domain_event(QuickMatchStartedEvent(quick_match_id=str(self._id)))
 
+    def freeze_handicaps(self, profile_handicaps: dict[UserId, float | None]) -> None:
+        """
+        Fija el índice con el que juega cada participante (BE #514).
+
+        Se llama al empezar la partida, con el hándicap que tiene cada registrado
+        en su perfil en ese momento. Desde entonces los golpes, los puntos y la
+        vuelta propia salen de lo fijado: si no, un cambio del perfil (la
+        actualización de la RFEG) recalculaba todas sus partidas ya jugadas.
+        Una sola vez y solo en juego.
+        """
+        if self._status != QuickMatchStatus.IN_PROGRESS:
+            raise InvalidQuickMatchStatusViolation(
+                f"Cannot freeze handicaps in status {self._status.value}."
+            )
+        if any(p.handicap_frozen for p in self._participants):
+            raise InvalidQuickMatchStatusViolation("Handicaps are already frozen.")
+
+        self._participants = [
+            p.frozen_with(profile_handicaps.get(p.user_id) if p.user_id else None)
+            for p in self._participants
+        ]
+        self._updated_at = datetime.now()
+
     def _validate_scorer_ids(self, scorer_ids: list[ParticipantId]) -> None:
         if not (1 <= len(scorer_ids) <= MAX_SCORERS):
             raise InvalidScorerConfigurationViolation(

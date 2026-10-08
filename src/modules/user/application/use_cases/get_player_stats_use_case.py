@@ -336,7 +336,7 @@ class GetPlayerStatsUseCase:
                 #   efectivo, scratch o no: ahí el hándicap solo sirve para el
                 #   tope de doble bogey neto del Adjusted Gross Score, que es
                 #   parte de la fórmula WHS y no depende de cómo se jugara.
-                effective_handicap = self._effective_handicap(participant, profile_handicap)
+                effective_handicap = participant.effective_handicap(profile_handicap)
                 # Ya lleva dentro la barra y el 100 %: por eso al calculador no
                 # se le pasa ni barra ni allowance
                 playing_handicap = own_playing_handicap(
@@ -704,20 +704,6 @@ class GetPlayerStatsUseCase:
     def _find_match_player(match, user_id: UserId):
         """El jugador dentro del partido, mire en el equipo que mire."""
         return match.find_player(user_id)
-
-    @staticmethod
-    def _effective_handicap(participant, profile_handicap: float | None) -> float | None:
-        """
-        Hándicap con el que jugó, por orden: el override manual que puso el
-        creador, y si no el del perfil.
-
-        Un participante registrado lleva `handicap` a None a propósito: el suyo
-        vive en su perfil, no copiado en la partida. Solo los invitados, que no
-        tienen cuenta, lo traen dentro.
-        """
-        if participant.custom_handicap is not None:
-            return participant.custom_handicap
-        return profile_handicap
 
     @staticmethod
     def _match_player_handicap(player, profile_handicap: float | None) -> float | None:
