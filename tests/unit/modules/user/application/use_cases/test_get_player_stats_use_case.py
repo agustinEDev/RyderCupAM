@@ -614,11 +614,16 @@ class TestCompetitionScorecards:
         assert stats.rounds_played == 1
         assert stats.scoring_avg == 18.0
 
-    async def test_strokes_received_count_against_the_par(
+    async def test_the_personal_handicap_counts_not_the_match_strokes(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """Un golpe recibido por hoyo: los mismos 5 brutos son par neto."""
-        player = await create_user(user_uow, unique_email("comp"), handicap=18)
+        """
+        Given un partido que le dio un golpe por hoyo y 9 de índice (8 de juego en amarillas)
+        When firma 5 en los 18
+        Then 90 - 8 - 72 = +10: cuenta su vuelta propia, no los golpes del partido
+        (con ellos salía par neto, BE #517)
+        """
+        player = await create_user(user_uow, unique_email("comp"), handicap=9)
         rival = await create_user(user_uow, unique_email("rival"), handicap=18)
         course = await create_golf_course(golf_course_uow, player.id)
         await _played_competition_match(
@@ -636,7 +641,7 @@ class TestCompetitionScorecards:
             player.id
         )
 
-        assert stats.scoring_avg == 0.0
+        assert stats.scoring_avg == 10.0
 
     async def test_averages_both_sources_together(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -1613,6 +1618,34 @@ class TestVueltaDeTorneoComoVueltaPropia:
         )
 
         assert stats.scoring_avg == -3.0
+
+    async def test_sin_barra_valorable_cuenta_el_indice_redondeado(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un partido desde una barra que el campo no trae (rojas), con 18,4 de índice
+        When firma 5 en los 18
+        Then su índice redondeado, 18: par neto, como la partida rápida sin barra
+        """
+        player = await create_user(user_uow, unique_email("t-sinbarra"), handicap=30.0)
+        rival = await create_user(user_uow, unique_email("t-sinbarra-r"), handicap=25.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            tee_color=TeeColor.RED,
+            player_handicap=18.4,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.scoring_avg == 0.0
 
     async def test_una_competicion_scratch_cuenta_sin_golpes(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

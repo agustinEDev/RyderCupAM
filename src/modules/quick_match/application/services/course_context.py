@@ -7,7 +7,6 @@ partida rápida: el detalle de la partida y el historial de partidas recientes.
 """
 
 import logging
-from decimal import Decimal
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.services.stroke_context import (
@@ -15,12 +14,10 @@ from src.modules.golf_course.domain.services.stroke_context import (
     StrokeContextBuilder,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
-from src.modules.quick_match.domain.services.stroke_allocation_service import (
-    StrokeAllocationService,
-)
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
+from src.shared.domain.services.personal_round import personal_playing_handicap
 
 logger = logging.getLogger(__name__)
 
@@ -65,28 +62,20 @@ def course_context_for(golf_course: GolfCourse) -> StrokeContext:
     return context
 
 
-# La vuelta propia se mide con el hándicap de juego ENTERO (decisión del 18 ago
-# 2026): el allowance de cada formato (95 % libre, 90 % fourball...) equilibra una
-# competición, no mide una vuelta, y con él la misma vuelta valía distinto según
-# el formato. Es lo que pinta «Tu vuelta» en la clasificación de la partida
-PERSONAL_ROUND_ALLOWANCE = 100
-
-
 def own_playing_handicap(
     match: QuickMatch,
     participant: QuickMatchParticipant,
     handicap_index: float | None,
     golf_course: GolfCourse,
-    allocation_service: StrokeAllocationService | None = None,
 ) -> int | None:
     """
     Hándicap de juego del participante en su vuelta propia, contra el campo.
 
-    Lo reparte `StrokeAllocationService` como un partido libre, igual que la
-    partida: la pendiente y el rating de su barra, o el índice si la barra no se
-    puede valorar. El historial y las estadísticas puntuaban con el índice tal
+    La pendiente y el rating de su barra, como la partida, o el índice si la
+    barra no se puede valorar: `personal_playing_handicap`, la misma pieza que
+    usan el historial y las estadísticas para los partidos de torneo. El historial y las estadísticas puntuaban con el índice tal
     cual, sin barra, y la misma vuelta daba 28 puntos en el panel y 32 en la
-    partida (BE #513). Al 100 %, ver `PERSONAL_ROUND_ALLOWANCE`.
+    partida (BE #513). Al 100 %.
 
     En match play también: el partido se decide por la diferencia con el rival,
     pero la vuelta de cada uno se mide contra el campo con su propio hándicap.
@@ -95,18 +84,7 @@ def own_playing_handicap(
     no da golpes). Lo devuelto ya es el hándicap de juego: quien lo use no debe
     volver a pasarlo por la barra ni por el allowance.
     """
-    if handicap_index is None:
-        return None
-
-    context = course_context_for(golf_course)
-    strokes = (allocation_service or StrokeAllocationService()).allocate(
-        participants=[participant],
-        handicaps={participant.participant_id: Decimal(str(handicap_index))},
-        tee_ratings=context.tee_ratings,
-        holes_by_stroke_index=context.holes_by_stroke_index,
-        holes_by_stroke_index_by_tee=context.holes_by_tee,
-        match_format=None,
-        allowance_percentage=PERSONAL_ROUND_ALLOWANCE,
-        play_mode=match.play_mode,
+    tee_rating = course_context_for(golf_course).rating_for(
+        participant.tee_color, participant.tee_gender
     )
-    return strokes[participant.participant_id].playing_handicap
+    return personal_playing_handicap(handicap_index, tee_rating, scratch=not match.uses_handicap())

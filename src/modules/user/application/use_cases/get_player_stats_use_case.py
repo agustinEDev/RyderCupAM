@@ -30,11 +30,8 @@ from src.modules.user.domain.services.scoring_breakdown_calculator import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
-from src.shared.domain.services.playing_handicap_calculator import (
-    PlayingHandicapCalculator,
-    TeeRating,
-    round_half_up,
-)
+from src.shared.domain.services.personal_round import personal_playing_handicap
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.score_differential_calculator import (
     PlayedRound,
     ScoreDifferentialCalculator,
@@ -606,22 +603,14 @@ class GetPlayerStatsUseCase:
         El hándicap de juego de su vuelta propia en un partido de torneo (BE #517).
 
         El índice que guardó el partido al generarse (o el del perfil si falta),
-        con la pendiente y el rating de su barra, al 100 %: lo mismo que mide
-        una partida rápida. Sin barra valorable, el índice redondeado; en una
-        competición scratch, ninguno.
+        con su barra, por `personal_playing_handicap`: la misma pieza que mide la
+        vuelta de una partida rápida.
         """
-        if scratch:
-            return 0
-        index = self._match_player_handicap(player, profile_handicap)
-        if index is None:
-            return None
         tee_rating = self._tee_rating(
             course, player.tee_color if player else None, player.tee_gender if player else None
         )
-        if tee_rating is None:
-            return round_half_up(Decimal(str(index)))
-        return PlayingHandicapCalculator().calculate(
-            Decimal(str(index)), tee_rating, COURSE_HANDICAP_ALLOWANCE
+        return personal_playing_handicap(
+            self._match_player_handicap(player, profile_handicap), tee_rating, scratch=scratch
         )
 
     @staticmethod

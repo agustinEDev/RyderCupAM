@@ -9,6 +9,7 @@ lugar de inventar una equivalencia.
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -224,6 +225,9 @@ async def played_competition_match(
     result: dict,
     match_format: MatchFormat = MatchFormat.SINGLES,
     own_scores_by_user_id: dict | None = None,
+    play_mode: PlayMode = PlayMode.SCRATCH,
+    tee_color: TeeColor = TeeColor.YELLOW,
+    player_handicaps: dict | None = None,
 ):
     """
     Un partido de torneo terminado, con su ronda y su competición.
@@ -239,7 +243,7 @@ async def played_competition_match(
         name=CompetitionName("Ryder Cup Test"),
         dates=DateRange(start_date=round_date, end_date=round_date + timedelta(days=2)),
         location=Location(main_country=CountryCode("ES")),
-        play_mode=PlayMode.SCRATCH,
+        play_mode=play_mode,
         team_1_name="Team A",
         team_2_name="Team B",
         team_assignment=TeamAssignment.MANUAL,
@@ -253,12 +257,14 @@ async def played_competition_match(
     )
 
     def player(user_id):
+        indice = (player_handicaps or {}).get(user_id)
         return MatchPlayer(
             user_id=user_id,
             playing_handicap=10,
-            tee_color=TeeColor.YELLOW,
+            tee_color=tee_color,
             tee_gender=Gender.MALE,
             strokes_received=tuple(range(1, 11)),
+            player_handicap=None if indice is None else Decimal(str(indice)),
         )
 
     match = Match.create(
@@ -1362,6 +1368,42 @@ class TestHandicapDeJuegoComoEnLaPartida:
         ).matches[0]
 
         assert entry.stableford_points == 18
+
+
+@pytest.mark.asyncio
+class TestTorneoComoVueltaPropia:
+    """BE #517: los puntos de un partido de torneo, como «Tu vuelta», no con el reparto del partido."""
+
+    async def test_un_singles_que_no_le_da_golpes_puntua_con_su_handicap_de_juego(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un singles con hándicap donde el partido no le dio golpes (los
+        hoyos guardan 0) y 18 de índice en blancas (21 de juego)
+        When firma 5 en los 18
+        Then 39 puntos, como la misma vuelta en partida rápida. Antes, 18
+        """
+        player = await create_user(user_uow, "TorneoBajo")
+        rival = await create_user(user_uow, "TorneoAlto")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.HANDICAP,
+            tee_color=TeeColor.WHITE,
+            player_handicaps={player.id: 18.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 39
 
 
 @pytest.mark.asyncio
