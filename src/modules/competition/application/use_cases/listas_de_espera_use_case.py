@@ -19,6 +19,9 @@ from src.modules.competition.application.exceptions import (
     PlazaEnFranjaError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    esta_jugada,
+)
 from src.modules.competition.domain.entities.espera_en_franja import EsperaEnFranja
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -54,7 +57,12 @@ class EsperarUseCase:
             competicion = await self._uow.competitions.find_by_id_for_update(franja.competition_id)
             if competicion is None:
                 raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
-            franja = await self._uow.rounds.find_by_id_for_update(round_id) or franja
+            # Releída con el candado: si la borraron a la vez, 404 y no un 500
+            franja = await self._uow.rounds.find_by_id_for_update(round_id)
+            if franja is None:
+                raise RoundNotFoundError(f"No existe la franja {round_id}")
+            if esta_jugada(franja):
+                raise PlazaEnFranjaError("La franja ya se está jugando o se jugó.")
             if competicion.stroke_play is None:
                 raise PlazaEnFranjaError("Las listas de espera son de un Stableford o un Medal.")
             if competicion.status is not CompetitionStatus.ACTIVE:
@@ -101,7 +109,8 @@ class DejarDeEsperarUseCase:
             franja = await self._uow.rounds.find_by_id(round_id)
             if franja is None:
                 raise RoundNotFoundError(f"No existe la franja {round_id}")
-            competicion = await self._uow.competitions.find_by_id(franja.competition_id)
+            # Bloqueada: si a la vez se libera una plaza, no se le asigna a quien sale
+            competicion = await self._uow.competitions.find_by_id_for_update(franja.competition_id)
             if competicion is None:
                 raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
             if quien != jugador and not (is_admin or competicion.is_creator(quien)):
@@ -121,11 +130,19 @@ class MisPlazasAsignadasUseCase:
         """Las más antiguas primero."""
         async with self._uow:
             plazas = await self._uow.plazas.asignadas_sin_ver(user_id)
+            competiciones = {}
+            for competition_id in {p.competition_id for p in plazas}:
+                competiciones[competition_id] = await self._uow.competitions.find_by_id(
+                    competition_id
+                )
             resultado = []
             for plaza in sorted(plazas, key=lambda p: p.desde_espera or p.creada):
+                competicion = competiciones.get(plaza.competition_id)
+                # Cancelada o terminada: ya no requiere su atención
+                if competicion is None or competicion.status.is_final():
+                    continue
                 franja = await self._uow.rounds.find_by_id(plaza.round_id)
-                competicion = await self._uow.competitions.find_by_id(plaza.competition_id)
-                if franja is None or competicion is None or franja.hoja_de_salidas is None:
+                if franja is None or franja.hoja_de_salidas is None:
                     continue
                 resultado.append(
                     AssignedPlaceDTO(

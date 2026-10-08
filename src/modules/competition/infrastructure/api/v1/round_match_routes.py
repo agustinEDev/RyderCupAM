@@ -67,6 +67,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundBodyDTO,
     UpdateRoundRequestDTO,
     UpdateRoundResponseDTO,
+    WaitingListEntryDTO,
 )
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
@@ -967,6 +968,7 @@ async def leave_tee_window_place(
 
 @router.post(
     "/rounds/{round_id}/waiting-list",
+    response_model=WaitingListEntryDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Apuntarse a la lista de espera de una franja",
     description=(
@@ -990,7 +992,7 @@ async def join_waiting_list(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except PlazaEnFranjaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
-    return {"round_id": str(round_id), "user_id": str(yo.value)}
+    return WaitingListEntryDTO(round_id=round_id, user_id=yo.value)
 
 
 @router.delete(

@@ -6,7 +6,7 @@ Medal, hasta que se cierran las inscripciones: ahí se fija el hándicap de cada
 jugador y su categoría (decidido el 7 oct 2026, como hace la RFEG).
 """
 
-from datetime import date
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from src.modules.competition.application.dto.competition_dto import (
@@ -18,6 +18,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -85,6 +88,11 @@ class UpdateStrokePlaySettingsUseCase:
                 overall_standing=request.overall_standing,
             )
             await self._uow.competitions.update(competition)
+            # Con otro cupo de jornadas, las listas al día y lo que ahora cabe (#251)
+            if request.max_matchdays_per_player is not None:
+                esperas = EsperasDeLaCompeticion(self._uow)
+                await esperas.limpiar(competition)
+                await esperas.rellenar_todas(competition, datetime.now(UTC))
 
         return CompetitionDTOMapper.to_stroke_play_dto(ajustes)
 

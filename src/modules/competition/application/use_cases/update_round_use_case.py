@@ -183,9 +183,7 @@ class UpdateRoundUseCase:
             await self._uow.rounds.update(round_entity)
             # Si la franja creció, sus nuevas plazas para los que esperan (#251); si
             # no hay sitio libre o no es una franja, no hace nada
-            await EsperasDeLaCompeticion(self._uow).rellenar(
-                competition, round_entity.id, datetime.now(UTC)
-            )
+            await self._listas_al_dia(competition, round_entity, request)
 
         return UpdateRoundResponseDTO(
             id=round_entity.id.value,
@@ -229,3 +227,15 @@ class UpdateRoundUseCase:
                 excepto=round_entity.id,
             )
         return hoja
+
+    async def _listas_al_dia(
+        self, competition: Competition, round_entity: Round, request: UpdateRoundRequestDTO
+    ) -> None:
+        """
+        Las plazas que haya ahora libres, para los que esperan (#251); y si la
+        franja cambió de día, cambia qué días juega cada uno: listas al día.
+        """
+        esperas = EsperasDeLaCompeticion(self._uow)
+        await esperas.rellenar(competition, round_entity.id, datetime.now(UTC))
+        if request.round_date:
+            await esperas.limpiar(competition)

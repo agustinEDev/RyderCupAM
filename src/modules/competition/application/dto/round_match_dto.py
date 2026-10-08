@@ -730,3 +730,10 @@ class AssignedPlaceDTO(BaseModel):
     session_type: str
     first_tee_time: time
     assigned_at: datetime
+
+
+class WaitingListEntryDTO(BaseModel):
+    """Apuntado a la lista de espera de una franja (#251)."""
+
+    round_id: UUID
+    user_id: UUID

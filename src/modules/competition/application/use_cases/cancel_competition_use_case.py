@@ -90,6 +90,9 @@ class CancelCompetitionUseCase:
             # 3. Cancelar la competición (la entidad valida la transición)
             competition.cancel(reason=request.reason)
 
+            # Sin listas de espera: ya no se juega (#251)
+            await self._uow.esperas.vaciar(competition.id)
+
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 

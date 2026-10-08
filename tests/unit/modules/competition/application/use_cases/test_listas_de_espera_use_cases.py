@@ -444,3 +444,186 @@ class TestRequiereTuAtencion:
         await e.coger(e.manana, jugador)
 
         assert await MisPlazasAsignadasUseCase(e.uow).execute(jugador) == []
+
+
+class TestLoQueEncontroElRevisor:
+    """La pasada del revisor sin mi contexto (8 oct 2026)."""
+
+    async def test_salir_de_la_lista_bloquea_la_competicion(self, e):
+        await e.torneo()
+        await e.llena(e.manana)
+        jugador = await e.aprobado()
+        await e.esperar(e.manana, jugador)
+        bloqueadas = []
+        original = e.uow.competitions.find_by_id_for_update
+
+        async def espia(competition_id):
+            bloqueadas.append(competition_id)
+            return await original(competition_id)
+
+        e.uow.competitions.find_by_id_for_update = espia
+
+        await DejarDeEsperarUseCase(e.uow).execute(e.manana.id, jugador, jugador)
+
+        assert bloqueadas == [e.competicion.id]
+
+    async def test_el_organizador_saca_a_alguien_de_la_lista(self, e):
+        await e.torneo()
+        await e.llena(e.manana)
+        jugador = await e.aprobado()
+        await e.esperar(e.manana, jugador)
+
+        await DejarDeEsperarUseCase(e.uow).execute(e.manana.id, jugador, e.creador)
+
+        assert await e.espera(e.manana) == []
+
+    async def test_mover_una_franja_de_dia_limpia_las_listas_de_ese_dia(self, e):
+        await e.torneo(jornadas=2)
+        await e.llena(e.sabado)
+        jugador = await e.aprobado()
+        await e.coger(e.tarde, jugador)
+        await e.esperar(e.sabado, jugador)
+
+        # Su franja del viernes pasa al sábado: ya juega ese día
+        await UpdateRoundUseCase(e.uow).execute(
+            UpdateRoundRequestDTO(round_id=e.tarde.id.value, round_date=SABADO), e.creador
+        )
+
+        assert await e.espera(e.sabado) == []
+
+    async def test_en_una_franja_ya_jugada_ni_se_espera_ni_se_rellena(self, e):
+        from src.modules.competition.domain.value_objects.round_status import RoundStatus
+
+        await e.torneo()
+        dentro = await e.llena(e.manana)
+        espera = await e.aprobado()
+        await e.esperar(e.manana, espera)
+        e.manana._status = RoundStatus.IN_PROGRESS
+        async with e.uow:
+            await e.uow.rounds.update(e.manana)
+
+        await e.soltar(e.manana, dentro[0])
+        otro = await e.aprobado()
+
+        assert espera not in await e.plazas(e.manana)
+        with pytest.raises(PlazaEnFranjaError, match="jugando"):
+            await e.esperar(e.manana, otro)
+
+    async def test_esperar_en_una_franja_que_borran_a_la_vez_es_404(self, e):
+        from src.modules.competition.application.exceptions import RoundNotFoundError
+
+        await e.torneo()
+        await e.llena(e.manana)
+        jugador = await e.aprobado()
+
+        async def la_borraron(_round_id):
+            return None
+
+        e.uow.rounds.find_by_id_for_update = la_borraron
+
+        with pytest.raises(RoundNotFoundError):
+            await e.esperar(e.manana, jugador)
+
+    async def test_requiere_tu_atencion_no_ensena_las_de_una_cancelada(self, e):
+        await e.torneo()
+        dentro = await e.llena(e.manana)
+        espera = await e.aprobado()
+        await e.esperar(e.manana, espera)
+        await e.soltar(e.manana, dentro[0])
+        await e.cambiar_estado(CompetitionStatus.CANCELLED)
+
+        assert await MisPlazasAsignadasUseCase(e.uow).execute(espera) == []
+
+    async def test_cancelar_vacia_las_listas(self, e):
+        from src.modules.competition.application.dto.competition_dto import (
+            CancelCompetitionRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.cancel_competition_use_case import (
+            CancelCompetitionUseCase,
+        )
+
+        await e.torneo()
+        await e.llena(e.manana)
+        await e.esperar(e.manana, await e.aprobado())
+
+        await CancelCompetitionUseCase(e.uow).execute(
+            CancelCompetitionRequestDTO(competition_id=e.competicion.id.value), e.creador
+        )
+
+        assert await e.espera(e.manana) == []
+
+    async def test_bajar_el_cupo_de_jornadas_saca_de_las_listas_a_quien_ya_lo_llena(self, e):
+        """Así nadie se queda en una lista para que luego se le salte (revisor de la 3b)."""
+        from src.modules.competition.application.dto.competition_dto import (
+            StrokePlaySettingsDTO,
+        )
+        from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
+            UpdateStrokePlaySettingsUseCase,
+        )
+
+        await e.torneo(jornadas=2)
+        await e.llena(e.sabado)
+        jugador = await e.aprobado()
+        await e.coger(e.manana, jugador)
+        await e.esperar(e.sabado, jugador)
+
+        await UpdateStrokePlaySettingsUseCase(e.uow).execute(
+            e.competicion.id.value, StrokePlaySettingsDTO(max_matchdays_per_player=1), e.creador
+        )
+
+        assert await e.espera(e.sabado) == []
+
+    async def test_cerrar_reabrir_y_volver_a_esperar(self, e):
+        from src.modules.competition.application.dto.competition_dto import (
+            CloseEnrollmentsRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.close_enrollments_use_case import (
+            CloseEnrollmentsUseCase,
+        )
+        from tests.unit.modules.competition.application.use_cases.helpers import (
+            USUARIOS_CON_GENERO,
+            plaza_para_todos,
+        )
+
+        await e.torneo()
+        await e.llena(e.manana)
+        jugador = await e.aprobado()
+        await e.esperar(e.manana, jugador)
+        await plaza_para_todos(e.uow, e.competicion.id)
+        # (plaza_para_todos le da plaza en una franja de tarde: se la quitamos tras reabrir)
+        await CloseEnrollmentsUseCase(e.uow, USUARIOS_CON_GENERO).execute(
+            CloseEnrollmentsRequestDTO(competition_id=e.competicion.id.value), e.creador
+        )
+        competicion = await e.uow.competitions.find_by_id(e.competicion.id)
+        competicion.reopen_enrollments()
+        async with e.uow:
+            await e.uow.competitions.update(competicion)
+        e.competicion = competicion
+        for plaza in await e.uow.plazas.de_la_competicion(e.competicion.id):
+            if plaza.user_id == jugador:
+                await e.soltar(await e.uow.rounds.find_by_id(plaza.round_id), jugador)
+
+        await e.esperar(e.manana, jugador)
+
+        assert await e.espera(e.manana) == [jugador]
+
+    async def test_retirarse_no_suelta_la_plaza_de_una_franja_ya_jugada(self, e):
+        """Tras volver atrás con sesiones jugadas: esa plaza es historial (revisor de la 3b)."""
+        from src.modules.competition.domain.value_objects.round_status import RoundStatus
+
+        await e.torneo()
+        dentro = await e.llena(e.manana)
+        e.manana._status = RoundStatus.COMPLETED
+        async with e.uow:
+            await e.uow.rounds.update(e.manana)
+        (inscripcion,) = [
+            i
+            for i in await e.uow.enrollments.find_by_competition(e.competicion.id)
+            if i.user_id == dentro[0]
+        ]
+
+        await WithdrawEnrollmentUseCase(e.uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), dentro[0]
+        )
+
+        assert dentro[0] in await e.plazas(e.manana)
