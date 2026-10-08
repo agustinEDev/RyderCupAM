@@ -10,6 +10,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    NotYourMarkedPlayerError,
 )
 from src.modules.competition.application.use_cases.submit_hole_score_use_case import (
     SubmitHoleScoreUseCase,
@@ -21,6 +22,7 @@ from src.modules.competition.domain.value_objects.marker_assignment import Marke
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -529,3 +531,225 @@ class TestLaBolaDelBandoEnFoursomes:
 
         for jugador in (a1, a2):
             assert (await uow.hole_scores.find_one(match.id, 1, jugador.user_id)).own_score == 4
+
+
+async def _partido_con_filas(
+    uow, team_a, team_b, match_format, assignments, status=MatchStatus.IN_PROGRESS
+):
+    """Partido con las filas del hoyo 1 de los cuatro (o dos) jugadores y su competición."""
+    match, mock_round = _setup_match(
+        uow,
+        team_a,
+        team_b,
+        match_format=match_format,
+        marker_assignments=assignments,
+        status=status,
+    )
+    await uow.matches.add(match)
+    uow._rounds._rounds[mock_round.id] = mock_round
+    for jugadores, equipo in ((team_a, "A"), (team_b, "B")):
+        for jugador in jugadores:
+            await uow.hole_scores.add(
+                HoleScore.create(
+                    match_id=match.id,
+                    hole_number=1,
+                    player_user_id=jugador.user_id,
+                    team=equipo,
+                    strokes_received=0,
+                )
+            )
+    mock_comp = MagicMock()
+    mock_comp.id = mock_round.competition_id
+    mock_comp.ryder_cup.team_1_name = "Team A"
+    mock_comp.ryder_cup.team_2_name = "Team B"
+    mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
+    uow._competitions._competitions[mock_comp.id] = mock_comp
+    return match
+
+
+def _cruzadas_de_cuatro(a1, a2, b1, b2):
+    """Las de `ScoringService` en fourball y foursomes: A1→B1, A2→B2, B1→A2, B2→A1."""
+    return [
+        MarkerAssignment(
+            scorer_user_id=a1.user_id, marks_user_id=b1.user_id, marked_by_user_id=b2.user_id
+        ),
+        MarkerAssignment(
+            scorer_user_id=a2.user_id, marks_user_id=b2.user_id, marked_by_user_id=b1.user_id
+        ),
+        MarkerAssignment(
+            scorer_user_id=b1.user_id, marks_user_id=a2.user_id, marked_by_user_id=a1.user_id
+        ),
+        MarkerAssignment(
+            scorer_user_id=b2.user_id, marks_user_id=a1.user_id, marked_by_user_id=a2.user_id
+        ),
+    ]
+
+
+class TestSoloMarcaSuMarcadorAsignado:
+    """
+    BE #520: cada uno marca SOLO al jugador que le asignó el sorteo de marcadores.
+
+    Antes bastaba con que el marcado jugara el partido: uno podía ponerse a sí
+    mismo como marcado, apuntarse el mismo número en las dos columnas y dejar
+    su hoyo validado sin que nadie lo confirmara, o pisar lo que le había
+    apuntado su marcador de verdad. Fuera de su asignación la petición entera
+    se rechaza (403) y no se guarda nada, tampoco su propio golpe.
+    """
+
+    @pytest.mark.asyncio
+    async def test_singles_marcarse_a_si_mismo_se_rechaza_y_no_guarda_nada(
+        self, uow, user_repo, scoring_service
+    ):
+        match, a, _b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        body = SubmitHoleScoreBodyDTO(own_score=3, marked_player_id=str(a.user_id), marked_score=3)
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(str(match.id), 1, body, a.user_id)
+
+        fila = await uow.hole_scores.find_one(match.id, 1, a.user_id)
+        assert fila.own_score is None
+        assert fila.marker_score is None
+        assert fila.validation_status != ValidationStatus.MATCH
+
+    @pytest.mark.asyncio
+    async def test_singles_no_puede_pisar_lo_que_le_apunto_su_marcador(
+        self, uow, user_repo, scoring_service
+    ):
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        await uc.execute(
+            str(match.id),
+            1,
+            SubmitHoleScoreBodyDTO(marked_player_id=str(a.user_id), marked_score=6),
+            b.user_id,
+        )
+
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(
+                str(match.id),
+                1,
+                SubmitHoleScoreBodyDTO(
+                    own_score=3, marked_player_id=str(a.user_id), marked_score=3
+                ),
+                a.user_id,
+            )
+
+        assert (await uow.hole_scores.find_one(match.id, 1, a.user_id)).marker_score == 6
+
+    @pytest.mark.asyncio
+    async def test_singles_su_marcador_asignado_si_puede(self, uow, user_repo, scoring_service):
+        match, a, b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        await uc.execute(
+            str(match.id),
+            1,
+            SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(a.user_id), marked_score=4),
+            b.user_id,
+        )
+
+        assert (await uow.hole_scores.find_one(match.id, 1, a.user_id)).marker_score == 4
+        assert (await uow.hole_scores.find_one(match.id, 1, b.user_id)).own_score == 5
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("formato", [MatchFormat.FOURBALL, MatchFormat.FOURSOMES])
+    @pytest.mark.parametrize("a_quien", ["a_si_mismo", "a_su_companero", "al_rival_que_no_le_toca"])
+    async def test_de_cuatro_fuera_de_su_asignacion_se_rechaza(
+        self, uow, user_repo, scoring_service, formato, a_quien
+    ):
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        match = await _partido_con_filas(
+            uow, [a1, a2], [b1, b2], formato, _cruzadas_de_cuatro(a1, a2, b1, b2)
+        )
+        marcado = {"a_si_mismo": a1, "a_su_companero": a2, "al_rival_que_no_le_toca": b2}[a_quien]
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(
+                str(match.id),
+                1,
+                SubmitHoleScoreBodyDTO(
+                    own_score=4, marked_player_id=str(marcado.user_id), marked_score=4
+                ),
+                a1.user_id,
+            )
+
+        for jugador in (a1, a2, b1, b2):
+            fila = await uow.hole_scores.find_one(match.id, 1, jugador.user_id)
+            assert fila.own_score is None
+            assert fila.marker_score is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("formato", [MatchFormat.FOURBALL, MatchFormat.FOURSOMES])
+    async def test_de_cuatro_al_que_le_toca_si(self, uow, user_repo, scoring_service, formato):
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        match = await _partido_con_filas(
+            uow, [a1, a2], [b1, b2], formato, _cruzadas_de_cuatro(a1, a2, b1, b2)
+        )
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        await uc.execute(
+            str(match.id),
+            1,
+            SubmitHoleScoreBodyDTO(own_score=4, marked_player_id=str(b1.user_id), marked_score=5),
+            a1.user_id,
+        )
+
+        assert (await uow.hole_scores.find_one(match.id, 1, b1.user_id)).marker_score == 5
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("a_quien", "se_rechaza"),
+        [("a_si_mismo", True), ("a_su_companero", True), ("a_un_rival", False)],
+    )
+    async def test_sin_asignaciones_vale_la_regla_de_fondo_solo_el_equipo_contrario(
+        self, uow, user_repo, scoring_service, a_quien, se_rechaza
+    ):
+        """Un partido sin sorteo de marcadores (datos viejos): nunca uno mismo ni su compañero."""
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        match = await _partido_con_filas(uow, [a1, a2], [b1, b2], MatchFormat.FOURBALL, None)
+        marcado = {"a_si_mismo": a1, "a_su_companero": a2, "a_un_rival": b2}[a_quien]
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+        body = SubmitHoleScoreBodyDTO(
+            own_score=4, marked_player_id=str(marcado.user_id), marked_score=5
+        )
+
+        if se_rechaza:
+            with pytest.raises(NotYourMarkedPlayerError):
+                await uc.execute(str(match.id), 1, body, a1.user_id)
+        else:
+            await uc.execute(str(match.id), 1, body, a1.user_id)
+            assert (await uow.hole_scores.find_one(match.id, 1, b2.user_id)).marker_score == 5
+
+    @pytest.mark.asyncio
+    async def test_se_rechaza_antes_de_abrir_el_partido(self, uow, user_repo, scoring_service):
+        """Un marcado ajeno no abre el partido: se rechaza antes, como el de quien no juega."""
+        programado, mock_round = _setup_match(
+            uow, [_make_player()], [_make_player()], status=MatchStatus.SCHEDULED
+        )
+        jugador = programado.team_a_players[0]
+        programado.set_marker_assignments(
+            [
+                MarkerAssignment(
+                    scorer_user_id=jugador.user_id,
+                    marks_user_id=programado.team_b_players[0].user_id,
+                    marked_by_user_id=programado.team_b_players[0].user_id,
+                ),
+            ]
+        )
+        await uow.matches.add(programado)
+        uow._rounds._rounds[mock_round.id] = mock_round
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(
+                str(programado.id),
+                1,
+                SubmitHoleScoreBodyDTO(
+                    own_score=4, marked_player_id=str(jugador.user_id), marked_score=4
+                ),
+                jugador.user_id,
+            )
+
+        assert (await uow.matches.find_by_id(programado.id)).status == MatchStatus.SCHEDULED

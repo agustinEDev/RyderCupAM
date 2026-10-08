@@ -129,6 +129,18 @@ class NotMatchPlayerError(Exception):
     pass
 
 
+class NotYourMarkedPlayerError(Exception):
+    """
+    El jugador marcado no es el que le toca marcar a quien anota (BE #520).
+
+    Cada uno marca solo al jugador que le asignó el sorteo de marcadores. Sin
+    esta comprobación uno podía marcarse a sí mismo y dejar su hoyo validado, o
+    pisar lo que le había apuntado su marcador de verdad.
+    """
+
+    error_code = "NOT_YOUR_MARKED_PLAYER"
+
+
 class ScorecardNotReadyError(Exception):
     """La tarjeta no esta lista para ser entregada (hay hoyos sin validar)."""
 

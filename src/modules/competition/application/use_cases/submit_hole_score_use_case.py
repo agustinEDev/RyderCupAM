@@ -12,6 +12,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    NotYourMarkedPlayerError,
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
@@ -75,6 +76,16 @@ class SubmitHoleScoreUseCase:
             if match.find_player(user_id) is None:
                 raise NotMatchPlayerError("No eres jugador de este partido")
 
+            # Cada uno marca SOLO al que le asignó el sorteo (BE #520), y se
+            # comprueba antes de abrir el partido, como lo de arriba: una
+            # petición fuera de su asignación no abre nada ni guarda nada,
+            # tampoco su propio golpe
+            marked_player_uid = UserId(body.marked_player_id)
+            if match.find_player(marked_player_uid) is None:
+                raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
+            if not match.may_mark(user_id, marked_player_uid):
+                raise NotYourMarkedPlayerError("No es el jugador que te toca marcar")
+
             # Despues de saber que es suyo: abrir el partido bloquea su fila,
             # crea 36 filas y arranca la ronda, y eso no lo dispara alguien que
             # solo acerto el identificador. Ademas el rechazo de «aun no ha
@@ -108,10 +119,6 @@ class SubmitHoleScoreUseCase:
 
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
             own_score_locked = match.has_submitted_scorecard(user_id, match_format)
-
-            marked_player_uid = UserId(body.marked_player_id)
-            if match.find_player(marked_player_uid) is None:
-                raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
 
             # Tarjeta del marcado entregada: marker_score ignorado, own_score sigue editable
             marker_score_locked = match.has_submitted_scorecard(marked_player_uid, match_format)
