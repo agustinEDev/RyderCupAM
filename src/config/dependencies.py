@@ -122,6 +122,12 @@ from src.modules.competition.application.use_cases.list_my_pending_envelopes_use
 from src.modules.competition.application.use_cases.list_my_sessions_without_matches_use_case import (
     ListMySessionsWithoutMatchesUseCase,
 )
+from src.modules.competition.application.use_cases.listas_de_espera_use_case import (
+    DejarDeEsperarUseCase,
+    EntendidoUseCase,
+    EsperarUseCase,
+    MisPlazasAsignadasUseCase,
+)
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
     MakeDraftPickUseCase,
 )
@@ -1818,6 +1824,34 @@ def get_soltar_plaza_use_case(
 ) -> SoltarPlazaUseCase:
     """Soltar la plaza en una franja de stroke play (#251)."""
     return SoltarPlazaUseCase(uow)
+
+
+def get_esperar_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> EsperarUseCase:
+    """Apuntarse a la lista de espera de una franja (#251)."""
+    return EsperarUseCase(uow)
+
+
+def get_dejar_de_esperar_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> DejarDeEsperarUseCase:
+    """Salir de la lista de espera de una franja (#251)."""
+    return DejarDeEsperarUseCase(uow)
+
+
+def get_mis_plazas_asignadas_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> MisPlazasAsignadasUseCase:
+    """Las plazas que asignó la lista de espera, para «Requiere tu atención» (#251)."""
+    return MisPlazasAsignadasUseCase(uow)
+
+
+def get_entendido_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> EntendidoUseCase:
+    """«Entendido»: ya ha visto la plaza que le asignó la lista (#251)."""
+    return EntendidoUseCase(uow)
 
 
 def get_close_enrollments_use_case(

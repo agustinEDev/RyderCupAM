@@ -1,5 +1,7 @@
 """Caso de Uso: Actualizar Ronda/Sesión de competición."""
 
+from datetime import UTC, datetime
+
 from src.modules.competition.application.dto.round_match_dto import (
     UpdateRoundRequestDTO,
     UpdateRoundResponseDTO,
@@ -10,6 +12,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
     RoundNotModifiableError,
+)
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
 )
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
@@ -176,6 +181,9 @@ class UpdateRoundUseCase:
                 round_entity.clear_match_generation_block()
 
             await self._uow.rounds.update(round_entity)
+            # Si la franja creció, sus nuevas plazas para los que esperan (#251); si
+            # no hay sitio libre o no es una franja, no hace nada
+            await self._listas_al_dia(competition, round_entity, request)
 
         return UpdateRoundResponseDTO(
             id=round_entity.id.value,
@@ -219,3 +227,16 @@ class UpdateRoundUseCase:
                 excepto=round_entity.id,
             )
         return hoja
+
+    async def _listas_al_dia(
+        self, competition: Competition, round_entity: Round, request: UpdateRoundRequestDTO
+    ) -> None:
+        """
+        Las plazas que haya ahora libres, para los que esperan (#251); y si la
+        franja cambió de día, cambia qué días juega cada uno: listas al día.
+        """
+        esperas = EsperasDeLaCompeticion(self._uow)
+        if request.tee_sheet is not None:
+            await esperas.rellenar(competition, round_entity.id, datetime.now(UTC))
+        if request.round_date:
+            await esperas.limpiar(competition)

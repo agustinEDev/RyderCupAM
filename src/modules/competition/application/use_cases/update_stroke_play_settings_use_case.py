@@ -18,6 +18,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
 )
 from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -85,6 +88,9 @@ class UpdateStrokePlaySettingsUseCase:
                 overall_standing=request.overall_standing,
             )
             await self._uow.competitions.update(competition)
+            # Con otro cupo de jornadas, las listas al día: fuera quien ya lo llena (#251)
+            if request.max_matchdays_per_player is not None:
+                await EsperasDeLaCompeticion(self._uow).limpiar(competition)
 
         return CompetitionDTOMapper.to_stroke_play_dto(ajustes)
 

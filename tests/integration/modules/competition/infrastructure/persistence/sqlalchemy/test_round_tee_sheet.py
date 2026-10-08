@@ -35,3 +35,33 @@ async def test_sin_hoja_es_nula(db_session, ronda):  # noqa: F811
     leida = await SQLAlchemyCompetitionUnitOfWork(db_session).rounds.find_by_id(ronda.id)
 
     assert leida.hoja_de_salidas is None
+
+
+async def test_esperas_y_marcas_de_la_plaza(db_session, ronda, jugadores):  # noqa: F811
+    """La lista de espera y las marcas «desde la lista» y «vista», en Postgres (#251)."""
+    from datetime import UTC, datetime
+
+    from src.modules.competition.domain.entities.espera_en_franja import EsperaEnFranja
+    from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
+
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    ahora = datetime(2030, 10, 10, 18, 0, tzinfo=UTC)
+    primero, segundo = jugadores[0], jugadores[1]
+    await uow.esperas.add(EsperaEnFranja.crear(ronda.competition_id, ronda.id, primero, ahora))
+    await uow.esperas.add(EsperaEnFranja.crear(ronda.competition_id, ronda.id, segundo, ahora))
+    await uow.plazas.add(
+        PlazaEnFranja.crear(ronda.competition_id, ronda.id, primero, ahora, desde_espera=True)
+    )
+    await uow.esperas.quitar(ronda.id, primero)
+    await db_session.commit()
+
+    esperan = [e.user_id for e in await uow.esperas.de_la_competicion(ronda.competition_id)]
+    sin_ver = await uow.plazas.asignadas_sin_ver(primero)
+    await uow.plazas.marcar_vista(ronda.id, primero, ahora)
+    await uow.esperas.vaciar(ronda.competition_id)
+    await db_session.commit()
+
+    assert esperan == [segundo]
+    assert [p.desde_espera for p in sin_ver] == [ahora]
+    assert await uow.plazas.asignadas_sin_ver(primero) == []
+    assert await uow.esperas.de_la_competicion(ronda.competition_id) == []

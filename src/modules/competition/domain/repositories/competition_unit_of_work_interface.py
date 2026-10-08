@@ -17,6 +17,7 @@ from .competition_repository_interface import CompetitionRepositoryInterface
 from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
 from .envelope_repository_interface import EnvelopeRepositoryInterface
+from .espera_en_franja_repository_interface import EsperaEnFranjaRepositoryInterface
 from .handicap_update_repository_interface import HandicapUpdateRepositoryInterface
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
@@ -92,6 +93,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         """Acceso al repositorio de hole scores."""
+        pass
+
+    @property
+    @abstractmethod
+    def esperas(self) -> EsperaEnFranjaRepositoryInterface:
+        """Las listas de espera de las franjas de stroke play (#251)."""
         pass
 
     @property

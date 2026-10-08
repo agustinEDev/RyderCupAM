@@ -1,8 +1,9 @@
 """Las plazas en franjas, en Postgres (#251)."""
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
@@ -31,6 +32,8 @@ class SQLAlchemyPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
                 round_id=plaza.round_id,
                 user_id=plaza.user_id,
                 created_at=plaza.creada,
+                from_waiting_list_at=plaza.desde_espera,
+                acknowledged_at=plaza.vista,
             )
         )
 
@@ -66,6 +69,24 @@ class SQLAlchemyPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
                 round_id=fila.round_id,
                 user_id=fila.user_id,
                 creada=fila.created_at,
+                desde_espera=fila.from_waiting_list_at,
+                vista=fila.acknowledged_at,
             )
             for fila in result
         ]
+
+    async def asignadas_sin_ver(self, user_id: UserId) -> list[PlazaEnFranja]:
+        tabla = tee_window_places_table
+        return await self._donde(
+            (tabla.c.user_id == user_id)
+            & tabla.c.from_waiting_list_at.is_not(None)
+            & tabla.c.acknowledged_at.is_(None)
+        )
+
+    async def marcar_vista(self, round_id: RoundId, user_id: UserId, momento: datetime) -> None:
+        tabla = tee_window_places_table
+        await self._session.execute(
+            update(tabla)
+            .where(tabla.c.round_id == round_id, tabla.c.user_id == user_id)
+            .values(acknowledged_at=momento)
+        )

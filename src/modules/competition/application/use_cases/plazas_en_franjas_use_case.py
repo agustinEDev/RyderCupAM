@@ -20,6 +20,9 @@ from src.modules.competition.application.exceptions import (
     PlazaEnFranjaError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
@@ -122,10 +125,27 @@ class CogerPlazaUseCase:
                 )
             except PlazaNoPosibleError as e:
                 raise PlazaEnFranjaError(str(e)) from e
+            ahora = datetime.now(UTC)
+            # Si deja una plaza que le dio la lista y aún no ha visto, la nueva hereda el
+            # aviso: si no, nunca se enteraría de que tiene plaza (code-review de la 3b)
+            sin_ver = en_lugar_de is not None and any(
+                p.round_id == en_lugar_de
+                and p.user_id == jugador
+                and p.desde_espera is not None
+                and p.vista is None
+                for p in plazas
+            )
             if en_lugar_de is not None:
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
-            plaza = PlazaEnFranja.crear(competicion.id, franja.id, jugador, datetime.now(UTC))
+            plaza = PlazaEnFranja.crear(
+                competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
+            )
             await self._uow.plazas.add(plaza)
+            # Fuera de las listas de ese día; y la que deja, para el primero que espera
+            esperas = EsperasDeLaCompeticion(self._uow)
+            await esperas.tras_coger(competicion, jugador)
+            if en_lugar_de is not None:
+                await esperas.rellenar(competicion, en_lugar_de, ahora)
         return plaza
 
 
@@ -155,3 +175,7 @@ class SoltarPlazaUseCase:
                     "se le deja sin ninguna: para quitarlo, retíralo de la competición."
                 )
             await self._uow.plazas.quitar(round_id, jugador)
+            # La plaza libre, para el primero que espera (#251)
+            await EsperasDeLaCompeticion(self._uow).rellenar(
+                competicion, round_id, datetime.now(UTC)
+            )

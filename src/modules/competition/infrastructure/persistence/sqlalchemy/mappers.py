@@ -15,12 +15,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import composite, relationship
@@ -1256,7 +1258,36 @@ tee_window_places_table = Table(
     ),
     Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # Asignada por la lista de espera, y vista en «Requiere tu atención»
+    Column("from_waiting_list_at", DateTime(timezone=True), nullable=True),
+    Column("acknowledged_at", DateTime(timezone=True), nullable=True),
     UniqueConstraint("round_id", "user_id", name="uq_tee_window_places_round_user"),
+    # «Requiere tu atención»: solo las asignadas por la lista y sin ver
+    Index(
+        "ix_tee_window_places_pending_ack",
+        "user_id",
+        postgresql_where=text("from_waiting_list_at IS NOT NULL AND acknowledged_at IS NULL"),
+    ),
+)
+
+# La lista de espera de cada franja de stroke play (#251): el orden, el de llegada
+tee_window_waits_table = Table(
+    "tee_window_waits",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "round_id", RoundIdDecorator, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("round_id", "user_id", name="uq_tee_window_waits_round_user"),
 )
 
 # La actualización que deja programada el organizador: una por competición (#251)
