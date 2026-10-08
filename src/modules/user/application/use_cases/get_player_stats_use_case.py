@@ -328,16 +328,17 @@ class GetPlayerStatsUseCase:
                 holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
                 # Son DOS hándicaps distintos y no se pueden compartir:
                 #
-                # - La media de la casa usa el hándicap con el que se jugó, y en
-                #   una partida scratch no hubo ninguno.
-                # - El diferencial WHS de más abajo usa siempre el efectivo,
-                #   scratch o no: ahí el hándicap solo sirve para el tope de
-                #   doble bogey neto del Adjusted Gross Score, que es parte de
-                #   la fórmula WHS y no depende de cómo se jugara la partida.
+                # - La media de la casa usa el de la vuelta propia: el hándicap
+                #   de juego de su barra al 100 %, como «Tu vuelta» (BE #513).
+                #   NO el allowance de la partida: con él el panel y la partida
+                #   volvían a separarse. En una partida scratch sale 0.
+                # - El diferencial WHS de más abajo usa siempre el índice
+                #   efectivo, scratch o no: ahí el hándicap solo sirve para el
+                #   tope de doble bogey neto del Adjusted Gross Score, que es
+                #   parte de la fórmula WHS y no depende de cómo se jugara.
                 effective_handicap = self._effective_handicap(participant, profile_handicap)
-                # El hándicap de juego de su vuelta propia, con su barra como en
-                # la partida (BE #513). Ya la lleva dentro, y el allowance de
-                # la vuelta propia es el 100 %: por eso no se pasa ninguno
+                # Ya lleva dentro la barra y el 100 %: por eso al calculador no
+                # se le pasa ni barra ni allowance
                 playing_handicap = own_playing_handicap(
                     match, participant, effective_handicap, course
                 )
@@ -479,9 +480,9 @@ class GetPlayerStatsUseCase:
         La vuelta convertida en materia prima para el diferencial, o None.
 
         El Adjusted Gross Score se recalcula con el Course Handicap en lugar de
-        reaprovechar el de la media: son dos topes distintos a propósito. La
-        media es una métrica de la casa y usa el hándicap con el que se jugó la
-        partida; el diferencial pretende ser WHS y el WHS ignora el allowance.
+        reaprovechar el de la media. La media es una métrica de la casa y usa el
+        hándicap de juego de la vuelta propia (BE #513); el diferencial pretende
+        ser WHS, que parte siempre del índice y de la barra y no del allowance.
         """
         tee_rating = self._tee_rating(course, tee_color, tee_gender)
         if tee_rating is None:
