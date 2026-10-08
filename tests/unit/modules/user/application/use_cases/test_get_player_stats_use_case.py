@@ -373,7 +373,12 @@ class TestRoundsAndAverage:
     async def test_handicap_strokes_count_towards_the_average(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """Con 18 de hándicap, 5 brutos por hoyo son par neto: media 0."""
+        """
+        Con 18 de hándicap y sin barra, 5 brutos por hoyo son par neto: media 0.
+
+        Sin barra el índice hace de hándicap de juego, y la vuelta propia va al
+        100 % (BE #513): no lleva el 95 % de la medal.
+        """
         user = await create_user(user_uow, unique_email("net"), handicap=18.0)
         course = await create_golf_course(golf_course_uow, user.id)
         await _played_quick_match(qm_uow, course, user, strokes_per_hole=5)
@@ -1386,9 +1391,11 @@ class TestParPorBarra:
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
-        Scratch de rojas (par 74) firmando 4 en todos los hoyos: 72 golpes,
-        dos bajo su par. Contra la tarjeta del campo (par 72) daría 0, que es
-        lo que salía antes.
+        Scratch de rojas (par 74, CR 72) firmando 4 en todos los hoyos.
+
+        Su hándicap de juego es CR - par = -2: cede dos golpes, como en la
+        partida (BE #513). 72 brutos + 2 = 74 netos, a la par de su barra.
+        Contra la tarjeta del campo (par 72) daría +2.
         """
         user = await create_user(user_uow, unique_email("red"), handicap=0)
         course = await self._course_with_longer_red(golf_course_uow, user.id)
@@ -1403,7 +1410,7 @@ class TestParPorBarra:
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
-        assert stats.scoring_avg == -2.0
+        assert stats.scoring_avg == 0.0
 
     @pytest.mark.asyncio
     async def test_la_base_de_golpes_sale_del_par_de_su_barra(
@@ -1495,6 +1502,69 @@ class TestParPorBarra:
 
         assert stats.rounds_with_differential == 1
         assert stats.best_differential is not None
+
+
+@pytest.mark.asyncio
+class TestHandicapDeJuegoComoEnLaPartida:
+    """
+    La media neta y el desglose usan el hándicap de juego de su barra (BE #513).
+
+    Restaban el Handicap Index tal cual, sin la pendiente ni el rating de la
+    barra. Es la vuelta propia, así que va al 100 % (decisión del 18 ago).
+    Campo de par 72 (par 4, stroke index 1-18); blancas CR 72 y SR 130: con 18
+    de índice, 21 de juego.
+    """
+
+    async def _vuelta_en_blancas(self, user_uow, qm_uow, golf_course_uow, scores_by_hole=None):
+        user = await create_user(user_uow, unique_email("blancas"), handicap=18.0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(
+            qm_uow,
+            course,
+            user,
+            strokes_per_hole=5,
+            tee_color=TeeColor.WHITE,
+            tee_gender=Gender.MALE,
+            scores_by_hole=scores_by_hole,
+        )
+        return user
+
+    async def test_la_media_resta_el_handicap_de_juego(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """90 brutos menos 21: tres bajo par. Con el índice salía 0."""
+        user = await self._vuelta_en_blancas(user_uow, qm_uow, golf_course_uow)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+
+        assert stats.scoring_avg == -3.0
+
+    async def test_el_tope_de_la_media_es_el_doble_bogey_neto_de_su_handicap_de_juego(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Un 10 en el hoyo 1, donde recibe 2: se computa 8 (par + 2 + 2).
+
+        8 + 17 x 5 = 93, menos 21, menos 72: 0. Con el índice recibía uno en
+        ese hoyo, el tope era 7 y salía +2.
+        """
+        user = await self._vuelta_en_blancas(user_uow, qm_uow, golf_course_uow, {1: 10})
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+
+        assert stats.scoring_avg == 0.0
+
+    async def test_el_desglose_cuenta_lo_mismo_que_la_media(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """El campo, en la escala de una vuelta de 18, da la misma cifra: 0."""
+        user = await self._vuelta_en_blancas(user_uow, qm_uow, golf_course_uow, {1: 10})
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.by_course[0].average_to_par == 0.0
 
 
 @pytest.mark.asyncio
