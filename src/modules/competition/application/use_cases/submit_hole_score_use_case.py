@@ -66,6 +66,7 @@ class SubmitHoleScoreUseCase:
         # un golpe enviado antes de la hora de apertura no se acepta porque las
         # busquedas de ronda, competicion y campo hayan tardado lo suyo
         # (CodeRabbit, PR #307)
+        """Anota el hoyo de quien llama y el de su marcado, si es el que le toca (BE #520)."""
         llegada = self._now()
 
         async with self._uow:
@@ -175,9 +176,7 @@ class SubmitHoleScoreUseCase:
         if match.find_player(marked) is None:
             raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
         if not match.may_mark(user_id, marked):
-            raise NotYourMarkedPlayerError(
-                "Solo puedes apuntar los golpes del jugador que te toca marcar"
-            )
+            raise NotYourMarkedPlayerError()
         return marked
 
     async def _abre_si_toca(self, match, llegada):

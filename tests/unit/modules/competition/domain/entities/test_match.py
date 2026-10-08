@@ -386,6 +386,7 @@ class TestMayMark:
     """BE #520: a quién puede apuntarle los golpes cada uno."""
 
     def _fourball(self, con_asignaciones=True):
+        """Un fourball con (o sin) el sorteo de marcadores de ScoringService."""
         from src.modules.competition.domain.services.scoring_service import ScoringService
         from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -405,6 +406,7 @@ class TestMayMark:
         return match, a1.user_id, a2.user_id, b1.user_id, b2.user_id
 
     def test_con_asignaciones_solo_al_que_le_toca(self):
+        """Given el sorteo When A1 marca Then solo vale B1: ni él, ni A2, ni B2."""
         match, a1, a2, b1, b2 = self._fourball()
 
         assert match.may_mark(a1, b1)
@@ -413,6 +415,7 @@ class TestMayMark:
         assert not match.may_mark(a1, a2)
 
     def test_sin_asignaciones_cualquiera_del_equipo_contrario(self):
+        """Given sin sorteo When A1 marca Then vale cualquiera de B, nunca él ni A2."""
         match, a1, a2, b1, b2 = self._fourball(con_asignaciones=False)
 
         assert match.may_mark(a1, b1)
@@ -421,6 +424,7 @@ class TestMayMark:
         assert not match.may_mark(a1, a2)
 
     def test_quien_no_juega_no_marca_a_nadie(self):
+        """Given alguien de fuera When marca Then no puede."""
         match, _a1, _a2, b1, _b2 = self._fourball(con_asignaciones=False)
 
         assert not match.may_mark(UserId.generate(), b1)

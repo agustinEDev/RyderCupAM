@@ -139,6 +139,12 @@ class NotYourMarkedPlayerError(Exception):
     """
 
     error_code = "NOT_YOUR_MARKED_PLAYER"
+    # El texto para el jugador, fijo: la ruta no devuelve el de la excepción
+    # (CodeQL, exposición de información de una excepción)
+    message = "Solo puedes apuntar los golpes del jugador que te toca marcar"
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.message)
 
 
 class ScorecardNotReadyError(Exception):

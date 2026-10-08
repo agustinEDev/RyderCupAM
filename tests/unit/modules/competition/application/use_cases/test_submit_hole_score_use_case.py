@@ -600,6 +600,7 @@ class TestSoloMarcaSuMarcadorAsignado:
     async def test_singles_marcarse_a_si_mismo_se_rechaza_y_no_guarda_nada(
         self, uow, user_repo, scoring_service
     ):
+        """Given un singles When A se pone como marcado Then 403 y su hoyo sin tocar."""
         match, a, _b = await _match_with_hole_rows(uow)
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
 
@@ -616,6 +617,7 @@ class TestSoloMarcaSuMarcadorAsignado:
     async def test_singles_no_puede_pisar_lo_que_le_apunto_su_marcador(
         self, uow, user_repo, scoring_service
     ):
+        """Given B le apuntó un 6 a A When A se marca un 3 Then se rechaza y sigue el 6."""
         match, a, b = await _match_with_hole_rows(uow)
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
         await uc.execute(
@@ -639,6 +641,7 @@ class TestSoloMarcaSuMarcadorAsignado:
 
     @pytest.mark.asyncio
     async def test_singles_su_marcador_asignado_si_puede(self, uow, user_repo, scoring_service):
+        """Given B es el marcador de A When B anota Then el número de A queda apuntado."""
         match, a, b = await _match_with_hole_rows(uow)
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
 
@@ -658,6 +661,7 @@ class TestSoloMarcaSuMarcadorAsignado:
     async def test_de_cuatro_fuera_de_su_asignacion_se_rechaza(
         self, uow, user_repo, scoring_service, formato, a_quien
     ):
+        """Given fourball o foursomes When A1 marca a quien no le toca Then se rechaza sin guardar nada."""
         a1, a2, b1, b2 = (_make_player() for _ in range(4))
         match = await _partido_con_filas(
             uow, [a1, a2], [b1, b2], formato, _cruzadas_de_cuatro(a1, a2, b1, b2)
@@ -683,6 +687,7 @@ class TestSoloMarcaSuMarcadorAsignado:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("formato", [MatchFormat.FOURBALL, MatchFormat.FOURSOMES])
     async def test_de_cuatro_al_que_le_toca_si(self, uow, user_repo, scoring_service, formato):
+        """Given A1 tiene asignado a B1 When lo marca Then queda apuntado."""
         a1, a2, b1, b2 = (_make_player() for _ in range(4))
         match = await _partido_con_filas(
             uow, [a1, a2], [b1, b2], formato, _cruzadas_de_cuatro(a1, a2, b1, b2)
@@ -747,6 +752,7 @@ class TestSoloMarcaSuMarcadorAsignado:
     async def test_singles_sin_asignaciones_marcarse_a_si_mismo_tambien_se_rechaza(
         self, uow, user_repo, scoring_service
     ):
+        """Given un singles sin sorteo de marcadores When A se marca Then se rechaza igual."""
         a, b = _make_player(), _make_player()
         match = await _partido_con_filas(uow, [a], [b], MatchFormat.SINGLES, None)
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)

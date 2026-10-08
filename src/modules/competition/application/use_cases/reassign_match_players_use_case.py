@@ -67,6 +67,7 @@ class ReassignMatchPlayersUseCase:
         handicap_calculator: PlayingHandicapCalculator | None = None,
         scoring_service: ScoringService | None = None,
     ):
+        """Recibe el reparto de golpes del partido y el sorteo de marcadores (BE #520)."""
         self._uow = uow
         self._scoring_service = scoring_service or ScoringService()
         self._jugadores = JugadoresDelPartido(
@@ -76,6 +77,7 @@ class ReassignMatchPlayersUseCase:
     async def execute(
         self, request: ReassignMatchPlayersRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> ReassignMatchPlayersResponseDTO:
+        """Sustituye los jugadores de un partido programado por uno nuevo, con su reparto y sus marcadores."""
         async with self._uow:
             # 1-4. Validaciones
             match, round_entity, competition = await self._validate(request, user_id, is_admin)
