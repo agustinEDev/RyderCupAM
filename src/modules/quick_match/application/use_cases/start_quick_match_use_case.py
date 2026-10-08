@@ -48,11 +48,14 @@ class StartQuickMatchUseCase:
             if quick_match.creator_id != requester_id:
                 raise NotQuickMatchCreatorError("Only the creator can start the quick match.")
 
+            # Los perfiles se leen ANTES de empezar: la consulta volcaría a la BD
+            # una partida ya en juego y aún sin fijar
+            profile_handicaps = await self._profile_handicaps(quick_match)
             quick_match.start(scorer_ids)
             # Cada uno juega la partida con el índice que tiene ahora (BE #514):
             # si no, un cambio posterior del perfil recalculaba sus golpes y sus
             # puntos en todas las partidas ya jugadas
-            quick_match.freeze_handicaps(await self._profile_handicaps(quick_match))
+            quick_match.freeze_handicaps(profile_handicaps)
             await self._uow.quick_matches.update(quick_match)
 
         return await QuickMatchDTOMapper.to_response_dto(
@@ -72,7 +75,7 @@ class StartQuickMatchUseCase:
         user_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
         users = await self._user_uow.users.find_by_ids(user_ids)
         return {
-            user.id: (float(user.handicap.value) if user.handicap else None)
+            user.id: (user.handicap.value if user.handicap else None)
             for user in users
             if user.id is not None
         }

@@ -79,8 +79,18 @@ class QuickMatchParticipant:
         ):
             raise ValueError(f"custom_handicap debe estar entre {MIN_HANDICAP} y {MAX_HANDICAP}.")
 
+        self._validate_starting_handicap()
         if self.tee_gender is not None and self.tee_color is None:
             raise ValueError("tee_gender requiere tee_color (un genero solo no identifica un tee).")
+
+    def _validate_starting_handicap(self) -> None:
+        """El índice fijado (BE #514): el mismo rango que los demás, y solo si está fijado."""
+        if self.starting_handicap is None:
+            return
+        if not self.handicap_frozen:
+            raise ValueError("starting_handicap solo existe en un participante fijado.")
+        if not (MIN_HANDICAP <= self.starting_handicap <= MAX_HANDICAP):
+            raise ValueError(f"starting_handicap debe estar entre {MIN_HANDICAP} y {MAX_HANDICAP}.")
 
     @property
     def is_guest(self) -> bool:
