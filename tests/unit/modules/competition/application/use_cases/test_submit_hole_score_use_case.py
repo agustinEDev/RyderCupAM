@@ -723,33 +723,76 @@ class TestSoloMarcaSuMarcadorAsignado:
             assert (await uow.hole_scores.find_one(match.id, 1, b2.user_id)).marker_score == 5
 
     @pytest.mark.asyncio
-    async def test_se_rechaza_antes_de_abrir_el_partido(self, uow, user_repo, scoring_service):
-        """Un marcado ajeno no abre el partido: se rechaza antes, como el de quien no juega."""
-        programado, mock_round = _setup_match(
-            uow, [_make_player()], [_make_player()], status=MatchStatus.SCHEDULED
+    async def test_foursomes_el_segundo_de_cada_bando_marca_la_bola_rival_entera(
+        self, uow, user_repo, scoring_service
+    ):
+        """A2 tiene asignado a B2; en foursomes su número va a la bola de B1 y B2."""
+        a1, a2, b1, b2 = (_make_player() for _ in range(4))
+        match = await _partido_con_filas(
+            uow, [a1, a2], [b1, b2], MatchFormat.FOURSOMES, _cruzadas_de_cuatro(a1, a2, b1, b2)
         )
-        jugador = programado.team_a_players[0]
-        programado.set_marker_assignments(
-            [
-                MarkerAssignment(
-                    scorer_user_id=jugador.user_id,
-                    marks_user_id=programado.team_b_players[0].user_id,
-                    marked_by_user_id=programado.team_b_players[0].user_id,
-                ),
-            ]
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        await uc.execute(
+            str(match.id),
+            1,
+            SubmitHoleScoreBodyDTO(own_score=4, marked_player_id=str(b2.user_id), marked_score=6),
+            a2.user_id,
         )
-        await uow.matches.add(programado)
-        uow._rounds._rounds[mock_round.id] = mock_round
+
+        for jugador in (b1, b2):
+            assert (await uow.hole_scores.find_one(match.id, 1, jugador.user_id)).marker_score == 6
+
+    @pytest.mark.asyncio
+    async def test_singles_sin_asignaciones_marcarse_a_si_mismo_tambien_se_rechaza(
+        self, uow, user_repo, scoring_service
+    ):
+        a, b = _make_player(), _make_player()
+        match = await _partido_con_filas(uow, [a], [b], MatchFormat.SINGLES, None)
         uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
 
         with pytest.raises(NotYourMarkedPlayerError):
             await uc.execute(
-                str(programado.id),
+                str(match.id),
                 1,
                 SubmitHoleScoreBodyDTO(
-                    own_score=4, marked_player_id=str(jugador.user_id), marked_score=4
+                    own_score=3, marked_player_id=str(a.user_id), marked_score=3
                 ),
-                jugador.user_id,
+                a.user_id,
             )
 
-        assert (await uow.matches.find_by_id(programado.id)).status == MatchStatus.SCHEDULED
+    @pytest.mark.asyncio
+    async def test_un_partido_terminado_con_marcado_ajeno_tambien_es_el_403(
+        self, uow, user_repo, scoring_service
+    ):
+        """El marcado se mira antes que el estado: el rechazo es el mismo, definitivo."""
+        match, a, _b = await _match_with_hole_rows(uow)
+        match.complete(result={"winner": "A", "score": "2&1"})
+        await uow.matches.update(match)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(
+                str(match.id),
+                1,
+                SubmitHoleScoreBodyDTO(
+                    own_score=3, marked_player_id=str(a.user_id), marked_score=3
+                ),
+                a.user_id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_un_marcado_que_no_es_un_id_es_un_jugador_que_no_esta(
+        self, uow, user_repo, scoring_service
+    ):
+        """Antes reventaba con un 500 al construir el UserId; es el 403 de «no pertenece»."""
+        match, a, _b = await _match_with_hole_rows(uow)
+        uc = SubmitHoleScoreUseCase(uow, user_repo, scoring_service)
+
+        with pytest.raises(NotMatchPlayerError):
+            await uc.execute(
+                str(match.id),
+                1,
+                SubmitHoleScoreBodyDTO(own_score=3, marked_player_id="no-es-un-id", marked_score=3),
+                a.user_id,
+            )

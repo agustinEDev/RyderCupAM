@@ -380,3 +380,47 @@ class TestMatchEquality:
 
         match_set = {match}
         assert match in match_set
+
+
+class TestMayMark:
+    """BE #520: a quién puede apuntarle los golpes cada uno."""
+
+    def _fourball(self, con_asignaciones=True):
+        from src.modules.competition.domain.services.scoring_service import ScoringService
+        from src.shared.domain.value_objects.match_format import MatchFormat
+
+        a1, a2, b1, b2 = (create_match_player() for _ in range(4))
+        match = Match.create(
+            round_id=RoundId.generate(),
+            match_number=1,
+            team_a_players=[a1, a2],
+            team_b_players=[b1, b2],
+        )
+        if con_asignaciones:
+            match.set_marker_assignments(
+                ScoringService().generate_marker_assignments(
+                    match.team_a_players, match.team_b_players, MatchFormat.FOURBALL
+                )
+            )
+        return match, a1.user_id, a2.user_id, b1.user_id, b2.user_id
+
+    def test_con_asignaciones_solo_al_que_le_toca(self):
+        match, a1, a2, b1, b2 = self._fourball()
+
+        assert match.may_mark(a1, b1)
+        assert not match.may_mark(a1, b2)
+        assert not match.may_mark(a1, a1)
+        assert not match.may_mark(a1, a2)
+
+    def test_sin_asignaciones_cualquiera_del_equipo_contrario(self):
+        match, a1, a2, b1, b2 = self._fourball(con_asignaciones=False)
+
+        assert match.may_mark(a1, b1)
+        assert match.may_mark(a1, b2)
+        assert not match.may_mark(a1, a1)
+        assert not match.may_mark(a1, a2)
+
+    def test_quien_no_juega_no_marca_a_nadie(self):
+        match, _a1, _a2, b1, _b2 = self._fourball(con_asignaciones=False)
+
+        assert not match.may_mark(UserId.generate(), b1)
