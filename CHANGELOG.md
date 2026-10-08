@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.26.1] - 2026-10-08
+
+Hotfix: los puntos del panel y de las estadísticas cuadran con la partida, y una
+contraseña fuera de la política deja de dar «Error interno del servidor». Va con
+el frontend **2.40.1**.
+
+**Notas de despliegue.** Sin migraciones ni variables nuevas. Sin cambios de
+contrato: un 500 pasa a ser un 400 y cambian cifras ya calculadas (puntos del
+historial, media neta y desglose de estadísticas). El frontend 2.40.0 sigue
+funcionando con este backend, así que el orden no es crítico; aun así, este
+primero, `/health`, y después el frontend. Probado en local a 360 px contra la BD
+del Kind (API de la rama en `:8001`, Vite con el proxy hacia ella): registro,
+reset y perfil, y una partida Stableford con la tarjeta real del 8 oct.
+
+### Fixed
+
+- **Los puntos del panel no cuadraban con la partida** (#513). «Últimas
+  partidas», la media neta (`scoring_avg`) y el desglose por hoyos de las
+  estadísticas repartían los golpes con el índice tal cual, sin la pendiente ni
+  el rating de la barra: una vuelta de 32 puntos salía con 28 en el panel. Ahora
+  sacan el hándicap de juego de `StrokeAllocationService`, como la partida, y al
+  **100 %**: es la vuelta propia, la misma regla que «Tu vuelta» (18 ago). El
+  diferencial WHS no cambia.
+- **Una contraseña fuera de la política daba un 500.** `InvalidPasswordError` no
+  era un `ValueError` y los endpoints de registro, reset y cambio desde el perfil
+  no la capturaban. Ahora es un 400 con el motivo. Bastaba una contraseña sin
+  símbolo, que el frontend 2.40.0 dejaba enviar.
+
 ## [2.26.0] - 2026-10-06
 
 El cupo de jugadores se respeta en los tres caminos para entrar en una

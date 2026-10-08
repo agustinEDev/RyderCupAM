@@ -57,6 +57,37 @@ class TestAuthRoutes:
         assert second_response.status_code == status.HTTP_409_CONFLICT
         assert "ya está registrado" in second_response.json()["detail"]
 
+    @pytest.mark.parametrize(
+        ("password", "motivo"),
+        [
+            # 12+ caracteres, así que Pydantic la deja pasar: la rechaza el VO
+            ("Abcdefghijk1", "carácter especial"),
+            (" Abcdefghi1!", "espacios"),
+            ("abcdefghij1!", "mayúscula"),
+        ],
+    )
+    async def test_register_with_a_password_that_breaks_the_policy_is_a_400(
+        self, client: AsyncClient, password: str, motivo: str
+    ):
+        """
+        Una contraseña fuera de la política es un 400 con el motivo, no un 500.
+
+        `InvalidPasswordError` no era un `ValueError`, el router no la capturaba y
+        el usuario veía «Error interno del servidor» en un toast.
+        """
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"policy.{motivo.replace(' ', '')}@example.com",
+                "password": password,
+                "first_name": "Policy",
+                "last_name": "Test",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert motivo in response.json()["detail"]
+
     async def test_logout_user_successfully(self, client: AsyncClient):
         """
         Verifica que un usuario autenticado puede hacer logout correctamente.

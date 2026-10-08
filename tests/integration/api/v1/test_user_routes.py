@@ -711,6 +711,33 @@ class TestUserRoutes:
         )
         assert login_response.status_code == status.HTTP_200_OK
 
+    async def test_update_security_with_a_password_that_breaks_the_policy_is_a_400(
+        self, client: AsyncClient
+    ):
+        """Sin símbolo: 400 con el motivo (antes, 500) y la contraseña de antes sigue valiendo."""
+        auth_data = await create_authenticated_user(
+            client, "security.policy@example.com", "0ldP@ssw0rd!", "Policy", "Test"
+        )
+
+        response = await client.patch(
+            "/api/v1/users/security",
+            json={
+                "current_password": "0ldP@ssw0rd!",
+                "new_email": None,
+                "new_password": "Abcdefghijk1",
+                "confirm_password": "Abcdefghijk1",
+            },
+            headers={"Authorization": f"Bearer {auth_data['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "carácter especial" in response.json()["detail"]
+        login_response = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "security.policy@example.com", "password": "0ldP@ssw0rd!"},
+        )
+        assert login_response.status_code == status.HTTP_200_OK
+
     async def test_update_security_both_email_and_password(self, client: AsyncClient):
         """Verifica que se pueden actualizar ambos."""
 
