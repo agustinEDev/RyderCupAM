@@ -98,17 +98,22 @@ class WithdrawEnrollmentUseCase:
             # juega: empezada, son las del historial de lo jugado (#251)
             if competition is not None and competition.status.allows_tee_window_edits():
                 # Las de franjas ya jugadas (tras volver atrás) se quedan: historial
+                sesiones = {
+                    r.id: r
+                    for r in await self._uow.rounds.find_by_competition(enrollment.competition_id)
+                }
                 suyas = []
                 for plaza in await self._uow.plazas.de_la_competicion(enrollment.competition_id):
-                    franja = await self._uow.rounds.find_by_id(plaza.round_id)
-                    if plaza.user_id == enrollment.user_id and franja and not esta_jugada(franja):
+                    if plaza.user_id != enrollment.user_id:
+                        continue
+                    franja = sesiones.get(plaza.round_id)
+                    if franja is not None and not esta_jugada(franja):
                         await self._uow.plazas.quitar(plaza.round_id, plaza.user_id)
                         suyas.append(plaza.round_id)
                 # Fuera de las listas, y sus plazas para los que esperan
                 esperas = EsperasDeLaCompeticion(self._uow)
                 await esperas.sacar_de_todas(competition, enrollment.user_id)
-                for round_id in suyas:
-                    await esperas.rellenar(competition, round_id, datetime.now(UTC))
+                await esperas.rellenar_varias(competition, suyas, datetime.now(UTC))
 
             #    Si era capitan, su puesto queda libre
             if competition and competition.handle_withdrawal(enrollment.user_id):

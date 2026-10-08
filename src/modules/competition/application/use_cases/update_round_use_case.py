@@ -236,6 +236,7 @@ class UpdateRoundUseCase:
         franja cambió de día, cambia qué días juega cada uno: listas al día.
         """
         esperas = EsperasDeLaCompeticion(self._uow)
-        await esperas.rellenar(competition, round_entity.id, datetime.now(UTC))
+        if request.tee_sheet is not None:
+            await esperas.rellenar(competition, round_entity.id, datetime.now(UTC))
         if request.round_date:
             await esperas.limpiar(competition)

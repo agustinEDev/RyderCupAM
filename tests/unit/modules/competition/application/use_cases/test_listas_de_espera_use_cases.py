@@ -627,3 +627,57 @@ class TestLoQueEncontroElRevisor:
         )
 
         assert dentro[0] in await e.plazas(e.manana)
+
+
+class TestLoQueEncontroCodeReview:
+    async def test_cancelar_bloquea_la_competicion(self, e):
+        from src.modules.competition.application.dto.competition_dto import (
+            CancelCompetitionRequestDTO,
+        )
+        from src.modules.competition.application.use_cases.cancel_competition_use_case import (
+            CancelCompetitionUseCase,
+        )
+
+        await e.torneo()
+        bloqueadas = []
+        original = e.uow.competitions.find_by_id_for_update
+
+        async def espia(competition_id):
+            bloqueadas.append(competition_id)
+            return await original(competition_id)
+
+        e.uow.competitions.find_by_id_for_update = espia
+
+        await CancelCompetitionUseCase(e.uow).execute(
+            CancelCompetitionRequestDTO(competition_id=e.competicion.id.value), e.creador
+        )
+
+        assert bloqueadas == [e.competicion.id]
+
+    async def test_moverle_de_una_plaza_recien_asignada_conserva_el_aviso(self, e):
+        await e.torneo()
+        dentro = await e.llena(e.manana)
+        espera = await e.aprobado()
+        await e.esperar(e.manana, espera)
+        await e.soltar(e.manana, dentro[0])
+
+        await CogerPlazaUseCase(e.uow).execute(
+            e.tarde.id, espera, e.creador, en_lugar_de=e.manana.id
+        )
+
+        asignadas = await MisPlazasAsignadasUseCase(e.uow).execute(espera)
+        assert [a.round_id for a in asignadas] == [e.tarde.id.value]
+
+    async def test_no_avisa_de_una_plaza_en_una_franja_ya_jugada(self, e):
+        from src.modules.competition.domain.value_objects.round_status import RoundStatus
+
+        await e.torneo()
+        dentro = await e.llena(e.manana)
+        espera = await e.aprobado()
+        await e.esperar(e.manana, espera)
+        await e.soltar(e.manana, dentro[0])
+        e.manana._status = RoundStatus.COMPLETED
+        async with e.uow:
+            await e.uow.rounds.update(e.manana)
+
+        assert await MisPlazasAsignadasUseCase(e.uow).execute(espera) == []

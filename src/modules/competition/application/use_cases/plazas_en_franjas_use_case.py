@@ -126,9 +126,20 @@ class CogerPlazaUseCase:
             except PlazaNoPosibleError as e:
                 raise PlazaEnFranjaError(str(e)) from e
             ahora = datetime.now(UTC)
+            # Si deja una plaza que le dio la lista y aún no ha visto, la nueva hereda el
+            # aviso: si no, nunca se enteraría de que tiene plaza (code-review de la 3b)
+            sin_ver = en_lugar_de is not None and any(
+                p.round_id == en_lugar_de
+                and p.user_id == jugador
+                and p.desde_espera is not None
+                and p.vista is None
+                for p in plazas
+            )
             if en_lugar_de is not None:
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
-            plaza = PlazaEnFranja.crear(competicion.id, franja.id, jugador, ahora)
+            plaza = PlazaEnFranja.crear(
+                competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
+            )
             await self._uow.plazas.add(plaza)
             # Fuera de las listas de ese día; y la que deja, para el primero que espera
             esperas = EsperasDeLaCompeticion(self._uow)

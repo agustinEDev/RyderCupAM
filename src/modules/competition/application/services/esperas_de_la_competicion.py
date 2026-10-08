@@ -3,8 +3,8 @@ EsperasDeLaCompeticion - Rellenar las franjas desde su lista y limpiar las lista
 
 Decidido con Agustín (#251, 20 sep; y 8 oct 2026):
 
-- Cuando se libera una plaza (alguien suelta, se cambia, se retira, se amplía
-  la franja o sube el cupo de jornadas), se **asigna** sola al primero de la
+- Cuando se libera una plaza (alguien suelta, se cambia, se retira o se
+  amplía la franja), se **asigna** sola al primero de la
   lista que pueda cogerla; queda marcada para avisarle en «Requiere tu atención».
 - Quien consigue plaza, por la lista o directamente, sale de las listas de ese
   día; y de todas, si con ella llena su cupo de jornadas. Lo mismo si cambia
@@ -80,12 +80,14 @@ class EsperasDeLaCompeticion:
         foto = await self._foto(competicion)
         return await self._rellenar(competicion, foto, round_id, ahora)
 
-    async def rellenar_todas(self, competicion: Competition, ahora: datetime) -> None:
-        """Cada franja, por si ahora puede entrar alguien a quien antes se saltó."""
-        if not self._rellena(competicion):
+    async def rellenar_varias(
+        self, competicion: Competition, round_ids: list[RoundId], ahora: datetime
+    ) -> None:
+        """Varias franjas a la vez, con una sola lectura (al retirarse)."""
+        if not self._rellena(competicion) or not round_ids:
             return
         foto = await self._foto(competicion)
-        for round_id in list(foto.sesiones):
+        for round_id in round_ids:
             await self._rellenar(competicion, foto, round_id, ahora)
 
     async def tras_coger(self, competicion: Competition, user_id: UserId) -> None:

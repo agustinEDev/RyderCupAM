@@ -55,10 +55,20 @@ def upgrade() -> None:
         "tee_window_places",
         sa.Column("acknowledged_at", sa.DateTime(timezone=True), nullable=True),
     )
+    # «Requiere tu atención», en cada carga del Dashboard: solo las asignadas sin ver
+    op.create_index(
+        "ix_tee_window_places_pending_ack",
+        "tee_window_places",
+        ["user_id"],
+        postgresql_where=sa.text(
+            "from_waiting_list_at IS NOT NULL AND acknowledged_at IS NULL"
+        ),
+    )
 
 
 def downgrade() -> None:
     """Quita las listas y las marcas."""
+    op.drop_index("ix_tee_window_places_pending_ack", table_name="tee_window_places")
     op.drop_column("tee_window_places", "acknowledged_at")
     op.drop_column("tee_window_places", "from_waiting_list_at")
     op.drop_index("ix_tee_window_waits_competition_id", table_name="tee_window_waits")

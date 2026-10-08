@@ -127,35 +127,42 @@ class MisPlazasAsignadasUseCase:
         self._uow = uow
 
     async def execute(self, user_id: UserId) -> list[AssignedPlaceDTO]:
-        """Las más antiguas primero."""
+        """
+        Las más antiguas primero. Sin las de competiciones canceladas o terminadas,
+        ni las de franjas que ya se están jugando o se jugaron: ya no requieren nada.
+        """
         async with self._uow:
             plazas = await self._uow.plazas.asignadas_sin_ver(user_id)
-            competiciones = {}
-            for competition_id in {p.competition_id for p in plazas}:
-                competiciones[competition_id] = await self._uow.competitions.find_by_id(
-                    competition_id
-                )
             resultado = []
-            for plaza in sorted(plazas, key=lambda p: p.desde_espera or p.creada):
-                competicion = competiciones.get(plaza.competition_id)
-                # Cancelada o terminada: ya no requiere su atención
+            for competition_id in {p.competition_id for p in plazas}:
+                competicion = await self._uow.competitions.find_by_id(competition_id)
                 if competicion is None or competicion.status.is_final():
                     continue
-                franja = await self._uow.rounds.find_by_id(plaza.round_id)
-                if franja is None or franja.hoja_de_salidas is None:
-                    continue
-                resultado.append(
-                    AssignedPlaceDTO(
-                        competition_id=competicion.id.value,
-                        competition_name=str(competicion.name),
-                        round_id=franja.id.value,
-                        round_date=franja.round_date,
-                        session_type=franja.session_type.value,
-                        first_tee_time=franja.hoja_de_salidas.primera_salida,
-                        assigned_at=plaza.desde_espera or plaza.creada,
+                sesiones = {
+                    s.id: s for s in await self._uow.rounds.find_by_competition(competition_id)
+                }
+                for plaza in plazas:
+                    franja = sesiones.get(plaza.round_id)
+                    if (
+                        plaza.competition_id != competition_id
+                        or franja is None
+                        or franja.hoja_de_salidas is None
+                        or esta_jugada(franja)
+                        or plaza.desde_espera is None
+                    ):
+                        continue
+                    resultado.append(
+                        AssignedPlaceDTO(
+                            competition_id=competicion.id.value,
+                            competition_name=str(competicion.name),
+                            round_id=franja.id.value,
+                            round_date=franja.round_date,
+                            session_type=franja.session_type.value,
+                            first_tee_time=franja.hoja_de_salidas.primera_salida,
+                            assigned_at=plaza.desde_espera,
+                        )
                     )
-                )
-        return resultado
+        return sorted(resultado, key=lambda a: a.assigned_at)
 
 
 class EntendidoUseCase:
