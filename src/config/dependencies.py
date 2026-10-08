@@ -131,6 +131,10 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
 )
+from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
+    CogerPlazaUseCase,
+    SoltarPlazaUseCase,
+)
 from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
     AnularProgramacionUseCase,
     ProgramarActualizacionUseCase,
@@ -1802,6 +1806,20 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
     return _lanzador
 
 
+def get_coger_plaza_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> CogerPlazaUseCase:
+    """Coger plaza en una franja de stroke play (#251)."""
+    return CogerPlazaUseCase(uow)
+
+
+def get_soltar_plaza_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> SoltarPlazaUseCase:
+    """Soltar la plaza en una franja de stroke play (#251)."""
+    return SoltarPlazaUseCase(uow)
+
+
 def get_close_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
@@ -1901,6 +1919,7 @@ def get_fill_captain_use_case(
 
 def get_start_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> StartCompetitionUseCase:
     """
     Proveedor del caso de uso StartCompetitionUseCase.
@@ -1910,7 +1929,8 @@ def get_start_competition_use_case(
     2. Crea una instancia de `StartCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return StartCompetitionUseCase(uow)
+    # Los usuarios, para nombrar a quien no tenga franja en un stroke play (#251)
+    return StartCompetitionUseCase(uow, user_uow.users)
 
 
 def get_complete_competition_use_case(

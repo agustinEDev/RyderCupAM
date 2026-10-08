@@ -1238,6 +1238,27 @@ handicap_updates_table = Table(
     Column("resumed_at", DateTime(timezone=True), nullable=True),
 )
 
+# La plaza de cada jugador en cada franja de stroke play (#251). Sin entidad
+# mapeada: la escribe y la lee su repositorio
+tee_window_places_table = Table(
+    "tee_window_places",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "round_id", RoundIdDecorator, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("round_id", "user_id", name="uq_tee_window_places_round_user"),
+)
+
 # La actualización que deja programada el organizador: una por competición (#251)
 handicap_update_schedules_table = Table(
     "handicap_update_schedules",

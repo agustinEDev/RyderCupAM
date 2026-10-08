@@ -18,6 +18,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -202,3 +203,42 @@ async def montar_calendario(uow: InMemoryUnitOfWork, competition_id, como: str) 
         await uow.matches.add(partido)
         await uow.hole_scores.add_many(tarjetas)
         await uow.commit()
+
+
+async def plaza_para_todos(uow: InMemoryUnitOfWork, competition_id) -> None:
+    """
+    Cada aprobado de un stroke play, con plaza en una franja (#251): sin ella no se
+    cierran las inscripciones. Una franja de tarde (18:00-20:00, cupo 52) el
+    primer día, para no mover la primera salida de los tests que la miran.
+    Coloca directamente, sin las reglas: es montaje, no lo que se prueba.
+    """
+    from datetime import UTC, datetime, time
+
+    from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
+    from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+
+    if not isinstance(competition_id, CompetitionId):
+        competition_id = CompetitionId(competition_id)
+    async with uow:
+        competicion = await uow.competitions.find_by_id(competition_id)
+        if competicion is None or competicion.stroke_play is None:
+            return
+        con_plaza = {p.user_id for p in await uow.plazas.de_la_competicion(competition_id)}
+        aprobados = await uow.enrollments.find_by_competition_and_status(
+            competition_id, EnrollmentStatus.APPROVED
+        )
+        sin = [i.user_id for i in aprobados if i.user_id not in con_plaza]
+        if not sin:
+            return
+        franja = Round.create_franja(
+            competition_id=competition_id,
+            golf_course_id=GolfCourseId(uuid4()),
+            round_date=competicion.dates.start_date,
+            session_type=SessionType.EVENING,
+            hoja_de_salidas=HojaDeSalidas(time(18, 0), time(20, 0), 10, 4),
+        )
+        await uow.rounds.add(franja)
+        for user_id in sin:
+            await uow.plazas.add(
+                PlazaEnFranja.crear(competition_id, franja.id, user_id, datetime.now(UTC))
+            )

@@ -19,6 +19,7 @@ from src.modules.competition.application.ports.lanzador_de_actualizaciones impor
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
+from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
@@ -122,6 +123,8 @@ class CloseEnrollmentsUseCase:
                 competition.stroke_play is not None
                 and competition.status is CompetitionStatus.ACTIVE
             ):
+                # Antes, que cada aprobado tenga su franja (8 oct 2026)
+                await FranjasAlCerrar(self._uow, self._usuarios()).comprobar(competition)
                 await self._handicaps().fijar(competition)
 
             # 4b. Cerrar inscripciones (la entidad valida la transición)
@@ -151,7 +154,10 @@ class CloseEnrollmentsUseCase:
             closed_at=competition.updated_at,
         )
 
-    def _handicaps(self) -> HandicapsAlCerrar:
+    def _usuarios(self) -> UserRepositoryInterface:
         if self._users is None:
             raise RuntimeError("Hace falta el repositorio de usuarios para un stroke play")
-        return HandicapsAlCerrar(self._uow, self._users)
+        return self._users
+
+    def _handicaps(self) -> HandicapsAlCerrar:
+        return HandicapsAlCerrar(self._uow, self._usuarios())

@@ -14,6 +14,7 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
+    comprobar_que_esta_vacia,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -78,6 +79,10 @@ class DeleteRoundUseCase:
                     f"No se puede eliminar la ronda en estado {round_entity.status.value}. "
                     f"Solo PENDING_TEAMS o PENDING_MATCHES"
                 )
+
+            # 5b. Una franja con gente dentro no se borra: perderían su sitio (#251).
+            #     Antes de tocar nada
+            await comprobar_que_esta_vacia(self._uow, round_entity)
 
             # 6. Eliminar partidos asociados en cascada
             matches = await self._uow.matches.find_by_round(round_id)

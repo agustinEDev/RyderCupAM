@@ -86,6 +86,10 @@ class TeeSheetResponseDTO(TeeSheetDTO):
 
     tee_times: list[time] = Field(..., description="Cada hora de salida, en orden.")
     capacity: int = Field(..., description="Cupo de la franja: salidas por jugadores por partida.")
+    places_taken: int = Field(0, description="Plazas ya cogidas (#251).")
+    player_ids: list[UUID] = Field(
+        default_factory=list, description="Quién tiene plaza, por orden de llegada (#251)."
+    )
 
 
 class RoundResponseDTO(BaseModel):
@@ -686,3 +690,28 @@ class ReassignMatchPlayersBodyDTO(BaseModel):
 
     team_a_player_ids: list[UUID] = Field(..., description="Nuevos jugadores equipo A.")
     team_b_player_ids: list[UUID] = Field(..., description="Nuevos jugadores equipo B.")
+
+
+# ======================================================================================
+# Plazas en franjas (#251)
+# ======================================================================================
+
+
+class TakeTeeWindowPlaceBodyDTO(BaseModel):
+    """Coger plaza en una franja de stroke play."""
+
+    user_id: UUID | None = Field(
+        None,
+        description="A quién: vacío para uno mismo; el organizador puede poner a cualquiera.",
+    )
+    instead_of_round_id: UUID | None = Field(
+        None,
+        description="Una franja suya que deja a cambio, de golpe (cambiarse sin perder sitio).",
+    )
+
+
+class TeeWindowPlaceResponseDTO(BaseModel):
+    """La plaza cogida."""
+
+    round_id: UUID
+    user_id: UUID

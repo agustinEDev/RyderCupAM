@@ -12,6 +12,7 @@ from tests.conftest import (
     add_one_session,
     create_authenticated_user,
     create_competition,
+    plaza_para_todos,
     set_auth_cookies,
 )
 
@@ -56,6 +57,8 @@ async def _cerrada(client: AsyncClient, tipo: str) -> tuple[dict, dict]:
     if tipo != "RYDER_CUP":
         await add_one_session(client, usuario["cookies"], competicion)
         set_auth_cookies(client, usuario["cookies"])
+    if tipo != "RYDER_CUP":
+        await plaza_para_todos(client, usuario["cookies"], competicion)
     cerrar = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
     assert cerrar.status_code == 200, cerrar.text
     return usuario, competicion

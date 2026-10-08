@@ -49,6 +49,7 @@ from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.helpers import (
     USUARIOS_CON_GENERO,
     create_approved_enrollment,
+    plaza_para_todos,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -120,12 +121,14 @@ class _Escenario:
         return user_id
 
     async def cerrar(self, torneo):
+        # Sin franja no se cierra un stroke play (#251, 8 oct 2026)
+        await plaza_para_todos(self.uow, torneo)
         return await CloseEnrollmentsUseCase(self.uow, self.usuarios).execute(
             CloseEnrollmentsRequestDTO(competition_id=torneo.value), self.creador
         )
 
     async def iniciar(self, torneo):
-        return await StartCompetitionUseCase(self.uow).execute(
+        return await StartCompetitionUseCase(self.uow, self.usuarios).execute(
             StartCompetitionRequestDTO(competition_id=torneo.value), self.creador
         )
 
