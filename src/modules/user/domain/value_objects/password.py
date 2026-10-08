@@ -26,10 +26,15 @@ import bcrypt
 from src.shared.security.password_blacklist import is_common_password
 
 
-class InvalidPasswordError(Exception):
-    """Excepción lanzada cuando un password no es válido."""
+class InvalidPasswordError(ValueError):
+    """
+    Excepción lanzada cuando un password no es válido.
 
-    pass
+    Es un `ValueError` porque los endpoints que reciben una contraseña nueva
+    (registro, reset y cambio desde el perfil) convierten ese tipo en un 400 con
+    el motivo. Siendo una `Exception` a secas se escapaba como un 500 y el
+    usuario leía «Error interno del servidor» en vez de qué le falta.
+    """
 
 
 @dataclass(frozen=True)

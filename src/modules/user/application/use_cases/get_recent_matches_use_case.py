@@ -14,7 +14,10 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.quick_match.application.services.course_context import course_context_for
+from src.modules.quick_match.application.services.course_context import (
+    course_context_for,
+    own_playing_handicap,
+)
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -644,19 +647,22 @@ class GetRecentMatchesUseCase:
             HoleSetup(hole.number, hole.par, hole.stroke_index)
             for hole in course.hole_card_for(raw.participant.tee_color, raw.participant.tee_gender)
         ]
-        # En una partida scratch nadie recibe golpes, tampoco para los puntos
-        # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a
-        # bruto se apuntaba como si le hubieran dado golpes.
-        handicap = (
-            self._effective_handicap(raw.participant, profile_handicap)
-            if raw.match.uses_handicap()
-            else None
+        # El hándicap de juego de su vuelta propia, con su barra como en la
+        # partida: con el índice tal cual el panel daba 28 puntos a una vuelta
+        # de 32 (BE #513). En una partida scratch sale 0, sin golpes
+        playing_handicap = own_playing_handicap(
+            raw.match,
+            raw.participant,
+            self._effective_handicap(raw.participant, profile_handicap),
+            course,
+            self._stroke_allocation_service,
         )
+        # Sin barra ni allowance: ya van dentro del hándicap de juego, y el
+        # calculador sin `tee_rating` reparte la cifra que recibe tal cual
         return self._calculator.compute_participant_totals(
-            handicap=handicap,
+            handicap=playing_handicap,
             holes=holes,
             scores_by_hole=scores_by_hole,
-            allowance_percentage=raw.match.get_effective_allowance(),
         )
 
     def _scorecard_totals(self, raw: _CompetitionMatchRaw, hole_card: list) -> tuple:
