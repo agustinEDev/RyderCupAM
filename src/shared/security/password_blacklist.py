@@ -133,6 +133,11 @@ COMMON_PASSWORDS = {
     "something",
 }
 
+# La lista se escribe como la gente las teclea («Password123!»), pero se compara
+# en minúsculas: sin normalizarla aquí, las entradas con mayúscula no
+# coincidían nunca y «Password123!» se aceptaba (BE #518)
+_COMMON_PASSWORDS_LOWER = frozenset(p.lower() for p in COMMON_PASSWORDS)
+
 
 def is_common_password(password: str) -> bool:
     """
@@ -157,7 +162,7 @@ def is_common_password(password: str) -> bool:
         >>> is_common_password("Welcome1!")  # En blacklist
         True
     """
-    return password.lower() in COMMON_PASSWORDS
+    return password.lower() in _COMMON_PASSWORDS_LOWER
 
 
 def get_blacklist_size() -> int:
