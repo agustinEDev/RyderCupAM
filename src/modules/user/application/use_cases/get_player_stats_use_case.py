@@ -12,6 +12,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.quick_match.application.services.course_context import own_playing_handicap
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -334,12 +335,16 @@ class GetPlayerStatsUseCase:
                 #   doble bogey neto del Adjusted Gross Score, que es parte de
                 #   la fórmula WHS y no depende de cómo se jugara la partida.
                 effective_handicap = self._effective_handicap(participant, profile_handicap)
-                scoring_handicap = effective_handicap if match.uses_handicap() else None
+                # El hándicap de juego de su vuelta propia, con su barra como en
+                # la partida (BE #513). Ya la lleva dentro, y el allowance de
+                # la vuelta propia es el 100 %: por eso no se pasa ninguno
+                playing_handicap = own_playing_handicap(
+                    match, participant, effective_handicap, course
+                )
                 totals = self._calculator.compute_participant_totals(
-                    handicap=scoring_handicap,
+                    handicap=playing_handicap,
                     holes=holes,
                     scores_by_hole=scores_by_hole,
-                    allowance_percentage=match.get_effective_allowance(),
                     # La media junta partidas rápidas y torneo: si solo una de
                     # las dos topara los hoyos malos, no serían comparables
                     cap_at_net_double_bogey=True,
@@ -361,8 +366,7 @@ class GetPlayerStatsUseCase:
                         holes=self._quick_match_hole_outcomes(
                             holes=holes,
                             scores_by_hole=scores_by_hole,
-                            handicap=scoring_handicap,
-                            allowance_percentage=match.get_effective_allowance(),
+                            playing_handicap=playing_handicap,
                         ),
                         golf_course_id=str(course.id) if course is not None else None,
                         golf_course_name=str(course.name) if course is not None else None,
@@ -623,15 +627,15 @@ class GetPlayerStatsUseCase:
         self,
         holes: list,
         scores_by_hole: dict,
-        handicap: float | None,
-        allowance_percentage: int,
+        playing_handicap: int | None,
     ) -> list[HoleOutcome]:
         """
         Los hoyos de una partida rápida, con el mismo tope que la media.
 
         Aquí los golpes recibidos SÍ se calculan, porque en partida rápida el
-        reparto no se guarda hoyo a hoyo: sale del hándicap, del índice de
-        dificultad y del allowance, exactamente como al puntuar.
+        reparto no se guarda hoyo a hoyo: sale del hándicap de juego (con su
+        barra ya dentro) y del índice de dificultad, exactamente
+        como al puntuar.
 
         Se usa el calculador por sus métodos públicos y no se toca: su reparto
         vive en el arnés de paridad con el frontend, y cambiarlo obliga a
@@ -641,7 +645,7 @@ class GetPlayerStatsUseCase:
         bogey neto, que es lo que el WHS manda anotar en un hoyo sin terminar.
         Un hoyo que nadie tocó no está en `scores_by_hole` y no entra.
         """
-        strokes_basis = self._calculator.resolve_strokes_basis(handicap, None, allowance_percentage)
+        strokes_basis = None if playing_handicap is None else Decimal(playing_handicap)
 
         outcomes = []
         for hole in holes:
