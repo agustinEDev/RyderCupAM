@@ -88,8 +88,12 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
 )
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
+from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
-from src.modules.user.infrastructure.api.v1.password_errors import password_policy_response
+from src.modules.user.infrastructure.api.v1.password_errors import (
+    password_policy_response,
+    reset_token_response,
+)
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -878,6 +882,8 @@ async def reset_password(
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)
         return password_policy_response(e)
+    except InvalidResetTokenError as e:
+        return reset_token_response(e)
     except ValueError as e:
         # Token inválido/expirado o password inválido
         logger.warning(f"Password reset failed: {e!s}")

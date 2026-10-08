@@ -24,6 +24,7 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.entities.password_history import PasswordHistory
+from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -115,7 +116,7 @@ class ResetPasswordUseCase:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
-            raise ValueError("Token de reseteo inválido o expirado")
+            raise InvalidResetTokenError()
 
         # Validar token y expiración usando lógica de dominio
         try:

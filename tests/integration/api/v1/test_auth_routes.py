@@ -88,6 +88,44 @@ class TestAuthRoutes:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert motivo in response.json()["detail"]
 
+    async def test_reset_with_a_password_without_symbol_carries_its_code_and_keeps_the_token(
+        self, client: AsyncClient
+    ):
+        """
+        Given un token de reseteo válido
+        When se manda una contraseña sin símbolo
+        Then 400 con `error_code` PASSWORD_NO_SYMBOL (BE #519) y el token sigue valiendo
+        """
+        email = "reset.policy@example.com"
+        await create_authenticated_user(client, email, "V@l1dP@ss123!", "Reset", "Policy")
+        await client.post("/api/v1/auth/forgot-password", json={"email": email})
+        token = (await get_user_by_email(client, email)).password_reset_token
+
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": token, "new_password": "Abcdefghijk1"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error_code"] == "PASSWORD_NO_SYMBOL"
+        sigue = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+        assert sigue.json()["valid"] is True
+
+    async def test_reset_with_an_unknown_token_carries_its_code(self, client: AsyncClient):
+        """
+        Given un token que no existe
+        When se intenta resetear
+        Then 400 con `error_code` RESET_TOKEN_INVALID: el cliente no puede reconocerlo
+        por el texto, que va en español («inválido», no «invalid»)
+        """
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "t" * 43, "new_password": "V@l1dP@ss123!"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error_code"] == "RESET_TOKEN_INVALID"
+
     async def test_register_with_a_common_password_carries_its_code(
         self, client: AsyncClient, monkeypatch
     ):

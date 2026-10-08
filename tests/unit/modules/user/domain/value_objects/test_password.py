@@ -339,6 +339,7 @@ class TestPasswordErrorCodes:
     @pytest.mark.parametrize(
         ("password", "code"),
         [
+            ("", "PASSWORD_EMPTY"),
             (" Abcdefghi1!", "PASSWORD_EDGE_SPACES"),
             ("Abc1!", "PASSWORD_TOO_SHORT"),
             ("A1!" + "a" * 130, "PASSWORD_TOO_LONG"),

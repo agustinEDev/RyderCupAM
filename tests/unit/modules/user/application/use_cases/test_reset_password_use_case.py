@@ -26,6 +26,7 @@ from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
 )
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -223,10 +224,12 @@ class TestResetPasswordInvalidToken:
         request_dto = ResetPasswordRequestDTO(token=fake_token, new_password="NewPassword456!")
 
         # Act & Assert
-        # Cuando el token no existe, puede fallar en validación de security event
-        # o en la lógica de negocio, ambos son válidos
-        with pytest.raises(ValueError):
+        # El error del token, con su código (BE #519). Antes valía «cualquier
+        # ValueError»: fallaba la auditoría («email debe ser válido») y eso era
+        # lo que le llegaba al usuario, sin que nadie lo viera
+        with pytest.raises(InvalidResetTokenError) as error:
             await use_case.execute(request_dto)
+        assert error.value.code == "RESET_TOKEN_INVALID"
 
         # Verificar que NO se envió email
         email_service.send_password_changed_notification.assert_not_called()
@@ -261,7 +264,7 @@ class TestResetPasswordInvalidToken:
         request_dto = ResetPasswordRequestDTO(token=token, new_password="NewPassword456!")
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Token de reseteo inválido o expirado"):
+        with pytest.raises(InvalidResetTokenError, match="Token de reseteo inválido o expirado"):
             await use_case.execute(request_dto)
 
         # Verificar que la contraseña NO cambió

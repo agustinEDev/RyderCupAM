@@ -1,6 +1,7 @@
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
@@ -1016,7 +1017,7 @@ class User:
         """
         # Validar el token antes de proceder
         if not self.can_reset_password(token):
-            raise ValueError("Token de reseteo inválido o expirado")
+            raise InvalidResetTokenError()
 
         # Cambiar la contraseña (Password VO valida la política de seguridad)
         new_password_vo = Password.from_plain_text(new_password)
