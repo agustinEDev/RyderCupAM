@@ -44,5 +44,5 @@ async def test_out_of_the_old_group_and_without_group_in_the_new_window():
     tarde = await ver.execute(escenario.tarde.id.value)
     assert quien.value not in {p.user_id for g in manana.groups for p in g.players}
     assert len(manana.groups[0].players) == 2
-    assert tarde.unassigned_player_ids == [quien.value]
+    assert [p.user_id for p in tarde.unassigned_players] == [quien.value]
     assert quien.value not in {p.user_id for g in tarde.groups for p in g.players}

@@ -209,7 +209,7 @@ async def test_nine_of_four_highest_first():
     assert [p.user_id for p in vista.groups[0].players] == [u.value for u in jugadores[8:4:-1]]
     assert vista.groups[0].players[0].name == "Jugador 9.0"
     assert vista.editable
-    assert vista.unassigned_player_ids == []
+    assert vista.unassigned_players == []
     assert len(await escenario.uow.partidas.de_la_franja(escenario.manana.id)) == 3
 
 

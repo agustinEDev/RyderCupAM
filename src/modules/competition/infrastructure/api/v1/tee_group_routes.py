@@ -264,7 +264,7 @@ async def delete_tee_groups(
     summary="Ver las partidas de una franja",
     description=(
         "Cualquiera con sesión. `editable` dice si el organizador aún puede generarlas o "
-        "cambiarlas; `unassigned_player_ids`, quién tiene plaza y no partida."
+        "cambiarlas; `unassigned_players`, quién tiene plaza y no partida."
     ),
     tags=["Competitions - Tee groups"],
 )

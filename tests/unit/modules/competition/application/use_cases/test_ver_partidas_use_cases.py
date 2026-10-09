@@ -77,7 +77,8 @@ async def test_before_generating_everybody_is_unassigned():
     vista = await _vista(escenario)
 
     assert vista.groups == []
-    assert vista.unassigned_player_ids == [u.value for u in jugadores]
+    assert [p.name for p in vista.unassigned_players] == ["Jugador 3.0", "Jugador 2.0"]
+    assert [p.user_id for p in vista.unassigned_players] == [u.value for u in jugadores]
     assert vista.editable
 
 
@@ -90,7 +91,7 @@ async def test_unassigned_leaves_out_the_withdrawn_and_the_placed():
     tarde = await escenario.con_plaza("9.0")
     await escenario.con_plaza("8.0", status=EnrollmentStatus.WITHDRAWN)
 
-    assert (await _vista(escenario)).unassigned_player_ids == [tarde.value]
+    assert [p.user_id for p in (await _vista(escenario)).unassigned_players] == [tarde.value]
 
 
 @pytest.mark.parametrize(

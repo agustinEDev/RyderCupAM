@@ -74,6 +74,13 @@ class TeeGroupDTO(BaseModel):
     players: list[TeeGroupPlayerDTO]
 
 
+class UnassignedPlayerDTO(BaseModel):
+    """Alguien con plaza en la franja y sin partida: para colocarlo."""
+
+    user_id: UUID
+    name: str
+
+
 class TeeGroupsResponseDTO(BaseModel):
     """Las partidas de una franja."""
 
@@ -82,8 +89,8 @@ class TeeGroupsResponseDTO(BaseModel):
         ...,
         description="Si el organizador aún puede generarlas o cambiarlas (hasta la 1.ª salida).",
     )
-    unassigned_player_ids: list[UUID] = Field(
-        ..., description="Con plaza en la franja y sin partida."
+    unassigned_players: list[UnassignedPlayerDTO] = Field(
+        ..., description="Con plaza en la franja y sin partida, por orden de llegada."
     )
     groups: list[TeeGroupDTO]
 

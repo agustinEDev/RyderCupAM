@@ -192,7 +192,7 @@ async def test_the_organiser_generates_them(client: AsyncClient):
     cuerpo = respuesta.json()
     assert cuerpo["round_id"] == franja
     assert cuerpo["editable"] is True
-    assert cuerpo["unassigned_player_ids"] == []
+    assert cuerpo["unassigned_players"] == []
     (partida,) = cuerpo["groups"]
     assert (partida["number"], partida["tee_time"], partida["status"]) == (1, "09:00", "SCHEDULED")
     assert partida["incomplete"] is False
@@ -405,7 +405,8 @@ async def test_deleting(client: AsyncClient):
 
     assert borradas.status_code == 204, borradas.text
     assert despues.json()["groups"] == []
-    assert len(despues.json()["unassigned_player_ids"]) == 4
+    assert len(despues.json()["unassigned_players"]) == 4
+    assert all(p["name"] for p in despues.json()["unassigned_players"])
 
 
 async def test_swapping_with_one_of_a_full_group(client: AsyncClient):

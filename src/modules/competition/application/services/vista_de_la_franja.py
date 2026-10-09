@@ -13,6 +13,7 @@ from src.modules.competition.application.dto.partidas_dto import (
     TeeGroupDTO,
     TeeGroupPlayerDTO,
     TeeGroupsResponseDTO,
+    UnassignedPlayerDTO,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
@@ -85,7 +86,9 @@ async def vista_de_la_franja(
     return TeeGroupsResponseDTO(
         round_id=franja.id.value,
         editable=await _editable(competicion, franja, partidas, zonas, ahora),
-        unassigned_player_ids=[u.value for u in sin_partida],
+        unassigned_players=[
+            UnassignedPlayerDTO(user_id=u.value, name=nombres.get(u, "")) for u in sin_partida
+        ],
         groups=[
             partida_dto(partida, hoja, nombres)
             for partida in sorted(partidas, key=lambda p: p.numero)

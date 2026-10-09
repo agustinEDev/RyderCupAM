@@ -148,8 +148,8 @@ class TestMover:
 
         vista = await _mover(escenario, tarde, partida.id.value)
 
-        assert antes.unassigned_player_ids == [tarde.value]
-        assert vista.unassigned_player_ids == []
+        assert [p.user_id for p in antes.unassigned_players] == [tarde.value]
+        assert [p.user_id for p in vista.unassigned_players] == []
         nuevo = next(p for p in vista.groups[0].players if p.user_id == tarde.value)
         assert nuevo.handicap == 9
 
