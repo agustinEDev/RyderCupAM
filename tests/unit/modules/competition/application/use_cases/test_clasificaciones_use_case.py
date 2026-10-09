@@ -19,7 +19,9 @@ import pytest
 
 from src.modules.competition.application.exceptions import PartidasError
 from src.modules.competition.application.use_cases.clasificaciones_use_case import (
-    ClasificacionesUseCase,
+    ClasificacionDeLaFranjaUseCase,
+    ClasificacionGeneralUseCase,
+    ClasificacionScratchUseCase,
 )
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.round import Round
@@ -68,8 +70,16 @@ async def _dos_franjas():
     return escenario, a, b, c
 
 
-def _caso(escenario) -> ClasificacionesUseCase:
-    return ClasificacionesUseCase(uow=escenario.uow, user_repository=escenario.usuarios)
+def _de_la_franja(escenario) -> ClasificacionDeLaFranjaUseCase:
+    return ClasificacionDeLaFranjaUseCase(uow=escenario.uow, user_repository=escenario.usuarios)
+
+
+def _general(escenario) -> ClasificacionGeneralUseCase:
+    return ClasificacionGeneralUseCase(uow=escenario.uow, user_repository=escenario.usuarios)
+
+
+def _scratch(escenario) -> ClasificacionScratchUseCase:
+    return ClasificacionScratchUseCase(uow=escenario.uow, user_repository=escenario.usuarios)
 
 
 async def _partida_de(escenario, franja, user_id):
@@ -84,7 +94,7 @@ async def test_the_window_by_points_with_names_categories_and_thru():
     await _validar(escenario, partida, a, hoyos=range(1, 3), golpes=4)  # 2 hoyos
     await _validar(escenario, partida, b, hoyos=range(1, 4), golpes=4)  # 3 hoyos
 
-    tabla = await _caso(escenario).de_la_franja(escenario.manana.id.value)
+    tabla = await _de_la_franja(escenario).execute(escenario.manana.id.value)
 
     assert [(f.user_id, f.position, f.thru) for f in tabla.rows] == [
         (b.value, 1, 3),
@@ -104,7 +114,7 @@ async def test_holes_not_validated_do_not_count():
     golpe.anotar_propio(4, True, a, A_LAS_NUEVE_Y_CINCO)
     await escenario.uow.golpes_de_partida.guardar(golpe)
 
-    tabla = await _caso(escenario).de_la_franja(escenario.manana.id.value)
+    tabla = await _de_la_franja(escenario).execute(escenario.manana.id.value)
 
     assert {f.status for f in tabla.rows} == {"SIN_EMPEZAR"}
 
@@ -115,7 +125,7 @@ async def test_the_window_by_category():
     await _validar(escenario, partida, a, hoyos=range(1, 2))
     await _validar(escenario, partida, c, hoyos=range(1, 2))
 
-    tabla = await _caso(escenario).de_la_franja(escenario.tarde.id.value, categoria=2)
+    tabla = await _de_la_franja(escenario).execute(escenario.tarde.id.value, categoria=2)
 
     assert [f.user_id for f in tabla.rows] == [c.value]
 
@@ -128,7 +138,7 @@ async def test_the_overall_adds_both_cards():
     await _validar(escenario, tarde, a, hoyos=range(1, 3))
     await _validar(escenario, manana, b, hoyos=range(1, 4))
 
-    tabla = await _caso(escenario).general(escenario.competicion.id.value)
+    tabla = await _general(escenario).execute(escenario.competicion.id.value)
 
     suya = next(f for f in tabla.rows if f.user_id == a.value)
     assert (suya.cards, tabla.rule) == (2, "ACCUMULATED")
@@ -154,7 +164,7 @@ async def test_the_handicap_of_the_last_window(al_reves, monkeypatch):
 
     monkeypatch.setattr(InMemoryPartidaRepository, "de_la_competicion", en_orden)
 
-    tabla = await _caso(escenario).general(escenario.competicion.id.value)
+    tabla = await _general(escenario).execute(escenario.competicion.id.value)
 
     assert next(f for f in tabla.rows if f.user_id == a.value).handicap == Decimal("1.0")
 
@@ -164,7 +174,7 @@ async def test_the_scratch_with_my_row():
     partida = await _partida_de(escenario, escenario.manana, a)
     await _validar(escenario, partida, a, hoyos=range(1, 3))
 
-    tabla = await _caso(escenario).scratch(escenario.competicion.id.value, b)
+    tabla = await _scratch(escenario).execute(escenario.competicion.id.value, b)
 
     assert tabla.scale == "SCRATCH"
     assert [f.user_id for f in tabla.rows] == [a.value]
@@ -185,6 +195,6 @@ async def test_a_session_that_is_not_a_window():
         await escenario.uow.rounds.add(sesion)
 
     with pytest.raises(PartidasError):
-        await _caso(escenario).de_la_franja(sesion.id.value)
+        await _de_la_franja(escenario).execute(sesion.id.value)
     with pytest.raises(PartidasError):
-        await _caso(escenario).de_la_franja(RoundId.generate().value)
+        await _de_la_franja(escenario).execute(RoundId.generate().value)

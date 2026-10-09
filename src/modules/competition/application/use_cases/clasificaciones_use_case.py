@@ -1,5 +1,5 @@
 """
-Caso de Uso: Las clasificaciones de un stroke play (#251, PR 5).
+Casos de Uso: Las clasificaciones de un stroke play (#251, PR 5).
 
 - **La de la franja** (pestaña 2 de anotar): una tarjeta por jugador, solo hoyos
   validados, con «tras N» y filtro de categoría.
@@ -49,61 +49,14 @@ CORTE_DEL_SCRATCH = 25
 _SOLO_STROKE_PLAY = "Solo hay clasificación en un Stableford o un Medal."
 
 
-class ClasificacionesUseCase:
-    """La de la franja, la general y la scratch."""
+class _Clasificaciones:
+    """Lo que comparten las tres: leer la competición y montar la tabla."""
 
     def __init__(
         self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
     ):
         self._uow = uow
         self._usuarios = user_repository
-
-    async def de_la_franja(
-        self, round_id: UUID, categoria: int | None = None
-    ) -> StandingsResponseDTO:
-        """
-        Raises:
-            PartidasError: Si no es una franja de un stroke play
-        """
-        async with self._uow:
-            franja = await self._uow.rounds.find_by_id(RoundId(round_id))
-            if franja is None or franja.hoja_de_salidas is None:
-                raise PartidasError(
-                    "Solo hay clasificación en las franjas de un Stableford o un Medal."
-                )
-            competicion = await self._stroke_play(franja.competition_id)
-            partidas = await self._uow.partidas.de_la_franja(franja.id)
-            golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
-            regla = OverallStanding.ACCUMULATED
-            filas, nombres = await self._tabla(
-                competicion, partidas, golpes, Escala.NETA, regla, categoria
-            )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, nombres)
-
-    async def general(
-        self, competition_id: UUID, categoria: int | None = None
-    ) -> StandingsResponseDTO:
-        """
-        Raises:
-            PartidasError: Si no es un stroke play
-        """
-        async with self._uow:
-            competicion = await self._stroke_play(CompetitionId(competition_id))
-            regla, filas, nombres = await self._de_la_competicion(
-                competicion, Escala.NETA, categoria
-            )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, nombres)
-
-    async def scratch(self, competition_id: UUID, quien: UserId) -> StandingsResponseDTO:
-        """
-        Raises:
-            PartidasError: Si no es un stroke play
-        """
-        async with self._uow:
-            competicion = await self._stroke_play(CompetitionId(competition_id))
-            regla, filas, nombres = await self._de_la_competicion(competicion, Escala.SCRATCH, None)
-        visibles, mia = Clasificacion.cortar(filas, CORTE_DEL_SCRATCH, quien)
-        return _respuesta(competicion, Escala.SCRATCH, regla, None, visibles, nombres, mia)
 
     async def _stroke_play(self, competition_id: CompetitionId) -> Competition:
         competicion = await self._uow.competitions.find_by_id(competition_id)
@@ -174,6 +127,63 @@ class ClasificacionesUseCase:
             [f.user_id for f in filas], competicion.id, self._usuarios, self._uow
         )
         return filas, nombres
+
+
+class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
+    """La de la franja: una tarjeta por jugador."""
+
+    async def execute(self, round_id: UUID, categoria: int | None = None) -> StandingsResponseDTO:
+        """
+        Raises:
+            PartidasError: Si no es una franja de un stroke play
+        """
+        async with self._uow:
+            franja = await self._uow.rounds.find_by_id(RoundId(round_id))
+            if franja is None or franja.hoja_de_salidas is None:
+                raise PartidasError(
+                    "Solo hay clasificación en las franjas de un Stableford o un Medal."
+                )
+            competicion = await self._stroke_play(franja.competition_id)
+            partidas = await self._uow.partidas.de_la_franja(franja.id)
+            golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
+            regla = OverallStanding.ACCUMULATED
+            filas, nombres = await self._tabla(
+                competicion, partidas, golpes, Escala.NETA, regla, categoria
+            )
+        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, nombres)
+
+
+class ClasificacionGeneralUseCase(_Clasificaciones):
+    """La general neta, con la regla de la competición."""
+
+    async def execute(
+        self, competition_id: UUID, categoria: int | None = None
+    ) -> StandingsResponseDTO:
+        """
+        Raises:
+            PartidasError: Si no es un stroke play
+        """
+        async with self._uow:
+            competicion = await self._stroke_play(CompetitionId(competition_id))
+            regla, filas, nombres = await self._de_la_competicion(
+                competicion, Escala.NETA, categoria
+            )
+        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, nombres)
+
+
+class ClasificacionScratchUseCase(_Clasificaciones):
+    """La scratch, cortada, con la fila de quien mira."""
+
+    async def execute(self, competition_id: UUID, quien: UserId) -> StandingsResponseDTO:
+        """
+        Raises:
+            PartidasError: Si no es un stroke play
+        """
+        async with self._uow:
+            competicion = await self._stroke_play(CompetitionId(competition_id))
+            regla, filas, nombres = await self._de_la_competicion(competicion, Escala.SCRATCH, None)
+        visibles, mia = Clasificacion.cortar(filas, CORTE_DEL_SCRATCH, quien)
+        return _respuesta(competicion, Escala.SCRATCH, regla, None, visibles, nombres, mia)
 
 
 def _fila(fila: Fila, nombres: dict[UserId, str]) -> StandingRowDTO:

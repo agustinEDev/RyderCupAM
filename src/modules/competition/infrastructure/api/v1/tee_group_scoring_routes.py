@@ -15,7 +15,9 @@ from fastapi.responses import JSONResponse
 from src.config.dependencies import (
     get_anotar_hoyo_de_partida_use_case,
     get_cerrar_franja_use_case,
-    get_clasificaciones_use_case,
+    get_clasificacion_de_la_franja_use_case,
+    get_clasificacion_general_use_case,
+    get_clasificacion_scratch_use_case,
     get_corregir_hoyo_de_partida_use_case,
     get_current_user,
     get_entregar_tarjeta_de_partida_use_case,
@@ -48,7 +50,9 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     SinMarcadorError,
 )
 from src.modules.competition.application.use_cases.clasificaciones_use_case import (
-    ClasificacionesUseCase,
+    ClasificacionDeLaFranjaUseCase,
+    ClasificacionGeneralUseCase,
+    ClasificacionScratchUseCase,
 )
 from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_use_case import (
     EntregarTarjetaDePartidaUseCase,
@@ -402,11 +406,13 @@ async def get_tee_window_standings(
     round_id: UUID,
     category: int | None = None,
     current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
-    clasificaciones: ClasificacionesUseCase = Depends(get_clasificaciones_use_case),
+    clasificacion: ClasificacionDeLaFranjaUseCase = Depends(
+        get_clasificacion_de_la_franja_use_case
+    ),
 ):
     """200 con la clasificación de la franja."""
     try:
-        return await clasificaciones.de_la_franja(round_id, category)
+        return await clasificacion.execute(round_id, category)
     except PartidasError:
         return _sin_clasificacion()
 
@@ -422,11 +428,11 @@ async def get_overall_standings(
     competition_id: UUID,
     category: int | None = None,
     current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
-    clasificaciones: ClasificacionesUseCase = Depends(get_clasificaciones_use_case),
+    clasificacion: ClasificacionGeneralUseCase = Depends(get_clasificacion_general_use_case),
 ):
     """200 con la general."""
     try:
-        return await clasificaciones.general(competition_id, category)
+        return await clasificacion.execute(competition_id, category)
     except PartidasError:
         return _sin_clasificacion()
 
@@ -444,10 +450,10 @@ async def get_overall_standings(
 async def get_scratch_standings(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
-    clasificaciones: ClasificacionesUseCase = Depends(get_clasificaciones_use_case),
+    clasificacion: ClasificacionScratchUseCase = Depends(get_clasificacion_scratch_use_case),
 ):
     """200 con el scratch."""
     try:
-        return await clasificaciones.scratch(competition_id, UserId(str(current_user.id)))
+        return await clasificacion.execute(competition_id, UserId(str(current_user.id)))
     except PartidasError:
         return _sin_clasificacion()

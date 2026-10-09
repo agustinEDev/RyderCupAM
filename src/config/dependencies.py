@@ -51,7 +51,9 @@ from src.modules.competition.application.use_cases.cancel_invitation_use_case im
     CancelInvitationUseCase,
 )
 from src.modules.competition.application.use_cases.clasificaciones_use_case import (
-    ClasificacionesUseCase,
+    ClasificacionDeLaFranjaUseCase,
+    ClasificacionGeneralUseCase,
+    ClasificacionScratchUseCase,
 )
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
@@ -1953,12 +1955,28 @@ def get_cerrar_franja_use_case(
     )
 
 
-def get_clasificaciones_use_case(
+def get_clasificacion_de_la_franja_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-) -> ClasificacionesUseCase:
-    """Las clasificaciones de un stroke play (#251)."""
-    return ClasificacionesUseCase(uow=uow, user_repository=user_uow.users)
+) -> ClasificacionDeLaFranjaUseCase:
+    """La clasificación de una franja (#251)."""
+    return ClasificacionDeLaFranjaUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_clasificacion_general_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ClasificacionGeneralUseCase:
+    """La clasificación general de un stroke play (#251)."""
+    return ClasificacionGeneralUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_clasificacion_scratch_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ClasificacionScratchUseCase:
+    """La clasificación scratch de un stroke play (#251)."""
+    return ClasificacionScratchUseCase(uow=uow, user_repository=user_uow.users)
 
 
 def get_ver_anotacion_de_partida_use_case(
