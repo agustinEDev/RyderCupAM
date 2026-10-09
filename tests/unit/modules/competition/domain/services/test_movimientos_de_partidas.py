@@ -90,8 +90,9 @@ class TestMover:
 
     def test_to_a_full_one_without_swap(self):
         p1, p2 = _partidas(4, 4)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], p2)
+        assert error.value.codigo == "GROUP_FULL"
 
     def test_swapping_with_one_of_the_full_one(self):
         p1, p2 = _partidas(4, 4)
@@ -104,18 +105,21 @@ class TestMover:
 
     def test_swapping_with_someone_not_in_the_destination(self):
         p1, p2, p3 = _partidas(4, 4, 4)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2, p3], p1.jugadores[0], p2, intercambiar_con=p3.jugadores[0].user_id)
+        assert error.value.codigo == "SWAP_PLAYER_NOT_IN_GROUP"
 
     def test_swapping_into_a_new_one(self):
         p1, p2 = _partidas(4, 4)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], None, intercambiar_con=p2.jugadores[0].user_id)
+        assert error.value.codigo == "SWAP_NEEDS_GROUP"
 
     def test_leaving_the_origin_with_one_is_refused(self):
         p1, p2 = _partidas(2, 3)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], p2)
+        assert error.value.codigo == "ORIGIN_WOULD_BE_ALONE"
 
     def test_taking_out_the_only_one_removes_the_group_and_the_next_ones_move_up(self):
         p1, p2, p3 = _partidas(1, 4, 3)
@@ -140,8 +144,9 @@ class TestMover:
 
     def test_to_a_new_one_without_free_tee_times(self):
         p1, p2, p3, p4 = _partidas(4, 4, 4, 4)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2, p3, p4], p1.jugadores[0], None)
+        assert error.value.codigo == "NO_FREE_TEE_TIME"
 
     def test_the_only_one_to_a_new_one_keeps_numbers_without_gaps(self):
         p1, p2 = _partidas(1, 4)
@@ -174,16 +179,18 @@ class TestMover:
 
     def test_to_the_same_group(self):
         p1, p2 = _partidas(3, 3)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], p1)
+        assert error.value.codigo == "ALREADY_IN_GROUP"
 
     def test_to_a_group_of_another_window(self):
         p1, p2 = _partidas(3, 3)
         ajena = Partida.crear(COMPETICION, RoundId.generate(), 1, [_jugador(), _jugador()])
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             MovimientosDePartidas.mover(
                 [p1, p2], p1.jugadores[0], ajena.id, None, HOJA, COMPETICION, FRANJA
             )
+        assert error.value.codigo == "GROUP_NOT_IN_WINDOW"
 
 
 class TestReordenar:
@@ -205,5 +212,6 @@ class TestReordenar:
     )
     def test_anything_but_a_permutation(self, orden):
         partidas = _partidas(4, 4, 4)
-        with pytest.raises(MovimientoImposibleError):
+        with pytest.raises(MovimientoImposibleError) as error:
             MovimientosDePartidas.reordenar(partidas, orden(partidas))
+        assert error.value.codigo == "INVALID_GROUP_ORDER"

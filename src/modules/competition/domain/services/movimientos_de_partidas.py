@@ -28,7 +28,11 @@ from .marcadores_en_cadena import MIN_PARA_MARCAR
 
 
 class MovimientoImposibleError(ValueError):
-    """Ese movimiento no se puede hacer, y el mensaje dice por qué."""
+    """Ese movimiento no se puede hacer: `codigo` dice por qué, en una clave para la pantalla."""
+
+    def __init__(self, codigo: str, mensaje: str):
+        self.codigo = codigo
+        super().__init__(mensaje)
 
 
 @dataclass
@@ -107,9 +111,11 @@ class MovimientosDePartidas:
             return None
         destino = next((p for p in partidas if p.id == destino_id), None)
         if destino is None:
-            raise MovimientoImposibleError("Esa partida no es de esta franja.")
+            raise MovimientoImposibleError(
+                "GROUP_NOT_IN_WINDOW", "Esa partida no es de esta franja."
+            )
         if destino is origen:
-            raise MovimientoImposibleError("Ya está en esa partida.")
+            raise MovimientoImposibleError("ALREADY_IN_GROUP", "Ya está en esa partida.")
         return destino
 
     @staticmethod
@@ -119,14 +125,18 @@ class MovimientosDePartidas:
         """Sin intercambio: hueco en el destino, el origen no se queda con uno, salidas libres."""
         if destino is not None and len(destino.jugadores) >= hoja.jugadores_por_partida:
             raise MovimientoImposibleError(
-                "La partida está llena: intercambia al jugador con uno de ella."
+                "GROUP_FULL",
+                "La partida está llena: intercambia al jugador con uno de ella.",
             )
         if origen is not None and len(origen.jugadores) == MIN_PARA_MARCAR:
             raise MovimientoImposibleError(
-                "Su partida se quedaría con un solo jugador: intercámbialo, o mueve antes al otro."
+                "ORIGIN_WOULD_BE_ALONE",
+                "Su partida se quedaría con un solo jugador: intercámbialo, o mueve antes al otro.",
             )
         if destino is None and quedan >= hoja.numero_de_salidas:
-            raise MovimientoImposibleError("No quedan salidas libres para otra partida.")
+            raise MovimientoImposibleError(
+                "NO_FREE_TEE_TIME", "No quedan salidas libres para otra partida."
+            )
 
     @staticmethod
     def _intercambiar(
@@ -138,10 +148,14 @@ class MovimientosDePartidas:
     ) -> Cambios:
         """Cada uno al sitio del otro; sin partida de origen, el otro se queda sin partida."""
         if destino is None:
-            raise MovimientoImposibleError("Solo se intercambia con alguien de otra partida.")
+            raise MovimientoImposibleError(
+                "SWAP_NEEDS_GROUP", "Solo se intercambia con alguien de otra partida."
+            )
         otro = next((j for j in destino.jugadores if j.user_id == intercambiar_con), None)
         if otro is None:
-            raise MovimientoImposibleError("Ese jugador no está en la partida de destino.")
+            raise MovimientoImposibleError(
+                "SWAP_PLAYER_NOT_IN_GROUP", "Ese jugador no está en la partida de destino."
+            )
         cambios = Cambios()
         destino.quitar(otro.user_id)
         destino.meter(jugador, hoja.jugadores_por_partida)
@@ -161,7 +175,9 @@ class MovimientosDePartidas:
             MovimientoImposibleError: Si el orden no tiene todas, una vez cada una
         """
         if len(set(orden)) != len(orden) or set(orden) != {p.id for p in partidas}:
-            raise MovimientoImposibleError("El orden tiene que llevar todas las partidas, una vez.")
+            raise MovimientoImposibleError(
+                "INVALID_GROUP_ORDER", "El orden tiene que llevar todas las partidas, una vez."
+            )
         por_id = {p.id: p for p in partidas}
         for numero, partida_id in enumerate(orden, start=1):
             por_id[partida_id].renumerar(numero)

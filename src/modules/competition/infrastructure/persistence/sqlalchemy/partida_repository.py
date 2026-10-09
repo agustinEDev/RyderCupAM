@@ -36,6 +36,9 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
         await self._session.execute(
             delete(tee_groups_table).where(tee_groups_table.c.round_id == round_id)
         )
+        await self.anadir(partidas)
+
+    async def anadir(self, partidas: Sequence[Partida]) -> None:
         ahora = datetime.now(UTC)
         for partida in partidas:
             await self._session.execute(

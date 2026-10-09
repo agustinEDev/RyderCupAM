@@ -96,3 +96,18 @@ async def test_queries():
     assert await repo.del_jugador(COMPETICION, FUERA) == []
     assert await repo.existe_con_jugador(A)
     assert not await repo.existe_con_jugador(FUERA)
+
+
+async def test_adding_keeps_the_others_of_the_window():
+    repo = InMemoryPartidaRepository()
+    primera = _partida(MANANA, 1, [A, B])
+    await repo.reemplazar_franja(MANANA, [primera])
+    nueva = _partida(MANANA, 2, [C])
+
+    await repo.anadir([nueva])
+    nueva.renumerar(5)
+
+    assert [(p.id, p.numero) for p in await repo.de_la_franja(MANANA)] == [
+        (primera.id, 1),
+        (nueva.id, 2),
+    ]

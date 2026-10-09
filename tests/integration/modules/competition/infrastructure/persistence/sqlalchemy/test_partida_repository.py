@@ -277,3 +277,40 @@ async def test_a_user_who_plays_a_group_cannot_be_deleted(db_session, ronda, jug
     with pytest.raises(IntegrityError):
         await db_session.execute(text("DELETE FROM users WHERE id = :id"), {"id": str(b.value)})
         await db_session.commit()
+
+
+async def test_a_move_that_empties_a_group_and_opens_a_new_one_is_saved(
+    db_session,
+    ronda,  # noqa: F811
+    jugadores,  # noqa: F811
+):
+    """Borrar la vacía, subir la de detrás y crear la nueva, en la misma transacción (M1, M3)."""
+    from datetime import time
+
+    from src.modules.competition.domain.services.movimientos_de_partidas import (
+        MovimientosDePartidas,
+    )
+    from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+
+    a, b, c, _ = jugadores
+    sola, segunda = _partida(ronda, 1, [a]), _partida(ronda, 2, [b, c])
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    await uow.partidas.reemplazar_franja(ronda.id, [sola, segunda])
+    await db_session.commit()
+
+    cambios = MovimientosDePartidas.mover(
+        [sola, segunda],
+        sola.jugadores[0],
+        None,
+        None,
+        HojaDeSalidas(time(9, 0), time(9, 30), 10, 4),
+        ronda.competition_id,
+        ronda.id,
+    )
+    await uow.partidas.borrar(cambios.borrar)
+    await uow.partidas.guardar(cambios.guardar)
+    await uow.partidas.anadir(cambios.crear)
+    uow = await _releer(db_session)
+
+    leidas = await uow.partidas.de_la_franja(ronda.id)
+    assert [(p.numero, p.user_ids) for p in leidas] == [(1, [b, c]), (2, [a])]

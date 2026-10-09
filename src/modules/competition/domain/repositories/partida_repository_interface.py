@@ -18,6 +18,10 @@ class PartidaRepositoryInterface(ABC):
         """Deja la franja con estas partidas y ninguna más (al generar)."""
 
     @abstractmethod
+    async def anadir(self, partidas: Sequence[Partida]) -> None:
+        """Añade partidas nuevas a su franja (una nueva al final, al mover)."""
+
+    @abstractmethod
     async def guardar(self, partidas: Sequence[Partida]) -> None:
         """
         Guarda los cambios de partidas que ya existen: jugadores, marcadores,

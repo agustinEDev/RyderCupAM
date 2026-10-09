@@ -27,6 +27,10 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
         for partida in partidas:
             self._partidas[partida.id] = deepcopy(partida)
 
+    async def anadir(self, partidas: Sequence[Partida]) -> None:
+        for partida in partidas:
+            self._partidas[partida.id] = deepcopy(partida)
+
     async def guardar(self, partidas: Sequence[Partida]) -> None:
         for partida in partidas:
             if partida.id in self._partidas:
