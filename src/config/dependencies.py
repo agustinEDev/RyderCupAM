@@ -50,6 +50,9 @@ from src.modules.competition.application.use_cases.cancel_enrollment_use_case im
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
 )
+from src.modules.competition.application.use_cases.clasificaciones_use_case import (
+    ClasificacionesUseCase,
+)
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
 )
@@ -1936,6 +1939,14 @@ def get_cerrar_franja_use_case(
         user_repository=user_uow.users,
         reloj=reloj,
     )
+
+
+def get_clasificaciones_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ClasificacionesUseCase:
+    """Las clasificaciones de un stroke play (#251)."""
+    return ClasificacionesUseCase(uow=uow, user_repository=user_uow.users)
 
 
 def get_ver_anotacion_de_partida_use_case(

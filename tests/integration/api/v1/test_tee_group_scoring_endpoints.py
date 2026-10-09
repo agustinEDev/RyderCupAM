@@ -292,3 +292,65 @@ async def test_closing_the_window(client: AsyncClient):
 
     assert respuesta.status_code == 200, respuesta.text
     assert [g["status"] for g in respuesta.json()["groups"]] == ["COMPLETED"]
+
+
+# | Clasificaciones                              | Respuesta                                  |
+# |----------------------------------------------|--------------------------------------------|
+# | Franja, con un hoyo validado                 | 200, ese jugador 1.º                       |
+# | General / scratch                            | 200, con la regla; scratch con `me`        |
+# | Una Ryder                                    | 400 NOT_STROKE_PLAY                        |
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_the_window_standings(client: AsyncClient):
+    organizador, franja, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/1",
+        json={"own_score": 4, "marker_score": 4},
+    )
+
+    respuesta = await client.get(f"/api/v1/competitions/rounds/{franja}/standings")
+
+    assert respuesta.status_code == 200, respuesta.text
+    primera = respuesta.json()["rows"][0]
+    assert (primera["user_id"], primera["position"], primera["thru"]) == (jugador, 1, 1)
+    assert primera["name"]
+
+
+async def test_overall_and_scratch(client: AsyncClient):
+    organizador, competicion, _, _ = await _stableford(client)
+    set_auth_cookies(client, organizador["cookies"])
+
+    general = await client.get(f"/api/v1/competitions/{competicion['id']}/standings")
+    scratch = await client.get(f"/api/v1/competitions/{competicion['id']}/standings/scratch")
+
+    assert general.status_code == 200, general.text
+    assert (general.json()["rule"], general.json()["scale"]) == ("ACCUMULATED", "NETA")
+    assert scratch.status_code == 200, scratch.text
+    assert scratch.json()["scale"] == "SCRATCH"
+
+
+async def test_a_ryder_has_no_standings(client: AsyncClient):
+    organizador = await _usuario(client)
+    start = date.today() + timedelta(days=30)
+    from tests.conftest import create_competition
+
+    ryder = await create_competition(
+        client,
+        organizador["cookies"],
+        {
+            "name": f"Ryder {uuid.uuid4().hex[:8]}",
+            "start_date": start.isoformat(),
+            "end_date": start.isoformat(),
+            "main_country": "ES",
+            "play_mode": "HANDICAP",
+        },
+    )
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.get(f"/api/v1/competitions/{ryder['id']}/standings")
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "NOT_STROKE_PLAY"

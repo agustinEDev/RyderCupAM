@@ -175,3 +175,34 @@ class CorrectHoleBodyDTO(BaseModel):
 
     own_score: int | None = Field(None, ge=1, le=15, description="El lado del jugador.")
     marker_score: int | None = Field(None, ge=1, le=15, description="El lado del marcador.")
+
+
+class StandingRowDTO(BaseModel):
+    """Una fila de una clasificación de stroke play."""
+
+    position: int | None = Field(..., description="null sin puesto: sin empezar, NR o NP.")
+    tied: bool = Field(..., description="Comparte puesto («T3»): no hay desempate automático.")
+    user_id: UUID
+    name: str
+    category: int | None
+    handicap: Decimal
+    value: int | None = Field(
+        ...,
+        description="Stableford: puntos (brutos en el scratch). Medal: golpes respecto al par.",
+    )
+    cards: int
+    thru: int
+    status: str = Field(..., description="CLASIFICADO, SIN_EMPEZAR, NR o NP.")
+
+
+class StandingsResponseDTO(BaseModel):
+    """Una clasificación: la de una franja, la general o la scratch."""
+
+    tournament_type: str
+    scale: str = Field(..., description="NETA o SCRATCH.")
+    rule: str = Field(..., description="ACCUMULATED o BEST_CARD.")
+    category: int | None
+    rows: list[StandingRowDTO]
+    me: StandingRowDTO | None = Field(
+        None, description="Scratch: la fila de quien mira si queda fuera del corte."
+    )

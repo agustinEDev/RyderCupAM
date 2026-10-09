@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from src.config.dependencies import (
     get_anotar_hoyo_de_partida_use_case,
     get_cerrar_franja_use_case,
+    get_clasificaciones_use_case,
     get_corregir_hoyo_de_partida_use_case,
     get_current_user,
     get_entregar_tarjeta_de_partida_use_case,
@@ -26,6 +27,7 @@ from src.config.dependencies import (
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.partidas_dto import (
     CorrectHoleBodyDTO,
+    StandingsResponseDTO,
     TeeGroupScoringViewDTO,
     TeeGroupsResponseDTO,
 )
@@ -35,6 +37,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotYourMarkedPlayerError,
     PartidaNotFoundError,
+    PartidasError,
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
@@ -43,6 +46,9 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     NoEsDeLaPartidaError,
     PartidaNoAnotableError,
     SinMarcadorError,
+)
+from src.modules.competition.application.use_cases.clasificaciones_use_case import (
+    ClasificacionesUseCase,
 )
 from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_use_case import (
     EntregarTarjetaDePartidaUseCase,
@@ -365,3 +371,83 @@ async def close_tee_window_groups(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
     except _CON_CODIGO as e:
         return _respuesta(e)
+
+
+# ======================================================================================
+# CLASIFICACIONES
+# ======================================================================================
+
+
+def _sin_clasificacion() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": "Solo hay clasificación en un Stableford o un Medal.",
+            "error_code": "NOT_STROKE_PLAY",
+        },
+    )
+
+
+@router.get(
+    "/rounds/{round_id}/standings",
+    response_model=StandingsResponseDTO,
+    summary="Clasificación de una franja",
+    description=(
+        "Neta, solo hoyos validados, con «tras N» y filtro de categoría. Sin desempate "
+        "automático: los empatados comparten puesto."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+async def get_tee_window_standings(
+    round_id: UUID,
+    category: int | None = None,
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    clasificaciones: ClasificacionesUseCase = Depends(get_clasificaciones_use_case),
+):
+    """200 con la clasificación de la franja."""
+    try:
+        return await clasificaciones.de_la_franja(round_id, category)
+    except PartidasError:
+        return _sin_clasificacion()
+
+
+@router.get(
+    "/{competition_id}/standings",
+    response_model=StandingsResponseDTO,
+    summary="Clasificación general",
+    description="Neta, con la regla de la competición (acumulado o mejor tarjeta) y categorías.",
+    tags=["Competitions - Tee groups"],
+)
+async def get_overall_standings(
+    competition_id: UUID,
+    category: int | None = None,
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    clasificaciones: ClasificacionesUseCase = Depends(get_clasificaciones_use_case),
+):
+    """200 con la general."""
+    try:
+        return await clasificaciones.general(competition_id, category)
+    except PartidasError:
+        return _sin_clasificacion()
+
+
+@router.get(
+    "/{competition_id}/standings/scratch",
+    response_model=StandingsResponseDTO,
+    summary="Clasificación scratch",
+    description=(
+        "Sin categorías, con la misma regla: hasta el 25.º más los empatados, y `me` con "
+        "la fila de quien mira si queda fuera."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+async def get_scratch_standings(
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    clasificaciones: ClasificacionesUseCase = Depends(get_clasificaciones_use_case),
+):
+    """200 con el scratch."""
+    try:
+        return await clasificaciones.scratch(competition_id, UserId(str(current_user.id)))
+    except PartidasError:
+        return _sin_clasificacion()
