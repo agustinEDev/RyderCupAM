@@ -99,7 +99,7 @@ class GolpeDePartida:
         self, golpes: int | None, acepta_raya: bool, quien: UserId, momento: datetime
     ) -> None:
         """El lado del jugador (o del organizador por él). None es levantar bola."""
-        self._comprobar(golpes, acepta_raya)
+        self.comprobar(golpes, acepta_raya)
         self._propio, self._propio_enviado, self._propio_por = golpes, True, quien
         self._actualizado = momento
 
@@ -107,12 +107,17 @@ class GolpeDePartida:
         self, golpes: int | None, acepta_raya: bool, quien: UserId, momento: datetime
     ) -> None:
         """El lado del marcador (o del organizador, que hace de marcador)."""
-        self._comprobar(golpes, acepta_raya)
+        self.comprobar(golpes, acepta_raya)
         self._del_marcador, self._marcador_enviado, self._marcador_por = golpes, True, quien
         self._actualizado = momento
 
     @staticmethod
-    def _comprobar(golpes: int | None, acepta_raya: bool) -> None:
+    def comprobar(golpes: int | None, acepta_raya: bool) -> None:
+        """
+        Raises:
+            RayaNoPermitidaError: Levantar bola en Medal
+            ValueError: Fuera de 1 a 15
+        """
         if golpes is None:
             if not acepta_raya:
                 raise RayaNoPermitidaError("En Medal no se levanta bola: hay que acabar el hoyo.")
