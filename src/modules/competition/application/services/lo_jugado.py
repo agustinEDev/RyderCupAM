@@ -54,6 +54,13 @@ class LoJugado:
             if bloquear
             else self._uow.hole_scores.find_by_match
         )
+        # Una franja de stroke play: jugado es un golpe apuntado en una de sus
+        # partidas (#251, PR 5). Generarlas no es jugar
+        if any(
+            golpe.propio_enviado or golpe.marcador_enviado
+            for golpe in await self._uow.golpes_de_partida.de_la_franja(round_id)
+        ):
+            return True
         # Primero los partidos y luego sus tarjetas, el mismo orden en que la
         # anotacion escribe
         for partido in await partidos_de(round_id):
