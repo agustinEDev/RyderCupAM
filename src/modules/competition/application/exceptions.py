@@ -75,6 +75,12 @@ class PartidasError(Exception):
     pass
 
 
+class PartidaNotFoundError(Exception):
+    """No existe esa partida (#251)."""
+
+    pass
+
+
 class DateOutOfRangeError(Exception):
     """La fecha de la sesión está fuera de las fechas de la competición."""
 
