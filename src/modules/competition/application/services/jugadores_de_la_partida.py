@@ -187,12 +187,10 @@ class JugadoresDeLaPartida:
             # Con esas barras se generó: si el campo ya no las valora, se deja como
             # estaba, y que se sepa: la corrección de la RFEG no llega a la partida
             logger.warning(
-                "Tee %s (%s) of golf course %s is no longer rated: the corrected handicap "
-                "of player %s does not reach their tee group",
+                "Tee %s of golf course %s is no longer rated: a corrected handicap "
+                "does not reach a tee group",
                 foto.tee_color,
-                foto.tee_gender,
                 franja.golf_course_id,
-                foto.user_id,
             )
             return foto
         return self._foto(

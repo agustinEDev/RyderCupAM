@@ -350,7 +350,11 @@ async def test_moving_to_a_full_group(client: AsyncClient):
     )
 
     assert respuesta.status_code == 400, respuesta.text
-    assert respuesta.json()["error_code"] == "GROUP_FULL"
+    assert respuesta.json() == {
+        "error_code": "GROUP_FULL",
+        # Fijo por clave: nunca el texto de la excepción (CodeQL)
+        "detail": "La partida está llena: intercambia al jugador con uno de ella.",
+    }
 
 
 async def test_another_player_cannot_move(client: AsyncClient):

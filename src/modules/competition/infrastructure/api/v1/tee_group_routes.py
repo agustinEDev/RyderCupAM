@@ -94,22 +94,51 @@ _ERRORES_CON_CODIGO: tuple[type[Exception], ...] = (
 )
 
 
+# El texto de cada clave, fijo: la respuesta nunca lleva el de la excepción (CodeQL,
+# exposición de información de una excepción). La pantalla traduce la clave
+_DETALLE: dict[str, str] = {
+    "GROUPS_WINDOW_CLOSED": (
+        "Las partidas se hacen del cierre de inscripciones a la primera salida de la franja."
+    ),
+    "GROUP_ALREADY_STARTED": "Ya ha salido alguna partida de la franja: no se puede cambiar.",
+    "COURSE_WITHOUT_TIMEZONE": (
+        "El campo de la franja no tiene zona horaria: no se sabe a qué hora sale nadie."
+    ),
+    "NOT_ENOUGH_PLAYERS": "Hacen falta al menos dos jugadores con plaza para formar una partida.",
+    "INVALID_MARKERS": "Cada jugador marca a uno de su partida, y nadie a sí mismo.",
+    "NOT_A_TEE_WINDOW": "Solo hay partidas en las franjas de un Stableford o un Medal.",
+    "GROUP_FULL": "La partida está llena: intercambia al jugador con uno de ella.",
+    "ORIGIN_WOULD_BE_ALONE": (
+        "Su partida se quedaría con un solo jugador: intercámbialo, o mueve antes al otro."
+    ),
+    "NO_FREE_TEE_TIME": "No quedan salidas libres para otra partida.",
+    "SWAP_NEEDS_GROUP": "Solo se intercambia con alguien de otra partida.",
+    "SWAP_PLAYER_NOT_IN_GROUP": "Ese jugador no está en la partida de destino.",
+    "ALREADY_IN_GROUP": "Ya está en esa partida.",
+    "GROUP_NOT_IN_WINDOW": "Esa partida no es de esta franja.",
+    "PLAYER_NOT_IN_WINDOW": "Ese jugador no tiene plaza en esta franja.",
+    "INVALID_GROUP_ORDER": "El orden tiene que llevar todas las partidas, una vez.",
+}
+
+
+def _con_codigo(status_code: int, codigo: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"detail": _DETALLE.get(codigo, codigo), "error_code": codigo},
+    )
+
+
 def _respuesta(error: Exception) -> JSONResponse:
     """La respuesta con `error_code` de un error de las partidas."""
     if isinstance(error, MovimientoImposibleError):
         # Cada movimiento imposible trae su clave
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"detail": str(error), "error_code": error.codigo},
-        )
+        return _con_codigo(status.HTTP_400_BAD_REQUEST, error.codigo)
     for tipo, codigo in _CON_JUGADORES.items():
         if isinstance(error, tipo):
             return respuesta_con_jugadores(error, codigo, error.players)
     for tipo, (status_code, codigo) in _CON_CODIGO.items():
         if isinstance(error, tipo):
-            return JSONResponse(
-                status_code=status_code, content={"detail": str(error), "error_code": codigo}
-            )
+            return _con_codigo(status_code, codigo)
     raise error
 
 
