@@ -22,6 +22,7 @@ from .handicap_update_repository_interface import HandicapUpdateRepositoryInterf
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
 from .match_repository_interface import MatchRepositoryInterface
+from .partida_repository_interface import PartidaRepositoryInterface
 from .plaza_en_franja_repository_interface import PlazaEnFranjaRepositoryInterface
 from .round_repository_interface import RoundRepositoryInterface
 from .team_assignment_repository_interface import TeamAssignmentRepositoryInterface
@@ -105,6 +106,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def plazas(self) -> PlazaEnFranjaRepositoryInterface:
         """Las plazas de los jugadores en las franjas de stroke play (#251)."""
+        pass
+
+    @property
+    @abstractmethod
+    def partidas(self) -> PartidaRepositoryInterface:
+        """Las partidas de las franjas de stroke play (#251, PR 4)."""
         pass
 
     @property

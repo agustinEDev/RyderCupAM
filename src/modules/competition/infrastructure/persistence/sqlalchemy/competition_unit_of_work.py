@@ -40,6 +40,9 @@ from src.modules.competition.domain.repositories.invitation_repository_interface
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.partida_repository_interface import (
+    PartidaRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.plaza_en_franja_repository_interface import (
     PlazaEnFranjaRepositoryInterface,
 )
@@ -75,6 +78,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.invitation_re
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.match_repository import (
     SQLAlchemyMatchRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.partida_repository import (
+    SQLAlchemyPartidaRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.plaza_en_franja_repository import (
     SQLAlchemyPlazaEnFranjaRepository,
@@ -114,6 +120,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._drafts = SQLAlchemyDraftRepository(session)
         self._handicap_updates = SQLAlchemyHandicapUpdateRepository(session)
         self._plazas = SQLAlchemyPlazaEnFranjaRepository(session)
+        self._partidas = SQLAlchemyPartidaRepository(session)
         self._esperas = SQLAlchemyEsperaEnFranjaRepository(session)
 
     @property
@@ -163,6 +170,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def plazas(self) -> PlazaEnFranjaRepositoryInterface:
         return self._plazas
+
+    @property
+    def partidas(self) -> PartidaRepositoryInterface:
+        return self._partidas
 
     @property
     def esperas(self) -> EsperaEnFranjaRepositoryInterface:
