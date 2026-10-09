@@ -170,8 +170,8 @@ class EnrollmentDTOMapper:
         """
         Convierte inscripciones a EnrollmentResponseDTO, con los datos de cada usuario.
 
-        Los usuarios se leen en UNA consulta (BE #314): el listado ya no se corta
-        en 100 filas, y buscarlos uno a uno eran cientos de consultas seguidas.
+        Los usuarios se leen en UNA consulta: el listado trae todas las filas de la
+        competición, y buscarlos uno a uno serían cientos de consultas seguidas.
 
         Args:
             enrollments: Entidades de dominio, en el orden en que se devuelven
@@ -186,7 +186,8 @@ class EnrollmentDTOMapper:
             return []
 
         async with user_uow:
-            usuarios = await user_uow.users.find_by_ids([e.user_id for e in enrollments])
+            # Un id por usuario: quien se dio de alta otra vez tiene varias filas
+            usuarios = await user_uow.users.find_by_ids(list({e.user_id for e in enrollments}))
         por_id = {u.id: u for u in usuarios}
 
         return [

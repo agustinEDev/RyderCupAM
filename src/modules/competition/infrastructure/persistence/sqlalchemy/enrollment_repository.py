@@ -73,7 +73,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
 
         Args:
             competition_id: ID de la competición
-            limit: Número máximo de resultados; None = todos (BE #314)
+            limit: Número máximo de resultados; None = todos
             offset: Número de resultados a saltar
 
         Returns:
@@ -102,7 +102,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         Args:
             competition_id: ID de la competición
             status: Estado de inscripción (enum)
-            limit: Número máximo de resultados; None = todos (BE #314)
+            limit: Número máximo de resultados; None = todos
             offset: Número de resultados a saltar
 
         Returns:
@@ -127,14 +127,14 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         return list(result.scalars().all())
 
     async def find_by_user(
-        self, user_id: UserId, limit: int = 100, offset: int = 0
+        self, user_id: UserId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario.
 
         Args:
             user_id: ID del usuario
-            limit: Número máximo de resultados
+            limit: Número máximo de resultados; None = todos
             offset: Número de resultados a saltar
 
         Returns:
@@ -144,7 +144,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             select(Enrollment)
             .where(Enrollment._user_id == user_id)
             .order_by(Enrollment._created_at.desc())  # Más recientes primero
-            .limit(limit)
+            .limit(limit)  # None = sin LIMIT
             .offset(offset)
         )
         result = await self._session.execute(statement)

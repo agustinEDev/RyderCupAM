@@ -84,7 +84,20 @@ async def test_reads_every_user_in_one_query(competition_id):
 
     assert uow.aperturas == 1
     assert uow.por_id == 0
-    assert uow.en_bloque == [[u.id for u in usuarios]]
+    assert len(uow.en_bloque) == 1
+    assert sorted(map(str, uow.en_bloque[0])) == sorted(str(u.id) for u in usuarios)
+
+
+async def test_a_user_with_several_rows_is_asked_for_once(competition_id):
+    """Quien se dio de alta otra vez tiene varias filas: su id va una sola vez a la consulta."""
+    uow = _UoWQueCuenta()
+    ana = await _usuario(uow, "Ana")
+    inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, ana)]
+
+    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow)
+
+    assert uow.en_bloque == [[ana.id]]
+    assert [d.user.first_name for d in dtos] == ["Ana", "Ana"]
 
 
 async def test_keeps_the_order_of_the_enrollments_and_pairs_each_with_its_user(competition_id):

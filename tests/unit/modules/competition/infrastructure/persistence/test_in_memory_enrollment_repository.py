@@ -63,3 +63,22 @@ async def test_an_explicit_limit_and_offset_still_page():
         )
         == 10
     )
+
+
+async def test_find_by_user_returns_every_enrollment_past_one_hundred():
+    """
+    Given un jugador con 150 inscripciones, una por competición
+    When se piden las suyas, sin límite y con una página explícita
+    Then llegan las 150, y la página se respeta
+    """
+    repo = InMemoryEnrollmentRepository()
+    jugador = UserId.generate()
+    for _ in range(150):
+        await repo.add(
+            Enrollment.direct_enroll(
+                id=EnrollmentId.generate(), competition_id=CompetitionId(uuid4()), user_id=jugador
+            )
+        )
+
+    assert len(await repo.find_by_user(jugador)) == 150
+    assert len(await repo.find_by_user(jugador, limit=10, offset=145)) == 5

@@ -83,9 +83,7 @@ class EnrollmentRepositoryInterface(ABC):
 
         Args:
             competition_id: El ID de la competición
-            limit: Número máximo de inscripciones; None (por defecto) = todas. Antes
-                era 100 y ninguna llamada lo pasaba: seis casos de uso dejaban fuera a
-                los inscritos a partir del 101 (BE #314)
+            limit: Número máximo de inscripciones; None (por defecto) = todas
             offset: Número de inscripciones a saltar (default: 0)
 
         Returns:
@@ -112,7 +110,7 @@ class EnrollmentRepositoryInterface(ABC):
         Args:
             competition_id: El ID de la competición
             status: El estado de inscripción (REQUESTED, APPROVED, etc.)
-            limit: Número máximo de inscripciones; None (por defecto) = todas (BE #314)
+            limit: Número máximo de inscripciones; None (por defecto) = todas
             offset: Número de inscripciones a saltar (default: 0)
 
         Returns:
@@ -125,7 +123,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_by_user(
-        self, user_id: UserId, limit: int = 100, offset: int = 0
+        self, user_id: UserId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario específico.
@@ -134,7 +132,7 @@ class EnrollmentRepositoryInterface(ABC):
 
         Args:
             user_id: El ID del usuario
-            limit: Número máximo de inscripciones a retornar (default: 100)
+            limit: Número máximo de inscripciones; None (por defecto) = todas
             offset: Número de inscripciones a saltar (default: 0)
 
         Returns:

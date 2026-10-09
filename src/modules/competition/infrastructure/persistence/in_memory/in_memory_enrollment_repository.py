@@ -13,7 +13,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 
 def _pagina(enrollments: list, limit: int | None, offset: int) -> list:
-    """La misma semántica que SQLAlchemy: sin límite (None) devuelve todas (BE #314)."""
+    """La misma semántica que SQLAlchemy: sin límite (None) devuelve todas."""
     return enrollments[offset:] if limit is None else enrollments[offset : offset + limit]
 
 
@@ -76,11 +76,11 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         return _pagina(enrollments, limit, offset)
 
     async def find_by_user(
-        self, user_id: UserId, limit: int = 100, offset: int = 0
+        self, user_id: UserId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """Busca todas las inscripciones de un usuario."""
         enrollments = [enr for enr in self._enrollments.values() if enr.user_id == user_id]
-        return enrollments[offset : offset + limit]
+        return _pagina(enrollments, limit, offset)
 
     async def find_by_competition_and_team(
         self, competition_id: CompetitionId, team_id: str

@@ -69,8 +69,7 @@ async def creator_id(db_session) -> UserId:
     return user_id
 
 
-@pytest_asyncio.fixture
-async def competition_id(db_session, creator_id) -> CompetitionId:
+async def _competicion(db_session, creator_id: UserId) -> CompetitionId:
     competition = Competition.create(
         id=CompetitionId(uuid4()),
         creator_id=creator_id,
@@ -84,6 +83,11 @@ async def competition_id(db_session, creator_id) -> CompetitionId:
     await SQLAlchemyCompetitionRepository(db_session).add(competition)
     await db_session.commit()
     return competition.id
+
+
+@pytest_asyncio.fixture
+async def competition_id(db_session, creator_id) -> CompetitionId:
+    return await _competicion(db_session, creator_id)
 
 
 async def _enroll(db_session, competition_id: CompetitionId, user_id: UserId, use_real_name: bool):
@@ -191,3 +195,20 @@ class TestNoHiddenLimit:
             == 120
         )
         assert len(await repo.find_by_competition(competition_id, limit=50, offset=100)) == 20
+
+    async def test_find_by_user_returns_more_than_one_hundred(self, db_session, creator_id):
+        """
+        Given un jugador con 120 inscripciones, una por competición
+        When se piden las suyas
+        Then llegan las 120. Con el LIMIT 100 por defecto, la lista de
+        competiciones, la ficha y sus estadísticas perdían las de más
+        """
+        jugador = UserId.generate()
+        await _insert_user(db_session, jugador)
+        for _ in range(120):
+            await _enroll(db_session, await _competicion(db_session, creator_id), jugador, True)
+
+        repo = SQLAlchemyEnrollmentRepository(db_session)
+
+        assert len(await repo.find_by_user(jugador)) == 120
+        assert len(await repo.find_by_user(jugador, limit=50, offset=100)) == 20
