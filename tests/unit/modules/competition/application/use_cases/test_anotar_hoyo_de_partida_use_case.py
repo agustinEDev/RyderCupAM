@@ -11,6 +11,8 @@ se toca desde aquí (P3; la corrige el organizador, P9).
 | Antes de la 1.ª salida                           | ScoringNotOpenYetError con la hora      |
 | Quien no es de la partida                        | NoEsDeLaPartidaError                    |
 | Marcando a quien no le toca                      | NotYourMarkedPlayerError, nada guardado |
+| Movido o con otro marcado mientras anota         | Se mira en la partida bloqueada: error  |
+|                                                  | del dominio, no un 500; nada guardado   |
 | Primer golpe                                     | Partida y competición en juego          |
 | Jugador y marcador coinciden                     | Validado                                |
 | Un campo que no viene                            | No se toca                              |
@@ -48,6 +50,9 @@ from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.competition.infrastructure.persistence.in_memory.in_memory_partida_repository import (
+    InMemoryPartidaRepository,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.test_generar_partidas_use_case import (
     _Escenario,
@@ -105,6 +110,43 @@ async def test_someone_not_in_the_group():
 
     with pytest.raises(NoEsDeLaPartidaError):
         await _anotar(escenario, partida, UserId.generate(), own_score=4)
+
+
+def cambiada_al_bloquear(monkeypatch, cambio):
+    """Lo que cambia el organizador entre leer la partida y bloquearla."""
+    bloquear = InMemoryPartidaRepository.find_by_id_for_update
+
+    async def cambiada(self, partida_id):
+        partida = await bloquear(self, partida_id)
+        cambio(partida)
+        return partida
+
+    monkeypatch.setattr(InMemoryPartidaRepository, "find_by_id_for_update", cambiada)
+
+
+async def test_moved_out_while_scoring(monkeypatch):
+    # Pasaba la comprobación con la lectura sin bloquear: KeyError, un 500
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    cambiada_al_bloquear(monkeypatch, lambda p: p.quitar(a))
+
+    with pytest.raises(NoEsDeLaPartidaError):
+        await _anotar(escenario, partida, a, own_score=4)
+
+    assert await _golpes(escenario, partida) == {}
+
+
+async def test_marking_changed_while_scoring(monkeypatch):
+    escenario, partida = await _partida()
+    a, b, c = partida.user_ids  # a marca a b; pasa a marcar a c
+    cambiada_al_bloquear(monkeypatch, lambda p: p.cambiar_marcadores({a: c, c: b, b: a}))
+
+    with pytest.raises(NotYourMarkedPlayerError):
+        await _anotar(
+            escenario, partida, a, own_score=4, marked_player_id=str(b.value), marked_score=5
+        )
+
+    assert await _golpes(escenario, partida) == {}
 
 
 async def test_marking_someone_else_saves_nothing():

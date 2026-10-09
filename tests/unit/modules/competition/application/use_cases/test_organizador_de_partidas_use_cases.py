@@ -4,6 +4,7 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | Caso                                              | Resultado                              |
 |---------------------------------------------------|----------------------------------------|
 | Corregir siendo jugador                           | NotCompetitionCreatorError             |
+| Corregir a quien movieron mientras tanto          | PartidaNotFoundError, no un 500        |
 | Corregir los dos lados                            | Validado, metido por él                |
 | Partida de 1: el jugador y él de marcador         | Validado (P11)                         |
 | Antes de la 1.ª salida                            | ScoringNotOpenYetError                 |
@@ -32,6 +33,7 @@ from pydantic import ValidationError
 from src.modules.competition.application.dto.partidas_dto import CorrectHoleBodyDTO
 from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
+    PartidaNotFoundError,
     ScoringNotOpenYetError,
 )
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
@@ -51,6 +53,7 @@ from src.modules.competition.domain.value_objects.estado_partida import EstadoPa
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
     _partida,
+    cambiada_al_bloquear,
 )
 from tests.unit.modules.competition.application.use_cases.test_entregar_tarjeta_de_partida_use_case import (
     _en_juego,
@@ -97,6 +100,15 @@ async def _golpe(escenario, partida, jugador, hoyo=1):
 
 async def _tarjetas(escenario, partida):
     return (await escenario.uow.partidas.find_by_id(partida.id)).estados_de_tarjeta
+
+
+async def test_correcting_someone_moved_meanwhile(monkeypatch):
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    cambiada_al_bloquear(monkeypatch, lambda p: p.quitar(a))
+
+    with pytest.raises(PartidaNotFoundError):
+        await _corrige(escenario, partida, a, own_score=4)
 
 
 async def test_a_player_cannot_correct():

@@ -188,6 +188,9 @@ class AnotarHoyoDePartidaUseCase:
             bloqueada = await self._uow.partidas.find_by_id_for_update(partida.id)
             if bloqueada is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
+            # Otra vez, ya bloqueada: mientras no sale, el organizador puede mover
+            # jugadores o marcadores entre la lectura de arriba y el bloqueo
+            marcado = self._comprobar_quien(bloqueada, quien, body)
             if bloqueada.estado == EstadoPartida.SCHEDULED:
                 bloqueada.empezar()
                 await self._uow.partidas.guardar([bloqueada])

@@ -133,6 +133,8 @@ class CorregirHoyoDePartidaUseCase:
             if competicion.status == CompetitionStatus.CLOSED:
                 await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await _bloqueada(self._uow, partida)
+            # Otra vez, ya bloqueada: pudieron moverlo mientras tanto
+            jugador = _del_jugador(bloqueada, user_id)
             if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
                 raise TarjetaCerradaError("Esa tarjeta está cerrada: reábrela para corregirla.")
             if bloqueada.estado == EstadoPartida.SCHEDULED:
