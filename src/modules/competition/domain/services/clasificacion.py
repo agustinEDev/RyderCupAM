@@ -57,6 +57,8 @@ class TarjetaDeJornada:
 
 @dataclass(frozen=True)
 class Participante:
+    """`tarjetas`, por calendario: la última jornada, la última."""
+
     user_id: UserId
     handicap: Decimal
     categoria: int | None
@@ -205,7 +207,16 @@ def _clave(resultado: _Resultado, medal: bool, regla: OverallStanding) -> tuple:
 def _fila(
     participante: Participante, resultado: _Resultado, puesto: int | None, empatado: bool
 ) -> Fila:
-    viva = next((t for t in participante.tarjetas if t.estado == EstadoDeTarjeta.JUGANDO), None)
+    # La última jornada en juego que ya tenga hoyos: una vieja sin cerrar o una
+    # futura aún a 0 no dicen por dónde va
+    viva = next(
+        (
+            t
+            for t in reversed(participante.tarjetas)
+            if t.estado == EstadoDeTarjeta.JUGANDO and t.tarjeta.tras > 0
+        ),
+        None,
+    )
     tras = (
         viva.tarjeta.tras
         if viva

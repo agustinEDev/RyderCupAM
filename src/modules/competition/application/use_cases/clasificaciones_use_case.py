@@ -147,7 +147,8 @@ class ClasificacionesUseCase:
         tarjetas: dict[UserId, list[TarjetaDeJornada]] = {}
         handicaps = {}
         # Por calendario: el hándicap que desempata (P5) es el de su última
-        # jornada, y se queda el de la última partida recorrida
+        # jornada, y se queda el de la última partida recorrida; y las
+        # tarjetas llegan en ese orden a la clasificación (el «tras»)
         franjas = {f.id: f for f in await self._uow.rounds.find_by_competition(competicion.id)}
 
         def cuando(partida: Partida) -> tuple[date, time]:

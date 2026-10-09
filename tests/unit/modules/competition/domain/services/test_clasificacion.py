@@ -10,6 +10,8 @@ empate, se pintan por hándicap (P5).
 | Medal: -2 y +1                                           | 1.º y 2.º                       |
 | Medal retirado / Stableford retirado                     | NR sin puesto / cuenta lo jugado|
 | Stableford retirado sin ningún hoyo validado             | NR sin puesto, no «sin empezar» |
+| «Tras» en la general: jornada vieja sin cerrar y la de hoy| El de la última en juego con    |
+|                                                          | hoyos; si no hay, el máximo     |
 | Sin hoyos validados / no presentado                      | Al final, sin puesto            |
 | Scratch de Stableford / de Medal                          | Puntos / golpes brutos (P13)    |
 | Scratch con categoría                                    | Error: no tiene                 |
@@ -142,6 +144,22 @@ def test_not_started_and_no_show_go_last_without_position():
         (None, EstadoEnClasificacion.NP),
     ]
     assert filas[0].tras == 5
+
+
+@pytest.mark.parametrize(
+    ("tarjetas", "tras"),
+    [
+        # Ayer sin cerrar con 17 y hoy por el 5: va por el 5
+        ((_tarjeta(30, tras=17, estado=JUGANDO), _tarjeta(8, tras=5, estado=JUGANDO)), 5),
+        # Ayer entregada y mañana aún sin salir: no «tras 0»
+        ((_tarjeta(30), _tarjeta(0, tras=0, estado=JUGANDO)), 18),
+    ],
+)
+def test_thru_comes_from_the_last_live_card_with_holes(tarjetas, tras):
+    """Las tarjetas llegan por calendario."""
+    (fila,) = _clasificar([_jugador(*tarjetas)])
+
+    assert fila.tras == tras
 
 
 def test_stableford_scratch_uses_gross_points():
