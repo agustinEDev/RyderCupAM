@@ -560,3 +560,46 @@ async def test_a_ryder_session_is_not_a_tee_window(client: AsyncClient):
 
     assert respuesta.status_code == 400, respuesta.text
     assert respuesta.json()["error_code"] == "NOT_A_TEE_WINDOW"
+
+
+# ======================================================================================
+# GANCHOS, CONTRA POSTGRES (revisión de la PR 4)
+# ======================================================================================
+#
+# | Caso                                    | Resultado                                |
+# |-----------------------------------------|------------------------------------------|
+# | Un jugador se retira (cerrada)          | Sale de su partida y no queda en espera  |
+# | El organizador reabre las inscripciones | La franja se queda sin partidas          |
+
+
+async def test_withdrawing_takes_the_player_out_of_the_group(client: AsyncClient):
+    organizador, competicion, franja, otros = await _stableford(client)
+    assert (await _generar(client, organizador, franja)).status_code == 200
+    jugador = otros[0]
+    set_auth_cookies(client, jugador["cookies"])
+    inscritos = (
+        await client.get(f"/api/v1/competitions/{competicion['id']}/enrollments?status=APPROVED")
+    ).json()
+    (suya,) = [i for i in inscritos if i["user_id"] == jugador["user"]["id"]]
+
+    retirada = await client.post(f"/api/v1/enrollments/{suya['id']}/withdraw", json={})
+    vista = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()
+
+    assert retirada.status_code == 200, retirada.text
+    (partida,) = vista["groups"]
+    assert jugador["user"]["id"] not in {p["user_id"] for p in partida["players"]}
+    assert len(partida["players"]) == 3
+    assert vista["unassigned_players"] == []
+
+
+async def test_reopening_leaves_the_window_without_groups(client: AsyncClient):
+    organizador, competicion, franja, _ = await _stableford(client)
+    assert (await _generar(client, organizador, franja)).status_code == 200
+    set_auth_cookies(client, organizador["cookies"])
+
+    reabierta = await client.post(f"/api/v1/competitions/{competicion['id']}/reopen-enrollments")
+    vista = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()
+
+    assert reabierta.status_code == 200, reabierta.text
+    assert vista["groups"] == []
+    assert vista["editable"] is False
