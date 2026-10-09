@@ -2,7 +2,8 @@
 
 La tarjeta de cada jugador de una partida: en juego, entregada, retirado o no
 presentado (decidido el 9 oct 2026, P3 y P6). Las partidas aún no han llegado
-a producción: la columna nace NOT NULL sin rellenar nada.
+a producción, pero sí a develop (PR 4): las ya generadas no tienen ningún golpe
+(no se podía anotar), así que su tarjeta está en juego.
 
 Revision ID: f2c4e6a8b0d1
 Revises: e1b3d5f7a9c2
@@ -23,8 +24,10 @@ def upgrade() -> None:
     """El estado de la tarjeta de cada jugador."""
     op.add_column(
         "tee_group_players",
-        sa.Column("card_status", sa.String(length=20), nullable=False),
+        sa.Column("card_status", sa.String(length=20), nullable=True),
     )
+    op.execute("UPDATE tee_group_players SET card_status = 'JUGANDO'")
+    op.alter_column("tee_group_players", "card_status", nullable=False)
 
 
 def downgrade() -> None:
