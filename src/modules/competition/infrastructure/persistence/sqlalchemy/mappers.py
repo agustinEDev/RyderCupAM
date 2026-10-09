@@ -11,10 +11,12 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -417,6 +419,7 @@ SetupModeDecorator = _create_enum_decorator(SetupMode)
 TournamentTypeDecorator = _create_enum_decorator(TournamentType)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
+GenderDecorator = _create_enum_decorator(Gender)
 
 
 # =============================================================================
@@ -1323,6 +1326,85 @@ handicap_refreshes_table = Table(
     Column("result", String(30), nullable=False),
     Column("attempts", Integer, nullable=False),
     Column("refreshed_at", DateTime(timezone=True), nullable=False),
+)
+
+# Las partidas de una franja de stroke play (#251, PR 4). La hora no se guarda:
+# sale de la hoja de salidas por el número. Los únicos se comprueban al final de
+# la transacción: un intercambio o un reordenado repite a medias un jugador o un
+# número, y solo completo es válido.
+tee_groups_table = Table(
+    "tee_groups",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "round_id", RoundIdDecorator, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("number", Integer, nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("number >= 1", name="ck_tee_groups_number_positive"),
+    UniqueConstraint(
+        "round_id",
+        "number",
+        name="uq_tee_groups_round_number",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+    # Para que cada jugador lleve la franja de su partida (uno por franja)
+    UniqueConstraint("id", "round_id", name="uq_tee_groups_id_round"),
+)
+
+# Cada jugador de una partida, con la foto que se sacó al generar (D14). Un
+# usuario que juega no se puede borrar (RESTRICT): lo jugado no desaparece.
+tee_group_players_table = Table(
+    "tee_group_players",
+    metadata,
+    Column("group_id", CHAR(36), primary_key=True),
+    Column("round_id", RoundIdDecorator, nullable=False),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        primary_key=True,
+        index=True,
+    ),
+    Column("position", Integer, nullable=False),
+    Column("handicap_index", Numeric(precision=4, scale=1), nullable=False),
+    Column("playing_handicap", Integer, nullable=False),
+    Column("tee_color", TeeColorDecorator, nullable=False),
+    Column("tee_gender", GenderDecorator, nullable=True),
+    Column("strokes_by_hole", JSONB, nullable=False),
+    Column(
+        "marks_user_id", UserIdDecorator, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    ),
+    ForeignKeyConstraint(
+        ["group_id", "round_id"],
+        ["tee_groups.id", "tee_groups.round_id"],
+        name="fk_tee_group_players_group",
+        ondelete="CASCADE",
+    ),
+    UniqueConstraint(
+        "round_id",
+        "user_id",
+        name="uq_tee_group_players_round_user",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+    UniqueConstraint(
+        "group_id",
+        "position",
+        name="uq_tee_group_players_group_position",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
 )
 
 # =============================================================================

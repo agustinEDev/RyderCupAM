@@ -84,6 +84,10 @@ from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
 )
+from src.modules.competition.application.services.jugadores_de_la_partida import (
+    JugadoresSinBarraError,
+    JugadoresSinHandicapError,
+)
 from src.modules.competition.application.services.jugadores_del_partido import (
     PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
 )
@@ -182,6 +186,9 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
     CaptainMissingError,
     CaptainOnWrongTeamError,
+)
+from src.modules.competition.infrastructure.api.v1.competition_state_routes import (
+    respuesta_con_jugadores,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -314,6 +321,11 @@ async def update_round(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
+    # Otro campo para una franja con partidas: alguien sin barras en él (#251)
+    except JugadoresSinBarraError as e:
+        return respuesta_con_jugadores(e, "PLAYERS_WITHOUT_TEE", e.players)
+    except JugadoresSinHandicapError as e:
+        return respuesta_con_jugadores(e, "PLAYERS_WITHOUT_HANDICAP", e.players)
     except UpdateRoundNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

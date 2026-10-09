@@ -1,5 +1,6 @@
 """Caso de Uso: Actualizar Ronda/Sesión de competición."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.round_match_dto import (
@@ -9,10 +10,12 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     DateOutOfRangeError,
+    FranjaInvalidaError,
     NotCompetitionCreatorError,
     RoundNotFoundError,
     RoundNotModifiableError,
 )
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -23,11 +26,23 @@ from src.modules.competition.application.services.franjas import (
     comprobar_tipo,
     hoja_de,
 )
+from src.modules.competition.application.services.jugadores_de_la_partida import (
+    JugadoresDeLaPartida,
+)
+from src.modules.competition.application.services.partidas_de_la_franja import (
+    comprobar_que_caben_las_partidas,
+    recalcular_partidas,
+)
+from src.modules.competition.application.services.partidas_del_jugador import (
+    salidas_por_hora,
+)
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -60,8 +75,22 @@ class UpdateRoundUseCase:
     - La ronda debe estar en estado modificable (PENDING_TEAMS/PENDING_MATCHES)
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        jugadores: JugadoresDeLaPartida | None = None,
+        zonas: ICompetitionTimezone | None = None,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        """
+        Args:
+            jugadores: Para rehacer las fotos de las partidas si una franja cambia
+                de campo (#251). Sin él, ese cambio con partidas se rechaza
+        """
         self._uow = uow
+        self._jugadores = jugadores
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(
         self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool = False
@@ -147,6 +176,9 @@ class UpdateRoundUseCase:
             await comprobar_que_nadie_pierde_su_sitio(
                 self._uow, round_entity, hoja, request.round_date
             )
+            # Y que sus partidas quepan en la hoja nueva (D9, #251)
+            partidas = await self._partidas_que_caben(round_entity, hoja)
+            campo_anterior = round_entity.golf_course_id
 
             # 7. Actualizar la ronda (validación de estado dentro del dominio)
             session_type = SessionType(request.session_type) if request.session_type else None
@@ -180,6 +212,8 @@ class UpdateRoundUseCase:
                 # sobres, empareja por handicap (revision de la FE #711)
                 round_entity.clear_match_generation_block()
 
+            await self._recalcular_partidas(competition, round_entity, partidas, campo_anterior)
+
             await self._uow.rounds.update(round_entity)
             # Si la franja creció, sus nuevas plazas para los que esperan (#251); si
             # no hay sitio libre o no es una franja, no hace nada
@@ -190,6 +224,47 @@ class UpdateRoundUseCase:
             status=round_entity.status.value,
             updated_at=round_entity.updated_at,
         )
+
+    async def _partidas_que_caben(self, franja: Round, hoja: HojaDeSalidas | None) -> list[Partida]:
+        """
+        Las partidas de la franja, si caben en la hoja nueva (D9, #251).
+
+        Con alguna ya salida (por su estado o por su hora), la franja ya no se toca:
+        cambiaría la hora o las barras de quien ya está en el campo (D11).
+        """
+        partidas = await self._uow.partidas.de_la_franja(franja.id)
+        salidas = await salidas_por_hora(franja, partidas, self._zonas, self._reloj())
+        if any(p.empezada or p.id in salidas for p in partidas):
+            raise FranjaInvalidaError("La franja ya ha empezado: sus partidas no se cambian.")
+        if hoja is not None:
+            comprobar_que_caben_las_partidas(partidas, hoja)
+        return partidas
+
+    async def _recalcular_partidas(
+        self,
+        competition: Competition,
+        franja: Round,
+        partidas: list[Partida],
+        campo_anterior: GolfCourseId,
+    ) -> None:
+        """
+        Otro campo: otras barras y otros golpes en las partidas sin salir. Si alguien
+        no tiene barras en el nuevo, se rechaza con la lista (D9, G2, #251).
+        """
+        if not partidas or franja.golf_course_id == campo_anterior:
+            return
+        if self._jugadores is None:
+            raise FranjaInvalidaError(
+                "No se puede cambiar el campo de una franja con partidas aquí."
+            )
+        # D10: sin zona no se sabe cuándo sale nadie, ni qué partidas salieron
+        if self._zonas is not None and (
+            zona_del_campo(await self._zonas.for_course(franja.golf_course_id)) is None
+        ):
+            raise FranjaInvalidaError(
+                "El campo nuevo no tiene zona horaria: una franja con partidas la necesita."
+            )
+        await recalcular_partidas(self._uow, self._jugadores, competition, franja, partidas)
 
     @staticmethod
     def _comprobar_franja(

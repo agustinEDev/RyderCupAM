@@ -31,13 +31,15 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import (
+    BarraDelJugador,
+    lo_que_le_falta,
+)
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_ENROLLMENT,
-    MISSING_GENDER,
-    MISSING_TEE_COLOR,
     NO_GOLF_COURSE,
     NO_TEAMS,
     NOT_ENOUGH_PLAYERS,
@@ -316,6 +318,12 @@ class GenerateMatchesUseCase:
             NoGolfCourseForHandicapError, EnvelopesDecideThePairingsError,
             EnvelopesNotRevealedError
         """
+        # Una franja de stroke play se reparte en partidas, no en partidos: asignar
+        # equipos la pasaría a PENDING_MATCHES como a las demás sesiones (#251)
+        if round_entity.hoja_de_salidas is not None:
+            raise RoundNotPendingMatchesError(
+                "Una franja de un Stableford o un Medal no tiene partidos: se reparte en partidas."
+            )
         if not round_entity.can_generate_matches():
             raise RoundNotPendingMatchesError(
                 f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
@@ -495,13 +503,13 @@ class GenerateMatchesUseCase:
             tee_color, _, tee_rating, _ = self._match_players.resolve_player_data(
                 uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
             )
-            if tee_rating is not None:
-                continue
-            # Solo es su género lo que falta si de verdad no lo tiene y el color
-            # existe para alguno: con género, lo que falta es su color para él
-            existe_el_color = any(color == tee_color.value for color, _ in tee_ratings)
-            sin_genero = user_gender_map.get(str(uid.value)) is None
-            sin_barras.append((uid, tee_color, existe_el_color and sin_genero))
+            falta = lo_que_le_falta(
+                BarraDelJugador(tee_color, None, tee_rating),
+                user_gender_map.get(str(uid.value)),
+                tee_ratings,
+            )
+            if falta is not None:
+                sin_barras.append((uid, *falta))
         if not sin_barras:
             return
 
@@ -511,12 +519,9 @@ class GenerateMatchesUseCase:
         raise PlayersWithoutTeeError(
             [
                 BlockedPlayer(
-                    user_id=uid,
-                    name=nombres.get(uid, ""),
-                    missing=MISSING_GENDER if le_falta_el_genero else MISSING_TEE_COLOR,
-                    tee_color=None if le_falta_el_genero else tee_color.value,
+                    user_id=uid, name=nombres.get(uid, ""), missing=missing, tee_color=color
                 )
-                for uid, tee_color, le_falta_el_genero in sin_barras
+                for uid, missing, color in sin_barras
             ]
         )
 

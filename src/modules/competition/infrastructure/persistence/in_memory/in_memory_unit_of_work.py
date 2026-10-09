@@ -34,6 +34,9 @@ from src.modules.competition.domain.repositories.invitation_repository_interface
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.partida_repository_interface import (
+    PartidaRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.plaza_en_franja_repository_interface import (
     PlazaEnFranjaRepositoryInterface,
 )
@@ -59,6 +62,7 @@ from .in_memory_handicap_update_repository import InMemoryHandicapUpdateReposito
 from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
 from .in_memory_match_repository import InMemoryMatchRepository
+from .in_memory_partida_repository import InMemoryPartidaRepository
 from .in_memory_plaza_en_franja_repository import InMemoryPlazaEnFranjaRepository
 from .in_memory_round_repository import InMemoryRoundRepository
 from .in_memory_team_assignment_repository import InMemoryTeamAssignmentRepository
@@ -80,6 +84,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._hole_scores = InMemoryHoleScoreRepository()
         self._handicap_updates = InMemoryHandicapUpdateRepository()
         self._plazas = InMemoryPlazaEnFranjaRepository()
+        self._partidas = InMemoryPartidaRepository()
         self._esperas = InMemoryEsperaEnFranjaRepository()
         self.committed = False
 
@@ -102,6 +107,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def plazas(self) -> PlazaEnFranjaRepositoryInterface:
         return self._plazas
+
+    @property
+    def partidas(self) -> PartidaRepositoryInterface:
+        return self._partidas
 
     @property
     def esperas(self) -> EsperaEnFranjaRepositoryInterface:
@@ -175,6 +184,12 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
             self._envelopes,
             self._invitations,
             self._hole_scores,
+            # Las de stroke play (#251): sin ellas, un fallo dentro las dejaba a
+            # medias en los tests (CodeRabbit en la #534)
+            self._handicap_updates,
+            self._plazas,
+            self._esperas,
+            self._partidas,
         ]
         copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
         try:

@@ -112,12 +112,12 @@ class LanzadorEnSegundoPlano(LanzadorDeActualizaciones):
         """Una sesión propia, que comparten la competición, los usuarios y los campos."""
         async with self.fabrica() as sesion:
             competiciones = SQLAlchemyCompetitionUnitOfWork(sesion)
+            campos = GolfCourseRepository(sesion)
             yield Herramientas(
                 competiciones=competiciones,
                 usuarios=SQLAlchemyUserRepository(sesion),
-                zonas=CompetitionTimezoneFromCourse(
-                    GolfCourseRepository(sesion), competiciones.competitions
-                ),
+                zonas=CompetitionTimezoneFromCourse(campos, competiciones.competitions),
+                campos=campos,
             )
 
 

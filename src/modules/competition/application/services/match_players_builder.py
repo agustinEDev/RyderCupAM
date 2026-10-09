@@ -16,13 +16,13 @@ from decimal import Decimal
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     para_jugar_la_ryder,
 )
+from src.modules.competition.domain.services.barra_del_jugador import barra_del_jugador
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.stroke_allocation import holes_receiving_strokes
-from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -91,16 +91,11 @@ class MatchPlayersBuilder:
             (tee_color, tee_gender, tee_rating, handicap_index)
         """
         enrollment = enrollment_map.get(str(user_id.value))
-        tee_color = enrollment.tee_color if enrollment and enrollment.tee_color else TeeColor.YELLOW
-        user_gender = user_gender_map.get(str(user_id.value))
-
-        # Auto-resolve tee: (colour, user_gender) → (colour, None) fallback
-        tee_key = tee_key_for(
-            tee_ratings, tee_color.value, user_gender.value if user_gender else None
-        ) or (tee_color.value, None)
-        tee_gender = user_gender if tee_key[1] is not None else None
-
-        tee_rating = tee_ratings.get(tee_key)
+        barra = barra_del_jugador(
+            enrollment.tee_color if enrollment else None,
+            user_gender_map.get(str(user_id.value)),
+            tee_ratings,
+        )
 
         # El que cuenta en la competición: el propio, si no el del perfil
         del_perfil = user_handicap_map.get(str(user_id.value))
@@ -108,7 +103,7 @@ class MatchPlayersBuilder:
             enrollment.handicap_que_cuenta(del_perfil) if enrollment else del_perfil
         )
 
-        return tee_color, tee_gender, tee_rating, handicap_index
+        return barra.tee_color, barra.tee_gender, barra.tee_rating, handicap_index
 
     @staticmethod
     def _team_holes(team_ids, player_data, holes_by_tee, default):

@@ -619,10 +619,10 @@ async def fill_captain(
 
 def respuesta_sin_franja(error: PlayersWithoutTeeWindowError) -> JSONResponse:
     """Stableford o Medal con aprobados sin franja (#251): 400 con la lista."""
-    return _con_jugadores(error, "PLAYERS_WITHOUT_TEE_WINDOW", error.players)
+    return respuesta_con_jugadores(error, "PLAYERS_WITHOUT_TEE_WINDOW", error.players)
 
 
-def _con_jugadores(error: Exception, codigo: str, jugadores) -> JSONResponse:
+def respuesta_con_jugadores(error: Exception, codigo: str, jugadores) -> JSONResponse:
     """El formato de «jugadores sin barras»: `error_code` en la raíz y la lista."""
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -631,7 +631,7 @@ def _con_jugadores(error: Exception, codigo: str, jugadores) -> JSONResponse:
             "error_code": codigo,
             "players": [
                 BlockedPlayerDTO(
-                    user_id=p.user_id.value, name=p.name, missing=p.missing
+                    user_id=p.user_id.value, name=p.name, missing=p.missing, tee_color=p.tee_color
                 ).model_dump(mode="json")
                 for p in jugadores
             ],
@@ -646,7 +646,7 @@ def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
     En el mismo formato que «jugadores sin barras»: claves y no frases (24 sep),
     `error_code` en la raíz y `detail` para quien aún no lo lee.
     """
-    return _con_jugadores(error, "PLAYERS_WITHOUT_HANDICAP", error.players)
+    return respuesta_con_jugadores(error, "PLAYERS_WITHOUT_HANDICAP", error.players)
 
 
 # ======================================================================================

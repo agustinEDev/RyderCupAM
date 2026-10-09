@@ -68,6 +68,14 @@ class HojaDeSalidas:
         """Cuántas salidas hay en la franja."""
         return len(self.salidas)
 
+    def hora_de(self, numero: int) -> time:
+        """La hora de salida de la partida `numero` (desde 1): no se guarda, sale de aquí."""
+        if not 1 <= numero <= self.numero_de_salidas:
+            raise HojaDeSalidasInvalidaError(
+                f"La franja tiene {self.numero_de_salidas} salidas: no hay salida {numero}."
+            )
+        return self.salidas[numero - 1]
+
     @property
     def cupo(self) -> int:
         """Cuántos jugadores caben: salidas por jugadores por partida."""

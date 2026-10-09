@@ -1845,3 +1845,34 @@ class TestGenerateMatchesUseCase:
         response = await use_case.execute(request, creator_id)
 
         assert response.matches_generated == 1
+
+    @pytest.mark.asyncio
+    async def test_a_tee_window_has_no_matches(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        """Una franja de stroke play se reparte en partidas, nunca en partidos (#251, PR 4)."""
+        from datetime import time
+
+        from src.modules.competition.application.use_cases.generate_matches_use_case import (
+            RoundNotPendingMatchesError,
+        )
+        from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+
+        competition = await self._create_closed_competition(uow, creator_id)
+        franja = Round.create_franja(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            hoja_de_salidas=HojaDeSalidas(time(9, 0), time(10, 0), 10, 4),
+        )
+        # Asignar equipos pasa todas las sesiones PENDING_TEAMS a PENDING_MATCHES
+        franja.mark_teams_assigned()
+        async with uow:
+            await uow.rounds.add(franja)
+        await self._create_teams_and_enrollments(uow, competition, 2, 2)
+
+        with pytest.raises(RoundNotPendingMatchesError, match="partidas"):
+            await GenerateMatchesUseCase(
+                uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+            ).execute(GenerateMatchesRequestDTO(round_id=franja.id.value), creator_id)
