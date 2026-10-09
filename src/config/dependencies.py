@@ -144,8 +144,10 @@ from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
     CambiarMarcadoresUseCase,
     GenerarPartidasUseCase,
+    MisPartidasUseCase,
     MoverJugadorUseCase,
     ReordenarPartidasUseCase,
+    VerPartidasUseCase,
 )
 from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
     CogerPlazaUseCase,
@@ -1905,6 +1907,23 @@ def get_borrar_partidas_use_case(
 ) -> BorrarPartidasUseCase:
     """Borrar las partidas de una franja (#251)."""
     return _de_las_partidas(BorrarPartidasUseCase, uow, gc_uow, user_uow)
+
+
+def get_ver_partidas_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> VerPartidasUseCase:
+    """Ver las partidas de una franja (#251)."""
+    return _de_las_partidas(VerPartidasUseCase, uow, gc_uow, user_uow)
+
+
+def get_mis_partidas_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> MisPartidasUseCase:
+    """Mis partidas en una competición (#251)."""
+    return MisPartidasUseCase(uow=uow, user_repository=user_uow.users)
 
 
 def get_esperar_use_case(

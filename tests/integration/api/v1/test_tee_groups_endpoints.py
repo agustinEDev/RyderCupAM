@@ -409,3 +409,52 @@ async def test_swapping_with_one_of_a_full_group(client: AsyncClient):
     primera, segunda = respuesta.json()["groups"]
     assert x in {p["user_id"] for p in primera["players"]}
     assert a in {p["user_id"] for p in segunda["players"]}
+
+
+# ======================================================================================
+# VER LAS PARTIDAS Y LAS MÍAS
+# ======================================================================================
+#
+# | Caso                                       | Respuesta                               |
+# |--------------------------------------------|-----------------------------------------|
+# | Un jugador mira la franja                  | 200, la misma vista                     |
+# | Sin sesión                                 | 401                                     |
+# | Una franja que no existe                   | 404                                     |
+# | Mis partidas / de quien no juega ninguna   | 200 con la suya / 200 vacía             |
+
+
+async def test_a_player_sees_the_window(client: AsyncClient):
+    organizador, franja, (partida,), otros = await _generadas(client)
+    set_auth_cookies(client, otros[0]["cookies"])
+
+    respuesta = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
+    client.cookies.clear()
+    sin_sesion = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
+    set_auth_cookies(client, organizador["cookies"])
+    no_existe = await client.get(f"/api/v1/competitions/rounds/{uuid.uuid4()}/groups")
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["groups"] == [partida]
+    assert sin_sesion.status_code == 401, sin_sesion.text
+    assert no_existe.status_code == 404, no_existe.text
+
+
+async def test_my_groups(client: AsyncClient):
+    organizador, competicion, franja, otros = await _stableford(client)
+    assert (await _generar(client, organizador, franja)).status_code == 200
+    ajeno = await _usuario(client)
+
+    set_auth_cookies(client, otros[0]["cookies"])
+    mias = await client.get(f"/api/v1/competitions/{competicion['id']}/groups/me")
+    set_auth_cookies(client, ajeno["cookies"])
+    ningunas = await client.get(f"/api/v1/competitions/{competicion['id']}/groups/me")
+
+    assert mias.status_code == 200, mias.text
+    (mia,) = mias.json()["groups"]
+    assert (mia["round_id"], mia["session_type"], mia["group"]["tee_time"]) == (
+        franja,
+        "MORNING",
+        "09:00",
+    )
+    assert otros[0]["user"]["id"] in {p["user_id"] for p in mia["group"]["players"]}
+    assert ningunas.json() == {"groups": []}

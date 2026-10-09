@@ -17,13 +17,16 @@ from src.config.dependencies import (
     get_cambiar_marcadores_use_case,
     get_current_user,
     get_generar_partidas_use_case,
+    get_mis_partidas_use_case,
     get_mover_jugador_de_partida_use_case,
     get_reordenar_partidas_use_case,
+    get_ver_partidas_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.partidas_dto import (
     GenerateTeeGroupsRequestDTO,
     MoveTeeGroupPlayerRequestDTO,
+    MyTeeGroupsResponseDTO,
     ReorderTeeGroupsRequestDTO,
     TeeGroupMarkersRequestDTO,
     TeeGroupsResponseDTO,
@@ -46,8 +49,10 @@ from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
     CambiarMarcadoresUseCase,
     GenerarPartidasUseCase,
+    MisPartidasUseCase,
     MoverJugadorUseCase,
     ReordenarPartidasUseCase,
+    VerPartidasUseCase,
 )
 from src.modules.competition.domain.entities.partida import PartidaEmpezadaError
 from src.modules.competition.domain.services.marcadores_en_cadena import (
@@ -251,3 +256,38 @@ async def delete_tee_groups(
     if isinstance(resultado, JSONResponse):
         return resultado
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/rounds/{round_id}/groups",
+    response_model=TeeGroupsResponseDTO,
+    summary="Ver las partidas de una franja",
+    description=(
+        "Cualquiera con sesión. `editable` dice si el organizador aún puede generarlas o "
+        "cambiarlas; `unassigned_player_ids`, quién tiene plaza y no partida."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+async def get_tee_groups(
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    use_case: VerPartidasUseCase = Depends(get_ver_partidas_use_case),
+):
+    """200 con las partidas de la franja."""
+    return await _responder(use_case.execute(round_id))
+
+
+@router.get(
+    "/{competition_id}/groups/me",
+    response_model=MyTeeGroupsResponseDTO,
+    summary="Mis partidas en una competición",
+    description="Las partidas de quien pregunta, por día y hora de salida, con sus compañeros.",
+    tags=["Competitions - Tee groups"],
+)
+async def get_my_tee_groups(
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: MisPartidasUseCase = Depends(get_mis_partidas_use_case),
+):
+    """200 con mis partidas (vacío si no juego ninguna)."""
+    return await use_case.execute(competition_id, _quien(current_user))

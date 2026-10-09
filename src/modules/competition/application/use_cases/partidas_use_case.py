@@ -22,6 +22,8 @@ from uuid import UUID
 
 from src.modules.competition.application.dto.partidas_dto import (
     GenerateTeeGroupsRequestDTO,
+    MyTeeGroupDTO,
+    MyTeeGroupsResponseDTO,
     TeeGroupsResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
@@ -35,8 +37,10 @@ from src.modules.competition.application.ports.competition_timezone import IComp
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
+from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.vista_de_la_franja import (
     con_plaza_y_aprobados,
+    partida_dto,
     primera_salida,
     vista_de_la_franja,
 )
@@ -55,6 +59,7 @@ from src.modules.competition.domain.services.reparto_de_partidas import (
     ParaRepartir,
     RepartoDePartidas,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -320,3 +325,84 @@ class BorrarPartidasUseCase(_ConLaFranja):
             abierta = await self._abrir(RoundId(round_id), quien, is_admin)
             await self._uow.partidas.borrar(abierta.partidas)
             await self._uow.commit()
+
+
+class VerPartidasUseCase:
+    """Las partidas de una franja: cualquiera con sesión las ve, como la Ryder (D8)."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        user_repository: UserRepositoryInterface,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._usuarios = user_repository
+        self._reloj = reloj
+
+    async def execute(self, round_id: UUID) -> TeeGroupsResponseDTO:
+        """
+        Raises:
+            RoundNotFoundError, CompetitionNotFoundError: Si no existen
+            PartidasError: Si no es una franja de stroke play
+        """
+        async with self._uow:
+            franja = await self._uow.rounds.find_by_id(RoundId(round_id))
+            if franja is None:
+                raise RoundNotFoundError(f"No existe la franja {round_id}")
+            if franja.hoja_de_salidas is None:
+                raise PartidasError("Solo hay partidas en las franjas de un Stableford o un Medal.")
+            competicion = await self._uow.competitions.find_by_id(franja.competition_id)
+            if competicion is None:
+                raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
+            partidas = await self._uow.partidas.de_la_franja(franja.id)
+            return await vista_de_la_franja(
+                self._uow, competicion, franja, partidas, self._zonas, self._usuarios, self._reloj()
+            )
+
+
+class MisPartidasUseCase:
+    """Las partidas de quien pregunta en una competición, por día y hora de salida."""
+
+    def __init__(
+        self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
+    ):
+        self._uow = uow
+        self._usuarios = user_repository
+
+    async def execute(self, competition_id: UUID, quien: UserId) -> MyTeeGroupsResponseDTO:
+        async with self._uow:
+            competicion_id = CompetitionId(competition_id)
+            partidas = await self._uow.partidas.del_jugador(competicion_id, quien)
+            franjas: dict[RoundId, Round] = {}
+            for partida in partidas:
+                if partida.round_id not in franjas:
+                    franja = await self._uow.rounds.find_by_id(partida.round_id)
+                    if franja is not None and franja.hoja_de_salidas is not None:
+                        franjas[partida.round_id] = franja
+            nombres = await PlayerNames.de_la_competicion(
+                list({u for p in partidas for u in p.user_ids}),
+                competicion_id,
+                self._usuarios,
+                self._uow,
+            )
+            mias = []
+            for partida in partidas:
+                franja = franjas.get(partida.round_id)
+                if franja is None or franja.hoja_de_salidas is None:
+                    continue
+                hoja = franja.hoja_de_salidas
+                mias.append(
+                    (
+                        (franja.round_date, hoja.hora_de(partida.numero)),
+                        MyTeeGroupDTO(
+                            round_id=franja.id.value,
+                            round_date=franja.round_date,
+                            session_type=franja.session_type.value,
+                            group=partida_dto(partida, hoja, nombres),
+                        ),
+                    )
+                )
+        return MyTeeGroupsResponseDTO(groups=[dto for _, dto in sorted(mias, key=lambda m: m[0])])

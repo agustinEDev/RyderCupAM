@@ -31,6 +31,7 @@ from src.modules.competition.domain.services.plazo_de_partidas import (
     PlazoDePartidas,
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -86,16 +87,21 @@ async def vista_de_la_franja(
         editable=await _editable(competicion, franja, partidas, zonas, ahora),
         unassigned_player_ids=[u.value for u in sin_partida],
         groups=[
-            TeeGroupDTO(
-                id=partida.id.value,
-                number=partida.numero,
-                tee_time=hoja.hora_de(partida.numero).strftime("%H:%M"),
-                status=partida.estado.value,
-                incomplete=partida.incompleta,
-                players=[_jugador(j, partida, nombres) for j in partida.jugadores],
-            )
+            partida_dto(partida, hoja, nombres)
             for partida in sorted(partidas, key=lambda p: p.numero)
         ],
+    )
+
+
+def partida_dto(partida: Partida, hoja: HojaDeSalidas, nombres: dict[UserId, str]) -> TeeGroupDTO:
+    """Una partida para la pantalla: su hora sale de la hoja, por su número."""
+    return TeeGroupDTO(
+        id=partida.id.value,
+        number=partida.numero,
+        tee_time=hoja.hora_de(partida.numero).strftime("%H:%M"),
+        status=partida.estado.value,
+        incomplete=partida.incompleta,
+        players=[_jugador(j, partida, nombres) for j in partida.jugadores],
     )
 
 

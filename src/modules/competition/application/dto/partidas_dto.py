@@ -1,5 +1,6 @@
 """DTOs de las partidas de las franjas de stroke play (#251, PR 4)."""
 
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -85,3 +86,18 @@ class TeeGroupsResponseDTO(BaseModel):
         ..., description="Con plaza en la franja y sin partida."
     )
     groups: list[TeeGroupDTO]
+
+
+class MyTeeGroupDTO(BaseModel):
+    """Una partida mía: en qué franja y día, y la partida con mis compañeros."""
+
+    round_id: UUID
+    round_date: date
+    session_type: str
+    group: TeeGroupDTO
+
+
+class MyTeeGroupsResponseDTO(BaseModel):
+    """Mis partidas en una competición, por día y hora de salida."""
+
+    groups: list[MyTeeGroupDTO]
