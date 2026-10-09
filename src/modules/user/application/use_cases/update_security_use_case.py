@@ -26,7 +26,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
-from src.modules.user.domain.value_objects.password import Password
+from src.modules.user.domain.value_objects.password import InvalidPasswordError, Password
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
@@ -93,8 +93,11 @@ class UpdateSecurityUseCase:
         for history_record in recent_history:
             temp_password = Password(history_record.password_hash)
             if await run_bcrypt(temp_password.verify, new_password):
-                raise ValueError(
-                    "Cannot reuse any of your last 5 passwords. Please choose a different password."
+                # Con su código (BE #519): el cliente lo reconocía buscando este
+                # texto, que va en inglés
+                raise InvalidPasswordError(
+                    "Cannot reuse any of your last 5 passwords. Please choose a different password.",
+                    error_code="PASSWORD_REUSED",
                 )
 
         # Cambiar la contraseña

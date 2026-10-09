@@ -18,6 +18,8 @@ Cobertura:
 - RateLimitExceededEvent (validación request_count)
 """
 
+from uuid import uuid4
+
 import pytest
 
 from src.shared.domain.events.security_events import (
@@ -26,6 +28,7 @@ from src.shared.domain.events.security_events import (
     LoginAttemptEvent,
     LogoutEvent,
     PasswordChangedEvent,
+    PasswordResetCompletedAuditEvent,
     RateLimitExceededEvent,
     RefreshTokenRevokedEvent,
     RefreshTokenUsedEvent,
@@ -433,3 +436,48 @@ class TestRateLimitExceededEvent:
         assert event.request_count == 10
         assert event.severity == SecuritySeverity.MEDIUM  # Auto-ajustado
         assert event.aggregate_type == "Security"
+
+
+class TestPasswordResetCompletedAuditEvent:
+    """BE #519: el intento con un token que no es de nadie también se audita."""
+
+    def test_a_failed_reset_with_no_known_user_can_be_audited(self):
+        """
+        Given un token que no es de nadie (no hay usuario ni correo)
+        When se registra el intento fallido
+        Then el evento se crea: antes lanzaba «email debe ser válido», que era lo
+        que le llegaba al usuario, y el intento no quedaba auditado
+        """
+        event = PasswordResetCompletedAuditEvent(
+            user_id=None,
+            email="unknown",
+            success=False,
+            failure_reason="Invalid or expired token",
+            ip_address="unknown",
+            user_agent="unknown",
+        )
+
+        assert event.success is False
+
+    def test_a_successful_reset_still_needs_a_valid_email(self):
+        """Given un reseteo correcto When se audita sin correo válido Then se rechaza, como antes."""
+        with pytest.raises(ValueError, match="email"):
+            PasswordResetCompletedAuditEvent(
+                user_id=str(uuid4()),
+                email="unknown",
+                success=True,
+                ip_address="unknown",
+                user_agent="unknown",
+            )
+
+    def test_a_failed_reset_of_a_known_user_still_needs_the_email(self):
+        """Given un usuario conocido When su reseteo falla sin correo Then se rechaza: la excepción es solo sin usuario."""
+        with pytest.raises(ValueError, match="email"):
+            PasswordResetCompletedAuditEvent(
+                user_id=str(uuid4()),
+                email="",
+                success=False,
+                failure_reason="Password does not meet policy",
+                ip_address="unknown",
+                user_agent="unknown",
+            )

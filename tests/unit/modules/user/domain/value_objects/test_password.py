@@ -341,3 +341,39 @@ class TestPasswordLongerThanBcryptLimit:
         assert len(corte.encode("utf-8")[:72].decode("utf-8", errors="ignore")) == 71
         guardado = self._hash_de_bcrypt_4(corte)
         assert guardado.verify(corte) is True
+
+
+class TestPasswordErrorCodes:
+    """BE #519: cada regla de la política lleva su código, para que el cliente la traduzca."""
+
+    @pytest.mark.parametrize(
+        ("password", "code"),
+        [
+            ("", "PASSWORD_EMPTY"),
+            (" Abcdefghi1!", "PASSWORD_EDGE_SPACES"),
+            ("Abc1!", "PASSWORD_TOO_SHORT"),
+            ("A1!" + "a" * 130, "PASSWORD_TOO_LONG"),
+            ("abcdefghij1!", "PASSWORD_NO_UPPERCASE"),
+            ("ABCDEFGHIJ1!", "PASSWORD_NO_LOWERCASE"),
+            ("Abcdefghijk!", "PASSWORD_NO_DIGIT"),
+            ("Abcdefghijk1", "PASSWORD_NO_SYMBOL"),
+            ("Comun-Segura123!", "PASSWORD_TOO_COMMON"),
+        ],
+    )
+    def test_each_rule_raises_its_own_code(self, password, code, monkeypatch):
+        """
+        Given una contraseña que solo rompe una regla
+        When se crea
+        Then el error lleva el código de esa regla, además del mensaje de siempre
+
+        La lista negra se simula: aquí se prueba el código, no la lista (BE #518).
+        """
+        monkeypatch.setattr(
+            "src.modules.user.domain.value_objects.password.is_common_password",
+            lambda candidate: candidate == "Comun-Segura123!",
+        )
+        with pytest.raises(InvalidPasswordError) as error:
+            Password.from_plain_text(password)
+
+        assert error.value.error_code == code
+        assert str(error.value)
