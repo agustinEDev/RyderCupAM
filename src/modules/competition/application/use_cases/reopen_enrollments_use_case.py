@@ -67,7 +67,8 @@ class ReopenEnrollmentsUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Bloqueada, como las demás que tocan partidas y plazas (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
@@ -84,6 +85,12 @@ class ReopenEnrollmentsUseCase:
             # La actualización de hándicaps que esté a medias se corta: al volver
             # a cerrar empieza otra (#251)
             await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
+
+            # Las partidas se borran: pueden entrar y salir jugadores, y se vuelven
+            # a generar al cerrar (D1, #251). Se reabre antes de iniciar: ninguna salió
+            await self._uow.partidas.borrar(
+                await self._uow.partidas.de_la_competicion(competition.id)
+            )
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
