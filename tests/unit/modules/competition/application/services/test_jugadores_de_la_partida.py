@@ -12,7 +12,7 @@ Campo de prueba: par 72, amarillas de hombre CR 71.2 / SR 128, dificultad = hoyo
 | Fijado 10.0                                    | De juego 10, un golpe en los hoyos 1-10  |
 | Plus -3.0                                      | De juego -4, da en los hoyos 15-18       |
 | Tope 8, fijado 20.0                            | De juego 8                               |
-| SCRATCH                                        | De juego 0, sin golpes, sin mirar campo  |
+| SCRATCH                                        | De juego 0, sin golpes; con su par       |
 | Perfil distinto del fijado                     | Cuenta el fijado                         |
 | Uno sin su color y otro sin género             | JugadoresSinBarraError con los dos       |
 | Sin hándicap fijado                            | JugadoresSinHandicapError                |
@@ -174,7 +174,8 @@ async def test_the_competition_cap_applies():
     assert (await escenario.construir([ana]))[ana].playing_handicap == 8
 
 
-async def test_scratch_plays_zero_without_looking_at_the_course():
+async def test_scratch_plays_zero_without_needing_rated_tees():
+    """Sin golpes, pero con el par de cada hoyo para los puntos (P12)."""
     escenario = _Escenario(play_mode=PlayMode.SCRATCH)
     ana = await escenario.jugador(Decimal("20.0"), barras=TeeColor.RED)
 
@@ -183,7 +184,14 @@ async def test_scratch_plays_zero_without_looking_at_the_course():
     assert jugador.playing_handicap == 0
     assert jugador.golpes_por_hoyo == (0,) * 18
     assert jugador.tee_color == TeeColor.RED
-    escenario.campos.find_by_id.assert_not_called()
+    assert jugador.par_por_hoyo == tuple(PARES)
+
+
+async def test_the_snapshot_carries_the_par_of_each_hole():
+    escenario = _Escenario()
+    ana = await escenario.jugador(Decimal("10.0"))
+
+    assert (await escenario.construir([ana]))[ana].par_por_hoyo == tuple(PARES)
 
 
 async def test_the_fixed_handicap_counts_not_the_profile():

@@ -61,6 +61,7 @@ def _jugador(playing_handicap: int = 10, user_id: UserId | None = None) -> Jugad
         tee_color=TeeColor.YELLOW,
         tee_gender=Gender.MALE,
         golpes_por_hoyo=_golpes(playing_handicap),
+        par_por_hoyo=(4,) * 18,
     )
 
 
@@ -102,6 +103,24 @@ class TestJugadorDePartida:
                 tee_color=TeeColor.YELLOW,
                 tee_gender=None,
                 golpes_por_hoyo=(0,) * 17,
+                par_por_hoyo=(4,) * 18,
+            )
+
+    @pytest.mark.parametrize(
+        "pares",
+        [pytest.param((4,) * 17, id="17 hoyos"), pytest.param((2,) + (4,) * 17, id="par 2")],
+    )
+    def test_the_par_of_each_hole_is_eighteen_from_three_to_six(self, pares):
+        """El par de SU barra, hoyo a hoyo (PR 5, P12): sin él no hay puntos ni «par»."""
+        with pytest.raises(ValueError):
+            JugadorDePartida(
+                user_id=UserId.generate(),
+                handicap=Decimal("5.0"),
+                playing_handicap=0,
+                tee_color=TeeColor.YELLOW,
+                tee_gender=None,
+                golpes_por_hoyo=(0,) * 18,
+                par_por_hoyo=pares,
             )
 
     def test_strokes_that_do_not_add_up_are_refused(self):
@@ -113,6 +132,7 @@ class TestJugadorDePartida:
                 tee_color=TeeColor.YELLOW,
                 tee_gender=None,
                 golpes_por_hoyo=_golpes(4),
+                par_por_hoyo=(4,) * 18,
             )
 
 

@@ -1382,6 +1382,8 @@ tee_group_players_table = Table(
     Column("tee_color", TeeColorDecorator, nullable=False),
     Column("tee_gender", GenderDecorator, nullable=True),
     Column("strokes_by_hole", JSONB, nullable=False),
+    # El par de cada hoyo desde sus barras (PR 5, P12)
+    Column("pars_by_hole", JSONB, nullable=False),
     Column(
         "marks_user_id", UserIdDecorator, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     ),

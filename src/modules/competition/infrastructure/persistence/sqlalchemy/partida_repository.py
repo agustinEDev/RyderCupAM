@@ -117,6 +117,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     "tee_color": jugador.tee_color,
                     "tee_gender": jugador.tee_gender,
                     "strokes_by_hole": list(jugador.golpes_por_hoyo),
+                    "pars_by_hole": list(jugador.par_por_hoyo),
                     "marks_user_id": partida.marcadores.get(jugador.user_id),
                 }
                 for posicion, jugador in enumerate(partida.jugadores, start=1)
@@ -162,6 +163,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     tee_color=fila.tee_color,
                     tee_gender=fila.tee_gender,
                     golpes_por_hoyo=tuple(fila.strokes_by_hole),
+                    par_por_hoyo=tuple(fila.pars_by_hole),
                 )
                 for fila in filas
             ],

@@ -80,6 +80,7 @@ def _jugador(
         tee_color=tee_color,
         tee_gender=tee_gender,
         golpes_por_hoyo=_golpes(playing_handicap),
+        par_por_hoyo=(3, 4, 5) * 6,
     )
 
 

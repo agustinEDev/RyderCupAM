@@ -579,3 +579,65 @@ class TestHolesForTee:
     def test_without_cards_at_all_the_default(self):
         """Generar y reasignar llaman sin tarjetas por barra (`None`) en scratch."""
         assert holes_for_tee(None, TeeColor.YELLOW, Gender.MALE, default=[1]) == [1]
+
+
+class TestParsFor:
+    """El par de cada hoyo según la barra (#251, PR 5): 25 campos tienen par distinto por barra."""
+
+    def test_each_tee_its_own_par_by_hole(self):
+        hombres = _card(list(range(1, 19)))
+        mujeres = _card(list(range(1, 19)), pars=[5] + [4] * 17)
+        course = _course(
+            [
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.MALE,
+                    course_rating=70.0,
+                    slope_rating=125,
+                    holes=hombres,
+                ),
+                Tee(
+                    color=TeeColor.RED,
+                    gender=Gender.FEMALE,
+                    course_rating=72.0,
+                    slope_rating=128,
+                    holes=mujeres,
+                ),
+            ],
+            holes=hombres,
+        )
+
+        context = StrokeContextBuilder.build(course)
+
+        assert context.pars_for(TeeColor.RED, Gender.MALE)[1] == 4
+        assert context.pars_for(TeeColor.RED, Gender.FEMALE)[1] == 5
+        assert len(context.pars_for(TeeColor.RED, Gender.MALE)) == 18
+
+    def test_falls_back_to_the_genderless_tee(self):
+        course = _course(
+            [
+                Tee(
+                    color=TeeColor.RED,
+                    gender=None,
+                    course_rating=72.0,
+                    slope_rating=128,
+                    holes=_card(list(range(1, 19)), pars=[5] + [4] * 17),
+                )
+            ],
+            holes=_card(list(range(1, 19))),
+        )
+
+        context = StrokeContextBuilder.build(course)
+
+        assert context.pars_for(TeeColor.RED, Gender.FEMALE)[1] == 5
+
+    def test_a_tee_without_card_takes_the_course_par(self):
+        course = _course(
+            [Tee(color=TeeColor.YELLOW, gender=Gender.MALE, course_rating=70.0, slope_rating=125)],
+            holes=_card(list(range(1, 19)), pars=[3] + [4] * 17),
+        )
+
+        context = StrokeContextBuilder.build(course)
+
+        assert context.pars_for(TeeColor.YELLOW, Gender.MALE) == context.par_by_hole
+        assert context.pars_for(TeeColor.YELLOW, Gender.MALE)[1] == 3

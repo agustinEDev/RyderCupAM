@@ -31,7 +31,7 @@ A, B, C, D, FUERA = (UserId.generate() for _ in range(5))
 
 
 def _jugador(user_id: UserId) -> JugadorDePartida:
-    return JugadorDePartida(user_id, Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18)
+    return JugadorDePartida(user_id, Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18, (4,) * 18)
 
 
 def _partida(round_id: RoundId, numero: int, user_ids: list[UserId]) -> Partida:

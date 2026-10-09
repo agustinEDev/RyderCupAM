@@ -33,7 +33,9 @@ async def test_a_failure_inside_undoes_groups_places_and_waits():
     competicion, franja = CompetitionId(uuid4()), RoundId.generate()
     ahora = datetime(2030, 10, 1, tzinfo=UTC)
     jugadores = [
-        JugadorDePartida(UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18)
+        JugadorDePartida(
+            UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18, (4,) * 18
+        )
         for _ in range(2)
     ]
 
