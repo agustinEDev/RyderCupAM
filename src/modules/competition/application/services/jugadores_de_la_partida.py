@@ -52,6 +52,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     TeeRating,
 )
 from src.shared.domain.services.stroke_allocation import allocate_by_hole
+from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -241,14 +242,22 @@ class JugadoresDeLaPartida:
     def _sin_golpes(user_id, inscripcion, genero, contexto: StrokeContext) -> JugadorDePartida:
         """SCRATCH: todos juegan con 0, y las barras no hace falta que estén valoradas."""
         barra = barra_del_jugador(inscripcion.tee_color, genero, contexto.tee_ratings)
+        tee_gender = barra.tee_gender
+        # Unas barras sin valorar no dan golpes, pero su tarjeta sí cuenta: su
+        # género se busca también entre las que la traen (P12)
+        con_tarjeta = tee_key_for(
+            contexto.pars_by_tee, barra.tee_color.value, genero.value if genero else None
+        )
+        if tee_gender is None and con_tarjeta is not None and con_tarjeta[1] is not None:
+            tee_gender = genero
         return JugadorDePartida(
             user_id=user_id,
             handicap=inscripcion.fixed_handicap,
             playing_handicap=0,
             tee_color=barra.tee_color,
-            tee_gender=barra.tee_gender,
+            tee_gender=tee_gender,
             golpes_por_hoyo=(0,) * HOYOS,
-            par_por_hoyo=_pares(contexto, barra.tee_color, barra.tee_gender),
+            par_por_hoyo=_pares(contexto, barra.tee_color, tee_gender),
         )
 
     async def _nombres(self, uow, competition, user_ids) -> dict[UserId, str]:
