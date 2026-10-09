@@ -184,6 +184,12 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
             self._envelopes,
             self._invitations,
             self._hole_scores,
+            # Las de stroke play (#251): sin ellas, un fallo dentro las dejaba a
+            # medias en los tests (CodeRabbit en la #534)
+            self._handicap_updates,
+            self._plazas,
+            self._esperas,
+            self._partidas,
         ]
         copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
         try:
