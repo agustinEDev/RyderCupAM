@@ -15,6 +15,9 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | Cerrar la franja                                  | Completa ENTREGADA, a medias RETIRADO, |
 |                                                   | sin hoyos NO_PRESENTADO                |
 | Cerrar la franja siendo jugador                   | NotCompetitionCreatorError             |
+| Cerrar la franja antes de su 1.ª salida           | ScoringNotOpenYetError: nada cambia    |
+| Cerrar la franja con la competición sin jugarse   | PartidaNoAnotableError                 |
+| Cerrar la franja                                  | Relee cada partida bloqueándola        |
 | Corregir sin ningún lado                          | ValidationError: no toca nada          |
 | Corregir con un lado nulo (raya)                  | Se acepta                              |
 """
@@ -29,6 +32,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     ScoringNotOpenYetError,
 )
+from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
+    PartidaNoAnotableError,
+)
 from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
     CerrarFranjaUseCase,
     CorregirHoyoDePartidaUseCase,
@@ -37,6 +43,7 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
 )
 from src.modules.competition.domain.entities.golpe_de_partida import RayaNoPermitidaError
 from src.modules.competition.domain.entities.partida import TarjetaCerradaError
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
@@ -187,6 +194,53 @@ async def test_closing_the_window():
         entregada: EstadoDeTarjeta.ENTREGADA,
     }
     assert (await escenario.uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.COMPLETED
+
+
+def _cerrar(escenario, quien=None):
+    return CerrarFranjaUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        reloj=lambda: escenario.ahora,
+    ).execute(escenario.manana.id.value, quien or escenario.creador, False)
+
+
+async def test_closing_before_the_first_tee_time():
+    # Dejaba a todos no presentados y la franja sin poder rehacerse
+    escenario, partida = await _partida()
+    escenario.ahora = datetime(2030, 10, 11, 6, 59, tzinfo=UTC)
+
+    with pytest.raises(ScoringNotOpenYetError):
+        await _cerrar(escenario)
+
+    assert (await escenario.uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.SCHEDULED
+
+
+async def test_closing_with_the_competition_not_in_play():
+    escenario, _ = await _partida()
+    competicion = await escenario.uow.competitions.find_by_id(escenario.competicion.id)
+    competicion._status = CompetitionStatus.ACTIVE
+    await escenario.uow.competitions.update(competicion)
+
+    with pytest.raises(PartidaNoAnotableError):
+        await _cerrar(escenario)
+
+
+async def test_closing_locks_each_group_before_deciding():
+    # Sin bloquear, un 18 anotado a la vez quedaba como retirado
+    escenario, partida = await _en_juego()
+    bloqueadas = []
+    original = escenario.uow.partidas.find_by_id_for_update
+
+    async def espia(partida_id):
+        bloqueadas.append(partida_id)
+        return await original(partida_id)
+
+    escenario.uow.partidas.find_by_id_for_update = espia
+
+    await _cerrar(escenario)
+
+    assert bloqueadas == [partida.id]
 
 
 async def test_a_player_cannot_close_the_window():

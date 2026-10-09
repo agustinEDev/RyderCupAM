@@ -41,6 +41,7 @@ from src.modules.competition.domain.entities.golpe_de_partida import (
     GolpeDePartida,
 )
 from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -89,6 +90,19 @@ async def comprobar_que_abrio(
     franja = await uow.rounds.find_by_id(partida.round_id)
     if franja is None:
         raise PartidaNotFoundError(f"No existe la franja de la partida {partida.id}")
+    await comprobar_que_abrio_la_franja(franja, zonas, llegada)
+
+
+async def comprobar_que_abrio_la_franja(
+    franja: Round, zonas: ICompetitionTimezone, llegada: datetime
+) -> None:
+    """
+    Lo mismo, con la franja en la mano.
+
+    Raises:
+        ScoringNotOpenYetError: Antes, con la hora
+        PartidaNoAnotableError: Sin zona horaria no se sabe cuándo abre
+    """
     try:
         abre = await primera_salida(franja, zonas)
     except ZonaDesconocidaError as e:

@@ -35,6 +35,7 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     PartidaNoAnotableError,
     arrancar_la_competicion,
     comprobar_que_abrio,
+    comprobar_que_abrio_la_franja,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import (
@@ -203,7 +204,11 @@ class CerrarFranjaUseCase:
         """
         Raises:
             RoundNotFoundError, NotCompetitionCreatorError
+            ScoringNotOpenYetError: Antes de su primera salida: se cerraría con
+                todos no presentados y la franja ya no podría rehacerse
+            PartidaNoAnotableError: Con la competición sin jugarse
         """
+        llegada = self._reloj()
         async with self._uow:
             franja = await self._uow.rounds.find_by_id(RoundId(round_id))
             if franja is None or franja.hoja_de_salidas is None:
@@ -213,12 +218,22 @@ class CerrarFranjaUseCase:
                 raise RoundNotFoundError(f"No existe la franja {round_id}")
             if not (is_admin or competicion.is_creator(quien)):
                 raise NotCompetitionCreatorError("Solo el organizador cierra la franja")
+            if competicion.status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
+                raise PartidaNoAnotableError("Esta competición no está en juego.")
+            await comprobar_que_abrio_la_franja(franja, self._zonas, llegada)
+            # Cada partida, bloqueada antes de decidir, y los golpes leídos
+            # después: anotar, entregar o retirarse bloquean la partida, y sin
+            # esto un 18 anotado a la vez quedaría como retirado
+            partidas = [
+                bloqueada
+                for p in await self._uow.partidas.de_la_franja(franja.id)
+                if (bloqueada := await self._uow.partidas.find_by_id_for_update(p.id))
+            ]
             golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
             validados: dict[UserId, int] = {}
             for golpe in golpes:
                 if golpe.validado:
                     validados[golpe.user_id] = validados.get(golpe.user_id, 0) + 1
-            partidas = await self._uow.partidas.de_la_franja(franja.id)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
                 partida.cerrar(
@@ -227,5 +242,5 @@ class CerrarFranjaUseCase:
                 )
             await self._uow.partidas.guardar(sin_acabar)
             return await vista_de_la_franja(
-                self._uow, competicion, franja, partidas, self._zonas, self._usuarios, self._reloj()
+                self._uow, competicion, franja, partidas, self._zonas, self._usuarios, llegada
             )
