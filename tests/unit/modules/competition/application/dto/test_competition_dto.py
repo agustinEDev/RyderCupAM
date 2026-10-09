@@ -156,7 +156,7 @@ class TestCreateCompetitionRequestDTO:
             )
 
     def test_max_players_above_maximum(self):
-        """Debe rechazar max_players mayor a 100."""
+        """Debe rechazar max_players mayor a 200."""
         with pytest.raises(ValidationError):
             CreateCompetitionRequestDTO(
                 name="Test Cup",
@@ -164,21 +164,21 @@ class TestCreateCompetitionRequestDTO:
                 end_date=date(2025, 6, 3),
                 main_country="ES",
                 play_mode="SCRATCH",
-                max_players=101,
+                max_players=201,
             )
 
     def test_max_players_accepts_the_cap(self):
-        """Debe aceptar exactamente 100, el cupo máximo de hoy."""
+        """Debe aceptar exactamente 200, el cupo máximo (BE #314)."""
         dto = CreateCompetitionRequestDTO(
             name="Test Cup",
             start_date=date(2025, 6, 1),
             end_date=date(2025, 6, 3),
             main_country="ES",
             play_mode="SCRATCH",
-            max_players=100,
+            max_players=200,
         )
 
-        assert dto.max_players == 100
+        assert dto.max_players == 200
 
     def test_max_players_accepts_the_minimum(self):
         """Debe aceptar exactamente 2, que sigue siendo el mínimo."""
@@ -267,12 +267,12 @@ class TestUpdateCompetitionRequestDTO:
         assert dto.max_players == 20
 
     def test_max_players_above_maximum(self):
-        """Debe rechazar un cupo mayor a 100, venga con el nombre que venga."""
+        """Debe rechazar un cupo mayor a 200, venga con el nombre que venga."""
         with pytest.raises(ValidationError):
-            UpdateCompetitionRequestDTO(number_of_players=101)
+            UpdateCompetitionRequestDTO(number_of_players=201)
 
         with pytest.raises(ValidationError):
-            UpdateCompetitionRequestDTO(max_players=101)
+            UpdateCompetitionRequestDTO(max_players=201)
 
     def test_max_players_below_minimum(self):
         """Debe rechazar un cupo menor a 2, venga con el nombre que venga."""

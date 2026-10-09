@@ -21,6 +21,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
@@ -161,3 +162,32 @@ class TestFindByUserIdsAndCompetition:
         found = await repo.find_by_user_ids_and_competition([player], competition_id)
 
         assert found == []
+
+
+class TestNoHiddenLimit:
+    """BE #314: en Postgres las consultas por competición no recortan a 100 a escondidas."""
+
+    async def test_find_by_competition_and_its_status_variant_return_more_than_one_hundred(
+        self, db_session, competition_id
+    ):
+        """
+        Given 120 inscripciones aprobadas
+        When se piden por competición, con y sin estado
+        Then llegan las 120. Con el LIMIT 100 por defecto, seis casos de uso (equipos,
+        partidos, listado, cierre, logros) dejaban fuera a los inscritos a partir del 101
+        """
+        for _ in range(120):
+            user_id = UserId.generate()
+            await _insert_user(db_session, user_id)
+            await _enroll(db_session, competition_id, user_id, use_real_name=True)
+
+        repo = SQLAlchemyEnrollmentRepository(db_session)
+
+        assert len(await repo.find_by_competition(competition_id)) == 120
+        assert (
+            len(
+                await repo.find_by_competition_and_status(competition_id, EnrollmentStatus.APPROVED)
+            )
+            == 120
+        )
+        assert len(await repo.find_by_competition(competition_id, limit=50, offset=100)) == 20

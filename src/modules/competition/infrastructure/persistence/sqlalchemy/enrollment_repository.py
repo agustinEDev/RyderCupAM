@@ -66,14 +66,14 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         return await self._session.get(Enrollment, enrollment_id)
 
     async def find_by_competition(
-        self, competition_id: CompetitionId, limit: int = 100, offset: int = 0
+        self, competition_id: CompetitionId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de una competición.
 
         Args:
             competition_id: ID de la competición
-            limit: Número máximo de resultados
+            limit: Número máximo de resultados; None = todos (BE #314)
             offset: Número de resultados a saltar
 
         Returns:
@@ -83,7 +83,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
             select(Enrollment)
             .where(Enrollment._competition_id == competition_id)
             .order_by(Enrollment._created_at.asc())  # Primero en inscribirse, primero en lista
-            .limit(limit)
+            .limit(limit)  # None = sin LIMIT
             .offset(offset)
         )
         result = await self._session.execute(statement)
@@ -93,7 +93,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         self,
         competition_id: CompetitionId,
         status: EnrollmentStatus,
-        limit: int = 100,
+        limit: int | None = None,
         offset: int = 0,
     ) -> list[Enrollment]:
         """
@@ -102,7 +102,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         Args:
             competition_id: ID de la competición
             status: Estado de inscripción (enum)
-            limit: Número máximo de resultados
+            limit: Número máximo de resultados; None = todos (BE #314)
             offset: Número de resultados a saltar
 
         Returns:
@@ -120,7 +120,7 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
                 )
             )
             .order_by(Enrollment._created_at.asc())
-            .limit(limit)
+            .limit(limit)  # None = sin LIMIT
             .offset(offset)
         )
         result = await self._session.execute(statement)

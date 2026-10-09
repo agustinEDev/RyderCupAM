@@ -46,26 +46,26 @@ class TestMaxPlayersConstants:
         """Dos jugadores es lo mínimo con lo que hay partido."""
         assert MIN_PLAYERS == 2
 
-    def test_maximum_is_one_hundred(self):
-        """100 mientras las inscripciones no se paginen: más arriba se truncan."""
-        assert MAX_PLAYERS == 100
+    def test_maximum_is_two_hundred(self):
+        """200 desde que las inscripciones se leen sin límite oculto (BE #314)."""
+        assert MAX_PLAYERS == 200
 
 
 class TestMaxPlayersOnConstruction:
     """El cupo se valida al construir."""
 
     def test_accepts_the_cap(self):
-        assert build_competition(max_players=100).max_players == 100
+        assert build_competition(max_players=200).max_players == 200
 
     def test_rejects_one_above_the_cap(self):
-        with pytest.raises(ValueError, match="entre 2 y 100"):
-            build_competition(max_players=101)
+        with pytest.raises(ValueError, match="entre 2 y 200"):
+            build_competition(max_players=201)
 
     def test_accepts_the_minimum(self):
         assert build_competition(max_players=2).max_players == 2
 
     def test_rejects_one_below_the_minimum(self):
-        with pytest.raises(ValueError, match="entre 2 y 100"):
+        with pytest.raises(ValueError, match="entre 2 y 200"):
             build_competition(max_players=1)
 
     def test_defaults_to_twelve(self):
@@ -97,22 +97,22 @@ class TestMaxPlayersOnUpdate:
     def test_accepts_the_cap(self):
         competition = build_competition(max_players=12)
 
-        competition.update_info(max_players=100)
+        competition.update_info(max_players=200)
 
-        assert competition.max_players == 100
+        assert competition.max_players == 200
 
     def test_rejects_one_above_the_cap(self):
         competition = build_competition(max_players=12)
 
-        with pytest.raises(ValueError, match="entre 2 y 100"):
-            competition.update_info(max_players=101)
+        with pytest.raises(ValueError, match="entre 2 y 200"):
+            competition.update_info(max_players=201)
 
         assert competition.max_players == 12
 
     def test_rejects_one_below_the_minimum(self):
         competition = build_competition(max_players=12)
 
-        with pytest.raises(ValueError, match="entre 2 y 100"):
+        with pytest.raises(ValueError, match="entre 2 y 200"):
             competition.update_info(max_players=1)
 
         assert competition.max_players == 12

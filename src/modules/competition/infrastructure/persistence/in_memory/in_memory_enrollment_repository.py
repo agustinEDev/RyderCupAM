@@ -12,6 +12,11 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
+def _pagina(enrollments: list, limit: int | None, offset: int) -> list:
+    """La misma semántica que SQLAlchemy: sin límite (None) devuelve todas (BE #314)."""
+    return enrollments[offset:] if limit is None else enrollments[offset : offset + limit]
+
+
 class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
     """
     Implementación en memoria del repositorio de inscripciones para testing.
@@ -38,14 +43,19 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         return self._enrollments.get(enrollment_id)
 
     async def find_by_competition_and_status(
-        self, competition_id: CompetitionId, status: EnrollmentStatus
+        self,
+        competition_id: CompetitionId,
+        status: EnrollmentStatus,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Enrollment]:
         """Busca inscripciones de una competición con un estado específico."""
-        return [
+        enrollments = [
             enr
             for enr in self._enrollments.values()
             if enr.competition_id == competition_id and enr.status == status
         ]
+        return _pagina(enrollments, limit, offset)
 
     async def exists_for_user_in_competition(
         self, user_id: UserId, competition_id: CompetitionId
@@ -57,13 +67,13 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         )
 
     async def find_by_competition(
-        self, competition_id: CompetitionId, limit: int = 100, offset: int = 0
+        self, competition_id: CompetitionId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """Busca todas las inscripciones de una competición."""
         enrollments = [
             enr for enr in self._enrollments.values() if enr.competition_id == competition_id
         ]
-        return enrollments[offset : offset + limit]
+        return _pagina(enrollments, limit, offset)
 
     async def find_by_user(
         self, user_id: UserId, limit: int = 100, offset: int = 0
