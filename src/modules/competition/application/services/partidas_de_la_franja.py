@@ -11,7 +11,7 @@ Decidido con Agustín el 9 oct 2026:
   cambio se rechaza con la lista (G2).
 """
 
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 
 from src.modules.competition.application.exceptions import FranjaInvalidaError
 from src.modules.competition.application.services.jugadores_de_la_partida import (
@@ -50,23 +50,51 @@ async def recalcular_partidas(
     competicion: Competition,
     franja: Round,
     partidas: Sequence[Partida],
-    solo: Collection[UserId] | None = None,
 ) -> None:
     """
-    Rehace la foto de los jugadores de las partidas sin salir: de todos, o `solo` de esos.
+    Rehace la foto de los jugadores de las partidas sin salir (otro campo, D9).
 
     Raises:
         JugadoresSinHandicapError, JugadoresSinBarraError: Con todos los afectados
     """
-    sin_salir = [
-        p
-        for p in partidas
-        if not p.empezada and (solo is None or any(u in solo for u in p.user_ids))
-    ]
-    quienes = [u for p in sin_salir for u in p.user_ids if solo is None or u in solo]
+    sin_salir = [p for p in partidas if not p.empezada]
+    quienes = [u for p in sin_salir for u in p.user_ids]
     if not quienes:
         return
     fotos = await jugadores.construir(uow, competicion, franja, quienes)
     for partida in sin_salir:
-        partida.recalcular([fotos.get(j.user_id, j) for j in partida.jugadores])
+        partida.recalcular([fotos[j.user_id] for j in partida.jugadores])
     await uow.partidas.guardar(sin_salir)
+
+
+async def recalcular_su_handicap(
+    uow: CompetitionUnitOfWorkInterface,
+    jugadores: JugadoresDeLaPartida,
+    competicion: Competition,
+    user_id: UserId,
+) -> None:
+    """
+    Su hándicap fijado cambió tras el cierre (G1): sus partidas sin salir lo recogen.
+
+    Mismas barras, otro hándicap de juego y otros golpes; los demás, igual.
+    """
+    inscripciones = await uow.enrollments.find_by_user_ids_and_competition(
+        [user_id], competicion.id
+    )
+    inscripcion = inscripciones[0] if inscripciones else None
+    if inscripcion is None or inscripcion.fixed_handicap is None:
+        return
+    for partida in await uow.partidas.del_jugador(competicion.id, user_id):
+        if partida.empezada:
+            continue
+        foto = next(j for j in partida.jugadores if j.user_id == user_id)
+        if foto.handicap == inscripcion.fixed_handicap:
+            continue
+        franja = await uow.rounds.find_by_id(partida.round_id)
+        if franja is None:
+            continue
+        nueva = await jugadores.con_otro_handicap(
+            competicion, franja, foto, inscripcion.fixed_handicap
+        )
+        partida.recalcular([nueva if j.user_id == user_id else j for j in partida.jugadores])
+        await uow.partidas.guardar([partida])

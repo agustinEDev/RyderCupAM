@@ -43,6 +43,12 @@ from src.modules.competition.application.services.avisos_al_organizador import (
     AvisosAlOrganizador,
 )
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
+from src.modules.competition.application.services.jugadores_de_la_partida import (
+    JugadoresDeLaPartida,
+)
+from src.modules.competition.application.services.partidas_de_la_franja import (
+    recalcular_su_handicap,
+)
 from src.modules.competition.application.services.pendientes_de_actualizar import (
     PendientesDeActualizar,
 )
@@ -59,6 +65,9 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.refresco_de_handicaps_service import (
     MAX_INTENTOS,
     ResultadoRefresco,
+)
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
 )
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -88,6 +97,9 @@ class Herramientas:
     usuarios: UserRepositoryInterface
     # Para la ventana: la pasada se corta 10 s por jugador antes de la salida
     zonas: ICompetitionTimezone
+    # Para rehacer el hándicap de juego de sus partidas al corregir el fijado (#251,
+    # G1). Sin campos, las partidas no se tocan (los tests que no las usan)
+    campos: IGolfCourseRepository | None = None
 
 
 # Da herramientas nuevas cada vez, y las cierra al salir
@@ -213,7 +225,7 @@ class RefrescarHandicapsUseCase:
                         and jugador.handicap is not None
                     ):
                         nuevo = Decimal(str(jugador.handicap.value))
-                        await self._corregir(uow, h.usuarios, h.zonas, update_id, user_id, nuevo)
+                        await self._corregir(uow, h, update_id, user_id, nuevo)
                     await uow.handicap_updates.apuntar(update_id, user_id, resultado, self._reloj())
             return resultado
         except Exception:
@@ -224,8 +236,7 @@ class RefrescarHandicapsUseCase:
     async def _corregir(
         self,
         uow: CompetitionUnitOfWorkInterface,
-        usuarios: UserRepositoryInterface,
-        zonas: ICompetitionTimezone,
+        h: Herramientas,
         update_id: uuid.UUID,
         user_id: UserId,
         nuevo: Decimal,
@@ -246,9 +257,14 @@ class RefrescarHandicapsUseCase:
             competicion is not None
             and actualizacion is not None
             and actualizacion.sigue()
-            and await self._dentro_de_la_ventana(uow, zonas, competicion, actualizacion)
+            and await self._dentro_de_la_ventana(uow, h.zonas, competicion, actualizacion)
         ):
-            await HandicapsAlCerrar(uow, usuarios).corregir(competicion, user_id, nuevo)
+            await HandicapsAlCerrar(uow, h.usuarios).corregir(competicion, user_id, nuevo)
+            # Y sus partidas sin salir, con su hándicap de juego nuevo (G1)
+            if h.campos is not None:
+                await recalcular_su_handicap(
+                    uow, JugadoresDeLaPartida(h.campos, h.usuarios), competicion, user_id
+                )
 
     @staticmethod
     async def _bloquear(uow: CompetitionUnitOfWorkInterface, update_id: uuid.UUID) -> None:

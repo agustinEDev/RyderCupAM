@@ -261,7 +261,12 @@ class _Escenario:
 
     @asynccontextmanager
     async def herramientas(self):
-        yield Herramientas(competiciones=self.uow, usuarios=self.usuarios, zonas=_Madrid())
+        yield Herramientas(
+            competiciones=self.uow,
+            usuarios=self.usuarios,
+            zonas=_Madrid(),
+            campos=getattr(self, "campos", None),
+        )
 
     def caso(self) -> RefrescarHandicapsUseCase:
         return RefrescarHandicapsUseCase(
@@ -515,6 +520,48 @@ class TestElHandicapFijado:
         assert inscripciones[sube].fixed_handicap == Decimal("13.0")
         assert inscripciones[altos[0]].fixed_handicap == Decimal("20.0")
         assert {i.fixed_category for i in inscripciones.values()} == {1}
+
+    async def test_un_fijado_corregido_llega_a_su_partida_sin_salir(self, e):
+        """G1 (#251, PR 4): mismas barras, otro hándicap de juego y otros golpes."""
+        from src.modules.competition.domain.entities.partida import Partida
+        from src.modules.competition.domain.value_objects.jugador_de_partida import (
+            JugadorDePartida,
+        )
+        from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+        from src.shared.domain.value_objects.gender import Gender
+        from tests.unit.modules.competition.application.services.test_jugadores_de_la_partida import (
+            _campo,
+        )
+
+        torneo = await e.torneo(tipo="STABLEFORD")
+        jugador = await e.inscrito(torneo, handicap=8.0)
+        await e.cerrar(torneo)
+        (franja,) = [r for r in await e.uow.rounds.find_by_competition(torneo) if r.hoja_de_salidas]
+
+        def foto(user_id, handicap):
+            return JugadorDePartida(
+                user_id, Decimal(handicap), 0, TeeColor.YELLOW, Gender.MALE, (0,) * 18
+            )
+
+        await e.uow.partidas.anadir(
+            [
+                Partida.crear(
+                    torneo, franja.id, 1, [foto(jugador, "8.0"), foto(e.creadores[torneo], "10.0")]
+                )
+            ]
+        )
+        e.campos = AsyncMock()
+        e.campos.find_by_id.return_value = _campo()
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: 13.0 if nombre == e.nombre(jugador) else None
+        )
+
+        await e.pasar(torneo)
+
+        (partida,) = await e.uow.partidas.de_la_franja(franja.id)
+        suyo = next(j for j in partida.jugadores if j.user_id == jugador)
+        assert (suyo.handicap, suyo.tee_color) == (Decimal("13.0"), TeeColor.YELLOW)
+        assert suyo.playing_handicap == sum(suyo.golpes_por_hoyo) > 0
 
     async def test_con_personalizado_en_otra_competicion_alli_no_se_toca(self, e):
         con_propio = await e.torneo(tipo="STABLEFORD")

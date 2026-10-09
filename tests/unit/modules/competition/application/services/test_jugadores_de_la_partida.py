@@ -219,3 +219,33 @@ async def test_without_a_fixed_handicap_is_refused():
         await escenario.construir([sin, con])
 
     assert [(p.user_id, p.missing) for p in error.value.players] == [(sin, MISSING_HANDICAP)]
+
+
+class TestConOtroHandicap:
+    """El fijado corregido tras el cierre (G1): mismas barras, otro hándicap de juego."""
+
+    async def test_same_tees_new_playing_handicap(self):
+        escenario = _Escenario()
+        ana = await escenario.jugador(Decimal("10.0"))
+        foto = (await escenario.construir([ana]))[ana]
+
+        nueva = await JugadoresDeLaPartida(escenario.campos, escenario.usuarios).con_otro_handicap(
+            escenario.competicion, escenario.franja, foto, Decimal("20.0")
+        )
+
+        assert (nueva.tee_color, nueva.tee_gender) == (foto.tee_color, foto.tee_gender)
+        assert nueva.handicap == Decimal("20.0")
+        assert nueva.playing_handicap == 21
+        assert sum(nueva.golpes_por_hoyo) == 21
+
+    async def test_scratch_keeps_zero(self):
+        escenario = _Escenario(play_mode=PlayMode.SCRATCH)
+        ana = await escenario.jugador(Decimal("10.0"))
+        foto = (await escenario.construir([ana]))[ana]
+
+        nueva = await JugadoresDeLaPartida(escenario.campos, escenario.usuarios).con_otro_handicap(
+            escenario.competicion, escenario.franja, foto, Decimal("20.0")
+        )
+
+        assert (nueva.handicap, nueva.playing_handicap) == (Decimal("20.0"), 0)
+        assert nueva.golpes_por_hoyo == (0,) * 18

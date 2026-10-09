@@ -15,6 +15,8 @@ con el hándicap del perfil: aquí cada uno juega contra el campo.
 """
 
 from collections.abc import Sequence
+from dataclasses import replace
+from decimal import Decimal
 
 from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.services.player_names import PlayerNames
@@ -38,12 +40,18 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.services.stroke_context import StrokeContext
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.domain.services.playing_handicap_calculator import PlayingHandicapCalculator
+from src.shared.domain.services.playing_handicap_calculator import (
+    PlayingHandicapCalculator,
+    TeeRating,
+)
 from src.shared.domain.services.stroke_allocation import allocate_by_hole
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 
@@ -131,23 +139,15 @@ class JugadoresDeLaPartida:
                 if falta is not None:
                     sin_barras.append((user_id, *falta))
                 continue
-            handicap = inscripcion.fixed_handicap
-            de_juego = self._calculadora.calculate(
-                handicap,
+            jugadores[user_id] = self._foto(
+                competition,
+                franja,
+                contexto,
+                user_id,
+                inscripcion.fixed_handicap,
+                barra.tee_color,
+                barra.tee_gender,
                 barra.tee_rating,
-                franja.get_effective_allowance(),
-                competition.max_playing_handicap,
-            )
-            reparto = allocate_by_hole(
-                de_juego, contexto.holes_for(barra.tee_color, barra.tee_gender)
-            )
-            jugadores[user_id] = JugadorDePartida(
-                user_id=user_id,
-                handicap=handicap,
-                playing_handicap=de_juego,
-                tee_color=barra.tee_color,
-                tee_gender=barra.tee_gender,
-                golpes_por_hoyo=tuple(reparto.get(hoyo, 0) for hoyo in range(1, HOYOS + 1)),
             )
 
         if sin_barras:
@@ -159,6 +159,68 @@ class JugadoresDeLaPartida:
                 ]
             )
         return jugadores
+
+    async def con_otro_handicap(
+        self,
+        competition: Competition,
+        franja: Round,
+        foto: JugadorDePartida,
+        handicap: Decimal,
+    ) -> JugadorDePartida:
+        """
+        La misma foto con otro hándicap fijado (G1): mismas barras, otro de juego.
+
+        Las barras no se vuelven a elegir: un cambio del perfil (el género) no
+        toca la partida (D14). Solo cambia lo que sale del hándicap.
+        """
+        if competition.play_mode == PlayMode.SCRATCH:
+            return replace(foto, handicap=handicap)
+        campo = await self._campos.find_by_id(franja.golf_course_id)
+        if campo is None:
+            raise ValueError(f"No existe el campo de la franja {franja.id}")
+        contexto = course_context_for(campo)
+        valoracion = contexto.rating_for(foto.tee_color, foto.tee_gender)
+        if valoracion is None:
+            # Con esas barras se generó: si el campo ya no las valora, se deja como estaba
+            return foto
+        return self._foto(
+            competition,
+            franja,
+            contexto,
+            foto.user_id,
+            handicap,
+            foto.tee_color,
+            foto.tee_gender,
+            valoracion,
+        )
+
+    def _foto(
+        self,
+        competition: Competition,
+        franja: Round,
+        contexto: StrokeContext,
+        user_id: UserId,
+        handicap: Decimal,
+        tee_color: TeeColor,
+        tee_gender: Gender | None,
+        valoracion: TeeRating,
+    ) -> JugadorDePartida:
+        """Hándicap de juego con el tope y golpes de cada hoyo, con signo."""
+        de_juego = self._calculadora.calculate(
+            handicap,
+            valoracion,
+            franja.get_effective_allowance(),
+            competition.max_playing_handicap,
+        )
+        reparto = allocate_by_hole(de_juego, contexto.holes_for(tee_color, tee_gender))
+        return JugadorDePartida(
+            user_id=user_id,
+            handicap=handicap,
+            playing_handicap=de_juego,
+            tee_color=tee_color,
+            tee_gender=tee_gender,
+            golpes_por_hoyo=tuple(reparto.get(hoyo, 0) for hoyo in range(1, HOYOS + 1)),
+        )
 
     @staticmethod
     def _sin_golpes(user_id, inscripcion, genero) -> JugadorDePartida:
