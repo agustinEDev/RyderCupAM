@@ -481,3 +481,14 @@ class TestPasswordResetCompletedAuditEvent:
                 ip_address="unknown",
                 user_agent="unknown",
             )
+
+    def test_a_successful_reset_without_a_user_is_rejected(self):
+        """Given un reseteo correcto When no tiene usuario Then se rechaza: el que sale bien siempre es de alguien."""
+        with pytest.raises(ValueError, match="user_id"):
+            PasswordResetCompletedAuditEvent(
+                user_id=None,
+                email="unknown",
+                success=True,
+                ip_address="unknown",
+                user_agent="unknown",
+            )
