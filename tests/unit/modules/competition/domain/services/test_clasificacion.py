@@ -9,6 +9,7 @@ empate, se pintan por hándicap (P5).
 | Stableford neto: A 20, B 18, C 20 (C, menos hándicap)    | C y A T1 (C delante), B 3.º     |
 | Medal: -2 y +1                                           | 1.º y 2.º                       |
 | Medal retirado / Stableford retirado                     | NR sin puesto / cuenta lo jugado|
+| Stableford retirado sin ningún hoyo validado             | NR sin puesto, no «sin empezar» |
 | Sin hoyos validados / no presentado                      | Al final, sin puesto            |
 | Scratch de Stableford / de Medal                          | Puntos / golpes brutos (P13)    |
 | Scratch con categoría                                    | Error: no tiene                 |
@@ -112,6 +113,20 @@ def test_medal_retired_is_nr_and_stableford_retired_counts_what_was_played():
     assert _puestos(medal_filas, [medal_ret, medal]) == [(1, 1, False), (0, None, False)]
     assert medal_filas[1].estado == EstadoEnClasificacion.NR
     assert _puestos(st_filas, [st_ret, st]) == [(0, 1, False), (1, 2, False)]
+
+
+@pytest.mark.parametrize("regla", [ACUMULADO, MEJOR])
+def test_stableford_retired_without_any_hole_is_nr(regla):
+    # Salía «sin empezar», como si aún fuera a salir
+    retirado = _jugador(_tarjeta(0, tras=0, estado=RETIRADO))
+    st = _jugador(_tarjeta(25))
+
+    filas = _clasificar([retirado, st], regla=regla)
+
+    assert [(f.puesto, f.estado) for f in filas] == [
+        (1, EstadoEnClasificacion.CLASIFICADO),
+        (None, EstadoEnClasificacion.NR),
+    ]
 
 
 def test_not_started_and_no_show_go_last_without_position():

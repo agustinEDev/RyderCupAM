@@ -165,21 +165,26 @@ def _resultado(
     jugadas = [t for t in participante.tarjetas if t.estado != EstadoDeTarjeta.NO_PRESENTADO]
     if not jugadas:
         return _Resultado(EstadoEnClasificacion.NP)
-    nr = medal and any(t.estado == EstadoDeTarjeta.RETIRADO for t in jugadas)
+    retirado = any(t.estado == EstadoDeTarjeta.RETIRADO for t in jugadas)
+    nr = medal and retirado
+    # Sin nada que contar, un retirado es NR también en Stableford: «sin
+    # empezar» diría que aún va a salir
+    sin_nada = _Resultado(
+        EstadoEnClasificacion.NR if retirado else EstadoEnClasificacion.SIN_EMPEZAR
+    )
     con_hoyos = [t for t in jugadas if t.tarjeta.tras > 0]
     if regla == OverallStanding.ACCUMULATED:
         if nr:
             return _Resultado(EstadoEnClasificacion.NR)
         if not con_hoyos:
-            return _Resultado(EstadoEnClasificacion.SIN_EMPEZAR)
+            return sin_nada
         valor = sum(_valor(t.tarjeta, medal, escala) for t in con_hoyos)
         return _Resultado(EstadoEnClasificacion.CLASIFICADO, valor, len(con_hoyos))
 
     # Mejor tarjeta: la mejor entregada, o la que juega si ya la mejora (P8)
     candidatas = [t for t in con_hoyos if not (medal and t.estado == EstadoDeTarjeta.RETIRADO)]
     if not candidatas:
-        estado = EstadoEnClasificacion.NR if nr else EstadoEnClasificacion.SIN_EMPEZAR
-        return _Resultado(estado)
+        return sin_nada
     valores = [_valor(t.tarjeta, medal, escala) for t in candidatas]
     mejor = min(valores) if medal else max(valores)
     return _Resultado(EstadoEnClasificacion.CLASIFICADO, mejor, len(candidatas))
