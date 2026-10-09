@@ -74,7 +74,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_by_competition(
-        self, competition_id: CompetitionId, limit: int = 100, offset: int = 0
+        self, competition_id: CompetitionId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de una competición específica.
@@ -83,7 +83,7 @@ class EnrollmentRepositoryInterface(ABC):
 
         Args:
             competition_id: El ID de la competición
-            limit: Número máximo de inscripciones a retornar (default: 100)
+            limit: Número máximo de inscripciones; None (por defecto) = todas
             offset: Número de inscripciones a saltar (default: 0)
 
         Returns:
@@ -99,7 +99,7 @@ class EnrollmentRepositoryInterface(ABC):
         self,
         competition_id: CompetitionId,
         status: EnrollmentStatus,
-        limit: int = 100,
+        limit: int | None = None,
         offset: int = 0,
     ) -> list[Enrollment]:
         """
@@ -110,7 +110,7 @@ class EnrollmentRepositoryInterface(ABC):
         Args:
             competition_id: El ID de la competición
             status: El estado de inscripción (REQUESTED, APPROVED, etc.)
-            limit: Número máximo de inscripciones a retornar (default: 100)
+            limit: Número máximo de inscripciones; None (por defecto) = todas
             offset: Número de inscripciones a saltar (default: 0)
 
         Returns:
@@ -123,7 +123,7 @@ class EnrollmentRepositoryInterface(ABC):
 
     @abstractmethod
     async def find_by_user(
-        self, user_id: UserId, limit: int = 100, offset: int = 0
+        self, user_id: UserId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
         """
         Busca todas las inscripciones de un usuario específico.
@@ -132,7 +132,7 @@ class EnrollmentRepositoryInterface(ABC):
 
         Args:
             user_id: El ID del usuario
-            limit: Número máximo de inscripciones a retornar (default: 100)
+            limit: Número máximo de inscripciones; None (por defecto) = todas
             offset: Número de inscripciones a saltar (default: 0)
 
         Returns:

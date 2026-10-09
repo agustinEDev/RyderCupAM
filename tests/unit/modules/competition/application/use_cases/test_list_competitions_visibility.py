@@ -131,6 +131,43 @@ class TestWhatAStrangerSees:
 
         assert len(visibles) == 1
 
+    async def test_somebody_enrolled_sees_it_past_one_hundred_old_enrollments(self, uow):
+        """
+        Given un jugador con 120 inscripciones viejas (rechazos en otras) y, la
+        última, la de una privada
+        When mira el listado
+        Then la ve: con el límite oculto de 100 de `find_by_user`, su inscripción
+        quedaba fuera y la privada desaparecía de su lista (BE #314)
+        """
+        organizador = UserId(uuid4())
+        jugador = UserId(uuid4())
+        creada = await self._crear(uow, organizador, "Ryder de los amigos", Visibility.PRIVATE)
+
+        async with uow:
+            for _ in range(120):
+                await uow.enrollments.save(
+                    Enrollment(
+                        id=EnrollmentId.generate(),
+                        competition_id=CompetitionId(uuid4()),
+                        user_id=jugador,
+                        status=EnrollmentStatus.REJECTED,
+                    )
+                )
+            await uow.enrollments.save(
+                Enrollment(
+                    id=EnrollmentId.generate(),
+                    competition_id=CompetitionId(creada.id),
+                    user_id=jugador,
+                    status=EnrollmentStatus.APPROVED,
+                )
+            )
+            await uow.commit()
+
+        uc = ListCompetitionsUseCase(uow)
+        visibles = await uc.execute(viewer_id=str(jugador.value))
+
+        assert len(visibles) == 1
+
     async def test_somebody_thrown_out_stops_seeing_it(self, uow):
         """Al que echan deja de verla: su fila sigue ahi, pero ya no esta dentro.
 
