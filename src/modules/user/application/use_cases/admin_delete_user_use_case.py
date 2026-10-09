@@ -85,6 +85,10 @@ class AdminDeleteUserUseCase:
             if await self._competition_uow.drafts.exists_by_captain(user_id):
                 reasons.append("is a captain in a live draft room")
 
+            # Lo jugado en stroke play no se borra: la clave ajena es RESTRICT (#251)
+            if await self._competition_uow.partidas.existe_con_jugador(user_id):
+                reasons.append("plays in one or more tee groups")
+
         async with self._quick_match_uow:
             if await self._quick_match_uow.quick_matches.exists_created_by(user_id):
                 reasons.append("has created one or more quick matches")
