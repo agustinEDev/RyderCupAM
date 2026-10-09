@@ -21,6 +21,9 @@ from src.modules.competition.application.ports.tournament_achievements_publisher
     TournamentAchievementsPublisherInterface,
 )
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+from src.modules.competition.application.services.jugadores_de_la_partida import (
+    JugadoresDeLaPartida,
+)
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
 )
@@ -136,6 +139,9 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 )
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
+)
+from src.modules.competition.application.use_cases.partidas_use_case import (
+    GenerarPartidasUseCase,
 )
 from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
     CogerPlazaUseCase,
@@ -1824,6 +1830,23 @@ def get_soltar_plaza_use_case(
 ) -> SoltarPlazaUseCase:
     """Soltar la plaza en una franja de stroke play (#251)."""
     return SoltarPlazaUseCase(uow)
+
+
+def get_generar_partidas_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GenerarPartidasUseCase:
+    """Generar las partidas de una franja (#251): el campo da barras y zona horaria."""
+    return GenerarPartidasUseCase(
+        uow=uow,
+        jugadores=JugadoresDeLaPartida(
+            gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
+        ),
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+        reloj=lambda: datetime.now(UTC),
+    )
 
 
 def get_esperar_use_case(
