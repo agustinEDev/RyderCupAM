@@ -52,10 +52,10 @@ from ..value_objects.visibility import Visibility
 
 # Constantes de validación
 MIN_PLAYERS = 2
-# 100 hasta que las inscripciones se paginen: hay seis consultas que piden como
-# mucho 100 filas sin decirlo, así que una competición mayor se sortearía y se
-# emparejaría con los 100 primeros. Subirlo a 300 va en su propia issue.
-MAX_PLAYERS = 100
+# 200 desde que las inscripciones se leen sin límite oculto (BE #314): antes
+# las consultas pedían como mucho 100 filas sin decirlo, y una competición
+# mayor se sorteaba y se emparejaba con los 100 primeros
+MAX_PLAYERS = 200
 # 12: una Ryder entre amigos son 12 jugadores, y es lo que el formulario propone
 DEFAULT_MAX_PLAYERS = 12
 

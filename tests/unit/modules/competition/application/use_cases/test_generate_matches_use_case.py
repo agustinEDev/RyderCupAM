@@ -229,6 +229,60 @@ class TestGenerateMatchesUseCase:
         assert response.round_status == "SCHEDULED"
         assert response.round_id == round_entity.id.value
 
+    @pytest.mark.parametrize(
+        ("match_format", "partidos"),
+        [
+            (MatchFormat.SINGLES, 60),  # 1 contra 1
+            (MatchFormat.FOURBALL, 30),  # 2 contra 2
+            (MatchFormat.FOURSOMES, 30),  # 2 contra 2
+        ],
+    )
+    async def test_generates_a_match_for_every_player_past_one_hundred(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+        match_format: MatchFormat,
+        partidos: int,
+    ):
+        """
+        Given equipos de 60 contra 60, 120 aprobados, emparejados a mano (BE #314)
+        When se generan los partidos de cada formato
+        Then juegan los 120: 60 individuales, o 30 de fourball o foursomes. Con
+        el límite oculto de 100, el mapa de inscripciones se quedaba sin los
+        jugadores a partir del 101 y la generación los rechazaba como no inscritos
+        """
+        competition = await self._create_closed_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, match_format
+        )
+        team_a, team_b = await self._create_teams_and_enrollments(uow, competition, 60, 60)
+        por_equipo = match_format.players_per_team()
+        request = GenerateMatchesRequestDTO(
+            round_id=round_entity.id.value,
+            manual_pairings=[
+                ManualPairingDTO(
+                    team_a_player_ids=[u.value for u in team_a[i : i + por_equipo]],
+                    team_b_player_ids=[u.value for u in team_b[i : i + por_equipo]],
+                )
+                for i in range(0, 60, por_equipo)
+            ],
+        )
+
+        response = await GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        ).execute(request, creator_id)
+
+        assert response.matches_generated == partidos
+        jugadores = {
+            p.user_id
+            for m in await uow.matches.find_by_round(round_entity.id)
+            for p in (*m.team_a_players, *m.team_b_players)
+        }
+        assert jugadores == set(team_a) | set(team_b)
+
     async def test_should_generate_fourball_matches_auto(
         self,
         uow: InMemoryUnitOfWork,
