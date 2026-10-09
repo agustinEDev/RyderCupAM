@@ -457,13 +457,12 @@ class GetRecentMatchesUseCase:
         context = course_context_for(course)
         handicaps = {}
         for participant in raw.match.participants:
-            if participant.is_guest:
-                value = participant.handicap
-            elif participant.custom_handicap is not None:
-                value = participant.custom_handicap
-            else:
-                user = users_by_id.get(participant.user_id)
-                value = user.handicap.value if user and user.handicap else None
+            # Lo decide el participante: el fijado al empezar (BE #514) o, en
+            # partidas de antes, el manual, el personalizado o el del perfil
+            user = users_by_id.get(participant.user_id) if participant.user_id else None
+            value = participant.effective_handicap(
+                user.handicap.value if user and user.handicap else None
+            )
             handicaps[participant.participant_id] = None if value is None else Decimal(str(value))
 
         return self._stroke_allocation_service.allocate(
@@ -675,7 +674,7 @@ class GetRecentMatchesUseCase:
         playing_handicap = own_playing_handicap(
             raw.match,
             raw.participant,
-            self._effective_handicap(raw.participant, profile_handicap),
+            raw.participant.effective_handicap(profile_handicap),
             course,
         )
         # Sin barra ni allowance: ya van dentro del hándicap de juego, y el
@@ -787,12 +786,3 @@ class GetRecentMatchesUseCase:
         if participant.is_guest:
             return f"{participant.first_name} {participant.last_name}"
         return cls._user_name(participant.user_id, users_by_id)
-
-    @staticmethod
-    def _effective_handicap(
-        participant: QuickMatchParticipant, profile_handicap: float | None
-    ) -> float | None:
-        """Override manual del creador si lo hay, y si no el hándicap del perfil."""
-        if participant.custom_handicap is not None:
-            return participant.custom_handicap
-        return profile_handicap

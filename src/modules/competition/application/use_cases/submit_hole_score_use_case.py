@@ -12,11 +12,13 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    NotYourMarkedPlayerError,
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.domain.entities.hole_score import MAX_HOLE, MIN_HOLE
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -31,7 +33,7 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import I
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 
 
 class SubmitHoleScoreUseCase:
@@ -64,6 +66,7 @@ class SubmitHoleScoreUseCase:
         # un golpe enviado antes de la hora de apertura no se acepta porque las
         # busquedas de ronda, competicion y campo hayan tardado lo suyo
         # (CodeRabbit, PR #307)
+        """Anota el hoyo de quien llama y el de su marcado, si es el que le toca (BE #520)."""
         llegada = self._now()
 
         async with self._uow:
@@ -74,6 +77,10 @@ class SubmitHoleScoreUseCase:
 
             if match.find_player(user_id) is None:
                 raise NotMatchPlayerError("No eres jugador de este partido")
+
+            # Antes de abrir el partido, como lo de arriba: una petición fuera de
+            # su asignación no abre nada ni guarda nada, tampoco su propio golpe
+            marked_player_uid = self._marked_player(match, user_id, body.marked_player_id)
 
             # Despues de saber que es suyo: abrir el partido bloquea su fila,
             # crea 36 filas y arranca la ronda, y eso no lo dispara alguien que
@@ -108,10 +115,6 @@ class SubmitHoleScoreUseCase:
 
             # Tras entregar tarjeta: own_score ignorado, marker_score sigue editable
             own_score_locked = match.has_submitted_scorecard(user_id, match_format)
-
-            marked_player_uid = UserId(body.marked_player_id)
-            if match.find_player(marked_player_uid) is None:
-                raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
 
             # Tarjeta del marcado entregada: marker_score ignorado, own_score sigue editable
             marker_score_locked = match.has_submitted_scorecard(marked_player_uid, match_format)
@@ -152,6 +155,29 @@ class SubmitHoleScoreUseCase:
             self._uow, self._user_repo, self._scoring_service, self._gc_repo
         )
         return await view_uc.execute(match_id_str)
+
+    @staticmethod
+    def _marked_player(match: Match, user_id: UserId, marked_player_id: str) -> UserId:
+        """
+        El jugador marcado, si es el que le toca marcar a quien anota (BE #520).
+
+        Cada uno marca SOLO al que le asignó el sorteo de marcadores: sin esto
+        uno se marcaba a sí mismo y validaba su propio hoyo, o pisaba lo que le
+        había apuntado su marcador de verdad.
+
+        :raises NotMatchPlayerError: si el marcado no juega este partido, o ni
+            siquiera es un id (antes eso era un 500).
+        :raises NotYourMarkedPlayerError: si juega, pero no le toca a él.
+        """
+        try:
+            marked = UserId(marked_player_id)
+        except InvalidUserIdError as e:
+            raise NotMatchPlayerError("El jugador marcado no pertenece a este partido") from e
+        if match.find_player(marked) is None:
+            raise NotMatchPlayerError("El jugador marcado no pertenece a este partido")
+        if not match.may_mark(user_id, marked):
+            raise NotYourMarkedPlayerError()
+        return marked
 
     async def _abre_si_toca(self, match, llegada):
         """

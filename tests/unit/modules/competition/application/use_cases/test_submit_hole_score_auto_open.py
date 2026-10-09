@@ -34,6 +34,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    NotYourMarkedPlayerError,
     ScoringNotOpenYetError,
 )
 from src.modules.competition.application.services.match_opener import MatchOpener
@@ -315,6 +316,24 @@ class TestSeAbreSola:
 
 
 class TestNoSeAbre:
+    @pytest.mark.asyncio
+    async def test_un_marcado_que_no_le_toca_a_su_hora_no_abre_nada(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """
+        BE #520: ya es la hora, así que un golpe bueno abriría el partido. Uno
+        que se marca a sí mismo se rechaza antes y no abre ni guarda nada.
+        """
+        _c, _r, match, a, _b = await _monta(uow)
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(str(match.id), 1, _body(a), a.user_id)
+
+        async with uow:
+            assert (await uow.matches.find_by_id(match.id)).status == MatchStatus.SCHEDULED
+            assert await uow.hole_scores.find_by_match(match.id) == []
+
     @pytest.mark.asyncio
     async def test_2_antes_de_la_hora_se_rechaza_y_no_abre_nada(
         self, uow, user_repo, scoring_service, campos

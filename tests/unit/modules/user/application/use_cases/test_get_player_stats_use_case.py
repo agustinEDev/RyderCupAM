@@ -154,6 +154,7 @@ async def _played_quick_match(
     tee_gender: Gender | None = None,
     scores_by_hole: dict[int, int] | None = None,
     match_format: MatchFormat | None = None,
+    frozen_handicap: float | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -180,6 +181,8 @@ async def _played_quick_match(
 
     creator_participant_id = match.participants[0].participant_id
     match.start(scorer_ids=[creator_participant_id])
+    if frozen_handicap is not None:
+        match.freeze_handicaps({user.id: frozen_handicap})
     match.complete()
 
     async with qm_uow:
@@ -1577,6 +1580,23 @@ class TestHandicapDeJuegoComoEnLaPartida:
         ).execute_breakdown(user.id)
 
         assert breakdown.by_course[0].average_to_par == 0.0
+
+
+@pytest.mark.asyncio
+class TestHandicapFijadoAlEmpezar:
+    """BE #514: la media usa el índice fijado al empezar, no el del perfil de hoy."""
+
+    async def test_un_cambio_del_perfil_no_mueve_la_media(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Fijado 18 sin barra: 5 brutos por hoyo son par neto, aunque hoy el perfil diga 30."""
+        user = await create_user(user_uow, unique_email("fijado"), handicap=30.0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await _played_quick_match(qm_uow, course, user, strokes_per_hole=5, frozen_handicap=18.0)
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+
+        assert stats.scoring_avg == 0.0
 
 
 @pytest.mark.asyncio

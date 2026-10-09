@@ -14,9 +14,9 @@ OWASP ASVS Compliance:
 - V2.1.7: Verify that a common password filter is applied
 """
 
-# Top 100 contraseñas más comunes (case-insensitive check)
+# Top 100 contraseñas más comunes, escritas como la gente las teclea
 # Incluye variaciones numéricas comunes y patrones de teclado
-COMMON_PASSWORDS = {
+_ENTRIES = {
     # Números secuenciales
     "123456",
     "12345678",
@@ -133,6 +133,11 @@ COMMON_PASSWORDS = {
     "something",
 }
 
+# La lista que se aplica: normalizada (`casefold`) e inmutable, una sola fuente.
+# Se comparaba `password.lower()` contra las entradas tal cual, y las que llevan
+# mayúscula («Password123!») no coincidían nunca (BE #518)
+COMMON_PASSWORDS: frozenset[str] = frozenset(entry.casefold() for entry in _ENTRIES)
+
 
 def is_common_password(password: str) -> bool:
     """
@@ -157,7 +162,7 @@ def is_common_password(password: str) -> bool:
         >>> is_common_password("Welcome1!")  # En blacklist
         True
     """
-    return password.lower() in COMMON_PASSWORDS
+    return password.casefold() in COMMON_PASSWORDS
 
 
 def get_blacklist_size() -> int:

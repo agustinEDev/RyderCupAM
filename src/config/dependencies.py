@@ -2421,6 +2421,7 @@ def get_reassign_match_players_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
 ) -> ReassignMatchPlayersUseCase:
     """Proveedor del caso de uso ReassignMatchPlayersUseCase (cross-module: Competition + GolfCourse + User)."""
     return ReassignMatchPlayersUseCase(
@@ -2428,6 +2429,7 @@ def get_reassign_match_players_use_case(
         golf_course_repository=gc_uow.golf_courses,
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
+        scoring_service=scoring_service,
     )
 
 

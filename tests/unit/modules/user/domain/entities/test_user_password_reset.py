@@ -23,6 +23,7 @@ from src.modules.user.domain.events.password_reset_completed_event import (
 from src.modules.user.domain.events.password_reset_requested_event import (
     PasswordResetRequestedEvent,
 )
+from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 
 
 def _rebuild_user(user: User, **overrides) -> User:
@@ -280,7 +281,7 @@ class TestCanResetPassword:
 
         # Act & Assert
         with pytest.raises(
-            ValueError, match="No hay ninguna solicitud de reseteo de contraseña activa"
+            InvalidResetTokenError, match="No hay ninguna solicitud de reseteo de contraseña activa"
         ):
             user.can_reset_password("any_token")
 
@@ -457,7 +458,7 @@ class TestResetPassword:
 
         # Assert: Segundo intento con el mismo token falla
         with pytest.raises(
-            ValueError, match="No hay ninguna solicitud de reseteo de contraseña activa"
+            InvalidResetTokenError, match="No hay ninguna solicitud de reseteo de contraseña activa"
         ):
             user.reset_password(token=token, new_password="AnotherPassword789!")
 
