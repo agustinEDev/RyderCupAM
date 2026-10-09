@@ -148,6 +148,12 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
 )
+from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    CerrarFranjaUseCase,
+    CorregirHoyoDePartidaUseCase,
+    MarcarNoPresentadoUseCase,
+    ReabrirTarjetaUseCase,
+)
 from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
     CambiarMarcadoresUseCase,
@@ -1888,6 +1894,48 @@ def get_retirarse_de_partida_use_case(
 ) -> RetirarseDePartidaUseCase:
     """Retirarse de una partida (#251)."""
     return RetirarseDePartidaUseCase(uow=uow)
+
+
+def get_corregir_hoyo_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> CorregirHoyoDePartidaUseCase:
+    """El organizador corrige un hoyo de una partida (#251)."""
+    return CorregirHoyoDePartidaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_reabrir_tarjeta_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> ReabrirTarjetaUseCase:
+    """El organizador reabre una tarjeta (#251)."""
+    return ReabrirTarjetaUseCase(uow=uow)
+
+
+def get_marcar_no_presentado_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> MarcarNoPresentadoUseCase:
+    """El organizador marca a alguien como no presentado (#251)."""
+    return MarcarNoPresentadoUseCase(uow=uow)
+
+
+def get_cerrar_franja_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> CerrarFranjaUseCase:
+    """El organizador cierra las partidas de una franja (#251)."""
+    return CerrarFranjaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+        reloj=reloj,
+    )
 
 
 def get_ver_anotacion_de_partida_use_case(

@@ -14,18 +14,28 @@ from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_anotar_hoyo_de_partida_use_case,
+    get_cerrar_franja_use_case,
+    get_corregir_hoyo_de_partida_use_case,
     get_current_user,
     get_entregar_tarjeta_de_partida_use_case,
+    get_marcar_no_presentado_use_case,
+    get_reabrir_tarjeta_use_case,
     get_retirarse_de_partida_use_case,
     get_ver_anotacion_de_partida_use_case,
 )
 from src.config.rate_limit import limiter
-from src.modules.competition.application.dto.partidas_dto import TeeGroupScoringViewDTO
+from src.modules.competition.application.dto.partidas_dto import (
+    CorrectHoleBodyDTO,
+    TeeGroupScoringViewDTO,
+    TeeGroupsResponseDTO,
+)
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
     InvalidHoleNumberError,
+    NotCompetitionCreatorError,
     NotYourMarkedPlayerError,
     PartidaNotFoundError,
+    RoundNotFoundError,
     ScoringNotOpenYetError,
 )
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
@@ -38,6 +48,12 @@ from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_u
     EntregarTarjetaDePartidaUseCase,
     RetirarseDePartidaUseCase,
     TarjetaIncompletaError,
+)
+from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    CerrarFranjaUseCase,
+    CorregirHoyoDePartidaUseCase,
+    MarcarNoPresentadoUseCase,
+    ReabrirTarjetaUseCase,
 )
 from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_case import (
     VerAnotacionDePartidaUseCase,
@@ -93,6 +109,11 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
         status.HTTP_409_CONFLICT,
         "SCORECARD_ALREADY_SUBMITTED",
         "Esa tarjeta ya está cerrada.",
+    ),
+    NotCompetitionCreatorError: (
+        status.HTTP_403_FORBIDDEN,
+        "NOT_ORGANIZER",
+        "Solo el organizador puede hacerlo.",
     ),
 }
 
@@ -237,3 +258,110 @@ async def retire_from_tee_group(
     """200 con la partida."""
     quien = UserId(str(current_user.id))
     return await _y_la_vista(retirarse.execute(group_id, quien), ver, group_id, quien)
+
+
+# ======================================================================================
+# EL ORGANIZADOR (P3, P4, P6, P9, P11)
+# ======================================================================================
+
+
+@router.put(
+    "/groups/{group_id}/players/{user_id}/holes/{hole}",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Corregir un hoyo (organizador)",
+    description=(
+        "El lado del jugador (`own_score`), el del marcador (`marker_score`) o los dos: "
+        "resuelve un desacuerdo o hace de marcador en una partida de uno. Queda registrado "
+        "que lo metió el organizador. Una tarjeta cerrada se reabre antes."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("60/minute")
+async def correct_tee_group_hole(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    user_id: UUID,
+    hole: int,
+    body: CorrectHoleBodyDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    corregir: CorregirHoyoDePartidaUseCase = Depends(get_corregir_hoyo_de_partida_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(
+        corregir.execute(group_id, user_id, hole, body, quien, current_user.is_admin),
+        ver,
+        group_id,
+        quien,
+    )
+
+
+@router.post(
+    "/groups/{group_id}/players/{user_id}/reopen",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Reabrir una tarjeta (organizador)",
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def reopen_tee_group_card(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    reabrir: ReabrirTarjetaUseCase = Depends(get_reabrir_tarjeta_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(
+        reabrir.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+    )
+
+
+@router.post(
+    "/groups/{group_id}/players/{user_id}/no-show",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Marcar como no presentado (organizador)",
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def mark_tee_group_no_show(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    marcar: MarcarNoPresentadoUseCase = Depends(get_marcar_no_presentado_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(
+        marcar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+    )
+
+
+@router.post(
+    "/rounds/{round_id}/groups/close",
+    response_model=TeeGroupsResponseDTO,
+    summary="Cerrar las partidas de una franja (organizador)",
+    description=(
+        "La red: las tarjetas aún en juego quedan entregadas si están completas, no "
+        "presentado si no tienen ningún hoyo validado, y retirado si van a medias."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def close_tee_window_groups(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    cerrar: CerrarFranjaUseCase = Depends(get_cerrar_franja_use_case),
+):
+    """200 con las partidas de la franja."""
+    try:
+        return await cerrar.execute(round_id, UserId(str(current_user.id)), current_user.is_admin)
+    except RoundNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
+    except _CON_CODIGO as e:
+        return _respuesta(e)

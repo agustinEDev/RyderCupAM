@@ -209,3 +209,86 @@ async def test_retiring(client: AsyncClient):
     assert respuesta.status_code == 200, respuesta.text
     jugadores = {p["user_id"]: p for p in respuesta.json()["players"]}
     assert jugadores[yo]["card_status"] == "RETIRADO"
+
+
+# | Organizador                                  | Respuesta                                  |
+# |----------------------------------------------|--------------------------------------------|
+# | Corrige los dos lados de un hoyo             | 200, validado                              |
+# | Un jugador intenta corregir                  | 403 NOT_ORGANIZER                          |
+# | No presentado, y reabrir                     | 200, NO_PRESENTADO / JUGANDO               |
+# | Cierra la franja                             | 200, las partidas acabadas                 |
+
+
+async def _con_partida_y_organizador(client):
+    organizador, _, franja, otros = await _stableford(client)
+    generadas = await _generar(client, organizador, franja)
+    (partida,) = generadas.json()["groups"]
+    por_id = {o["user"]["id"]: o for o in [organizador, *otros]}
+    return organizador, franja, partida, por_id
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_the_organiser_corrects_both_sides(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/3",
+        json={"own_score": 5, "marker_score": 5},
+    )
+
+    assert respuesta.status_code == 200, respuesta.text
+    suyo = next(p for p in respuesta.json()["players"] if p["user_id"] == jugador)
+    assert suyo["holes"][2]["status"] == "MATCH"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_cannot_correct(client: AsyncClient):
+    _, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, por_id[jugador]["cookies"])
+
+    respuesta = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/3",
+        json={"own_score": 5, "marker_score": 5},
+    )
+
+    assert respuesta.status_code == 403, respuesta.text
+    assert respuesta.json()["error_code"] == "NOT_ORGANIZER"
+
+
+async def test_no_show_and_reopen(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}"
+
+    no_presentado = await client.post(f"{base}/no-show")
+    reabierta = await client.post(f"{base}/reopen")
+
+    def tarjeta(respuesta):
+        return next(p for p in respuesta.json()["players"] if p["user_id"] == jugador)[
+            "card_status"
+        ]
+
+    assert no_presentado.status_code == 200, no_presentado.text
+    assert tarjeta(no_presentado) == "NO_PRESENTADO"
+    assert reabierta.status_code == 200, reabierta.text
+    assert tarjeta(reabierta) == "JUGANDO"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_closing_the_window(client: AsyncClient):
+    organizador, franja, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/1",
+        json={"own_score": 5, "marker_score": 5},
+    )
+
+    respuesta = await client.post(f"/api/v1/competitions/rounds/{franja}/groups/close")
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert [g["status"] for g in respuesta.json()["groups"]] == ["COMPLETED"]

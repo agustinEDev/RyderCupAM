@@ -164,3 +164,14 @@ class TeeGroupScoringViewDTO(BaseModel):
     picked_up_allowed: bool = Field(..., description="Stableford sí; Medal no.")
     i_mark_user_id: UUID | None = Field(..., description="A quién marca quien mira.")
     players: list[TeeGroupScoringPlayerDTO]
+
+
+class CorrectHoleBodyDTO(BaseModel):
+    """
+    El organizador mete el lado del jugador, el del marcador o los dos (P4, P9, P11).
+
+    Como al anotar, omitir un campo no lo toca y nulo es levantar bola (no en Medal).
+    """
+
+    own_score: int | None = Field(None, ge=1, le=15, description="El lado del jugador.")
+    marker_score: int | None = Field(None, ge=1, le=15, description="El lado del marcador.")

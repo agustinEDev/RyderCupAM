@@ -167,16 +167,21 @@ class Partida:
         if self._estado == EstadoPartida.COMPLETED:
             self._estado = EstadoPartida.IN_PROGRESS
 
-    def cerrar(self, completas: Collection[UserId]) -> None:
+    def cerrar(self, completas: Collection[UserId], sin_hoyos: Collection[UserId] = ()) -> None:
         """
-        El organizador cierra la partida (P3, la red): las tarjetas en juego
-        completas se entregan; las demás quedan retiradas.
+        El organizador cierra la partida (P3, la red). Las tarjetas aún en juego:
+        completas, entregadas; sin ningún hoyo validado, no presentado; a medias,
+        retirado. Las ya cerradas se quedan como estaban.
         """
         for user_id, estado in self._tarjetas.items():
-            if estado == EstadoDeTarjeta.JUGANDO:
-                self._tarjetas[user_id] = (
-                    EstadoDeTarjeta.ENTREGADA if user_id in completas else EstadoDeTarjeta.RETIRADO
-                )
+            if estado != EstadoDeTarjeta.JUGANDO:
+                continue
+            if user_id in completas:
+                self._tarjetas[user_id] = EstadoDeTarjeta.ENTREGADA
+            elif user_id in sin_hoyos:
+                self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
+            else:
+                self._tarjetas[user_id] = EstadoDeTarjeta.RETIRADO
         self._estado = EstadoPartida.COMPLETED
 
     def _cerrar_tarjeta(self, user_id: UserId, estado: EstadoDeTarjeta) -> None:

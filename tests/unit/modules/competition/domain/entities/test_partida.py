@@ -305,7 +305,8 @@ class TestCicloDeLaTarjeta:
     | Retirarse con los demás entregados    | RETIRADO y COMPLETED                   |
     | No presentado, sin empezar            | NO_PRESENTADO                          |
     | Reabrir una entregada                 | JUGANDO, y la partida en juego         |
-    | Cerrar (organizador)                  | Completas ENTREGADA, el resto RETIRADO |
+    | Cerrar (organizador)                  | Completas ENTREGADA, sin hoyos NO_PRES.,|
+    |                                       | el resto RETIRADO                      |
     | Un jugador que no está                | Error                                  |
     """
 
@@ -389,16 +390,18 @@ class TestCicloDeLaTarjeta:
         assert partida.estado == EstadoPartida.IN_PROGRESS
 
     def test_closing_by_the_organiser(self):
-        partida = self._empezada(3)
-        a, b, c = partida.user_ids
-        partida.no_presentado(c)
+        """Completa, entregada; a medias, retirado; sin ningún hoyo, no presentado."""
+        partida = self._empezada(4)
+        a, b, c, d = partida.user_ids
+        partida.entregar(d)
 
-        partida.cerrar(completas={a})
+        partida.cerrar(completas={a}, sin_hoyos={c})
 
         assert partida.estados_de_tarjeta == {
             a: EstadoDeTarjeta.ENTREGADA,
             b: EstadoDeTarjeta.RETIRADO,
             c: EstadoDeTarjeta.NO_PRESENTADO,
+            d: EstadoDeTarjeta.ENTREGADA,
         }
         assert partida.estado == EstadoPartida.COMPLETED
 

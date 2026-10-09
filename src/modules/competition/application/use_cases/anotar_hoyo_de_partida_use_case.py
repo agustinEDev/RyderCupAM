@@ -73,6 +73,42 @@ class PartidaNoAnotableError(Exception):
 _ANOTABLE = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
 
 
+async def comprobar_que_abrio(
+    uow: CompetitionUnitOfWorkInterface,
+    zonas: ICompetitionTimezone,
+    partida: Partida,
+    llegada: datetime,
+) -> None:
+    """
+    La anotación abre para toda la franja a su primera salida (P1).
+
+    Raises:
+        ScoringNotOpenYetError: Antes, con la hora
+        PartidaNoAnotableError: Sin zona horaria no se sabe cuándo abre
+    """
+    franja = await uow.rounds.find_by_id(partida.round_id)
+    if franja is None:
+        raise PartidaNotFoundError(f"No existe la franja de la partida {partida.id}")
+    try:
+        abre = await primera_salida(franja, zonas)
+    except ZonaDesconocidaError as e:
+        raise PartidaNoAnotableError("El campo de la franja no tiene zona horaria.") from e
+    if llegada < abre:
+        raise ScoringNotOpenYetError("La anotación de la franja aún no ha abierto", abre)
+
+
+async def arrancar_la_competicion(
+    uow: CompetitionUnitOfWorkInterface, competicion: Competition
+) -> None:
+    """La competición en juego con su fila bloqueada (como la Ryder, BE #375)."""
+    bloqueada = await uow.competitions.find_by_id_for_update(competicion.id)
+    if bloqueada is None or bloqueada.status not in _ANOTABLE:
+        raise PartidaNoAnotableError("Esta competición no está en juego.")
+    if bloqueada.status == CompetitionStatus.CLOSED:
+        bloqueada.start()
+        await uow.competitions.update(bloqueada)
+
+
 class AnotarHoyoDePartidaUseCase:
     """Un jugador apunta su golpe y el de quien marca en un hoyo."""
 
@@ -112,7 +148,7 @@ class AnotarHoyoDePartidaUseCase:
             competicion = await self._uow.competitions.find_by_id(partida.competition_id)
             if competicion is None or competicion.status not in _ANOTABLE:
                 raise PartidaNoAnotableError("Esta competición no está en juego.")
-            await self._comprobar_que_abrio(partida, llegada)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
             # Una raya en Medal, antes de abrir nada
             acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD
             for campo in ("own_score", "marked_score"):
@@ -122,7 +158,7 @@ class AnotarHoyoDePartidaUseCase:
             # Primero la competición, después la partida: el mismo orden que el
             # resto de lo que toca partidas, y solo en el primer golpe
             if competicion.status == CompetitionStatus.CLOSED:
-                await self._arrancar(competicion)
+                await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await self._uow.partidas.find_by_id_for_update(partida.id)
             if bloqueada is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
@@ -147,27 +183,6 @@ class AnotarHoyoDePartidaUseCase:
         if body.marked_player_id != str(marcado.value):
             raise NotYourMarkedPlayerError()
         return marcado
-
-    async def _comprobar_que_abrio(self, partida: Partida, llegada: datetime) -> None:
-        """Toda la franja, a su primera salida (P1)."""
-        franja = await self._uow.rounds.find_by_id(partida.round_id)
-        if franja is None:
-            raise PartidaNotFoundError(f"No existe la franja de la partida {partida.id}")
-        try:
-            abre = await primera_salida(franja, self._zonas)
-        except ZonaDesconocidaError as e:
-            raise PartidaNoAnotableError("El campo de la franja no tiene zona horaria.") from e
-        if llegada < abre:
-            raise ScoringNotOpenYetError("La anotación de la franja aún no ha abierto", abre)
-
-    async def _arrancar(self, competicion: Competition) -> None:
-        """La competición en juego con su fila bloqueada (como la Ryder, BE #375)."""
-        bloqueada = await self._uow.competitions.find_by_id_for_update(competicion.id)
-        if bloqueada is None or bloqueada.status not in _ANOTABLE:
-            raise PartidaNoAnotableError("Esta competición no está en juego.")
-        if bloqueada.status == CompetitionStatus.CLOSED:
-            bloqueada.start()
-            await self._uow.competitions.update(bloqueada)
 
     async def _apuntar(
         self,
