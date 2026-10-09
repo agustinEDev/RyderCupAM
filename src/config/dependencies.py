@@ -1826,9 +1826,12 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
 
 def get_coger_plaza_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> CogerPlazaUseCase:
     """Coger plaza en una franja de stroke play (#251)."""
-    return CogerPlazaUseCase(uow)
+    return CogerPlazaUseCase(
+        uow, zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+    )
 
 
 def get_soltar_plaza_use_case(
@@ -2225,9 +2228,14 @@ def get_cancel_enrollment_use_case(
 
 def get_withdraw_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> WithdrawEnrollmentUseCase:
     """Proveedor del caso de uso WithdrawEnrollmentUseCase."""
-    return WithdrawEnrollmentUseCase(uow)
+    return WithdrawEnrollmentUseCase(
+        uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=lambda: datetime.now(UTC),
+    )
 
 
 def get_update_stroke_play_settings_use_case(
@@ -2290,6 +2298,8 @@ def get_update_round_use_case(
         jugadores=JugadoresDeLaPartida(
             gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
         ),
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=lambda: datetime.now(UTC),
     )
 
 

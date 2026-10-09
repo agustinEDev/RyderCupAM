@@ -1,5 +1,6 @@
 """Caso de Uso: Actualizar Ronda/Sesión de competición."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.round_match_dto import (
@@ -14,6 +15,7 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     RoundNotModifiableError,
 )
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -30,6 +32,9 @@ from src.modules.competition.application.services.jugadores_de_la_partida import
 from src.modules.competition.application.services.partidas_de_la_franja import (
     comprobar_que_caben_las_partidas,
     recalcular_partidas,
+)
+from src.modules.competition.application.services.partidas_del_jugador import (
+    salidas_por_hora,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida
@@ -73,6 +78,8 @@ class UpdateRoundUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         jugadores: JugadoresDeLaPartida | None = None,
+        zonas: ICompetitionTimezone | None = None,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
     ):
         """
         Args:
@@ -81,6 +88,8 @@ class UpdateRoundUseCase:
         """
         self._uow = uow
         self._jugadores = jugadores
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(
         self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool = False
@@ -216,8 +225,16 @@ class UpdateRoundUseCase:
         )
 
     async def _partidas_que_caben(self, franja: Round, hoja: HojaDeSalidas | None) -> list[Partida]:
-        """Las partidas de la franja, si caben en la hoja nueva (D9, #251)."""
+        """
+        Las partidas de la franja, si caben en la hoja nueva (D9, #251).
+
+        Con alguna ya salida (por su estado o por su hora), la franja ya no se toca:
+        cambiaría la hora o las barras de quien ya está en el campo (D11).
+        """
         partidas = await self._uow.partidas.de_la_franja(franja.id)
+        salidas = await salidas_por_hora(franja, partidas, self._zonas, self._reloj())
+        if any(p.empezada or p.id in salidas for p in partidas):
+            raise FranjaInvalidaError("La franja ya ha empezado: sus partidas no se cambian.")
         if hoja is not None:
             comprobar_que_caben_las_partidas(partidas, hoja)
         return partidas

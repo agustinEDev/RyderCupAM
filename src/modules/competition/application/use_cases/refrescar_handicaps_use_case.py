@@ -263,7 +263,12 @@ class RefrescarHandicapsUseCase:
             # Y sus partidas sin salir, con su hándicap de juego nuevo (G1)
             if h.campos is not None:
                 await recalcular_su_handicap(
-                    uow, JugadoresDeLaPartida(h.campos, h.usuarios), competicion, user_id
+                    uow,
+                    JugadoresDeLaPartida(h.campos, h.usuarios),
+                    competicion,
+                    user_id,
+                    zonas=h.zonas,
+                    ahora=self._reloj(),
                 )
 
     @staticmethod

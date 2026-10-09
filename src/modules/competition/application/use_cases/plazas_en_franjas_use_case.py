@@ -20,6 +20,7 @@ from src.modules.competition.application.exceptions import (
     PlazaEnFranjaError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -80,8 +81,17 @@ async def _franja_y_competicion(
 class CogerPlazaUseCase:
     """Un jugador coge plaza en una franja (él mismo, o el organizador por él)."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone | None = None,
+    ):
+        """
+        Args:
+            zonas: Para no sacar a nadie de una partida que ya salió por su hora (#251)
+        """
         self._uow = uow
+        self._zonas = zonas
 
     async def execute(
         self,
@@ -141,7 +151,9 @@ class CogerPlazaUseCase:
             if en_lugar_de is not None:
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
                 # Y de su partida en esa franja: en la nueva queda sin partida (D3)
-                await sacar_de_sus_partidas(self._uow, competicion.id, jugador, en_lugar_de)
+                await sacar_de_sus_partidas(
+                    self._uow, competicion.id, jugador, en_lugar_de, self._zonas, ahora
+                )
             plaza = PlazaEnFranja.crear(
                 competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
             )

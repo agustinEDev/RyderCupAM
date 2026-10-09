@@ -13,7 +13,7 @@ Decidido con Agustín el 9 oct 2026:
 Aquí solo están las reglas; el plazo y quién puede, los mira quien llama.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -167,16 +167,28 @@ class MovimientosDePartidas:
         return cambios
 
     @staticmethod
-    def sacar(partidas: Sequence[Partida], user_id: UserId) -> Cambios:
+    def sacar(
+        partidas: Sequence[Partida],
+        user_id: UserId,
+        salidas: Collection[PartidaId] = frozenset(),
+    ) -> Cambios:
         """
         Una baja (retirada, cambio de franja): sale de su partida si aún no ha salido.
 
         Aquí sí puede quedar una partida de 1, incompleta (D4); si se vacía,
         desaparece y las de detrás suben (M3). Si ya salió, lo jugado se queda.
+
+        Args:
+            salidas: Las que ya salieron aunque su estado no lo diga: les llegó la
+                hora (hasta la PR 5 nadie las pasa a IN_PROGRESS)
         """
+
+        def salio(partida: Partida) -> bool:
+            return partida.empezada or partida.id in salidas
+
         cambios = Cambios()
         origen = next((p for p in partidas if user_id in p.user_ids), None)
-        if origen is None or origen.empezada:
+        if origen is None or salio(origen):
             return cambios
         if len(origen.jugadores) > 1:
             origen.quitar(user_id)
@@ -185,7 +197,7 @@ class MovimientosDePartidas:
         cambios.borrar.append(origen)
         quedan = [p for p in partidas if p is not origen]
         # Ya en juego, nadie cambia de hora: la que se vacía deja su hueco
-        if any(p.empezada for p in quedan):
+        if any(salio(p) for p in quedan):
             return cambios
         for numero, partida in enumerate(sorted(quedan, key=lambda p: p.numero), start=1):
             if partida.numero != numero:

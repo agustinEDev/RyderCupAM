@@ -4,6 +4,7 @@ Caso de Uso: Retirar Inscripción (Withdraw Enrollment).
 Permite a un jugador aprobado retirarse de una competición.
 """
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.enrollment_dto import (
@@ -11,6 +12,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import EnrollmentNotFoundError
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
     esta_jugada,
@@ -47,14 +49,24 @@ class WithdrawEnrollmentUseCase:
     - Diferencia con cancel: withdraw es después de estar inscrito
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone | None = None,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            zonas: Para saber qué partidas ya salieron por su hora (#251). Sin ellas,
+                solo cuenta el estado de la partida
+            reloj: El momento de la retirada
         """
         self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(
         self, request: WithdrawEnrollmentRequestDTO, user_id: UserId
@@ -98,7 +110,13 @@ class WithdrawEnrollmentUseCase:
             enrollment.withdraw(request.reason)
 
             # Sale de sus partidas sin salir, también ya iniciada (D2, #251)
-            await sacar_de_sus_partidas(self._uow, enrollment.competition_id, enrollment.user_id)
+            await sacar_de_sus_partidas(
+                self._uow,
+                enrollment.competition_id,
+                enrollment.user_id,
+                zonas=self._zonas,
+                ahora=self._reloj(),
+            )
 
             # Y suelta sus plazas en las franjas de un stroke play, si aún no se
             # juega: empezada, son las del historial de lo jugado (#251)

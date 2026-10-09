@@ -291,3 +291,21 @@ class TestSacar:
         assert cambios.borrar == [p1]
         assert (salida.numero, p3.numero) == (2, 3)
         assert cambios.guardar == []
+
+    def test_a_group_whose_tee_time_came_counts_as_out(self):
+        """Hasta la PR 5 nadie marca IN_PROGRESS: la hora llegada también es salida."""
+        p1, p2, p3 = _partidas(1, 4, 3)
+
+        cambios = MovimientosDePartidas.sacar([p1, p2, p3], p1.user_ids[0], salidas={p1.id})
+
+        assert (cambios.guardar, cambios.borrar) == ([], [])
+        assert len(p1.jugadores) == 1
+
+    def test_once_one_is_out_by_its_time_nobody_moves_up(self):
+        p1, p2, p3 = _partidas(4, 1, 3)
+
+        cambios = MovimientosDePartidas.sacar([p1, p2, p3], p2.user_ids[0], salidas={p1.id})
+
+        assert cambios.borrar == [p2]
+        assert (p1.numero, p3.numero) == (1, 3)
+        assert cambios.guardar == []
