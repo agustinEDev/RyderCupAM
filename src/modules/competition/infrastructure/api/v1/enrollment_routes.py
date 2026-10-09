@@ -5,7 +5,7 @@ Endpoints FastAPI para gestión de inscripciones siguiendo Clean Architecture.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -103,8 +103,9 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
     NotOwnerError as WithdrawNotOwnerError,
     WithdrawEnrollmentUseCase,
 )
-from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
+from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -161,35 +162,48 @@ class EnrollmentDTOMapper:
     """
 
     @staticmethod
-    async def to_response_dto(
-        enrollment,
-        user_uow: UserUnitOfWorkInterface | None = None,
+    async def to_response_dtos(
+        enrollments: Sequence[Enrollment],
+        user_uow: UserUnitOfWorkInterface,
         categorias: Mapping[UserId, int | None] | None = None,
-    ) -> EnrollmentResponseDTO:
+    ) -> list[EnrollmentResponseDTO]:
         """
-        Convierte una entidad Enrollment a EnrollmentResponseDTO.
+        Convierte inscripciones a EnrollmentResponseDTO, con los datos de cada usuario.
+
+        Los usuarios se leen en UNA consulta (BE #314): el listado ya no se corta
+        en 100 filas, y buscarlos uno a uno eran cientos de consultas seguidas.
 
         Args:
-            enrollment: Entidad de dominio
-            user_uow: Unit of Work de usuarios para obtener datos del usuario (opcional)
+            enrollments: Entidades de dominio, en el orden en que se devuelven
+            user_uow: Unit of Work de usuarios
             categorias: La categoría de cada jugador, si ya está fijada (#251).
                 Sin ella, ni hándicap fijado ni categoría: aún no cuentan
 
         Returns:
-            EnrollmentResponseDTO enriquecido con datos del usuario
+            Un DTO por inscripción; `user` a None si el usuario ya no existe
         """
-        # Obtener información del usuario (si user_uow es provisto)
-        user_dto = None
-        if user_uow:
-            user_dto = await EnrollmentDTOMapper._get_user_dto(
-                enrollment.user_id, user_uow, use_real_name=enrollment.use_real_name
-            )
+        if not enrollments:
+            return []
 
+        async with user_uow:
+            usuarios = await user_uow.users.find_by_ids([e.user_id for e in enrollments])
+        por_id = {u.id: u for u in usuarios}
+
+        return [
+            EnrollmentDTOMapper._to_dto(e, por_id.get(e.user_id), categorias) for e in enrollments
+        ]
+
+    @staticmethod
+    def _to_dto(
+        enrollment: Enrollment,
+        user: User | None,
+        categorias: Mapping[UserId, int | None] | None,
+    ) -> EnrollmentResponseDTO:
         return EnrollmentResponseDTO(
             id=enrollment.id.value,
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
-            user=user_dto,
+            user=EnrollmentDTOMapper._user_dto(enrollment, user),
             status=enrollment.status.value,
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
@@ -202,41 +216,27 @@ class EnrollmentDTOMapper:
         )
 
     @staticmethod
-    async def _get_user_dto(
-        user_id: UserId,
-        user_uow: UserUnitOfWorkInterface,
-        *,
-        use_real_name: bool = False,
-    ) -> EnrolledUserDTO | None:
+    def _user_dto(enrollment: Enrollment, user: User | None) -> EnrolledUserDTO | None:
         """
-        Obtiene la información de un usuario inscrito.
+        Los datos del usuario inscrito.
 
-        Args:
-            user_id: ID del usuario
-            user_uow: Unit of Work de usuarios
-            use_real_name: preferencia de SU inscripción en ESTA competición
-                (BE #254) — no del perfil, así que no se lee de `user`
-
-        Returns:
-            EnrolledUserDTO con los datos del usuario, o None si no se encuentra
+        El nombre sigue la preferencia de SU inscripción en ESTA competición
+        (BE #254), no la del perfil, así que no se lee de `user`.
         """
-        async with user_uow:
-            user = await user_uow.users.find_by_id(user_id)
+        if not user:
+            logger.warning(f"User with id {enrollment.user_id.value} not found")
+            return None
 
-            if not user:
-                logger.warning(f"User with id {user_id.value} not found")
-                return None
-
-            return EnrolledUserDTO(
-                id=user.id.value,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                display_name=user.display_name_or_legal(use_real_name),
-                email=str(user.email),
-                handicap=user.handicap.value if user.handicap else None,
-                country_code=user.country_code.value if user.country_code else None,
-                avatar_url=None,  # TODO: Implementar cuando tengamos sistema de avatares
-            )
+        return EnrolledUserDTO(
+            id=user.id.value,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            display_name=user.display_name_or_legal(enrollment.use_real_name),
+            email=str(user.email),
+            handicap=user.handicap.value if user.handicap else None,
+            country_code=user.country_code.value if user.country_code else None,
+            avatar_url=None,  # TODO: Implementar cuando tengamos sistema de avatares
+        )
 
 
 # ======================================================================================
@@ -364,15 +364,10 @@ async def list_enrollments(
             competition_id=str(competition_id), status=status_filter
         )
 
-        # Convertir entidades a DTOs enriquecidos con datos de usuario
-        result = []
-        for enrollment in enrollments:
-            dto = await EnrollmentDTOMapper.to_response_dto(
-                enrollment, user_uow, categorias=categorias
-            )
-            result.append(dto)
-
-        return result
+        # Entidades a DTOs, con los datos de cada usuario leídos en bloque
+        return await EnrollmentDTOMapper.to_response_dtos(
+            enrollments, user_uow, categorias=categorias
+        )
 
     except ListCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
