@@ -137,6 +137,7 @@ async def _stableford(
     con_zona: bool = True,
     cerrar: bool = True,
     generos: tuple[str, ...] = (),
+    tipo: str = "STABLEFORD",
 ) -> tuple[dict, dict, str, list[dict]]:
     """El organizador (inscrito) y `jugadores` más, todos con plaza en la franja."""
     organizador = await _usuario(client)
@@ -150,7 +151,7 @@ async def _stableford(
             "end_date": start.isoformat(),
             "main_country": "ES",
             "play_mode": "HANDICAP",
-            "tournament_type": "STABLEFORD",
+            "tournament_type": tipo,
             "stroke_play": {"category_limits": [12.0]},
         },
     )

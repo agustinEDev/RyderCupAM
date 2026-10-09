@@ -35,6 +35,9 @@ from src.modules.competition.application.use_cases.actualizar_handicaps_use_case
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
+    AnotarHoyoDePartidaUseCase,
+)
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
 )
@@ -46,6 +49,11 @@ from src.modules.competition.application.use_cases.cancel_enrollment_use_case im
 )
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
+)
+from src.modules.competition.application.use_cases.clasificaciones_use_case import (
+    ClasificacionDeLaFranjaUseCase,
+    ClasificacionGeneralUseCase,
+    ClasificacionScratchUseCase,
 )
 from src.modules.competition.application.use_cases.close_enrollments_use_case import (
     CloseEnrollmentsUseCase,
@@ -76,6 +84,10 @@ from src.modules.competition.application.use_cases.delete_round_use_case import 
 )
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     DirectEnrollPlayerUseCase,
+)
+from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_use_case import (
+    EntregarTarjetaDePartidaUseCase,
+    RetirarseDePartidaUseCase,
 )
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
@@ -140,6 +152,12 @@ from src.modules.competition.application.use_cases.name_captains_use_case import
 )
 from src.modules.competition.application.use_cases.name_vice_captain_use_case import (
     NameViceCaptainUseCase,
+)
+from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    CerrarFranjaUseCase,
+    CorregirHoyoDePartidaUseCase,
+    MarcarNoPresentadoUseCase,
+    ReabrirTarjetaUseCase,
 )
 from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
@@ -229,6 +247,9 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
 )
 from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
     UpdateStrokePlaySettingsUseCase,
+)
+from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_case import (
+    VerAnotacionDePartidaUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
@@ -1840,6 +1861,135 @@ def get_soltar_plaza_use_case(
 ) -> SoltarPlazaUseCase:
     """Soltar la plaza en una franja de stroke play (#251)."""
     return SoltarPlazaUseCase(uow)
+
+
+def get_reloj_del_servidor() -> Callable[[], datetime]:
+    """
+    El reloj del servidor para la anotación de las partidas (#251, PR 5).
+
+    Decide si la anotación ya abrió; nunca una hora que mande el cliente. Es
+    una dependencia para que los tests de la API puedan ponerlo en el día del
+    torneo.
+    """
+    return lambda: datetime.now(UTC)
+
+
+def get_anotar_hoyo_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> AnotarHoyoDePartidaUseCase:
+    """Anotar un hoyo en una partida (#251): la zona del campo da la hora de apertura."""
+    return AnotarHoyoDePartidaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_entregar_tarjeta_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> EntregarTarjetaDePartidaUseCase:
+    """Entregar la tarjeta de una partida (#251)."""
+    return EntregarTarjetaDePartidaUseCase(uow=uow)
+
+
+def get_retirarse_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RetirarseDePartidaUseCase:
+    """Retirarse de una partida (#251)."""
+    return RetirarseDePartidaUseCase(uow=uow)
+
+
+def get_corregir_hoyo_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> CorregirHoyoDePartidaUseCase:
+    """El organizador corrige un hoyo de una partida (#251)."""
+    return CorregirHoyoDePartidaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_reabrir_tarjeta_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> ReabrirTarjetaUseCase:
+    """El organizador reabre una tarjeta (#251)."""
+    return ReabrirTarjetaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_marcar_no_presentado_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> MarcarNoPresentadoUseCase:
+    """El organizador marca a alguien como no presentado (#251)."""
+    return MarcarNoPresentadoUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_cerrar_franja_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> CerrarFranjaUseCase:
+    """El organizador cierra las partidas de una franja (#251)."""
+    return CerrarFranjaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+        reloj=reloj,
+    )
+
+
+def get_clasificacion_de_la_franja_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ClasificacionDeLaFranjaUseCase:
+    """La clasificación de una franja (#251)."""
+    return ClasificacionDeLaFranjaUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_clasificacion_general_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ClasificacionGeneralUseCase:
+    """La clasificación general de un stroke play (#251)."""
+    return ClasificacionGeneralUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_clasificacion_scratch_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ClasificacionScratchUseCase:
+    """La clasificación scratch de un stroke play (#251)."""
+    return ClasificacionScratchUseCase(uow=uow, user_repository=user_uow.users)
+
+
+def get_ver_anotacion_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> VerAnotacionDePartidaUseCase:
+    """La partida para anotar y las tarjetas de los suyos (#251)."""
+    return VerAnotacionDePartidaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+    )
 
 
 def get_jugadores_de_la_partida(

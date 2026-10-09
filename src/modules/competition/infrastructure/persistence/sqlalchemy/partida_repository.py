@@ -12,6 +12,7 @@ from src.modules.competition.domain.repositories.partida_repository_interface im
     PartidaRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
@@ -80,6 +81,12 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
         encontradas = await self._donde(tee_groups_table.c.id == str(partida_id))
         return encontradas[0] if encontradas else None
 
+    async def find_by_id_for_update(self, partida_id: PartidaId) -> Partida | None:
+        encontradas = await self._donde(
+            tee_groups_table.c.id == str(partida_id), para_actualizar=True
+        )
+        return encontradas[0] if encontradas else None
+
     async def de_la_franja(self, round_id: RoundId) -> list[Partida]:
         return await self._donde(tee_groups_table.c.round_id == round_id)
 
@@ -117,21 +124,24 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     "tee_color": jugador.tee_color,
                     "tee_gender": jugador.tee_gender,
                     "strokes_by_hole": list(jugador.golpes_por_hoyo),
+                    "pars_by_hole": list(jugador.par_por_hoyo),
+                    "card_status": partida.estados_de_tarjeta[jugador.user_id].value,
                     "marks_user_id": partida.marcadores.get(jugador.user_id),
                 }
                 for posicion, jugador in enumerate(partida.jugadores, start=1)
             ],
         )
 
-    async def _donde(self, condicion) -> list[Partida]:
+    async def _donde(self, condicion, para_actualizar: bool = False) -> list[Partida]:
         """Las partidas que cumplen la condición, por franja y número, con sus jugadores."""
-        grupos = (
-            await self._session.execute(
-                select(tee_groups_table)
-                .where(condicion)
-                .order_by(tee_groups_table.c.round_id, tee_groups_table.c.number)
-            )
-        ).all()
+        consulta = (
+            select(tee_groups_table)
+            .where(condicion)
+            .order_by(tee_groups_table.c.round_id, tee_groups_table.c.number)
+        )
+        if para_actualizar:
+            consulta = consulta.with_for_update()
+        grupos = (await self._session.execute(consulta)).all()
         if not grupos:
             return []
         jugadores = tee_group_players_table
@@ -162,6 +172,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     tee_color=fila.tee_color,
                     tee_gender=fila.tee_gender,
                     golpes_por_hoyo=tuple(fila.strokes_by_hole),
+                    par_por_hoyo=tuple(fila.pars_by_hole),
                 )
                 for fila in filas
             ],
@@ -169,4 +180,5 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                 fila.user_id: fila.marks_user_id for fila in filas if fila.marks_user_id is not None
             },
             estado=EstadoPartida(grupo.status),
+            estados_de_tarjeta={fila.user_id: EstadoDeTarjeta(fila.card_status) for fila in filas},
         )

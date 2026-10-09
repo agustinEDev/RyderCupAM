@@ -50,7 +50,9 @@ HOJA = HojaDeSalidas(time(9, 0), time(9, 30), 10, 4)
 
 
 def _jugador() -> JugadorDePartida:
-    return JugadorDePartida(UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18)
+    return JugadorDePartida(
+        UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18, (4,) * 18
+    )
 
 
 def _partidas(*tamanos: int) -> list[Partida]:

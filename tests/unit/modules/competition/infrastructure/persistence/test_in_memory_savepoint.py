@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.domain.entities.espera_en_franja import EsperaEnFranja
+from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -33,13 +34,21 @@ async def test_a_failure_inside_undoes_groups_places_and_waits():
     competicion, franja = CompetitionId(uuid4()), RoundId.generate()
     ahora = datetime(2030, 10, 1, tzinfo=UTC)
     jugadores = [
-        JugadorDePartida(UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18)
+        JugadorDePartida(
+            UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18, (4,) * 18
+        )
         for _ in range(2)
     ]
 
     with pytest.raises(RuntimeError):
         async with uow.savepoint():
-            await uow.partidas.anadir([Partida.crear(competicion, franja, 1, jugadores)])
+            partida = Partida.crear(competicion, franja, 1, jugadores)
+            await uow.partidas.anadir([partida])
+            await uow.golpes_de_partida.guardar(
+                GolpeDePartida.crear(
+                    partida.id, franja, competicion, jugadores[0].user_id, 1, ahora
+                )
+            )
             await uow.plazas.add(PlazaEnFranja.crear(competicion, franja, UserId.generate(), ahora))
             await uow.esperas.add(
                 EsperaEnFranja.crear(competicion, franja, UserId.generate(), ahora)
@@ -47,5 +56,6 @@ async def test_a_failure_inside_undoes_groups_places_and_waits():
             raise RuntimeError("falla dentro")
 
     assert await uow.partidas.de_la_franja(franja) == []
+    assert await uow.golpes_de_partida.de_la_franja(franja) == []
     assert await uow.plazas.de_la_franja(franja) == []
     assert await uow.esperas.de_la_competicion(competicion) == []

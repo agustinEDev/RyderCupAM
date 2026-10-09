@@ -28,6 +28,9 @@ from src.modules.competition.domain.repositories.envelope_repository_interface i
 from src.modules.competition.domain.repositories.espera_en_franja_repository_interface import (
     EsperaEnFranjaRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.golpe_de_partida_repository_interface import (
+    GolpeDePartidaRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.handicap_update_repository_interface import (
     HandicapUpdateRepositoryInterface,
 )
@@ -66,6 +69,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.envelope_repo
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.espera_en_franja_repository import (
     SQLAlchemyEsperaEnFranjaRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.golpe_de_partida_repository import (
+    SQLAlchemyGolpeDePartidaRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.handicap_update_repository import (
     SQLAlchemyHandicapUpdateRepository,
@@ -121,6 +127,7 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._handicap_updates = SQLAlchemyHandicapUpdateRepository(session)
         self._plazas = SQLAlchemyPlazaEnFranjaRepository(session)
         self._partidas = SQLAlchemyPartidaRepository(session)
+        self._golpes_de_partida = SQLAlchemyGolpeDePartidaRepository(session)
         self._esperas = SQLAlchemyEsperaEnFranjaRepository(session)
 
     @property
@@ -174,6 +181,10 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def partidas(self) -> PartidaRepositoryInterface:
         return self._partidas
+
+    @property
+    def golpes_de_partida(self) -> GolpeDePartidaRepositoryInterface:
+        return self._golpes_de_partida
 
     @property
     def esperas(self) -> EsperaEnFranjaRepositoryInterface:

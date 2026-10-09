@@ -12,12 +12,13 @@ Decidido con Agustín el 6-9 oct 2026:
 - Empezada, no se toca: ni jugadores, ni marcadores, ni número (D1, D2, D11).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..services.marcadores_en_cadena import MIN_PARA_MARCAR, MarcadoresEnCadena
 from ..value_objects.competition_id import CompetitionId
+from ..value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from ..value_objects.estado_partida import EstadoPartida
 from ..value_objects.jugador_de_partida import JugadorDePartida
 from ..value_objects.partida_id import PartidaId
@@ -34,6 +35,14 @@ class PartidaEmpezadaError(ValueError):
     """La partida ya salió: no se toca."""
 
 
+class PartidaNoEmpezadaError(ValueError):
+    """La partida aún no ha empezado: no hay tarjeta que entregar."""
+
+
+class TarjetaCerradaError(ValueError):
+    """Esa tarjeta ya está entregada, retirada o sin presentarse."""
+
+
 class Partida:
     """Un grupo que sale junto en una franja."""
 
@@ -46,6 +55,7 @@ class Partida:
         jugadores: Sequence[JugadorDePartida],
         marcadores: Mapping[UserId, UserId],
         estado: EstadoPartida,
+        estados_de_tarjeta: Mapping[UserId, EstadoDeTarjeta] | None = None,
     ):
         self._comprobar_numero(numero)
         self._comprobar_jugadores(jugadores)
@@ -57,6 +67,10 @@ class Partida:
         self._jugadores = list(jugadores)
         self._marcadores = dict(marcadores)
         self._estado = estado
+        self._tarjetas = {
+            j.user_id: (estados_de_tarjeta or {}).get(j.user_id, EstadoDeTarjeta.JUGANDO)
+            for j in jugadores
+        }
 
     @classmethod
     def crear(
@@ -85,6 +99,7 @@ class Partida:
         if user_id not in self.user_ids:
             raise PartidaInvalidaError("Ese jugador no está en la partida.")
         self._jugadores = [j for j in self._jugadores if j.user_id != user_id]
+        self._tarjetas.pop(user_id, None)
         self._marcadores = MarcadoresEnCadena.de(self.user_ids)
 
     def meter(self, jugador: JugadorDePartida, jugadores_por_partida: int) -> None:
@@ -95,6 +110,7 @@ class Partida:
         if len(self._jugadores) >= jugadores_por_partida:
             raise PartidaInvalidaError("La partida está llena.")
         self._jugadores = [*self._jugadores, jugador]
+        self._tarjetas[jugador.user_id] = EstadoDeTarjeta.JUGANDO
         self._marcadores = MarcadoresEnCadena.de(self.user_ids)
 
     def cambiar_marcadores(self, marcadores: Mapping[UserId, UserId]) -> None:
@@ -117,7 +133,79 @@ class Partida:
         por_id = {j.user_id: j for j in jugadores}
         self._jugadores = [por_id[u] for u in self.user_ids]
 
+    # ==================== La partida en juego (PR 5) ====================
+
+    def empezar(self) -> None:
+        """El primer golpe la pone en juego (P2); si ya lo estaba, nada."""
+        if self._estado == EstadoPartida.SCHEDULED:
+            self._estado = EstadoPartida.IN_PROGRESS
+
+    def entregar(self, user_id: UserId) -> None:
+        """
+        Entrega su tarjeta (P3); con todas cerradas, la partida acaba.
+
+        Que todos sus hoyos estén validados lo mira quien llama (P4).
+        """
+        self._cerrar_tarjeta(user_id, EstadoDeTarjeta.ENTREGADA)
+
+    def retirar(self, user_id: UserId) -> None:
+        """Lo deja a medias: NR en Medal; en Stableford cuenta lo jugado (P6)."""
+        self._cerrar_tarjeta(user_id, EstadoDeTarjeta.RETIRADO)
+
+    def no_presentado(self, user_id: UserId) -> None:
+        """No se presentó (P6): también antes de que la partida empiece."""
+        self._de_la_partida(user_id)
+        if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
+            raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
+        self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
+        self._acabar_si_no_queda_nadie()
+
+    def reabrir_tarjeta(self, user_id: UserId) -> None:
+        """El organizador la vuelve a abrir para corregirla (P9)."""
+        self._de_la_partida(user_id)
+        self._tarjetas[user_id] = EstadoDeTarjeta.JUGANDO
+        if self._estado == EstadoPartida.COMPLETED:
+            self._estado = EstadoPartida.IN_PROGRESS
+
+    def cerrar(self, completas: Collection[UserId], sin_hoyos: Collection[UserId] = ()) -> None:
+        """
+        El organizador cierra la partida (P3, la red). Las tarjetas aún en juego:
+        completas, entregadas; sin ningún hoyo validado, no presentado; a medias,
+        retirado. Las ya cerradas se quedan como estaban.
+        """
+        for user_id, estado in self._tarjetas.items():
+            if estado != EstadoDeTarjeta.JUGANDO:
+                continue
+            if user_id in completas:
+                self._tarjetas[user_id] = EstadoDeTarjeta.ENTREGADA
+            elif user_id in sin_hoyos:
+                self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
+            else:
+                self._tarjetas[user_id] = EstadoDeTarjeta.RETIRADO
+        self._estado = EstadoPartida.COMPLETED
+
+    def _cerrar_tarjeta(self, user_id: UserId, estado: EstadoDeTarjeta) -> None:
+        self._de_la_partida(user_id)
+        if not self.empezada:
+            raise PartidaNoEmpezadaError("La partida aún no ha empezado.")
+        if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
+            raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
+        self._tarjetas[user_id] = estado
+        self._acabar_si_no_queda_nadie()
+
+    def _acabar_si_no_queda_nadie(self) -> None:
+        if self.empezada and EstadoDeTarjeta.JUGANDO not in self._tarjetas.values():
+            self._estado = EstadoPartida.COMPLETED
+
+    def _de_la_partida(self, user_id: UserId) -> None:
+        if user_id not in self._tarjetas:
+            raise PartidaInvalidaError("Ese jugador no está en la partida.")
+
     # ==================== Consultas ====================
+
+    @property
+    def estados_de_tarjeta(self) -> dict[UserId, EstadoDeTarjeta]:
+        return dict(self._tarjetas)
 
     def may_mark(self, scorer_id: UserId, marked_id: UserId) -> bool:
         """Si `scorer_id` le apunta los golpes a `marked_id`: solo a quien le toca."""

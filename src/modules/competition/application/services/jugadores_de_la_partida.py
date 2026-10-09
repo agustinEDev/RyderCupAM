@@ -52,6 +52,7 @@ from src.shared.domain.services.playing_handicap_calculator import (
     TeeRating,
 )
 from src.shared.domain.services.stroke_allocation import allocate_by_hole
+from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -122,13 +123,17 @@ class JugadoresDeLaPartida:
                 [BlockedPlayer(u, nombres.get(u, ""), MISSING_HANDICAP) for u in sin_handicap]
             )
 
-        if competition.play_mode == PlayMode.SCRATCH:
-            return {u: self._sin_golpes(u, inscripciones[u], generos.get(u)) for u in user_ids}
-
+        # El campo hace falta también en SCRATCH: sin golpes, pero con el par de
+        # cada hoyo de sus barras para los puntos y el «par» (P12)
         campo = await self._campos.find_by_id(franja.golf_course_id)
         if campo is None:
             raise ValueError(f"No existe el campo de la franja {franja.id}")
         contexto = course_context_for(campo)
+
+        if competition.play_mode == PlayMode.SCRATCH:
+            return {
+                u: self._sin_golpes(u, inscripciones[u], generos.get(u), contexto) for u in user_ids
+            }
 
         jugadores: dict[UserId, JugadorDePartida] = {}
         sin_barras: list[tuple[UserId, str, str | None]] = []
@@ -230,20 +235,36 @@ class JugadoresDeLaPartida:
             tee_color=tee_color,
             tee_gender=tee_gender,
             golpes_por_hoyo=tuple(reparto.get(hoyo, 0) for hoyo in range(1, HOYOS + 1)),
+            par_por_hoyo=_pares(contexto, tee_color, tee_gender),
         )
 
     @staticmethod
-    def _sin_golpes(user_id, inscripcion, genero) -> JugadorDePartida:
-        """SCRATCH: todos juegan con 0 y las barras no se valoran."""
-        barra = barra_del_jugador(inscripcion.tee_color, genero, {})
+    def _sin_golpes(user_id, inscripcion, genero, contexto: StrokeContext) -> JugadorDePartida:
+        """SCRATCH: todos juegan con 0, y las barras no hace falta que estén valoradas."""
+        barra = barra_del_jugador(inscripcion.tee_color, genero, contexto.tee_ratings)
+        tee_gender = barra.tee_gender
+        # Unas barras sin valorar no dan golpes, pero su tarjeta sí cuenta: su
+        # género se busca también entre las que la traen (P12)
+        con_tarjeta = tee_key_for(
+            contexto.pars_by_tee, barra.tee_color.value, genero.value if genero else None
+        )
+        if tee_gender is None and con_tarjeta is not None and con_tarjeta[1] is not None:
+            tee_gender = genero
         return JugadorDePartida(
             user_id=user_id,
             handicap=inscripcion.fixed_handicap,
             playing_handicap=0,
             tee_color=barra.tee_color,
-            tee_gender=None,
+            tee_gender=tee_gender,
             golpes_por_hoyo=(0,) * HOYOS,
+            par_por_hoyo=_pares(contexto, barra.tee_color, tee_gender),
         )
 
     async def _nombres(self, uow, competition, user_ids) -> dict[UserId, str]:
         return await PlayerNames.de_la_competicion(user_ids, competition.id, self._usuarios, uow)
+
+
+def _pares(contexto: StrokeContext, tee_color: TeeColor, tee_gender: Gender | None) -> tuple:
+    """El par de cada hoyo, del 1 al 18, desde esas barras (P12)."""
+    pares = contexto.pars_for(tee_color, tee_gender)
+    return tuple(pares[hoyo] for hoyo in range(1, HOYOS + 1))

@@ -38,6 +38,10 @@ class PartidaRepositoryInterface(ABC):
         """Una partida, o None si no existe."""
 
     @abstractmethod
+    async def find_by_id_for_update(self, partida_id: PartidaId) -> Partida | None:
+        """Una partida, bloqueada hasta el final de la transacción (anotar y entregar)."""
+
+    @abstractmethod
     async def de_la_franja(self, round_id: RoundId) -> list[Partida]:
         """Las partidas de la franja, por número de salida."""
 

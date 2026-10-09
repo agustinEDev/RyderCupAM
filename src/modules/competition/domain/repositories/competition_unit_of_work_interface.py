@@ -18,6 +18,7 @@ from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
 from .envelope_repository_interface import EnvelopeRepositoryInterface
 from .espera_en_franja_repository_interface import EsperaEnFranjaRepositoryInterface
+from .golpe_de_partida_repository_interface import GolpeDePartidaRepositoryInterface
 from .handicap_update_repository_interface import HandicapUpdateRepositoryInterface
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
@@ -112,6 +113,12 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def partidas(self) -> PartidaRepositoryInterface:
         """Las partidas de las franjas de stroke play (#251, PR 4)."""
+        pass
+
+    @property
+    @abstractmethod
+    def golpes_de_partida(self) -> GolpeDePartidaRepositoryInterface:
+        """Los golpes de los jugadores de las partidas (#251, PR 5)."""
         pass
 
     @property

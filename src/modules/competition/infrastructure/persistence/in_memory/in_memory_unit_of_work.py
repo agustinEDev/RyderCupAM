@@ -22,6 +22,9 @@ from src.modules.competition.domain.repositories.envelope_repository_interface i
 from src.modules.competition.domain.repositories.espera_en_franja_repository_interface import (
     EsperaEnFranjaRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.golpe_de_partida_repository_interface import (
+    GolpeDePartidaRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.handicap_update_repository_interface import (
     HandicapUpdateRepositoryInterface,
 )
@@ -58,6 +61,7 @@ from .in_memory_draft_repository import InMemoryDraftRepository
 from .in_memory_enrollment_repository import InMemoryEnrollmentRepository
 from .in_memory_envelope_repository import InMemoryEnvelopeRepository
 from .in_memory_espera_en_franja_repository import InMemoryEsperaEnFranjaRepository
+from .in_memory_golpe_de_partida_repository import InMemoryGolpeDePartidaRepository
 from .in_memory_handicap_update_repository import InMemoryHandicapUpdateRepository
 from .in_memory_hole_score_repository import InMemoryHoleScoreRepository
 from .in_memory_invitation_repository import InMemoryInvitationRepository
@@ -85,6 +89,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
         self._handicap_updates = InMemoryHandicapUpdateRepository()
         self._plazas = InMemoryPlazaEnFranjaRepository()
         self._partidas = InMemoryPartidaRepository()
+        self._golpes_de_partida = InMemoryGolpeDePartidaRepository()
         self._esperas = InMemoryEsperaEnFranjaRepository()
         self.committed = False
 
@@ -111,6 +116,10 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def partidas(self) -> PartidaRepositoryInterface:
         return self._partidas
+
+    @property
+    def golpes_de_partida(self) -> GolpeDePartidaRepositoryInterface:
+        return self._golpes_de_partida
 
     @property
     def esperas(self) -> EsperaEnFranjaRepositoryInterface:
@@ -190,6 +199,7 @@ class InMemoryUnitOfWork(CompetitionUnitOfWorkInterface):
             self._plazas,
             self._esperas,
             self._partidas,
+            self._golpes_de_partida,
         ]
         copias = [copy.deepcopy(repo.__dict__) for repo in repositorios]
         try:

@@ -540,7 +540,7 @@ class TestElHandicapFijado:
 
         def foto(user_id, handicap):
             return JugadorDePartida(
-                user_id, Decimal(handicap), 0, TeeColor.YELLOW, Gender.MALE, (0,) * 18
+                user_id, Decimal(handicap), 0, TeeColor.YELLOW, Gender.MALE, (0,) * 18, (4,) * 18
             )
 
         await e.uow.partidas.anadir(

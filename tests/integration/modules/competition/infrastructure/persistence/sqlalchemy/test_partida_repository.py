@@ -30,6 +30,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
@@ -80,6 +81,7 @@ def _jugador(
         tee_color=tee_color,
         tee_gender=tee_gender,
         golpes_por_hoyo=_golpes(playing_handicap),
+        par_por_hoyo=(3, 4, 5) * 6,
     )
 
 
@@ -314,3 +316,129 @@ async def test_a_move_that_empties_a_group_and_opens_a_new_one_is_saved(
 
     leidas = await uow.partidas.de_la_franja(ronda.id)
     assert [(p.numero, p.user_ids) for p in leidas] == [(1, [b, c]), (2, [a])]
+
+
+async def test_the_state_of_each_card_comes_back(db_session, ronda, jugadores):  # noqa: F811
+    """PR 5: la partida en juego y la tarjeta de cada uno (P2, P3, P6)."""
+    a, b, c, _ = jugadores
+    partida = _partida(ronda, 1, [a, b, c])
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    await uow.partidas.reemplazar_franja(ronda.id, [partida])
+    await db_session.commit()
+
+    partida.empezar()
+    partida.entregar(a)
+    partida.retirar(b)
+    await uow.partidas.guardar([partida])
+    uow = await _releer(db_session)
+
+    leida = await uow.partidas.find_by_id(partida.id)
+    assert leida.estado == EstadoPartida.IN_PROGRESS
+    assert leida.estados_de_tarjeta == {
+        a: EstadoDeTarjeta.ENTREGADA,
+        b: EstadoDeTarjeta.RETIRADO,
+        c: EstadoDeTarjeta.JUGANDO,
+    }
+
+
+# ======================================================================================
+# LOS GOLPES DE LAS PARTIDAS (PR 5)
+# ======================================================================================
+
+
+def _golpe(partida, user_id, hoyo, momento=None):
+    from datetime import UTC, datetime
+
+    from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
+
+    return GolpeDePartida.crear(
+        partida.id,
+        partida.round_id,
+        partida.competition_id,
+        user_id,
+        hoyo,
+        momento or datetime(2030, 10, 11, 9, 0, tzinfo=UTC),
+    )
+
+
+async def _con_partida(db_session, ronda, jugadores):  # noqa: F811
+    a, b, _, _ = jugadores
+    partida = _partida(ronda, 1, [a, b])
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    await uow.partidas.reemplazar_franja(ronda.id, [partida])
+    await db_session.commit()
+    return uow, partida, a, b
+
+
+async def test_a_hole_score_comes_back_with_who_entered_it(db_session, ronda, jugadores):  # noqa: F811
+    uow, partida, a, b = await _con_partida(db_session, ronda, jugadores)
+    golpe = _golpe(partida, a, 7)
+    golpe.anotar_propio(None, acepta_raya=True, quien=a, momento=golpe.creado)
+    golpe.anotar_del_marcador(None, acepta_raya=True, quien=b, momento=golpe.creado)
+
+    await uow.golpes_de_partida.guardar(golpe)
+    uow = await _releer(db_session)
+
+    (leido,) = await uow.golpes_de_partida.de_la_partida(partida.id)
+    assert (leido.user_id, leido.hoyo, leido.validado, leido.golpes_validados) == (a, 7, True, None)
+    assert (leido.propio_por, leido.marcador_por) == (a, b)
+    assert leido.creado == golpe.creado
+
+
+async def test_saving_the_same_hole_again_updates_it(db_session, ronda, jugadores):  # noqa: F811
+    uow, partida, a, b = await _con_partida(db_session, ronda, jugadores)
+    golpe = _golpe(partida, a, 1)
+    golpe.anotar_propio(4, acepta_raya=False, quien=a, momento=golpe.creado)
+    await uow.golpes_de_partida.guardar(golpe)
+    await db_session.commit()
+
+    golpe.anotar_del_marcador(5, acepta_raya=False, quien=b, momento=golpe.creado)
+    await uow.golpes_de_partida.guardar(golpe)
+    uow = await _releer(db_session)
+
+    (leido,) = await uow.golpes_de_partida.de_la_partida(partida.id)
+    assert (leido.propio, leido.del_marcador) == (4, 5)
+
+
+async def test_by_window_and_by_competition(db_session, ronda, otra_franja, jugadores):  # noqa: F811
+    a, b, c, d = jugadores
+    manana, tarde = _partida(ronda, 1, [a, b]), _partida(otra_franja, 1, [c, d])
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    await uow.partidas.reemplazar_franja(ronda.id, [manana])
+    await uow.partidas.reemplazar_franja(otra_franja.id, [tarde])
+    await uow.golpes_de_partida.guardar(_golpe(manana, a, 1))
+    await uow.golpes_de_partida.guardar(_golpe(tarde, c, 1))
+    uow = await _releer(db_session)
+
+    assert [g.user_id for g in await uow.golpes_de_partida.de_la_franja(ronda.id)] == [a]
+    assert len(await uow.golpes_de_partida.de_la_competicion(ronda.competition_id)) == 2
+
+
+async def test_saving_a_group_with_scores_works(db_session, ronda, jugadores):  # noqa: F811
+    """El repo de partidas reescribe sus jugadores: la clave ajena se mira al final."""
+    uow, partida, a, _ = await _con_partida(db_session, ronda, jugadores)
+    await uow.golpes_de_partida.guardar(_golpe(partida, a, 1))
+    await db_session.commit()
+
+    partida.empezar()
+    partida.entregar(a)
+    await uow.partidas.guardar([partida])
+    await db_session.commit()
+
+    assert (await uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.IN_PROGRESS
+
+
+async def test_a_group_with_scores_cannot_be_deleted(db_session, ronda, jugadores):  # noqa: F811
+    uow, partida, a, _ = await _con_partida(db_session, ronda, jugadores)
+    await uow.golpes_de_partida.guardar(_golpe(partida, a, 1))
+    await db_session.commit()
+
+    await uow.partidas.borrar([partida])
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+
+
+async def test_find_for_update(db_session, ronda, jugadores):  # noqa: F811
+    uow, partida, _, _ = await _con_partida(db_session, ronda, jugadores)
+
+    assert (await uow.partidas.find_by_id_for_update(partida.id)).id == partida.id

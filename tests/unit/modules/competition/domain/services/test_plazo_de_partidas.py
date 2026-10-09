@@ -40,7 +40,9 @@ ANTES = PRIMERA_SALIDA - timedelta(minutes=1)
 
 def _partida(estado: EstadoPartida = EstadoPartida.SCHEDULED) -> Partida:
     jugadores = [
-        JugadorDePartida(UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18)
+        JugadorDePartida(
+            UserId.generate(), Decimal("0.0"), 0, TeeColor.YELLOW, None, (0,) * 18, (4,) * 18
+        )
         for _ in range(2)
     ]
     a, b = (j.user_id for j in jugadores)
