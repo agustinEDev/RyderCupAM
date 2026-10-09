@@ -16,6 +16,37 @@ class GenerateTeeGroupsRequestDTO(BaseModel):
     )
 
 
+class MoveTeeGroupPlayerRequestDTO(BaseModel):
+    """Mover a un jugador a otra partida, intercambiando o a una nueva al final."""
+
+    user_id: UUID = Field(..., description="Quién se mueve.")
+    group_id: UUID | None = Field(
+        None, description="La partida de destino; null para una nueva al final."
+    )
+    swap_with_user_id: UUID | None = Field(
+        None, description="Con quién de la de destino se intercambia, si está llena."
+    )
+
+
+class ReorderTeeGroupsRequestDTO(BaseModel):
+    """El orden de salida: todas las partidas de la franja, una vez."""
+
+    group_ids: list[UUID]
+
+
+class TeeGroupMarkerDTO(BaseModel):
+    """Quién marca a quién."""
+
+    user_id: UUID
+    marks_user_id: UUID
+
+
+class TeeGroupMarkersRequestDTO(BaseModel):
+    """Los marcadores de una partida: todos los jugadores, nadie a sí mismo."""
+
+    markers: list[TeeGroupMarkerDTO]
+
+
 class TeeGroupPlayerDTO(BaseModel):
     """Un jugador de una partida, con la foto que se sacó al generarla."""
 

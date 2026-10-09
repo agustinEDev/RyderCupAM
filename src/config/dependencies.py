@@ -141,7 +141,11 @@ from src.modules.competition.application.use_cases.name_vice_captain_use_case im
     NameViceCaptainUseCase,
 )
 from src.modules.competition.application.use_cases.partidas_use_case import (
+    BorrarPartidasUseCase,
+    CambiarMarcadoresUseCase,
     GenerarPartidasUseCase,
+    MoverJugadorUseCase,
+    ReordenarPartidasUseCase,
 )
 from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
     CogerPlazaUseCase,
@@ -1847,6 +1851,60 @@ def get_generar_partidas_use_case(
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
     )
+
+
+def get_mover_jugador_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> MoverJugadorUseCase:
+    """Mover a un jugador de partida (#251): quien no tenía, saca su foto con el campo."""
+    return MoverJugadorUseCase(
+        uow=uow,
+        jugadores=JugadoresDeLaPartida(
+            gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
+        ),
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+        reloj=lambda: datetime.now(UTC),
+    )
+
+
+def _de_las_partidas(caso_de_uso, uow, gc_uow, user_uow):
+    """Los que solo necesitan la zona del campo y los nombres (#251)."""
+    return caso_de_uso(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+        reloj=lambda: datetime.now(UTC),
+    )
+
+
+def get_reordenar_partidas_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ReordenarPartidasUseCase:
+    """Reordenar las partidas de una franja (#251)."""
+    return _de_las_partidas(ReordenarPartidasUseCase, uow, gc_uow, user_uow)
+
+
+def get_cambiar_marcadores_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CambiarMarcadoresUseCase:
+    """Cambiar los marcadores de una partida (#251)."""
+    return _de_las_partidas(CambiarMarcadoresUseCase, uow, gc_uow, user_uow)
+
+
+def get_borrar_partidas_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> BorrarPartidasUseCase:
+    """Borrar las partidas de una franja (#251)."""
+    return _de_las_partidas(BorrarPartidasUseCase, uow, gc_uow, user_uow)
 
 
 def get_esperar_use_case(

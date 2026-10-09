@@ -35,6 +35,21 @@ from tests.conftest import (
 
 pytestmark = pytest.mark.asyncio
 
+
+@pytest.fixture(autouse=True)
+def _sin_la_rfeg_de_verdad():
+    """Los hándicaps son los manuales: la RFEG real limita a 429 en cuanto se le pregunta mucho."""
+    from main import app
+    from src.config.dependencies import get_handicap_service
+    from src.modules.user.infrastructure.external.mock_handicap_service import (
+        MockHandicapService,
+    )
+
+    app.dependency_overrides[get_handicap_service] = lambda: MockHandicapService(default=None)
+    yield
+    app.dependency_overrides.pop(get_handicap_service, None)
+
+
 EN_MADRID = {"latitude": 40.4168, "longitude": -3.7038}
 
 
@@ -255,3 +270,142 @@ async def test_an_order_that_does_not_exist(client: AsyncClient):
     organizador, _, franja, _ = await _stableford(client)
 
     assert (await _generar(client, organizador, franja, order="RANDOM")).status_code == 422
+
+
+# ======================================================================================
+# MOVER, REORDENAR, MARCADORES Y BORRAR
+# ======================================================================================
+#
+# | Caso                                          | Respuesta                        |
+# |-----------------------------------------------|----------------------------------|
+# | Mover a una nueva al final                    | 200, la nueva incompleta         |
+# | Mover a una llena sin intercambio             | 400 GROUP_FULL                   |
+# | Mover, otro jugador                           | 403                              |
+# | Reordenar / sin todas                         | 200 / 400 INVALID_GROUP_ORDER    |
+# | Marcadores válidos / alguien a sí mismo       | 200 / 400 INVALID_MARKERS        |
+# | Marcadores de una partida que no existe       | 404                              |
+# | Borrar                                        | 204, la franja sin partidas      |
+
+
+async def _generadas(client: AsyncClient, jugadores: int = 3) -> tuple[dict, str, list, list]:
+    organizador, _, franja, otros = await _stableford(client, jugadores=jugadores)
+    generadas = await _generar(client, organizador, franja)
+    assert generadas.status_code == 200, generadas.text
+    return organizador, franja, generadas.json()["groups"], otros
+
+
+async def _mover(client, quien, franja, user_id, group_id=None, swap_with_user_id=None):
+    set_auth_cookies(client, quien["cookies"])
+    return await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": user_id, "group_id": group_id, "swap_with_user_id": swap_with_user_id},
+    )
+
+
+async def _orden(client, quien, franja, group_ids):
+    set_auth_cookies(client, quien["cookies"])
+    return await client.put(
+        f"/api/v1/competitions/rounds/{franja}/groups/order", json={"group_ids": group_ids}
+    )
+
+
+async def _marcadores(client, quien, group_id, markers):
+    set_auth_cookies(client, quien["cookies"])
+    return await client.put(
+        f"/api/v1/competitions/groups/{group_id}/markers",
+        json={"markers": [{"user_id": u, "marks_user_id": m} for u, m in markers]},
+    )
+
+
+async def test_moving_to_a_new_group_at_the_end(client: AsyncClient):
+    organizador, franja, (partida,), _ = await _generadas(client)
+    quien = partida["players"][0]["user_id"]
+
+    respuesta = await _mover(client, organizador, franja, quien)
+
+    assert respuesta.status_code == 200, respuesta.text
+    grupos = respuesta.json()["groups"]
+    assert [(g["tee_time"], g["incomplete"]) for g in grupos] == [
+        ("09:00", False),
+        ("09:10", True),
+    ]
+    assert grupos[1]["players"][0]["user_id"] == quien
+    assert grupos[1]["players"][0]["marks_user_id"] is None
+
+
+async def test_moving_to_a_full_group(client: AsyncClient):
+    organizador, franja, (primera, segunda), _ = await _generadas(client, jugadores=7)
+
+    respuesta = await _mover(
+        client, organizador, franja, primera["players"][0]["user_id"], segunda["id"]
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "GROUP_FULL"
+
+
+async def test_another_player_cannot_move(client: AsyncClient):
+    _, franja, (partida,), otros = await _generadas(client)
+
+    respuesta = await _mover(client, otros[0], franja, partida["players"][0]["user_id"])
+
+    assert respuesta.status_code == 403, respuesta.text
+
+
+async def test_reordering(client: AsyncClient):
+    organizador, franja, (primera, segunda), _ = await _generadas(client, jugadores=7)
+
+    respuesta = await _orden(client, organizador, franja, [segunda["id"], primera["id"]])
+    sin_todas = await _orden(client, organizador, franja, [segunda["id"]])
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert [(g["id"], g["tee_time"]) for g in respuesta.json()["groups"]] == [
+        (segunda["id"], "09:00"),
+        (primera["id"], "09:10"),
+    ]
+    assert sin_todas.status_code == 400, sin_todas.text
+    assert sin_todas.json()["error_code"] == "INVALID_GROUP_ORDER"
+
+
+async def test_markers(client: AsyncClient):
+    organizador, _, (partida,), _ = await _generadas(client)
+    a, b, c, d = (p["user_id"] for p in partida["players"])
+
+    parejas = await _marcadores(
+        client, organizador, partida["id"], [(a, b), (b, a), (c, d), (d, c)]
+    )
+    a_si_mismo = await _marcadores(
+        client, organizador, partida["id"], [(a, a), (b, c), (c, d), (d, b)]
+    )
+    sin_partida = await _marcadores(client, organizador, str(uuid.uuid4()), [])
+
+    assert parejas.status_code == 200, parejas.text
+    jugadores = parejas.json()["groups"][0]["players"]
+    assert {p["user_id"]: p["marks_user_id"] for p in jugadores} == {a: b, b: a, c: d, d: c}
+    assert a_si_mismo.status_code == 400, a_si_mismo.text
+    assert a_si_mismo.json()["error_code"] == "INVALID_MARKERS"
+    assert sin_partida.status_code == 404, sin_partida.text
+
+
+async def test_deleting(client: AsyncClient):
+    organizador, franja, _, _ = await _generadas(client)
+    set_auth_cookies(client, organizador["cookies"])
+
+    borradas = await client.delete(f"/api/v1/competitions/rounds/{franja}/groups")
+    despues = await _orden(client, organizador, franja, [])
+
+    assert borradas.status_code == 204, borradas.text
+    assert despues.json()["groups"] == []
+    assert len(despues.json()["unassigned_player_ids"]) == 4
+
+
+async def test_swapping_with_one_of_a_full_group(client: AsyncClient):
+    organizador, franja, (primera, segunda), _ = await _generadas(client, jugadores=7)
+    a, x = primera["players"][0]["user_id"], segunda["players"][0]["user_id"]
+
+    respuesta = await _mover(client, organizador, franja, a, segunda["id"], swap_with_user_id=x)
+
+    assert respuesta.status_code == 200, respuesta.text
+    primera, segunda = respuesta.json()["groups"]
+    assert x in {p["user_id"] for p in primera["players"]}
+    assert a in {p["user_id"] for p in segunda["players"]}
