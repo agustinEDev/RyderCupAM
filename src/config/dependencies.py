@@ -35,6 +35,9 @@ from src.modules.competition.application.use_cases.actualizar_handicaps_use_case
 from src.modules.competition.application.use_cases.add_golf_course_use_case import (
     AddGolfCourseToCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
+    AnotarHoyoDePartidaUseCase,
+)
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
 )
@@ -229,6 +232,9 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
 )
 from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
     UpdateStrokePlaySettingsUseCase,
+)
+from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_case import (
+    VerAnotacionDePartidaUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
@@ -1840,6 +1846,43 @@ def get_soltar_plaza_use_case(
 ) -> SoltarPlazaUseCase:
     """Soltar la plaza en una franja de stroke play (#251)."""
     return SoltarPlazaUseCase(uow)
+
+
+def get_reloj_del_servidor() -> Callable[[], datetime]:
+    """
+    El reloj del servidor para la anotación de las partidas (#251, PR 5).
+
+    Decide si la anotación ya abrió; nunca una hora que mande el cliente. Es
+    una dependencia para que los tests de la API puedan ponerlo en el día del
+    torneo.
+    """
+    return lambda: datetime.now(UTC)
+
+
+def get_anotar_hoyo_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> AnotarHoyoDePartidaUseCase:
+    """Anotar un hoyo en una partida (#251): la zona del campo da la hora de apertura."""
+    return AnotarHoyoDePartidaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_ver_anotacion_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> VerAnotacionDePartidaUseCase:
+    """La partida para anotar y las tarjetas de los suyos (#251)."""
+    return VerAnotacionDePartidaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        user_repository=user_uow.users,
+    )
 
 
 def get_jugadores_de_la_partida(

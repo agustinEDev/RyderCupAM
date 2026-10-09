@@ -1,6 +1,6 @@
 """DTOs de las partidas de las franjas de stroke play (#251, PR 4)."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -109,3 +109,58 @@ class MyTeeGroupsResponseDTO(BaseModel):
     """Mis partidas en una competición, por día y hora de salida."""
 
     groups: list[MyTeeGroupDTO]
+
+
+class TeeGroupHoleDTO(BaseModel):
+    """Un hoyo de un jugador: su lado, el de su marcador y si coinciden."""
+
+    hole: int
+    par: int
+    strokes_received: int = Field(..., description="Con signo: un plus los da.")
+    own_score: int | None
+    own_submitted: bool
+    marker_score: int | None
+    marker_submitted: bool
+    status: str = Field(..., description="PENDING, MATCH o MISMATCH.")
+
+
+class TeeGroupTotalsDTO(BaseModel):
+    """Lo validado de una tarjeta."""
+
+    thru: int = Field(..., description="Hoyos validados, en cualquier orden (P15).")
+    points: int
+    gross_points: int
+    gross: int
+    net: int
+    to_par_net: int
+    to_par_gross: int
+    complete: bool
+
+
+class TeeGroupScoringPlayerDTO(BaseModel):
+    user_id: UUID
+    name: str
+    playing_handicap: int
+    tee_color: str
+    card_status: str = Field(..., description="JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO.")
+    marks_user_id: UUID | None
+    marked_by_user_id: UUID | None
+    holes: list[TeeGroupHoleDTO]
+    totals: TeeGroupTotalsDTO
+
+
+class TeeGroupScoringViewDTO(BaseModel):
+    """La partida para anotar (pestaña 1) y ver las tarjetas de los suyos (pestaña 3)."""
+
+    group_id: UUID
+    round_id: UUID
+    number: int
+    tee_time: str
+    status: str
+    scoring_opens_at: datetime | None = Field(
+        ..., description="La primera salida de la franja (P1); null sin zona horaria."
+    )
+    tournament_type: str
+    picked_up_allowed: bool = Field(..., description="Stableford sí; Medal no.")
+    i_mark_user_id: UUID | None = Field(..., description="A quién marca quien mira.")
+    players: list[TeeGroupScoringPlayerDTO]
