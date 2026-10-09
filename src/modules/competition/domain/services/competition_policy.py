@@ -39,10 +39,10 @@ MAX_COMPETITION_DURATION_DAYS = 365
 # seguir al cupo (`max_players`): el día que el cupo suba, seguirlo convertiría una
 # competición en un emisor de tantos correos por hora como jugadores admita.
 #
-# Con el cupo de hoy (100) esto no cambia nada: 100 es el techo que ya había de
-# hecho, y el límite efectivo `min(max_players, MAX_INVITATIONS_PER_HOUR)` deja una
-# competición de 12 frenando en 12, como siempre. Está puesto para que subir el
-# cupo no arrastre el freno sin que nadie lo decida.
+# El límite efectivo es `min(max_players, MAX_INVITATIONS_PER_HOUR)`: una
+# competición de 12 frena en 12. Al subir el cupo a 200 (BE #314) se decidió
+# dejar el freno en 100: una de 200 plazas invita en dos tandas, separadas una hora,
+# antes que enviar 200 correos por hora.
 MAX_INVITATIONS_PER_HOUR = 100
 
 

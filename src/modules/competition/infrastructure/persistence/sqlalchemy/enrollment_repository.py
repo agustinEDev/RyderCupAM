@@ -158,9 +158,9 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
 
         Una sola consulta con `IN`, sin límite ni paginación: llamado con los
         jugadores que ya aparecen en la clasificación, que es un conjunto
-        acotado por `max_players` (100) en un momento dado — al revés que
-        `find_by_competition`, cuyas filas se acumulan sin límite con el
-        tiempo (rechazos, retiros, altas de nuevo).
+        acotado por `max_players` (`MAX_PLAYERS`) en un momento dado — al revés
+        que `find_by_competition`, que devuelve también las filas acumuladas con
+        el tiempo (rechazos, retiros, altas de nuevo).
 
         Args:
             user_ids: IDs de los usuarios de interés
