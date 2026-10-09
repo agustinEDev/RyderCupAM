@@ -15,6 +15,8 @@ from fastapi.responses import JSONResponse
 from src.config.dependencies import (
     get_anotar_hoyo_de_partida_use_case,
     get_current_user,
+    get_entregar_tarjeta_de_partida_use_case,
+    get_retirarse_de_partida_use_case,
     get_ver_anotacion_de_partida_use_case,
 )
 from src.config.rate_limit import limiter
@@ -32,10 +34,19 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     PartidaNoAnotableError,
     SinMarcadorError,
 )
+from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_use_case import (
+    EntregarTarjetaDePartidaUseCase,
+    RetirarseDePartidaUseCase,
+    TarjetaIncompletaError,
+)
 from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_case import (
     VerAnotacionDePartidaUseCase,
 )
 from src.modules.competition.domain.entities.golpe_de_partida import RayaNoPermitidaError
+from src.modules.competition.domain.entities.partida import (
+    PartidaNoEmpezadaError,
+    TarjetaCerradaError,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -73,10 +84,30 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
         "INVALID_HOLE",
         "El hoyo va del 1 al 18.",
     ),
+    PartidaNoEmpezadaError: (
+        status.HTTP_409_CONFLICT,
+        "GROUP_NOT_STARTED",
+        "La partida aún no ha empezado.",
+    ),
+    TarjetaCerradaError: (
+        status.HTTP_409_CONFLICT,
+        "SCORECARD_ALREADY_SUBMITTED",
+        "Esa tarjeta ya está cerrada.",
+    ),
 }
 
 
 def _respuesta(error: Exception) -> JSONResponse:
+    if isinstance(error, TarjetaIncompletaError):
+        # Con los hoyos que faltan: la pantalla los señala (P4)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": "Quedan hoyos sin validar: jugador y marcador tienen que coincidir.",
+                "error_code": TarjetaIncompletaError.error_code,
+                "holes": error.hoyos,
+            },
+        )
     if isinstance(error, ScoringNotOpenYetError):
         # Con la hora de apertura: la cola del móvil lo guarda y reintenta
         abre = error.opens_at.isoformat()
@@ -96,7 +127,11 @@ def _respuesta(error: Exception) -> JSONResponse:
     raise error
 
 
-_CON_CODIGO: tuple[type[Exception], ...] = (ScoringNotOpenYetError, *_ERRORES)
+_CON_CODIGO: tuple[type[Exception], ...] = (
+    ScoringNotOpenYetError,
+    TarjetaIncompletaError,
+    *_ERRORES,
+)
 _NO_EXISTE = "No existe esa partida."
 
 
@@ -149,3 +184,56 @@ async def get_tee_group_scoring_view(
         return await ver.execute(group_id, UserId(str(current_user.id)))
     except PartidaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
+
+
+async def _y_la_vista(llamada, ver: VerAnotacionDePartidaUseCase, group_id: UUID, quien: UserId):
+    try:
+        await llamada
+        return await ver.execute(group_id, quien)
+    except PartidaNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
+    except _CON_CODIGO as e:
+        return _respuesta(e)
+
+
+@router.post(
+    "/groups/{group_id}/scorecard",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Entregar la tarjeta",
+    description=(
+        "Con los 18 hoyos validados (jugador y marcador coinciden); si no, 400 "
+        "SCORECARD_NOT_READY con `holes`. La partida acaba cuando no queda ninguna en juego."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def submit_tee_group_scorecard(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    entregar: EntregarTarjetaDePartidaUseCase = Depends(get_entregar_tarjeta_de_partida_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(entregar.execute(group_id, quien), ver, group_id, quien)
+
+
+@router.post(
+    "/groups/{group_id}/scorecard/retire",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Retirarse de la partida",
+    description="En Medal queda NR; en Stableford cuenta lo jugado.",
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def retire_from_tee_group(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    retirarse: RetirarseDePartidaUseCase = Depends(get_retirarse_de_partida_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(retirarse.execute(group_id, quien), ver, group_id, quien)

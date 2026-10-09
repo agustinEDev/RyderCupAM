@@ -80,6 +80,10 @@ from src.modules.competition.application.use_cases.delete_round_use_case import 
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     DirectEnrollPlayerUseCase,
 )
+from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_use_case import (
+    EntregarTarjetaDePartidaUseCase,
+    RetirarseDePartidaUseCase,
+)
 from src.modules.competition.application.use_cases.fill_captain_use_case import (
     FillCaptainUseCase,
 )
@@ -1870,6 +1874,20 @@ def get_anotar_hoyo_de_partida_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
     )
+
+
+def get_entregar_tarjeta_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> EntregarTarjetaDePartidaUseCase:
+    """Entregar la tarjeta de una partida (#251)."""
+    return EntregarTarjetaDePartidaUseCase(uow=uow)
+
+
+def get_retirarse_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> RetirarseDePartidaUseCase:
+    """Retirarse de una partida (#251)."""
+    return RetirarseDePartidaUseCase(uow=uow)
 
 
 def get_ver_anotacion_de_partida_use_case(

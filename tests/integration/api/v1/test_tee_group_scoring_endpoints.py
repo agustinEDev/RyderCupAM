@@ -161,3 +161,51 @@ async def test_the_view(client: AsyncClient):
     assert vista.status_code == 200, vista.text
     assert len(vista.json()["players"]) == 4
     assert no_existe.status_code == 404, no_existe.text
+
+
+# | Entregar / retirarse                        | Respuesta                                  |
+# |---------------------------------------------|--------------------------------------------|
+# | Sin empezar                                 | 409 GROUP_NOT_STARTED                      |
+# | Con hoyos sin validar                       | 400 SCORECARD_NOT_READY con `holes`        |
+# | Retirarse                                   | 200, su tarjeta RETIRADO                   |
+
+
+async def _post(client, quien, partida, ruta):
+    set_auth_cookies(client, quien["cookies"])
+    return await client.post(f"/api/v1/competitions/groups/{partida['id']}/scorecard{ruta}")
+
+
+async def test_delivering_before_the_group_started(client: AsyncClient):
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+
+    respuesta = await _post(client, por_id[yo], partida, "")
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "GROUP_NOT_STARTED"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_delivering_with_holes_not_validated(client: AsyncClient):
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+    await _anotar(client, por_id[yo], partida, own_score=4, marked_player_id=_marca_a(partida, yo))
+
+    respuesta = await _post(client, por_id[yo], partida, "")
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "SCORECARD_NOT_READY"
+    assert respuesta.json()["holes"] == list(range(1, 19))
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_retiring(client: AsyncClient):
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+    await _anotar(client, por_id[yo], partida, own_score=4, marked_player_id=_marca_a(partida, yo))
+
+    respuesta = await _post(client, por_id[yo], partida, "/retire")
+
+    assert respuesta.status_code == 200, respuesta.text
+    jugadores = {p["user_id"]: p for p in respuesta.json()["players"]}
+    assert jugadores[yo]["card_status"] == "RETIRADO"
