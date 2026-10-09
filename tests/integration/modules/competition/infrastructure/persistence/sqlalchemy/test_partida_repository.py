@@ -30,6 +30,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
@@ -315,3 +316,26 @@ async def test_a_move_that_empties_a_group_and_opens_a_new_one_is_saved(
 
     leidas = await uow.partidas.de_la_franja(ronda.id)
     assert [(p.numero, p.user_ids) for p in leidas] == [(1, [b, c]), (2, [a])]
+
+
+async def test_the_state_of_each_card_comes_back(db_session, ronda, jugadores):  # noqa: F811
+    """PR 5: la partida en juego y la tarjeta de cada uno (P2, P3, P6)."""
+    a, b, c, _ = jugadores
+    partida = _partida(ronda, 1, [a, b, c])
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    await uow.partidas.reemplazar_franja(ronda.id, [partida])
+    await db_session.commit()
+
+    partida.empezar()
+    partida.entregar(a)
+    partida.retirar(b)
+    await uow.partidas.guardar([partida])
+    uow = await _releer(db_session)
+
+    leida = await uow.partidas.find_by_id(partida.id)
+    assert leida.estado == EstadoPartida.IN_PROGRESS
+    assert leida.estados_de_tarjeta == {
+        a: EstadoDeTarjeta.ENTREGADA,
+        b: EstadoDeTarjeta.RETIRADO,
+        c: EstadoDeTarjeta.JUGANDO,
+    }

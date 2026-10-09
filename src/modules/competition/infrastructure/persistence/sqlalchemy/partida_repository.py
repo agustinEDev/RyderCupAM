@@ -12,6 +12,7 @@ from src.modules.competition.domain.repositories.partida_repository_interface im
     PartidaRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
@@ -118,6 +119,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     "tee_gender": jugador.tee_gender,
                     "strokes_by_hole": list(jugador.golpes_por_hoyo),
                     "pars_by_hole": list(jugador.par_por_hoyo),
+                    "card_status": partida.estados_de_tarjeta[jugador.user_id].value,
                     "marks_user_id": partida.marcadores.get(jugador.user_id),
                 }
                 for posicion, jugador in enumerate(partida.jugadores, start=1)
@@ -171,4 +173,5 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                 fila.user_id: fila.marks_user_id for fila in filas if fila.marks_user_id is not None
             },
             estado=EstadoPartida(grupo.status),
+            estados_de_tarjeta={fila.user_id: EstadoDeTarjeta(fila.card_status) for fila in filas},
         )

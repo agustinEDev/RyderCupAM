@@ -1384,6 +1384,8 @@ tee_group_players_table = Table(
     Column("strokes_by_hole", JSONB, nullable=False),
     # El par de cada hoyo desde sus barras (PR 5, P12)
     Column("pars_by_hole", JSONB, nullable=False),
+    # Su tarjeta: JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO (PR 5, P3, P6)
+    Column("card_status", String(20), nullable=False),
     Column(
         "marks_user_id", UserIdDecorator, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     ),

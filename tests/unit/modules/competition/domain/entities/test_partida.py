@@ -31,11 +31,14 @@ from src.modules.competition.domain.entities.partida import (
     Partida,
     PartidaEmpezadaError,
     PartidaInvalidaError,
+    PartidaNoEmpezadaError,
+    TarjetaCerradaError,
 )
 from src.modules.competition.domain.services.marcadores_en_cadena import (
     MarcadoresInvalidosError,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
@@ -287,3 +290,120 @@ class TestMayMark:
         assert not partida.may_mark(a, c)
         assert not partida.may_mark(a, a)
         assert not partida.may_mark(UserId.generate(), b)
+
+
+class TestCicloDeLaTarjeta:
+    """
+    La partida en juego y la tarjeta de cada uno (PR 5; P2, P3, P6, P9).
+
+    | Caso                                  | Resultado                              |
+    |---------------------------------------|----------------------------------------|
+    | Nueva                                 | Todas JUGANDO                          |
+    | Empezar, dos veces                    | IN_PROGRESS; la segunda no hace nada   |
+    | Entregar sin empezar / dos veces      | Error                                  |
+    | Entregar una / todas                  | Sigue IN_PROGRESS / COMPLETED          |
+    | Retirarse con los demás entregados    | RETIRADO y COMPLETED                   |
+    | No presentado, sin empezar            | NO_PRESENTADO                          |
+    | Reabrir una entregada                 | JUGANDO, y la partida en juego         |
+    | Cerrar (organizador)                  | Completas ENTREGADA, el resto RETIRADO |
+    | Un jugador que no está                | Error                                  |
+    """
+
+    def _empezada(self, n=2) -> Partida:
+        partida = _partida(n)
+        partida.empezar()
+        return partida
+
+    def test_new_every_card_playing(self):
+        partida = _partida(3)
+
+        assert set(partida.estados_de_tarjeta.values()) == {EstadoDeTarjeta.JUGANDO}
+
+    def test_starting_twice(self):
+        partida = self._empezada()
+        partida.empezar()
+
+        assert partida.estado == EstadoPartida.IN_PROGRESS
+
+    def test_starting_a_finished_group_does_not_reopen_it(self):
+        """Un golpe que llega tarde (la cola sin conexión) no la devuelve a juego."""
+        partida = self._empezada()
+        for user_id in partida.user_ids:
+            partida.entregar(user_id)
+
+        partida.empezar()
+
+        assert partida.estado == EstadoPartida.COMPLETED
+
+    def test_delivering_before_starting(self):
+        partida = _partida(2)
+        with pytest.raises(PartidaNoEmpezadaError):
+            partida.entregar(partida.user_ids[0])
+
+    def test_delivering_twice(self):
+        partida = self._empezada()
+        partida.entregar(partida.user_ids[0])
+        with pytest.raises(TarjetaCerradaError):
+            partida.entregar(partida.user_ids[0])
+
+    def test_one_and_then_all_delivered(self):
+        partida = self._empezada()
+        a, b = partida.user_ids
+
+        partida.entregar(a)
+        assert partida.estado == EstadoPartida.IN_PROGRESS
+        partida.entregar(b)
+
+        assert partida.estado == EstadoPartida.COMPLETED
+        assert partida.estados_de_tarjeta == {
+            a: EstadoDeTarjeta.ENTREGADA,
+            b: EstadoDeTarjeta.ENTREGADA,
+        }
+
+    def test_retiring_with_the_rest_delivered_completes_it(self):
+        partida = self._empezada()
+        a, b = partida.user_ids
+        partida.entregar(a)
+
+        partida.retirar(b)
+
+        assert partida.estados_de_tarjeta[b] == EstadoDeTarjeta.RETIRADO
+        assert partida.estado == EstadoPartida.COMPLETED
+
+    def test_no_show_even_without_starting(self):
+        partida = _partida(2)
+
+        partida.no_presentado(partida.user_ids[0])
+
+        assert partida.estados_de_tarjeta[partida.user_ids[0]] == EstadoDeTarjeta.NO_PRESENTADO
+
+    def test_reopening_a_delivered_card(self):
+        partida = self._empezada()
+        a, b = partida.user_ids
+        partida.entregar(a)
+        partida.entregar(b)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
+        assert partida.estado == EstadoPartida.IN_PROGRESS
+
+    def test_closing_by_the_organiser(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        partida.no_presentado(c)
+
+        partida.cerrar(completas={a})
+
+        assert partida.estados_de_tarjeta == {
+            a: EstadoDeTarjeta.ENTREGADA,
+            b: EstadoDeTarjeta.RETIRADO,
+            c: EstadoDeTarjeta.NO_PRESENTADO,
+        }
+        assert partida.estado == EstadoPartida.COMPLETED
+
+    @pytest.mark.parametrize("accion", ["entregar", "retirar", "no_presentado", "reabrir_tarjeta"])
+    def test_someone_not_in_the_group(self, accion):
+        partida = self._empezada()
+        with pytest.raises(PartidaInvalidaError):
+            getattr(partida, accion)(UserId.generate())
