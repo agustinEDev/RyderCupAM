@@ -100,3 +100,18 @@ class TestSolape:
     def test_no_si_una_acaba_antes(self):
         assert not _hoja("09:00", "12:00").se_solapa_con(_hoja("12:10", "14:00"))
         assert not _hoja("12:10", "14:00").se_solapa_con(_hoja("09:00", "12:00"))
+
+
+class TestHoraDe:
+    """La hora de cada partida sale de su número (PR 4): no se guarda."""
+
+    @pytest.mark.parametrize(
+        ("numero", "hora"), [(1, time(15, 0)), (3, time(15, 20)), (19, time(18, 0))]
+    )
+    def test_cada_partida_sale_a_su_hora(self, numero, hora):
+        assert _hoja().hora_de(numero) == hora
+
+    @pytest.mark.parametrize("numero", [0, 20])
+    def test_fuera_de_la_hoja_es_un_error(self, numero):
+        with pytest.raises(HojaDeSalidasInvalidaError):
+            _hoja().hora_de(numero)
