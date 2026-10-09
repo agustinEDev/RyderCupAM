@@ -28,10 +28,10 @@ from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.partidas_dto import (
     CorrectHoleBodyDTO,
     StandingsResponseDTO,
+    SubmitTeeGroupScoreBodyDTO,
     TeeGroupScoringViewDTO,
     TeeGroupsResponseDTO,
 )
-from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
     InvalidHoleNumberError,
     NotCompetitionCreatorError,
@@ -178,7 +178,7 @@ async def score_tee_group_hole(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     group_id: UUID,
     hole: int,
-    body: SubmitHoleScoreBodyDTO,
+    body: SubmitTeeGroupScoreBodyDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     anotar: AnotarHoyoDePartidaUseCase = Depends(get_anotar_hoyo_de_partida_use_case),
     ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),

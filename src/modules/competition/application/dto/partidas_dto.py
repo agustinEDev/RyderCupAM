@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.domain.value_objects.orden_de_salida import OrdenDeSalida
 
 
@@ -164,6 +165,21 @@ class TeeGroupScoringViewDTO(BaseModel):
     picked_up_allowed: bool = Field(..., description="Stableford sí; Medal no.")
     i_mark_user_id: UUID | None = Field(..., description="A quién marca quien mira.")
     players: list[TeeGroupScoringPlayerDTO]
+
+
+class SubmitTeeGroupScoreBodyDTO(SubmitHoleScoreBodyDTO):
+    """
+    El body de la Ryder, para una partida: con algún golpe.
+
+    Sin ninguno arrancaría la partida y la competición sin escribir nada. La
+    Ryder no se toca: allí sigue aceptándose.
+    """
+
+    @model_validator(mode="after")
+    def _algun_golpe(self) -> "SubmitTeeGroupScoreBodyDTO":
+        if not self.model_fields_set & {"own_score", "marked_score"}:
+            raise ValueError("Falta own_score o marked_score")
+        return self
 
 
 class CorrectHoleBodyDTO(BaseModel):

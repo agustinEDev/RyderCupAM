@@ -20,12 +20,16 @@ se toca desde aquí (P3; la corrige el organizador, P9).
 | Partida de 1: su golpe / el de un marcado        | Vale / SinMarcadorError                 |
 | Competición acabada                              | PartidaNoAnotableError                  |
 | Golpe tardío en una partida acabada              | Ignorado, sigue acabada                 |
+| Sin ningún golpe                                 | ValidationError: no arranca nada        |
+| Con uno solo, o levantando bola                  | Se acepta                               |
 """
 
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 
+from src.modules.competition.application.dto.partidas_dto import SubmitTeeGroupScoreBodyDTO
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
     InvalidHoleNumberError,
@@ -224,3 +228,16 @@ async def test_a_late_score_on_a_finished_group():
 
     assert (await escenario.uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.COMPLETED
     assert (await _golpes(escenario, partida))[(a, 1)].del_marcador is None
+
+
+def test_a_score_without_any_stroke():
+    # Arrancaba la partida y la competición sin escribir nada
+    with pytest.raises(ValidationError):
+        SubmitTeeGroupScoreBodyDTO(marked_player_id="x")
+
+
+@pytest.mark.parametrize("golpes", [{"own_score": None}, {"marked_score": 4}])
+def test_a_score_with_one_stroke(golpes):
+    body = SubmitTeeGroupScoreBodyDTO(marked_player_id="x", **golpes)
+
+    assert body.model_fields_set == {"marked_player_id", *golpes}
