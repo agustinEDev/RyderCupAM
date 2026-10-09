@@ -8,6 +8,7 @@ partida entera.
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -219,6 +220,9 @@ async def _played_competition_match(
     decided_early: bool = False,
     round_date: date = date(2026, 6, 1),
     match_format: MatchFormat = MatchFormat.SINGLES,
+    play_mode: PlayMode = PlayMode.SCRATCH,
+    tee_color: TeeColor = TeeColor.YELLOW,
+    player_handicap: float | None = None,
 ):
     """
     Un partido de torneo terminado con la tarjeta del jugador anotada.
@@ -235,7 +239,7 @@ async def _played_competition_match(
         name=CompetitionName("Ryder Cup Test"),
         dates=DateRange(start_date=round_date, end_date=round_date + timedelta(days=2)),
         location=Location(main_country=CountryCode("ES")),
-        play_mode=PlayMode.SCRATCH,
+        play_mode=play_mode,
         team_1_name="Team A",
         team_2_name="Team B",
     )
@@ -251,9 +255,10 @@ async def _played_competition_match(
         return MatchPlayer(
             user_id=user_id,
             playing_handicap=strokes_received_per_hole * 18,
-            tee_color=TeeColor.YELLOW,
+            tee_color=tee_color,
             tee_gender=Gender.MALE,
             strokes_received=tuple(range(1, 19)) * max(strokes_received_per_hole, 1),
+            player_handicap=None if player_handicap is None else Decimal(str(player_handicap)),
         )
 
     match = Match.create(
@@ -612,11 +617,16 @@ class TestCompetitionScorecards:
         assert stats.rounds_played == 1
         assert stats.scoring_avg == 18.0
 
-    async def test_strokes_received_count_against_the_par(
+    async def test_the_personal_handicap_counts_not_the_match_strokes(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """Un golpe recibido por hoyo: los mismos 5 brutos son par neto."""
-        player = await create_user(user_uow, unique_email("comp"), handicap=18)
+        """
+        Given un partido que le dio un golpe por hoyo y 9 de índice (8 de juego en amarillas)
+        When firma 5 en los 18
+        Then 90 - 8 - 72 = +10: cuenta su vuelta propia, no los golpes del partido
+        (con ellos salía par neto, BE #517)
+        """
+        player = await create_user(user_uow, unique_email("comp"), handicap=9)
         rival = await create_user(user_uow, unique_email("rival"), handicap=18)
         course = await create_golf_course(golf_course_uow, player.id)
         await _played_competition_match(
@@ -626,13 +636,15 @@ class TestCompetitionScorecards:
             rival,
             strokes_per_hole=5,
             strokes_received_per_hole=1,
+            # Con hándicap: 9 de índice del perfil en amarillas son 8 de juego (BE #517)
+            play_mode=PlayMode.HANDICAP,
         )
 
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
             player.id
         )
 
-        assert stats.scoring_avg == 0.0
+        assert stats.scoring_avg == 10.0
 
     async def test_averages_both_sources_together(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -1585,6 +1597,123 @@ class TestHandicapFijadoAlEmpezar:
         stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
 
         assert stats.scoring_avg == 0.0
+
+
+@pytest.mark.asyncio
+class TestVueltaDeTorneoComoVueltaPropia:
+    """
+    BE #517: una vuelta de torneo se mide como «Tu vuelta», no con el reparto del partido.
+
+    En match play los golpes del partido son la DIFERENCIA con el rival: el de
+    menos hándicap no recibe ninguno y su vuelta entraba en la media a bruto,
+    mientras sus partidas rápidas entran con su hándicap de juego al 100 %. Dos
+    escalas en una sola media. Blancas: CR 72, SR 130; con 18 de índice, 21.
+    """
+
+    async def test_un_singles_que_no_le_da_golpes_cuenta_con_su_handicap_de_juego(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un singles donde el partido no le dio ningún golpe (el rival tenía más)
+        When firma 5 en todos los hoyos desde blancas con 18 de índice
+        Then la media resta sus 21 de juego: 90 - 21 - 72 = -3. Antes, +18
+        """
+        player = await create_user(user_uow, unique_email("t-bajo"), handicap=30.0)
+        rival = await create_user(user_uow, unique_email("t-alto"), handicap=25.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            strokes_received_per_hole=0,
+            tee_color=TeeColor.WHITE,
+            player_handicap=18.0,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.scoring_avg == -3.0
+
+    async def test_sin_barra_valorable_cuenta_el_indice_redondeado(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un partido desde una barra que el campo no trae (rojas), con 18,4 de índice
+        When firma 5 en los 18
+        Then su índice redondeado, 18: par neto, como la partida rápida sin barra
+        """
+        player = await create_user(user_uow, unique_email("t-sinbarra"), handicap=30.0)
+        rival = await create_user(user_uow, unique_email("t-sinbarra-r"), handicap=25.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            tee_color=TeeColor.RED,
+            player_handicap=18.4,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.scoring_avg == 0.0
+
+    async def test_una_competicion_scratch_cuenta_sin_golpes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given una competición scratch When firma 5 en todos Then +18, como una partida rápida scratch."""
+        player = await create_user(user_uow, unique_email("t-scratch"), handicap=18.0)
+        rival = await create_user(user_uow, unique_email("t-scratch-r"), handicap=18.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            play_mode=PlayMode.SCRATCH,
+            tee_color=TeeColor.WHITE,
+            player_handicap=18.0,
+        )
+
+        stats = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert stats.scoring_avg == 18.0
+
+    async def test_el_desglose_cuenta_lo_mismo_que_la_media(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given el singles de antes When se pide el desglose Then el campo da la misma cifra: -3."""
+        player = await create_user(user_uow, unique_email("t-desglose"), handicap=30.0)
+        rival = await create_user(user_uow, unique_email("t-desglose-r"), handicap=25.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=5,
+            tee_color=TeeColor.WHITE,
+            player_handicap=18.0,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(player.id)
+
+        assert breakdown.by_course[0].average_to_par == -3.0
 
 
 @pytest.mark.asyncio

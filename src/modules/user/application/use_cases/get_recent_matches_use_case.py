@@ -37,6 +37,10 @@ from src.modules.user.application.dto.player_stats_dto import (
     RecentMatchDTO,
     RecentMatchesResponseDTO,
 )
+from src.modules.user.application.services.tournament_round import (
+    is_scratch,
+    tournament_personal_handicap,
+)
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -84,6 +88,8 @@ class _CompetitionMatchRaw:
     # La tarjeta del jugador, para poder dar sus golpes y sus puntos: el
     # partido guarda quién ganó, no cómo jugó cada uno
     hole_scores: list
+    # Una competición scratch: la vuelta propia va sin golpes (BE #517)
+    scratch: bool = False
 
 
 class GetRecentMatchesUseCase:
@@ -206,6 +212,7 @@ class GetRecentMatchesUseCase:
         raws: list[_CompetitionMatchRaw] = []
         rounds_cache: dict = {}
         competition_names: dict = {}
+        scratch_competitions: set = set()
 
         async with self._competition_uow:
             matches = await self._competition_uow.matches.find_completed_for_player(
@@ -228,12 +235,15 @@ class GetRecentMatchesUseCase:
                     competition_names[round_.competition_id] = (
                         competition.name.value if competition else None
                     )
+                    if is_scratch(competition):
+                        scratch_competitions.add(round_.competition_id)
 
                 raws.append(
                     _CompetitionMatchRaw(
                         match=match,
                         round_=round_,
                         tournament_name=competition_names[round_.competition_id],
+                        scratch=round_.competition_id in scratch_competitions,
                         hole_scores=await self._competition_uow.hole_scores.find_by_match_and_player(
                             match.id, user_id
                         ),
@@ -384,7 +394,19 @@ class GetRecentMatchesUseCase:
             if own_player is not None
             else course.reference_card
         )
-        total_strokes, holes_played, points = self._scorecard_totals(raw, hole_card)
+        # Los puntos de su vuelta propia, como en partida rápida: con su índice
+        # (el que guardó el partido, o el del perfil) en su barra al 100 %, no
+        # con la diferencia con el rival que reparte el partido (BE #517)
+        user = users_by_id.get(user_id)
+        playing_handicap = tournament_personal_handicap(
+            course,
+            own_player,
+            user.handicap.value if user and user.handicap else None,
+            scratch=raw.scratch,
+        )
+        total_strokes, holes_played, points = self._scorecard_totals(
+            raw, hole_card, playing_handicap
+        )
         # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
         # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
         # Los golpes del bando sí se enseñan, y son los mismos para los dos
@@ -654,7 +676,6 @@ class GetRecentMatchesUseCase:
             raw.participant,
             raw.participant.effective_handicap(profile_handicap),
             course,
-            self._stroke_allocation_service,
         )
         # Sin barra ni allowance: ya van dentro del hándicap de juego, y el
         # calculador sin `tee_rating` reparte la cifra que recibe tal cual
@@ -664,12 +685,15 @@ class GetRecentMatchesUseCase:
             scores_by_hole=scores_by_hole,
         )
 
-    def _scorecard_totals(self, raw: _CompetitionMatchRaw, hole_card: list) -> tuple:
+    def _scorecard_totals(
+        self, raw: _CompetitionMatchRaw, hole_card: list, playing_handicap: int | None
+    ) -> tuple:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
 
-        Los golpes recibidos ya vienen resueltos por hoyo desde que se generó el
-        partido, así que no hay que repartirlos otra vez. Se usa `own_score` y
+        Los puntos con los golpes de su vuelta propia sobre el índice de su
+        barra, no con los guardados en el hoyo, que son los del partido (BE
+        #517). Se usa `own_score` y
         no `net_score` porque este último solo existe cuando el marcador validó
         el hoyo, y una tarjeta legítima sin validar cerrar se quedaría sin
         cifras que enseñar.
@@ -678,6 +702,8 @@ class GetRecentMatchesUseCase:
             return None, None, None
 
         pars = {hole.number: hole.par for hole in hole_card}
+        stroke_index = {hole.number: hole.stroke_index for hole in hole_card}
+        basis = None if playing_handicap is None else Decimal(playing_handicap)
         scored = [
             hole_score
             for hole_score in raw.hole_scores
@@ -691,7 +717,7 @@ class GetRecentMatchesUseCase:
             self._calculator.hole_points(
                 hole_score.own_score,
                 pars[hole_score.hole_number],
-                hole_score.strokes_received,
+                self._calculator.allocate_strokes(basis, stroke_index[hole_score.hole_number]),
             )
             for hole_score in scored
         )
