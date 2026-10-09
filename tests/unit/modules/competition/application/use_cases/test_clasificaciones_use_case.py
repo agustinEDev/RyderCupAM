@@ -7,10 +7,12 @@ Las clasificaciones de un stroke play por casos de uso (#251, PR 5).
 | Hoyos sin validar                            | No cuentan                                 |
 | Franja filtrada por categoría                | Solo esa                                   |
 | General acumulada en dos franjas             | Suma de las dos tarjetas                   |
+| Hándicap distinto en cada franja             | Cuenta el de la última (P5)                |
 | Scratch                                      | Puntos brutos, con la fila propia          |
 | Una sesión que no es franja                  | PartidasError                              |
 """
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -23,6 +25,9 @@ from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePart
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.infrastructure.persistence.in_memory.in_memory_partida_repository import (
+    InMemoryPartidaRepository,
+)
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
@@ -127,6 +132,31 @@ async def test_the_overall_adds_both_cards():
 
     suya = next(f for f in tabla.rows if f.user_id == a.value)
     assert (suya.cards, tabla.rule) == (2, "ACCUMULATED")
+
+
+@pytest.mark.parametrize("al_reves", [False, True])
+async def test_the_handicap_of_the_last_window(al_reves, monkeypatch):
+    # El de desempatar (P5): antes salía el de la partida leída la última, y
+    # se leen por el id de la franja, que no sigue el calendario. Se prueba en
+    # los dos órdenes de lectura
+    escenario, a, _, _ = await _dos_franjas()
+    tarde = await _partida_de(escenario, escenario.tarde, a)
+    tarde.recalcular(
+        [replace(j, handicap=Decimal("1.0")) if j.user_id == a else j for j in tarde.jugadores]
+    )
+    await escenario.uow.partidas.guardar([tarde])
+    leer = InMemoryPartidaRepository.de_la_competicion
+
+    async def en_orden(self, competition_id):
+        # La de la tarde leída la última, o la primera
+        partidas = await leer(self, competition_id)
+        return sorted(partidas, key=lambda p: (p.round_id == escenario.tarde.id) != al_reves)
+
+    monkeypatch.setattr(InMemoryPartidaRepository, "de_la_competicion", en_orden)
+
+    tabla = await _caso(escenario).general(escenario.competicion.id.value)
+
+    assert next(f for f in tabla.rows if f.user_id == a.value).handicap == Decimal("1.0")
 
 
 async def test_the_scratch_with_my_row():

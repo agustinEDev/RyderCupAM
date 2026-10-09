@@ -13,6 +13,7 @@ Las ve cualquiera con sesión, como las partidas (D8).
 """
 
 from collections.abc import Sequence
+from datetime import date, time
 from uuid import UUID
 
 from src.modules.competition.application.dto.partidas_dto import (
@@ -145,7 +146,16 @@ class ClasificacionesUseCase:
         }
         tarjetas: dict[UserId, list[TarjetaDeJornada]] = {}
         handicaps = {}
-        for partida in partidas:
+        # Por calendario: el hándicap que desempata (P5) es el de su última
+        # jornada, y se queda el de la última partida recorrida
+        franjas = {f.id: f for f in await self._uow.rounds.find_by_competition(competicion.id)}
+
+        def cuando(partida: Partida) -> tuple[date, time]:
+            franja = franjas[partida.round_id]
+            hoja = franja.hoja_de_salidas
+            return franja.round_date, hoja.hora_de(partida.numero) if hoja else time.min
+
+        for partida in sorted(partidas, key=cuando):
             for foto in partida.jugadores:
                 tarjeta = TarjetaDeStrokePlay.de(
                     foto, validados.get((partida.id, foto.user_id), {})
