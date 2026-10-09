@@ -81,6 +81,12 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
         encontradas = await self._donde(tee_groups_table.c.id == str(partida_id))
         return encontradas[0] if encontradas else None
 
+    async def find_by_id_for_update(self, partida_id: PartidaId) -> Partida | None:
+        encontradas = await self._donde(
+            tee_groups_table.c.id == str(partida_id), para_actualizar=True
+        )
+        return encontradas[0] if encontradas else None
+
     async def de_la_franja(self, round_id: RoundId) -> list[Partida]:
         return await self._donde(tee_groups_table.c.round_id == round_id)
 
@@ -126,15 +132,16 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             ],
         )
 
-    async def _donde(self, condicion) -> list[Partida]:
+    async def _donde(self, condicion, para_actualizar: bool = False) -> list[Partida]:
         """Las partidas que cumplen la condición, por franja y número, con sus jugadores."""
-        grupos = (
-            await self._session.execute(
-                select(tee_groups_table)
-                .where(condicion)
-                .order_by(tee_groups_table.c.round_id, tee_groups_table.c.number)
-            )
-        ).all()
+        consulta = (
+            select(tee_groups_table)
+            .where(condicion)
+            .order_by(tee_groups_table.c.round_id, tee_groups_table.c.number)
+        )
+        if para_actualizar:
+            consulta = consulta.with_for_update()
+        grupos = (await self._session.execute(consulta)).all()
         if not grupos:
             return []
         jugadores = tee_group_players_table

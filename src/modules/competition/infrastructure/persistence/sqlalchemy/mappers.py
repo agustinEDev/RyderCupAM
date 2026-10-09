@@ -1411,6 +1411,44 @@ tee_group_players_table = Table(
     ),
 )
 
+# Los golpes de cada jugador de una partida (#251, PR 5): un hoyo por fila, con
+# su lado, el del marcador y quién metió cada uno. Sin id propio: la cola sin
+# conexión del móvil los identifica por partida, jugador y hoyo. La clave ajena a
+# su jugador se mira al final de la transacción: el repo de partidas reescribe
+# sus jugadores al guardar, y una partida con golpes no se puede borrar.
+tee_group_hole_scores_table = Table(
+    "tee_group_hole_scores",
+    metadata,
+    Column("group_id", CHAR(36), primary_key=True),
+    Column("user_id", UserIdDecorator, primary_key=True),
+    Column("hole_number", Integer, primary_key=True),
+    Column("round_id", RoundIdDecorator, nullable=False, index=True),
+    Column("competition_id", CompetitionIdDecorator, nullable=False, index=True),
+    Column("own_score", Integer, nullable=True),
+    Column("own_submitted", Boolean, nullable=False),
+    Column("own_by", UserIdDecorator, nullable=True),
+    Column("marker_score", Integer, nullable=True),
+    Column("marker_submitted", Boolean, nullable=False),
+    Column("marker_by", UserIdDecorator, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("hole_number BETWEEN 1 AND 18", name="ck_tee_group_hole_scores_hole"),
+    CheckConstraint(
+        "own_score IS NULL OR own_score BETWEEN 1 AND 15", name="ck_tee_group_hole_scores_own"
+    ),
+    CheckConstraint(
+        "marker_score IS NULL OR marker_score BETWEEN 1 AND 15",
+        name="ck_tee_group_hole_scores_marker",
+    ),
+    ForeignKeyConstraint(
+        ["group_id", "user_id"],
+        ["tee_group_players.group_id", "tee_group_players.user_id"],
+        name="fk_tee_group_hole_scores_player",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+)
+
 # =============================================================================
 # START MAPPERS - Funcion de inicializacion
 # =============================================================================

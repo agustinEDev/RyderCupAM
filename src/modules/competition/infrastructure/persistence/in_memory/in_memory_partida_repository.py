@@ -44,6 +44,10 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
         partida = self._partidas.get(partida_id)
         return deepcopy(partida) if partida else None
 
+    async def find_by_id_for_update(self, partida_id: PartidaId) -> Partida | None:
+        # En memoria no hay transacciones concurrentes que bloquear
+        return await self.find_by_id(partida_id)
+
     async def de_la_franja(self, round_id: RoundId) -> list[Partida]:
         return self._donde(lambda p: p.round_id == round_id)
 
