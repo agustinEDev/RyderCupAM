@@ -167,6 +167,33 @@ class MovimientosDePartidas:
         return cambios
 
     @staticmethod
+    def sacar(partidas: Sequence[Partida], user_id: UserId) -> Cambios:
+        """
+        Una baja (retirada, cambio de franja): sale de su partida si aún no ha salido.
+
+        Aquí sí puede quedar una partida de 1, incompleta (D4); si se vacía,
+        desaparece y las de detrás suben (M3). Si ya salió, lo jugado se queda.
+        """
+        cambios = Cambios()
+        origen = next((p for p in partidas if user_id in p.user_ids), None)
+        if origen is None or origen.empezada:
+            return cambios
+        if len(origen.jugadores) > 1:
+            origen.quitar(user_id)
+            cambios.a_guardar(origen)
+            return cambios
+        cambios.borrar.append(origen)
+        quedan = [p for p in partidas if p is not origen]
+        # Ya en juego, nadie cambia de hora: la que se vacía deja su hueco
+        if any(p.empezada for p in quedan):
+            return cambios
+        for numero, partida in enumerate(sorted(quedan, key=lambda p: p.numero), start=1):
+            if partida.numero != numero:
+                partida.renumerar(numero)
+                cambios.a_guardar(partida)
+        return cambios
+
+    @staticmethod
     def reordenar(partidas: Sequence[Partida], orden: Sequence[PartidaId]) -> list[Partida]:
         """
         Las partidas en el orden dado, numeradas desde 1.

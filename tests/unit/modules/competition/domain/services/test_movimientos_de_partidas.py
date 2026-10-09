@@ -215,3 +215,79 @@ class TestReordenar:
         with pytest.raises(MovimientoImposibleError) as error:
             MovimientosDePartidas.reordenar(partidas, orden(partidas))
         assert error.value.codigo == "INVALID_GROUP_ORDER"
+
+
+class TestSacar:
+    """Una baja (retirada, cambio de franja): aquí sí puede quedar una de 1 (D4)."""
+
+    def test_from_one_of_four(self):
+        p1, p2 = _partidas(4, 3)
+        a = p1.user_ids[0]
+
+        cambios = MovimientosDePartidas.sacar([p1, p2], a)
+
+        assert a not in p1.user_ids and len(p1.jugadores) == 3
+        assert cambios.guardar == [p1] and cambios.borrar == []
+
+    def test_from_one_of_two_leaves_it_incomplete(self):
+        p1, p2 = _partidas(2, 3)
+
+        MovimientosDePartidas.sacar([p1, p2], p1.user_ids[0])
+
+        assert p1.incompleta and p1.marcadores == {}
+
+    def test_from_one_of_one_removes_it_and_the_next_ones_move_up(self):
+        p1, p2, p3 = _partidas(4, 1, 3)
+
+        cambios = MovimientosDePartidas.sacar([p1, p2, p3], p2.user_ids[0])
+
+        assert cambios.borrar == [p2]
+        assert (p1.numero, p3.numero) == (1, 2)
+        assert cambios.guardar == [p3]
+
+    def test_someone_who_is_not_in_any(self):
+        p1, p2 = _partidas(4, 3)
+
+        cambios = MovimientosDePartidas.sacar([p1, p2], UserId.generate())
+
+        assert (cambios.guardar, cambios.borrar, cambios.crear) == ([], [], [])
+
+    def test_a_group_that_already_started_keeps_them(self):
+        from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+
+        p1, p2 = _partidas(4, 3)
+        empezada = Partida(
+            id=p1.id,
+            competition_id=p1.competition_id,
+            round_id=p1.round_id,
+            numero=p1.numero,
+            jugadores=p1.jugadores,
+            marcadores=p1.marcadores,
+            estado=EstadoPartida.IN_PROGRESS,
+        )
+
+        cambios = MovimientosDePartidas.sacar([empezada, p2], empezada.user_ids[0])
+
+        assert len(empezada.jugadores) == 4
+        assert (cambios.guardar, cambios.borrar) == ([], [])
+
+    def test_with_a_group_already_out_the_gap_stays(self):
+        """Ya en juego, nadie cambia de hora: la que se vacía deja su hueco."""
+        from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+
+        p1, p2, p3 = _partidas(1, 4, 3)
+        salida = Partida(
+            id=p2.id,
+            competition_id=p2.competition_id,
+            round_id=p2.round_id,
+            numero=p2.numero,
+            jugadores=p2.jugadores,
+            marcadores=p2.marcadores,
+            estado=EstadoPartida.IN_PROGRESS,
+        )
+
+        cambios = MovimientosDePartidas.sacar([p1, salida, p3], p1.user_ids[0])
+
+        assert cambios.borrar == [p1]
+        assert (salida.numero, p3.numero) == (2, 3)
+        assert cambios.guardar == []
