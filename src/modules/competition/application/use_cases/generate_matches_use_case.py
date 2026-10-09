@@ -318,6 +318,12 @@ class GenerateMatchesUseCase:
             NoGolfCourseForHandicapError, EnvelopesDecideThePairingsError,
             EnvelopesNotRevealedError
         """
+        # Una franja de stroke play se reparte en partidas, no en partidos: asignar
+        # equipos la pasaría a PENDING_MATCHES como a las demás sesiones (#251)
+        if round_entity.hoja_de_salidas is not None:
+            raise RoundNotPendingMatchesError(
+                "Una franja de un Stableford o un Medal no tiene partidos: se reparte en partidas."
+            )
         if not round_entity.can_generate_matches():
             raise RoundNotPendingMatchesError(
                 f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
