@@ -71,14 +71,22 @@ async def vista_de_la_franja(
     zonas: ICompetitionTimezone,
     usuarios: UserRepositoryInterface,
     ahora: datetime,
+    plazas: list | None = None,
 ) -> TeeGroupsResponseDTO:
-    """La franja con sus partidas, para la pantalla."""
+    """
+    La franja con sus partidas, para la pantalla.
+
+    Args:
+        plazas: Las de `con_plaza_y_aprobados`, si quien llama ya las leyó
+    """
     hoja = franja.hoja_de_salidas
     if hoja is None:
         raise ValueError(f"La sesión {franja.id} no es una franja de stroke play")
     en_partida = {u for p in partidas for u in p.user_ids}
     sin_partida = [
-        p.user_id for p in await con_plaza_y_aprobados(uow, franja) if p.user_id not in en_partida
+        p.user_id
+        for p in (plazas if plazas is not None else await con_plaza_y_aprobados(uow, franja))
+        if p.user_id not in en_partida
     ]
     nombres = await PlayerNames.de_la_competicion(
         [*en_partida, *sin_partida], competicion.id, usuarios, uow

@@ -36,3 +36,27 @@ async def test_reopening_deletes_the_groups_of_every_window():
     )
 
     assert await escenario.uow.partidas.de_la_competicion(escenario.competicion.id) == []
+
+
+async def test_reopening_keeps_the_groups_whose_tee_time_came():
+    """Solo las que no salieron (D1): sin la PR 5, la hora es la que dice que salió."""
+    from datetime import UTC, datetime
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in ("8.0", "7.0", "6.0", "5.0", "4.0", "3.0"):
+        await escenario.con_plaza(h)
+    await escenario.generar()
+    primera, _ = await escenario.uow.partidas.de_la_franja(escenario.manana.id)
+    # Las 9:05 en Madrid: la de las 9:00 ya salió, la de las 9:10 no
+    escenario.ahora = datetime(2030, 10, 11, 7, 5, tzinfo=UTC)
+
+    await ReopenEnrollmentsUseCase(
+        escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
+    ).execute(
+        ReopenEnrollmentsRequestDTO(competition_id=escenario.competicion.id.value),
+        escenario.creador,
+    )
+
+    quedan = await escenario.uow.partidas.de_la_competicion(escenario.competicion.id)
+    assert [p.id for p in quedan] == [primera.id]

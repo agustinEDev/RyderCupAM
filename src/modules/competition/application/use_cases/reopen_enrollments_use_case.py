@@ -5,6 +5,9 @@ Permite reabrir inscripciones de una competición (CLOSED → ACTIVE).
 Solo el creador puede realizar esta acción.
 """
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from src.modules.competition.application.dto.competition_dto import (
     ReopenEnrollmentsRequestDTO,
     ReopenEnrollmentsResponseDTO,
@@ -13,13 +16,18 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
+)
+from src.modules.competition.application.services.partidas_del_jugador import (
+    salidas_por_hora,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -43,8 +51,20 @@ class ReopenEnrollmentsUseCase:
     5. Commit de la transacción
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone | None = None,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        """
+        Args:
+            zonas: Para no borrar las partidas que ya salieron por su hora (#251).
+                Sin ellas, solo cuenta el estado de la partida
+        """
         self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(
         self, request: ReopenEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -86,11 +106,11 @@ class ReopenEnrollmentsUseCase:
             # a cerrar empieza otra (#251)
             await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
-            # Las partidas se borran: pueden entrar y salir jugadores, y se vuelven
-            # a generar al cerrar (D1, #251). Se reabre antes de iniciar: ninguna salió
-            await self._uow.partidas.borrar(
-                await self._uow.partidas.de_la_competicion(competition.id)
-            )
+            # Las partidas que no han salido se borran: pueden entrar y salir
+            # jugadores, y se vuelven a generar al cerrar. Las que salieron (por su
+            # estado o por su hora: hasta la PR 5 nadie las pasa a IN_PROGRESS) se
+            # quedan: lo jugado no se borra (D1, #251)
+            await self._borrar_las_que_no_salieron(competition.id)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
@@ -100,4 +120,17 @@ class ReopenEnrollmentsUseCase:
             id=competition.id.value,
             status=competition.status.value,
             reopened_at=competition.updated_at,
+        )
+
+    async def _borrar_las_que_no_salieron(self, competition_id: CompetitionId) -> None:
+        partidas = await self._uow.partidas.de_la_competicion(competition_id)
+        ahora = self._reloj()
+        salidas: set[PartidaId] = set()
+        for round_id in {p.round_id for p in partidas}:
+            franja = await self._uow.rounds.find_by_id(round_id)
+            if franja is not None:
+                de_la_franja = [p for p in partidas if p.round_id == round_id]
+                salidas |= await salidas_por_hora(franja, de_la_franja, self._zonas, ahora)
+        await self._uow.partidas.borrar(
+            [p for p in partidas if not p.empezada and p.id not in salidas]
         )

@@ -1,7 +1,8 @@
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from datetime import UTC, datetime
+from typing import TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -1841,17 +1842,24 @@ def get_soltar_plaza_use_case(
     return SoltarPlazaUseCase(uow)
 
 
+def get_jugadores_de_la_partida(
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> JugadoresDeLaPartida:
+    """La foto de los jugadores de una partida (#251): campo y usuarios, misma sesión."""
+    return JugadoresDeLaPartida(gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator())
+
+
 def get_generar_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
 ) -> GenerarPartidasUseCase:
     """Generar las partidas de una franja (#251): el campo da barras y zona horaria."""
     return GenerarPartidasUseCase(
         uow=uow,
-        jugadores=JugadoresDeLaPartida(
-            gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
-        ),
+        jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
@@ -1862,20 +1870,27 @@ def get_mover_jugador_de_partida_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
 ) -> MoverJugadorUseCase:
     """Mover a un jugador de partida (#251): quien no tenía, saca su foto con el campo."""
     return MoverJugadorUseCase(
         uow=uow,
-        jugadores=JugadoresDeLaPartida(
-            gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
-        ),
+        jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
     )
 
 
-def _de_las_partidas(caso_de_uso, uow, gc_uow, user_uow):
+T = TypeVar("T")
+
+
+def _de_las_partidas(
+    caso_de_uso: Callable[..., T],
+    uow: CompetitionUnitOfWorkInterface,
+    gc_uow: GolfCourseUnitOfWorkInterface,
+    user_uow: UserUnitOfWorkInterface,
+) -> T:
     """Los que solo necesitan la zona del campo y los nombres (#251)."""
     return caso_de_uso(
         uow=uow,
@@ -2134,6 +2149,7 @@ def get_revert_competition_to_in_progress_use_case(
 
 def get_reopen_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> ReopenEnrollmentsUseCase:
     """
     Proveedor del caso de uso ReopenEnrollmentsUseCase.
@@ -2143,7 +2159,11 @@ def get_reopen_enrollments_use_case(
     2. Crea una instancia de `ReopenEnrollmentsUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ReopenEnrollmentsUseCase(uow)
+    return ReopenEnrollmentsUseCase(
+        uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=lambda: datetime.now(UTC),
+    )
 
 
 def get_add_golf_course_to_competition_use_case(
@@ -2290,14 +2310,12 @@ def get_create_round_use_case(
 def get_update_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
 ) -> UpdateRoundUseCase:
     """Proveedor del caso de uso UpdateRoundUseCase: con el campo, rehace las partidas (#251)."""
     return UpdateRoundUseCase(
         uow,
-        jugadores=JugadoresDeLaPartida(
-            gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
-        ),
+        jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
     )

@@ -42,6 +42,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -255,6 +256,13 @@ class UpdateRoundUseCase:
         if self._jugadores is None:
             raise FranjaInvalidaError(
                 "No se puede cambiar el campo de una franja con partidas aquí."
+            )
+        # D10: sin zona no se sabe cuándo sale nadie, ni qué partidas salieron
+        if self._zonas is not None and (
+            zona_del_campo(await self._zonas.for_course(franja.golf_course_id)) is None
+        ):
+            raise FranjaInvalidaError(
+                "El campo nuevo no tiene zona horaria: una franja con partidas la necesita."
             )
         await recalcular_partidas(self._uow, self._jugadores, competition, franja, partidas)
 

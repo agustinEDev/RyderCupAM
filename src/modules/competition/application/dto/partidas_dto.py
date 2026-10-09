@@ -32,7 +32,8 @@ class MoveTeeGroupPlayerRequestDTO(BaseModel):
 class ReorderTeeGroupsRequestDTO(BaseModel):
     """El orden de salida: todas las partidas de la franja, una vez."""
 
-    group_ids: list[UUID]
+    # Tantas como salidas puede tener una hoja (6:00-20:00 cada 5 min son 169)
+    group_ids: list[UUID] = Field(..., max_length=200)
 
 
 class TeeGroupMarkerDTO(BaseModel):
@@ -45,7 +46,7 @@ class TeeGroupMarkerDTO(BaseModel):
 class TeeGroupMarkersRequestDTO(BaseModel):
     """Los marcadores de una partida: todos los jugadores, nadie a sí mismo."""
 
-    markers: list[TeeGroupMarkerDTO]
+    markers: list[TeeGroupMarkerDTO] = Field(..., max_length=4)
 
 
 class TeeGroupPlayerDTO(BaseModel):

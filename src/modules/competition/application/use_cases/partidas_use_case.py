@@ -76,8 +76,8 @@ SOLO_EN_FRANJAS = "Solo hay partidas en las franjas de un Stableford o un Medal.
 
 async def _franja_del_organizador(
     uow: CompetitionUnitOfWorkInterface, round_id: RoundId, quien: UserId, is_admin: bool
-) -> tuple[Round, Competition]:
-    """La franja y su competición (bloqueada), si quien pide la organiza."""
+) -> tuple[Round, Competition, HojaDeSalidas]:
+    """La franja, su competición (bloqueada) y su hoja, si quien pide la organiza."""
     franja = await uow.rounds.find_by_id(round_id)
     if franja is None:
         raise RoundNotFoundError(f"No existe la franja {round_id}")
@@ -92,7 +92,7 @@ async def _franja_del_organizador(
         raise NotCompetitionCreatorError("Solo el organizador hace las partidas")
     if franja.hoja_de_salidas is None:
         raise PartidasError(SOLO_EN_FRANJAS)
-    return franja, competicion
+    return franja, competicion, franja.hoja_de_salidas
 
 
 @dataclass
@@ -127,10 +127,9 @@ class _ConLaFranja:
             RoundNotFoundError, CompetitionNotFoundError, NotCompetitionCreatorError,
             PartidasError, ZonaDesconocidaError, PlazoCerradoError, PartidaEmpezadaError
         """
-        franja, competicion = await _franja_del_organizador(self._uow, round_id, quien, is_admin)
-        hoja = franja.hoja_de_salidas
-        if hoja is None:  # comprobado al leer la franja: para mypy
-            raise PartidasError(SOLO_EN_FRANJAS)
+        franja, competicion, hoja = await _franja_del_organizador(
+            self._uow, round_id, quien, is_admin
+        )
         ahora = self._reloj()
         partidas = await self._uow.partidas.de_la_franja(franja.id)
         PlazoDePartidas.comprobar(
@@ -138,7 +137,9 @@ class _ConLaFranja:
         )
         return _Abierta(franja, competicion, hoja, partidas, ahora)
 
-    async def _vista(self, abierta: _Abierta, partidas: list[Partida]) -> TeeGroupsResponseDTO:
+    async def _vista(
+        self, abierta: _Abierta, partidas: list[Partida], plazas: list | None = None
+    ) -> TeeGroupsResponseDTO:
         return await vista_de_la_franja(
             self._uow,
             abierta.competicion,
@@ -147,6 +148,7 @@ class _ConLaFranja:
             self._zonas,
             self._usuarios,
             abierta.ahora,
+            plazas,
         )
 
 
@@ -235,9 +237,8 @@ class MoverJugadorUseCase(_ConLaFranja):
         async with self._uow:
             abierta = await self._abrir(RoundId(round_id), quien, is_admin)
             jugador = UserId(user_id)
-            if jugador not in {
-                p.user_id for p in await con_plaza_y_aprobados(self._uow, abierta.franja)
-            }:
+            plazas = await con_plaza_y_aprobados(self._uow, abierta.franja)
+            if jugador not in {p.user_id for p in plazas}:
                 raise MovimientoImposibleError(
                     "PLAYER_NOT_IN_WINDOW", "Ese jugador no tiene plaza en esta franja."
                 )
@@ -263,7 +264,7 @@ class MoverJugadorUseCase(_ConLaFranja):
             await self._uow.partidas.guardar(cambios.guardar)
             await self._uow.partidas.anadir(cambios.crear)
             quedan = [p for p in abierta.partidas if p not in cambios.borrar] + cambios.crear
-            vista = await self._vista(abierta, quedan)
+            vista = await self._vista(abierta, quedan, plazas)
             await self._uow.commit()
         return vista
 
@@ -388,15 +389,23 @@ class MisPartidasUseCase:
         self._usuarios = user_repository
 
     async def execute(self, competition_id: UUID, quien: UserId) -> MyTeeGroupsResponseDTO:
+        """
+        Args:
+            competition_id: La competición
+            quien: Quien pregunta: sus partidas, con sus compañeros
+
+        Returns:
+            Sus partidas por día y hora de salida; vacío si no juega ninguna
+        """
         async with self._uow:
             competicion_id = CompetitionId(competition_id)
             partidas = await self._uow.partidas.del_jugador(competicion_id, quien)
-            franjas: dict[RoundId, Round] = {}
+            franjas: dict[RoundId, tuple[Round, HojaDeSalidas]] = {}
             for partida in partidas:
                 if partida.round_id not in franjas:
                     franja = await self._uow.rounds.find_by_id(partida.round_id)
                     if franja is not None and franja.hoja_de_salidas is not None:
-                        franjas[partida.round_id] = franja
+                        franjas[partida.round_id] = (franja, franja.hoja_de_salidas)
             nombres = await PlayerNames.de_la_competicion(
                 list({u for p in partidas for u in p.user_ids}),
                 competicion_id,
@@ -405,10 +414,9 @@ class MisPartidasUseCase:
             )
             mias = []
             for partida in partidas:
-                franja = franjas.get(partida.round_id)
-                if franja is None or franja.hoja_de_salidas is None:
+                if partida.round_id not in franjas:
                     continue
-                hoja = franja.hoja_de_salidas
+                franja, hoja = franjas[partida.round_id]
                 mias.append(
                     (
                         (franja.round_date, hoja.hora_de(partida.numero)),

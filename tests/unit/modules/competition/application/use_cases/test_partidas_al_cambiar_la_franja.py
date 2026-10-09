@@ -157,3 +157,27 @@ async def test_another_course_without_tees_for_someone_is_refused():
         await _cambiar(escenario, golf_course_id=nuevo.value)
 
     assert [j.playing_handicap for j in (await _partidas(escenario))[0].jugadores] == antes
+
+
+async def test_another_course_without_time_zone_is_refused():
+    """D10: sin zona no se sabe qué partidas salieron (code-review de la PR 4)."""
+    escenario = await _generadas("10.0", "9.0")
+    nuevo = _otro_campo(escenario, ((TeeColor.YELLOW, Gender.MALE),), "71.2")
+
+    class _SinZonaElNuevo:
+        async def for_competition(self, _competition):
+            return "Europe/Madrid"
+
+        async def for_course(self, golf_course_id):
+            return None if golf_course_id == nuevo else "Europe/Madrid"
+
+    with pytest.raises(FranjaInvalidaError):
+        await UpdateRoundUseCase(
+            escenario.uow,
+            jugadores=JugadoresDeLaPartida(escenario.campos, escenario.usuarios),
+            zonas=_SinZonaElNuevo(),
+            reloj=lambda: escenario.ahora,
+        ).execute(
+            UpdateRoundRequestDTO(round_id=escenario.manana.id.value, golf_course_id=nuevo.value),
+            escenario.creador,
+        )
