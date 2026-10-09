@@ -8,12 +8,14 @@ Entregar la tarjeta y retirarse de una partida (#251, PR 5; P3, P4, P6).
 | Sin empezar / dos veces                 | PartidaNoEmpezadaError / TarjetaCerrada    |
 | Quien no es de la partida               | NoEsDeLaPartidaError                       |
 | Retirarse                               | RETIRADO                                   |
+| Entregar o retirarse con el torneo acabado | PartidaNoAnotableError                  |
 """
 
 import pytest
 
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     NoEsDeLaPartidaError,
+    PartidaNoAnotableError,
 )
 from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_use_case import (
     EntregarTarjetaDePartidaUseCase,
@@ -25,6 +27,7 @@ from src.modules.competition.domain.entities.partida import (
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -135,3 +138,28 @@ async def test_a_hole_where_player_and_marker_disagree():
         await _entregar(escenario).execute(partida.id.value, a)
 
     assert error.value.hoyos == [18]
+
+
+async def con_estado(escenario, status):
+    competicion = await escenario.uow.competitions.find_by_id(escenario.competicion.id)
+    competicion._status = status
+    await escenario.uow.competitions.update(competicion)
+
+
+@pytest.mark.parametrize("accion", ["entregar", "retirarse"])
+async def test_not_once_the_competition_is_over(accion):
+    # Retirarse tras acabar convertía a alguien en NR en la clasificación final
+    escenario, partida = await _en_juego()
+    a = partida.user_ids[0]
+    await _validar(escenario, partida, a)
+    await con_estado(escenario, CompetitionStatus.COMPLETED)
+    caso = (
+        _entregar(escenario)
+        if accion == "entregar"
+        else RetirarseDePartidaUseCase(uow=escenario.uow)
+    )
+
+    with pytest.raises(PartidaNoAnotableError):
+        await caso.execute(partida.id.value, a)
+
+    assert (await _estado(escenario, partida)).estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO

@@ -18,6 +18,7 @@ from uuid import UUID
 from src.modules.competition.application.exceptions import PartidaNotFoundError
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     NoEsDeLaPartidaError,
+    comprobar_que_se_juega,
 )
 from src.modules.competition.domain.entities.partida import Partida, PartidaNoEmpezadaError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -44,6 +45,9 @@ async def _bloqueada(uow: CompetitionUnitOfWorkInterface, group_id: UUID, quien:
         raise PartidaNotFoundError(f"No existe la partida {group_id}")
     if quien not in partida.user_ids:
         raise NoEsDeLaPartidaError("No juegas esta partida.")
+    # Con el torneo acabado, una tarjeta ya no se cierra: retirarse convertía a
+    # alguien en NR en la clasificación final
+    comprobar_que_se_juega(await uow.competitions.find_by_id(partida.competition_id))
     return partida
 
 
@@ -57,6 +61,7 @@ class EntregarTarjetaDePartidaUseCase:
         """
         Raises:
             PartidaNotFoundError, NoEsDeLaPartidaError
+            PartidaNoAnotableError: Con la competición sin jugarse
             TarjetaIncompletaError: Con los hoyos sin validar (P4)
             PartidaNoEmpezadaError, TarjetaCerradaError
         """
@@ -87,6 +92,7 @@ class RetirarseDePartidaUseCase:
         """
         Raises:
             PartidaNotFoundError, NoEsDeLaPartidaError
+            PartidaNoAnotableError: Con la competición sin jugarse
             PartidaNoEmpezadaError, TarjetaCerradaError
         """
         async with self._uow:

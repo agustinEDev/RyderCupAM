@@ -87,4 +87,6 @@ async def test_the_competition_reads_its_scores_once(monkeypatch):
 
     await LoJugado(escenario.uow).en_la_competicion(escenario.competicion.id)
 
-    assert [lectura for lectura in lecturas if lectura.startswith("de_la_")] == ["de_la_competicion"]
+    assert [lectura for lectura in lecturas if lectura.startswith("de_la_")] == [
+        "de_la_competicion"
+    ]

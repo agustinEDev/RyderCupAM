@@ -230,6 +230,7 @@ async def test_retiring(client: AsyncClient):
 # | Un jugador intenta corregir                  | 403 NOT_ORGANIZER                          |
 # | Corrige sin ningún lado                      | 422                                        |
 # | No presentado, y reabrir                     | 200, NO_PRESENTADO / JUGANDO               |
+# | No presentado antes de la 1.ª salida         | 409 SCORING_NOT_OPEN_YET                   |
 # | Cierra la franja                             | 200, las partidas acabadas                 |
 
 
@@ -285,6 +286,7 @@ async def test_a_correction_without_any_side(client: AsyncClient):
     assert respuesta.status_code == 422, respuesta.text
 
 
+@pytest.mark.usefixtures("_ya_abrio")
 async def test_no_show_and_reopen(client: AsyncClient):
     organizador, _, partida, _ = await _con_partida_y_organizador(client)
     jugador = partida["players"][1]["user_id"]
@@ -303,6 +305,19 @@ async def test_no_show_and_reopen(client: AsyncClient):
     assert tarjeta(no_presentado) == "NO_PRESENTADO"
     assert reabierta.status_code == 200, reabierta.text
     assert tarjeta(reabierta) == "JUGANDO"
+
+
+async def test_no_show_before_the_first_tee_time(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/no-show"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "SCORING_NOT_OPEN_YET"
 
 
 @pytest.mark.usefixtures("_ya_abrio")

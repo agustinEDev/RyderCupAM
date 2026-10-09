@@ -74,6 +74,18 @@ class PartidaNoAnotableError(Exception):
 _ANOTABLE = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
 
 
+def comprobar_que_se_juega(competicion: Competition | None) -> Competition:
+    """
+    Cerrada o en juego: lo único en que se anota o se tocan las tarjetas.
+
+    Raises:
+        PartidaNoAnotableError: Si no
+    """
+    if competicion is None or competicion.status not in _ANOTABLE:
+        raise PartidaNoAnotableError("Esta competición no está en juego.")
+    return competicion
+
+
 async def comprobar_que_abrio(
     uow: CompetitionUnitOfWorkInterface,
     zonas: ICompetitionTimezone,
@@ -159,9 +171,9 @@ class AnotarHoyoDePartidaUseCase:
             if partida is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
             marcado = self._comprobar_quien(partida, quien, body)
-            competicion = await self._uow.competitions.find_by_id(partida.competition_id)
-            if competicion is None or competicion.status not in _ANOTABLE:
-                raise PartidaNoAnotableError("Esta competición no está en juego.")
+            competicion = comprobar_que_se_juega(
+                await self._uow.competitions.find_by_id(partida.competition_id)
+            )
             await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
             # Una raya en Medal, antes de abrir nada
             acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD

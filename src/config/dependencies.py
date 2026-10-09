@@ -1914,16 +1914,28 @@ def get_corregir_hoyo_de_partida_use_case(
 
 def get_reabrir_tarjeta_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
 ) -> ReabrirTarjetaUseCase:
     """El organizador reabre una tarjeta (#251)."""
-    return ReabrirTarjetaUseCase(uow=uow)
+    return ReabrirTarjetaUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
 
 
 def get_marcar_no_presentado_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
 ) -> MarcarNoPresentadoUseCase:
     """El organizador marca a alguien como no presentado (#251)."""
-    return MarcarNoPresentadoUseCase(uow=uow)
+    return MarcarNoPresentadoUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
 
 
 def get_cerrar_franja_use_case(

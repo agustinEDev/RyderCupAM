@@ -18,6 +18,8 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | Cerrar la franja antes de su 1.ª salida           | ScoringNotOpenYetError: nada cambia    |
 | Cerrar la franja con la competición sin jugarse   | PartidaNoAnotableError                 |
 | Cerrar la franja                                  | Relee cada partida bloqueándola        |
+| Reabrir / no presentado con el torneo acabado     | PartidaNoAnotableError                 |
+| Reabrir / no presentado antes de la 1.ª salida    | ScoringNotOpenYetError                 |
 | Corregir sin ningún lado                          | ValidationError: no toca nada          |
 | Corregir con un lado nulo (raya)                  | Se acepta                              |
 """
@@ -53,6 +55,7 @@ from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_pa
 from tests.unit.modules.competition.application.use_cases.test_entregar_tarjeta_de_partida_use_case import (
     _en_juego,
     _validar,
+    con_estado,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -60,6 +63,18 @@ pytestmark = pytest.mark.asyncio
 
 def _corregir(escenario):
     return CorregirHoyoDePartidaUseCase(
+        uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
+    )
+
+
+def _reabrir(escenario):
+    return ReabrirTarjetaUseCase(
+        uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
+    )
+
+
+def _no_presentado(escenario):
+    return MarcarNoPresentadoUseCase(
         uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
     )
 
@@ -133,9 +148,7 @@ async def test_a_delivered_card_has_to_be_reopened_first():
 
     with pytest.raises(TarjetaCerradaError):
         await _corrige(escenario, partida, a, own_score=4)
-    await ReabrirTarjetaUseCase(uow=escenario.uow).execute(
-        partida.id.value, a.value, escenario.creador, False
-    )
+    await _reabrir(escenario).execute(partida.id.value, a.value, escenario.creador, False)
     await _corrige(escenario, partida, a, own_score=4)
 
     assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.JUGANDO
@@ -163,9 +176,7 @@ async def test_no_show():
     escenario, partida = await _partida()
     a = partida.user_ids[0]
 
-    await MarcarNoPresentadoUseCase(uow=escenario.uow).execute(
-        partida.id.value, a.value, escenario.creador, False
-    )
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
 
     assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
 
@@ -265,3 +276,26 @@ def test_a_correction_without_any_side():
 @pytest.mark.parametrize("cuerpo", [{"own_score": None}, {"marker_score": 4}])
 def test_a_correction_with_one_side(cuerpo):
     assert CorrectHoleBodyDTO(**cuerpo).model_fields_set == set(cuerpo)
+
+
+@pytest.mark.parametrize("caso", [_reabrir, _no_presentado])
+async def test_not_once_the_competition_is_over_either(caso):
+    escenario, partida = await _en_juego()
+    a = partida.user_ids[0]
+    await con_estado(escenario, CompetitionStatus.COMPLETED)
+
+    with pytest.raises(PartidaNoAnotableError):
+        await caso(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+
+@pytest.mark.parametrize("caso", [_reabrir, _no_presentado])
+async def test_not_before_the_first_tee_time_either(caso):
+    # Un no presentado puesto antes de salir ignoraba luego sus golpes en silencio
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    escenario.ahora = datetime(2030, 10, 11, 6, 59, tzinfo=UTC)
+
+    with pytest.raises(ScoringNotOpenYetError):
+        await caso(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.JUGANDO

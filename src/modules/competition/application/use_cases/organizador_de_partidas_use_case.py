@@ -32,10 +32,10 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
-    PartidaNoAnotableError,
     arrancar_la_competicion,
     comprobar_que_abrio,
     comprobar_que_abrio_la_franja,
+    comprobar_que_se_juega,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import (
@@ -123,8 +123,7 @@ class CorregirHoyoDePartidaUseCase:
         async with self._uow:
             partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
             jugador = _del_jugador(partida, user_id)
-            if competicion.status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
-                raise PartidaNoAnotableError("Esta competición no está en juego.")
+            comprobar_que_se_juega(competicion)
             await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
             acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD
             for campo in ("own_score", "marker_score"):
@@ -160,12 +159,27 @@ class CorregirHoyoDePartidaUseCase:
 class ReabrirTarjetaUseCase:
     """El organizador vuelve a abrir una tarjeta cerrada para corregirla (P9)."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
         self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+        """
+        llegada = self._reloj()
         async with self._uow:
-            partida, _ = await _del_organizador(self._uow, group_id, quien, is_admin)
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
             bloqueada = await _bloqueada(self._uow, partida)
             bloqueada.reabrir_tarjeta(_del_jugador(bloqueada, user_id))
             await self._uow.partidas.guardar([bloqueada])
@@ -174,12 +188,27 @@ class ReabrirTarjetaUseCase:
 class MarcarNoPresentadoUseCase:
     """El organizador marca a alguien como no presentado (P6)."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
         self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+        """
+        llegada = self._reloj()
         async with self._uow:
-            partida, _ = await _del_organizador(self._uow, group_id, quien, is_admin)
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
             bloqueada = await _bloqueada(self._uow, partida)
             bloqueada.no_presentado(_del_jugador(bloqueada, user_id))
             await self._uow.partidas.guardar([bloqueada])
@@ -218,8 +247,7 @@ class CerrarFranjaUseCase:
                 raise RoundNotFoundError(f"No existe la franja {round_id}")
             if not (is_admin or competicion.is_creator(quien)):
                 raise NotCompetitionCreatorError("Solo el organizador cierra la franja")
-            if competicion.status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
-                raise PartidaNoAnotableError("Esta competición no está en juego.")
+            comprobar_que_se_juega(competicion)
             await comprobar_que_abrio_la_franja(franja, self._zonas, llegada)
             # Cada partida, bloqueada antes de decidir, y los golpes leídos
             # después: anotar, entregar o retirarse bloquean la partida, y sin
