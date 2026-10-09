@@ -2281,9 +2281,16 @@ def get_create_round_use_case(
 
 def get_update_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> UpdateRoundUseCase:
-    """Proveedor del caso de uso UpdateRoundUseCase."""
-    return UpdateRoundUseCase(uow)
+    """Proveedor del caso de uso UpdateRoundUseCase: con el campo, rehace las partidas (#251)."""
+    return UpdateRoundUseCase(
+        uow,
+        jugadores=JugadoresDeLaPartida(
+            gc_uow.golf_courses, user_uow.users, PlayingHandicapCalculator()
+        ),
+    )
 
 
 def get_delete_round_use_case(

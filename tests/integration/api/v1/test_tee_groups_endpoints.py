@@ -71,8 +71,20 @@ async def _usuario(client: AsyncClient, gender: str = "MALE", nombre: str = "Pa"
     return usuario
 
 
-async def _franja_en_madrid(client: AsyncClient, organizador: dict, competicion: dict) -> str:
-    """Una franja de 9:00 a 11:00 cada 10', de 4, en un campo con coordenadas (con zona)."""
+AMARILLAS = {
+    "identifier": "Amarillo",
+    "color": "YELLOW",
+    "tee_gender": "MALE",
+    "course_rating": 70.2,
+    "slope_rating": 128,
+    "par": 72,
+}
+
+
+async def _campo_en_madrid(
+    client: AsyncClient, organizador: dict, competicion: dict, tees: list[dict]
+) -> str:
+    """Un campo aprobado con coordenadas (de ahí su zona), añadido a la competición."""
     admin = await create_admin_user(
         client, f"admin-{uuid.uuid4()}@test.com", "P@ssw0rd123!", "Admin", "Partidas"
     )
@@ -84,16 +96,7 @@ async def _franja_en_madrid(client: AsyncClient, organizador: dict, competicion:
             "country_code": "ES",
             "course_type": "STANDARD_18",
             "location": EN_MADRID,
-            "tees": [
-                {
-                    "identifier": "Amarillo",
-                    "color": "YELLOW",
-                    "tee_gender": "MALE",
-                    "course_rating": 70.2,
-                    "slope_rating": 128,
-                    "par": 72,
-                }
-            ],
+            "tees": tees,
             "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
         },
     )
@@ -104,10 +107,16 @@ async def _franja_en_madrid(client: AsyncClient, organizador: dict, competicion:
         json={"golf_course_id": campo["id"]},
     )
     assert anadido.status_code == 201, anadido.text
+    return campo["id"]
+
+
+async def _franja_en_madrid(client: AsyncClient, organizador: dict, competicion: dict) -> str:
+    """Una franja de 9:00 a 11:00 cada 10', de 4, en un campo con coordenadas (con zona)."""
+    campo = await _campo_en_madrid(client, organizador, competicion, [AMARILLAS])
     franja = await client.post(
         f"/api/v1/competitions/{competicion['id']}/rounds",
         json={
-            "golf_course_id": campo["id"],
+            "golf_course_id": campo,
             "round_date": competicion["start_date"],
             "session_type": "MORNING",
             "tee_sheet": {
@@ -458,3 +467,73 @@ async def test_my_groups(client: AsyncClient):
     )
     assert otros[0]["user"]["id"] in {p["user_id"] for p in mia["group"]["players"]}
     assert ningunas.json() == {"groups": []}
+
+
+# ======================================================================================
+# CAMBIAR LA FRANJA CON PARTIDAS (D9, G2)
+# ======================================================================================
+#
+# | Cambio                                   | Respuesta                              |
+# |------------------------------------------|----------------------------------------|
+# | Partidas de 3 con una de 4               | 400                                    |
+# | Otro campo sin barras para ellos         | 400 PLAYERS_WITHOUT_TEE                |
+# | Otro campo con barras                    | 200, el hándicap de juego recalculado  |
+
+
+async def _con_partidas_y_competicion(client: AsyncClient):
+    organizador, competicion, franja, _ = await _stableford(client)
+    generadas = await _generar(client, organizador, franja)
+    assert generadas.status_code == 200, generadas.text
+    return organizador, competicion, franja, generadas.json()["groups"]
+
+
+async def _cambiar_franja(client, organizador, franja, cambios):
+    set_auth_cookies(client, organizador["cookies"])
+    return await client.put(f"/api/v1/competitions/rounds/{franja}", json=cambios)
+
+
+async def test_groups_that_no_longer_fit_the_tee_sheet(client: AsyncClient):
+    organizador, _, franja, _ = await _con_partidas_y_competicion(client)
+
+    respuesta = await _cambiar_franja(
+        client,
+        organizador,
+        franja,
+        {
+            "tee_sheet": {
+                "first_tee_time": "09:00",
+                "last_tee_time": "11:00",
+                "interval_minutes": 10,
+                "group_size": 3,
+            }
+        },
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+
+
+async def test_another_course_without_their_tees(client: AsyncClient):
+    organizador, competicion, franja, _ = await _con_partidas_y_competicion(client)
+    rojas_de_mujer = {**AMARILLAS, "identifier": "Rojo", "color": "RED", "tee_gender": "FEMALE"}
+    campo = await _campo_en_madrid(client, organizador, competicion, [rojas_de_mujer])
+
+    respuesta = await _cambiar_franja(client, organizador, franja, {"golf_course_id": campo})
+
+    assert respuesta.status_code == 400, respuesta.text
+    cuerpo = respuesta.json()
+    assert cuerpo["error_code"] == "PLAYERS_WITHOUT_TEE"
+    assert len(cuerpo["players"]) == 4
+
+
+async def test_another_course_recalculates_the_playing_handicaps(client: AsyncClient):
+    organizador, competicion, franja, (partida,) = await _con_partidas_y_competicion(client)
+    mas_dificil = {**AMARILLAS, "course_rating": 74.0, "slope_rating": 140}
+    campo = await _campo_en_madrid(client, organizador, competicion, [mas_dificil])
+
+    respuesta = await _cambiar_franja(client, organizador, franja, {"golf_course_id": campo})
+    despues = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()
+
+    assert respuesta.status_code == 200, respuesta.text
+    antes = {p["user_id"]: p["playing_handicap"] for p in partida["players"]}
+    ahora = {p["user_id"]: p["playing_handicap"] for p in despues["groups"][0]["players"]}
+    assert all(ahora[u] > antes[u] for u in antes)
