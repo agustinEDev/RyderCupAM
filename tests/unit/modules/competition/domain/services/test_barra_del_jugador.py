@@ -19,7 +19,14 @@ from decimal import Decimal
 
 import pytest
 
-from src.modules.competition.domain.services.barra_del_jugador import barra_del_jugador
+from src.modules.competition.domain.services.barra_del_jugador import (
+    barra_del_jugador,
+    lo_que_le_falta,
+)
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MISSING_GENDER,
+    MISSING_TEE_COLOR,
+)
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.value_objects.gender import Gender
@@ -81,3 +88,31 @@ def test_barra_del_jugador(de_la_inscripcion, genero, valoradas, esperado):
     barra = barra_del_jugador(de_la_inscripcion, genero, valoradas)
 
     assert (barra.tee_color, barra.tee_gender, barra.tee_rating) == esperado
+
+
+class TestLoQueLeFalta:
+    """Qué le falta a quien no tiene barras: su género, o su color (BE #360, #361)."""
+
+    @pytest.mark.parametrize(
+        ("genero", "valoradas", "esperado"),
+        [
+            pytest.param(Gender.FEMALE, {("RED", "FEMALE"): ROJAS_M}, None, id="con barras, nada"),
+            pytest.param(None, {("RED", "MALE"): ROJAS_H}, (MISSING_GENDER, None), id="sin género"),
+            pytest.param(
+                Gender.FEMALE,
+                {("RED", "MALE"): ROJAS_H},
+                (MISSING_TEE_COLOR, "RED"),
+                id="el color, no para su género",
+            ),
+            pytest.param(
+                None,
+                {("YELLOW", "MALE"): AMARILLAS_H},
+                (MISSING_TEE_COLOR, "RED"),
+                id="sin género y el color no existe",
+            ),
+        ],
+    )
+    def test_lo_que_le_falta(self, genero, valoradas, esperado):
+        barra = barra_del_jugador(TeeColor.RED, genero, valoradas)
+
+        assert lo_que_le_falta(barra, genero, valoradas) == esperado

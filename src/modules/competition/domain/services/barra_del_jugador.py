@@ -11,6 +11,10 @@ stroke play elijan igual.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MISSING_GENDER,
+    MISSING_TEE_COLOR,
+)
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.services.tee_lookup import TeeKey, tee_key_for
@@ -49,3 +53,25 @@ def barra_del_jugador(
     if clave is None:
         return BarraDelJugador(tee_color, None, None)
     return BarraDelJugador(tee_color, genero if clave[1] is not None else None, valoradas[clave])
+
+
+def lo_que_le_falta(
+    barra: BarraDelJugador,
+    genero: Gender | None,
+    valoradas: Mapping[TeeKey, TeeRating],
+) -> tuple[str, str | None] | None:
+    """
+    Qué le falta a quien no tiene barras en el campo (BE #360, #361).
+
+    Solo es su género si de verdad no lo tiene y el color existe para alguno: con
+    género, lo que falta es su color para él.
+
+    Returns:
+        None si tiene barras; si no, (clave de lo que falta, color o None)
+    """
+    if barra.tee_rating is not None:
+        return None
+    existe_el_color = any(color == barra.tee_color.value for color, _ in valoradas)
+    if existe_el_color and genero is None:
+        return MISSING_GENDER, None
+    return MISSING_TEE_COLOR, barra.tee_color.value
