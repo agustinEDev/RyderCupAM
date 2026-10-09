@@ -50,6 +50,9 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.marcadores_en_cadena import (
+    MarcadoresInvalidosError,
+)
 from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientoImposibleError,
     MovimientosDePartidas,
@@ -67,6 +70,8 @@ from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+SOLO_EN_FRANJAS = "Solo hay partidas en las franjas de un Stableford o un Medal."
 
 
 async def _franja_del_organizador(
@@ -86,7 +91,7 @@ async def _franja_del_organizador(
     if not (is_admin or competicion.is_creator(quien)):
         raise NotCompetitionCreatorError("Solo el organizador hace las partidas")
     if franja.hoja_de_salidas is None:
-        raise PartidasError("Solo hay partidas en las franjas de un Stableford o un Medal.")
+        raise PartidasError(SOLO_EN_FRANJAS)
     return franja, competicion
 
 
@@ -125,7 +130,7 @@ class _ConLaFranja:
         franja, competicion = await _franja_del_organizador(self._uow, round_id, quien, is_admin)
         hoja = franja.hoja_de_salidas
         if hoja is None:  # comprobado al leer la franja: para mypy
-            raise PartidasError("Solo hay partidas en las franjas de un Stableford o un Medal.")
+            raise PartidasError(SOLO_EN_FRANJAS)
         ahora = self._reloj()
         partidas = await self._uow.partidas.de_la_franja(franja.id)
         PlazoDePartidas.comprobar(
@@ -289,11 +294,15 @@ class CambiarMarcadoresUseCase(_ConLaFranja):
     """El organizador cambia quién marca a quién en una partida (D12)."""
 
     async def execute(
-        self, group_id: UUID, markers: dict[UUID, UUID], quien: UserId, is_admin: bool
+        self,
+        group_id: UUID,
+        markers: list[tuple[UUID, UUID]],
+        quien: UserId,
+        is_admin: bool,
     ) -> TeeGroupsResponseDTO:
         """
         Args:
-            markers: marcador -> marcado, para todos los de la partida
+            markers: (marcador, marcado), uno por cada jugador de la partida
 
         Raises:
             PartidaNotFoundError: Si no existe
@@ -305,8 +314,14 @@ class CambiarMarcadoresUseCase(_ConLaFranja):
             if encontrada is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
             abierta = await self._abrir(encontrada.round_id, quien, is_admin)
-            partida = next(p for p in abierta.partidas if p.id == encontrada.id)
-            partida.cambiar_marcadores({UserId(a): UserId(b) for a, b in markers.items()})
+            # Releída con el candado: si otra petición la borró mientras, no existe
+            partida = next((p for p in abierta.partidas if p.id == encontrada.id), None)
+            if partida is None:
+                raise PartidaNotFoundError(f"No existe la partida {group_id}")
+            marcadores = {UserId(a): UserId(b) for a, b in markers}
+            if len(marcadores) != len(markers):
+                raise MarcadoresInvalidosError("Cada jugador marca a uno solo.")
+            partida.cambiar_marcadores(marcadores)
             await self._uow.partidas.guardar([partida])
             vista = await self._vista(abierta, abierta.partidas)
             await self._uow.commit()
@@ -353,7 +368,7 @@ class VerPartidasUseCase:
             if franja is None:
                 raise RoundNotFoundError(f"No existe la franja {round_id}")
             if franja.hoja_de_salidas is None:
-                raise PartidasError("Solo hay partidas en las franjas de un Stableford o un Medal.")
+                raise PartidasError(SOLO_EN_FRANJAS)
             competicion = await self._uow.competitions.find_by_id(franja.competition_id)
             if competicion is None:
                 raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")

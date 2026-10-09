@@ -17,8 +17,7 @@ solo, la penúltima cede uno: nunca una partida de 1 al generar.
 | 7 / 3              | 3, 2, 2       |
 | 4 / 3              | 2, 2          |
 | 10 / 3             | 3, 3, 2, 2    |
-| 0                  | Ninguna       |
-| 1                  | Error         |
+| 0 o 1              | Error         |
 
 | Orden                    | Primera partida                          |
 |--------------------------|------------------------------------------|
@@ -69,7 +68,6 @@ class TestTamanos:
             (7, 3, [3, 2, 2]),
             (4, 3, [2, 2]),
             (10, 3, [3, 3, 2, 2]),
-            (0, 4, []),
         ],
     )
     def test_sizes(self, n, tamano, esperado):
@@ -85,9 +83,11 @@ class TestTamanos:
         repartidos = [u for p in partidas for u in p]
         assert sorted(map(str, repartidos)) == sorted(str(j.user_id) for j in jugadores)
 
-    def test_one_player_alone_is_refused(self):
+    @pytest.mark.parametrize("n", [0, 1])
+    def test_none_or_one_alone_is_refused(self, n):
+        """Con nadie, generar borraría las que hubiera y diría 200 (revisión de la PR 4)."""
         with pytest.raises(RepartoImposibleError):
-            RepartoDePartidas.repartir(_jugadores(1), 4, OrdenDeSalida.HIGH_FIRST)
+            RepartoDePartidas.repartir(_jugadores(n), 4, OrdenDeSalida.HIGH_FIRST)
 
 
 class TestOrden:

@@ -44,8 +44,8 @@ def comprobar_que_caben_las_partidas(partidas: Sequence[Partida], hoja: HojaDeSa
         )
     if partidas and max(p.numero for p in partidas) > hoja.numero_de_salidas:
         raise FranjaInvalidaError(
-            f"La franja tiene {len(partidas)} partidas y la hoja nueva solo "
-            f"{hoja.numero_de_salidas} salidas."
+            f"La hoja nueva tiene {hoja.numero_de_salidas} salidas y hay partidas que salen "
+            f"en la {max(p.numero for p in partidas)}.ª: reordénalas o vuelve a generarlas antes."
         )
 
 

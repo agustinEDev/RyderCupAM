@@ -537,3 +537,25 @@ async def test_another_course_recalculates_the_playing_handicaps(client: AsyncCl
     antes = {p["user_id"]: p["playing_handicap"] for p in partida["players"]}
     ahora = {p["user_id"]: p["playing_handicap"] for p in despues["groups"][0]["players"]}
     assert all(ahora[u] > antes[u] for u in antes)
+
+
+async def test_a_ryder_session_is_not_a_tee_window(client: AsyncClient):
+    organizador = await _usuario(client)
+    start = date.today() + timedelta(days=30)
+    ryder = await create_competition(
+        client,
+        organizador["cookies"],
+        {
+            "name": f"Ryder {uuid.uuid4().hex[:8]}",
+            "start_date": start.isoformat(),
+            "end_date": start.isoformat(),
+            "main_country": "ES",
+            "play_mode": "HANDICAP",
+        },
+    )
+    sesion = await add_one_session(client, organizador["cookies"], ryder)
+
+    respuesta = await _generar(client, organizador, sesion["id"])
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "NOT_A_TEE_WINDOW"

@@ -80,6 +80,7 @@ _CON_CODIGO: dict[type[Exception], tuple[int, str]] = {
     ZonaDesconocidaError: (status.HTTP_400_BAD_REQUEST, "COURSE_WITHOUT_TIMEZONE"),
     RepartoImposibleError: (status.HTTP_400_BAD_REQUEST, "NOT_ENOUGH_PLAYERS"),
     MarcadoresInvalidosError: (status.HTTP_400_BAD_REQUEST, "INVALID_MARKERS"),
+    PartidasError: (status.HTTP_400_BAD_REQUEST, "NOT_A_TEE_WINDOW"),
 }
 # Error con la lista de jugadores afectados -> error_code (400)
 _CON_JUGADORES: dict[type[Exception], str] = {
@@ -120,8 +121,6 @@ async def _responder(llamada: Awaitable[T]) -> T | JSONResponse:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except PartidasError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except _ERRORES_CON_CODIGO as e:
         return _respuesta(e)
 
@@ -167,7 +166,8 @@ async def generate_tee_groups(
     ),
     tags=["Competitions - Tee groups"],
 )
-@limiter.limit("30/minute")
+# Recolocar a mano una franja grande son muchos movimientos seguidos (revisión)
+@limiter.limit("120/minute")
 async def move_tee_group_player(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     round_id: UUID,
@@ -228,7 +228,7 @@ async def change_tee_group_markers(
     return await _responder(
         use_case.execute(
             group_id,
-            {m.user_id: m.marks_user_id for m in body.markers},
+            [(m.user_id, m.marks_user_id) for m in body.markers],
             _quien(current_user),
             current_user.is_admin,
         )

@@ -21,6 +21,7 @@ from decimal import Decimal
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..value_objects.orden_de_salida import OrdenDeSalida
+from .marcadores_en_cadena import MIN_PARA_MARCAR
 
 
 class RepartoImposibleError(ValueError):
@@ -48,10 +49,13 @@ class RepartoDePartidas:
             Las partidas en orden de salida, cada una con sus jugadores en orden
 
         Raises:
-            RepartoImposibleError: Con un solo jugador, que se quedaría en una partida de 1
+            RepartoImposibleError: Con nadie (se borrarían las que hubiera) o con uno
+                solo, que se quedaría en una partida de 1
         """
-        if len(jugadores) == 1:
-            raise RepartoImposibleError("Hace falta más de un jugador para formar una partida.")
+        if len(jugadores) < MIN_PARA_MARCAR:
+            raise RepartoImposibleError(
+                "Hacen falta al menos dos jugadores para formar una partida."
+            )
         signo = -1 if orden == OrdenDeSalida.HIGH_FIRST else 1
         en_orden = sorted(jugadores, key=lambda j: (signo * j.handicap, j.plaza_cogida))
         partidas = []

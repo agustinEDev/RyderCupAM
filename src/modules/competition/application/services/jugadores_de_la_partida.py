@@ -14,6 +14,7 @@ Gemelo de `JugadoresDelPartido` de la Ryder, que reparte entre dos bandos y
 con el hándicap del perfil: aquí cada uno juega contra el campo.
 """
 
+import logging
 from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal
@@ -53,6 +54,8 @@ from src.shared.domain.services.playing_handicap_calculator import (
 from src.shared.domain.services.stroke_allocation import allocate_by_hole
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
+
+logger = logging.getLogger(__name__)
 
 
 class JugadoresSinHandicapError(Exception):
@@ -181,7 +184,16 @@ class JugadoresDeLaPartida:
         contexto = course_context_for(campo)
         valoracion = contexto.rating_for(foto.tee_color, foto.tee_gender)
         if valoracion is None:
-            # Con esas barras se generó: si el campo ya no las valora, se deja como estaba
+            # Con esas barras se generó: si el campo ya no las valora, se deja como
+            # estaba, y que se sepa: la corrección de la RFEG no llega a la partida
+            logger.warning(
+                "Tee %s (%s) of golf course %s is no longer rated: the corrected handicap "
+                "of player %s does not reach their tee group",
+                foto.tee_color,
+                foto.tee_gender,
+                franja.golf_course_id,
+                foto.user_id,
+            )
             return foto
         return self._foto(
             competition,

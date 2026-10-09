@@ -203,9 +203,10 @@ class TestReordenar:
 
 class TestMarcadores:
     async def _cambiar(self, escenario, partida_id, marcadores, quien=None):
+        pares = marcadores.items() if isinstance(marcadores, dict) else marcadores
         return await _casos(escenario)["marcadores"].execute(
             partida_id,
-            {a.value: b.value for a, b in marcadores.items()},
+            [(a.value, b.value) for a, b in pares],
             quien or escenario.creador,
             False,
         )
@@ -232,6 +233,31 @@ class TestMarcadores:
 
         with pytest.raises(MarcadoresInvalidosError):
             await self._cambiar(escenario, partida.id.value, {a: a, b: c, c: b})
+
+    async def test_the_same_player_twice_is_refused(self):
+        """Contradictorio: A marca a C y a B. Antes se quedaba con el último (revisión)."""
+        escenario, _ = await _generadas("3.0", "2.0", "1.0")
+        (partida,) = await _guardadas(escenario)
+        a, b, c = partida.user_ids
+
+        with pytest.raises(MarcadoresInvalidosError):
+            await self._cambiar(escenario, partida.id.value, [(a, c), (a, b), (b, c), (c, a)])
+
+    async def test_a_group_gone_while_waiting_for_the_lock(self):
+        """Otra petición la borró entre leerla y bloquear: 404, no un 500 (revisión)."""
+        escenario, _ = await _generadas("2.0", "1.0")
+        (partida,) = await _guardadas(escenario)
+        original = escenario.uow.partidas.find_by_id
+
+        async def y_se_borra(partida_id):
+            encontrada = await original(partida_id)
+            await escenario.uow.partidas.borrar([encontrada])
+            return encontrada
+
+        escenario.uow.partidas.find_by_id = y_se_borra
+
+        with pytest.raises(PartidaNotFoundError):
+            await self._cambiar(escenario, partida.id.value, {})
 
     async def test_a_group_that_does_not_exist(self):
         escenario, _ = await _generadas("2.0", "1.0")
@@ -285,7 +311,7 @@ async def _llamar(escenario: _Escenario, caso: str, quien: UserId):
     if caso == "marcadores":
         return await _casos(escenario)["marcadores"].execute(
             partida.id.value,
-            {u.value: m.value for u, m in partida.marcadores.items()},
+            [(u.value, m.value) for u, m in partida.marcadores.items()],
             quien,
             False,
         )
