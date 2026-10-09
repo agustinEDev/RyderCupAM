@@ -215,6 +215,7 @@ async def test_retiring(client: AsyncClient):
 # |----------------------------------------------|--------------------------------------------|
 # | Corrige los dos lados de un hoyo             | 200, validado                              |
 # | Un jugador intenta corregir                  | 403 NOT_ORGANIZER                          |
+# | Corrige sin ningún lado                      | 422                                        |
 # | No presentado, y reabrir                     | 200, NO_PRESENTADO / JUGANDO               |
 # | Cierra la franja                             | 200, las partidas acabadas                 |
 
@@ -256,6 +257,19 @@ async def test_a_player_cannot_correct(client: AsyncClient):
 
     assert respuesta.status_code == 403, respuesta.text
     assert respuesta.json()["error_code"] == "NOT_ORGANIZER"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_correction_without_any_side(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/3", json={}
+    )
+
+    assert respuesta.status_code == 422, respuesta.text
 
 
 async def test_no_show_and_reopen(client: AsyncClient):

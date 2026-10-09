@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.modules.competition.domain.value_objects.orden_de_salida import OrdenDeSalida
 
@@ -175,6 +175,14 @@ class CorrectHoleBodyDTO(BaseModel):
 
     own_score: int | None = Field(None, ge=1, le=15, description="El lado del jugador.")
     marker_score: int | None = Field(None, ge=1, le=15, description="El lado del marcador.")
+
+    @model_validator(mode="after")
+    def _algun_lado(self) -> "CorrectHoleBodyDTO":
+        # Vacía arrancaría la partida sin un golpe y dejaría una fila que no
+        # cuenta como jugada pero impide borrar la franja
+        if not self.model_fields_set:
+            raise ValueError("Falta own_score o marker_score")
+        return self
 
 
 class StandingRowDTO(BaseModel):

@@ -16,6 +16,7 @@ from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
     comprobar_que_esta_vacia,
 )
+from src.modules.competition.application.services.lo_jugado import LoJugado
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -83,6 +84,15 @@ class DeleteRoundUseCase:
             # 5b. Una franja con gente dentro no se borra: perderían su sitio (#251).
             #     Antes de tocar nada
             await comprobar_que_esta_vacia(self._uow, round_entity)
+
+            # 5c. Con un golpe apuntado en sus partidas, lo jugado se queda (#251,
+            #     PR 5). Bloqueando, como al borrar la competición: entre
+            #     preguntar y borrar cabe un golpe
+            if await LoJugado(self._uow).en_la_sesion(round_id, bloquear=True):
+                raise RoundNotModifiableError("No se puede eliminar una franja ya jugada")
+
+            # 5d. Sus partidas se van con ella: en memoria no hay cascada
+            await self._uow.partidas.borrar(await self._uow.partidas.de_la_franja(round_id))
 
             # 6. Eliminar partidos asociados en cascada
             matches = await self._uow.matches.find_by_round(round_id)

@@ -15,11 +15,14 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | Cerrar la franja                                  | Completa ENTREGADA, a medias RETIRADO, |
 |                                                   | sin hoyos NO_PRESENTADO                |
 | Cerrar la franja siendo jugador                   | NotCompetitionCreatorError             |
+| Corregir sin ningún lado                          | ValidationError: no toca nada          |
+| Corregir con un lado nulo (raya)                  | Se acepta                              |
 """
 
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from src.modules.competition.application.dto.partidas_dto import CorrectHoleBodyDTO
 from src.modules.competition.application.exceptions import (
@@ -196,3 +199,15 @@ async def test_a_player_cannot_close_the_window():
             user_repository=escenario.usuarios,
             reloj=lambda: escenario.ahora,
         ).execute(escenario.manana.id.value, partida.user_ids[0], False)
+
+
+def test_a_correction_without_any_side():
+    # Vacía arrancaría la partida y dejaría un golpe sin nada que impide
+    # borrar la franja
+    with pytest.raises(ValidationError):
+        CorrectHoleBodyDTO()
+
+
+@pytest.mark.parametrize("cuerpo", [{"own_score": None}, {"marker_score": 4}])
+def test_a_correction_with_one_side(cuerpo):
+    assert CorrectHoleBodyDTO(**cuerpo).model_fields_set == set(cuerpo)
