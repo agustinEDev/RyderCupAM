@@ -172,13 +172,16 @@ class SubmitTeeGroupScoreBodyDTO(SubmitHoleScoreBodyDTO):
     El body de la Ryder, para una partida: con algún golpe.
 
     Sin ninguno arrancaría la partida y la competición sin escribir nada. La
-    Ryder no se toca: allí sigue aceptándose.
+    Ryder no se toca: allí sigue aceptándose. `acting_as` (el admin anotando
+    por otro) aquí no existe: para eso está la corrección del organizador.
     """
 
     @model_validator(mode="after")
     def _algun_golpe(self) -> "SubmitTeeGroupScoreBodyDTO":
         if not self.model_fields_set & {"own_score", "marked_score"}:
             raise ValueError("Falta own_score o marked_score")
+        if "acting_as" in self.model_fields_set:
+            raise ValueError("acting_as no existe en las partidas: corrige como organizador")
         return self
 
 

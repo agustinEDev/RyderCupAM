@@ -22,6 +22,7 @@ se toca desde aquí (P3; la corrige el organizador, P9).
 | Golpe tardío en una partida acabada              | Ignorado, sigue acabada                 |
 | Sin ningún golpe                                 | ValidationError: no arranca nada        |
 | Con uno solo, o levantando bola                  | Se acepta                               |
+| Con acting_as (anotar por otro, de la Ryder)     | ValidationError: aquí no existe         |
 """
 
 from datetime import UTC, datetime
@@ -241,3 +242,11 @@ def test_a_score_with_one_stroke(golpes):
     body = SubmitTeeGroupScoreBodyDTO(marked_player_id="x", **golpes)
 
     assert body.model_fields_set == {"marked_player_id", *golpes}
+
+
+def test_acting_as_does_not_exist_here():
+    # Se ignoraba: el admin anotaba como él mismo sin enterarse
+    with pytest.raises(ValidationError):
+        SubmitTeeGroupScoreBodyDTO(
+            marked_player_id="x", own_score=4, acting_as="11111111-1111-1111-1111-111111111111"
+        )

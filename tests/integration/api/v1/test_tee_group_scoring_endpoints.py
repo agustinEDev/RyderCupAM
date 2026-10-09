@@ -10,6 +10,7 @@ Anotar en las partidas de stroke play por la API (#251, PR 5).
 | Hoyo 19                                     | 400 INVALID_HOLE                           |
 | Levantar bola en Medal                      | 400 PICKED_UP_NOT_ALLOWED                  |
 | Sin ningún golpe                            | 422, la partida sin empezar                |
+| Con acting_as                               | 422                                        |
 | La vista, de una que no existe              | 200 / 404                                  |
 """
 
@@ -106,6 +107,23 @@ async def test_without_any_stroke(client: AsyncClient):
     assert respuesta.status_code == 422, respuesta.text
     vista = await client.get(f"/api/v1/competitions/groups/{partida['id']}/scoring-view")
     assert vista.json()["status"] == "SCHEDULED"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_acting_as(client: AsyncClient):
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+
+    respuesta = await _anotar(
+        client,
+        por_id[yo],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, yo),
+        acting_as=yo,
+    )
+
+    assert respuesta.status_code == 422, respuesta.text
 
 
 @pytest.mark.usefixtures("_ya_abrio")
