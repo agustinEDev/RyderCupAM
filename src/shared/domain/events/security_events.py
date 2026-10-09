@@ -530,6 +530,10 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
         # usuario ni correo que poner: se audita igual (BE #519). Antes lanzaba
         # aquí, el intento no quedaba registrado y al usuario le llegaba
         # «email debe ser válido»
+        # Un reseteo correcto siempre es de alguien, con su correo: la excepción
+        # sin usuario vale solo para los fallidos (CodeRabbit, PR #524)
+        if self.success and self.user_id is None:
+            raise ValueError("user_id es requerido cuando success=True")
         if self.user_id is not None and (not self.email or "@" not in self.email):
             raise ValueError("email debe ser válido")
 
