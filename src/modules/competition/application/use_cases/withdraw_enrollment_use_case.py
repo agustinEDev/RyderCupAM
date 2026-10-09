@@ -15,6 +15,9 @@ from src.modules.competition.application.services.esperas_de_la_competicion impo
     EsperasDeLaCompeticion,
     esta_jugada,
 )
+from src.modules.competition.application.services.partidas_del_jugador import (
+    sacar_de_sus_partidas,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -93,6 +96,9 @@ class WithdrawEnrollmentUseCase:
 
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
+
+            # Sale de sus partidas sin salir, también ya iniciada (D2, #251)
+            await sacar_de_sus_partidas(self._uow, enrollment.competition_id, enrollment.user_id)
 
             # Y suelta sus plazas en las franjas de un stroke play, si aún no se
             # juega: empezada, son las del historial de lo jugado (#251)
