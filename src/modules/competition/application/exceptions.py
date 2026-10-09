@@ -69,6 +69,12 @@ class PlazaEnFranjaError(Exception):
     pass
 
 
+class PartidasError(Exception):
+    """Las partidas de esa franja no se pueden generar o cambiar (#251), con el motivo."""
+
+    pass
+
+
 class DateOutOfRangeError(Exception):
     """La fecha de la sesión está fuera de las fechas de la competición."""
 
