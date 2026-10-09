@@ -23,6 +23,9 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
+from src.modules.competition.application.services.partidas_del_jugador import (
+    sacar_de_sus_partidas,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
@@ -137,6 +140,8 @@ class CogerPlazaUseCase:
             )
             if en_lugar_de is not None:
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
+                # Y de su partida en esa franja: en la nueva queda sin partida (D3)
+                await sacar_de_sus_partidas(self._uow, competicion.id, jugador, en_lugar_de)
             plaza = PlazaEnFranja.crear(
                 competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
             )
