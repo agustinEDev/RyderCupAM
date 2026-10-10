@@ -33,10 +33,7 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
     MISSING_HANDICAP,
     BlockedPlayer,
 )
-from src.modules.competition.domain.value_objects.stroke_play_setup import (
-    StrokePlaySetup,
-    handicap_fijado,
-)
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -74,9 +71,7 @@ class HandicapsAlCerrar:
         """
         if competition.stroke_play is None:
             return
-        inscripciones, del_perfil = await self._de_los_inscritos(competition)
-        # Con un decimal, como se guarda: categoría y reparto salen de ese valor
-        handicaps = {u: handicap_fijado(h) for u, h in del_perfil.items()}
+        inscripciones, handicaps = await self._de_los_inscritos(competition)
         sin = [e.user_id for e in inscripciones if handicaps[e.user_id] is None]
         if sin:
             nombres = await PlayerNames.de_la_competicion(
@@ -112,7 +107,6 @@ class HandicapsAlCerrar:
         suya = next((e for e in inscripciones if e.user_id == user_id), None)
         if suya is None or suya.has_custom_handicap():
             return
-        handicap = handicap_fijado(handicap)
         if competition.status is CompetitionStatus.IN_PROGRESS:
             # Ya empezada: cuenta para lo que falta por jugar, y la categoría se
             # queda la del cierre (7 oct 2026)
@@ -121,6 +115,30 @@ class HandicapsAlCerrar:
             return
         handicaps = {e.user_id: handicap if e is suya else e.fixed_handicap for e in inscripciones}
         await self._congelar(competition.stroke_play, inscripciones, handicaps)
+
+    async def repartir_de_nuevo(self, competition: Competition) -> None:
+        """
+        Las categorías iguales, otra vez, con los hándicaps fijados de ahora (#251).
+
+        Al acabar el refresco del cierre: llega segundos después del reparto y
+        cambia hándicaps, así que los grupos se rehacen (10 oct 2026). Solo con
+        las inscripciones cerradas; a mano no cambia nada.
+        """
+        ajustes = competition.stroke_play
+        if (
+            ajustes is None
+            or ajustes.category_count is None
+            or competition.status is not CompetitionStatus.CLOSED
+        ):
+            return
+        inscripciones = await self._uow.enrollments.find_by_competition_and_status(
+            competition.id, EnrollmentStatus.APPROVED
+        )
+        handicaps = {e.user_id: e.fixed_handicap for e in inscripciones}
+        await self._congelar(
+            competition.repartir_categorias(handicaps.values()), inscripciones, handicaps
+        )
+        await self._uow.competitions.update(competition)
 
     async def _congelar(
         self,

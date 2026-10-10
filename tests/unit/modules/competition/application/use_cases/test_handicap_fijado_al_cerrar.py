@@ -454,15 +454,15 @@ class TestCategoriasIgualesAlCerrar:
         assert inscripciones[bajos[0]].fixed_category == 2
         assert sum(1 for i in inscripciones.values() if i.fixed_category == 2) == altos_antes + 1
 
-    async def test_y_luego_la_regla_de_los_seis(self, e):
-        # Cuatro con el creador, en 2: dos y dos, que se juntan en una
+    async def test_sin_seis_para_cada_una_no_se_parte(self, e):
+        # Cuatro con el creador, en 2: no llegan a 6 por categoría, una sola
         torneo = await e.torneo(contador=2)
         for h in (4.0, 20.0, 22.0):
             await e.jugador(torneo, h)
 
         await e.cerrar(torneo)
 
-        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+        assert await self._limites(e, torneo) == ()
         assert {i.fixed_category for i in (await e.inscripciones(torneo)).values()} == {1}
 
     async def test_a_mano_se_cierra_como_siempre(self, e):
@@ -549,3 +549,19 @@ class TestHandicapsConDosDecimales:
         await e.cerrar(torneo)
 
         assert (await e.inscripciones(torneo))[plus].fixed_handicap == Decimal("-0.1")
+
+
+class TestElRedondeoEnLaInscripcion:
+    async def test_congelar_guarda_un_decimal(self):
+        from src.modules.competition.domain.entities.enrollment import Enrollment
+        from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+
+        inscripcion = Enrollment.direct_enroll(
+            id=EnrollmentId.generate(),
+            competition_id=CompetitionId.generate(),
+            user_id=UserId.generate(),
+        )
+
+        inscripcion.congelar_handicap(Decimal("12.05"), 2)
+
+        assert inscripcion.fixed_handicap == Decimal("12.1")

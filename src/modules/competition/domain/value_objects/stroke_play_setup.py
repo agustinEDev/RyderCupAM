@@ -141,28 +141,51 @@ class StrokePlaySetup:
         """
         Los límites de las categorías iguales, con los hándicaps fijados al cerrar.
 
-        Cada frontera cae donde quedarían grupos iguales (k·n/N, redondeado) y el
-        límite es el hándicap del último de ese grupo: con «hasta X» incluido, los
-        que empatan con él van todos a la de hándicap más bajo. Un límite repetido
-        se funde (salen menos categorías) y uno que dejaría vacía la de arriba no
-        se pone. Quien no tiene hándicap no cuenta. Después, como siempre, la
-        regla de los seis. A mano no se reparte nada.
+        Decidido con Agustín el 10 oct 2026:
+
+        - Se parte en tantas como quepan con 6 por categoría (14 para 3 → 2 de 7).
+        - Cada frontera cae donde quedarían grupos iguales (k·n/N, redondeado) y
+          el límite es el hándicap del último de ese grupo: con «hasta X»
+          incluido, los que empatan con él van todos a la de hándicap más bajo.
+        - Si así una categoría quedaría vacía (el empate llega hasta arriba o
+          hasta la frontera anterior), la frontera baja justo por debajo del
+          empate y los empatados suben juntos; si tampoco cabe, sale una menos.
+
+        Con el hándicap a un decimal, el que se fija. Quien no tiene no cuenta.
+        Después, como siempre, la regla de los seis. A mano no se reparte nada.
         """
         if self.category_count is None:
             return self
-        orden = sorted(h for h in handicaps if h is not None)
-        n, total = len(orden), self.category_count
+        orden = sorted(handicap_fijado(h) for h in handicaps if h is not None)
+        n = len(orden)
+        total = min(self.category_count, n // MIN_JUGADORES_POR_CATEGORIA)
         limites: list[Decimal] = []
         for k in range(1, total):
             # Redondeo hacia arriba en el medio: k·n/N con enteros, sin flotantes
             cuantos = (2 * k * n + total) // (2 * total)
-            if cuantos < 1:
-                continue
-            limite = orden[cuantos - 1]
-            if limite == orden[-1] or (limites and limite <= limites[-1]):
-                continue
-            limites.append(self._con_un_decimal(limite))
+            limite = self._frontera(orden, orden[cuantos - 1], limites[-1] if limites else None)
+            if limite is not None:
+                limites.append(limite)
         return replace(self, category_limits=tuple(limites))
+
+    @staticmethod
+    def _frontera(
+        orden: list[Decimal], limite: Decimal, anterior: Decimal | None
+    ) -> Decimal | None:
+        """
+        El límite, o el hándicap justo por debajo del empate si con él una
+        categoría quedaría vacía; None si no cabe ninguno.
+        """
+
+        def deja_las_dos_con_alguien(valor: Decimal) -> bool:
+            return valor < orden[-1] and (anterior is None or valor > anterior)
+
+        if deja_las_dos_con_alguien(limite):
+            return limite
+        debajo = [h for h in orden if h < limite]
+        if debajo and deja_las_dos_con_alguien(debajo[-1]):
+            return debajo[-1]
+        return None
 
     def sin_reparto(self) -> Self:
         """Las categorías iguales sin los límites del último cierre (al reabrir)."""
@@ -188,7 +211,9 @@ class StrokePlaySetup:
         """
         if handicap is None:
             return None
-        return 1 + sum(1 for limite in self.category_limits if handicap > limite)
+        # Con un decimal, el que queda fijado: un 12,04 es «hasta 12,0»
+        fijado = handicap_fijado(handicap)
+        return 1 + sum(1 for limite in self.category_limits if fijado > limite)
 
     def categorias(self, handicaps: Mapping[UserId, Decimal | None]) -> dict[UserId, int | None]:
         """

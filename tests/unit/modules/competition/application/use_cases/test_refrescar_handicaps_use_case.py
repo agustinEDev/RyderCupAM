@@ -196,13 +196,15 @@ class _Escenario:
     async def esperar(self, segundos: float) -> None:
         self.esperas.append(segundos)
 
-    async def torneo(self, tipo="RYDER_CUP", limites=("12.0",)) -> CompetitionId:
+    async def torneo(self, tipo="RYDER_CUP", limites=("12.0",), contador=None) -> CompetitionId:
         """Una competición con las inscripciones abiertas; su creador, sin personalizado."""
         creador = self.usuarios.alta()
         extra = {}
         if tipo != "RYDER_CUP":
-            extra["stroke_play"] = StrokePlaySettingsDTO(
-                category_limits=[Decimal(x) for x in limites]
+            extra["stroke_play"] = (
+                StrokePlaySettingsDTO(category_count=contador)
+                if contador
+                else StrokePlaySettingsDTO(category_limits=[Decimal(x) for x in limites])
             )
         respuesta = await CreateCompetitionUseCase(
             self.uow, LocationBuilder(self.uow.countries), self.usuarios
@@ -819,3 +821,106 @@ class TestCadaApunteConElCandado:
         await e.pasar(torneo)
 
         assert sin_candado == []
+
+
+class TestCategoriasIgualesTrasElRefrescoDelCierre:
+    """
+    El refresco del cierre llega siempre segundos después del reparto: al
+    acabar, se reparte otra vez con los hándicaps corregidos (10 oct 2026).
+    El botón y lo programado mantienen los límites.
+    """
+
+    async def _doce(self, e, torneo):
+        """El creador (10,0), 5 con 8,0 y 6 con 20,0: al cerrar, «hasta 10,0»."""
+        bajos = [await e.inscrito(torneo, handicap=8.0) for _ in range(5)]
+        altos = [await e.inscrito(torneo, handicap=20.0) for _ in range(6)]
+        return bajos, altos
+
+    async def _limites(self, e, torneo):
+        return (await e.uow.competitions.find_by_id(torneo)).stroke_play.category_limits
+
+    def _la_rfeg_da(self, e, nuevos: dict) -> None:
+        e.rfeg.search_handicap = AsyncMock(
+            side_effect=lambda nombre: next(
+                (h for u, h in nuevos.items() if nombre == e.nombre(u)), None
+            )
+        )
+
+    async def test_al_acabar_el_del_cierre_se_reparte_otra_vez(self, e):
+        torneo = await e.torneo(tipo="STABLEFORD", contador=2)
+        bajos, altos = await self._doce(e, torneo)
+        await e.cerrar(torneo)
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+        # Tres de los bajos suben a 30,0: con los límites del cierre serían 3 y 9
+        self._la_rfeg_da(e, dict.fromkeys(bajos[:3], 30.0))
+
+        await e.pasar(torneo)
+
+        # Ordenados: 8, 8, 10, 20×6, 30×3 → el 6.º es el 20,0 (con los del cierre
+        # seguiría en 10,0). Los empatados en 20,0 van abajo y arriba quedan 3:
+        # la regla de los seis los junta, y las categorías se fijan otra vez
+        assert await self._limites(e, torneo) == (Decimal("20.0"),)
+        inscripciones = await e.inscripciones(torneo)
+        assert {inscripciones[u].fixed_category for u in [*altos, *bajos]} == {1}
+        assert {inscripciones[u].fixed_handicap for u in bajos[:3]} == {Decimal("30.0")}
+
+    async def test_si_queda_incompleta_tambien_se_reparte_con_lo_que_hay(self, e):
+        torneo = await e.torneo(tipo="STABLEFORD", contador=2)
+        bajos, _ = await self._doce(e, torneo)
+        await e.cerrar(torneo)
+
+        def contesta(nombre):
+            if nombre == e.nombre(bajos[4]):
+                raise RuntimeError("RFEG caída")
+            return 30.0 if nombre in {e.nombre(u) for u in bajos[:3]} else None
+
+        e.rfeg.search_handicap = AsyncMock(side_effect=contesta)
+
+        await e.pasar(torneo)
+
+        assert (await e.ultima(torneo)).estado is EstadoActualizacion.INCOMPLETA
+        assert await self._limites(e, torneo) == (Decimal("20.0"),)
+
+    async def test_si_empieza_a_mitad_no_se_reparte(self, e):
+        torneo = await e.torneo(tipo="STABLEFORD", contador=2)
+        bajos, _ = await self._doce(e, torneo)
+        await e.cerrar(torneo)
+        ultima = await e.ultima(torneo)
+        ultima.estado = EstadoActualizacion.CORTADA
+        await e.uow.handicap_updates.update(ultima)
+        self._la_rfeg_da(e, dict.fromkeys(bajos[:3], 30.0))
+
+        await e.pasar(torneo)
+
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+
+    async def test_la_del_boton_mantiene_los_limites(self, e):
+        from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
+            ActualizacionDeHandicaps,
+        )
+
+        torneo = await e.torneo(tipo="STABLEFORD", contador=2)
+        bajos, _ = await self._doce(e, torneo)
+        await e.cerrar(torneo)
+        del_cierre = await e.ultima(torneo)
+        del_cierre.estado = EstadoActualizacion.COMPLETA
+        await e.uow.handicap_updates.update(del_cierre)
+        boton = ActualizacionDeHandicaps.crear(torneo, OrigenActualizacion.BOTON, e.ahora)
+        await e.uow.handicap_updates.add(boton)
+        self._la_rfeg_da(e, dict.fromkeys(bajos[:3], 30.0))
+
+        await e.caso().execute(boton.id)
+
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+        inscripciones = await e.inscripciones(torneo)
+        assert {inscripciones[u].fixed_handicap for u in bajos[:3]} == {Decimal("30.0")}
+
+    async def test_con_limites_a_mano_no_se_tocan(self, e):
+        torneo = await e.torneo(tipo="STABLEFORD", limites=("12.0",))
+        bajos, _ = await self._doce(e, torneo)
+        await e.cerrar(torneo)
+        self._la_rfeg_da(e, dict.fromkeys(bajos[:3], 30.0))
+
+        await e.pasar(torneo)
+
+        assert await self._limites(e, torneo) == (Decimal("12.0"),)

@@ -57,6 +57,7 @@ from src.modules.competition.application.services.refresco_rfeg import RefrescoR
 from src.modules.competition.application.services.ventana_de_la_competicion import ventana_de
 from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
     ActualizacionDeHandicaps,
+    OrigenActualizacion,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -305,6 +306,10 @@ class RefrescarHandicapsUseCase:
             sin_actualizar = await PendientesDeActualizar.de(uow, actualizacion)
             actualizacion.terminar(len(sin_actualizar), self._reloj())
             await uow.handicap_updates.update(actualizacion)
+            # El del cierre cambia hándicaps segundos después del reparto: las
+            # categorías iguales se rehacen con los corregidos (10 oct 2026)
+            if actualizacion.origen is OrigenActualizacion.CIERRE:
+                await HandicapsAlCerrar(uow, h.usuarios).repartir_de_nuevo(competicion)
             if not sin_actualizar:
                 return
             nombres = await PlayerNames.de_la_competicion(
