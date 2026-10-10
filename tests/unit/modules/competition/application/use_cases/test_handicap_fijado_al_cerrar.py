@@ -472,3 +472,80 @@ class TestCategoriasIgualesAlCerrar:
         await e.cerrar(torneo)
 
         assert await self._limites(e, torneo) == (Decimal("12.0"),)
+
+
+class TestHandicapsConDosDecimales:
+    """
+    Un perfil puede traer dos decimales (el manual solo mira el rango) y la
+    columna fijada guarda uno: se fija redondeado, y reparto y categoría salen
+    de ese mismo valor (revisor de la PR de categorías iguales, 10 oct 2026).
+    """
+
+    async def test_con_categorias_iguales_se_cierra_y_el_limite_lleva_un_decimal(self, e):
+        torneo = await e.torneo(contador=2)
+        for h in (1.0, 2.0, 3.0, 4.0, 6.05):
+            await e.jugador(torneo, h)
+        for h in range(20, 26):
+            await e.jugador(torneo, float(h))
+
+        await e.cerrar(torneo)
+
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        # Doce con el creador (10,0): el 6.º es el 10,0; el 6,05 queda en 6,1
+        assert competicion.stroke_play.category_limits == (Decimal("10.0"),)
+        assert {i.fixed_handicap for i in (await e.inscripciones(torneo)).values()} >= {
+            Decimal("6.1")
+        }
+
+    async def test_el_limite_calculado_sale_del_valor_redondeado(self, e):
+        torneo = await e.torneo(contador=2)
+        for h in (1.0, 2.0, 3.0, 4.0, 5.0):
+            await e.jugador(torneo, h)
+        frontera = await e.jugador(torneo, 9.96)  # con el creador (10,0), dos «10,0»
+        for h in range(20, 25):
+            await e.jugador(torneo, float(h))
+
+        await e.cerrar(torneo)
+
+        competicion = await e.uow.competitions.find_by_id(torneo)
+        assert competicion.stroke_play.category_limits == (Decimal("10.0"),)
+        assert (await e.inscripciones(torneo))[frontera].fixed_handicap == Decimal("10.0")
+
+    async def test_a_mano_la_categoria_es_la_del_handicap_fijado(self, e):
+        # 12,04 se fija como 12,0: con «hasta 12,0», 1.ª; no 2.ª por los centésimos
+        torneo = await e.torneo(limites=("12.0",))
+        justo = await e.jugador(torneo, 12.04)
+        for _ in range(4):
+            await e.jugador(torneo, 5.0)
+        for _ in range(6):
+            await e.jugador(torneo, 20.0)
+
+        await e.cerrar(torneo)
+
+        suya = (await e.inscripciones(torneo))[justo]
+        assert (suya.fixed_handicap, suya.fixed_category) == (Decimal("12.0"), 1)
+
+    async def test_la_correccion_de_la_rfeg_tambien_se_redondea(self, e):
+        from src.modules.competition.application.services.handicaps_al_cerrar import (
+            HandicapsAlCerrar,
+        )
+
+        torneo = await e.torneo(limites=("12.0",))
+        jugador = await e.jugador(torneo, 5.0)
+        await e.cerrar(torneo)
+
+        async with e.uow:
+            competicion = await e.uow.competitions.find_by_id(torneo)
+            await HandicapsAlCerrar(e.uow, e.usuarios).corregir(
+                competicion, jugador, Decimal("12.04")
+            )
+
+        assert (await e.inscripciones(torneo))[jugador].fixed_handicap == Decimal("12.0")
+
+    async def test_un_plus_se_redondea_hacia_fuera_como_postgres(self, e):
+        torneo = await e.torneo(limites=("12.0",))
+        plus = await e.jugador(torneo, -0.05)
+
+        await e.cerrar(torneo)
+
+        assert (await e.inscripciones(torneo))[plus].fixed_handicap == Decimal("-0.1")

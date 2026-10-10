@@ -23,9 +23,9 @@ Cada cambio devuelve una pieza nueva.
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
-from typing import Self
+from typing import Self, overload
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -39,6 +39,23 @@ MIN_JUGADORES_POR_CATEGORIA = 6
 MIN_LIMIT = Decimal("-10.0")
 MAX_LIMIT = Decimal("54.0")
 UNA_DECIMAL = Decimal("0.1")
+
+
+@overload
+def handicap_fijado(handicap: Decimal) -> Decimal: ...
+@overload
+def handicap_fijado(handicap: None) -> None: ...
+def handicap_fijado(handicap: Decimal | None) -> Decimal | None:
+    """
+    El hándicap que se fija al cerrar, con un decimal: lo que guarda la columna.
+
+    Un perfil puede traer centésimos, y la categoría y el reparto tienen que
+    salir del mismo valor que queda guardado. Redondea hacia fuera en el medio,
+    como Postgres al guardar en `Numeric(4, 1)`.
+    """
+    if handicap is None:
+        return None
+    return handicap.quantize(UNA_DECIMAL, rounding=ROUND_HALF_UP)
 
 
 class StrokePlaySettingsError(ValueError):
