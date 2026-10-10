@@ -229,4 +229,5 @@ class CreateCompetitionUseCase:
             "category_limits": request.stroke_play.category_limits,
             "max_matchdays_per_player": request.stroke_play.max_matchdays_per_player,
             "overall_standing": request.stroke_play.overall_standing,
+            "category_count": request.stroke_play.category_count,
         }

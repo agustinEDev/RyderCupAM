@@ -18,6 +18,7 @@ from ..events.enrollment_withdrawn_event import EnrollmentWithdrawnEvent
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.enrollment_id import EnrollmentId
 from ..value_objects.enrollment_status import EnrollmentStatus
+from ..value_objects.stroke_play_setup import handicap_fijado
 
 
 class EnrollmentStateError(Exception):
@@ -250,7 +251,8 @@ class Enrollment:
         Si se reabren y se vuelven a cerrar, se fija de nuevo con el de ese momento.
         Y no se mueve aunque luego alguien se retire (decidido el 7 oct 2026).
         """
-        self._fixed_handicap = handicap
+        # Con un decimal, como lo guarda la columna: lo que se compara es lo guardado
+        self._fixed_handicap = handicap_fijado(handicap)
         self._fixed_category = categoria
 
     def handicap_que_cuenta(self, del_perfil: Decimal | None) -> Decimal | None:

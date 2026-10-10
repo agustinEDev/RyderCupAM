@@ -84,6 +84,8 @@ class TestAlCrear:
             "category_limits": [],
             "max_matchdays_per_player": 1,
             "overall_standing": "ACCUMULATED",
+            # Límites a mano, que son los de por defecto (10 oct 2026)
+            "category_count": None,
         }
 
     async def test_una_ryder_no_los_trae(self, client: AsyncClient):
@@ -212,3 +214,72 @@ async def test_un_limite_desmesurado_es_un_400_y_no_un_500(client: AsyncClient):
 
     assert respuesta.status_code == 400, respuesta.text
     assert "entre -10,0 y 54,0" in respuesta.json()["detail"]
+
+
+class TestCategoriasIguales:
+    """N categorías iguales en vez de límites (10 oct 2026)."""
+
+    async def test_al_crear_las_devuelve_y_la_ficha_tambien(self, client: AsyncClient):
+        usuario = await _usuario(client)
+
+        creada = await create_competition(
+            client, usuario["cookies"], _datos(stroke_play={"category_count": 3})
+        )
+        ficha = (await client.get(f"/api/v1/competitions/{creada['id']}")).json()
+
+        assert creada["stroke_play"]["category_count"] == 3
+        assert ficha["stroke_play"]["category_count"] == 3
+        assert _limites(ficha) == []
+
+    async def test_a_mano_el_contador_es_null(self, client: AsyncClient):
+        usuario = await _usuario(client)
+
+        creada = await create_competition(
+            client, usuario["cookies"], _datos(stroke_play={"category_limits": [12.0]})
+        )
+
+        assert creada["stroke_play"]["category_count"] is None
+
+    async def test_cambiar_a_iguales_borra_los_limites(self, client: AsyncClient):
+        usuario = await _usuario(client)
+        creada = await create_competition(
+            client, usuario["cookies"], _datos(stroke_play={"category_limits": [12.0]})
+        )
+
+        respuesta = await client.patch(
+            f"/api/v1/competitions/{creada['id']}/stroke-play", json={"category_count": 4}
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["category_count"] == 4
+        assert respuesta.json()["category_limits"] == []
+
+    async def test_los_dos_a_la_vez_son_un_400_con_su_motivo(self, client: AsyncClient):
+        await _usuario(client)
+
+        respuesta = await client.post(
+            "/api/v1/competitions",
+            json=_datos(stroke_play={"category_limits": [12.0], "category_count": 3}),
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+        assert "a la vez" in respuesta.json()["detail"]
+
+    async def test_fuera_de_rango_es_un_400_con_su_motivo(self, client: AsyncClient):
+        await _usuario(client)
+
+        respuesta = await client.post(
+            "/api/v1/competitions", json=_datos(stroke_play={"category_count": 6})
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+        assert "entre 2 y 5" in respuesta.json()["detail"]
+
+    async def test_con_decimales_es_un_422(self, client: AsyncClient):
+        await _usuario(client)
+
+        respuesta = await client.post(
+            "/api/v1/competitions", json=_datos(stroke_play={"category_count": 2.5})
+        )
+
+        assert respuesta.status_code == 422, respuesta.text

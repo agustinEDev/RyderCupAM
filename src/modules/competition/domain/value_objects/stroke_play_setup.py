@@ -10,6 +10,10 @@ Decidido con Agustín el 6 oct 2026:
 - **Jornadas por jugador**: como mucho una franja por jornada, y el organizador
   fija en cuántas jornadas juega cada uno (normalmente una).
 - **La general**: acumulada o mejor tarjeta, a elección del organizador.
+- **Categorías iguales** (10 oct 2026): en vez de escribir los límites, el
+  organizador pide N categorías y los límites salen al cerrar las inscripciones,
+  con los hándicaps fijados: grupos lo más parecidos posible, y los empatados en
+  una frontera van todos a la de hándicap más bajo.
 
 **Es inmutable**, por lo mismo que la de la Ryder: se guarda en columnas de
 `competitions` con `composite()`, y SQLAlchemy no ve un cambio hecho dentro.
@@ -17,22 +21,41 @@ Cada cambio devuelve una pieza nueva.
 """
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from itertools import pairwise
-from typing import Self
+from typing import Self, overload
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from .overall_standing import OverallStanding
 
 MAX_CATEGORIES = 5
+# Pedir una sola categoría iguales es no tener categorías: eso son límites vacíos
+MIN_CATEGORY_COUNT = 2
 # Una categoría se disputa con 6 jugadores como mínimo, como en la RFEG (7 oct 2026)
 MIN_JUGADORES_POR_CATEGORIA = 6
 MIN_LIMIT = Decimal("-10.0")
 MAX_LIMIT = Decimal("54.0")
 UNA_DECIMAL = Decimal("0.1")
+
+
+@overload
+def handicap_fijado(handicap: Decimal) -> Decimal: ...
+@overload
+def handicap_fijado(handicap: None) -> None: ...
+def handicap_fijado(handicap: Decimal | None) -> Decimal | None:
+    """
+    El hándicap que se fija al cerrar, con un decimal: lo que guarda la columna.
+
+    Un perfil puede traer centésimos, y la categoría y el reparto tienen que
+    salir del mismo valor que queda guardado. Redondea hacia fuera en el medio,
+    como Postgres al guardar en `Numeric(4, 1)`.
+    """
+    if handicap is None:
+        return None
+    return handicap.quantize(UNA_DECIMAL, rounding=ROUND_HALF_UP)
 
 
 class StrokePlaySettingsError(ValueError):
@@ -48,9 +71,13 @@ class StrokePlaySetup:
     category_limits: tuple[Decimal, ...] = ()
     max_matchdays_per_player: int = 1
     overall_standing: OverallStanding = OverallStanding.ACCUMULATED
+    # Categorías iguales: cuántas se piden. None = límites a mano. Con él, los
+    # límites están vacíos hasta el cierre, que los calcula (`repartir`)
+    category_count: int | None = None
 
     def __post_init__(self) -> None:
         self._check_limits(self.category_limits)
+        self._check_count(self.category_count)
         if self.max_matchdays_per_player < 1:
             raise StrokePlaySettingsError("Cada jugador tiene que poder jugar al menos una jornada")
 
@@ -64,12 +91,14 @@ class StrokePlaySetup:
         category_limits: Sequence[Decimal] | None = None,
         max_matchdays_per_player: int | None = None,
         overall_standing: OverallStanding | None = None,
+        category_count: int | None = None,
     ) -> Self:
         """Unos ajustes nuevos; lo que no llega se queda con su valor por defecto."""
         return cls().with_changes(
             category_limits=category_limits,
             max_matchdays_per_player=max_matchdays_per_player,
             overall_standing=overall_standing,
+            category_count=category_count,
         )
 
     def with_changes(
@@ -77,19 +106,29 @@ class StrokePlaySetup:
         category_limits: Sequence[Decimal] | None = None,
         max_matchdays_per_player: int | None = None,
         overall_standing: OverallStanding | None = None,
+        category_count: int | None = None,
     ) -> Self:
         """
         Una pieza nueva con lo que cambia; None es «no lo toques».
 
-        Una lista de límites vacía SÍ es un cambio: quita las categorías.
+        Una lista de límites vacía SÍ es un cambio: quita las categorías. Los
+        límites y el contador son los dos modos de hacer categorías: mandar uno
+        cambia a ese modo y borra el otro, y los dos a la vez no se entienden.
         """
+        if category_limits is not None and category_count is not None:
+            raise StrokePlaySettingsError(
+                "Las categorías se hacen con límites o con un número de categorías "
+                "iguales, no con las dos cosas a la vez"
+            )
+        limites, contador = self.category_limits, self.category_count
+        if category_limits is not None:
+            limites, contador = tuple(self._con_un_decimal(v) for v in category_limits), None
+        elif category_count is not None:
+            limites, contador = (), category_count
         return replace(
             self,
-            category_limits=(
-                tuple(self._con_un_decimal(v) for v in category_limits)
-                if category_limits is not None
-                else self.category_limits
-            ),
+            category_limits=limites,
+            category_count=contador,
             max_matchdays_per_player=(
                 max_matchdays_per_player
                 if max_matchdays_per_player is not None
@@ -97,6 +136,62 @@ class StrokePlaySetup:
             ),
             overall_standing=overall_standing or self.overall_standing,
         )
+
+    def repartir(self, handicaps: Iterable[Decimal | None]) -> Self:
+        """
+        Los límites de las categorías iguales, con los hándicaps fijados al cerrar.
+
+        Decidido con Agustín el 10 oct 2026:
+
+        - Se parte en tantas como quepan con 6 por categoría (14 para 3 → 2 de 7).
+        - Cada frontera cae donde quedarían grupos iguales (k·n/N, redondeado) y
+          el límite es el hándicap del último de ese grupo: con «hasta X»
+          incluido, los que empatan con él van todos a la de hándicap más bajo.
+        - Si así una categoría quedaría vacía (el empate llega hasta arriba o
+          hasta la frontera anterior), la frontera baja justo por debajo del
+          empate y los empatados suben juntos; si tampoco cabe, sale una menos.
+
+        Con el hándicap a un decimal, el que se fija. Quien no tiene no cuenta.
+        Después, como siempre, la regla de los seis. A mano no se reparte nada.
+        """
+        if self.category_count is None:
+            return self
+        orden = sorted(handicap_fijado(h) for h in handicaps if h is not None)
+        n = len(orden)
+        total = min(self.category_count, n // MIN_JUGADORES_POR_CATEGORIA)
+        limites: list[Decimal] = []
+        for k in range(1, total):
+            # Redondeo hacia arriba en el medio: k·n/N con enteros, sin flotantes
+            cuantos = (2 * k * n + total) // (2 * total)
+            limite = self._frontera(orden, orden[cuantos - 1], limites[-1] if limites else None)
+            if limite is not None:
+                limites.append(limite)
+        return replace(self, category_limits=tuple(limites))
+
+    @staticmethod
+    def _frontera(
+        orden: list[Decimal], limite: Decimal, anterior: Decimal | None
+    ) -> Decimal | None:
+        """
+        El límite, o el hándicap justo por debajo del empate si con él una
+        categoría quedaría vacía; None si no cabe ninguno.
+        """
+
+        def deja_las_dos_con_alguien(valor: Decimal) -> bool:
+            return valor < orden[-1] and (anterior is None or valor > anterior)
+
+        if deja_las_dos_con_alguien(limite):
+            return limite
+        debajo = [h for h in orden if h < limite]
+        if debajo and deja_las_dos_con_alguien(debajo[-1]):
+            return debajo[-1]
+        return None
+
+    def sin_reparto(self) -> Self:
+        """Las categorías iguales sin los límites del último cierre (al reabrir)."""
+        if self.category_count is None:
+            return self
+        return replace(self, category_limits=())
 
     # ------------------------------------------------------------------
     # Reglas
@@ -116,7 +211,9 @@ class StrokePlaySetup:
         """
         if handicap is None:
             return None
-        return 1 + sum(1 for limite in self.category_limits if handicap > limite)
+        # Con un decimal, el que queda fijado: un 12,04 es «hasta 12,0»
+        fijado = handicap_fijado(handicap)
+        return 1 + sum(1 for limite in self.category_limits if fijado > limite)
 
     def categorias(self, handicaps: Mapping[UserId, Decimal | None]) -> dict[UserId, int | None]:
         """
@@ -190,6 +287,16 @@ class StrokePlaySetup:
         return limite.is_finite() and MIN_LIMIT <= limite <= MAX_LIMIT
 
     @staticmethod
+    def _check_count(count: object) -> None:
+        # Un `bool` es un `int` en Python, pero True vale 1 y se queda fuera del rango
+        if count is None:
+            return
+        if not isinstance(count, int) or not MIN_CATEGORY_COUNT <= count <= MAX_CATEGORIES:
+            raise StrokePlaySettingsError(
+                f"Las categorías iguales son entre {MIN_CATEGORY_COUNT} y {MAX_CATEGORIES}"
+            )
+
+    @staticmethod
     def _check_limits(limits: tuple[Decimal, ...]) -> None:
         if len(limits) > MAX_CATEGORIES - 1:
             raise StrokePlaySettingsError(
@@ -215,7 +322,12 @@ class StrokePlaySetup:
 
     def __composite_values__(self) -> tuple:
         """En el orden de `from_columns`: así se guarda en `competitions`."""
-        return (list(self.category_limits), self.max_matchdays_per_player, self.overall_standing)
+        return (
+            list(self.category_limits),
+            self.max_matchdays_per_player,
+            self.overall_standing,
+            self.category_count,
+        )
 
     @classmethod
     def from_columns(
@@ -223,6 +335,7 @@ class StrokePlaySetup:
         category_limits: Sequence[Decimal] | None,
         max_matchdays_per_player: int | None,
         overall_standing: object,
+        category_count: int | None = None,
     ) -> Self | None:
         """
         Reconstruye la pieza al leer. Sin jornadas guardadas no es un stroke play: None.
@@ -244,4 +357,5 @@ class StrokePlaySetup:
             if overall_standing
             else OverallStanding.ACCUMULATED,
         )
+        object.__setattr__(pieza, "category_count", category_count)
         return pieza

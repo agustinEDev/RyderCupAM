@@ -218,3 +218,67 @@ class TestCuandoSeTocaElHandicap:
     )
     def test_ryder(self, status, se_puede):
         assert _ryder(status=status).allows_handicap_edits() is se_puede
+
+
+class TestCategoriasIguales:
+    """Pedir N categorías iguales; los límites salen al cerrar (10 oct 2026)."""
+
+    @staticmethod
+    def _treinta() -> list[Decimal]:
+        return [Decimal(n) for n in range(1, 31)]
+
+    def test_al_crear_con_un_contador(self):
+        competicion = _stroke_play(category_count=3)
+
+        assert competicion.stroke_play.category_count == 3
+        assert competicion.stroke_play.category_limits == ()
+
+    def test_una_ryder_con_contador_se_rechaza(self):
+        with pytest.raises(TournamentTypeError):
+            _ryder(category_count=3)
+
+    def test_al_cambiar_se_pasa_a_iguales(self):
+        competicion = _stroke_play(category_limits=[Decimal("12.0")])
+
+        competicion.update_stroke_play(category_count=4)
+
+        assert competicion.stroke_play.category_count == 4
+        assert competicion.stroke_play.category_limits == ()
+
+    def test_repartir_pone_los_limites(self):
+        competicion = _stroke_play(category_count=3, status=CompetitionStatus.ACTIVE)
+
+        competicion.repartir_categorias(self._treinta())
+
+        assert competicion.stroke_play.category_limits == (Decimal("10.0"), Decimal("20.0"))
+
+    def test_a_una_ryder_no_se_le_reparte(self):
+        with pytest.raises(TournamentTypeError):
+            _ryder().repartir_categorias(self._treinta())
+
+    def test_al_reabrir_se_borran_los_limites_calculados(self):
+        competicion = _stroke_play(category_count=3, status=CompetitionStatus.ACTIVE)
+        competicion.repartir_categorias(self._treinta())
+        competicion.close_enrollments()
+
+        competicion.reopen_enrollments()
+
+        assert competicion.stroke_play.category_limits == ()
+        assert competicion.stroke_play.category_count == 3
+
+    def test_al_reabrir_los_limites_a_mano_se_quedan(self):
+        competicion = _stroke_play(
+            category_limits=[Decimal("12.0")], status=CompetitionStatus.ACTIVE
+        )
+        competicion.close_enrollments()
+
+        competicion.reopen_enrollments()
+
+        assert competicion.stroke_play.category_limits == (Decimal("12.0"),)
+
+    def test_una_ryder_se_reabre_como_siempre(self):
+        competicion = _ryder(status=CompetitionStatus.CLOSED)
+
+        competicion.reopen_enrollments()
+
+        assert competicion.stroke_play is None

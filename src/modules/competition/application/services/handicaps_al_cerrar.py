@@ -6,6 +6,9 @@ de datos tras el cierre de inscripción»). En un Stableford o un Medal, al cerr
 se guarda en cada inscripción el hándicap que cuenta (el personalizado, si no el
 del perfil). Es el de todo el torneo: de él sale su categoría, y ya no cambia.
 
+Con categorías iguales (10 oct 2026), los límites salen aquí mismo, de los
+hándicaps que se fijan: el reparto y lo fijado no pueden discrepar.
+
 Para inscribirse ya hace falta hándicap, así que aquí no debería llegar nadie
 sin él. Si aun así falta alguno, no se cierra y se dice quién: la misma lista que
 «jugadores sin barras».
@@ -80,7 +83,9 @@ class HandicapsAlCerrar:
                     for u in sin
                 ]
             )
-        await self._congelar(competition.stroke_play, inscripciones, handicaps)
+        # Las categorías iguales salen ahora, de estos mismos hándicaps (10 oct 2026)
+        ajustes = competition.repartir_categorias(handicaps.values())
+        await self._congelar(ajustes, inscripciones, handicaps)
 
     async def corregir(self, competition: Competition, user_id: UserId, handicap: Decimal) -> None:
         """
@@ -110,6 +115,30 @@ class HandicapsAlCerrar:
             return
         handicaps = {e.user_id: handicap if e is suya else e.fixed_handicap for e in inscripciones}
         await self._congelar(competition.stroke_play, inscripciones, handicaps)
+
+    async def repartir_de_nuevo(self, competition: Competition) -> None:
+        """
+        Las categorías iguales, otra vez, con los hándicaps fijados de ahora (#251).
+
+        Al acabar el refresco del cierre: llega segundos después del reparto y
+        cambia hándicaps, así que los grupos se rehacen (10 oct 2026). Solo con
+        las inscripciones cerradas; a mano no cambia nada.
+        """
+        ajustes = competition.stroke_play
+        if (
+            ajustes is None
+            or ajustes.category_count is None
+            or competition.status is not CompetitionStatus.CLOSED
+        ):
+            return
+        inscripciones = await self._uow.enrollments.find_by_competition_and_status(
+            competition.id, EnrollmentStatus.APPROVED
+        )
+        handicaps = {e.user_id: e.fixed_handicap for e in inscripciones}
+        await self._congelar(
+            competition.repartir_categorias(handicaps.values()), inscripciones, handicaps
+        )
+        await self._uow.competitions.update(competition)
 
     async def _congelar(
         self,

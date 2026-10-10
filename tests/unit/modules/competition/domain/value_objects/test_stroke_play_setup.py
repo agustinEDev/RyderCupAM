@@ -16,6 +16,7 @@ from src.modules.competition.domain.value_objects.stroke_play_setup import (
     StrokePlaySettingsError,
     StrokePlaySetup,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 def _d(*valores: str) -> list[Decimal]:
@@ -255,3 +256,257 @@ class TestSeisPorCategoria:
         tercera = {categorias[u] for u, h in jugadores.items() if h == Decimal("20.0")}
         assert segunda == primera == {1}
         assert tercera == {2}
+
+
+# ----------------------------------------------------------------------
+# Categorías iguales, repartidas al cerrar (decidido con Agustín el 10 oct 2026)
+# ----------------------------------------------------------------------
+
+
+def _hs(*valores: str | float) -> list[Decimal]:
+    return [Decimal(str(v)) for v in valores]
+
+
+def _grupos(ajustes: StrokePlaySetup, handicaps: list[Decimal]) -> list[int]:
+    """Cuántos caen en cada categoría nominal (sin la regla de los seis)."""
+    por = [0] * ajustes.number_of_categories
+    for h in handicaps:
+        por[ajustes.category_for(h) - 1] += 1
+    return por
+
+
+class TestCategoriasIgualesAlCrear:
+    def test_con_un_contador_se_guarda_y_no_hay_limites_hasta_el_cierre(self):
+        ajustes = StrokePlaySetup.create(category_count=3)
+
+        assert ajustes.category_count == 3
+        assert ajustes.category_limits == ()
+
+    def test_sin_contador_son_limites_a_mano(self):
+        assert StrokePlaySetup.create(category_limits=_d("12.0")).category_count is None
+
+    @pytest.mark.parametrize("contador", [0, 1, 6, -2])
+    def test_fuera_de_2_a_5_se_rechaza(self, contador):
+        with pytest.raises(StrokePlaySettingsError, match="entre 2 y 5"):
+            StrokePlaySetup.create(category_count=contador)
+
+    @pytest.mark.parametrize("contador", [2, 5])
+    def test_los_bordes_valen(self, contador):
+        assert StrokePlaySetup.create(category_count=contador).category_count == contador
+
+    @pytest.mark.parametrize("raro", [2.5, True, "3"])
+    def test_lo_que_no_es_un_entero_se_rechaza(self, raro):
+        with pytest.raises(StrokePlaySettingsError, match="entre 2 y 5"):
+            StrokePlaySetup.create(category_count=raro)
+
+    def test_limites_y_contador_a_la_vez_se_rechazan(self):
+        with pytest.raises(StrokePlaySettingsError, match="a la vez"):
+            StrokePlaySetup.create(category_limits=_d("12.0"), category_count=3)
+
+
+class TestCambiarDeModo:
+    def test_de_iguales_a_mano_borra_el_contador(self):
+        ajustes = StrokePlaySetup.create(category_count=3)
+
+        nuevos = ajustes.with_changes(category_limits=_d("12.0", "26.0"))
+
+        assert nuevos.category_count is None
+        assert nuevos.category_limits == (Decimal("12.0"), Decimal("26.0"))
+
+    def test_a_mano_con_lista_vacia_tambien_borra_el_contador(self):
+        nuevos = StrokePlaySetup.create(category_count=3).with_changes(category_limits=[])
+
+        assert nuevos.category_count is None
+        assert nuevos.number_of_categories == 1
+
+    def test_de_mano_a_iguales_borra_los_limites(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0", "26.0"))
+
+        nuevos = ajustes.with_changes(category_count=4)
+
+        assert nuevos.category_count == 4
+        assert nuevos.category_limits == ()
+
+    def test_los_dos_a_la_vez_se_rechazan(self):
+        with pytest.raises(StrokePlaySettingsError, match="a la vez"):
+            StrokePlaySetup.create().with_changes(category_limits=_d("12.0"), category_count=3)
+
+    def test_cambiar_otra_cosa_no_toca_el_modo(self):
+        nuevos = StrokePlaySetup.create(category_count=3).with_changes(max_matchdays_per_player=2)
+
+        assert nuevos.category_count == 3
+        assert nuevos.category_limits == ()
+
+
+class TestRepartir:
+    def test_treinta_distintos_en_tres_son_diez_diez_y_diez(self):
+        handicaps = _hs(*range(1, 31))
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("10.0"), Decimal("20.0"))
+        assert _grupos(ajustes, handicaps) == [10, 10, 10]
+
+    def test_treinta_y_uno_en_tres_son_diez_once_y_diez(self):
+        handicaps = _hs(*range(1, 32))
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(handicaps)
+
+        assert _grupos(ajustes, handicaps) == [10, 11, 10]
+
+    def test_el_orden_de_llegada_no_importa(self):
+        handicaps = _hs(*range(30, 0, -1))
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("10.0"), Decimal("20.0"))
+
+    def test_los_empatados_en_la_frontera_van_todos_a_la_mas_baja(self):
+        # 12 jugadores en 2: la frontera cae en el 6.º, que empata con el 7.º y el 8.º
+        handicaps = _hs(1, 2, 3, 4, 5, "9.4", "9.4", "9.4", 20, 21, 22, 23)
+        ajustes = StrokePlaySetup.create(category_count=2).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("9.4"),)
+        assert _grupos(ajustes, handicaps) == [8, 4]
+
+    def test_si_dos_limites_coinciden_salen_menos_categorias(self):
+        # 18 en 3: las fronteras (6.º y 12.º) caen las dos en el 15,0
+        handicaps = _hs(1, 2, *(["15.0"] * 14), 30, 31)
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("15.0"),)
+        assert ajustes.number_of_categories == 2
+
+    def test_si_todos_tienen_el_mismo_sale_una_sola(self):
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(_hs(*(["12.0"] * 9)))
+
+        assert ajustes.category_limits == ()
+
+    def test_un_empate_arriba_baja_la_frontera_por_debajo_del_empate(self):
+        # 13 en 2: la frontera (7.º) cae en el 10,0 de los siete de arriba; con
+        # «empates abajo» la 2.ª quedaría vacía: los empatados suben juntos
+        handicaps = _hs(1, 2, 3, 4, 5, 6, *(["10.0"] * 7))
+        ajustes = StrokePlaySetup.create(category_count=2).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("6.0"),)
+        assert _grupos(ajustes, handicaps) == [6, 7]
+
+    def test_un_empate_en_medio_sigue_yendo_abajo(self):
+        handicaps = _hs(1, 2, 3, 4, 5, "9.4", "9.4", 20, 21, 22, 23, 24, 25)
+        ajustes = StrokePlaySetup.create(category_count=2).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("9.4"),)
+
+    def test_ninguna_categoria_nace_vacia(self):
+        handicaps = _hs(*range(1, 13), *(["30.0"] * 18))
+        ajustes = StrokePlaySetup.create(category_count=5).repartir(handicaps)
+
+        assert 0 not in _grupos(ajustes, handicaps)
+
+    def test_sin_inscritos_no_hay_limites(self):
+        assert StrokePlaySetup.create(category_count=3).repartir([]).category_limits == ()
+
+    def test_los_plus_van_primero(self):
+        handicaps = _hs(8, 7, 6, 5, 4, 3, "0.5", 0, "-0.5", -1, "-1.5", -2)
+        ajustes = StrokePlaySetup.create(category_count=2).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("0.5"),)
+
+    def test_quien_no_tiene_handicap_no_cuenta(self):
+        handicaps = [*_hs(*range(1, 31)), None]
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("10.0"), Decimal("20.0"))
+
+    def test_conserva_el_contador_y_lo_demas(self):
+        ajustes = StrokePlaySetup.create(
+            category_count=3, max_matchdays_per_player=2, overall_standing=OverallStanding.BEST_CARD
+        ).repartir(_hs(*range(1, 31)))
+
+        assert ajustes.category_count == 3
+        assert ajustes.max_matchdays_per_player == 2
+        assert ajustes.overall_standing is OverallStanding.BEST_CARD
+
+    def test_a_mano_no_se_reparte(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+
+        assert ajustes.repartir(_hs(*range(1, 31))) == ajustes
+
+    def test_repartir_otra_vez_parte_de_cero(self):
+        primero = StrokePlaySetup.create(category_count=2).repartir(_hs(*range(1, 31)))
+
+        segundo = primero.repartir(_hs(*range(41, 53)))
+
+        assert segundo.category_limits == (Decimal("46.0"),)
+
+    def test_sin_seis_para_cada_una_se_reparte_en_las_que_caben(self):
+        # 14 para 3: con 6 como mínimo caben 2, de 7 (decidido el 10 oct 2026)
+        handicaps = _hs(*range(1, 15))
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("7.0"),)
+        assert _grupos(ajustes, handicaps) == [7, 7]
+
+    @pytest.mark.parametrize(("jugadores", "categorias"), [(11, 1), (12, 2), (17, 2), (18, 3)])
+    def test_caben_tantas_como_grupos_de_seis(self, jugadores, categorias):
+        handicaps = _hs(*range(1, jugadores + 1))
+        ajustes = StrokePlaySetup.create(category_count=5).repartir(handicaps)
+
+        assert ajustes.number_of_categories == categorias
+
+    def test_y_despues_la_regla_de_los_seis_si_un_empate_deja_una_corta(self):
+        # 12 en 2, con el empate abajo: 8 y 4 → la de 4 se une a la 1.ª
+        handicaps = _hs(1, 2, 3, 4, 5, "9.4", "9.4", "9.4", 20, 21, 22, 23)
+        ajustes = StrokePlaySetup.create(category_count=2).repartir(handicaps)
+        categorias = ajustes.categorias({UserId.generate(): h for h in handicaps})
+
+        assert set(categorias.values()) == {1}
+
+    def test_un_solo_jugador_no_da_para_limites(self):
+        assert StrokePlaySetup.create(category_count=3).repartir(_hs(7)).category_limits == ()
+
+    def test_dos_jugadores_en_dos_es_una_sola(self):
+        assert StrokePlaySetup.create(category_count=2).repartir(_hs(7, 9)).category_limits == ()
+
+
+class TestElRedondeoViveEnElDominio:
+    """Lo que se compara es lo que se guarda: un decimal (revisión del 10 oct 2026)."""
+
+    def test_repartir_con_centesimos_no_rompe_y_da_un_decimal(self):
+        handicaps = _hs(1, 2, 3, 4, 5, "6.05", 20, 21, 22, 23, 24, 25)
+
+        ajustes = StrokePlaySetup.create(category_count=2).repartir(handicaps)
+
+        assert ajustes.category_limits == (Decimal("6.1"),)
+
+    def test_la_categoria_sale_del_handicap_redondeado(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+
+        assert ajustes.category_for(Decimal("12.04")) == 1
+        assert ajustes.category_for(Decimal("12.05")) == 2
+
+
+class TestQuitarElReparto:
+    def test_en_iguales_borra_los_limites_calculados(self):
+        repartido = StrokePlaySetup.create(category_count=3).repartir(_hs(*range(1, 31)))
+
+        limpio = repartido.sin_reparto()
+
+        assert limpio.category_limits == ()
+        assert limpio.category_count == 3
+
+    def test_a_mano_no_toca_nada(self):
+        ajustes = StrokePlaySetup.create(category_limits=_d("12.0"))
+
+        assert ajustes.sin_reparto() == ajustes
+
+
+class TestGuardarElContador:
+    def test_ida_y_vuelta_por_las_columnas(self):
+        ajustes = StrokePlaySetup.create(category_count=3).repartir(_hs(*range(1, 31)))
+
+        leido = StrokePlaySetup.from_columns(*ajustes.__composite_values__())
+
+        assert leido == ajustes
+
+    def test_una_fila_de_antes_del_contador_es_a_mano(self):
+        leido = StrokePlaySetup.from_columns([Decimal("12.0")], 1, "ACCUMULATED", None)
+
+        assert leido.category_count is None

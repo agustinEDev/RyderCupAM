@@ -188,6 +188,7 @@ class CompetitionDTOMapper:
             category_limits=list(ajustes.category_limits),
             max_matchdays_per_player=ajustes.max_matchdays_per_player,
             overall_standing=ajustes.overall_standing,
+            category_count=ajustes.category_count,
         )
 
     @staticmethod
