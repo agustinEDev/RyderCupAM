@@ -86,6 +86,7 @@ class UpdateStrokePlaySettingsUseCase:
                 category_limits=request.category_limits,
                 max_matchdays_per_player=request.max_matchdays_per_player,
                 overall_standing=request.overall_standing,
+                category_count=request.category_count,
             )
             await self._uow.competitions.update(competition)
             # Con otro cupo de jornadas, las listas al día: fuera quien ya lo llena (#251)

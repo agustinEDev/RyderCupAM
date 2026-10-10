@@ -123,6 +123,17 @@ class StrokePlaySettingsDTO(BaseModel):
             "Stableford, de golpes netos en Medal) o BEST_CARD (la mejor tarjeta)."
         ),
     )
+    # Sin rango aquí: «entre 2 y 5» lo dice el dominio, con su motivo
+    category_count: int | None = Field(
+        None,
+        description=(
+            "Categorías iguales: cuántas (de 2 a 5). Los límites se calculan al cerrar "
+            "las inscripciones con los hándicaps fijados, con grupos lo más parecidos "
+            "posible; los empatados en una frontera van a la de hándicap más bajo. "
+            "Mandarlo pasa a este modo y borra los límites; mandar `category_limits` "
+            "vuelve a límites a mano. Los dos a la vez es un 400."
+        ),
+    )
 
 
 class StrokePlaySettingsResponseDTO(BaseModel):
@@ -135,6 +146,13 @@ class StrokePlaySettingsResponseDTO(BaseModel):
         ..., description="En cuántas jornadas puede jugar cada jugador."
     )
     overall_standing: OverallStanding = Field(..., description="ACCUMULATED o BEST_CARD.")
+    category_count: int | None = Field(
+        None,
+        description=(
+            "Categorías iguales pedidas; null si los límites son a mano. Con él, "
+            "`category_limits` está vacía hasta el cierre, que la calcula."
+        ),
+    )
 
 
 class CreateCompetitionRequestDTO(BaseModel):

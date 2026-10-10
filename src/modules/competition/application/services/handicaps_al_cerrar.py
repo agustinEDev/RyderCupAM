@@ -6,6 +6,9 @@ de datos tras el cierre de inscripción»). En un Stableford o un Medal, al cerr
 se guarda en cada inscripción el hándicap que cuenta (el personalizado, si no el
 del perfil). Es el de todo el torneo: de él sale su categoría, y ya no cambia.
 
+Con categorías iguales (10 oct 2026), los límites salen aquí mismo, de los
+hándicaps que se fijan: el reparto y lo fijado no pueden discrepar.
+
 Para inscribirse ya hace falta hándicap, así que aquí no debería llegar nadie
 sin él. Si aun así falta alguno, no se cierra y se dice quién: la misma lista que
 «jugadores sin barras».
@@ -80,7 +83,9 @@ class HandicapsAlCerrar:
                     for u in sin
                 ]
             )
-        await self._congelar(competition.stroke_play, inscripciones, handicaps)
+        # Las categorías iguales salen ahora, de estos mismos hándicaps (10 oct 2026)
+        ajustes = competition.repartir_categorias(handicaps.values())
+        await self._congelar(ajustes, inscripciones, handicaps)
 
     async def corregir(self, competition: Competition, user_id: UserId, handicap: Decimal) -> None:
         """

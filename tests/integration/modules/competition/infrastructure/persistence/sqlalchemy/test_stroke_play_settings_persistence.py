@@ -101,3 +101,45 @@ async def test_un_cambio_de_ajustes_queda_guardado(db_session, creator_id):  # n
     leida = await _leida(db_session, competicion.id)
 
     assert leida.stroke_play.category_limits == (Decimal("18.0"),)
+
+
+async def test_las_categorias_iguales_se_guardan_con_su_contador(db_session, creator_id):  # noqa: F811
+    competicion = _competicion(
+        creator_id, tournament_type=TournamentType.STABLEFORD, category_count=3
+    )
+    await SQLAlchemyCompetitionRepository(db_session).add(competicion)
+    await db_session.commit()
+
+    leida = await _leida(db_session, competicion.id)
+
+    assert leida.stroke_play.category_count == 3
+    assert leida.stroke_play.category_limits == ()
+
+
+async def test_los_limites_repartidos_al_cerrar_se_guardan(db_session, creator_id):  # noqa: F811
+    competicion = _competicion(
+        creator_id, tournament_type=TournamentType.STABLEFORD, category_count=3
+    )
+    repo = SQLAlchemyCompetitionRepository(db_session)
+    await repo.add(competicion)
+    await db_session.commit()
+    competicion.repartir_categorias([Decimal(n) for n in range(1, 31)])
+    await repo.update(competicion)
+    await db_session.commit()
+
+    leida = await _leida(db_session, competicion.id)
+
+    assert leida.stroke_play.category_limits == (Decimal("10.0"), Decimal("20.0"))
+    assert leida.stroke_play.category_count == 3
+
+
+async def test_con_limites_a_mano_el_contador_se_lee_vacio(db_session, creator_id):  # noqa: F811
+    competicion = _competicion(
+        creator_id, tournament_type=TournamentType.MEDAL, category_limits=[Decimal("12.0")]
+    )
+    await SQLAlchemyCompetitionRepository(db_session).add(competicion)
+    await db_session.commit()
+
+    leida = await _leida(db_session, competicion.id)
+
+    assert leida.stroke_play.category_count is None

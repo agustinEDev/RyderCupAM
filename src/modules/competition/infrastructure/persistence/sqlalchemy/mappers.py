@@ -895,6 +895,8 @@ competitions_table = Table(
     Column("stroke_category_limits", ARRAY(Numeric(precision=4, scale=1)), nullable=True),
     Column("stroke_max_matchdays_per_player", Integer, nullable=True),
     Column("stroke_overall_standing", String(20), nullable=True),
+    # Categorías iguales pedidas (10 oct 2026); vacía, límites a mano
+    Column("stroke_category_count", Integer, nullable=True),
     # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
     Column(
         "team_a_captain_id",
@@ -1514,11 +1516,13 @@ def start_competition_mappers():
                     competitions_table.c.stroke_max_matchdays_per_player
                 ),
                 "_sp_overall_standing": competitions_table.c.stroke_overall_standing,
+                "_sp_category_count": competitions_table.c.stroke_category_count,
                 "_stroke_play": composite(
                     StrokePlaySetup.from_columns,
                     "_sp_category_limits",
                     "_sp_max_matchdays_per_player",
                     "_sp_overall_standing",
+                    "_sp_category_count",
                 ),
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,

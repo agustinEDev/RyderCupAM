@@ -85,10 +85,16 @@ class _Escenario:
         self.creador = UserId(uuid4())
         self.usuarios.handicaps[self.creador] = 10.0
 
-    async def torneo(self, tipo="STABLEFORD", limites=("12.0", "26.0")) -> CompetitionId:
+    async def torneo(
+        self, tipo="STABLEFORD", limites=("12.0", "26.0"), contador=None
+    ) -> CompetitionId:
         extra = {"tournament_type": tipo}
         if tipo != "RYDER_CUP":
-            extra["stroke_play"] = {"category_limits": [Decimal(v) for v in limites]}
+            extra["stroke_play"] = (
+                {"category_count": contador}
+                if contador
+                else {"category_limits": [Decimal(v) for v in limites]}
+            )
         respuesta = await CreateCompetitionUseCase(
             self.uow, LocationBuilder(self.uow.countries), USUARIOS_CON_GENERO
         ).execute(
@@ -371,3 +377,98 @@ class TestLoQueEncontroCodeReviewEnLaPR2:
                 HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"),
                 e.creador,
             )
+
+
+class TestCategoriasIgualesAlCerrar:
+    """N categorías iguales: los límites salen al cerrar (decidido el 10 oct 2026)."""
+
+    async def _doce(self, e, torneo):
+        """Con el creador (10,0), doce: 1-5, 10 y 20-25."""
+        bajos = [await e.jugador(torneo, float(h)) for h in range(1, 6)]
+        altos = [await e.jugador(torneo, float(h)) for h in range(20, 26)]
+        return bajos, altos
+
+    async def _limites(self, e, torneo):
+        return (await e.uow.competitions.find_by_id(torneo)).stroke_play.category_limits
+
+    async def test_al_cerrar_se_reparten_y_se_fija_la_categoria(self, e):
+        torneo = await e.torneo(contador=2)
+        bajos, altos = await self._doce(e, torneo)
+
+        await e.cerrar(torneo)
+
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+        inscripciones = await e.inscripciones(torneo)
+        assert {inscripciones[u].fixed_category for u in [*bajos, e.creador]} == {1}
+        assert {inscripciones[u].fixed_category for u in altos} == {2}
+
+    async def test_reabrir_y_volver_a_cerrar_reparte_con_los_de_ahora(self, e):
+        torneo = await e.torneo(contador=2)
+        await self._doce(e, torneo)
+        await e.cerrar(torneo)
+        async with e.uow:
+            competicion = await e.uow.competitions.find_by_id(torneo)
+            competicion.reopen_enrollments()
+            await e.uow.competitions.update(competicion)
+        assert await self._limites(e, torneo) == ()
+        for _ in range(12):
+            await e.jugador(torneo, 40.0)
+
+        await e.cerrar(torneo)
+
+        # 24: el 12.º es el 25,0
+        assert await self._limites(e, torneo) == (Decimal("25.0"),)
+
+    async def test_volver_a_cerrada_desde_en_juego_no_reparte(self, e):
+        torneo = await e.torneo(contador=2)
+        await self._doce(e, torneo)
+        await e.cerrar(torneo)
+        await e.iniciar(torneo)
+        for _ in range(12):
+            await e.jugador(torneo, 40.0)
+
+        await e.cerrar(torneo)
+
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+
+    async def test_la_rfeg_tras_el_cierre_no_mueve_los_limites_y_recoloca(self, e):
+        from src.modules.competition.application.services.handicaps_al_cerrar import (
+            HandicapsAlCerrar,
+        )
+
+        torneo = await e.torneo(contador=2)
+        bajos, _ = await self._doce(e, torneo)
+        # Uno más abajo: al subir uno, la 1.ª se queda con seis y no se junta
+        await e.jugador(torneo, 6.0)
+        await e.cerrar(torneo)
+        altos_antes = 6
+
+        async with e.uow:
+            competicion = await e.uow.competitions.find_by_id(torneo)
+            await HandicapsAlCerrar(e.uow, e.usuarios).corregir(
+                competicion, bajos[0], Decimal("30.0")
+            )
+
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+        inscripciones = await e.inscripciones(torneo)
+        assert inscripciones[bajos[0]].fixed_category == 2
+        assert sum(1 for i in inscripciones.values() if i.fixed_category == 2) == altos_antes + 1
+
+    async def test_y_luego_la_regla_de_los_seis(self, e):
+        # Cuatro con el creador, en 2: dos y dos, que se juntan en una
+        torneo = await e.torneo(contador=2)
+        for h in (4.0, 20.0, 22.0):
+            await e.jugador(torneo, h)
+
+        await e.cerrar(torneo)
+
+        assert await self._limites(e, torneo) == (Decimal("10.0"),)
+        assert {i.fixed_category for i in (await e.inscripciones(torneo)).values()} == {1}
+
+    async def test_a_mano_se_cierra_como_siempre(self, e):
+        torneo = await e.torneo(limites=("12.0",))
+        await self._doce(e, torneo)
+
+        await e.cerrar(torneo)
+
+        assert await self._limites(e, torneo) == (Decimal("12.0"),)

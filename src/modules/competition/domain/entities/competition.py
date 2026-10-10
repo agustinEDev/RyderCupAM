@@ -5,7 +5,7 @@ Esta es el agregado raíz del módulo competition.
 Gestiona el ciclo de vida completo del torneo y su configuración.
 """
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from datetime import datetime
 from decimal import Decimal
 
@@ -173,6 +173,7 @@ class Competition:
         category_limits: Sequence[Decimal] | None = None,
         max_matchdays_per_player: int | None = None,
         overall_standing: OverallStanding | None = None,
+        category_count: int | None = None,
     ):
         # Validaciones de invariantes. Equipos, modo de montaje, reparto y
         # capitanes son de la Ryder Cup: viven en su pieza, y un torneo de otro
@@ -183,7 +184,11 @@ class Competition:
         )
         # Y lo que es solo del stroke play, en la suya (6 oct 2026)
         self._stroke_play: StrokePlaySetup | None = self._stroke_play_for(
-            tournament_type, category_limits, max_matchdays_per_player, overall_standing
+            tournament_type,
+            category_limits,
+            max_matchdays_per_player,
+            overall_standing,
+            category_count,
         )
         if self._stroke_play is not None:
             self._stroke_play.check_fits_in(self._days_of(dates))
@@ -231,6 +236,7 @@ class Competition:
         category_limits: Sequence[Decimal] | None = None,
         max_matchdays_per_player: int | None = None,
         overall_standing: OverallStanding | None = None,
+        category_count: int | None = None,
     ) -> "Competition":
         """
         Factory method para crear una nueva competición.
@@ -256,6 +262,7 @@ class Competition:
             category_limits=category_limits,
             max_matchdays_per_player=max_matchdays_per_player,
             overall_standing=overall_standing,
+            category_count=category_count,
             status=CompetitionStatus.DRAFT,
         )
 
@@ -302,6 +309,7 @@ class Competition:
         category_limits: Sequence[Decimal] | None,
         max_matchdays_per_player: int | None,
         overall_standing: OverallStanding | None,
+        category_count: int | None = None,
     ) -> StrokePlaySetup | None:
         """
         La pieza del stroke play, o None si el torneo es una Ryder.
@@ -311,10 +319,11 @@ class Competition:
         """
         if not tournament_type.has_teams:
             return StrokePlaySetup.create(
-                category_limits, max_matchdays_per_player, overall_standing
+                category_limits, max_matchdays_per_player, overall_standing, category_count
             )
         if any(
-            v is not None for v in (category_limits, max_matchdays_per_player, overall_standing)
+            v is not None
+            for v in (category_limits, max_matchdays_per_player, overall_standing, category_count)
         ):
             raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
         return None
@@ -439,6 +448,7 @@ class Competition:
         category_limits: Sequence[Decimal] | None = None,
         max_matchdays_per_player: int | None = None,
         overall_standing: OverallStanding | None = None,
+        category_count: int | None = None,
     ) -> StrokePlaySetup:
         """
         Cambia los ajustes del stroke play; None es «no lo toques».
@@ -464,12 +474,28 @@ class Competition:
                 "Los ajustes del stroke play se cambian hasta que se cierran las inscripciones"
             )
         nuevos = self._stroke_play.with_changes(
-            category_limits, max_matchdays_per_player, overall_standing
+            category_limits, max_matchdays_per_player, overall_standing, category_count
         )
         nuevos.check_fits_in(self._days_of(self._dates))
         self._stroke_play = nuevos
         self._updated_at = datetime.now()
         return nuevos
+
+    def repartir_categorias(self, handicaps: Iterable[Decimal | None]) -> StrokePlaySetup:
+        """
+        Las categorías iguales, con los hándicaps fijados al cerrar (10 oct 2026).
+
+        Con límites a mano no cambia nada. Lo llama el cierre de inscripciones,
+        que es quien tiene los hándicaps.
+
+        Raises:
+            TournamentTypeError: Si es una Ryder
+        """
+        if self._stroke_play is None:
+            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
+        self._stroke_play = self._stroke_play.repartir(handicaps)
+        self._updated_at = datetime.now()
+        return self._stroke_play
 
     @property
     def play_mode(self) -> PlayMode:
@@ -983,6 +1009,10 @@ class Competition:
             )
 
         self._status = CompetitionStatus.ACTIVE
+        # Las categorías iguales se reparten otra vez al volver a cerrar: los
+        # límites del cierre anterior ya no dicen nada (10 oct 2026)
+        if self._stroke_play is not None:
+            self._stroke_play = self._stroke_play.sin_reparto()
         self._updated_at = datetime.now()
 
         event = CompetitionEnrollmentsReopenedEvent(

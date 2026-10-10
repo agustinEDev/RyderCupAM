@@ -241,3 +241,63 @@ class TestLaPeticion:
                 tipo=TournamentType.RYDER_CUP,
                 stroke_play=StrokePlaySettingsDTO(),
             )
+
+
+class TestCategoriasIguales:
+    """Pedir N categorías iguales en vez de los límites (10 oct 2026)."""
+
+    async def test_al_crear_se_guarda_el_contador_sin_limites(self):
+        respuesta = await _crear(
+            InMemoryUnitOfWork(), stroke_play=StrokePlaySettingsDTO(category_count=3)
+        )
+
+        assert respuesta.stroke_play.category_count == 3
+        assert respuesta.stroke_play.category_limits == []
+
+    async def test_a_mano_el_contador_sale_vacio(self):
+        respuesta = await _crear(
+            InMemoryUnitOfWork(),
+            stroke_play=StrokePlaySettingsDTO(category_limits=[Decimal("12.0")]),
+        )
+
+        assert respuesta.stroke_play.category_count is None
+
+    async def test_al_cambiar_a_iguales_se_borran_los_limites(self):
+        uow = InMemoryUnitOfWork()
+        competicion = CompetitionId(
+            (
+                await _crear(
+                    uow, stroke_play=StrokePlaySettingsDTO(category_limits=[Decimal("12.0")])
+                )
+            ).id
+        )
+
+        respuesta = await UpdateStrokePlaySettingsUseCase(uow).execute(
+            competicion.value, StrokePlaySettingsDTO(category_count=4), CREADOR
+        )
+
+        assert respuesta.category_count == 4
+        assert respuesta.category_limits == []
+        guardada = await uow.competitions.find_by_id(competicion)
+        assert guardada.stroke_play.category_count == 4
+
+    async def test_los_dos_a_la_vez_se_rechazan(self):
+        with pytest.raises(StrokePlaySettingsError, match="a la vez"):
+            await _crear(
+                InMemoryUnitOfWork(),
+                stroke_play=StrokePlaySettingsDTO(
+                    category_limits=[Decimal("12.0")], category_count=3
+                ),
+            )
+
+    async def test_fuera_de_rango_lo_dice_el_dominio(self):
+        with pytest.raises(StrokePlaySettingsError, match="entre 2 y 5"):
+            await _crear(InMemoryUnitOfWork(), stroke_play=StrokePlaySettingsDTO(category_count=6))
+
+    async def test_a_una_ryder_con_contador_se_rechaza(self):
+        with pytest.raises(TournamentTypeError):
+            await _crear(
+                InMemoryUnitOfWork(),
+                tipo=TournamentType.RYDER_CUP,
+                stroke_play=StrokePlaySettingsDTO(category_count=3),
+            )
