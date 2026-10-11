@@ -142,5 +142,6 @@ def _hoyo(foto: JugadorDePartida, hoyo: int, golpe: GolpeDePartida | None) -> Te
         own_submitted=golpe.propio_enviado if golpe else False,
         marker_score=golpe.del_marcador if golpe else None,
         marker_submitted=golpe.marcador_enviado if golpe else False,
+        marker_by=golpe.marcador_por.value if golpe and golpe.marcador_por else None,
         status=golpe.estado.value if golpe else "PENDING",
     )

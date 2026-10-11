@@ -33,6 +33,7 @@ from src.modules.competition.domain.services.plazo_de_partidas import (
 )
 from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -123,13 +124,14 @@ async def vista_de_la_franja(
 
 def partida_dto(partida: Partida, hoja: HojaDeSalidas, nombres: dict[UserId, str]) -> TeeGroupDTO:
     """Una partida para la pantalla: su hora sale de la hoja, por su número."""
+    tarjetas = partida.estados_de_tarjeta
     return TeeGroupDTO(
         id=partida.id.value,
         number=partida.numero,
         tee_time=hoja.hora_de(partida.numero).strftime("%H:%M"),
         status=partida.estado.value,
         incomplete=partida.incompleta,
-        players=[_jugador(j, partida, nombres) for j in partida.jugadores],
+        players=[_jugador(j, partida, nombres, tarjetas) for j in partida.jugadores],
     )
 
 
@@ -143,7 +145,9 @@ async def _editable(competicion, franja, partidas, zonas, ahora) -> bool:
     return True
 
 
-def _jugador(jugador, partida: Partida, nombres: dict[UserId, str]) -> TeeGroupPlayerDTO:
+def _jugador(
+    jugador, partida: Partida, nombres: dict[UserId, str], tarjetas: dict[UserId, EstadoDeTarjeta]
+) -> TeeGroupPlayerDTO:
     marca = partida.marcadores.get(jugador.user_id)
     return TeeGroupPlayerDTO(
         user_id=jugador.user_id.value,
@@ -155,5 +159,5 @@ def _jugador(jugador, partida: Partida, nombres: dict[UserId, str]) -> TeeGroupP
         strokes_by_hole=list(jugador.golpes_por_hoyo),
         marks_user_id=marca.value if marca else None,
         brought_in=jugador.user_id in partida.traidos,
-        card_status=partida.estados_de_tarjeta[jugador.user_id].value,
+        card_status=tarjetas[jugador.user_id].value,
     )

@@ -132,6 +132,13 @@ class TeeGroupHoleDTO(BaseModel):
     own_submitted: bool
     marker_score: int | None
     marker_submitted: bool
+    marker_by: UUID | None = Field(
+        None,
+        description=(
+            "Quién puso el lado del marcador: tras cambiar el círculo, puede no ser "
+            "quien marca ahora."
+        ),
+    )
     status: str = Field(..., description="PENDING, MATCH o MISMATCH.")
 
 

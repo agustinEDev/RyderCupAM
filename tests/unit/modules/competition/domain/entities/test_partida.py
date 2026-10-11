@@ -657,6 +657,27 @@ class TestElMarcadorQueSeVa:
 
         assert partida.estados_de_tarjeta[falta] == EstadoDeTarjeta.NO_PRESENTADO
 
+    def test_reopening_a_no_show_counts_the_withdrawn_too(self):
+        # 3 juegan + 1 retirado: reabrir al NP dejaría 5 tarjetas que no son NP (/code-review)
+        partida = _partida(4)
+        falta = partida.user_ids[0]
+        partida.no_presentado(falta)
+        partida.meter(_jugador(), 4)
+        partida.empezar()
+        partida.retirar(partida.user_ids[1])
+
+        with pytest.raises(PartidaLlenaError):
+            partida.reabrir_tarjeta(falta)
+
+    def test_reopening_a_no_show_in_a_group_of_three_with_three_playing(self):
+        partida = _partida(3)
+        falta = partida.user_ids[0]
+        partida.no_presentado(falta)
+        partida.meter(_jugador(), 3)
+
+        with pytest.raises(PartidaLlenaError):
+            partida.reabrir_tarjeta(falta, jugadores_por_partida=3)
+
     def test_reopening_a_no_show_with_room_gets_a_marker(self):
         partida = _partida(3)
         a, b, c = partida.user_ids

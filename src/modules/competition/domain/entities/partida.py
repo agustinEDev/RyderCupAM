@@ -188,7 +188,7 @@ class Partida:
         self._rehacer_el_circulo()
         self._acabar_si_no_queda_nadie()
 
-    def reabrir_tarjeta(self, user_id: UserId) -> None:
+    def reabrir_tarjeta(self, user_id: UserId, jugadores_por_partida: int = MAX_JUGADORES) -> None:
         """
         El organizador la vuelve a abrir para corregirla (P9). Un no presentado
         vuelve a ocupar sitio: solo si cabe y, sin salir, con marcador (12 oct
@@ -196,9 +196,10 @@ class Partida:
         """
         self._de_la_partida(user_id)
         era_no_presentado = self._tarjetas[user_id] == EstadoDeTarjeta.NO_PRESENTADO
-        if era_no_presentado and len(self.quedan) >= MAX_JUGADORES:
+        # Cuentan también los retirados: siguen ocupando su sitio (/code-review)
+        if era_no_presentado and self._que_ocupan_sitio() >= jugadores_por_partida:
             raise PartidaLlenaError(
-                f"Ya juegan {MAX_JUGADORES} en la partida: mueve antes a uno para reabrirla."
+                f"Ya son {jugadores_por_partida} en la partida: mueve antes a uno para reabrirla."
             )
         self._tarjetas[user_id] = EstadoDeTarjeta.JUGANDO
         if era_no_presentado and not self.empezada:
@@ -337,9 +338,13 @@ class Partida:
         if numero < 1:
             raise PartidaInvalidaError("Las partidas se numeran desde 1.")
 
+    def _que_ocupan_sitio(self) -> int:
+        """Todos menos los no presentados: los retirados jugaron y siguen dentro."""
+        return sum(e != EstadoDeTarjeta.NO_PRESENTADO for e in self._tarjetas.values())
+
     def _comprobar_que_caben(self) -> None:
         """Los no presentados siguen en la partida, pero no ocupan sitio (QA 2, 12 oct 2026)."""
-        if sum(e != EstadoDeTarjeta.NO_PRESENTADO for e in self._tarjetas.values()) > MAX_JUGADORES:
+        if self._que_ocupan_sitio() > MAX_JUGADORES:
             raise PartidaInvalidaError(
                 f"Como mucho juegan {MAX_JUGADORES} por partida; los no presentados, aparte."
             )

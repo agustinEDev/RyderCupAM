@@ -6,6 +6,7 @@ La partida para anotar y las tarjetas de los suyos (#251, PR 5; pestañas 1 y 3)
 | Recién generada                   | 18 hoyos vacíos, la hora de apertura, a quién marco |
 | La hora de apertura               | Con el desfase del campo, como en la Ryder           |
 | Tras anotar                       | Cada lado, su estado; totales solo de lo validado    |
+| Quién puso el lado del marcador   | `marker_by`; sin anotar, null (QA 2, 12 oct)         |
 | Una tarjeta entregada             | Su estado                                            |
 | Medal                             | Sin levantar bola                                    |
 | Una partida que no existe         | PartidaNotFoundError                                 |
@@ -98,6 +99,10 @@ async def test_after_scoring_only_the_validated_count():
     assert suyo.totals.gross == 5
     assert suyo.marked_by_user_id == a.value
     assert vista.status == "IN_PROGRESS"
+    # El número del lado del marcador lleva quién lo puso: tras cambiar el
+    # círculo, el nuevo marcador ve que no es suyo (2.ª pasada del QA)
+    assert suyo.holes[0].marker_by == a.value
+    assert suyo.holes[1].marker_by is None
 
 
 async def test_a_delivered_card():
