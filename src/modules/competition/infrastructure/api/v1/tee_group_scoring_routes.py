@@ -132,7 +132,7 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
     PartidaLlenaError: (
         status.HTTP_409_CONFLICT,
         "GROUP_FULL",
-        "Ya juegan 4 en la partida: mueve antes a uno para reabrir esta tarjeta.",
+        "La partida ya está completa: mueve antes a uno para reabrir esta tarjeta.",
     ),
     TieneMarcadorError: (
         status.HTTP_409_CONFLICT,

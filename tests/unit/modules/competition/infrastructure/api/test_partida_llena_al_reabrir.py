@@ -17,7 +17,10 @@ def test_a_full_group_is_a_conflict():
     respuesta = _respuesta(PartidaLlenaError("llena"))
 
     assert respuesta.status_code == 409
-    assert json.loads(respuesta.body)["error_code"] == "GROUP_FULL"
+    cuerpo = json.loads(respuesta.body)
+    assert cuerpo["error_code"] == "GROUP_FULL"
+    # Sin número: en una franja de 3 no son 4 (CodeRabbit en la #543)
+    assert not any(c.isdigit() for c in cuerpo["detail"])
 
 
 def test_moving_a_no_show_says_why():
