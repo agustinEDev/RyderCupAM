@@ -58,9 +58,12 @@ async def primera_salida_en_el_campo(franja: Round, zonas: ICompetitionTimezone)
     Raises:
         ZonaDesconocidaError: Si el campo no tiene zona horaria (D10)
     """
-    return (await primera_salida(franja, zonas)).astimezone(
-        zona_del_campo(await zonas.for_course(franja.golf_course_id))
-    )
+    # La zona, una vez y comprobada: si el campo la perdiera entre dos lecturas,
+    # `astimezone(None)` pondría la del servidor sin decir nada (CodeRabbit)
+    zona = zona_del_campo(await zonas.for_course(franja.golf_course_id))
+    if zona is None:
+        raise ZonaDesconocidaError("El campo de la franja no tiene zona horaria.")
+    return (await primera_salida(franja, zonas)).astimezone(zona)
 
 
 async def con_plaza_y_aprobados(uow: CompetitionUnitOfWorkInterface, franja: Round) -> list:
