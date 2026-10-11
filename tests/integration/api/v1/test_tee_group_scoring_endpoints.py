@@ -509,8 +509,8 @@ async def test_a_no_show_leaving_one_alone_brings_the_last_of_the_next_group(
     dia = date.fromisoformat(competicion["start_date"])
     hora, minuto = map(int, primera["tee_time"].split(":"))
     reloj = datetime(
-        dia.year, dia.month, dia.day, hora, minuto + 1, tzinfo=ZoneInfo("Europe/Madrid")
-    )
+        dia.year, dia.month, dia.day, hora, minuto, tzinfo=ZoneInfo("Europe/Madrid")
+    ) + timedelta(minutes=1)
     app.dependency_overrides[get_reloj_del_servidor] = lambda: lambda: reloj
     try:
         for jugador in primera["players"][:2]:

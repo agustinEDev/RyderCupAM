@@ -4,7 +4,7 @@ Una partida leída de sus filas (QA del 11 oct 2026).
 | Caso                                                    | Resultado                      |
 |---------------------------------------------------------|--------------------------------|
 | Guardada antes del 11 oct: un retirado sigue marcando   | Se rehace el círculo al leerla |
-| Guardada después                                        | Tal cual                       |
+| Guardada después, con un reabierto fuera del círculo    | Tal cual (rehecho, entraría)   |
 | Un jugador traído de otra partida                       | En `traidos`                   |
 """
 
@@ -58,8 +58,9 @@ def test_a_withdrawn_player_still_marking_is_rebuilt():
 
 
 def test_a_circle_saved_after_is_read_as_it_is():
+    # C reabierto: juega, fuera del círculo. Rehecho daría A→B→C→A
     partida = SQLAlchemyPartidaRepository._partida(
-        GRUPO, [_fila(A, B), _fila(B, A), _fila(C, None, tarjeta="RETIRADO")]
+        GRUPO, [_fila(A, B), _fila(B, A), _fila(C, None)]
     )
 
     assert partida.marcadores == {A: B, B: A}

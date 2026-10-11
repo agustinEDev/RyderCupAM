@@ -6,13 +6,17 @@ Decidido con Agustín el 9 oct 2026: al retirarse (D2) o al cambiarse de franja
 
 Una partida a la que le llegó su hora ya salió, aunque su estado no lo diga:
 hasta la PR 5 nadie la pasa a IN_PROGRESS (revisión de la PR 4).
+
+Pasada la primera salida de la franja, quien se queda solo en una partida sin
+salir (por una baja o un no presentado) recibe compañero de otra partida (QA del
+11 oct 2026); antes, lo arregla el organizador (D4).
 """
 
 from collections.abc import Sequence
 from datetime import datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
-from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.partida import MAX_JUGADORES, Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -76,3 +80,60 @@ async def sacar_de_sus_partidas(
         cambios = MovimientosDePartidas.sacar(de_la_franja, user_id, salidas)
         await uow.partidas.borrar(cambios.borrar)
         await uow.partidas.guardar(cambios.guardar)
+        for cambiada in cambios.guardar:
+            await que_no_se_quede_solo(uow, zonas, cambiada.id, ahora)
+
+
+async def que_no_se_quede_solo(
+    uow: CompetitionUnitOfWorkInterface,
+    zonas: ICompetitionTimezone | None,
+    partida_id: PartidaId,
+    ahora: datetime | None,
+) -> None:
+    """
+    Si en esa partida, sin salir, queda uno solo y la franja ya pasó su primera
+    salida, trae al último en salir que juega de la siguiente partida de 4 aún
+    sin salir; si no hay, de una de 3. Nunca de las de antes. Si no cabe, nadie.
+
+    Bloquea la partida y después las de detrás, por número: el mismo orden que
+    cerrar la franja.
+    """
+    partida = await uow.partidas.find_by_id_for_update(partida_id)
+    if (
+        partida is None
+        or partida.empezada
+        or len(partida.quedan) != 1
+        or len(partida.user_ids) >= MAX_JUGADORES
+    ):
+        return
+    franja = await uow.rounds.find_by_id(partida.round_id)
+    if franja is None or not await _paso_su_primera_salida(franja, zonas, ahora):
+        return
+    partidas = await uow.partidas.de_la_franja(partida.round_id)
+    salidas = await salidas_por_hora(franja, partidas, zonas, ahora)
+    detras = [p for p in partidas if p.numero > partida.numero and p.id not in salidas]
+    for tamano in (4, 3):
+        for candidata in detras:
+            # Bloqueada antes de mirarla: anotar o mover también la bloquean
+            origen = await uow.partidas.find_by_id_for_update(candidata.id)
+            if origen is None or origen.empezada or len(origen.quedan) != tamano:
+                continue
+            viene = origen.quedan[-1]
+            jugador = next(j for j in origen.jugadores if j.user_id == viene)
+            origen.quitar(viene)
+            partida.acompanar(jugador)
+            await uow.partidas.guardar([partida, origen])
+            return
+
+
+async def _paso_su_primera_salida(
+    franja: Round, zonas: ICompetitionTimezone | None, ahora: datetime | None
+) -> bool:
+    """Sin hoja, zona o reloj no se sabe: entonces no."""
+    hoja = franja.hoja_de_salidas
+    if hoja is None or zonas is None or ahora is None:
+        return False
+    zona = zona_del_campo(await zonas.for_course(franja.golf_course_id))
+    if zona is None:
+        return False
+    return ahora >= datetime.combine(franja.round_date, hoja.primera_salida, zona)

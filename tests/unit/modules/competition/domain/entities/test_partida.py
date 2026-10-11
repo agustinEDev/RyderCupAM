@@ -559,6 +559,23 @@ class TestElMarcadorQueSeVa:
         assert partida.estados_de_tarjeta[nuevo.user_id] == EstadoDeTarjeta.JUGANDO
         assert not partida.sin_marcador
 
+    def test_marked_by_someone_who_handed_in_the_organiser_may_validate(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        partida.entregar(a)
+        partida.retirar(c)
+
+        assert partida.sin_marcador == []
+        assert partida.sin_marcador_en_juego == [b]
+
+    def test_quedan_in_tee_order(self):
+        partida = self._empezada(4)
+        a, b, c, d = partida.user_ids
+        partida.retirar(b)
+        partida.entregar(d)
+
+        assert partida.quedan == [a, c, d]
+
     def test_who_was_brought_in_and_leaves_again_is_no_longer_brought_in(self):
         partida = self._sola(2)
         nuevo = _jugador()

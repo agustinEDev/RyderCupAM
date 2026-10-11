@@ -35,7 +35,9 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
-from src.modules.competition.application.services.partidas_del_jugador import salidas_por_hora
+from src.modules.competition.application.services.partidas_del_jugador import (
+    que_no_se_quede_solo,
+)
 from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     arrancar_la_competicion,
@@ -49,11 +51,7 @@ from src.modules.competition.domain.entities.golpe_de_partida import (
     ULTIMO_HOYO,
     GolpeDePartida,
 )
-from src.modules.competition.domain.entities.partida import (
-    MAX_JUGADORES,
-    Partida,
-    TarjetaCerradaError,
-)
+from src.modules.competition.domain.entities.partida import Partida, TarjetaCerradaError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -227,49 +225,13 @@ class MarcarNoPresentadoUseCase:
             partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
             comprobar_que_se_juega(competicion)
             await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            # La competición antes que las partidas, como la baja, que también
+            # rehace partidas sin salir: así no se cruzan (revisión)
+            await self._uow.competitions.find_by_id_for_update(competicion.id)
             bloqueada = await _bloqueada(self._uow, partida)
             bloqueada.no_presentado(_del_jugador(bloqueada, user_id))
-            origen = await self._quien_le_acompana(bloqueada, llegada)
-            await self._uow.partidas.guardar([bloqueada, *origen])
-
-    async def _quien_le_acompana(self, partida: Partida, llegada: datetime) -> list[Partida]:
-        """
-        Si se ha quedado uno solo sin salir, trae al último en salir de la
-        siguiente partida de 4 aún sin salir; si no hay, de una de 3. Devuelve
-        la partida de la que salió, para guardarla; sin nadie, ninguna.
-        """
-        solo = (
-            not partida.empezada
-            and not partida.marcadores
-            and len(partida.sin_marcador) == 1
-            and len(partida.user_ids) < MAX_JUGADORES
-        )
-        if not solo:
-            return []
-        franja = await self._uow.rounds.find_by_id(partida.round_id)
-        if franja is None:
-            return []
-        partidas = await self._uow.partidas.de_la_franja(partida.round_id)
-        salidas = await salidas_por_hora(franja, partidas, self._zonas, llegada)
-        detras = [p for p in partidas if p.numero > partida.numero and p.id not in salidas]
-        for tamano in (4, 3):
-            for candidata in detras:
-                # Bloqueada antes de mirarla: anotar o mover también la bloquean
-                origen = await self._uow.partidas.find_by_id_for_update(candidata.id)
-                if origen is None or origen.empezada or len(_juegan(origen)) != tamano:
-                    continue
-                viene = _juegan(origen)[-1]
-                jugador = next(j for j in origen.jugadores if j.user_id == viene)
-                origen.quitar(viene)
-                partida.acompanar(jugador)
-                return [origen]
-        return []
-
-
-def _juegan(partida: Partida) -> list[UserId]:
-    """Por orden de salida, quienes no se retiraron ni faltaron."""
-    tarjetas = partida.estados_de_tarjeta
-    return [u for u in partida.user_ids if not tarjetas[u].fuera_de_la_partida()]
+            await self._uow.partidas.guardar([bloqueada])
+            await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
 
 
 class ValidarLoAnotadoUseCase:
@@ -294,7 +256,7 @@ class ValidarLoAnotadoUseCase:
             PartidaNoAnotableError: Con la competición sin jugarse
             ScoringNotOpenYetError: Antes de abrir la franja
             TarjetaCerradaError: Su tarjeta ya está cerrada
-            TieneMarcadorError: Alguien le marca
+            TieneMarcadorError: Alguien en juego le marca
         """
         llegada = self._reloj()
         async with self._uow:
@@ -305,7 +267,7 @@ class ValidarLoAnotadoUseCase:
             jugador = _del_jugador(bloqueada, user_id)
             if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
                 raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
-            if jugador not in bloqueada.sin_marcador:
+            if jugador not in bloqueada.sin_marcador_en_juego:
                 raise TieneMarcadorError("Ese jugador tiene marcador.")
             acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD
             for golpe in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id):

@@ -17,6 +17,12 @@ Si un marcador se retira o no se presenta (QA del 11 oct 2026, decidido con Agus
 | El nuevo marcador anota un hoyo pendiente del que se fue | Validado                                      |
 | Validar lo anotado, solo                                 | Valida los hoyos con su golpe; el ✗ no        |
 | Validar lo anotado con marcador                          | TieneMarcadorError                            |
+| Validar lo anotado si su marcador ya entregó             | Valida                                        |
+| Validar lo anotado con la competición sin jugarse        | PartidaNoAnotableError                        |
+| El último que juega de la de 4, no el último de la fila  | Se salta a un no presentado                   |
+| Baja que deja a uno solo, ya pasada la 1.ª salida        | Le acompaña el último de la siguiente de 4    |
+| Baja que deja a uno solo antes de la 1.ª salida          | Nadie: lo arregla el organizador (D4)         |
+| El no presentado bloquea la competición antes            | Como la baja: no se cruzan                    |
 | Validar lo anotado siendo jugador                        | NotCompetitionCreatorError                    |
 | Validar lo anotado con la tarjeta cerrada                | TarjetaCerradaError                           |
 | Validar lo anotado antes de la 1.ª salida                | ScoringNotOpenYetError                        |
@@ -30,6 +36,12 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotYourMarkedPlayerError,
     ScoringNotOpenYetError,
+)
+from src.modules.competition.application.services.partidas_del_jugador import (
+    sacar_de_sus_partidas,
+)
+from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
+    PartidaNoAnotableError,
 )
 from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
     MarcarNoPresentadoUseCase,
@@ -312,3 +324,114 @@ async def test_validating_before_the_first_tee_time():
         await _validar(escenario).execute(
             partida.id.value, partida.user_ids[0].value, escenario.creador, False
         )
+
+
+async def test_validating_someone_whose_marker_handed_in():
+    escenario, partida = await _partida(3)
+    a, b, c = partida.user_ids
+    await _anotar(escenario, partida, b, own_score=4)
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida.entregar(a)
+    leida.retirar(c)
+    await escenario.uow.partidas.guardar([leida])
+
+    await _validar(escenario).execute(partida.id.value, b.value, escenario.creador, False)
+
+    assert (await _golpes(escenario, partida))[(b, 1)].validado
+
+
+async def test_validating_with_the_competition_not_in_play():
+    from src.modules.competition.domain.value_objects.competition_status import (
+        CompetitionStatus,
+    )
+
+    escenario, partida = await _partida(2)
+    escenario.competicion._status = CompetitionStatus.COMPLETED
+    async with escenario.uow:
+        await escenario.uow.competitions.update(escenario.competicion)
+
+    with pytest.raises(PartidaNoAnotableError):
+        await _validar(escenario).execute(
+            partida.id.value, partida.user_ids[0].value, escenario.creador, False
+        )
+
+
+async def test_the_last_one_playing_comes_skipping_a_no_show_at_the_end():
+    escenario, (sola, cuatro, _) = await _franja(2, 4, 3)
+    ultimo = cuatro.user_ids[-1]
+    await _no_presentado(escenario, cuatro, ultimo)
+    await _no_presentado(escenario, sola, sola.user_ids[0])
+
+    una, dos, _ = await _leidas(escenario)
+    # La 2 tiene 3 que juegan, como la 3: viene el último que juega de la 2
+    assert una.traidos == {cuatro.user_ids[2]}
+    assert ultimo in dos.user_ids
+
+
+async def _baja(escenario, jugador):
+    async with escenario.uow:
+        await sacar_de_sus_partidas(
+            escenario.uow,
+            escenario.competicion.id,
+            jugador,
+            zonas=escenario.zonas,
+            ahora=escenario.ahora,
+        )
+
+
+async def test_a_withdrawal_after_the_first_tee_time_also_brings_company():
+    # A las 9:05 la 1 ya salió; la 2 (9:10) y la 3 (9:20), no
+    escenario, (_, sola, cuatro) = await _franja(4, 2, 4)
+
+    await _baja(escenario, sola.user_ids[0])
+
+    _, dos, tres = await _leidas(escenario)
+    assert dos.user_ids == [sola.user_ids[1], cuatro.user_ids[-1]]
+    assert dos.traidos == {cuatro.user_ids[-1]}
+    assert len(tres.user_ids) == 3
+
+
+async def test_a_withdrawal_right_at_the_first_tee_time_brings_company():
+    escenario, (_, sola, cuatro) = await _franja(4, 2, 4)
+    escenario.ahora = datetime(2030, 10, 11, 7, 0, tzinfo=UTC)
+
+    await _baja(escenario, sola.user_ids[0])
+
+    _, dos, _ = await _leidas(escenario)
+    assert dos.traidos == {cuatro.user_ids[-1]}
+
+
+async def test_a_withdrawal_before_the_first_tee_time_is_for_the_organiser():
+    escenario, (_, sola, _) = await _franja(4, 2, 4)
+    escenario.ahora = datetime(2030, 10, 11, 6, 55, tzinfo=UTC)
+
+    await _baja(escenario, sola.user_ids[0])
+
+    _, dos, tres = await _leidas(escenario)
+    assert dos.user_ids == [sola.user_ids[1]]
+    assert len(tres.user_ids) == 4
+
+
+async def test_the_no_show_locks_the_competition_first(monkeypatch):
+    """La baja bloquea la competición: el no presentado también, y antes que las partidas."""
+    escenario, (sola, _) = await _franja(2, 4)
+    orden = []
+    competiciones = type(escenario.uow.competitions)
+    partidas = type(escenario.uow.partidas)
+    bloquear_competicion = competiciones.find_by_id_for_update
+    bloquear_partida = partidas.find_by_id_for_update
+
+    async def competicion(self, *args):
+        orden.append("competicion")
+        return await bloquear_competicion(self, *args)
+
+    async def partida(self, *args):
+        orden.append("partida")
+        return await bloquear_partida(self, *args)
+
+    monkeypatch.setattr(competiciones, "find_by_id_for_update", competicion)
+    monkeypatch.setattr(partidas, "find_by_id_for_update", partida)
+
+    await _no_presentado(escenario, sola, sola.user_ids[0])
+
+    assert orden[0] == "competicion"

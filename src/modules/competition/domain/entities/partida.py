@@ -74,7 +74,7 @@ class Partida:
             j.user_id: (estados_de_tarjeta or {}).get(j.user_id, EstadoDeTarjeta.JUGANDO)
             for j in jugadores
         }
-        MarcadoresEnCadena.validar_leidos(self._quedan(), marcadores)
+        MarcadoresEnCadena.validar_leidos(self.quedan, marcadores)
         self._traidos = {u for u in traidos if u in self._tarjetas}
 
     @classmethod
@@ -126,7 +126,7 @@ class Partida:
         en la partida, así que tiene que caber.
         """
         self._sin_empezar()
-        if len(self._quedan()) != 1:
+        if len(self.quedan) != 1:
             raise PartidaInvalidaError("Solo se acompaña a quien se ha quedado solo.")
         if jugador.user_id in self.user_ids:
             raise PartidaInvalidaError("Ese jugador ya está en la partida.")
@@ -140,7 +140,7 @@ class Partida:
     def cambiar_marcadores(self, marcadores: Mapping[UserId, UserId]) -> None:
         """Otra asignación de marcadores, si es válida (D12)."""
         self._sin_empezar()
-        MarcadoresEnCadena.validar(self._quedan(), marcadores)
+        MarcadoresEnCadena.validar(self.quedan, marcadores)
         self._marcadores = dict(marcadores)
 
     def renumerar(self, numero: int) -> None:
@@ -221,12 +221,8 @@ class Partida:
             self._rehacer_el_circulo()
         self._acabar_si_no_queda_nadie()
 
-    def _quedan(self) -> list[UserId]:
-        """Por orden de salida, los que no se retiraron ni faltaron: marcan y son marcados."""
-        return [u for u in self.user_ids if not self._tarjetas[u].fuera_de_la_partida()]
-
     def _rehacer_el_circulo(self) -> None:
-        self._marcadores = MarcadoresEnCadena.de(self._quedan())
+        self._marcadores = MarcadoresEnCadena.de(self.quedan)
 
     def _acabar_si_no_queda_nadie(self) -> None:
         if self.empezada and EstadoDeTarjeta.JUGANDO not in self._tarjetas.values():
@@ -241,6 +237,25 @@ class Partida:
     @property
     def estados_de_tarjeta(self) -> dict[UserId, EstadoDeTarjeta]:
         return dict(self._tarjetas)
+
+    @property
+    def quedan(self) -> list[UserId]:
+        """Por orden de salida, los que no se retiraron ni faltaron: marcan y son marcados."""
+        return [u for u in self.user_ids if not self._tarjetas[u].fuera_de_la_partida()]
+
+    @property
+    def sin_marcador_en_juego(self) -> list[UserId]:
+        """
+        Quienes siguen jugando sin nadie en juego que les marque: también si su
+        marcador ya entregó y puede haberse ido. Lo puede validar el organizador.
+        """
+        marcado_por = {marcado: marcador for marcador, marcado in self._marcadores.items()}
+        return [
+            u
+            for u in self.user_ids
+            if self._tarjetas[u] == EstadoDeTarjeta.JUGANDO
+            and (u not in marcado_por or self._tarjetas[marcado_por[u]] != EstadoDeTarjeta.JUGANDO)
+        ]
 
     @property
     def traidos(self) -> set[UserId]:
