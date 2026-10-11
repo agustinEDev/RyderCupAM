@@ -13,19 +13,22 @@ mismo mensaje para crear, cambiar y borrar.
 """
 
 from collections.abc import Iterable
-from datetime import date
+from datetime import UTC, date, datetime
 
 from src.modules.competition.application.dto.round_match_dto import TeeSheetDTO
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
+    FranjaEnElPasadoError,
     FranjaInvalidaError,
 )
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.franjas_de_la_jornada import FranjasDeLaJornada
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
@@ -178,4 +181,38 @@ async def comprobar_que_esta_vacia(uow: CompetitionUnitOfWorkInterface, franja: 
     if dentro:
         raise FranjaInvalidaError(
             f"La franja tiene {dentro} jugadores con plaza: muévelos o quítalos antes de borrarla."
+        )
+
+
+async def primera_salida_de(
+    hoja: HojaDeSalidas, dia: date, campo: GolfCourseId, zonas: ICompetitionTimezone | None
+) -> datetime | None:
+    """El instante de su primera salida, en la hora del campo; sin zona, no se sabe."""
+    if zonas is None:
+        return None
+    zona = zona_del_campo(await zonas.for_course(campo))
+    if zona is None:
+        return None
+    sale = datetime.combine(dia, hoja.primera_salida, zona)
+    # El día del cambio de hora de primavera hay horas que no existen (02:30 en
+    # Madrid): ida y vuelta por UTC salen otras, y esa franja no podría salir
+    # (CodeRabbit en la #538)
+    if sale.astimezone(UTC).astimezone(zona).replace(tzinfo=None) != sale.replace(tzinfo=None):
+        raise FranjaInvalidaError(
+            "Esa primera salida no existe ese día en el campo (cambio de hora): elige otra."
+        )
+    return sale
+
+
+def comprobar_que_no_ha_pasado(sale: datetime | None, ahora: datetime) -> None:
+    """
+    Una franja que ya salió no admite partidas: sus jugadores se quedarían
+    atrapados y fuera de la clasificación (QA del 11 oct 2026).
+
+    Raises:
+        FranjaEnElPasadoError: Si su primera salida ya llegó
+    """
+    if sale is not None and ahora >= sale:
+        raise FranjaEnElPasadoError(
+            "La primera salida de la franja ya ha pasado: elige una hora futura."
         )

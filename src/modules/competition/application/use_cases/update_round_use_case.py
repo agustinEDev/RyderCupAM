@@ -22,9 +22,11 @@ from src.modules.competition.application.services.esperas_de_la_competicion impo
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
     comprobar_que_nadie_pierde_su_sitio,
+    comprobar_que_no_ha_pasado,
     comprobar_solape,
     comprobar_tipo,
     hoja_de,
+    primera_salida_de,
 )
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
@@ -172,6 +174,10 @@ class UpdateRoundUseCase:
             # 6b. Una franja solo cambia su hoja (no tiene formato), y no puede
             #     acabar solapada con otra de su jornada (#251)
             hoja = self._comprobar_franja(request, competition, round_entity, del_dia)
+            # Si su primera salida cambia, que no sea a una ya pasada; si no
+            # cambia, una franja ya empezada se sigue tocando como antes (QA del
+            # 11 oct 2026)
+            await self._que_no_salga_en_el_pasado(request, round_entity, hoja)
             # Y que nadie de dentro pierda su sitio (#251)
             await comprobar_que_nadie_pierde_su_sitio(
                 self._uow, round_entity, hoja, request.round_date
@@ -265,6 +271,32 @@ class UpdateRoundUseCase:
                 "El campo nuevo no tiene zona horaria: una franja con partidas la necesita."
             )
         await recalcular_partidas(self._uow, self._jugadores, competition, franja, partidas)
+
+    async def _que_no_salga_en_el_pasado(
+        self, request: UpdateRoundRequestDTO, franja: Round, hoja: HojaDeSalidas | None
+    ) -> None:
+        """
+        Raises:
+            FranjaEnElPasadoError: Si su primera salida pasa a una que ya llegó
+        """
+        if franja.hoja_de_salidas is None:
+            return
+        antes = await primera_salida_de(
+            franja.hoja_de_salidas, franja.round_date, franja.golf_course_id, self._zonas
+        )
+        campo = (
+            GolfCourseId(request.golf_course_id)
+            if request.golf_course_id
+            else franja.golf_course_id
+        )
+        nueva = await primera_salida_de(
+            hoja or franja.hoja_de_salidas,
+            request.round_date or franja.round_date,
+            campo,
+            self._zonas,
+        )
+        if nueva != antes:
+            comprobar_que_no_ha_pasado(nueva, self._reloj())
 
     @staticmethod
     def _comprobar_franja(

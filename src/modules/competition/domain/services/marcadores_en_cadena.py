@@ -57,3 +57,24 @@ class MarcadoresEnCadena:
             raise MarcadoresInvalidosError("Cada jugador de la partida tiene un solo marcador.")
         if any(marcador == marcado for marcador, marcado in marcadores.items()):
             raise MarcadoresInvalidosError("Nadie se marca a sí mismo.")
+
+    @staticmethod
+    def validar_leidos(jugadores: Sequence[UserId], marcadores: Mapping[UserId, UserId]) -> None:
+        """
+        Lo guardado de una partida en juego: el círculo puede dejar fuera a
+        quien se fue o a una tarjeta reabierta (QA del 11 oct 2026), pero sigue
+        siendo un círculo entre jugadores de la partida.
+
+        Raises:
+            MarcadoresInvalidosError: Si no es una biyección sin puntos fijos
+                sobre algunos de los jugadores de la partida
+        """
+        if not marcadores:
+            return
+        en_el_circulo = set(marcadores)
+        if not en_el_circulo <= set(jugadores) or set(marcadores.values()) != en_el_circulo:
+            raise MarcadoresInvalidosError(
+                "Los marcadores son un círculo entre jugadores de la partida."
+            )
+        if any(marcador == marcado for marcador, marcado in marcadores.items()):
+            raise MarcadoresInvalidosError("Nadie se marca a sí mismo.")

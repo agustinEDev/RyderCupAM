@@ -18,3 +18,7 @@ class EstadoDeTarjeta(StrEnum):
 
     def __str__(self) -> str:
         return self.value
+
+    def fuera_de_la_partida(self) -> bool:
+        """Se retiró o no vino: ni marca ni le marcan (QA del 11 oct 2026)."""
+        return self in (EstadoDeTarjeta.RETIRADO, EstadoDeTarjeta.NO_PRESENTADO)

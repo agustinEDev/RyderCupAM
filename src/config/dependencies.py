@@ -158,6 +158,7 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
+    ValidarLoAnotadoUseCase,
 )
 from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
@@ -1940,6 +1941,19 @@ def get_marcar_no_presentado_use_case(
     )
 
 
+def get_validar_lo_anotado_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> ValidarLoAnotadoUseCase:
+    """El organizador valida lo anotado de quien juega sin marcador (QA del 11 oct 2026)."""
+    return ValidarLoAnotadoUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
 def get_cerrar_franja_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
@@ -2452,22 +2466,29 @@ def get_list_enrollments_use_case(
 
 def get_create_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
 ) -> CreateRoundUseCase:
-    """Proveedor del caso de uso CreateRoundUseCase."""
-    return CreateRoundUseCase(uow)
+    """Proveedor del caso de uso CreateRoundUseCase: con la zona, para no crear una franja pasada."""
+    return CreateRoundUseCase(
+        uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
 
 
 def get_update_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
 ) -> UpdateRoundUseCase:
     """Proveedor del caso de uso UpdateRoundUseCase: con el campo, rehace las partidas (#251)."""
     return UpdateRoundUseCase(
         uow,
         jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        reloj=lambda: datetime.now(UTC),
+        reloj=reloj,
     )
 
 
