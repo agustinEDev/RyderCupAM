@@ -1,5 +1,8 @@
 """Caso de Uso: Crear Ronda/Sesión de competición."""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from src.modules.competition.application.dto.round_match_dto import (
     CreateRoundRequestDTO,
     CreateRoundResponseDTO,
@@ -9,11 +12,14 @@ from src.modules.competition.application.exceptions import (
     DateOutOfRangeError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
+    comprobar_que_no_ha_pasado,
     comprobar_solape,
     comprobar_tipo,
     hoja_de,
+    primera_salida_de,
 )
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -49,10 +55,23 @@ class CreateRoundUseCase:
     - El campo de golf debe estar asociado a la competición
     - No pueden existir sesiones duplicadas (misma fecha + tipo)
     - La fecha debe estar dentro del rango de la competición
+    - Una franja, con su primera salida aún por llegar (QA del 11 oct 2026)
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone | None = None,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        """
+        Args:
+            zonas: Para saber si la primera salida de una franja ya pasó; sin
+                ellas (o sin zona en el campo), no se mira
+        """
         self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(
         self, request: CreateRoundRequestDTO, user_id: UserId, is_admin: bool = False
@@ -120,6 +139,10 @@ class CreateRoundUseCase:
             )
             if hoja is not None:
                 comprobar_solape(hoja, request.round_date, golf_course_id, existing_rounds)
+                comprobar_que_no_ha_pasado(
+                    await primera_salida_de(hoja, request.round_date, golf_course_id, self._zonas),
+                    self._reloj(),
+                )
 
             # 7. Crear la ronda
             if hoja is not None:
