@@ -4,6 +4,7 @@ La partida para anotar y las tarjetas de los suyos (#251, PR 5; pestañas 1 y 3)
 | Caso                              | Resultado                                            |
 |-----------------------------------|------------------------------------------------------|
 | Recién generada                   | 18 hoyos vacíos, la hora de apertura, a quién marco |
+| La hora de apertura               | Con el desfase del campo, como en la Ryder           |
 | Tras anotar                       | Cada lado, su estado; totales solo de lo validado    |
 | Una tarjeta entregada             | Su estado                                            |
 | Medal                             | Sin levantar bola                                    |
@@ -61,6 +62,20 @@ async def test_a_new_group():
     assert (jugador.totals.thru, jugador.totals.points) == (0, 0)
     assert jugador.card_status == "JUGANDO"
     assert jugador.name
+
+
+async def test_the_opening_time_carries_the_course_offset():
+    """
+    Como `scoring_opens_at` de la Ryder: el cliente lee la hora de la cadena
+    («la hora del campo»), así que en UTC anunciaba las 07:00 de una salida a
+    las 09:00 en Madrid (pasada del front, FE #824).
+    """
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+
+    vista = await _ver(escenario).execute(partida.id.value, a)
+
+    assert vista.scoring_opens_at.isoformat() == "2030-10-11T09:00:00+02:00"
 
 
 async def test_after_scoring_only_the_validated_count():
