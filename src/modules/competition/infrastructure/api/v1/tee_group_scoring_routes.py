@@ -24,6 +24,7 @@ from src.config.dependencies import (
     get_marcar_no_presentado_use_case,
     get_reabrir_tarjeta_use_case,
     get_retirarse_de_partida_use_case,
+    get_validar_lo_anotado_use_case,
     get_ver_anotacion_de_partida_use_case,
 )
 from src.config.rate_limit import limiter
@@ -64,6 +65,8 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
+    TieneMarcadorError,
+    ValidarLoAnotadoUseCase,
 )
 from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_case import (
     VerAnotacionDePartidaUseCase,
@@ -124,6 +127,11 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
         status.HTTP_403_FORBIDDEN,
         "NOT_ORGANIZER",
         "Solo el organizador puede hacerlo.",
+    ),
+    TieneMarcadorError: (
+        status.HTTP_409_CONFLICT,
+        TieneMarcadorError.error_code,
+        "Ese jugador tiene marcador: sus hoyos los valida él.",
     ),
 }
 
@@ -348,6 +356,32 @@ async def mark_tee_group_no_show(
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
         marcar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+    )
+
+
+@router.post(
+    "/groups/{group_id}/players/{user_id}/validate-scored",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Validar lo anotado de quien juega sin marcador (organizador)",
+    description=(
+        "Valida de una vez los hoyos con el golpe del jugador y sin el del marcador. "
+        "Un hoyo con los dos golpes distintos no se toca: se corrige uno a uno."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def validate_tee_group_scored_holes(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    validar: ValidarLoAnotadoUseCase = Depends(get_validar_lo_anotado_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(
+        validar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
     )
 
 

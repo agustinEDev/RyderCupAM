@@ -118,6 +118,7 @@ def _jugador(
         card_status=partida.estados_de_tarjeta[foto.user_id].value,
         marks_user_id=marca.value if marca else None,
         marked_by_user_id=le_marca.value if le_marca else None,
+        brought_in=foto.user_id in partida.traidos,
         holes=[_hoyo(foto, hoyo, golpe) for hoyo, golpe in suyos.items()],
         totals=TeeGroupTotalsDTO(
             thru=tarjeta.tras,

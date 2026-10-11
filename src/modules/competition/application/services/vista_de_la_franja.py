@@ -154,4 +154,5 @@ def _jugador(jugador, partida: Partida, nombres: dict[UserId, str]) -> TeeGroupP
         tee_gender=jugador.tee_gender.value if jugador.tee_gender else None,
         strokes_by_hole=list(jugador.golpes_por_hoyo),
         marks_user_id=marca.value if marca else None,
+        brought_in=jugador.user_id in partida.traidos,
     )

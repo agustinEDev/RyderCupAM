@@ -63,6 +63,9 @@ class TeeGroupPlayerDTO(BaseModel):
         ..., description="Los 18 hoyos en orden, con signo: lo que recibe (o da) en cada uno."
     )
     marks_user_id: UUID | None = Field(None, description="A quién marca; null en una partida de 1.")
+    brought_in: bool = Field(
+        False, description="Vino de otra partida a acompañar al que se quedó solo."
+    )
 
 
 class TeeGroupDTO(BaseModel):
@@ -145,7 +148,12 @@ class TeeGroupScoringPlayerDTO(BaseModel):
     tee_color: str
     card_status: str = Field(..., description="JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO.")
     marks_user_id: UUID | None
-    marked_by_user_id: UUID | None
+    marked_by_user_id: UUID | None = Field(
+        ..., description="Quién le marca; null si nadie: valida el organizador."
+    )
+    brought_in: bool = Field(
+        False, description="Vino de otra partida a acompañar al que se quedó solo."
+    )
     holes: list[TeeGroupHoleDTO]
     totals: TeeGroupTotalsDTO
 

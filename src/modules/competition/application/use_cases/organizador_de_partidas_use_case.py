@@ -8,6 +8,11 @@ Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 20
   (P11). Queda registrado que lo metió él (P9). Una tarjeta cerrada se reabre
   antes, a propósito: que la corrección se vea.
 - **Reabrir una tarjeta** (P9) y **marcar a alguien como no presentado** (P6).
+  Si el no presentado deja a uno solo sin salir, el último en salir de la
+  siguiente partida de 4 aún sin salir (si no hay, de 3) pasa a acompañarle
+  (QA del 11 oct 2026).
+- **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
+  una vez; los que no coinciden se corrigen uno a uno (QA del 11 oct 2026).
 - **Cerrar la franja**, la red (P3): las tarjetas aún en juego quedan
   entregadas si están completas, no presentado si no tienen ningún hoyo
   validado, y retirado si van a medias.
@@ -30,6 +35,9 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.partidas_del_jugador import (
+    que_no_se_quede_solo,
+)
 from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     arrancar_la_competicion,
@@ -80,6 +88,12 @@ async def _bloqueada(uow: CompetitionUnitOfWorkInterface, partida: Partida) -> P
     if bloqueada is None:
         raise PartidaNotFoundError(f"No existe la partida {partida.id}")
     return bloqueada
+
+
+class TieneMarcadorError(Exception):
+    """Ese jugador tiene marcador: sus hoyos los valida él, no el organizador."""
+
+    error_code = "PLAYER_HAS_MARKER"
 
 
 def _del_jugador(partida: Partida, user_id: UUID) -> UserId:
@@ -211,9 +225,56 @@ class MarcarNoPresentadoUseCase:
             partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
             comprobar_que_se_juega(competicion)
             await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            # La competición antes que las partidas, como la baja, que también
+            # rehace partidas sin salir: así no se cruzan (revisión)
+            await self._uow.competitions.find_by_id_for_update(competicion.id)
             bloqueada = await _bloqueada(self._uow, partida)
             bloqueada.no_presentado(_del_jugador(bloqueada, user_id))
             await self._uow.partidas.guardar([bloqueada])
+            await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
+
+
+class ValidarLoAnotadoUseCase:
+    """El organizador valida de una vez lo que anotó quien juega sin marcador."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Valida los hoyos con su golpe y sin el del marcador; un hoyo con los dos
+        y distintos no se toca: se corrige uno a uno.
+
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+            TarjetaCerradaError: Su tarjeta ya está cerrada
+            TieneMarcadorError: Alguien en juego le marca
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            jugador = _del_jugador(bloqueada, user_id)
+            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
+                raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
+            if jugador not in bloqueada.sin_marcador_en_juego:
+                raise TieneMarcadorError("Ese jugador tiene marcador.")
+            acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD
+            for golpe in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id):
+                if golpe.user_id != jugador or not golpe.propio_enviado or golpe.marcador_enviado:
+                    continue
+                golpe.anotar_del_marcador(golpe.propio, acepta_raya, quien, llegada)
+                await self._uow.golpes_de_partida.guardar(golpe)
 
 
 class CerrarFranjaUseCase:

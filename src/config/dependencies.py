@@ -158,6 +158,7 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
+    ValidarLoAnotadoUseCase,
 )
 from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
@@ -1934,6 +1935,19 @@ def get_marcar_no_presentado_use_case(
 ) -> MarcarNoPresentadoUseCase:
     """El organizador marca a alguien como no presentado (#251)."""
     return MarcarNoPresentadoUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_validar_lo_anotado_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> ValidarLoAnotadoUseCase:
+    """El organizador valida lo anotado de quien juega sin marcador (QA del 11 oct 2026)."""
+    return ValidarLoAnotadoUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
