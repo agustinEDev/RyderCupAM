@@ -98,7 +98,8 @@ async def que_no_se_quede_solo(
     """
     Si en esa partida, sin salir, queda uno solo y la franja ya pasó su primera
     salida, trae al último en salir que juega de la siguiente partida de 4 aún
-    sin salir; si no hay, de una de 3. Nunca de las de antes. Si no cabe, nadie.
+    sin salir; si no hay, de una de 3. Nunca de las de antes. Los no presentados
+    no ocupan sitio (12 oct 2026): siempre cabe.
 
     Bloquea la partida y después las de detrás, por número: el mismo orden que
     cerrar la franja.

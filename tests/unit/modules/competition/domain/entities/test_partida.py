@@ -31,6 +31,7 @@ from src.modules.competition.domain.entities.partida import (
     Partida,
     PartidaEmpezadaError,
     PartidaInvalidaError,
+    PartidaLlenaError,
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
 )
@@ -436,6 +437,8 @@ class TestElMarcadorQueSeVa:
     | Leer 5 filas con un NP, o 4 que juegan + 2 NP | Vale                                       |
     | Leer 5 filas sin ningún NP                    | Error                                      |
     | Meter en una de 4 con un NP / con 4 que juegan| Entra / llena                              |
+    | Reabrir un NP con 4 ya jugando                | PartidaLlenaError (12 oct)                 |
+    | Reabrir un NP con hueco, sin salir            | Entra en el círculo                        |
     """
 
     def _empezada(self, n=4) -> Partida:
@@ -640,8 +643,55 @@ class TestElMarcadorQueSeVa:
     def test_putting_one_in_a_group_of_four_playing_is_full(self):
         partida = _partida(4)
 
-        with pytest.raises(PartidaInvalidaError):
+        with pytest.raises(PartidaLlenaError):
             partida.meter(_jugador(), 4)
+
+    def test_reopening_a_no_show_with_four_already_playing_is_refused(self):
+        partida = _partida(4)
+        falta = partida.user_ids[0]
+        partida.no_presentado(falta)
+        partida.meter(_jugador(), 4)
+
+        with pytest.raises(PartidaLlenaError):
+            partida.reabrir_tarjeta(falta)
+
+        assert partida.estados_de_tarjeta[falta] == EstadoDeTarjeta.NO_PRESENTADO
+
+    def test_reopening_a_no_show_with_room_gets_a_marker(self):
+        partida = _partida(3)
+        a, b, c = partida.user_ids
+        partida.no_presentado(a)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.marcadores == {a: b, b: c, c: a}
+
+    def test_reopening_a_handed_in_card_with_four_playing_is_fine(self):
+        partida = self._empezada(4)
+        a = partida.user_ids[0]
+        partida.entregar(a)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
+
+    def test_reopening_a_no_show_once_started_does_not_touch_the_markers(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        partida.no_presentado(a)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.marcadores == {b: c, c: b}
+
+    def test_reopening_a_withdrawn_card_with_four_rows_is_fine(self):
+        partida = self._empezada(4)
+        d = partida.user_ids[3]
+        partida.retirar(d)
+
+        partida.reabrir_tarjeta(d)
+
+        assert partida.estados_de_tarjeta[d] == EstadoDeTarjeta.JUGANDO
 
     def _con_filas(self, jugadores, tarjetas) -> Partida:
         quedan = [j.user_id for j in jugadores if j.user_id not in tarjetas]

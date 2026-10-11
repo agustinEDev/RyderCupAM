@@ -155,4 +155,5 @@ def _jugador(jugador, partida: Partida, nombres: dict[UserId, str]) -> TeeGroupP
         strokes_by_hole=list(jugador.golpes_por_hoyo),
         marks_user_id=marca.value if marca else None,
         brought_in=jugador.user_id in partida.traidos,
+        card_status=partida.estados_de_tarjeta[jugador.user_id].value,
     )

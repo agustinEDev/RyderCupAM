@@ -66,6 +66,13 @@ class TeeGroupPlayerDTO(BaseModel):
     brought_in: bool = Field(
         False, description="Vino de otra partida a acompañar al que se quedó solo."
     )
+    card_status: str = Field(
+        "JUGANDO",
+        description=(
+            "JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO. Un no presentado sigue en su "
+            "partida pero no ocupa sitio ni se mueve."
+        ),
+    )
 
 
 class TeeGroupDTO(BaseModel):

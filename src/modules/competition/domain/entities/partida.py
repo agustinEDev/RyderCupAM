@@ -34,6 +34,10 @@ class PartidaInvalidaError(ValueError):
     """La partida no es posible, y el mensaje dice por qué."""
 
 
+class PartidaLlenaError(PartidaInvalidaError):
+    """Ya juegan 4: no entra nadie más que juegue (QA 2, 12 oct 2026)."""
+
+
 class PartidaEmpezadaError(ValueError):
     """La partida ya salió: no se toca."""
 
@@ -115,7 +119,7 @@ class Partida:
         if jugador.user_id in self.user_ids:
             raise PartidaInvalidaError("Ese jugador ya está en la partida.")
         if len(self.quedan) >= jugadores_por_partida:
-            raise PartidaInvalidaError("La partida está llena.")
+            raise PartidaLlenaError("La partida está llena.")
         self._jugadores = [*self._jugadores, jugador]
         self._tarjetas[jugador.user_id] = EstadoDeTarjeta.JUGANDO
         self._rehacer_el_circulo()
@@ -185,9 +189,20 @@ class Partida:
         self._acabar_si_no_queda_nadie()
 
     def reabrir_tarjeta(self, user_id: UserId) -> None:
-        """El organizador la vuelve a abrir para corregirla (P9)."""
+        """
+        El organizador la vuelve a abrir para corregirla (P9). Un no presentado
+        vuelve a ocupar sitio: solo si cabe y, sin salir, con marcador (12 oct
+        2026). A los demás no se les tocan los marcadores.
+        """
         self._de_la_partida(user_id)
+        era_no_presentado = self._tarjetas[user_id] == EstadoDeTarjeta.NO_PRESENTADO
+        if era_no_presentado and len(self.quedan) >= MAX_JUGADORES:
+            raise PartidaLlenaError(
+                f"Ya juegan {MAX_JUGADORES} en la partida: mueve antes a uno para reabrirla."
+            )
         self._tarjetas[user_id] = EstadoDeTarjeta.JUGANDO
+        if era_no_presentado and not self.empezada:
+            self._rehacer_el_circulo()
         if self._estado == EstadoPartida.COMPLETED:
             self._estado = EstadoPartida.IN_PROGRESS
 
@@ -325,12 +340,14 @@ class Partida:
     def _comprobar_que_caben(self) -> None:
         """Los no presentados siguen en la partida, pero no ocupan sitio (QA 2, 12 oct 2026)."""
         if sum(e != EstadoDeTarjeta.NO_PRESENTADO for e in self._tarjetas.values()) > MAX_JUGADORES:
-            raise PartidaInvalidaError(f"Una partida es de 1 a {MAX_JUGADORES} jugadores.")
+            raise PartidaInvalidaError(
+                f"Como mucho juegan {MAX_JUGADORES} por partida; los no presentados, aparte."
+            )
 
     @staticmethod
     def _comprobar_jugadores(jugadores: Sequence[JugadorDePartida]) -> None:
         if not jugadores:
-            raise PartidaInvalidaError(f"Una partida es de 1 a {MAX_JUGADORES} jugadores.")
+            raise PartidaInvalidaError("Una partida tiene al menos un jugador.")
         if len({j.user_id for j in jugadores}) != len(jugadores):
             raise PartidaInvalidaError("Un jugador solo puede estar una vez en la partida.")
 

@@ -192,9 +192,11 @@ async def test_alone_among_three_no_shows_someone_still_comes():
 
 
 async def test_who_was_brought_in_left_alone_by_another_no_show_gets_company():
-    escenario, (sola, cuatro, otra) = await _franja(2, 4, 4)
-    falta, queda = sola.user_ids
+    # De 3: con la segunda compañía la partida llega a 5 filas
+    escenario, (sola, cuatro, otra) = await _franja(3, 4, 4)
+    falta, otro, queda = sola.user_ids
     await _no_presentado(escenario, sola, falta)
+    await _no_presentado(escenario, sola, otro)
     diana = cuatro.user_ids[-1]
 
     await _no_presentado(escenario, sola, queda)
@@ -202,7 +204,7 @@ async def test_who_was_brought_in_left_alone_by_another_no_show_gets_company():
     # La 2 ya es de 3: viene el último de la 3, que sigue siendo de 4
     una, dos, tres = await _leidas(escenario)
     viene = otra.user_ids[-1]
-    assert una.user_ids == [falta, queda, diana, viene]
+    assert una.user_ids == [falta, otro, queda, diana, viene]
     assert una.traidos == {diana, viene}
     assert una.marcadores == {diana: viene, viene: diana}
     assert dos.user_ids == cuatro.user_ids[:-1]

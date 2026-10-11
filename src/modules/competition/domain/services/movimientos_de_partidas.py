@@ -20,11 +20,11 @@ from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..entities.partida import Partida
 from ..value_objects.competition_id import CompetitionId
+from ..value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from ..value_objects.hoja_de_salidas import HojaDeSalidas
 from ..value_objects.jugador_de_partida import JugadorDePartida
 from ..value_objects.partida_id import PartidaId
 from ..value_objects.round_id import RoundId
-from .marcadores_en_cadena import MIN_PARA_MARCAR
 
 
 class MovimientoImposibleError(ValueError):
@@ -72,6 +72,7 @@ class MovimientosDePartidas:
             MovimientoImposibleError: Si no se puede, con el motivo
         """
         origen = next((p for p in partidas if jugador.user_id in p.user_ids), None)
+        MovimientosDePartidas._no_presentado(origen, jugador.user_id)
         destino = MovimientosDePartidas._destino(partidas, destino_id, origen)
         if intercambiar_con is not None:
             return MovimientosDePartidas._intercambiar(
@@ -101,6 +102,17 @@ class MovimientosDePartidas:
             destino.meter(jugador, hoja.jugadores_por_partida)
             cambios.a_guardar(destino)
         return cambios
+
+    @staticmethod
+    def _no_presentado(partida: Partida | None, user_id: UserId) -> None:
+        """Un no presentado se queda en su partida, que es donde sale su NP (12 oct 2026)."""
+        if (
+            partida is not None
+            and partida.estados_de_tarjeta[user_id] == EstadoDeTarjeta.NO_PRESENTADO
+        ):
+            raise MovimientoImposibleError(
+                "PLAYER_IS_NO_SHOW", "Es no presentado: se queda en su partida."
+            )
 
     @staticmethod
     def _destino(
@@ -135,8 +147,9 @@ class MovimientosDePartidas:
                 "GROUP_FULL",
                 "La partida está llena: intercambia al jugador con uno de ella.",
             )
+        # Sin el que se va, uno solo jugando; solo con no presentados sí vale (12 oct 2026)
         siguen = [u for u in origen.quedan if u != jugador.user_id] if origen else []
-        if origen is not None and (len(origen.jugadores) == MIN_PARA_MARCAR or len(siguen) == 1):
+        if len(siguen) == 1:
             raise MovimientoImposibleError(
                 "ORIGIN_WOULD_BE_ALONE",
                 "Su partida se quedaría con un solo jugador: intercámbialo, o mueve antes al otro.",
@@ -164,6 +177,7 @@ class MovimientosDePartidas:
             raise MovimientoImposibleError(
                 "SWAP_PLAYER_NOT_IN_GROUP", "Ese jugador no está en la partida de destino."
             )
+        MovimientosDePartidas._no_presentado(destino, otro.user_id)
         cambios = Cambios()
         destino.quitar(otro.user_id)
         destino.meter(jugador, hoja.jugadores_por_partida)

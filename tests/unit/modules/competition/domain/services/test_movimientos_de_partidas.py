@@ -7,6 +7,8 @@ Mover jugadores entre partidas y reordenarlas (#251, PR 4; D4, D13, M1-M3 del 9 
 | A una llena sin intercambio                        | Error                                  |
 | A una de 4 con un no presentado (QA 2, 12 oct)     | Entra: el NP no ocupa sitio            |
 | Dejar el origen con uno que juega y un NP          | Error (M2)                             |
+| Mover o intercambiar a un NP                       | Error: se queda donde sale su NP       |
+| Mover al último que juega de una con NP            | Se mueve; la partida queda con sus NP  |
 | Intercambio con uno de la llena                    | Cada uno al sitio del otro             |
 | Intercambio con uno que no está en el destino      | Error                                  |
 | Intercambio hacia una partida nueva                | Error                                  |
@@ -106,6 +108,40 @@ class TestMover:
         _mover([p1, p2], a, p2)
 
         assert p2.quedan[-1] == a.user_id
+
+    def test_a_no_show_is_not_moved(self):
+        p1, p2 = _partidas(4, 3)
+        p1.no_presentado(p1.user_ids[0])
+        with pytest.raises(MovimientoImposibleError) as error:
+            _mover([p1, p2], p1.jugadores[0], p2)
+        assert error.value.codigo == "PLAYER_IS_NO_SHOW"
+
+    def test_a_no_show_is_not_swapped(self):
+        p1, p2 = _partidas(3, 4)
+        p2.no_presentado(p2.user_ids[0])
+        with pytest.raises(MovimientoImposibleError) as error:
+            _mover([p1, p2], p1.jugadores[0], p2, intercambiar_con=p2.user_ids[0])
+        assert error.value.codigo == "PLAYER_IS_NO_SHOW"
+        assert len(p2.user_ids) == 4
+
+    def test_the_last_one_playing_leaves_a_group_of_no_shows(self):
+        p1, p2 = _partidas(3, 2)
+        p1.no_presentado(p1.user_ids[0])
+        p1.no_presentado(p1.user_ids[1])
+        a = p1.jugadores[2]
+
+        cambios = _mover([p1, p2], a, p2)
+
+        assert p1.quedan == [] and len(p1.user_ids) == 2
+        assert p1 in cambios.guardar and cambios.borrar == []
+
+    def test_the_one_playing_beside_a_no_show_can_leave(self):
+        p1, p2 = _partidas(2, 2)
+        p1.no_presentado(p1.user_ids[0])
+
+        _mover([p1, p2], p1.jugadores[1], p2)
+
+        assert p1.quedan == []
 
     def test_leaving_the_origin_with_one_playing_and_a_no_show(self):
         p1, p2 = _partidas(3, 3)
