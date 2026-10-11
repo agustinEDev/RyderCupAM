@@ -15,6 +15,8 @@ quedaban atrapados y fuera de la clasificación.
 | Ya empezada, cambiar solo la última salida           | Se cambia, como hasta ahora  |
 | Moverla a un campo de otra zona, ya pasada allí      | FranjaEnElPasadoError        |
 | Moverla a un campo de otra zona, aún por llegar allí | Se mueve (cuenta su zona)    |
+| Una hora que no existe por el cambio de hora         | FranjaInvalidaError (CodeRabbit) |
+| La de después del cambio de hora                     | Se crea                      |
 """
 
 from datetime import UTC, date, datetime
@@ -195,3 +197,26 @@ async def test_moving_it_to_a_course_where_it_is_already_gone():
 
     with pytest.raises(FranjaEnElPasadoError):
         await e.cambiar(creada.id, golf_course_id=canarias.value, tee_sheet=_hoja("09:15", "12:00"))
+
+
+# El 31 de marzo de 2030 Madrid pasa de las 2:00 a las 3:00
+CAMBIO_DE_HORA = date(2030, 3, 31)
+
+
+async def test_a_first_tee_time_that_does_not_exist_that_day():
+    e = _ConReloj()
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+
+    with pytest.raises(FranjaInvalidaError, match="no existe"):
+        await e.crear(_hoja("02:30", "12:00"), dia=CAMBIO_DE_HORA)
+
+
+async def test_the_first_tee_time_right_after_the_change():
+    e = _ConReloj()
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+
+    creada = await e.crear(_hoja("03:00", "12:00"), dia=CAMBIO_DE_HORA)
+
+    assert creada.id

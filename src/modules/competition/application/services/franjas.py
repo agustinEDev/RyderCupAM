@@ -13,7 +13,7 @@ mismo mensaje para crear, cambiar y borrar.
 """
 
 from collections.abc import Iterable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from src.modules.competition.application.dto.round_match_dto import TeeSheetDTO
 from src.modules.competition.application.exceptions import (
@@ -193,7 +193,15 @@ async def primera_salida_de(
     zona = zona_del_campo(await zonas.for_course(campo))
     if zona is None:
         return None
-    return datetime.combine(dia, hoja.primera_salida, zona)
+    sale = datetime.combine(dia, hoja.primera_salida, zona)
+    # El día del cambio de hora de primavera hay horas que no existen (02:30 en
+    # Madrid): ida y vuelta por UTC salen otras, y esa franja no podría salir
+    # (CodeRabbit en la #538)
+    if sale.astimezone(UTC).astimezone(zona).replace(tzinfo=None) != sale.replace(tzinfo=None):
+        raise FranjaInvalidaError(
+            "Esa primera salida no existe ese día en el campo (cambio de hora): elige otra."
+        )
+    return sale
 
 
 def comprobar_que_no_ha_pasado(sale: datetime | None, ahora: datetime) -> None:
