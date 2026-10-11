@@ -139,6 +139,9 @@ class TeeGroupHoleDTO(BaseModel):
             "quien marca ahora."
         ),
     )
+    marker_by_name: str | None = Field(
+        None, description="Su nombre, aunque ya no esté en la partida (o sea el organizador)."
+    )
     status: str = Field(..., description="PENDING, MATCH o MISMATCH.")
 
 
