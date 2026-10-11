@@ -79,7 +79,7 @@ class MovimientosDePartidas:
             )
         se_vacia = origen is not None and len(origen.jugadores) == 1
         quedan = [p for p in partidas if not (se_vacia and p is origen)]
-        MovimientosDePartidas._comprobar(origen, destino, len(quedan), hoja)
+        MovimientosDePartidas._comprobar(origen, destino, jugador, len(quedan), hoja)
 
         cambios = Cambios()
         if origen is not None:
@@ -120,15 +120,23 @@ class MovimientosDePartidas:
 
     @staticmethod
     def _comprobar(
-        origen: Partida | None, destino: Partida | None, quedan: int, hoja: HojaDeSalidas
+        origen: Partida | None,
+        destino: Partida | None,
+        jugador: JugadorDePartida,
+        quedan: int,
+        hoja: HojaDeSalidas,
     ) -> None:
-        """Sin intercambio: hueco en el destino, el origen no se queda con uno, salidas libres."""
-        if destino is not None and len(destino.jugadores) >= hoja.jugadores_por_partida:
+        """
+        Sin intercambio: hueco en el destino, el origen no se queda con uno, salidas
+        libres. Los no presentados no ocupan sitio (2.ª pasada del QA, 12 oct 2026).
+        """
+        if destino is not None and len(destino.quedan) >= hoja.jugadores_por_partida:
             raise MovimientoImposibleError(
                 "GROUP_FULL",
                 "La partida está llena: intercambia al jugador con uno de ella.",
             )
-        if origen is not None and len(origen.jugadores) == MIN_PARA_MARCAR:
+        siguen = [u for u in origen.quedan if u != jugador.user_id] if origen else []
+        if origen is not None and (len(origen.jugadores) == MIN_PARA_MARCAR or len(siguen) == 1):
             raise MovimientoImposibleError(
                 "ORIGIN_WOULD_BE_ALONE",
                 "Su partida se quedaría con un solo jugador: intercámbialo, o mueve antes al otro.",

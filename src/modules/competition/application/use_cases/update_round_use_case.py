@@ -21,6 +21,7 @@ from src.modules.competition.application.services.esperas_de_la_competicion impo
 )
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
+    comprobar_que_existen_sus_salidas,
     comprobar_que_nadie_pierde_su_sitio,
     comprobar_que_no_ha_pasado,
     comprobar_solape,
@@ -278,6 +279,8 @@ class UpdateRoundUseCase:
         """
         Raises:
             FranjaEnElPasadoError: Si su primera salida pasa a una que ya llegó
+            FranjaInvalidaError: Si con el cambio alguna salida cae en la hora
+                que no existe por el cambio de hora
         """
         if franja.hoja_de_salidas is None:
             return
@@ -295,6 +298,13 @@ class UpdateRoundUseCase:
             campo,
             self._zonas,
         )
+        if hoja is not None or request.round_date or request.golf_course_id:
+            await comprobar_que_existen_sus_salidas(
+                hoja or franja.hoja_de_salidas,
+                request.round_date or franja.round_date,
+                campo,
+                self._zonas,
+            )
         if nueva != antes:
             comprobar_que_no_ha_pasado(nueva, self._reloj())
 

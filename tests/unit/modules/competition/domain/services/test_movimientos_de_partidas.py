@@ -5,6 +5,8 @@ Mover jugadores entre partidas y reordenarlas (#251, PR 4; D4, D13, M1-M3 del 9 
 |----------------------------------------------------|----------------------------------------|
 | A una con hueco                                    | Origen -1, destino +1                  |
 | A una llena sin intercambio                        | Error                                  |
+| A una de 4 con un no presentado (QA 2, 12 oct)     | Entra: el NP no ocupa sitio            |
+| Dejar el origen con uno que juega y un NP          | Error (M2)                             |
 | Intercambio con uno de la llena                    | Cada uno al sitio del otro             |
 | Intercambio con uno que no está en el destino      | Error                                  |
 | Intercambio hacia una partida nueva                | Error                                  |
@@ -95,6 +97,22 @@ class TestMover:
         with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], p2)
         assert error.value.codigo == "GROUP_FULL"
+
+    def test_to_a_group_of_four_with_a_no_show(self):
+        p1, p2 = _partidas(4, 4)
+        p2.no_presentado(p2.user_ids[0])
+        a = p1.jugadores[0]
+
+        _mover([p1, p2], a, p2)
+
+        assert p2.quedan[-1] == a.user_id
+
+    def test_leaving_the_origin_with_one_playing_and_a_no_show(self):
+        p1, p2 = _partidas(3, 3)
+        p1.no_presentado(p1.user_ids[0])
+        with pytest.raises(MovimientoImposibleError) as error:
+            _mover([p1, p2], p1.jugadores[2], p2)
+        assert error.value.codigo == "ORIGIN_WOULD_BE_ALONE"
 
     def test_swapping_with_one_of_the_full_one(self):
         p1, p2 = _partidas(4, 4)

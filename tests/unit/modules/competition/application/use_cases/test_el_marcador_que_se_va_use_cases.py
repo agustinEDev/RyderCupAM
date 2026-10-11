@@ -9,7 +9,8 @@ Si un marcador se retira o no se presenta (QA del 11 oct 2026, decidido con Agus
 | Ninguna de 4 detrás; una de 3                            | De la de 3                                    |
 | Detrás solo partidas de 2                                | Nadie: se queda solo                          |
 | Solo, pero su partida ya empezó                          | Nadie: valida el organizador                  |
-| Solo en una de 4 con tres no presentados                 | Nadie: no cabe                                |
+| Solo en una de 4 con tres no presentados                 | Viene uno: el NP no ocupa sitio (QA 2)        |
+| El traído se queda solo por otro no presentado           | Viene otro de la siguiente partida            |
 | Las partidas de antes no cuentan, aunque no hayan salido | Nadie                                         |
 | Detrás una de 3 y luego una de 4                         | De la de 4                                    |
 | La de 4 empieza mientras se bloquea                      | De la siguiente                               |
@@ -178,14 +179,34 @@ async def test_alone_in_a_group_already_started_nobody_comes():
     assert len(dos.user_ids) == 4
 
 
-async def test_alone_in_a_full_group_of_no_shows_nobody_fits():
-    escenario, (sola, dos) = await _franja(4, 4)
+async def test_alone_among_three_no_shows_someone_still_comes():
+    # Los no presentados no ocupan sitio (2.ª pasada del QA, 12 oct 2026)
+    escenario, (sola, cuatro) = await _franja(4, 4)
     for jugador in sola.user_ids[:3]:
         await _no_presentado(escenario, sola, jugador)
 
     una, dos = await _leidas(escenario)
-    assert una.traidos == set()
-    assert len(dos.user_ids) == 4
+    assert una.traidos == {cuatro.user_ids[-1]}
+    assert len(una.user_ids) == 5
+    assert len(dos.user_ids) == 3
+
+
+async def test_who_was_brought_in_left_alone_by_another_no_show_gets_company():
+    escenario, (sola, cuatro, otra) = await _franja(2, 4, 4)
+    falta, queda = sola.user_ids
+    await _no_presentado(escenario, sola, falta)
+    diana = cuatro.user_ids[-1]
+
+    await _no_presentado(escenario, sola, queda)
+
+    # La 2 ya es de 3: viene el último de la 3, que sigue siendo de 4
+    una, dos, tres = await _leidas(escenario)
+    viene = otra.user_ids[-1]
+    assert una.user_ids == [falta, queda, diana, viene]
+    assert una.traidos == {diana, viene}
+    assert una.marcadores == {diana: viene, viene: diana}
+    assert dos.user_ids == cuatro.user_ids[:-1]
+    assert tres.user_ids == otra.user_ids[:-1]
 
 
 async def test_earlier_groups_do_not_count():

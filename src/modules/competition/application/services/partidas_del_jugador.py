@@ -20,7 +20,7 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.vista_de_la_franja import primera_salida
-from src.modules.competition.domain.entities.partida import MAX_JUGADORES, Partida
+from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -104,12 +104,7 @@ async def que_no_se_quede_solo(
     cerrar la franja.
     """
     partida = await uow.partidas.find_by_id_for_update(partida_id)
-    if (
-        partida is None
-        or partida.empezada
-        or len(partida.quedan) != 1
-        or len(partida.user_ids) >= MAX_JUGADORES
-    ):
+    if partida is None or partida.empezada or len(partida.quedan) != 1:
         return
     franja = await uow.rounds.find_by_id(partida.round_id)
     if franja is None or not await _paso_su_primera_salida(franja, zonas, ahora):
