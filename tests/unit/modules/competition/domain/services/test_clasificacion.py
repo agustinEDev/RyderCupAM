@@ -162,6 +162,34 @@ def test_thru_comes_from_the_last_live_card_with_holes(tarjetas, tras):
     assert fila.tras == tras
 
 
+@pytest.mark.parametrize(
+    ("tarjetas", "retirado"),
+    [
+        # Se retiró en el 5 de la única: «R», no «5» como si siguiera
+        ((_tarjeta(9, tras=5, estado=RETIRADO),), True),
+        # Entregada: no
+        ((_tarjeta(30),), False),
+        # Ayer retirado y hoy va por el 3: lo que cuenta es hoy
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(6, tras=3, estado=JUGANDO)), False),
+        # Ayer retirado y hoy sin salir: su última jugada fue retirada
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(0, tras=0, estado=JUGANDO)), True),
+        # Retirado ayer, hoy entregada
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(30)), False),
+        # Hoy entregada, ayer no presentado
+        ((_tarjeta(0, tras=0, estado=NP), _tarjeta(30)), False),
+        # Ayer retirado y hoy no presentado: lo último fue no venir
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(0, tras=0, estado=NP)), False),
+        # Ayer sin cerrar por el 17 y hoy retirado: va por el 17 de ayer
+        ((_tarjeta(30, tras=17, estado=JUGANDO), _tarjeta(9, tras=5, estado=RETIRADO)), False),
+    ],
+)
+def test_retired_when_the_last_card_played_was_withdrawn(tarjetas, retirado):
+    """QA del 11 oct 2026: en Stableford el retirado cuenta, pero en HOYO va «R»."""
+    (fila,) = _clasificar([_jugador(*tarjetas)])
+
+    assert fila.retirado is retirado
+
+
 def test_stableford_scratch_uses_gross_points():
     a = _jugador(_tarjeta(40, brutos=20))
     b = _jugador(_tarjeta(36, brutos=25))

@@ -198,6 +198,7 @@ def _fila(fila: Fila, nombres: dict[UserId, str]) -> StandingRowDTO:
         cards=fila.tarjetas,
         thru=fila.tras,
         status=fila.estado.value,
+        retired=fila.retirado,
     )
 
 

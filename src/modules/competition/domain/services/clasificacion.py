@@ -76,6 +76,9 @@ class Fila:
     estado: EstadoEnClasificacion
     categoria: int | None
     handicap: Decimal
+    # Su última tarjeta jugada quedó retirada: en Stableford cuenta lo jugado,
+    # pero no sigue en el campo (QA del 11 oct 2026)
+    retirado: bool = False
 
 
 # Sin puesto, en este orden detrás de los clasificados
@@ -222,6 +225,12 @@ def _fila(
         if viva
         else max((t.tarjeta.tras for t in participante.tarjetas), default=0)
     )
+    # Sin ninguna en juego con hoyos, la última cerrada dice cómo acabó
+    cerrada = next(
+        (t for t in reversed(participante.tarjetas) if t.estado != EstadoDeTarjeta.JUGANDO),
+        None,
+    )
+    retirado = viva is None and cerrada is not None and cerrada.estado == EstadoDeTarjeta.RETIRADO
     return Fila(
         user_id=participante.user_id,
         puesto=puesto,
@@ -232,4 +241,5 @@ def _fila(
         estado=resultado.estado,
         categoria=participante.categoria,
         handicap=participante.handicap,
+        retirado=retirado,
     )

@@ -10,6 +10,7 @@ Las clasificaciones de un stroke play por casos de uso (#251, PR 5).
 | Hándicap distinto en cada franja             | Cuenta el de la última (P5)                |
 | Scratch                                      | Puntos brutos, con la fila propia          |
 | Una sesión que no es franja                  | PartidasError                              |
+| Retirado en Stableford                       | Cuenta lo jugado, `retired` (QA 11 oct)    |
 """
 
 from dataclasses import replace
@@ -103,6 +104,24 @@ async def test_the_window_by_points_with_names_categories_and_thru():
     assert tabla.rows[0].name == "Jugador 2.0"
     assert tabla.rows[0].category == 1
     assert (tabla.scale, tabla.tournament_type) == ("NETA", "STABLEFORD")
+
+
+async def test_a_stableford_withdrawal_counts_and_says_so():
+    escenario, a, b, _ = await _dos_franjas()
+    partida = await _partida_de(escenario, escenario.manana, a)
+    await _validar(escenario, partida, a, hoyos=range(1, 3), golpes=4)
+    await _validar(escenario, partida, b, hoyos=range(1, 4), golpes=4)
+    partida = await _partida_de(escenario, escenario.manana, a)
+    partida.empezar()
+    partida.retirar(a)
+    await escenario.uow.partidas.guardar([partida])
+
+    tabla = await _de_la_franja(escenario).execute(escenario.manana.id.value)
+
+    assert [(f.user_id, f.retired, f.status) for f in tabla.rows] == [
+        (b.value, False, "CLASIFICADO"),
+        (a.value, True, "CLASIFICADO"),
+    ]
 
 
 async def test_holes_not_validated_do_not_count():
