@@ -16,6 +16,10 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.jornadas_de_la_competicion import (
+    ZonaDesconocidaError,
+)
+from src.modules.competition.application.services.vista_de_la_franja import primera_salida
 from src.modules.competition.domain.entities.partida import MAX_JUGADORES, Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -80,7 +84,8 @@ async def sacar_de_sus_partidas(
         cambios = MovimientosDePartidas.sacar(de_la_franja, user_id, salidas)
         await uow.partidas.borrar(cambios.borrar)
         await uow.partidas.guardar(cambios.guardar)
-        for cambiada in cambios.guardar:
+        # Por número, como se bloquean al cerrar la franja
+        for cambiada in sorted(cambios.guardar, key=lambda p: p.numero):
             await que_no_se_quede_solo(uow, zonas, cambiada.id, ahora)
 
 
@@ -114,7 +119,9 @@ async def que_no_se_quede_solo(
     detras = [p for p in partidas if p.numero > partida.numero and p.id not in salidas]
     for tamano in (4, 3):
         for candidata in detras:
-            # Bloqueada antes de mirarla: anotar o mover también la bloquean
+            if len(candidata.quedan) != tamano:
+                continue
+            # Bloqueada solo la elegida, y mirada otra vez: anotar la bloquea
             origen = await uow.partidas.find_by_id_for_update(candidata.id)
             if origen is None or origen.empezada or len(origen.quedan) != tamano:
                 continue
@@ -130,10 +137,9 @@ async def _paso_su_primera_salida(
     franja: Round, zonas: ICompetitionTimezone | None, ahora: datetime | None
 ) -> bool:
     """Sin hoja, zona o reloj no se sabe: entonces no."""
-    hoja = franja.hoja_de_salidas
-    if hoja is None or zonas is None or ahora is None:
+    if franja.hoja_de_salidas is None or zonas is None or ahora is None:
         return False
-    zona = zona_del_campo(await zonas.for_course(franja.golf_course_id))
-    if zona is None:
+    try:
+        return ahora >= await primera_salida(franja, zonas)
+    except ZonaDesconocidaError:
         return False
-    return ahora >= datetime.combine(franja.round_date, hoja.primera_salida, zona)

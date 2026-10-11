@@ -162,7 +162,8 @@ async def test_with_only_groups_of_two_behind_nobody_comes():
 
     una, dos = await _leidas(escenario)
     assert una.traidos == set()
-    assert una.sin_marcador == [sola.user_ids[1]]
+    assert una.sin_marcador_en_juego == [sola.user_ids[1]]
+    assert una.incompleta
     assert len(dos.user_ids) == 2
 
 

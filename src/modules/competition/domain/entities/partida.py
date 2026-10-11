@@ -262,16 +262,6 @@ class Partida:
         """Quienes vinieron de otra partida a acompañar al que se quedó solo."""
         return set(self._traidos)
 
-    @property
-    def sin_marcador(self) -> list[UserId]:
-        """Quienes siguen jugando sin nadie que les marque: valida el organizador."""
-        marcados = set(self._marcadores.values())
-        return [
-            u
-            for u in self.user_ids
-            if self._tarjetas[u] == EstadoDeTarjeta.JUGANDO and u not in marcados
-        ]
-
     def may_mark(self, scorer_id: UserId, marked_id: UserId) -> bool:
         """Si `scorer_id` le apunta los golpes a `marked_id`: solo a quien le toca."""
         return self._marcadores.get(scorer_id) == marked_id
@@ -315,8 +305,12 @@ class Partida:
 
     @property
     def incompleta(self) -> bool:
-        """De un solo jugador: sin marcador, hasta que el organizador la arregle (D4)."""
-        return len(self._jugadores) < MIN_PARA_MARCAR
+        """
+        De un solo jugador que juega: sin marcador, hasta que el organizador la
+        arregle (D4). Los no presentados y retirados siguen en la partida, pero
+        no cuentan (revisión del 11 oct 2026).
+        """
+        return len(self.quedan) < MIN_PARA_MARCAR
 
     # ==================== Reglas ====================
 

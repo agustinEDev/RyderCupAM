@@ -478,7 +478,7 @@ class TestElMarcadorQueSeVa:
         partida.no_presentado(a)
 
         assert partida.marcadores == {}
-        assert partida.sin_marcador == [partida.user_ids[1]]
+        assert partida.sin_marcador_en_juego == [partida.user_ids[1]]
 
     def test_closing_keeps_the_circle_among_those_who_handed_in(self):
         partida = self._empezada(4)
@@ -557,7 +557,7 @@ class TestElMarcadorQueSeVa:
         assert partida.marcadores == {solo: nuevo.user_id, nuevo.user_id: solo}
         assert partida.traidos == {nuevo.user_id}
         assert partida.estados_de_tarjeta[nuevo.user_id] == EstadoDeTarjeta.JUGANDO
-        assert not partida.sin_marcador
+        assert not partida.sin_marcador_en_juego
 
     def test_marked_by_someone_who_handed_in_the_organiser_may_validate(self):
         partida = self._empezada(3)
@@ -565,7 +565,7 @@ class TestElMarcadorQueSeVa:
         partida.entregar(a)
         partida.retirar(c)
 
-        assert partida.sin_marcador == []
+        assert partida.marcadores == {a: b, b: a}
         assert partida.sin_marcador_en_juego == [b]
 
     def test_quedan_in_tee_order(self):
@@ -575,6 +575,11 @@ class TestElMarcadorQueSeVa:
         partida.entregar(d)
 
         assert partida.quedan == [a, c, d]
+
+    def test_alone_among_no_shows_is_incomplete(self):
+        partida = self._sola(3)
+
+        assert partida.incompleta
 
     def test_who_was_brought_in_and_leaves_again_is_no_longer_brought_in(self):
         partida = self._sola(2)
@@ -626,10 +631,10 @@ class TestElMarcadorQueSeVa:
     def test_without_marker_only_a_player_still_playing_whom_nobody_marks(self):
         partida = self._empezada(3)
         a, b, c = partida.user_ids
-        assert not partida.sin_marcador
+        assert not partida.sin_marcador_en_juego
         partida.retirar(a)
-        assert not partida.sin_marcador
+        assert not partida.sin_marcador_en_juego
         partida.retirar(b)
-        assert partida.sin_marcador == [c]
+        assert partida.sin_marcador_en_juego == [c]
         partida.entregar(c)
-        assert not partida.sin_marcador
+        assert not partida.sin_marcador_en_juego
