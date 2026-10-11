@@ -31,6 +31,7 @@ from src.modules.competition.domain.services.plazo_de_partidas import (
     PlazoCerradoError,
     PlazoDePartidas,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.user.domain.repositories.user_repository_interface import (
@@ -47,6 +48,19 @@ async def primera_salida(franja: Round, zonas: ICompetitionTimezone) -> datetime
         ZonaDesconocidaError: Si el campo no tiene zona horaria (D10)
     """
     return (await JornadasDeLaCompeticion.de([franja], zonas))[0].primera_salida
+
+
+async def primera_salida_en_el_campo(franja: Round, zonas: ICompetitionTimezone) -> datetime:
+    """
+    La misma, con el desfase del campo: lo que se le dice al cliente, como el
+    `scoring_opens_at` de la Ryder, que lee la hora de la cadena (FE #824).
+
+    Raises:
+        ZonaDesconocidaError: Si el campo no tiene zona horaria (D10)
+    """
+    return (await primera_salida(franja, zonas)).astimezone(
+        zona_del_campo(await zonas.for_course(franja.golf_course_id))
+    )
 
 
 async def con_plaza_y_aprobados(uow: CompetitionUnitOfWorkInterface, franja: Round) -> list:

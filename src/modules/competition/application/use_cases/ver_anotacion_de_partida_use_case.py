@@ -20,7 +20,9 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
-from src.modules.competition.application.services.vista_de_la_franja import primera_salida
+from src.modules.competition.application.services.vista_de_la_franja import (
+    primera_salida_en_el_campo,
+)
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -66,7 +68,10 @@ class VerAnotacionDePartidaUseCase:
             if competicion is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
             try:
-                abre = await primera_salida(franja, self._zonas)
+                # Con el desfase del campo, como `scoring_opens_at` de la Ryder:
+                # el cliente lee la hora de la cadena, y en UTC anunciaba otra
+                # (pasada del front, FE #824)
+                abre = await primera_salida_en_el_campo(franja, self._zonas)
             except ZonaDesconocidaError:
                 abre = None
             golpes = await self._uow.golpes_de_partida.de_la_partida(partida.id)

@@ -103,6 +103,9 @@ async def test_before_the_first_tee_time():
         await _anotar(escenario, partida, partida.user_ids[0], own_score=4)
 
     assert error.value.opens_at == PRIMERA_SALIDA
+    # Con el desfase del campo, como el de la Ryder: el cliente lo lee como hora
+    # del campo (pasada del front, FE #824)
+    assert error.value.opens_at.isoformat() == "2030-10-11T09:00:00+02:00"
 
 
 async def test_someone_not_in_the_group():

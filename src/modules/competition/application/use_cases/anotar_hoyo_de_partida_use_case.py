@@ -33,7 +33,9 @@ from src.modules.competition.application.ports.competition_timezone import IComp
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
 )
-from src.modules.competition.application.services.vista_de_la_franja import primera_salida
+from src.modules.competition.application.services.vista_de_la_franja import (
+    primera_salida_en_el_campo,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import (
     PRIMER_HOYO,
@@ -116,7 +118,8 @@ async def comprobar_que_abrio_la_franja(
         PartidaNoAnotableError: Sin zona horaria no se sabe cuándo abre
     """
     try:
-        abre = await primera_salida(franja, zonas)
+        # Con el desfase del campo: el error lo lleva al cliente (FE #824)
+        abre = await primera_salida_en_el_campo(franja, zonas)
     except ZonaDesconocidaError as e:
         raise PartidaNoAnotableError("El campo de la franja no tiene zona horaria.") from e
     if llegada < abre:
