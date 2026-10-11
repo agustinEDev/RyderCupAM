@@ -225,18 +225,19 @@ def _fila(
         if viva
         else max((t.tarjeta.tras for t in participante.tarjetas), default=0)
     )
-    # Sin ninguna en juego con hoyos, la última jugada y cerrada dice cómo
-    # acabó; la de un no presentado no se jugó (revisor). Con `retirado`, el
-    # cliente pinta «R» y no mira `tras`
-    cerrada = next(
+    # Su última tarjeta jugada: ni la de un no presentado ni una aún sin
+    # empezar. Si es una retirada, el cliente pinta «R» y no mira `tras`
+    # (revisor y /code-review)
+    jugada = next(
         (
             t
             for t in reversed(participante.tarjetas)
-            if t.estado not in (EstadoDeTarjeta.JUGANDO, EstadoDeTarjeta.NO_PRESENTADO)
+            if t.estado != EstadoDeTarjeta.NO_PRESENTADO
+            and not (t.estado == EstadoDeTarjeta.JUGANDO and t.tarjeta.tras == 0)
         ),
         None,
     )
-    retirado = viva is None and cerrada is not None and cerrada.estado == EstadoDeTarjeta.RETIRADO
+    ultima_retirada = jugada is not None and jugada.estado == EstadoDeTarjeta.RETIRADO
     return Fila(
         user_id=participante.user_id,
         puesto=puesto,
@@ -247,5 +248,5 @@ def _fila(
         estado=resultado.estado,
         categoria=participante.categoria,
         handicap=participante.handicap,
-        retirado=retirado,
+        retirado=ultima_retirada,
     )
