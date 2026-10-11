@@ -10,6 +10,9 @@ Decidido con Agustín el 6-9 oct 2026:
 - Marcadores en cadena, que el organizador puede cambiar sin que nadie se marque
   a sí mismo (D12). Al meter o quitar a alguien, la cadena se rehace.
 - Empezada, no se toca: ni jugadores, ni marcadores, ni número (D1, D2, D11).
+- Si alguien se retira o no se presenta, los que quedan se marcan en círculo
+  por orden de salida; reabrir una tarjeta no lo toca. Quien se queda solo sin
+  salir puede recibir a un jugador de otra partida (QA del 11 oct 2026).
 """
 
 from collections.abc import Collection, Mapping, Sequence
@@ -56,10 +59,10 @@ class Partida:
         marcadores: Mapping[UserId, UserId],
         estado: EstadoPartida,
         estados_de_tarjeta: Mapping[UserId, EstadoDeTarjeta] | None = None,
+        traidos: Collection[UserId] = (),
     ):
         self._comprobar_numero(numero)
         self._comprobar_jugadores(jugadores)
-        MarcadoresEnCadena.validar([j.user_id for j in jugadores], marcadores)
         self._id = id
         self._competition_id = competition_id
         self._round_id = round_id
@@ -71,6 +74,8 @@ class Partida:
             j.user_id: (estados_de_tarjeta or {}).get(j.user_id, EstadoDeTarjeta.JUGANDO)
             for j in jugadores
         }
+        MarcadoresEnCadena.validar_leidos(self._quedan(), marcadores)
+        self._traidos = {u for u in traidos if u in self._tarjetas}
 
     @classmethod
     def crear(
@@ -100,7 +105,8 @@ class Partida:
             raise PartidaInvalidaError("Ese jugador no está en la partida.")
         self._jugadores = [j for j in self._jugadores if j.user_id != user_id]
         self._tarjetas.pop(user_id, None)
-        self._marcadores = MarcadoresEnCadena.de(self.user_ids)
+        self._traidos.discard(user_id)
+        self._rehacer_el_circulo()
 
     def meter(self, jugador: JugadorDePartida, jugadores_por_partida: int) -> None:
         """Mete a un jugador al final, si cabe; la cadena se rehace."""
@@ -111,12 +117,30 @@ class Partida:
             raise PartidaInvalidaError("La partida está llena.")
         self._jugadores = [*self._jugadores, jugador]
         self._tarjetas[jugador.user_id] = EstadoDeTarjeta.JUGANDO
-        self._marcadores = MarcadoresEnCadena.de(self.user_ids)
+        self._rehacer_el_circulo()
+
+    def acompanar(self, jugador: JugadorDePartida) -> None:
+        """
+        Mete a quien viene de otra partida para que el que se quedó solo, sin
+        salir aún, tenga marcador (QA del 11 oct 2026). Los no presentados siguen
+        en la partida, así que tiene que caber.
+        """
+        self._sin_empezar()
+        if len(self._quedan()) != 1:
+            raise PartidaInvalidaError("Solo se acompaña a quien se ha quedado solo.")
+        if jugador.user_id in self.user_ids:
+            raise PartidaInvalidaError("Ese jugador ya está en la partida.")
+        if len(self._jugadores) >= MAX_JUGADORES:
+            raise PartidaInvalidaError("La partida está llena.")
+        self._jugadores = [*self._jugadores, jugador]
+        self._tarjetas[jugador.user_id] = EstadoDeTarjeta.JUGANDO
+        self._traidos.add(jugador.user_id)
+        self._rehacer_el_circulo()
 
     def cambiar_marcadores(self, marcadores: Mapping[UserId, UserId]) -> None:
         """Otra asignación de marcadores, si es válida (D12)."""
         self._sin_empezar()
-        MarcadoresEnCadena.validar(self.user_ids, marcadores)
+        MarcadoresEnCadena.validar(self._quedan(), marcadores)
         self._marcadores = dict(marcadores)
 
     def renumerar(self, numero: int) -> None:
@@ -158,6 +182,7 @@ class Partida:
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
             raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
         self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
+        self._rehacer_el_circulo()
         self._acabar_si_no_queda_nadie()
 
     def reabrir_tarjeta(self, user_id: UserId) -> None:
@@ -182,6 +207,7 @@ class Partida:
                 self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
             else:
                 self._tarjetas[user_id] = EstadoDeTarjeta.RETIRADO
+        self._rehacer_el_circulo()
         self._estado = EstadoPartida.COMPLETED
 
     def _cerrar_tarjeta(self, user_id: UserId, estado: EstadoDeTarjeta) -> None:
@@ -191,7 +217,16 @@ class Partida:
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
             raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
         self._tarjetas[user_id] = estado
+        if estado == EstadoDeTarjeta.RETIRADO:
+            self._rehacer_el_circulo()
         self._acabar_si_no_queda_nadie()
+
+    def _quedan(self) -> list[UserId]:
+        """Por orden de salida, los que no se retiraron ni faltaron: marcan y son marcados."""
+        return [u for u in self.user_ids if not self._tarjetas[u].fuera_de_la_partida()]
+
+    def _rehacer_el_circulo(self) -> None:
+        self._marcadores = MarcadoresEnCadena.de(self._quedan())
 
     def _acabar_si_no_queda_nadie(self) -> None:
         if self.empezada and EstadoDeTarjeta.JUGANDO not in self._tarjetas.values():
@@ -206,6 +241,21 @@ class Partida:
     @property
     def estados_de_tarjeta(self) -> dict[UserId, EstadoDeTarjeta]:
         return dict(self._tarjetas)
+
+    @property
+    def traidos(self) -> set[UserId]:
+        """Quienes vinieron de otra partida a acompañar al que se quedó solo."""
+        return set(self._traidos)
+
+    @property
+    def sin_marcador(self) -> list[UserId]:
+        """Quienes siguen jugando sin nadie que les marque: valida el organizador."""
+        marcados = set(self._marcadores.values())
+        return [
+            u
+            for u in self.user_ids
+            if self._tarjetas[u] == EstadoDeTarjeta.JUGANDO and u not in marcados
+        ]
 
     def may_mark(self, scorer_id: UserId, marked_id: UserId) -> bool:
         """Si `scorer_id` le apunta los golpes a `marked_id`: solo a quien le toca."""

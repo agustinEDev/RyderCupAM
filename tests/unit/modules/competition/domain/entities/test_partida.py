@@ -410,3 +410,209 @@ class TestCicloDeLaTarjeta:
         partida = self._empezada()
         with pytest.raises(PartidaInvalidaError):
             getattr(partida, accion)(UserId.generate())
+
+
+class TestElMarcadorQueSeVa:
+    """
+    Si un marcador se retira o no se presenta, su jugador no se queda sin
+    validar (QA del 11 oct 2026, decidido con Agustín).
+
+    | Caso                                          | Resultado                                  |
+    |-----------------------------------------------|--------------------------------------------|
+    | A·B·C·D en juego; C se retira                 | Círculo por orden de salida: A→B, B→D, D→A |
+    | De 3; uno no presentado                       | Los otros dos se marcan entre ellos        |
+    | A entregó; C se retira                        | A sigue en el círculo                      |
+    | De 2; uno se retira                           | Sin marcadores: el otro, solo              |
+    | Sin empezar, de 2; un no presentado           | Sin marcadores                             |
+    | Cerrar                                        | Círculo entre los entregados               |
+    | Reabrir a un retirado                         | Los marcadores no cambian                  |
+    | Leer con un retirado en el círculo            | Error                                      |
+    | Leer con un reabierto fuera del círculo       | Vale                                       |
+    | Acompañar al que se quedó solo, sin empezar   | Entra, círculo nuevo, marcado como traído  |
+    | Acompañar sin estar solo, empezada, o llena   | Error                                      |
+    """
+
+    def _empezada(self, n=4) -> Partida:
+        partida = _partida(n)
+        partida.empezar()
+        return partida
+
+    def test_a_marker_who_withdraws_is_replaced_in_tee_order(self):
+        partida = self._empezada(4)
+        a, b, c, d = partida.user_ids
+
+        partida.retirar(c)
+
+        assert partida.marcadores == {a: b, b: d, d: a}
+
+    def test_a_no_show_in_a_three_leaves_the_other_two_marking_each_other(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+
+        partida.no_presentado(a)
+
+        assert partida.marcadores == {b: c, c: b}
+
+    def test_who_handed_in_their_card_keeps_marking(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        partida.entregar(a)
+
+        partida.retirar(c)
+
+        assert partida.marcadores == {a: b, b: a}
+
+    def test_alone_after_a_withdrawal_nobody_marks(self):
+        partida = self._empezada(2)
+        a, b = partida.user_ids
+
+        partida.retirar(b)
+
+        assert partida.marcadores == {}
+        assert not partida.may_mark(b, a)
+
+    def test_a_no_show_before_starting_leaves_the_other_alone(self):
+        partida = _partida(2)
+        a, _ = partida.user_ids
+
+        partida.no_presentado(a)
+
+        assert partida.marcadores == {}
+        assert partida.sin_marcador == [partida.user_ids[1]]
+
+    def test_closing_keeps_the_circle_among_those_who_handed_in(self):
+        partida = self._empezada(4)
+        a, _, c, d = partida.user_ids
+
+        partida.cerrar(completas={a, c}, sin_hoyos={d})
+
+        assert partida.marcadores == {a: c, c: a}
+
+    def test_reopening_a_withdrawn_card_does_not_touch_the_markers(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        partida.retirar(c)
+
+        partida.reabrir_tarjeta(c)
+
+        assert partida.marcadores == {a: b, b: a}
+        assert partida.estados_de_tarjeta[c] == EstadoDeTarjeta.JUGANDO
+
+    def _leida(self, partida, marcadores, tarjetas) -> Partida:
+        return Partida(
+            id=partida.id,
+            competition_id=partida.competition_id,
+            round_id=partida.round_id,
+            numero=partida.numero,
+            jugadores=partida.jugadores,
+            marcadores=marcadores,
+            estado=EstadoPartida.IN_PROGRESS,
+            estados_de_tarjeta=tarjetas,
+        )
+
+    def test_reading_a_withdrawn_player_in_the_circle_fails(self):
+        partida = _partida(3)
+        a, b, c = partida.user_ids
+
+        with pytest.raises(MarcadoresInvalidosError):
+            self._leida(partida, {a: b, b: c, c: a}, {c: EstadoDeTarjeta.RETIRADO})
+
+    def test_reading_a_reopened_player_outside_the_circle_is_fine(self):
+        partida = _partida(3)
+        a, b, _ = partida.user_ids
+
+        leida = self._leida(partida, {a: b, b: a}, {})
+
+        assert leida.marcadores == {a: b, b: a}
+
+    def test_reading_a_circle_with_a_single_member_fails(self):
+        partida = _partida(3)
+        a, _, _ = partida.user_ids
+
+        with pytest.raises(MarcadoresInvalidosError):
+            self._leida(partida, {a: a}, {})
+
+    def test_reading_a_marker_outside_the_group_fails(self):
+        partida = _partida(3)
+        a, b, _ = partida.user_ids
+
+        with pytest.raises(MarcadoresInvalidosError):
+            self._leida(partida, {a: b, b: UserId.generate()}, {})
+
+    def _sola(self, n=3) -> Partida:
+        """Sin empezar, con todos menos el último no presentados."""
+        partida = _partida(n)
+        for user_id in partida.user_ids[:-1]:
+            partida.no_presentado(user_id)
+        return partida
+
+    def test_keeping_company_to_who_was_left_alone(self):
+        partida = self._sola(2)
+        _, solo = partida.user_ids
+        nuevo = _jugador()
+
+        partida.acompanar(nuevo)
+
+        assert partida.user_ids[-1] == nuevo.user_id
+        assert partida.marcadores == {solo: nuevo.user_id, nuevo.user_id: solo}
+        assert partida.traidos == {nuevo.user_id}
+        assert partida.estados_de_tarjeta[nuevo.user_id] == EstadoDeTarjeta.JUGANDO
+        assert not partida.sin_marcador
+
+    def test_who_was_brought_in_and_leaves_again_is_no_longer_brought_in(self):
+        partida = self._sola(2)
+        nuevo = _jugador()
+        partida.acompanar(nuevo)
+
+        partida.quitar(nuevo.user_id)
+
+        assert partida.traidos == set()
+
+    def test_keeping_company_in_a_group_of_four_with_three_no_shows_does_not_fit(self):
+        partida = self._sola(4)
+
+        with pytest.raises(PartidaInvalidaError):
+            partida.acompanar(_jugador())
+
+    def test_keeping_company_to_a_group_that_is_not_alone(self):
+        partida = _partida(2)
+
+        with pytest.raises(PartidaInvalidaError):
+            partida.acompanar(_jugador())
+
+    def test_keeping_company_once_started(self):
+        partida = self._sola(2)
+        partida.empezar()
+
+        with pytest.raises(PartidaEmpezadaError):
+            partida.acompanar(_jugador())
+
+    def test_who_was_brought_in_is_read_back(self):
+        partida = self._sola(2)
+        nuevo = _jugador()
+        partida.acompanar(nuevo)
+
+        leida = Partida(
+            id=partida.id,
+            competition_id=partida.competition_id,
+            round_id=partida.round_id,
+            numero=partida.numero,
+            jugadores=partida.jugadores,
+            marcadores=partida.marcadores,
+            estado=partida.estado,
+            estados_de_tarjeta=partida.estados_de_tarjeta,
+            traidos={nuevo.user_id},
+        )
+
+        assert leida.traidos == {nuevo.user_id}
+
+    def test_without_marker_only_a_player_still_playing_whom_nobody_marks(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        assert not partida.sin_marcador
+        partida.retirar(a)
+        assert not partida.sin_marcador
+        partida.retirar(b)
+        assert partida.sin_marcador == [c]
+        partida.entregar(c)
+        assert not partida.sin_marcador

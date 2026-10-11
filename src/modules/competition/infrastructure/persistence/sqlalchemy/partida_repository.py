@@ -11,6 +11,7 @@ from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.repositories.partida_repository_interface import (
     PartidaRepositoryInterface,
 )
+from src.modules.competition.domain.services.marcadores_en_cadena import MarcadoresEnCadena
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
@@ -127,6 +128,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     "pars_by_hole": list(jugador.par_por_hoyo),
                     "card_status": partida.estados_de_tarjeta[jugador.user_id].value,
                     "marks_user_id": partida.marcadores.get(jugador.user_id),
+                    "brought_in": jugador.user_id in partida.traidos,
                 }
                 for posicion, jugador in enumerate(partida.jugadores, start=1)
             ],
@@ -159,6 +161,18 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
 
     @staticmethod
     def _partida(grupo, filas) -> Partida:
+        marcadores = {
+            fila.user_id: fila.marks_user_id for fila in filas if fila.marks_user_id is not None
+        }
+        quedan = [
+            fila.user_id
+            for fila in filas
+            if not EstadoDeTarjeta(fila.card_status).fuera_de_la_partida()
+        ]
+        # Guardadas antes del 11 oct 2026, quien se retiró seguía en el círculo:
+        # se rehace entre los que quedan, como se hace ahora al retirarse
+        if any(u not in quedan for par in marcadores.items() for u in par):
+            marcadores = MarcadoresEnCadena.de(quedan)
         return Partida(
             id=PartidaId(uuid.UUID(grupo.id)),
             competition_id=grupo.competition_id,
@@ -176,9 +190,8 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                 )
                 for fila in filas
             ],
-            marcadores={
-                fila.user_id: fila.marks_user_id for fila in filas if fila.marks_user_id is not None
-            },
+            marcadores=marcadores,
             estado=EstadoPartida(grupo.status),
             estados_de_tarjeta={fila.user_id: EstadoDeTarjeta(fila.card_status) for fila in filas},
+            traidos={fila.user_id for fila in filas if fila.brought_in},
         )

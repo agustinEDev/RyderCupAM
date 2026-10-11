@@ -414,3 +414,118 @@ async def test_a_ryder_has_no_standings(client: AsyncClient):
 
     assert respuesta.status_code == 400, respuesta.text
     assert respuesta.json()["error_code"] == "NOT_STROKE_PLAY"
+
+
+# | El marcador que se va (QA del 11 oct 2026)       | Respuesta                                |
+# |--------------------------------------------------|------------------------------------------|
+# | Uno se retira                                    | 200, los demás en círculo, él fuera      |
+# | Validar lo anotado de quien se quedó solo        | 200, sus hoyos validados                 |
+# | Validar lo anotado de quien tiene marcador       | 409 PLAYER_HAS_MARKER                    |
+# | No presentado deja a uno solo sin salir          | El último de la siguiente pasa, traído   |
+
+
+def _de(vista, user_id):
+    return next(p for p in vista["players"] if p["user_id"] == user_id)
+
+
+async def _no_show(client, organizador, partida, user_id):
+    set_auth_cookies(client, organizador["cookies"])
+    return await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{user_id}/no-show"
+    )
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_who_withdraws_leaves_the_circle(client: AsyncClient):
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+    await _anotar(client, por_id[yo], partida, own_score=4, marked_player_id=_marca_a(partida, yo))
+
+    vista = (await _post(client, por_id[yo], partida, "/retire")).json()
+
+    assert _de(vista, yo)["marks_user_id"] is None
+    assert _de(vista, yo)["marked_by_user_id"] is None
+    quedan = [p for p in vista["players"] if p["user_id"] != yo]
+    assert {p["marks_user_id"] for p in quedan} == {p["user_id"] for p in quedan}
+    assert all(p["brought_in"] is False for p in vista["players"])
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_validating_what_the_lone_player_scored(client: AsyncClient):
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    *faltan, solo = [p["user_id"] for p in partida["players"]]
+    for user_id in faltan:
+        assert (await _no_show(client, organizador, partida, user_id)).status_code == 200
+    for hoyo, golpes in ((1, 4), (2, 5)):
+        anotado = await _anotar(
+            client, por_id[solo], partida, hoyo=hoyo, own_score=golpes, marked_player_id=solo
+        )
+        assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{solo}/validate-scored"
+    )
+
+    assert respuesta.status_code == 200, respuesta.text
+    suyo = _de(respuesta.json(), solo)
+    assert suyo["marked_by_user_id"] is None
+    assert [h["status"] for h in suyo["holes"][:3]] == ["MATCH", "MATCH", "PENDING"]
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_validating_someone_with_a_marker(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][0]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/validate-scored"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "PLAYER_HAS_MARKER"
+
+
+async def test_a_no_show_leaving_one_alone_brings_the_last_of_the_next_group(
+    client: AsyncClient,
+):
+    from zoneinfo import ZoneInfo
+
+    from main import app
+    from src.config.dependencies import get_reloj_del_servidor
+
+    organizador, competicion, franja, _ = await _stableford(client, jugadores=6)
+    generadas = (await _generar(client, organizador, franja)).json()["groups"]
+    assert [len(p["players"]) for p in generadas] == [4, 3], generadas
+    # La de 3 sale primero: se queda solo uno y la siguiente, de 4, aún no ha salido
+    reordenadas = await client.put(
+        f"/api/v1/competitions/rounds/{franja}/groups/order",
+        json={"group_ids": [generadas[1]["id"], generadas[0]["id"]]},
+    )
+    assert reordenadas.status_code == 200, reordenadas.text
+    primera, segunda = reordenadas.json()["groups"]
+    # Un minuto después de la salida de la primera: la segunda aún no ha salido
+    dia = date.fromisoformat(competicion["start_date"])
+    hora, minuto = map(int, primera["tee_time"].split(":"))
+    reloj = datetime(
+        dia.year, dia.month, dia.day, hora, minuto + 1, tzinfo=ZoneInfo("Europe/Madrid")
+    )
+    app.dependency_overrides[get_reloj_del_servidor] = lambda: lambda: reloj
+    try:
+        for jugador in primera["players"][:2]:
+            respuesta = await _no_show(client, organizador, primera, jugador["user_id"])
+            assert respuesta.status_code == 200, respuesta.text
+        vista = respuesta.json()
+    finally:
+        app.dependency_overrides.pop(get_reloj_del_servidor, None)
+
+    viene = segunda["players"][-1]["user_id"]
+    queda = primera["players"][2]["user_id"]
+    assert _de(vista, viene)["brought_in"] is True
+    assert _de(vista, viene)["marks_user_id"] == queda
+    assert _de(vista, queda)["marks_user_id"] == viene
+    set_auth_cookies(client, organizador["cookies"])
+    listado = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()["groups"]
+    assert viene not in [p["user_id"] for p in listado[1]["players"]]
+    assert any(p["brought_in"] for p in listado[0]["players"])
