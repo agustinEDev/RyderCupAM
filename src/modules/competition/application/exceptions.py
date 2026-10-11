@@ -45,6 +45,12 @@ class FranjaInvalidaError(Exception):
     pass
 
 
+class FranjaEnElPasadoError(FranjaInvalidaError):
+    """Su primera salida ya ha pasado: no admitiría partidas (QA del 11 oct 2026)."""
+
+    pass
+
+
 class ActualizacionNoPermitidaError(Exception):
     """Fuera de la ventana para actualizar los hándicaps a mano (#251)."""
 

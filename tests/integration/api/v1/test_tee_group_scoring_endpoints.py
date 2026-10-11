@@ -24,11 +24,28 @@ from tests.conftest import set_auth_cookies
 from tests.integration.api.v1.test_tee_groups_endpoints import (  # noqa: F401
     _generar,
     _sin_la_rfeg_de_verdad,
-    _stableford,
+    _stableford as _stableford_con_el_reloj,
     _usuario,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _stableford(*args, **kwargs):
+    """
+    El torneo se monta con el reloj de verdad: con el de `_ya_abrio` (mediodía
+    del día del torneo) su franja de las 9 nacería ya pasada, y no se puede
+    crear (QA del 11 oct 2026). El reloj falso vuelve para anotar.
+    """
+    from main import app
+    from src.config.dependencies import get_reloj_del_servidor
+
+    falso = app.dependency_overrides.pop(get_reloj_del_servidor, None)
+    try:
+        return await _stableford_con_el_reloj(*args, **kwargs)
+    finally:
+        if falso is not None:
+            app.dependency_overrides[get_reloj_del_servidor] = falso
 
 
 @pytest.fixture
