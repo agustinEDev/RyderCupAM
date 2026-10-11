@@ -177,8 +177,8 @@ def test_thru_comes_from_the_last_live_card_with_holes(tarjetas, tras):
         ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(30)), False),
         # Hoy entregada, ayer no presentado
         ((_tarjeta(0, tras=0, estado=NP), _tarjeta(30)), False),
-        # Ayer retirado y hoy no presentado: lo último fue no venir
-        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(0, tras=0, estado=NP)), False),
+        # Ayer retirado y hoy no presentado: la última jugada fue retirada (revisor)
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(0, tras=0, estado=NP)), True),
         # Ayer sin cerrar por el 17 y hoy retirado: va por el 17 de ayer
         ((_tarjeta(30, tras=17, estado=JUGANDO), _tarjeta(9, tras=5, estado=RETIRADO)), False),
     ],
