@@ -162,6 +162,45 @@ def test_thru_comes_from_the_last_live_card_with_holes(tarjetas, tras):
     assert fila.tras == tras
 
 
+@pytest.mark.parametrize(
+    ("tarjetas", "retirado"),
+    [
+        # Se retiró en el 5 de la única: «R», no «5» como si siguiera
+        ((_tarjeta(9, tras=5, estado=RETIRADO),), True),
+        # Entregada: no
+        ((_tarjeta(30),), False),
+        # Ayer retirado y hoy va por el 3: lo que cuenta es hoy
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(6, tras=3, estado=JUGANDO)), False),
+        # Ayer retirado y hoy sin salir: su última jugada fue retirada
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(0, tras=0, estado=JUGANDO)), True),
+        # Retirado ayer, hoy entregada
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(30)), False),
+        # Hoy entregada, ayer no presentado
+        ((_tarjeta(0, tras=0, estado=NP), _tarjeta(30)), False),
+        # Ayer retirado y hoy no presentado: la última jugada fue retirada (revisor)
+        ((_tarjeta(9, tras=5, estado=RETIRADO), _tarjeta(0, tras=0, estado=NP)), True),
+        # Ayer sin cerrar por el 17 y hoy retirado: lo último que jugó, retirado (/code-review)
+        ((_tarjeta(30, tras=17, estado=JUGANDO), _tarjeta(9, tras=5, estado=RETIRADO)), True),
+        # Retirado sin ningún hoyo: también (su status es NR)
+        ((_tarjeta(0, tras=0, estado=RETIRADO),), True),
+    ],
+)
+def test_retired_when_the_last_card_played_was_withdrawn(tarjetas, retirado):
+    # Ayer retirado y hoy sin salir: «R» hasta que empiece hoy, que es lo último
+    # que jugó; sus hoyos de ayer no dirían dónde va
+    """QA del 11 oct 2026: en Stableford el retirado cuenta, pero en HOYO va «R»."""
+    (fila,) = _clasificar([_jugador(*tarjetas)])
+
+    assert fila.retirado is retirado
+
+
+def test_in_medal_a_withdrawal_is_nr_and_also_retired():
+    """El cliente enseña el status (NR) primero; `retired` solo cambia a los clasificados."""
+    (fila,) = _clasificar([_jugador(_tarjeta(al_par=3, tras=9, estado=RETIRADO))], tipo=MEDAL)
+
+    assert (fila.estado, fila.retirado) == (EstadoEnClasificacion.NR, True)
+
+
 def test_stableford_scratch_uses_gross_points():
     a = _jugador(_tarjeta(40, brutos=20))
     b = _jugador(_tarjeta(36, brutos=25))

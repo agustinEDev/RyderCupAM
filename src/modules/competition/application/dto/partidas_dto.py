@@ -227,6 +227,13 @@ class StandingRowDTO(BaseModel):
     )
     cards: int
     thru: int
+    retired: bool = Field(
+        False,
+        description=(
+            "Su última tarjeta jugada (ni de no presentado ni sin empezar) quedó retirada. "
+            "En Stableford sigue CLASIFICADO con lo jugado; en Medal su status ya es NR."
+        ),
+    )
     status: str = Field(..., description="CLASIFICADO, SIN_EMPEZAR, NR o NP.")
 
 
