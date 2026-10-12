@@ -26,6 +26,13 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | Reabrir / no presentado antes de la 1.ª salida    | ScoringNotOpenYetError                 |
 | Corregir sin ningún lado                          | ValidationError: no toca nada          |
 | Corregir con un lado nulo (raya)                  | Se acepta                              |
+| Reabrir una tarjeta ya abierta (#545)             | TarjetaYaAbiertaError: nada cambia     |
+| No presentado con golpes en su partida (#550):    | TieneGolpesError: nada cambia          |
+|   suyos, solo del marcador, una raya              |                                        |
+| No presentado con golpes solo en otra partida     | NO_PRESENTADO                          |
+| El organizador retira a un jugador (#550)         | RETIRADO, círculo rehecho              |
+| Retirar en una partida sin empezar / ya cerrada   | PartidaNoEmpezadaError / Cerrada       |
+| Retirar siendo jugador                            | NotCompetitionCreatorError             |
 """
 
 from datetime import UTC, datetime
@@ -47,12 +54,18 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
+    RetirarJugadorUseCase,
+    TieneGolpesError,
 )
 from src.modules.competition.domain.entities.golpe_de_partida import (
     GolpeDePartida,
     RayaNoPermitidaError,
 )
-from src.modules.competition.domain.entities.partida import TarjetaCerradaError
+from src.modules.competition.domain.entities.partida import (
+    PartidaNoEmpezadaError,
+    TarjetaCerradaError,
+    TarjetaYaAbiertaError,
+)
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
@@ -85,6 +98,12 @@ def _reabrir(escenario):
 
 def _no_presentado(escenario):
     return MarcarNoPresentadoUseCase(
+        uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
+    )
+
+
+def _retirar(escenario):
+    return RetirarJugadorUseCase(
         uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
     )
 
@@ -388,7 +407,7 @@ def test_a_correction_with_one_side(cuerpo):
     assert CorrectHoleBodyDTO(**cuerpo).model_fields_set == set(cuerpo)
 
 
-@pytest.mark.parametrize("caso", [_reabrir, _no_presentado])
+@pytest.mark.parametrize("caso", [_reabrir, _no_presentado, _retirar])
 async def test_not_once_the_competition_is_over_either(caso):
     escenario, partida = await _en_juego()
     a = partida.user_ids[0]
@@ -398,7 +417,7 @@ async def test_not_once_the_competition_is_over_either(caso):
         await caso(escenario).execute(partida.id.value, a.value, escenario.creador, False)
 
 
-@pytest.mark.parametrize("caso", [_reabrir, _no_presentado])
+@pytest.mark.parametrize("caso", [_reabrir, _no_presentado, _retirar])
 async def test_not_before_the_first_tee_time_either(caso):
     # Un no presentado puesto antes de salir ignoraba luego sus golpes en silencio
     escenario, partida = await _partida()
@@ -409,3 +428,85 @@ async def test_not_before_the_first_tee_time_either(caso):
         await caso(escenario).execute(partida.id.value, a.value, escenario.creador, False)
 
     assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.JUGANDO
+
+
+async def test_reopening_a_card_already_open():
+    # Dos organizadores a la vez: el segundo ve que se le adelantaron (#545)
+    escenario, partida = await _en_juego()
+    a = partida.user_ids[0]
+
+    with pytest.raises(TarjetaYaAbiertaError):
+        await _reabrir(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.JUGANDO
+
+
+@pytest.mark.parametrize(
+    ("propio", "del_marcador"),
+    [
+        pytest.param(4, None, id="suyos"),
+        pytest.param(None, 5, id="solo-del-marcador"),
+        pytest.param(RAYA, None, id="una-raya"),
+    ],
+)
+async def test_no_show_with_strokes_entered(propio, del_marcador):
+    # Jugó: se retira, no es no presentado (#550)
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 2), propio, del_marcador)
+
+    with pytest.raises(TieneGolpesError):
+        await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.JUGANDO
+
+
+async def test_no_show_with_strokes_only_in_another_group():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 3), 4, partida_id=PartidaId.generate())
+
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_the_organiser_retires_a_player():
+    escenario, partida = await _en_juego(n=3)
+    a, b, c = partida.user_ids
+    await _anotar(escenario, partida, a, range(1, 4), 4)
+
+    await _retirar(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    assert leida.estados_de_tarjeta[a] == EstadoDeTarjeta.RETIRADO
+    # Como cuando se retira él: los que quedan se marcan entre ellos
+    assert set(leida.marcadores) == {b, c}
+    assert set(leida.marcadores.values()) == {b, c}
+
+
+async def test_retiring_in_a_group_not_started():
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+
+    with pytest.raises(PartidaNoEmpezadaError):
+        await _retirar(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+
+async def test_retiring_a_closed_card():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    entregada = await escenario.uow.partidas.find_by_id(partida.id)
+    entregada.entregar(a)
+    await escenario.uow.partidas.guardar([entregada])
+
+    with pytest.raises(TarjetaCerradaError):
+        await _retirar(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+
+async def test_a_player_cannot_retire_another():
+    escenario, partida = await _en_juego(n=3)
+    a, b, _ = partida.user_ids
+
+    with pytest.raises(NotCompetitionCreatorError):
+        await _retirar(escenario).execute(partida.id.value, a.value, b, False)

@@ -7,8 +7,9 @@ Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 20
   así resuelve un desacuerdo (P4) y hace de marcador en una partida de uno
   (P11). Queda registrado que lo metió él (P9). Una tarjeta cerrada se reabre
   antes, a propósito: que la corrección se vea.
-- **Reabrir una tarjeta** (P9) y **marcar a alguien como no presentado** (P6).
-  Si el no presentado deja a uno solo sin salir, el último en salir de la
+- **Reabrir una tarjeta** (P9), solo si está cerrada (#545), y **marcar a
+  alguien como no presentado** (P6), solo si no tiene golpes en su partida; si
+  los tiene, jugó, y el organizador lo **retira** (#550). Si el no presentado deja a uno solo sin salir, el último en salir de la
   siguiente partida de 4 aún sin salir (si no hay, de 3) pasa a acompañarle
   (QA del 11 oct 2026).
 - **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
@@ -92,6 +93,12 @@ async def _bloqueada(uow: CompetitionUnitOfWorkInterface, partida: Partida) -> P
     if bloqueada is None:
         raise PartidaNotFoundError(f"No existe la partida {partida.id}")
     return bloqueada
+
+
+class TieneGolpesError(Exception):
+    """Tiene golpes anotados en su partida: jugó, así que se retira (#550)."""
+
+    error_code = "PLAYER_HAS_STROKES"
 
 
 class TieneMarcadorError(Exception):
@@ -194,6 +201,7 @@ class ReabrirTarjetaUseCase:
         Raises:
             PartidaNoAnotableError: Con la competición sin jugarse
             ScoringNotOpenYetError: Antes de abrir la franja
+            TarjetaYaAbiertaError: Si ya estaba abierta (#545)
         """
         llegada = self._reloj()
         async with self._uow:
@@ -229,6 +237,7 @@ class MarcarNoPresentadoUseCase:
         Raises:
             PartidaNoAnotableError: Con la competición sin jugarse
             ScoringNotOpenYetError: Antes de abrir la franja
+            TieneGolpesError: Con golpes anotados en esta partida (#550)
         """
         llegada = self._reloj()
         async with self._uow:
@@ -239,9 +248,46 @@ class MarcarNoPresentadoUseCase:
             # rehace partidas sin salir: así no se cruzan (revisión)
             await self._uow.competitions.find_by_id_for_update(competicion.id)
             bloqueada = await _bloqueada(self._uow, partida)
-            bloqueada.no_presentado(_del_jugador(bloqueada, user_id))
+            jugador = _del_jugador(bloqueada, user_id)
+            # Leídos con la partida bloqueada: un golpe a la vez no se cuela
+            golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
+            if any(
+                g.user_id == jugador and (g.propio_enviado or g.marcador_enviado) for g in golpes
+            ):
+                raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
+            bloqueada.no_presentado(jugador)
             await self._uow.partidas.guardar([bloqueada])
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
+
+
+class RetirarJugadorUseCase:
+    """El organizador retira a quien ya jugó algún hoyo (#550): como si se retirara él."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+            PartidaNoEmpezadaError, TarjetaCerradaError
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            bloqueada.retirar(_del_jugador(bloqueada, user_id))
+            await self._uow.partidas.guardar([bloqueada])
 
 
 class ValidarLoAnotadoUseCase:

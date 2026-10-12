@@ -23,6 +23,7 @@ from src.config.dependencies import (
     get_entregar_tarjeta_de_partida_use_case,
     get_marcar_no_presentado_use_case,
     get_reabrir_tarjeta_use_case,
+    get_retirar_jugador_use_case,
     get_retirarse_de_partida_use_case,
     get_validar_lo_anotado_use_case,
     get_ver_anotacion_de_partida_use_case,
@@ -65,6 +66,8 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
+    RetirarJugadorUseCase,
+    TieneGolpesError,
     TieneMarcadorError,
     ValidarLoAnotadoUseCase,
 )
@@ -76,6 +79,7 @@ from src.modules.competition.domain.entities.partida import (
     PartidaLlenaError,
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
+    TarjetaYaAbiertaError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -133,6 +137,16 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
         status.HTTP_409_CONFLICT,
         "GROUP_FULL",
         "La partida ya está completa: mueve antes a uno para reabrir esta tarjeta.",
+    ),
+    TarjetaYaAbiertaError: (
+        status.HTTP_409_CONFLICT,
+        "SCORECARD_ALREADY_OPEN",
+        "Esa tarjeta ya está abierta.",
+    ),
+    TieneGolpesError: (
+        status.HTTP_409_CONFLICT,
+        TieneGolpesError.error_code,
+        "Tiene golpes anotados: no es un no presentado, retíralo.",
     ),
     TieneMarcadorError: (
         status.HTTP_409_CONFLICT,
@@ -362,6 +376,29 @@ async def mark_tee_group_no_show(
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
         marcar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+    )
+
+
+@router.post(
+    "/groups/{group_id}/players/{user_id}/retire",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Retirar a un jugador (organizador)",
+    description="Para quien ya tiene golpes anotados: queda retirado, como si se retirara él.",
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def retire_tee_group_player(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    retirar: RetirarJugadorUseCase = Depends(get_retirar_jugador_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(
+        retirar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
     )
 
 

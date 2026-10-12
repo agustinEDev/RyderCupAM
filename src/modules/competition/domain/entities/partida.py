@@ -50,6 +50,10 @@ class TarjetaCerradaError(ValueError):
     """Esa tarjeta ya está entregada, retirada o sin presentarse."""
 
 
+class TarjetaYaAbiertaError(ValueError):
+    """Reabrir una tarjeta que ya está abierta: otro organizador se adelantó (#545)."""
+
+
 class Partida:
     """Un grupo que sale junto en una franja."""
 
@@ -195,6 +199,8 @@ class Partida:
         2026). A los demás no se les tocan los marcadores.
         """
         self._de_la_partida(user_id)
+        if self._tarjetas[user_id] == EstadoDeTarjeta.JUGANDO:
+            raise TarjetaYaAbiertaError("Esa tarjeta ya está abierta.")
         era_no_presentado = self._tarjetas[user_id] == EstadoDeTarjeta.NO_PRESENTADO
         # Cuentan también los retirados: siguen ocupando su sitio (/code-review)
         if era_no_presentado and self._que_ocupan_sitio() >= jugadores_por_partida:

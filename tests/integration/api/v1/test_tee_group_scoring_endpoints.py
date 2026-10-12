@@ -342,6 +342,68 @@ async def test_no_show_and_reopen(client: AsyncClient):
     assert tarjeta(reabierta) == "JUGANDO"
 
 
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_reopening_an_open_card(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/reopen"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "SCORECARD_ALREADY_OPEN"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_with_strokes_is_retired_not_a_no_show(client: AsyncClient):
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    anotado = await _anotar(
+        client,
+        por_id[jugador],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, jugador),
+        marked_score=4,
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}"
+
+    no_presentado = await client.post(f"{base}/no-show")
+    retirado = await client.post(f"{base}/retire")
+
+    assert no_presentado.status_code == 409, no_presentado.text
+    assert no_presentado.json()["error_code"] == "PLAYER_HAS_STROKES"
+    assert retirado.status_code == 200, retirado.text
+    suyo = next(p for p in retirado.json()["players"] if p["user_id"] == jugador)
+    assert suyo["card_status"] == "RETIRADO"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_cannot_retire_another(client: AsyncClient):
+    _, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]
+    await _anotar(
+        client,
+        por_id[jugador],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, jugador),
+        marked_score=4,
+    )
+    set_auth_cookies(client, por_id[otro]["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/retire"
+    )
+
+    assert respuesta.status_code == 403, respuesta.text
+    assert respuesta.json()["error_code"] == "NOT_ORGANIZER"
+
+
 async def test_no_show_before_the_first_tee_time(client: AsyncClient):
     organizador, _, partida, _ = await _con_partida_y_organizador(client)
     jugador = partida["players"][1]["user_id"]

@@ -34,6 +34,7 @@ from src.modules.competition.domain.entities.partida import (
     PartidaLlenaError,
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
+    TarjetaYaAbiertaError,
 )
 from src.modules.competition.domain.services.marcadores_en_cadena import (
     MarcadoresEnCadena,
@@ -391,6 +392,16 @@ class TestCicloDeLaTarjeta:
 
         assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
         assert partida.estado == EstadoPartida.IN_PROGRESS
+
+    def test_reopening_a_card_already_open(self):
+        # Dos organizadores a la vez: el segundo se entera (#545)
+        partida = self._empezada()
+        a = partida.user_ids[0]
+
+        with pytest.raises(TarjetaYaAbiertaError):
+            partida.reabrir_tarjeta(a)
+
+        assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
 
     def test_closing_by_the_organiser(self):
         """Completa, entregada; a medias, retirado; sin ningún hoyo, no presentado."""
