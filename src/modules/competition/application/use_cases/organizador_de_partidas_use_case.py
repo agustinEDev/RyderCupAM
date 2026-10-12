@@ -14,8 +14,8 @@ Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 20
 - **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
   una vez; los que no coinciden se corrigen uno a uno (QA del 11 oct 2026).
 - **Cerrar la franja**, la red (P3): las tarjetas aún en juego quedan
-  entregadas si están completas, no presentado si no tienen ningún hoyo
-  validado, y retirado si van a medias.
+  entregadas si están completas, no presentado si nadie les anotó ningún
+  golpe, y retirado el resto (también con hoyos anotados sin validar).
 
 Solo el organizador o un admin, con la partida bloqueada.
 """
@@ -331,15 +331,24 @@ class CerrarFranjaUseCase:
                 if (bloqueada := await self._uow.partidas.find_by_id_for_update(p.id))
             ]
             golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
-            validados: dict[UserId, int] = {}
+            # Por partida y jugador: sus golpes de otra partida no cuentan aquí
+            validados: dict[tuple[PartidaId, UserId], int] = {}
+            # Con algo anotado por cualquiera de los dos lados jugó, aunque no se
+            # le validara nada (su marcador no vino): retirado, no no presentado
+            anotaron: set[tuple[PartidaId, UserId]] = set()
             for golpe in golpes:
+                suyo = (golpe.partida_id, golpe.user_id)
                 if golpe.validado:
-                    validados[golpe.user_id] = validados.get(golpe.user_id, 0) + 1
+                    validados[suyo] = validados.get(suyo, 0) + 1
+                if golpe.propio_enviado or golpe.marcador_enviado:
+                    anotaron.add(suyo)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
                 partida.cerrar(
-                    completas={u for u in partida.user_ids if validados.get(u, 0) == HOYOS},
-                    sin_hoyos={u for u in partida.user_ids if validados.get(u, 0) == 0},
+                    completas={
+                        u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS
+                    },
+                    sin_golpes={u for u in partida.user_ids if (partida.id, u) not in anotaron},
                 )
             await self._uow.partidas.guardar(sin_acabar)
             return await vista_de_la_franja(

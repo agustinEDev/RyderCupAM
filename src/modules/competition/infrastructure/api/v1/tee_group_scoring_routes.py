@@ -397,7 +397,7 @@ async def validate_tee_group_scored_holes(
     summary="Cerrar las partidas de una franja (organizador)",
     description=(
         "La red: las tarjetas aún en juego quedan entregadas si están completas, no "
-        "presentado si no tienen ningún hoyo validado, y retirado si van a medias."
+        "presentado si nadie les anotó ningún golpe, y retirado el resto."
     ),
     tags=["Competitions - Tee groups"],
 )

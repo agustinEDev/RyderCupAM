@@ -15,6 +15,9 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | No presentado                                     | NO_PRESENTADO                          |
 | Cerrar la franja                                  | Completa ENTREGADA, a medias RETIRADO, |
 |                                                   | sin hoyos NO_PRESENTADO                |
+| Cerrar con hoyos anotados y ninguno validado      | RETIRADO, no NO_PRESENTADO: jugó       |
+|   (suyos, solo del marcador, los 18, ✗, raya)     |                                        |
+| Cerrar con un hoyo creado y nada enviado          | NO_PRESENTADO                          |
 | Cerrar la franja siendo jugador                   | NotCompetitionCreatorError             |
 | Cerrar la franja antes de su 1.ª salida           | ScoringNotOpenYetError: nada cambia    |
 | Cerrar la franja con la competición sin jugarse   | PartidaNoAnotableError                 |
@@ -45,11 +48,15 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
 )
-from src.modules.competition.domain.entities.golpe_de_partida import RayaNoPermitidaError
+from src.modules.competition.domain.entities.golpe_de_partida import (
+    GolpeDePartida,
+    RayaNoPermitidaError,
+)
 from src.modules.competition.domain.entities.partida import TarjetaCerradaError
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
     _partida,
@@ -237,6 +244,77 @@ async def test_closing_the_window():
         entregada: EstadoDeTarjeta.ENTREGADA,
     }
     assert (await escenario.uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.COMPLETED
+
+
+async def _anotar(
+    escenario, partida, user_id, hoyos, propio=None, del_marcador=None, partida_id=None
+):
+    """Cada lado se envía solo si se pasa; RAYA es levantar bola."""
+    # `marcadores` va de marcador a marcado
+    marcador = next(m for m, marcado in partida.marcadores.items() if marcado == user_id)
+    for hoyo in hoyos:
+        golpe = GolpeDePartida.crear(
+            partida_id or partida.id,
+            partida.round_id,
+            partida.competition_id,
+            user_id,
+            hoyo,
+            escenario.ahora,
+        )
+        if propio is not None:
+            golpe.anotar_propio(_golpes(propio), True, user_id, escenario.ahora)
+        if del_marcador is not None:
+            golpe.anotar_del_marcador(_golpes(del_marcador), True, marcador, escenario.ahora)
+        await escenario.uow.golpes_de_partida.guardar(golpe)
+
+
+RAYA = "raya"
+
+
+def _golpes(valor):
+    return None if valor == RAYA else valor
+
+
+@pytest.mark.parametrize(
+    ("hoyos", "propio", "del_marcador"),
+    [
+        pytest.param(range(1, 11), 4, None, id="solo-los-suyos"),
+        pytest.param(range(1, 2), None, 5, id="solo-los-del-marcador"),
+        pytest.param(range(1, 19), 4, None, id="los-18-sin-validar"),
+        pytest.param(range(1, 4), 4, 5, id="solo-desacuerdos"),
+        pytest.param(range(1, 2), RAYA, None, id="una-raya"),
+    ],
+)
+async def test_closing_with_entered_holes_and_none_validated(hoyos, propio, del_marcador):
+    # Su marcadora no vino y nadie le validó nada: jugó, así que no es NP
+    escenario, partida = await _en_juego(n=3)
+    jugo = partida.user_ids[0]
+    await _anotar(escenario, partida, jugo, hoyos, propio, del_marcador)
+
+    await _cerrar(escenario)
+
+    assert (await _tarjetas(escenario, partida))[jugo] == EstadoDeTarjeta.RETIRADO
+
+
+async def test_closing_counts_only_the_strokes_of_its_own_group():
+    # Golpes suyos de otra partida de la franja no le hacen retirado en esta
+    escenario, partida = await _en_juego(n=3)
+    nadie = partida.user_ids[0]
+    await _anotar(escenario, partida, nadie, range(1, 4), 4, partida_id=PartidaId.generate())
+
+    await _cerrar(escenario)
+
+    assert (await _tarjetas(escenario, partida))[nadie] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_closing_with_a_hole_created_and_nothing_sent():
+    escenario, partida = await _en_juego(n=3)
+    nadie = partida.user_ids[0]
+    await _anotar(escenario, partida, nadie, range(1, 2))
+
+    await _cerrar(escenario)
+
+    assert (await _tarjetas(escenario, partida))[nadie] == EstadoDeTarjeta.NO_PRESENTADO
 
 
 def _cerrar(escenario, quien=None):
