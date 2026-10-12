@@ -47,13 +47,17 @@ async def _en_juego(n=2):
     return escenario, en_juego
 
 
-async def _validar(escenario, partida, user_id, hoyos=range(1, 19), golpes=4):
+async def _validar(escenario, partida, user_id, hoyos=range(1, 19), golpes=4, marcador=None):
+    # `marcadores` va de marcador a marcado: su marcador es quien le tiene
+    marcador = marcador or next(
+        (m for m, marcado in partida.marcadores.items() if marcado == user_id), None
+    )
     for hoyo in hoyos:
         golpe = GolpeDePartida.crear(
             partida.id, partida.round_id, partida.competition_id, user_id, hoyo, A_LAS_NUEVE_Y_CINCO
         )
         golpe.anotar_propio(golpes, False, user_id, A_LAS_NUEVE_Y_CINCO)
-        golpe.anotar_del_marcador(golpes, False, partida.marcadores[user_id], A_LAS_NUEVE_Y_CINCO)
+        golpe.anotar_del_marcador(golpes, False, marcador, A_LAS_NUEVE_Y_CINCO)
         await escenario.uow.golpes_de_partida.guardar(golpe)
 
 

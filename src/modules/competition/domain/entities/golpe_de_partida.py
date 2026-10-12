@@ -145,6 +145,15 @@ class GolpeDePartida:
         """Alguien anotó algo en este hoyo (su lado, el del marcador o una raya): jugó."""
         return self._propio_enviado or self._marcador_enviado
 
+    def muestra_que_jugo(self, user_id: UserId) -> bool:
+        """
+        Este hoyo dice que estuvo en el campo: tiene algo anotado en su tarjeta,
+        o anotó él a quien marca (12 oct 2026). El organizador que corrige no.
+        """
+        if self._user_id == user_id:
+            return self.apuntado
+        return self._marcador_enviado and self._marcador_por == user_id
+
     @property
     def golpes_validados(self) -> int | None:
         """Los golpes que cuentan, si está validado; None también es una raya validada."""

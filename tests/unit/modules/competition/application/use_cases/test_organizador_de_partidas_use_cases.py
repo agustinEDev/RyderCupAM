@@ -33,6 +33,8 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | No presentado con golpes solo de otro de la       | NO_PRESENTADO (cuentan sus filas, como |
 |   partida, o una fila sin nada enviado            |   al cerrar la franja)                 |
 | No presentado con la tarjeta ya cerrada y golpes  | TarjetaCerradaError, no TieneGolpes    |
+| Sin golpes suyos pero anotó a quien marca         | Jugó: TieneGolpesError, y al cerrar la |
+|   (12 oct 2026)                                   |   franja, RETIRADO                     |
 | El organizador retira a un jugador (#550)         | RETIRADO, círculo rehecho              |
 | Retirar en una partida sin empezar / ya cerrada   | PartidaNoEmpezadaError / Cerrada       |
 | Retirar siendo jugador                            | NotCompetitionCreatorError             |
@@ -245,9 +247,11 @@ async def test_reopening_a_no_show_in_a_full_three_ball_window():
 async def test_closing_the_window():
     escenario, partida = await _en_juego(n=4)
     completa, a_medias, sin_hoyos, entregada = partida.user_ids
-    await _validar(escenario, partida, completa)
-    await _validar(escenario, partida, a_medias, hoyos=range(1, 10))
-    await _validar(escenario, partida, entregada)
+    # El lado del marcador lo mete el organizador: así `sin_hoyos` no anotó a nadie
+    organizador = escenario.creador
+    await _validar(escenario, partida, completa, marcador=organizador)
+    await _validar(escenario, partida, a_medias, hoyos=range(1, 10), marcador=organizador)
+    await _validar(escenario, partida, entregada, marcador=organizador)
     antes = await escenario.uow.partidas.find_by_id(partida.id)
     antes.entregar(entregada)
     await escenario.uow.partidas.guardar([antes])
@@ -546,3 +550,33 @@ async def test_no_show_on_a_closed_card_with_strokes():
 
     with pytest.raises(TarjetaCerradaError):
         await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+
+async def _anoto_a_su_marcado(escenario, partida, marcador):
+    """Solo el lado del marcador en la tarjeta de quien marca: él no se anotó nada."""
+    marcado = partida.marcadores[marcador]
+    golpe = GolpeDePartida.crear(
+        partida.id, partida.round_id, partida.competition_id, marcado, 1, escenario.ahora
+    )
+    golpe.anotar_del_marcador(4, True, marcador, escenario.ahora)
+    await escenario.uow.golpes_de_partida.guardar(golpe)
+
+
+async def test_no_show_for_someone_who_only_scored_whom_they_mark():
+    # Estuvo en el campo: se retira, no es no presentado (12 oct 2026)
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anoto_a_su_marcado(escenario, partida, a)
+
+    with pytest.raises(TieneGolpesError):
+        await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+
+async def test_closing_with_someone_who_only_scored_whom_they_mark():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anoto_a_su_marcado(escenario, partida, a)
+
+    await _cerrar(escenario)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.RETIRADO

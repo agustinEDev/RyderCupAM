@@ -255,7 +255,7 @@ class MarcarNoPresentadoUseCase:
                 raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
             # Leídos con la partida bloqueada: un golpe a la vez no se cuela
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
-            if any(g.user_id == jugador and g.apuntado for g in golpes):
+            if any(g.muestra_que_jugo(jugador) for g in golpes):
                 raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
             bloqueada.no_presentado(jugador)
             await self._uow.partidas.guardar([bloqueada])
@@ -381,22 +381,25 @@ class CerrarFranjaUseCase:
             golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
             # Por partida y jugador: sus golpes de otra partida no cuentan aquí
             validados: dict[tuple[PartidaId, UserId], int] = {}
-            # Con algo anotado por cualquiera de los dos lados jugó, aunque no se
-            # le validara nada (su marcador no vino): retirado, no no presentado
-            anotaron: set[tuple[PartidaId, UserId]] = set()
+            # Jugó si algo lo dice, aunque no se le validara nada (su marcador
+            # no vino) o solo anotara a quien marca: retirado, no no presentado
+            golpes_de: dict[PartidaId, list[GolpeDePartida]] = {}
             for golpe in golpes:
                 suyo = (golpe.partida_id, golpe.user_id)
                 if golpe.validado:
                     validados[suyo] = validados.get(suyo, 0) + 1
-                if golpe.apuntado:
-                    anotaron.add(suyo)
+                golpes_de.setdefault(golpe.partida_id, []).append(golpe)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
                 partida.cerrar(
                     completas={
                         u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS
                     },
-                    sin_golpes={u for u in partida.user_ids if (partida.id, u) not in anotaron},
+                    sin_golpes={
+                        u
+                        for u in partida.user_ids
+                        if not any(g.muestra_que_jugo(u) for g in golpes_de.get(partida.id, []))
+                    },
                 )
             await self._uow.partidas.guardar(sin_acabar)
             return await vista_de_la_franja(

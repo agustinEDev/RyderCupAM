@@ -14,6 +14,8 @@ cuando coinciden. Medal no deja levantar bola; Stableford sí (vale 0 puntos).
 | Corregir un lado validado a otro valor            | MISMATCH                |
 | Quién metió cada lado                             | Queda guardado          |
 | Apuntado: nada / su lado / el del marcador / raya | No / sí / sí / sí       |
+| Muestra que jugó: el jugador / quien le marcó /   | Sí / sí / no            |
+|   otro (el organizador que corrige no juega)      |                         |
 """
 
 from datetime import UTC, datetime
@@ -138,3 +140,24 @@ def test_entered_means_someone_wrote_something(lado, golpes, apuntado):
         golpe.anotar_del_marcador(golpes, acepta_raya=True, quien=MARCADOR, momento=AHORA)
 
     assert golpe.apuntado is apuntado
+
+
+def test_it_shows_who_was_on_the_course():
+    golpe = _golpe()
+    golpe.anotar_del_marcador(4, acepta_raya=True, quien=MARCADOR, momento=AHORA)
+
+    assert golpe.muestra_que_jugo(JUGADOR)
+    assert golpe.muestra_que_jugo(MARCADOR)
+    assert not golpe.muestra_que_jugo(UserId.generate())
+
+
+def test_an_empty_hole_shows_nobody():
+    assert not _golpe().muestra_que_jugo(JUGADOR)
+
+
+def test_the_own_side_does_not_show_the_marker():
+    golpe = _golpe()
+    golpe.anotar_propio(4, acepta_raya=True, quien=JUGADOR, momento=AHORA)
+
+    assert golpe.muestra_que_jugo(JUGADOR)
+    assert not golpe.muestra_que_jugo(MARCADOR)
