@@ -19,6 +19,8 @@ empate, se pintan por hándicap (P5).
 | Acumulado Stableford                                     | Suma de tarjetas                |
 | Acumulado Medal                                          | Más tarjetas delante (P7); NR   |
 |                                                          | en una = NR                     |
+| Acumulado Medal: retirado sin ningún hoyo validado      | NR en la general; un NP no      |
+|   (su marcadora no vino; QA del 12 oct 2026)             | (se descarta la tarjeta)        |
 | Mejor tarjeta: entregada 30, viva 25 / viva 33           | 30 / 33 (P8)                    |
 | Corte de 25 con empate en el 25.º                        | 26 visibles; la propia si fuera |
 """
@@ -254,6 +256,18 @@ def test_accumulated_medal_more_cards_first_and_one_nr_makes_it_nr():
 
     assert _puestos(filas, [dos, una, con_nr]) == [(0, 1, False), (1, 2, False), (2, None, False)]
     assert filas[0].valor == 9
+
+
+def test_accumulated_medal_withdrawn_without_validated_holes_is_nr_but_no_show_is_not():
+    # Anotó y su marcadora no vino: al cerrar la franja queda retirado, no NP
+    retirado = _jugador(_tarjeta(al_par=-2), _tarjeta(tras=0, estado=RETIRADO))
+    no_presentado = _jugador(_tarjeta(al_par=-2), _tarjeta(tras=0, estado=NP))
+
+    filas = {f.user_id: f for f in _clasificar([retirado, no_presentado], tipo=MEDAL)}
+
+    assert filas[retirado.user_id].estado == EstadoEnClasificacion.NR
+    assert filas[retirado.user_id].puesto is None
+    assert filas[no_presentado.user_id].puesto == 1
 
 
 @pytest.mark.parametrize(("viva", "esperado"), [(25, 30), (33, 33)])

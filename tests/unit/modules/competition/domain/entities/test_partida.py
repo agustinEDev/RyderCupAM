@@ -398,7 +398,7 @@ class TestCicloDeLaTarjeta:
         a, b, c, d = partida.user_ids
         partida.entregar(d)
 
-        partida.cerrar(completas={a}, sin_hoyos={c})
+        partida.cerrar(completas={a}, sin_golpes={c})
 
         assert partida.estados_de_tarjeta == {
             a: EstadoDeTarjeta.ENTREGADA,
@@ -493,7 +493,7 @@ class TestElMarcadorQueSeVa:
         partida = self._empezada(4)
         a, _, c, d = partida.user_ids
 
-        partida.cerrar(completas={a, c}, sin_hoyos={d})
+        partida.cerrar(completas={a, c}, sin_golpes={d})
 
         assert partida.marcadores == {a: c, c: a}
 
