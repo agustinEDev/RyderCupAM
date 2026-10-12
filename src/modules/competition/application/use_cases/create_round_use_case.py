@@ -15,6 +15,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
+    comprobar_que_existen_sus_salidas,
     comprobar_que_no_ha_pasado,
     comprobar_solape,
     comprobar_tipo,
@@ -142,6 +143,9 @@ class CreateRoundUseCase:
                 comprobar_que_no_ha_pasado(
                     await primera_salida_de(hoja, request.round_date, golf_course_id, self._zonas),
                     self._reloj(),
+                )
+                await comprobar_que_existen_sus_salidas(
+                    hoja, request.round_date, golf_course_id, self._zonas
                 )
 
             # 7. Crear la ronda

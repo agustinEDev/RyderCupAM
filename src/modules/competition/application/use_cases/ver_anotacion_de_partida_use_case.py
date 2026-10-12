@@ -75,8 +75,14 @@ class VerAnotacionDePartidaUseCase:
             except ZonaDesconocidaError:
                 abre = None
             golpes = await self._uow.golpes_de_partida.de_la_partida(partida.id)
+            # También de quien anotó y ya no está (movido, o el organizador)
+            quienes = list(
+                dict.fromkeys(
+                    [*partida.user_ids, *(g.marcador_por for g in golpes if g.marcador_por)]
+                )
+            )
             nombres = await PlayerNames.de_la_competicion(
-                partida.user_ids, partida.competition_id, self._usuarios, self._uow
+                quienes, partida.competition_id, self._usuarios, self._uow
             )
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
@@ -119,7 +125,7 @@ def _jugador(
         marks_user_id=marca.value if marca else None,
         marked_by_user_id=le_marca.value if le_marca else None,
         brought_in=foto.user_id in partida.traidos,
-        holes=[_hoyo(foto, hoyo, golpe) for hoyo, golpe in suyos.items()],
+        holes=[_hoyo(foto, hoyo, golpe, nombres) for hoyo, golpe in suyos.items()],
         totals=TeeGroupTotalsDTO(
             thru=tarjeta.tras,
             points=tarjeta.puntos,
@@ -133,7 +139,13 @@ def _jugador(
     )
 
 
-def _hoyo(foto: JugadorDePartida, hoyo: int, golpe: GolpeDePartida | None) -> TeeGroupHoleDTO:
+def _hoyo(
+    foto: JugadorDePartida,
+    hoyo: int,
+    golpe: GolpeDePartida | None,
+    nombres: dict[UserId, str],
+) -> TeeGroupHoleDTO:
+    por = golpe.marcador_por if golpe else None
     return TeeGroupHoleDTO(
         hole=hoyo,
         par=foto.par_por_hoyo[hoyo - 1],
@@ -142,5 +154,7 @@ def _hoyo(foto: JugadorDePartida, hoyo: int, golpe: GolpeDePartida | None) -> Te
         own_submitted=golpe.propio_enviado if golpe else False,
         marker_score=golpe.del_marcador if golpe else None,
         marker_submitted=golpe.marcador_enviado if golpe else False,
+        marker_by=por.value if por else None,
+        marker_by_name=nombres.get(por) or None if por else None,
         status=golpe.estado.value if golpe else "PENDING",
     )

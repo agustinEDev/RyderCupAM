@@ -20,7 +20,7 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.vista_de_la_franja import primera_salida
-from src.modules.competition.domain.entities.partida import MAX_JUGADORES, Partida
+from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -98,18 +98,14 @@ async def que_no_se_quede_solo(
     """
     Si en esa partida, sin salir, queda uno solo y la franja ya pasó su primera
     salida, trae al último en salir que juega de la siguiente partida de 4 aún
-    sin salir; si no hay, de una de 3. Nunca de las de antes. Si no cabe, nadie.
+    sin salir; si no hay, de una de 3. Nunca de las de antes. Los no presentados
+    no ocupan sitio (12 oct 2026): siempre cabe.
 
     Bloquea la partida y después las de detrás, por número: el mismo orden que
     cerrar la franja.
     """
     partida = await uow.partidas.find_by_id_for_update(partida_id)
-    if (
-        partida is None
-        or partida.empezada
-        or len(partida.quedan) != 1
-        or len(partida.user_ids) >= MAX_JUGADORES
-    ):
+    if partida is None or partida.empezada or len(partida.quedan) != 1:
         return
     franja = await uow.rounds.find_by_id(partida.round_id)
     if franja is None or not await _paso_su_primera_salida(franja, zonas, ahora):

@@ -194,14 +194,44 @@ async def primera_salida_de(
     if zona is None:
         return None
     sale = datetime.combine(dia, hoja.primera_salida, zona)
-    # El día del cambio de hora de primavera hay horas que no existen (02:30 en
-    # Madrid): ida y vuelta por UTC salen otras, y esa franja no podría salir
-    # (CodeRabbit en la #538)
-    if sale.astimezone(UTC).astimezone(zona).replace(tzinfo=None) != sale.replace(tzinfo=None):
+    if not _existe(sale):
         raise FranjaInvalidaError(
             "Esa primera salida no existe ese día en el campo (cambio de hora): elige otra."
         )
     return sale
+
+
+async def comprobar_que_existen_sus_salidas(
+    hoja: HojaDeSalidas, dia: date, campo: GolfCourseId, zonas: ICompetitionTimezone | None
+) -> None:
+    """
+    Todas sus salidas, no solo la primera: una partida a las 02:10 del día del
+    cambio de hora no saldría nunca (QA del 12 oct 2026). Sin zona, no se sabe.
+
+    Raises:
+        FranjaInvalidaError: Si alguna cae en la hora que no existe
+    """
+    if zonas is None:
+        return
+    zona = zona_del_campo(await zonas.for_course(campo))
+    if zona is None:
+        return
+    for hora in hoja.salidas:
+        if not _existe(datetime.combine(dia, hora, zona)):
+            raise FranjaInvalidaError(
+                f"La salida de las {hora:%H:%M} no existe ese día en el campo (cambio de "
+                "hora): mueve la franja para que ninguna caiga en el salto."
+            )
+
+
+def _existe(sale: datetime) -> bool:
+    """
+    El día del cambio de hora de primavera hay horas que no existen (02:30 en
+    Madrid): ida y vuelta por UTC salen otras (CodeRabbit en la #538).
+    """
+    return sale.astimezone(UTC).astimezone(sale.tzinfo).replace(tzinfo=None) == sale.replace(
+        tzinfo=None
+    )
 
 
 def comprobar_que_no_ha_pasado(sale: datetime | None, ahora: datetime) -> None:

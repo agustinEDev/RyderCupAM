@@ -6,6 +6,7 @@ Una partida leída de sus filas (QA del 11 oct 2026).
 | Guardada antes del 11 oct: un retirado sigue marcando   | Se rehace el círculo al leerla |
 | Guardada después, con un reabierto fuera del círculo    | Tal cual (rehecho, entraría)   |
 | Un jugador traído de otra partida                       | En `traidos`                   |
+| Cinco filas: tres no presentados, el solo y el traído   | Se lee (QA 2, 12 oct)          |
 """
 
 import uuid
@@ -70,3 +71,19 @@ def test_who_was_brought_in():
     partida = SQLAlchemyPartidaRepository._partida(GRUPO, [_fila(A, B), _fila(B, A, traido=True)])
 
     assert partida.traidos == {B}
+
+
+def test_five_rows_with_three_no_shows():
+    d, e = UserId.generate(), UserId.generate()
+    filas = [
+        _fila(A, None, tarjeta="NO_PRESENTADO"),
+        _fila(B, None, tarjeta="NO_PRESENTADO"),
+        _fila(C, None, tarjeta="NO_PRESENTADO"),
+        _fila(d, e),
+        _fila(e, d, traido=True),
+    ]
+
+    partida = SQLAlchemyPartidaRepository._partida(GRUPO, filas)
+
+    assert partida.quedan == [d, e]
+    assert partida.traidos == {e}

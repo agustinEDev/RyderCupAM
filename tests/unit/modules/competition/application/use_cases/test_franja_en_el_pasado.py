@@ -17,6 +17,12 @@ quedaban atrapados y fuera de la clasificación.
 | Moverla a un campo de otra zona, aún por llegar allí | Se mueve (cuenta su zona)    |
 | Una hora que no existe por el cambio de hora         | FranjaInvalidaError (CodeRabbit) |
 | La de después del cambio de hora                     | Se crea                      |
+| Una salida que no es la primera cae en la hora que no existe (QA 2) | FranjaInvalidaError |
+| Todas antes del salto (01:00-01:50)                  | Se crea                      |
+| La última justo en el salto (01:00-02:00)            | FranjaInvalidaError          |
+| Sin zona, salidas en el salto                        | Se crea: no se sabe          |
+| Cambiarla para que una salida caiga en el salto      | FranjaInvalidaError          |
+| Moverla al día del cambio con salidas en el salto    | FranjaInvalidaError          |
 """
 
 from datetime import UTC, date, datetime
@@ -220,3 +226,61 @@ async def test_the_first_tee_time_right_after_the_change():
     creada = await e.crear(_hoja("03:00", "12:00"), dia=CAMBIO_DE_HORA)
 
     assert creada.id
+
+
+async def test_a_later_tee_time_that_does_not_exist_that_day():
+    e = _ConReloj()
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+
+    with pytest.raises(FranjaInvalidaError, match="no existe"):
+        await e.crear(_hoja("01:50", "04:00"), dia=CAMBIO_DE_HORA)
+
+
+async def test_every_tee_time_before_the_change():
+    e = _ConReloj()
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+
+    creada = await e.crear(_hoja("01:00", "01:50"), dia=CAMBIO_DE_HORA)
+
+    assert creada.id
+
+
+async def test_the_last_tee_time_right_on_the_change():
+    e = _ConReloj()
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+
+    with pytest.raises(FranjaInvalidaError, match="no existe"):
+        await e.crear(_hoja("01:00", "02:00"), dia=CAMBIO_DE_HORA)
+
+
+async def test_tee_times_on_the_change_without_a_time_zone():
+    e = _ConReloj(zona=None)
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+
+    creada = await e.crear(_hoja("01:50", "04:00"), dia=CAMBIO_DE_HORA)
+
+    assert creada.id
+
+
+async def test_changing_it_so_a_tee_time_falls_on_the_change():
+    e = _ConReloj()
+    await _torneo(e, (CAMBIO_DE_HORA, CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 30, 12, 0, tzinfo=UTC)
+    creada = await e.crear(_hoja("01:00", "01:50"), dia=CAMBIO_DE_HORA)
+
+    with pytest.raises(FranjaInvalidaError, match="no existe"):
+        await e.cambiar(creada.id, tee_sheet=_hoja("01:00", "04:00"))
+
+
+async def test_moving_it_to_the_day_of_the_change():
+    e = _ConReloj()
+    await _torneo(e, (date(2030, 3, 30), CAMBIO_DE_HORA))
+    e.ahora = datetime(2030, 3, 29, 12, 0, tzinfo=UTC)
+    creada = await e.crear(_hoja("01:50", "04:00"), dia=date(2030, 3, 30))
+
+    with pytest.raises(FranjaInvalidaError, match="no existe"):
+        await e.cambiar(creada.id, round_date=CAMBIO_DE_HORA)

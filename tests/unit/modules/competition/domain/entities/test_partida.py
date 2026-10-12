@@ -31,10 +31,12 @@ from src.modules.competition.domain.entities.partida import (
     Partida,
     PartidaEmpezadaError,
     PartidaInvalidaError,
+    PartidaLlenaError,
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
 )
 from src.modules.competition.domain.services.marcadores_en_cadena import (
+    MarcadoresEnCadena,
     MarcadoresInvalidosError,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -43,6 +45,7 @@ from src.modules.competition.domain.value_objects.estado_partida import EstadoPa
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
 )
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -429,7 +432,13 @@ class TestElMarcadorQueSeVa:
     | Leer con un retirado en el círculo            | Error                                      |
     | Leer con un reabierto fuera del círculo       | Vale                                       |
     | Acompañar al que se quedó solo, sin empezar   | Entra, círculo nuevo, marcado como traído  |
-    | Acompañar sin estar solo, empezada, o llena   | Error                                      |
+    | Acompañar sin estar solo o empezada           | Error                                      |
+    | Acompañar en una de 4 con tres no presentados | Entra: el NP no ocupa sitio (QA 2, 12 oct) |
+    | Leer 5 filas con un NP, o 4 que juegan + 2 NP | Vale                                       |
+    | Leer 5 filas sin ningún NP                    | Error                                      |
+    | Meter en una de 4 con un NP / con 4 que juegan| Entra / llena                              |
+    | Reabrir un NP con 4 ya jugando                | PartidaLlenaError (12 oct)                 |
+    | Reabrir un NP con hueco, sin salir            | Entra en el círculo                        |
     """
 
     def _empezada(self, n=4) -> Partida:
@@ -590,11 +599,133 @@ class TestElMarcadorQueSeVa:
 
         assert partida.traidos == set()
 
-    def test_keeping_company_in_a_group_of_four_with_three_no_shows_does_not_fit(self):
+    def test_keeping_company_in_a_group_of_four_with_three_no_shows(self):
+        # Los no presentados no ocupan sitio (2.ª pasada del QA, 12 oct 2026)
         partida = self._sola(4)
+        solo = partida.user_ids[-1]
+        nuevo = _jugador()
+
+        partida.acompanar(nuevo)
+
+        assert len(partida.user_ids) == 5
+        assert partida.marcadores == {solo: nuevo.user_id, nuevo.user_id: solo}
+
+    def test_reading_five_rows_with_a_no_show(self):
+        jugadores = [_jugador() for _ in range(5)]
+
+        leida = self._con_filas(jugadores, {jugadores[0].user_id: EstadoDeTarjeta.NO_PRESENTADO})
+
+        assert len(leida.quedan) == 4
+
+    def test_reading_four_playing_and_two_no_shows(self):
+        jugadores = [_jugador() for _ in range(6)]
+        faltan = {j.user_id: EstadoDeTarjeta.NO_PRESENTADO for j in jugadores[:2]}
+
+        leida = self._con_filas(jugadores, faltan)
+
+        assert len(leida.quedan) == 4
+
+    def test_reading_five_rows_without_a_no_show_fails(self):
+        jugadores = [_jugador() for _ in range(5)]
 
         with pytest.raises(PartidaInvalidaError):
-            partida.acompanar(_jugador())
+            self._con_filas(jugadores, {jugadores[0].user_id: EstadoDeTarjeta.RETIRADO})
+
+    def test_putting_one_in_a_group_of_four_with_a_no_show(self):
+        partida = _partida(4)
+        partida.no_presentado(partida.user_ids[0])
+        nuevo = _jugador()
+
+        partida.meter(nuevo, 4)
+
+        assert partida.quedan[-1] == nuevo.user_id
+
+    def test_putting_one_in_a_group_of_four_playing_is_full(self):
+        partida = _partida(4)
+
+        with pytest.raises(PartidaLlenaError):
+            partida.meter(_jugador(), 4)
+
+    def test_reopening_a_no_show_with_four_already_playing_is_refused(self):
+        partida = _partida(4)
+        falta = partida.user_ids[0]
+        partida.no_presentado(falta)
+        partida.meter(_jugador(), 4)
+
+        with pytest.raises(PartidaLlenaError):
+            partida.reabrir_tarjeta(falta)
+
+        assert partida.estados_de_tarjeta[falta] == EstadoDeTarjeta.NO_PRESENTADO
+
+    def test_reopening_a_no_show_counts_the_withdrawn_too(self):
+        # 3 juegan + 1 retirado: reabrir al NP dejaría 5 tarjetas que no son NP (/code-review)
+        partida = _partida(4)
+        falta = partida.user_ids[0]
+        partida.no_presentado(falta)
+        partida.meter(_jugador(), 4)
+        partida.empezar()
+        partida.retirar(partida.user_ids[1])
+
+        with pytest.raises(PartidaLlenaError):
+            partida.reabrir_tarjeta(falta)
+
+    def test_reopening_a_no_show_in_a_group_of_three_with_three_playing(self):
+        partida = _partida(3)
+        falta = partida.user_ids[0]
+        partida.no_presentado(falta)
+        partida.meter(_jugador(), 3)
+
+        with pytest.raises(PartidaLlenaError):
+            partida.reabrir_tarjeta(falta, jugadores_por_partida=3)
+
+    def test_reopening_a_no_show_with_room_gets_a_marker(self):
+        partida = _partida(3)
+        a, b, c = partida.user_ids
+        partida.no_presentado(a)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.marcadores == {a: b, b: c, c: a}
+
+    def test_reopening_a_handed_in_card_with_four_playing_is_fine(self):
+        partida = self._empezada(4)
+        a = partida.user_ids[0]
+        partida.entregar(a)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
+
+    def test_reopening_a_no_show_once_started_does_not_touch_the_markers(self):
+        partida = self._empezada(3)
+        a, b, c = partida.user_ids
+        partida.no_presentado(a)
+
+        partida.reabrir_tarjeta(a)
+
+        assert partida.marcadores == {b: c, c: b}
+
+    def test_reopening_a_withdrawn_card_with_four_rows_is_fine(self):
+        partida = self._empezada(4)
+        d = partida.user_ids[3]
+        partida.retirar(d)
+
+        partida.reabrir_tarjeta(d)
+
+        assert partida.estados_de_tarjeta[d] == EstadoDeTarjeta.JUGANDO
+
+    def _con_filas(self, jugadores, tarjetas) -> Partida:
+        quedan = [j.user_id for j in jugadores if j.user_id not in tarjetas]
+        return Partida(
+            id=PartidaId.generate(),
+            competition_id=CompetitionId(uuid4()),
+            round_id=RoundId.generate(),
+            numero=1,
+            jugadores=jugadores,
+            marcadores=MarcadoresEnCadena.de(quedan),
+            estado=EstadoPartida.SCHEDULED,
+            estados_de_tarjeta=tarjetas,
+        )
 
     def test_keeping_company_to_a_group_that_is_not_alone(self):
         partida = _partida(2)

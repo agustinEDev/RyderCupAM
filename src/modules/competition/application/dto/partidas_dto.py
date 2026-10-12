@@ -66,6 +66,13 @@ class TeeGroupPlayerDTO(BaseModel):
     brought_in: bool = Field(
         False, description="Vino de otra partida a acompañar al que se quedó solo."
     )
+    card_status: str = Field(
+        "JUGANDO",
+        description=(
+            "JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO. Un no presentado sigue en su "
+            "partida pero no ocupa sitio ni se mueve."
+        ),
+    )
 
 
 class TeeGroupDTO(BaseModel):
@@ -125,6 +132,16 @@ class TeeGroupHoleDTO(BaseModel):
     own_submitted: bool
     marker_score: int | None
     marker_submitted: bool
+    marker_by: UUID | None = Field(
+        None,
+        description=(
+            "Quién puso el lado del marcador: tras cambiar el círculo, puede no ser "
+            "quien marca ahora."
+        ),
+    )
+    marker_by_name: str | None = Field(
+        None, description="Su nombre, aunque ya no esté en la partida (o sea el organizador)."
+    )
     status: str = Field(..., description="PENDING, MATCH o MISMATCH.")
 
 

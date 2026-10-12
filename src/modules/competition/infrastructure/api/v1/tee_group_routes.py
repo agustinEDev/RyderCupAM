@@ -118,6 +118,7 @@ _DETALLE: dict[str, str] = {
     "GROUP_NOT_IN_WINDOW": "Esa partida no es de esta franja.",
     "PLAYER_NOT_IN_WINDOW": "Ese jugador no tiene plaza en esta franja.",
     "INVALID_GROUP_ORDER": "El orden tiene que llevar todas las partidas, una vez.",
+    "PLAYER_IS_NO_SHOW": "Es no presentado: se queda en su partida, donde sale su NP.",
 }
 
 

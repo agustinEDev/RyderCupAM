@@ -193,6 +193,26 @@ async def test_no_show():
     assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
 
 
+async def test_reopening_a_no_show_in_a_full_three_ball_window():
+    # En una franja de 3, con 3 jugando, el NP no vuelve (/code-review, 12 oct 2026)
+    from datetime import time
+
+    from src.modules.competition.domain.entities.partida import PartidaLlenaError
+    from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+    from tests.unit.modules.competition.domain.entities.test_partida import _jugador
+
+    escenario, partida = await _partida()
+    escenario.manana._hoja_de_salidas = HojaDeSalidas(time(9, 0), time(10, 0), 10, 3)
+    a = partida.user_ids[0]
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida.meter(_jugador(), 3)
+    await escenario.uow.partidas.guardar([leida])
+
+    with pytest.raises(PartidaLlenaError):
+        await _reabrir(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+
 async def test_closing_the_window():
     escenario, partida = await _en_juego(n=4)
     completa, a_medias, sin_hoyos, entregada = partida.user_ids

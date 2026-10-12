@@ -6,6 +6,8 @@ La partida para anotar y las tarjetas de los suyos (#251, PR 5; pestañas 1 y 3)
 | Recién generada                   | 18 hoyos vacíos, la hora de apertura, a quién marco |
 | La hora de apertura               | Con el desfase del campo, como en la Ryder           |
 | Tras anotar                       | Cada lado, su estado; totales solo de lo validado    |
+| Quién puso el lado del marcador   | `marker_by`; sin anotar, null (QA 2, 12 oct)         |
+| Y su nombre, aunque ya no esté    | `marker_by_name`                                     |
 | Una tarjeta entregada             | Su estado                                            |
 | Medal                             | Sin levantar bola                                    |
 | Una partida que no existe         | PartidaNotFoundError                                 |
@@ -98,6 +100,31 @@ async def test_after_scoring_only_the_validated_count():
     assert suyo.totals.gross == 5
     assert suyo.marked_by_user_id == a.value
     assert vista.status == "IN_PROGRESS"
+    # El número del lado del marcador lleva quién lo puso: tras cambiar el
+    # círculo, el nuevo marcador ve que no es suyo (2.ª pasada del QA)
+    assert suyo.holes[0].marker_by == a.value
+    assert suyo.holes[1].marker_by is None
+    # Y su nombre: puede no estar ya en la partida (12 oct 2026)
+    nombre_de_a = next(p.name for p in vista.players if p.user_id == a.value)
+    assert suyo.holes[0].marker_by_name == nombre_de_a
+    assert suyo.holes[1].marker_by_name is None
+
+
+async def test_who_scored_left_the_group_still_has_a_name():
+    escenario, partida = await _partida()
+    a, b, c = partida.user_ids
+    await _anotar(escenario, partida, a, 1, own_score=4, marked_score=5)
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida._jugadores = [j for j in leida._jugadores if j.user_id != a]
+    leida._tarjetas.pop(a)
+    leida._marcadores = {b: c, c: b}
+    await escenario.uow.partidas.guardar([leida])
+
+    vista = await _ver(escenario).execute(partida.id.value, c)
+
+    suyo = next(p for p in vista.players if p.user_id == b.value)
+    assert suyo.holes[0].marker_by == a.value
+    assert suyo.holes[0].marker_by_name
 
 
 async def test_a_delivered_card():

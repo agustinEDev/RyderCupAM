@@ -102,6 +102,20 @@ class TestMover:
         assert [len(g.players) for g in vista.groups] == [3, 3]
         assert quien in (await _guardadas(escenario))[1].user_ids
 
+    async def test_the_view_says_who_is_a_no_show(self):
+        # El front cuenta solo a los que juegan (2.ª pasada del QA, 12 oct 2026)
+        escenario, _ = await _generadas("6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        primera, segunda = await _guardadas(escenario)
+        falta = primera.user_ids[0]
+        primera.no_presentado(falta)
+        await escenario.uow.partidas.guardar([primera])
+
+        vista = await _mover(escenario, primera.user_ids[1], segunda.id.value)
+
+        estados = {p.user_id: p.card_status for g in vista.groups for p in g.players}
+        assert estados[falta.value] == "NO_PRESENTADO"
+        assert set(estados.values()) == {"NO_PRESENTADO", "JUGANDO"}
+
     async def test_swapping(self):
         escenario, _ = await _generadas(*[f"{h}.0" for h in range(8, 0, -1)])
         primera, segunda = await _guardadas(escenario)

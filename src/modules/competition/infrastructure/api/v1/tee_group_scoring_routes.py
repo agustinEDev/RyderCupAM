@@ -73,6 +73,7 @@ from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_
 )
 from src.modules.competition.domain.entities.golpe_de_partida import RayaNoPermitidaError
 from src.modules.competition.domain.entities.partida import (
+    PartidaLlenaError,
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
 )
@@ -127,6 +128,11 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
         status.HTTP_403_FORBIDDEN,
         "NOT_ORGANIZER",
         "Solo el organizador puede hacerlo.",
+    ),
+    PartidaLlenaError: (
+        status.HTTP_409_CONFLICT,
+        "GROUP_FULL",
+        "La partida ya está completa: mueve antes a uno para reabrir esta tarjeta.",
     ),
     TieneMarcadorError: (
         status.HTTP_409_CONFLICT,

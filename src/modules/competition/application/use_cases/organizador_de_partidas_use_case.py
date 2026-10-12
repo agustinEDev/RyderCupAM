@@ -51,7 +51,11 @@ from src.modules.competition.domain.entities.golpe_de_partida import (
     ULTIMO_HOYO,
     GolpeDePartida,
 )
-from src.modules.competition.domain.entities.partida import Partida, TarjetaCerradaError
+from src.modules.competition.domain.entities.partida import (
+    MAX_JUGADORES,
+    Partida,
+    TarjetaCerradaError,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -197,7 +201,13 @@ class ReabrirTarjetaUseCase:
             comprobar_que_se_juega(competicion)
             await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
             bloqueada = await _bloqueada(self._uow, partida)
-            bloqueada.reabrir_tarjeta(_del_jugador(bloqueada, user_id))
+            # Un no presentado vuelve solo si cabe en las partidas de su franja
+            franja = await self._uow.rounds.find_by_id(bloqueada.round_id)
+            hoja = franja.hoja_de_salidas if franja else None
+            bloqueada.reabrir_tarjeta(
+                _del_jugador(bloqueada, user_id),
+                hoja.jugadores_por_partida if hoja else MAX_JUGADORES,
+            )
             await self._uow.partidas.guardar([bloqueada])
 
 

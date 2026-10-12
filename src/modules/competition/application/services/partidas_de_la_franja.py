@@ -38,7 +38,8 @@ def comprobar_que_caben_las_partidas(partidas: Sequence[Partida], hoja: HojaDeSa
         FranjaInvalidaError: Si alguna partida no cabe en la hoja nueva
     """
     tamano = hoja.jugadores_por_partida
-    if any(len(p.jugadores) > tamano for p in partidas):
+    # Los no presentados no ocupan sitio (12 oct 2026)
+    if any(len(p.quedan) > tamano for p in partidas):
         raise FranjaInvalidaError(
             f"Hay partidas de más de {tamano} jugadores: muévelos o vuelve a generarlas antes."
         )
@@ -58,17 +59,18 @@ async def recalcular_partidas(
 ) -> None:
     """
     Rehace la foto de los jugadores de las partidas sin salir (otro campo, D9).
+    La de un no presentado se queda: no juega, y no bloquea el cambio (12 oct 2026).
 
     Raises:
         JugadoresSinHandicapError, JugadoresSinBarraError: Con todos los afectados
     """
     sin_salir = [p for p in partidas if not p.empezada]
-    quienes = [u for p in sin_salir for u in p.user_ids]
+    quienes = [u for p in sin_salir for u in p.quedan]
     if not quienes:
         return
     fotos = await jugadores.construir(uow, competicion, franja, quienes)
     for partida in sin_salir:
-        partida.recalcular([fotos[j.user_id] for j in partida.jugadores])
+        partida.recalcular([fotos.get(j.user_id, j) for j in partida.jugadores])
     await uow.partidas.guardar(sin_salir)
 
 
