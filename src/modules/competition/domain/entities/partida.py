@@ -55,12 +55,14 @@ class TarjetaYaAbiertaError(ValueError):
     """Reabrir una tarjeta que ya está abierta: otro organizador se adelantó (#545)."""
 
     error_code = "SCORECARD_ALREADY_OPEN"
+    message = "Esa tarjeta ya está abierta."
 
 
 class TieneGolpesError(ValueError):
     """Sus golpes dicen que jugó: se retira, no es un no presentado (#550)."""
 
     error_code = "PLAYER_HAS_STROKES"
+    message = "Tiene golpes anotados: retíralo en su lugar."
 
 
 class Partida:
@@ -201,7 +203,7 @@ class Partida:
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
             raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
         if user_id in self.quienes_jugaron(golpes):
-            raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
+            raise TieneGolpesError(TieneGolpesError.message)
         self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
         self._rehacer_el_circulo()
         self._acabar_si_no_queda_nadie()
@@ -214,7 +216,7 @@ class Partida:
         """
         self._de_la_partida(user_id)
         if self._tarjetas[user_id] == EstadoDeTarjeta.JUGANDO:
-            raise TarjetaYaAbiertaError("Esa tarjeta ya está abierta.")
+            raise TarjetaYaAbiertaError(TarjetaYaAbiertaError.message)
         era_no_presentado = self._tarjetas[user_id] == EstadoDeTarjeta.NO_PRESENTADO
         # Cuentan también los retirados: siguen ocupando su sitio (/code-review)
         if era_no_presentado and self._que_ocupan_sitio() >= jugadores_por_partida:

@@ -141,12 +141,12 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
     TarjetaYaAbiertaError: (
         status.HTTP_409_CONFLICT,
         TarjetaYaAbiertaError.error_code,
-        "Esa tarjeta ya está abierta.",
+        TarjetaYaAbiertaError.message,
     ),
     TieneGolpesError: (
         status.HTTP_409_CONFLICT,
         TieneGolpesError.error_code,
-        "Tiene golpes anotados: retíralo en su lugar.",
+        TieneGolpesError.message,
     ),
     TieneMarcadorError: (
         status.HTTP_409_CONFLICT,

@@ -372,13 +372,16 @@ class CerrarFranjaUseCase:
             validados: dict[tuple[PartidaId, UserId], int] = {}
             # Jugó si algo lo dice, aunque no se le validara nada (su marcador
             # no vino) o solo anotara a quien marca: retirado, no no presentado
+            # De una pasada, por partida: cada una mira solo los suyos (/code-review)
+            golpes_de: dict[PartidaId, list[GolpeDePartida]] = {}
             for golpe in golpes:
                 suyo = (golpe.partida_id, golpe.user_id)
                 if golpe.validado:
                     validados[suyo] = validados.get(suyo, 0) + 1
+                golpes_de.setdefault(golpe.partida_id, []).append(golpe)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
-                jugaron = partida.quienes_jugaron(golpes)
+                jugaron = partida.quienes_jugaron(golpes_de.get(partida.id, []))
                 partida.cerrar(
                     completas={
                         u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS
