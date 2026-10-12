@@ -8,8 +8,9 @@ Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 20
   (P11). Queda registrado que lo metió él (P9). Una tarjeta cerrada se reabre
   antes, a propósito: que la corrección se vea.
 - **Reabrir una tarjeta** (P9), solo si está cerrada (#545), y **marcar a
-  alguien como no presentado** (P6), solo si no tiene golpes en su partida; si
-  los tiene, jugó, y el organizador lo **retira** (#550). Si el no presentado deja a uno solo sin salir, el último en salir de la
+  alguien como no presentado** (P6), solo si no tiene golpes en su partida;
+  si los tiene, jugó, y el organizador lo **retira** (#550). Si el no
+  presentado deja a uno solo sin salir, el último en salir de la
   siguiente partida de 4 aún sin salir (si no hay, de 3) pasa a acompañarle
   (QA del 11 oct 2026).
 - **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
@@ -249,11 +250,12 @@ class MarcarNoPresentadoUseCase:
             await self._uow.competitions.find_by_id_for_update(competicion.id)
             bloqueada = await _bloqueada(self._uow, partida)
             jugador = _del_jugador(bloqueada, user_id)
+            # Cerrada antes que con golpes: si ya se retiró, «retíralo» no sirve
+            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
+                raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
             # Leídos con la partida bloqueada: un golpe a la vez no se cuela
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
-            if any(
-                g.user_id == jugador and (g.propio_enviado or g.marcador_enviado) for g in golpes
-            ):
+            if any(g.user_id == jugador and g.apuntado for g in golpes):
                 raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
             bloqueada.no_presentado(jugador)
             await self._uow.partidas.guardar([bloqueada])
@@ -386,7 +388,7 @@ class CerrarFranjaUseCase:
                 suyo = (golpe.partida_id, golpe.user_id)
                 if golpe.validado:
                     validados[suyo] = validados.get(suyo, 0) + 1
-                if golpe.propio_enviado or golpe.marcador_enviado:
+                if golpe.apuntado:
                     anotaron.add(suyo)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:

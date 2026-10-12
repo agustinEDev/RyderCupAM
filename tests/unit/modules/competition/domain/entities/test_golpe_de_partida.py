@@ -13,6 +13,7 @@ cuando coinciden. Medal no deja levantar bola; Stableford sí (vale 0 puntos).
 | Raya en Medal, en cualquier lado                  | RayaNoPermitidaError    |
 | Corregir un lado validado a otro valor            | MISMATCH                |
 | Quién metió cada lado                             | Queda guardado          |
+| Apuntado: nada / su lado / el del marcador / raya | No / sí / sí / sí       |
 """
 
 from datetime import UTC, datetime
@@ -117,3 +118,23 @@ def test_who_entered_each_side_is_kept():
 
     assert (golpe.propio_por, golpe.marcador_por) == (organizador, MARCADOR)
     assert golpe.golpes_validados == 4
+
+
+@pytest.mark.parametrize(
+    ("lado", "golpes", "apuntado"),
+    [
+        pytest.param(None, None, False, id="nada"),
+        pytest.param("propio", 4, True, id="su-lado"),
+        pytest.param("marcador", 5, True, id="el-del-marcador"),
+        pytest.param("propio", None, True, id="una-raya"),
+    ],
+)
+def test_entered_means_someone_wrote_something(lado, golpes, apuntado):
+    # La regla con la que el organizador y el cierre de la franja ven que jugó
+    golpe = _golpe()
+    if lado == "propio":
+        golpe.anotar_propio(golpes, acepta_raya=True, quien=JUGADOR, momento=AHORA)
+    elif lado == "marcador":
+        golpe.anotar_del_marcador(golpes, acepta_raya=True, quien=MARCADOR, momento=AHORA)
+
+    assert golpe.apuntado is apuntado

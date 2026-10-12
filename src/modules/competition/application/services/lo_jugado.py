@@ -109,4 +109,4 @@ class LoJugado:
 
 
 def _alguno_apuntado(golpes: Sequence[GolpeDePartida]) -> bool:
-    return any(golpe.propio_enviado or golpe.marcador_enviado for golpe in golpes)
+    return any(golpe.apuntado for golpe in golpes)

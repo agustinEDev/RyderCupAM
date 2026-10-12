@@ -30,6 +30,9 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | No presentado con golpes en su partida (#550):    | TieneGolpesError: nada cambia          |
 |   suyos, solo del marcador, una raya              |                                        |
 | No presentado con golpes solo en otra partida     | NO_PRESENTADO                          |
+| No presentado con golpes solo de otro de la       | NO_PRESENTADO (cuentan sus filas, como |
+|   partida, o una fila sin nada enviado            |   al cerrar la franja)                 |
+| No presentado con la tarjeta ya cerrada y golpes  | TarjetaCerradaError, no TieneGolpes    |
 | El organizador retira a un jugador (#550)         | RETIRADO, círculo rehecho              |
 | Retirar en una partida sin empezar / ya cerrada   | PartidaNoEmpezadaError / Cerrada       |
 | Retirar siendo jugador                            | NotCompetitionCreatorError             |
@@ -510,3 +513,36 @@ async def test_a_player_cannot_retire_another():
 
     with pytest.raises(NotCompetitionCreatorError):
         await _retirar(escenario).execute(partida.id.value, a.value, b, False)
+
+
+async def test_no_show_when_only_another_player_scored():
+    escenario, partida = await _en_juego(n=3)
+    a, b, _ = partida.user_ids
+    await _anotar(escenario, partida, b, range(1, 3), 4)
+
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_no_show_with_a_hole_created_and_nothing_sent():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 2))
+
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_no_show_on_a_closed_card_with_strokes():
+    # Antes decía «tiene golpes, retíralo» y retirarlo también fallaba (revisor)
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 4), 4)
+    retirada = await escenario.uow.partidas.find_by_id(partida.id)
+    retirada.retirar(a)
+    await escenario.uow.partidas.guardar([retirada])
+
+    with pytest.raises(TarjetaCerradaError):
+        await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)

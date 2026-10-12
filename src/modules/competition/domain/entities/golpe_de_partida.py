@@ -141,6 +141,11 @@ class GolpeDePartida:
         return self.estado == ValidationStatus.MATCH
 
     @property
+    def apuntado(self) -> bool:
+        """Alguien anotó algo en este hoyo (su lado, el del marcador o una raya): jugó."""
+        return self._propio_enviado or self._marcador_enviado
+
+    @property
     def golpes_validados(self) -> int | None:
         """Los golpes que cuentan, si está validado; None también es una raya validada."""
         return self._propio if self.validado else None

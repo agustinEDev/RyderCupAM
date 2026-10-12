@@ -383,7 +383,10 @@ async def mark_tee_group_no_show(
     "/groups/{group_id}/players/{user_id}/retire",
     response_model=TeeGroupScoringViewDTO,
     summary="Retirar a un jugador (organizador)",
-    description="Para quien ya tiene golpes anotados: queda retirado, como si se retirara él.",
+    description=(
+        "Queda retirado, como si se retirara él. Es la salida para quien ya tiene golpes "
+        "anotados, que no puede marcarse como no presentado."
+    ),
     tags=["Competitions - Tee groups"],
 )
 @limiter.limit("30/minute")
