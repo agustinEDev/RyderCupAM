@@ -802,6 +802,9 @@ class TestQuienesJugaron:
     | Un jugador de la partida metió el lado del marcador | Sí (él también),  |
     |   de otro, aunque ya no le marque (círculo rehecho)  |   12 oct 2026     |
     | Lo metió alguien de fuera (el organizador)          | Solo el dueño     |
+    | Lo metió el organizador que juega en la partida a   | No: corrige       |
+    |   alguien a quien no marca (CodeRabbit, 13 oct)     |   (salvo que sea  |
+    |                                                     |   su marcador)    |
     | Una fila sin nada enviado                           | No                |
     | Golpes de otra partida                              | No cuentan        |
     """
@@ -855,6 +858,38 @@ class TestQuienesJugaron:
         golpe = self._golpe(partida, a, del_marcador=4, por=UserId.generate())
 
         assert partida.quienes_jugaron([golpe]) == {a}
+
+    def test_the_playing_organiser_correcting_another_card_did_not_play(self):
+        partida = _partida(3)
+        organizador = partida.user_ids[0]
+        no_marca = next(
+            u for u in partida.user_ids if u not in (organizador, partida.marcadores[organizador])
+        )
+
+        golpe = self._golpe(partida, no_marca, del_marcador=4, por=organizador)
+
+        assert partida.quienes_jugaron([golpe], organizador) == {no_marca}
+
+    def test_the_playing_organiser_scoring_whom_they_mark_did_play(self):
+        partida = _partida(3)
+        organizador = partida.user_ids[0]
+        marcado = partida.marcadores[organizador]
+
+        golpe = self._golpe(partida, marcado, del_marcador=4, por=organizador)
+
+        assert partida.quienes_jugaron([golpe], organizador) == {marcado, organizador}
+
+    def test_a_no_show_organiser_who_only_corrected_is_allowed(self):
+        partida = _partida(3)
+        organizador = partida.user_ids[0]
+        no_marca = next(
+            u for u in partida.user_ids if u not in (organizador, partida.marcadores[organizador])
+        )
+        golpe = self._golpe(partida, no_marca, del_marcador=4, por=organizador)
+
+        partida.no_presentado(organizador, [golpe], organizador)
+
+        assert partida.estados_de_tarjeta[organizador] == EstadoDeTarjeta.NO_PRESENTADO
 
     def test_an_empty_row_shows_nobody(self):
         partida = _partida(3)

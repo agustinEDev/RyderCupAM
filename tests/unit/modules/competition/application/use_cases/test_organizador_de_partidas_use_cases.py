@@ -611,3 +611,39 @@ async def test_retiring_the_last_one_playing_finishes_the_group():
     await _retirar(escenario).execute(partida.id.value, a.value, escenario.creador, False)
 
     assert (await escenario.uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.COMPLETED
+
+
+async def _organiza_y_juega(escenario, partida):
+    """El organizador es uno de la partida y corrige la tarjeta de otro al que no marca."""
+    organizador = partida.user_ids[0]
+    competicion = await escenario.uow.competitions.find_by_id(escenario.competicion.id)
+    competicion._creator_id = organizador
+    await escenario.uow.competitions.update(competicion)
+    no_marca = next(
+        u for u in partida.user_ids if u not in (organizador, partida.marcadores[organizador])
+    )
+    golpe = GolpeDePartida.crear(
+        partida.id, partida.round_id, partida.competition_id, no_marca, 1, escenario.ahora
+    )
+    golpe.anotar_del_marcador(4, True, organizador, escenario.ahora)
+    await escenario.uow.golpes_de_partida.guardar(golpe)
+    return organizador
+
+
+async def test_a_playing_organiser_who_only_corrected_can_be_a_no_show():
+    # CodeRabbit (13 oct): corregir desde la casa club no es haber jugado
+    escenario, partida = await _en_juego(n=3)
+    organizador = await _organiza_y_juega(escenario, partida)
+
+    await _no_presentado(escenario).execute(partida.id.value, organizador.value, organizador, False)
+
+    assert (await _tarjetas(escenario, partida))[organizador] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_closing_with_a_playing_organiser_who_only_corrected():
+    escenario, partida = await _en_juego(n=3)
+    organizador = await _organiza_y_juega(escenario, partida)
+
+    await _cerrar(escenario, quien=organizador)
+
+    assert (await _tarjetas(escenario, partida))[organizador] == EstadoDeTarjeta.NO_PRESENTADO

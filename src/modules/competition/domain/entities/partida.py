@@ -194,7 +194,12 @@ class Partida:
         """Lo deja a medias: NR en Medal; en Stableford cuenta lo jugado (P6)."""
         self._cerrar_tarjeta(user_id, EstadoDeTarjeta.RETIRADO)
 
-    def no_presentado(self, user_id: UserId, golpes: Iterable[GolpeDePartida]) -> None:
+    def no_presentado(
+        self,
+        user_id: UserId,
+        golpes: Iterable[GolpeDePartida],
+        organizador: UserId | None = None,
+    ) -> None:
         """
         No se presentó (P6): también antes de que la partida empiece. Si los
         golpes de la partida dicen que jugó (`quienes_jugaron`), se retira (#550).
@@ -202,7 +207,7 @@ class Partida:
         self._de_la_partida(user_id)
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
             raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
-        if user_id in self.quienes_jugaron(golpes):
+        if user_id in self.quienes_jugaron(golpes, organizador):
             raise TieneGolpesError(TieneGolpesError.message)
         self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
         self._rehacer_el_circulo()
@@ -247,11 +252,15 @@ class Partida:
         self._rehacer_el_circulo()
         self._estado = EstadoPartida.COMPLETED
 
-    def quienes_jugaron(self, golpes: Iterable[GolpeDePartida]) -> set[UserId]:
+    def quienes_jugaron(
+        self, golpes: Iterable[GolpeDePartida], organizador: UserId | None = None
+    ) -> set[UserId]:
         """
         Quién estuvo en el campo según los golpes de esta partida: algo en su
         tarjeta, o metió el lado del marcador de otro jugador de la partida,
-        aunque ya no le marque (12 oct 2026). El organizador de fuera no cuenta.
+        aunque ya no le marque (12 oct 2026). El organizador de fuera no cuenta;
+        el que juega aquí, solo si es el marcador de esa tarjeta: si no, corrige
+        (13 oct 2026).
         """
         jugaron: set[UserId] = set()
         for golpe in golpes:
@@ -260,7 +269,9 @@ class Partida:
             if golpe.apuntado:
                 jugaron.add(golpe.user_id)
             por = golpe.marcador_por
-            if golpe.marcador_enviado and por in self._tarjetas:
+            if not golpe.marcador_enviado or por not in self._tarjetas:
+                continue
+            if por != organizador or self._marcadores.get(por) == golpe.user_id:
                 jugaron.add(por)
         return jugaron
 
