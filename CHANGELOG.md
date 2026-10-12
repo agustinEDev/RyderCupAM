@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.27.0] - 2026-10-12
+
+**Torneos Stableford y Medal** (stroke play individual, #251): ajustes de
+categorías, franjas de salida con plazas y lista de espera, hándicap fijado al
+cerrar inscripciones y actualizado desde la RFEG, partidas, anotación por
+partidas con marcador y clasificaciones. Además, arreglos de la Ryder, de la
+partida rápida, de las estadísticas y de la política de contraseñas. Va con el
+frontend **2.41.0**.
+
+**Notas de despliegue.**
+
+- **14 migraciones**, una sola cadena (`a7d3e9f2c4b1` → `d5f7a9b1c3e6`). Solo
+  añaden tablas y columnas; las columnas nuevas de tablas existentes admiten nulo
+  o tienen valor por defecto. Generación en modo offline comprobada.
+- **Sin variables nuevas.** Las actualizaciones de hándicap programadas corren
+  con `HANDICAP_REFRESH_ENABLED=true`, ya puesta en Render.
+- **Contrato:** todo aditivo. `max_players` sube de 100 a 200 (se relaja una
+  cota de la petición) y los errores de contraseña llevan `error_code`. Un
+  jugador que manda golpes para alguien que no es su marcado recibe ahora un 403
+  (`NOT_YOUR_MARKED_PLAYER`); el frontend siempre manda el suyo.
+- Orden: este primero, `/health`, y después el frontend 2.41.0. Probado en el
+  Kind con cinco pasadas de QA (navegador a 360 px y API) y en un iPhone real.
+
+### Added
+
+- **Ajustes de stroke play** (#501, #536): categorías por hándicap con límites a
+  mano o **N categorías iguales** que se reparten al cerrar inscripciones, regla
+  de los seis jugadores, jornadas por jugador y clasificación general acumulada
+  o a mejor tarjeta.
+- **Hándicap de stroke play** (#500, #506, #507, #509, #510): obligatorio para
+  inscribirse y fijado al cerrar inscripciones; se actualiza desde la RFEG al
+  cerrar, con el botón del organizador y con una actualización programada (un
+  vigilante dentro de la API, con bloqueo de Postgres). Una sola regla para el
+  hándicap con el que juega cada uno en una competición.
+- **Franjas de salida** (#508, #511, #512): por día y sesión, con su hoja de
+  salidas (primera y última salida, intervalo, jugadores por partida) y el cupo
+  que sale de ella; los inscritos cogen plaza, y si está llena, lista de espera.
+- **Partidas de cada franja** (#534): el organizador las genera (altos o bajos
+  primero), mueve jugadores (con intercambio), reordena y cambia marcadores
+  hasta la primera salida.
+- **Anotación y clasificaciones** (#535, #542): cada jugador anota su golpe y el
+  de quien marca; el hoyo se valida cuando coinciden. Entregar, retirarse; el
+  organizador corrige, reabre, marca no presentados, valida lo anotado y cierra
+  la franja. Clasificación de la franja, General (por categoría) y Scratch, con
+  NR, NP y «R» del retirado.
+- **Marcador que se va** (#539): al retirarse o no presentarse alguien, los
+  marcadores se reasignan en círculo; antes de salir, quien se queda solo recibe
+  compañero de la siguiente partida, con aviso.
+- La vista de anotación dice el género de la barra de cada jugador (#546).
+- Los errores de contraseña llevan un `error_code` estable para traducirlos en
+  el cliente (#524).
+- Inscripciones sin límite oculto al leerlas y cupo máximo de 200 jugadores
+  (#530).
+
+### Fixed
+
+- **Solo el marcador asignado puede anotar a un jugador** en la Ryder (#521):
+  antes uno podía validarse su propio hoyo. Reasignar jugadores ahora sortea los
+  marcadores como al generar.
+- **La partida rápida congela el hándicap de cada jugador al empezar** (#522):
+  un cambio del índice ya no movía golpes, puntos ni estadísticas de partidas
+  pasadas.
+- Las vueltas de torneo se miden en las estadísticas y el historial como vuelta
+  propia (#525): un 93 ya no sale -3 en una partida rápida y +21 en un torneo.
+- La lista de contraseñas comunes se compara en minúsculas (#523), y un reset
+  con un token desconocido da su error en lugar de «email debe ser válido»
+  (#524, #528).
+- Hora de apertura de la anotación con el desfase del campo (#537).
+- Se rechaza una franja cuya primera salida ya pasó o cuyas salidas caen en el
+  hueco del cambio de hora (#538, #543).
+- Los no presentados liberan su sitio en la partida, no se mueven y reabrirlos
+  con la partida llena da `GROUP_FULL` (#543).
+- Al cerrar la franja, quien tiene golpes anotados aunque ninguno validado queda
+  retirado, no no presentado (#547).
+
 ## [2.26.1] - 2026-10-08
 
 Hotfix: los puntos del panel y de las estadísticas cuadran con la partida, y una
