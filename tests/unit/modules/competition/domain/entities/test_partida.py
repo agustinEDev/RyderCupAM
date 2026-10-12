@@ -35,6 +35,7 @@ from src.modules.competition.domain.entities.partida import (
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
     TarjetaYaAbiertaError,
+    TieneGolpesError,
 )
 from src.modules.competition.domain.services.marcadores_en_cadena import (
     MarcadoresEnCadena,
@@ -780,3 +781,90 @@ class TestElMarcadorQueSeVa:
         assert partida.sin_marcador_en_juego == [c]
         partida.entregar(c)
         assert not partida.sin_marcador_en_juego
+
+
+class TestQuienesJugaron:
+    """
+    Quién estuvo en el campo según los golpes de su partida (#550, 12 oct 2026).
+
+    | Caso                                               | ¿Jugó?            |
+    |----------------------------------------------------|-------------------|
+    | Algo en su tarjeta (su lado, el del marcador, raya) | Sí                |
+    | Anotó, como su marcador, a quien marca              | Sí (él también)   |
+    | Metió el lado del marcador de alguien a quien no    | No: corrige, como |
+    |   marca (el organizador que juega y corrige)        |   el organizador  |
+    | Una fila sin nada enviado                           | No                |
+    | Golpes de otra partida                              | No cuentan        |
+    """
+
+    def _golpe(self, partida, de, propio=None, del_marcador=None, por=None, partida_id=None):
+        from datetime import UTC, datetime
+
+        from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
+
+        ahora = datetime(2030, 10, 11, 9, 0, tzinfo=UTC)
+        golpe = GolpeDePartida.crear(
+            partida_id or partida.id, partida.round_id, partida.competition_id, de, 1, ahora
+        )
+        if propio is not None:
+            golpe.anotar_propio(propio, True, de, ahora)
+        if del_marcador is not None:
+            golpe.anotar_del_marcador(del_marcador, True, por, ahora)
+        return golpe
+
+    def test_whoever_has_something_on_their_card(self):
+        partida = _partida(3)
+        a = partida.user_ids[0]
+
+        jugaron = partida.quienes_jugaron([self._golpe(partida, a, propio=4)])
+
+        assert jugaron == {a}
+
+    def test_scoring_whom_you_mark_shows_you_played(self):
+        partida = _partida(3)
+        marcador, marcado = next(iter(partida.marcadores.items()))
+
+        golpe = self._golpe(partida, marcado, del_marcador=4, por=marcador)
+
+        assert partida.quienes_jugaron([golpe]) == {marcado, marcador}
+
+    def test_entering_someone_you_do_not_mark_is_a_correction(self):
+        # El organizador que juega y corrige la tarjeta de otro no «jugó» por eso
+        partida = _partida(3)
+        a = partida.user_ids[0]
+        no_marca = next(u for u in partida.user_ids if u not in (a, partida.marcadores[a]))
+
+        golpe = self._golpe(partida, no_marca, del_marcador=4, por=a)
+
+        assert partida.quienes_jugaron([golpe]) == {no_marca}
+
+    def test_an_empty_row_shows_nobody(self):
+        partida = _partida(3)
+
+        assert partida.quienes_jugaron([self._golpe(partida, partida.user_ids[0])]) == set()
+
+    def test_strokes_of_another_group_do_not_count(self):
+        partida = _partida(3)
+        a = partida.user_ids[0]
+
+        golpe = self._golpe(partida, a, propio=4, partida_id=PartidaId.generate())
+
+        assert partida.quienes_jugaron([golpe]) == set()
+
+    def test_a_no_show_who_played_is_refused(self):
+        partida = _partida(3)
+        a = partida.user_ids[0]
+
+        with pytest.raises(TieneGolpesError):
+            partida.no_presentado(a, jugo=True)
+
+        assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
+
+    def test_a_closed_card_says_closed_before_played(self):
+        partida = _partida(3)
+        partida.empezar()
+        a = partida.user_ids[0]
+        partida.retirar(a)
+
+        with pytest.raises(TarjetaCerradaError):
+            partida.no_presentado(a, jugo=True)

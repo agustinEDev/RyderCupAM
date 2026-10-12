@@ -60,7 +60,6 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
     RetirarJugadorUseCase,
-    TieneGolpesError,
 )
 from src.modules.competition.domain.entities.golpe_de_partida import (
     GolpeDePartida,
@@ -70,6 +69,7 @@ from src.modules.competition.domain.entities.partida import (
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
     TarjetaYaAbiertaError,
+    TieneGolpesError,
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
@@ -580,3 +580,19 @@ async def test_closing_with_someone_who_only_scored_whom_they_mark():
     await _cerrar(escenario)
 
     assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.RETIRADO
+
+
+async def test_no_show_for_someone_who_only_corrected_another_card():
+    # El organizador que juega y corrige a quien no marca no «jugó» por eso
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    no_marca = next(u for u in partida.user_ids if u not in (a, partida.marcadores[a]))
+    golpe = GolpeDePartida.crear(
+        partida.id, partida.round_id, partida.competition_id, no_marca, 1, escenario.ahora
+    )
+    golpe.anotar_del_marcador(4, True, a, escenario.ahora)
+    await escenario.uow.golpes_de_partida.guardar(golpe)
+
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO

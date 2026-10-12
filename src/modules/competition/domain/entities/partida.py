@@ -15,7 +15,7 @@ Decidido con Agustín el 6-9 oct 2026:
   salir puede recibir a un jugador de otra partida (QA del 11 oct 2026).
 """
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -26,6 +26,7 @@ from ..value_objects.estado_partida import EstadoPartida
 from ..value_objects.jugador_de_partida import JugadorDePartida
 from ..value_objects.partida_id import PartidaId
 from ..value_objects.round_id import RoundId
+from .golpe_de_partida import GolpeDePartida
 
 MAX_JUGADORES = 4
 
@@ -52,6 +53,14 @@ class TarjetaCerradaError(ValueError):
 
 class TarjetaYaAbiertaError(ValueError):
     """Reabrir una tarjeta que ya está abierta: otro organizador se adelantó (#545)."""
+
+    error_code = "SCORECARD_ALREADY_OPEN"
+
+
+class TieneGolpesError(ValueError):
+    """Sus golpes dicen que jugó: se retira, no es un no presentado (#550)."""
+
+    error_code = "PLAYER_HAS_STROKES"
 
 
 class Partida:
@@ -183,11 +192,16 @@ class Partida:
         """Lo deja a medias: NR en Medal; en Stableford cuenta lo jugado (P6)."""
         self._cerrar_tarjeta(user_id, EstadoDeTarjeta.RETIRADO)
 
-    def no_presentado(self, user_id: UserId) -> None:
-        """No se presentó (P6): también antes de que la partida empiece."""
+    def no_presentado(self, user_id: UserId, jugo: bool = False) -> None:
+        """
+        No se presentó (P6): también antes de que la partida empiece. Si sus
+        golpes dicen que jugó (`quienes_jugaron`), se retira (#550).
+        """
         self._de_la_partida(user_id)
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
             raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
+        if jugo:
+            raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
         self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
         self._rehacer_el_circulo()
         self._acabar_si_no_queda_nadie()
@@ -230,6 +244,23 @@ class Partida:
                 self._tarjetas[user_id] = EstadoDeTarjeta.RETIRADO
         self._rehacer_el_circulo()
         self._estado = EstadoPartida.COMPLETED
+
+    def quienes_jugaron(self, golpes: Iterable[GolpeDePartida]) -> set[UserId]:
+        """
+        Quién estuvo en el campo según los golpes de esta partida: algo en su
+        tarjeta, o anotó como su marcador a quien marca (12 oct 2026). Meter el
+        lado del marcador de alguien a quien no marcas es corregir, no jugar.
+        """
+        jugaron: set[UserId] = set()
+        for golpe in golpes:
+            if golpe.partida_id != self.id:
+                continue
+            if golpe.apuntado:
+                jugaron.add(golpe.user_id)
+            por = golpe.marcador_por
+            if golpe.marcador_enviado and por and self._marcadores.get(por) == golpe.user_id:
+                jugaron.add(por)
+        return jugaron
 
     def _cerrar_tarjeta(self, user_id: UserId, estado: EstadoDeTarjeta) -> None:
         self._de_la_partida(user_id)

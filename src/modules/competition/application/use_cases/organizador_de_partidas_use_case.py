@@ -96,12 +96,6 @@ async def _bloqueada(uow: CompetitionUnitOfWorkInterface, partida: Partida) -> P
     return bloqueada
 
 
-class TieneGolpesError(Exception):
-    """Tiene golpes anotados en su partida: jugó, así que se retira (#550)."""
-
-    error_code = "PLAYER_HAS_STROKES"
-
-
 class TieneMarcadorError(Exception):
     """Ese jugador tiene marcador: sus hoyos los valida él, no el organizador."""
 
@@ -238,7 +232,7 @@ class MarcarNoPresentadoUseCase:
         Raises:
             PartidaNoAnotableError: Con la competición sin jugarse
             ScoringNotOpenYetError: Antes de abrir la franja
-            TieneGolpesError: Con golpes anotados en esta partida (#550)
+            TieneGolpesError: Si sus golpes dicen que jugó (#550)
         """
         llegada = self._reloj()
         async with self._uow:
@@ -250,14 +244,9 @@ class MarcarNoPresentadoUseCase:
             await self._uow.competitions.find_by_id_for_update(competicion.id)
             bloqueada = await _bloqueada(self._uow, partida)
             jugador = _del_jugador(bloqueada, user_id)
-            # Cerrada antes que con golpes: si ya se retiró, «retíralo» no sirve
-            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
-                raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
             # Leídos con la partida bloqueada: un golpe a la vez no se cuela
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
-            if any(g.muestra_que_jugo(jugador) for g in golpes):
-                raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
-            bloqueada.no_presentado(jugador)
+            bloqueada.no_presentado(jugador, jugo=jugador in bloqueada.quienes_jugaron(golpes))
             await self._uow.partidas.guardar([bloqueada])
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
 
@@ -383,23 +372,18 @@ class CerrarFranjaUseCase:
             validados: dict[tuple[PartidaId, UserId], int] = {}
             # Jugó si algo lo dice, aunque no se le validara nada (su marcador
             # no vino) o solo anotara a quien marca: retirado, no no presentado
-            golpes_de: dict[PartidaId, list[GolpeDePartida]] = {}
             for golpe in golpes:
                 suyo = (golpe.partida_id, golpe.user_id)
                 if golpe.validado:
                     validados[suyo] = validados.get(suyo, 0) + 1
-                golpes_de.setdefault(golpe.partida_id, []).append(golpe)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
+                jugaron = partida.quienes_jugaron(golpes)
                 partida.cerrar(
                     completas={
                         u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS
                     },
-                    sin_golpes={
-                        u
-                        for u in partida.user_ids
-                        if not any(g.muestra_que_jugo(u) for g in golpes_de.get(partida.id, []))
-                    },
+                    sin_golpes={u for u in partida.user_ids if u not in jugaron},
                 )
             await self._uow.partidas.guardar(sin_acabar)
             return await vista_de_la_franja(

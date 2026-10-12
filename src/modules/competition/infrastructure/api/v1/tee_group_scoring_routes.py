@@ -67,7 +67,6 @@ from src.modules.competition.application.use_cases.organizador_de_partidas_use_c
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
     RetirarJugadorUseCase,
-    TieneGolpesError,
     TieneMarcadorError,
     ValidarLoAnotadoUseCase,
 )
@@ -80,6 +79,7 @@ from src.modules.competition.domain.entities.partida import (
     PartidaNoEmpezadaError,
     TarjetaCerradaError,
     TarjetaYaAbiertaError,
+    TieneGolpesError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -140,13 +140,13 @@ _ERRORES: dict[type[Exception], tuple[int, str, str]] = {
     ),
     TarjetaYaAbiertaError: (
         status.HTTP_409_CONFLICT,
-        "SCORECARD_ALREADY_OPEN",
+        TarjetaYaAbiertaError.error_code,
         "Esa tarjeta ya está abierta.",
     ),
     TieneGolpesError: (
         status.HTTP_409_CONFLICT,
         TieneGolpesError.error_code,
-        "Tiene golpes anotados: no es un no presentado, retíralo.",
+        "Tiene golpes anotados: retíralo en su lugar.",
     ),
     TieneMarcadorError: (
         status.HTTP_409_CONFLICT,
