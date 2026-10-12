@@ -192,15 +192,15 @@ class Partida:
         """Lo deja a medias: NR en Medal; en Stableford cuenta lo jugado (P6)."""
         self._cerrar_tarjeta(user_id, EstadoDeTarjeta.RETIRADO)
 
-    def no_presentado(self, user_id: UserId, jugo: bool = False) -> None:
+    def no_presentado(self, user_id: UserId, golpes: Iterable[GolpeDePartida]) -> None:
         """
-        No se presentó (P6): también antes de que la partida empiece. Si sus
-        golpes dicen que jugó (`quienes_jugaron`), se retira (#550).
+        No se presentó (P6): también antes de que la partida empiece. Si los
+        golpes de la partida dicen que jugó (`quienes_jugaron`), se retira (#550).
         """
         self._de_la_partida(user_id)
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
             raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
-        if jugo:
+        if user_id in self.quienes_jugaron(golpes):
             raise TieneGolpesError("Tiene golpes anotados: retíralo en su lugar.")
         self._tarjetas[user_id] = EstadoDeTarjeta.NO_PRESENTADO
         self._rehacer_el_circulo()
@@ -248,8 +248,8 @@ class Partida:
     def quienes_jugaron(self, golpes: Iterable[GolpeDePartida]) -> set[UserId]:
         """
         Quién estuvo en el campo según los golpes de esta partida: algo en su
-        tarjeta, o anotó como su marcador a quien marca (12 oct 2026). Meter el
-        lado del marcador de alguien a quien no marcas es corregir, no jugar.
+        tarjeta, o metió el lado del marcador de otro jugador de la partida,
+        aunque ya no le marque (12 oct 2026). El organizador de fuera no cuenta.
         """
         jugaron: set[UserId] = set()
         for golpe in golpes:
@@ -258,7 +258,7 @@ class Partida:
             if golpe.apuntado:
                 jugaron.add(golpe.user_id)
             por = golpe.marcador_por
-            if golpe.marcador_enviado and por and self._marcadores.get(por) == golpe.user_id:
+            if golpe.marcador_enviado and por in self._tarjetas:
                 jugaron.add(por)
         return jugaron
 

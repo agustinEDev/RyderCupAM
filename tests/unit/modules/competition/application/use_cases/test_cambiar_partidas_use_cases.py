@@ -107,7 +107,7 @@ class TestMover:
         escenario, _ = await _generadas("6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
         primera, segunda = await _guardadas(escenario)
         falta = primera.user_ids[0]
-        primera.no_presentado(falta)
+        primera.no_presentado(falta, [])
         await escenario.uow.partidas.guardar([primera])
 
         vista = await _mover(escenario, primera.user_ids[1], segunda.id.value)

@@ -246,7 +246,7 @@ class MarcarNoPresentadoUseCase:
             jugador = _del_jugador(bloqueada, user_id)
             # Leídos con la partida bloqueada: un golpe a la vez no se cuela
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
-            bloqueada.no_presentado(jugador, jugo=jugador in bloqueada.quienes_jugaron(golpes))
+            bloqueada.no_presentado(jugador, golpes)
             await self._uow.partidas.guardar([bloqueada])
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
 

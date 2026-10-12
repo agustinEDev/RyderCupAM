@@ -76,6 +76,7 @@ from src.modules.competition.domain.value_objects.estado_de_tarjeta import Estad
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
     _partida,
     cambiada_al_bloquear,
@@ -582,17 +583,31 @@ async def test_closing_with_someone_who_only_scored_whom_they_mark():
     assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.RETIRADO
 
 
-async def test_no_show_for_someone_who_only_corrected_another_card():
-    # El organizador que juega y corrige a quien no marca no «jugó» por eso
+async def test_retiring_someone_not_in_the_group():
     escenario, partida = await _en_juego(n=3)
-    a = partida.user_ids[0]
-    no_marca = next(u for u in partida.user_ids if u not in (a, partida.marcadores[a]))
-    golpe = GolpeDePartida.crear(
-        partida.id, partida.round_id, partida.competition_id, no_marca, 1, escenario.ahora
-    )
-    golpe.anotar_del_marcador(4, True, a, escenario.ahora)
-    await escenario.uow.golpes_de_partida.guardar(golpe)
 
-    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+    with pytest.raises(PartidaNotFoundError):
+        await _retirar(escenario).execute(
+            partida.id.value, UserId.generate().value, escenario.creador, False
+        )
 
-    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
+
+async def test_an_admin_can_retire():
+    escenario, partida = await _en_juego(n=3)
+    a, b, _ = partida.user_ids
+
+    await _retirar(escenario).execute(partida.id.value, a.value, b, True)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.RETIRADO
+
+
+async def test_retiring_the_last_one_playing_finishes_the_group():
+    escenario, partida = await _en_juego(n=2)
+    a, b = partida.user_ids
+    entregada = await escenario.uow.partidas.find_by_id(partida.id)
+    entregada.entregar(b)
+    await escenario.uow.partidas.guardar([entregada])
+
+    await _retirar(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await escenario.uow.partidas.find_by_id(partida.id)).estado == EstadoPartida.COMPLETED

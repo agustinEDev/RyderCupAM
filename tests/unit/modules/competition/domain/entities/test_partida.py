@@ -379,7 +379,7 @@ class TestCicloDeLaTarjeta:
     def test_no_show_even_without_starting(self):
         partida = _partida(2)
 
-        partida.no_presentado(partida.user_ids[0])
+        partida.no_presentado(partida.user_ids[0], [])
 
         assert partida.estados_de_tarjeta[partida.user_ids[0]] == EstadoDeTarjeta.NO_PRESENTADO
 
@@ -420,11 +420,20 @@ class TestCicloDeLaTarjeta:
         }
         assert partida.estado == EstadoPartida.COMPLETED
 
-    @pytest.mark.parametrize("accion", ["entregar", "retirar", "no_presentado", "reabrir_tarjeta"])
+    @pytest.mark.parametrize(
+        "accion",
+        [
+            lambda p, u: p.entregar(u),
+            lambda p, u: p.retirar(u),
+            lambda p, u: p.no_presentado(u, []),
+            lambda p, u: p.reabrir_tarjeta(u),
+        ],
+        ids=["entregar", "retirar", "no_presentado", "reabrir_tarjeta"],
+    )
     def test_someone_not_in_the_group(self, accion):
         partida = self._empezada()
         with pytest.raises(PartidaInvalidaError):
-            getattr(partida, accion)(UserId.generate())
+            accion(partida, UserId.generate())
 
 
 class TestElMarcadorQueSeVa:
@@ -470,7 +479,7 @@ class TestElMarcadorQueSeVa:
         partida = self._empezada(3)
         a, b, c = partida.user_ids
 
-        partida.no_presentado(a)
+        partida.no_presentado(a, [])
 
         assert partida.marcadores == {b: c, c: b}
 
@@ -496,7 +505,7 @@ class TestElMarcadorQueSeVa:
         partida = _partida(2)
         a, _ = partida.user_ids
 
-        partida.no_presentado(a)
+        partida.no_presentado(a, [])
 
         assert partida.marcadores == {}
         assert partida.sin_marcador_en_juego == [partida.user_ids[1]]
@@ -564,7 +573,7 @@ class TestElMarcadorQueSeVa:
         """Sin empezar, con todos menos el último no presentados."""
         partida = _partida(n)
         for user_id in partida.user_ids[:-1]:
-            partida.no_presentado(user_id)
+            partida.no_presentado(user_id, [])
         return partida
 
     def test_keeping_company_to_who_was_left_alone(self):
@@ -645,7 +654,7 @@ class TestElMarcadorQueSeVa:
 
     def test_putting_one_in_a_group_of_four_with_a_no_show(self):
         partida = _partida(4)
-        partida.no_presentado(partida.user_ids[0])
+        partida.no_presentado(partida.user_ids[0], [])
         nuevo = _jugador()
 
         partida.meter(nuevo, 4)
@@ -661,7 +670,7 @@ class TestElMarcadorQueSeVa:
     def test_reopening_a_no_show_with_four_already_playing_is_refused(self):
         partida = _partida(4)
         falta = partida.user_ids[0]
-        partida.no_presentado(falta)
+        partida.no_presentado(falta, [])
         partida.meter(_jugador(), 4)
 
         with pytest.raises(PartidaLlenaError):
@@ -673,7 +682,7 @@ class TestElMarcadorQueSeVa:
         # 3 juegan + 1 retirado: reabrir al NP dejaría 5 tarjetas que no son NP (/code-review)
         partida = _partida(4)
         falta = partida.user_ids[0]
-        partida.no_presentado(falta)
+        partida.no_presentado(falta, [])
         partida.meter(_jugador(), 4)
         partida.empezar()
         partida.retirar(partida.user_ids[1])
@@ -684,7 +693,7 @@ class TestElMarcadorQueSeVa:
     def test_reopening_a_no_show_in_a_group_of_three_with_three_playing(self):
         partida = _partida(3)
         falta = partida.user_ids[0]
-        partida.no_presentado(falta)
+        partida.no_presentado(falta, [])
         partida.meter(_jugador(), 3)
 
         with pytest.raises(PartidaLlenaError):
@@ -693,7 +702,7 @@ class TestElMarcadorQueSeVa:
     def test_reopening_a_no_show_with_room_gets_a_marker(self):
         partida = _partida(3)
         a, b, c = partida.user_ids
-        partida.no_presentado(a)
+        partida.no_presentado(a, [])
 
         partida.reabrir_tarjeta(a)
 
@@ -711,7 +720,7 @@ class TestElMarcadorQueSeVa:
     def test_reopening_a_no_show_once_started_does_not_touch_the_markers(self):
         partida = self._empezada(3)
         a, b, c = partida.user_ids
-        partida.no_presentado(a)
+        partida.no_presentado(a, [])
 
         partida.reabrir_tarjeta(a)
 
@@ -790,9 +799,9 @@ class TestQuienesJugaron:
     | Caso                                               | ¿Jugó?            |
     |----------------------------------------------------|-------------------|
     | Algo en su tarjeta (su lado, el del marcador, raya) | Sí                |
-    | Anotó, como su marcador, a quien marca              | Sí (él también)   |
-    | Metió el lado del marcador de alguien a quien no    | No: corrige, como |
-    |   marca (el organizador que juega y corrige)        |   el organizador  |
+    | Un jugador de la partida metió el lado del marcador | Sí (él también),  |
+    |   de otro, aunque ya no le marque (círculo rehecho)  |   12 oct 2026     |
+    | Lo metió alguien de fuera (el organizador)          | Solo el dueño     |
     | Una fila sin nada enviado                           | No                |
     | Golpes de otra partida                              | No cuentan        |
     """
@@ -828,15 +837,24 @@ class TestQuienesJugaron:
 
         assert partida.quienes_jugaron([golpe]) == {marcado, marcador}
 
-    def test_entering_someone_you_do_not_mark_is_a_correction(self):
-        # El organizador que juega y corrige la tarjeta de otro no «jugó» por eso
+    def test_scoring_someone_you_no_longer_mark_still_counts(self):
+        # El círculo se rehízo al retirarse su marcado: lo que anotó sigue diciendo que jugó
+        partida = _partida(4)
+        partida.empezar()
+        marcador, marcado = next(iter(partida.marcadores.items()))
+        golpe = self._golpe(partida, marcado, del_marcador=4, por=marcador)
+        partida.retirar(marcado)
+
+        assert marcador in partida.quienes_jugaron([golpe])
+
+    def test_someone_outside_the_group_does_not_count(self):
+        # El organizador que corrige desde fuera no está en la partida
         partida = _partida(3)
         a = partida.user_ids[0]
-        no_marca = next(u for u in partida.user_ids if u not in (a, partida.marcadores[a]))
 
-        golpe = self._golpe(partida, no_marca, del_marcador=4, por=a)
+        golpe = self._golpe(partida, a, del_marcador=4, por=UserId.generate())
 
-        assert partida.quienes_jugaron([golpe]) == {no_marca}
+        assert partida.quienes_jugaron([golpe]) == {a}
 
     def test_an_empty_row_shows_nobody(self):
         partida = _partida(3)
@@ -856,7 +874,7 @@ class TestQuienesJugaron:
         a = partida.user_ids[0]
 
         with pytest.raises(TieneGolpesError):
-            partida.no_presentado(a, jugo=True)
+            partida.no_presentado(a, [self._golpe(partida, a, propio=4)])
 
         assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
 
@@ -867,4 +885,4 @@ class TestQuienesJugaron:
         partida.retirar(a)
 
         with pytest.raises(TarjetaCerradaError):
-            partida.no_presentado(a, jugo=True)
+            partida.no_presentado(a, [self._golpe(partida, a, propio=4)])
