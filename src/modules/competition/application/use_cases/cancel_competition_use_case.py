@@ -76,7 +76,9 @@ class CancelCompetitionUseCase:
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Bloqueada: una espera o una asignación a la vez no se cuela en una
+            # competición recién cancelada (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
 
             if not competition:
                 raise CompetitionNotFoundError(
@@ -89,6 +91,9 @@ class CancelCompetitionUseCase:
 
             # 3. Cancelar la competición (la entidad valida la transición)
             competition.cancel(reason=request.reason)
+
+            # Sin listas de espera: ya no se juega (#251)
+            await self._uow.esperas.vaciar(competition.id)
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)

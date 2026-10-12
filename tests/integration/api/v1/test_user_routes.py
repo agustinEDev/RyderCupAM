@@ -732,6 +732,7 @@ class TestUserRoutes:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "carácter especial" in response.json()["detail"]
+        assert response.json()["error_code"] == "PASSWORD_NO_SYMBOL"
         login_response = await client.post(
             "/api/v1/auth/login",
             json={"email": "security.policy@example.com", "password": "0ldP@ssw0rd!"},

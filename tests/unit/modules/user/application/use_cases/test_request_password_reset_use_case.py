@@ -231,7 +231,7 @@ class TestRequestPasswordResetEmailNotFound:
             first_name="Test",
             last_name="User",
             email_str="exists@test.com",
-            plain_password="Password123!",
+            plain_password="Segura-Prueba123!",
         )
         async with uow:
             await uow.users.save(user)

@@ -1,6 +1,7 @@
 """DTOs para el módulo Competition - Application Layer."""
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.domain.value_objects.visibility import Visibility
@@ -87,6 +89,70 @@ class CreatorDTO(BaseModel):
 # ======================================================================================
 # DTO para el Caso de Uso: Crear Competition
 # ======================================================================================
+
+
+class StrokePlaySettingsDTO(BaseModel):
+    """
+    Los ajustes de un Stableford o un Medal (#251). Al crear, lo que no llega
+    toma su valor por defecto; al cambiar, lo que no llega no se toca.
+    """
+
+    # Un tope generoso para no leer entera una lista desmesurada: el «como mucho
+    # 5 categorías» lo dice el dominio, con su motivo
+    category_limits: list[Decimal] | None = Field(
+        None,
+        max_length=20,
+        description=(
+            "Límites superiores de hándicap de las categorías, de menor a mayor y con "
+            "un decimal como mucho: [12.0, 26.0] son «hasta 12,0», «de 12,1 a 26,0» y "
+            "«más de 26,0». Hasta 4 límites (5 categorías). Una lista vacía quita las "
+            "categorías. Solo cuentan en la clasificación neta."
+        ),
+    )
+    max_matchdays_per_player: int | None = Field(
+        None,
+        description=(
+            "En cuántas jornadas puede jugar cada jugador, una franja por jornada. "
+            "Por defecto 1. No puede pasar de los días que dura el torneo."
+        ),
+    )
+    overall_standing: OverallStanding | None = Field(
+        None,
+        description=(
+            "Cómo se calcula la general: ACCUMULATED (por defecto: suma de puntos en "
+            "Stableford, de golpes netos en Medal) o BEST_CARD (la mejor tarjeta)."
+        ),
+    )
+    # Sin rango aquí: «entre 2 y 5» lo dice el dominio, con su motivo
+    category_count: int | None = Field(
+        None,
+        description=(
+            "Categorías iguales: cuántas (de 2 a 5). Los límites se calculan al cerrar "
+            "las inscripciones con los hándicaps fijados, con grupos lo más parecidos "
+            "posible; los empatados en una frontera van a la de hándicap más bajo. "
+            "Mandarlo pasa a este modo y borra los límites; mandar `category_limits` "
+            "vuelve a límites a mano. Los dos a la vez es un 400."
+        ),
+    )
+
+
+class StrokePlaySettingsResponseDTO(BaseModel):
+    """Los ajustes de un Stableford o un Medal, tal como están (#251)."""
+
+    category_limits: list[Decimal] = Field(
+        ..., description="Límites superiores de las categorías; vacía si no hay categorías."
+    )
+    max_matchdays_per_player: int = Field(
+        ..., description="En cuántas jornadas puede jugar cada jugador."
+    )
+    overall_standing: OverallStanding = Field(..., description="ACCUMULATED o BEST_CARD.")
+    category_count: int | None = Field(
+        None,
+        description=(
+            "Categorías iguales pedidas; null si los límites son a mano. Con él, "
+            "`category_limits` está vacía hasta el cierre, que la calcula."
+        ),
+    )
 
 
 class CreateCompetitionRequestDTO(BaseModel):
@@ -188,6 +254,15 @@ class CreateCompetitionRequestDTO(BaseModel):
     setup_mode: SetupMode | None = Field(
         None,
         description="Solo en una Ryder Cup. Cuánto monta la aplicación por su cuenta (FE #695). AUTOMATIC: equipos, capitanes y partidos solos, preguntando solo los días, las franjas y el campo. MANUAL: todo a mano. RYDER_CUP (por defecto): draft opcional, capitanes por el organizador, rondas configurables y sobres. Se cambia mientras las inscripciones siguen abiertas.",
+    )
+
+    stroke_play: StrokePlaySettingsDTO | None = Field(
+        None,
+        description=(
+            "Solo en un STABLEFORD o un MEDAL: categorías, jornadas por jugador y "
+            "regla de la general. Sin esto se crea con los valores por defecto. En "
+            "una Ryder Cup es un 400."
+        ),
     )
 
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
@@ -300,6 +375,9 @@ class CreateCompetitionResponseDTO(BaseModel):
     )
     modality: str = Field(
         "MATCH_PLAY", description="Su modalidad, derivada del tipo: MATCH_PLAY o STROKE_PLAY."
+    )
+    stroke_play: StrokePlaySettingsResponseDTO | None = Field(
+        None, description="Ajustes del stroke play (#251); vacío en una Ryder Cup."
     )
     play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
@@ -494,6 +572,96 @@ class UpdateCompetitionResponseDTO(BaseModel):
 # ======================================================================================
 
 
+class PendingHandicapPlayerDTO(BaseModel):
+    """Un jugador al que falta actualizar el hándicap con la RFEG (#251)."""
+
+    user_id: UUID
+    name: str
+
+
+class HandicapUpdateStatusDTO(BaseModel):
+    """La última actualización de hándicaps con la RFEG de la competición (#251)."""
+
+    status: Literal["IN_PROGRESS", "COMPLETED", "INCOMPLETE", "STOPPED"] = Field(
+        ...,
+        description=(
+            "IN_PROGRESS: preguntando a la RFEG. COMPLETED: todos actualizados. "
+            "INCOMPLETE: alguien se quedó sin actualizar (se avisa al organizador por "
+            "correo). STOPPED: la competición empezó o se volvió a cerrar a mitad."
+        ),
+    )
+    origin: Literal["ENROLLMENTS_CLOSED", "ORGANIZER", "SCHEDULED"] = Field(
+        ..., description="Qué la lanzó: el cierre de inscripciones, el botón o una programada."
+    )
+    started_at: datetime
+    finished_at: datetime | None = None
+    pending_players: list[PendingHandicapPlayerDTO] = Field(
+        default_factory=list,
+        description=(
+            "En curso, quién falta todavía; incompleta, quién se quedó sin actualizar. "
+            "Vacío si está completa o cortada."
+        ),
+    )
+
+
+class HandicapUpdateWindowDTO(BaseModel):
+    """Si el organizador puede actualizar ahora los hándicaps con la RFEG (#251)."""
+
+    open: bool = Field(..., description="Si el botón «Actualizar hándicaps» está activo.")
+    closes_at: datetime | None = Field(
+        None,
+        description=(
+            "Hasta cuándo (10 s por jugador antes de la siguiente salida). Null sin "
+            "horas de salida (Ryder o stroke play sin franjas): hasta iniciar."
+        ),
+    )
+    reason: str | None = Field(None, description="Por qué no, si está cerrada.")
+    scheduled_at: datetime | None = Field(
+        None, description="Si hay una actualización programada, para cuándo (#251)."
+    )
+
+
+class ScheduleHandicapUpdateRequestDTO(BaseModel):
+    """Para cuándo programar la actualización de hándicaps (#251)."""
+
+    run_at: datetime = Field(
+        ...,
+        description=(
+            "Cuándo, con huso (por ejemplo 2030-10-11T03:00:00+02:00). Futuro y dentro "
+            "de la ventana del botón en esa hora."
+        ),
+    )
+
+    @field_validator("run_at")
+    @classmethod
+    def con_huso(cls, v: datetime) -> datetime:
+        """Sin huso no se sabe qué hora es: «las 3:00» de dónde."""
+        if v.tzinfo is None:
+            raise ValueError("La hora tiene que llevar su huso (por ejemplo +02:00 o Z).")
+        return v
+
+
+class ScheduledHandicapUpdateDTO(BaseModel):
+    """La actualización de hándicaps programada."""
+
+    run_at: datetime
+
+
+class HandicapUpdateLaunchedDTO(BaseModel):
+    """La actualización de hándicaps que acaba de lanzar el organizador (#251)."""
+
+    id: UUID
+    status: Literal["IN_PROGRESS"] = "IN_PROGRESS"
+    origin: Literal["ENROLLMENTS_CLOSED", "ORGANIZER", "SCHEDULED"] = Field(
+        ...,
+        description="La nueva viene del botón; si se reanudó una a medias, conserva la suya.",
+    )
+    started_at: datetime = Field(..., description="Cuándo empezó (la original, si se reanudó).")
+    resumed: bool = Field(
+        ..., description="True si se reanudó una incompleta: solo pregunta por lo pendiente."
+    )
+
+
 class CompetitionResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una competición.
@@ -536,6 +704,9 @@ class CompetitionResponseDTO(BaseModel):
     )
     modality: str = Field(
         "MATCH_PLAY", description="Su modalidad, derivada del tipo: MATCH_PLAY o STROKE_PLAY."
+    )
+    stroke_play: StrokePlaySettingsResponseDTO | None = Field(
+        None, description="Ajustes del stroke play (#251); vacío en una Ryder Cup."
     )
     play_mode: str = Field(..., description="Modo de juego: 'SCRATCH' o 'HANDICAP'.")
 
@@ -608,6 +779,21 @@ class CompetitionResponseDTO(BaseModel):
             "Solo en la ficha: si quien la mira puede borrarla ahora (creador o admin, "
             "estado que lo permita y nada jugado). Null en los listados, donde no "
             "se calcula para no recorrer los partidos de cada competición."
+        ),
+    )
+    handicap_update_window: HandicapUpdateWindowDTO | None = Field(
+        None,
+        description=(
+            "Solo en la ficha y solo para el organizador o un admin: si puede "
+            "actualizar ahora los hándicaps con la RFEG (#251)."
+        ),
+    )
+    handicap_update: HandicapUpdateStatusDTO | None = Field(
+        None,
+        description=(
+            "Solo en la ficha y solo para el organizador o un admin: la última "
+            "actualización de hándicaps con la RFEG (#251). Null si no hay ninguna, "
+            "para cualquier otro y en los listados."
         ),
     )
 

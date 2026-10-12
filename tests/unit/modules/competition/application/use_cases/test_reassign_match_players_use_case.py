@@ -240,6 +240,16 @@ class TestReassignMatchPlayersUseCase:
         # El nuevo match tiene un ID diferente al original
         assert response.match_id != match.id.value
 
+        # BE #520: el partido nuevo nace con sus marcadores sorteados, como al
+        # generar. Sin ellos la app no podía anotarlo (no manda nada sin
+        # asignación) y la regla del marcador asignado no tenía a quién mirar
+        async with uow:
+            nuevo = await uow.matches.find_by_id(MatchId(response.match_id))
+        assert {(a.scorer_user_id, a.marks_user_id) for a in nuevo.marker_assignments} == {
+            (player2, player4),
+            (player4, player2),
+        }
+
     async def test_should_fail_when_match_not_scheduled(
         self,
         uow: InMemoryUnitOfWork,

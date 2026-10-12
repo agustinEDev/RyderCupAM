@@ -7,6 +7,10 @@ Lo usan el borrado de una competicion y el reset de los sobres de una sesion, y
 vive aqui porque las dos tienen que contestar EXACTAMENTE lo mismo.
 """
 
+from collections.abc import Sequence
+
+from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
+from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -44,6 +48,44 @@ class LoJugado:
                 llega despues, ya no encuentra la fila. La pregunta de una
                 ficha NO bloquea: retendria a quien anota
         """
+        # Una franja de stroke play: jugado es un golpe apuntado en una de sus
+        # partidas (#251, PR 5). Generarlas no es jugar
+        if bloquear:
+            await self._bloquear(await self._uow.partidas.de_la_franja(round_id))
+        if _alguno_apuntado(await self._uow.golpes_de_partida.de_la_franja(round_id)):
+            return True
+        return await self._partidos_jugados(round_id, bloquear)
+
+    async def en_la_competicion(
+        self, competition_id: CompetitionId, bloquear: bool = False
+    ) -> bool:
+        """Indica si el torneo llego a jugarse, aunque sea un hoyo.
+
+        Se pregunta aunque el estado diga otra cosa: el estado se puede andar
+        hacia atras sin deshacer lo jugado, asi que un torneo ya jugado puede
+        estar de vuelta en ACTIVE y la cascada se llevaria sus partidos y sus
+        golpes. Los golpes de las partidas se leen una vez para todo el torneo.
+        """
+        if bloquear:
+            await self._bloquear(await self._uow.partidas.de_la_competicion(competition_id))
+        if _alguno_apuntado(await self._uow.golpes_de_partida.de_la_competicion(competition_id)):
+            return True
+        for ronda in await self._uow.rounds.find_by_competition(competition_id):
+            if await self._partidos_jugados(ronda.id, bloquear):
+                return True
+        return False
+
+    async def _bloquear(self, partidas: Sequence[Partida]) -> None:
+        """Bloquea cada partida antes de leer sus golpes.
+
+        Anotar bloquea la partida antes de escribir: un primer golpe aun sin
+        confirmar no se ve, y sin esperarlo el borrado se llevaria al jugador y
+        su golpe reventaria la clave ajena al confirmar (un 500).
+        """
+        for partida in partidas:
+            await self._uow.partidas.find_by_id_for_update(partida.id)
+
+    async def _partidos_jugados(self, round_id: RoundId, bloquear: bool) -> bool:
         partidos_de = (
             self._uow.matches.find_by_round_for_update
             if bloquear
@@ -65,17 +107,6 @@ class LoJugado:
                     return True
         return False
 
-    async def en_la_competicion(
-        self, competition_id: CompetitionId, bloquear: bool = False
-    ) -> bool:
-        """Indica si el torneo llego a jugarse, aunque sea un hoyo.
 
-        Se pregunta aunque el estado diga otra cosa: el estado se puede andar
-        hacia atras sin deshacer lo jugado, asi que un torneo ya jugado puede
-        estar de vuelta en ACTIVE y la cascada se llevaria sus partidos y sus
-        golpes.
-        """
-        for ronda in await self._uow.rounds.find_by_competition(competition_id):
-            if await self.en_la_sesion(ronda.id, bloquear):
-                return True
-        return False
+def _alguno_apuntado(golpes: Sequence[GolpeDePartida]) -> bool:
+    return any(golpe.propio_enviado or golpe.marcador_enviado for golpe in golpes)

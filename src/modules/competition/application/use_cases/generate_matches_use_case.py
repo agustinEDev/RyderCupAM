@@ -1,7 +1,5 @@
 """Caso de Uso: Generar partidos para una ronda."""
 
-import asyncio
-import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -26,19 +24,22 @@ from src.modules.competition.application.services.match_players_builder import (
     TeeColorNotFoundError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.barra_del_jugador import (
+    BarraDelJugador,
+    lo_que_le_falta,
+)
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_status import SE_JUEGA
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_ENROLLMENT,
-    MISSING_GENDER,
-    MISSING_TEE_COLOR,
     NO_GOLF_COURSE,
     NO_TEAMS,
     NOT_ENOUGH_PLAYERS,
@@ -58,8 +59,6 @@ from src.shared.domain.services.playing_handicap_calculator import (
 )
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
-
-logger = logging.getLogger(__name__)
 
 
 class RoundNotPendingMatchesError(Exception):
@@ -179,7 +178,7 @@ class GenerateMatchesUseCase:
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
         self._scoring_service = scoring_service or ScoringService()
-        self._handicap_service = handicap_service
+        self._refresco_rfeg = RefrescoRfeg(handicap_service, user_repository)
         self._match_players = MatchPlayersBuilder()
 
     async def execute(
@@ -319,6 +318,12 @@ class GenerateMatchesUseCase:
             NoGolfCourseForHandicapError, EnvelopesDecideThePairingsError,
             EnvelopesNotRevealedError
         """
+        # Una franja de stroke play se reparte en partidas, no en partidos: asignar
+        # equipos la pasaría a PENDING_MATCHES como a las demás sesiones (#251)
+        if round_entity.hoja_de_salidas is not None:
+            raise RoundNotPendingMatchesError(
+                "Una franja de un Stableford o un Medal no tiene partidos: se reparte en partidas."
+            )
         if not round_entity.can_generate_matches():
             raise RoundNotPendingMatchesError(
                 f"La ronda debe estar en PENDING_MATCHES. Estado: {round_entity.status.value}"
@@ -498,13 +503,13 @@ class GenerateMatchesUseCase:
             tee_color, _, tee_rating, _ = self._match_players.resolve_player_data(
                 uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
             )
-            if tee_rating is not None:
-                continue
-            # Solo es su género lo que falta si de verdad no lo tiene y el color
-            # existe para alguno: con género, lo que falta es su color para él
-            existe_el_color = any(color == tee_color.value for color, _ in tee_ratings)
-            sin_genero = user_gender_map.get(str(uid.value)) is None
-            sin_barras.append((uid, tee_color, existe_el_color and sin_genero))
+            falta = lo_que_le_falta(
+                BarraDelJugador(tee_color, None, tee_rating),
+                user_gender_map.get(str(uid.value)),
+                tee_ratings,
+            )
+            if falta is not None:
+                sin_barras.append((uid, *falta))
         if not sin_barras:
             return
 
@@ -514,12 +519,9 @@ class GenerateMatchesUseCase:
         raise PlayersWithoutTeeError(
             [
                 BlockedPlayer(
-                    user_id=uid,
-                    name=nombres.get(uid, ""),
-                    missing=MISSING_GENDER if le_falta_el_genero else MISSING_TEE_COLOR,
-                    tee_color=None if le_falta_el_genero else tee_color.value,
+                    user_id=uid, name=nombres.get(uid, ""), missing=missing, tee_color=color
                 )
-                for uid, tee_color, le_falta_el_genero in sin_barras
+                for uid, missing, color in sin_barras
             ]
         )
 
@@ -554,17 +556,17 @@ class GenerateMatchesUseCase:
             all_player_ids = list(team_assignment.team_a_player_ids) + list(
                 team_assignment.team_b_player_ids
             )
-            users = await asyncio.gather(
-                *(self._user_repo.find_by_id(pid) for pid in all_player_ids)
-            )
+            # De uno en uno: son consultas sobre la misma sesión, y SQLAlchemy
+            # no admite dos operaciones a la vez en una sesión (era un gather)
+            users = [await self._user_repo.find_by_id(pid) for pid in all_player_ids]
             for pid, user in zip(all_player_ids, users, strict=True):
                 if user:
                     enrollment = enrollment_map.get(str(pid.value))
                     has_custom_handicap = (
-                        enrollment is not None and enrollment.custom_handicap is not None
+                        enrollment is not None and enrollment.has_custom_handicap()
                     )
                     if not has_custom_handicap and refrescar_handicap_rfeg:
-                        await self._maybe_refresh_rfeg_handicap(user)
+                        await self._refresco_rfeg.si_toca(user)
                     if user.handicap is not None:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender
@@ -576,49 +578,6 @@ class GenerateMatchesUseCase:
             user_gender_map,
             holes_by_tee,
         )
-
-    async def _maybe_refresh_rfeg_handicap(self, user) -> None:
-        """
-        HM-1a: refresco best-effort del hándicap RFEG antes de generar partidos.
-
-        Solo para jugadores ES sin hándicap personalizado en la inscripción, y como
-        máximo una vez al día (mismo gate que el refresco en login, HM-2a/c). Errores
-        de red o de persistencia se registran y se ignoran: nunca deben bloquear la
-        generación de partidos.
-        """
-        if self._handicap_service is None:
-            return
-
-        country_code_value = user.country_code.value if user.country_code else None
-        if country_code_value != "ES":
-            return
-
-        now = datetime.now(UTC)
-        if user.handicap_updated_at is not None and user.handicap_updated_at.date() == now.date():
-            return
-
-        try:
-            handicap_value = await self._handicap_service.search_handicap(user.get_full_name())
-        except Exception:
-            logger.warning(
-                "RFEG lookup failed for %s during match generation",
-                user.get_full_name(),
-                exc_info=True,
-            )
-            return
-
-        if handicap_value is None:
-            return
-
-        try:
-            user.update_handicap(handicap_value)
-            await self._user_repo.save(user)
-        except Exception:
-            logger.error(
-                "Failed to persist RFEG handicap for %s during match generation",
-                user.get_full_name(),
-                exc_info=True,
-            )
 
     async def _generate_auto(
         self,

@@ -17,9 +17,14 @@ from .competition_repository_interface import CompetitionRepositoryInterface
 from .draft_repository_interface import DraftRepositoryInterface
 from .enrollment_repository_interface import EnrollmentRepositoryInterface
 from .envelope_repository_interface import EnvelopeRepositoryInterface
+from .espera_en_franja_repository_interface import EsperaEnFranjaRepositoryInterface
+from .golpe_de_partida_repository_interface import GolpeDePartidaRepositoryInterface
+from .handicap_update_repository_interface import HandicapUpdateRepositoryInterface
 from .hole_score_repository_interface import HoleScoreRepositoryInterface
 from .invitation_repository_interface import InvitationRepositoryInterface
 from .match_repository_interface import MatchRepositoryInterface
+from .partida_repository_interface import PartidaRepositoryInterface
+from .plaza_en_franja_repository_interface import PlazaEnFranjaRepositoryInterface
 from .round_repository_interface import RoundRepositoryInterface
 from .team_assignment_repository_interface import TeamAssignmentRepositoryInterface
 
@@ -90,6 +95,36 @@ class CompetitionUnitOfWorkInterface(UnitOfWorkInterface):
     @abstractmethod
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         """Acceso al repositorio de hole scores."""
+        pass
+
+    @property
+    @abstractmethod
+    def esperas(self) -> EsperaEnFranjaRepositoryInterface:
+        """Las listas de espera de las franjas de stroke play (#251)."""
+        pass
+
+    @property
+    @abstractmethod
+    def plazas(self) -> PlazaEnFranjaRepositoryInterface:
+        """Las plazas de los jugadores en las franjas de stroke play (#251)."""
+        pass
+
+    @property
+    @abstractmethod
+    def partidas(self) -> PartidaRepositoryInterface:
+        """Las partidas de las franjas de stroke play (#251, PR 4)."""
+        pass
+
+    @property
+    @abstractmethod
+    def golpes_de_partida(self) -> GolpeDePartidaRepositoryInterface:
+        """Los golpes de los jugadores de las partidas (#251, PR 5)."""
+        pass
+
+    @property
+    @abstractmethod
+    def handicap_updates(self) -> HandicapUpdateRepositoryInterface:
+        """Las actualizaciones de hándicaps con la RFEG y sus resultados (#251)."""
         pass
 
     @abstractmethod

@@ -18,6 +18,7 @@ from ..events.enrollment_withdrawn_event import EnrollmentWithdrawnEvent
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.enrollment_id import EnrollmentId
 from ..value_objects.enrollment_status import EnrollmentStatus
+from ..value_objects.stroke_play_setup import handicap_fijado
 
 
 class EnrollmentStateError(Exception):
@@ -52,6 +53,8 @@ class Enrollment:
         custom_handicap: Decimal | None = None,
         tee_color: TeeColor | None = None,
         use_real_name: bool = True,
+        fixed_handicap: Decimal | None = None,
+        fixed_category: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
@@ -69,6 +72,11 @@ class Enrollment:
         self._custom_handicap = custom_handicap
         self._tee_color = tee_color
         self._use_real_name = use_real_name
+        # El hándicap de todo el torneo, fijado al cerrar las inscripciones: de
+        # él sale su categoría en un stroke play (#251)
+        self._fixed_handicap = fixed_handicap
+        # Y su categoría, con la regla de los seis, fijada a la vez (#251)
+        self._fixed_category = fixed_category
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -225,6 +233,41 @@ class Enrollment:
     def has_team_assigned(self) -> bool:
         """Verifica si tiene equipo asignado."""
         return self._team_id is not None
+
+    @property
+    def fixed_handicap(self) -> Decimal | None:
+        """El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)."""
+        return self._fixed_handicap
+
+    @property
+    def fixed_category(self) -> int | None:
+        """Su categoría, fijada al cerrar las inscripciones con la regla de los seis (#251)."""
+        return self._fixed_category
+
+    def congelar_handicap(self, handicap: Decimal | None, categoria: int | None = None) -> None:
+        """
+        Fija el hándicap de todo el torneo y su categoría, al cerrar las inscripciones (#251).
+
+        Si se reabren y se vuelven a cerrar, se fija de nuevo con el de ese momento.
+        Y no se mueve aunque luego alguien se retire (decidido el 7 oct 2026).
+        """
+        # Con un decimal, como lo guarda la columna: lo que se compara es lo guardado
+        self._fixed_handicap = handicap_fijado(handicap)
+        self._fixed_category = categoria
+
+    def handicap_que_cuenta(self, del_perfil: Decimal | None) -> Decimal | None:
+        """
+        El hándicap con el que juega en esta competición (RyderCupAM#251).
+
+        El propio de la inscripción si el organizador le puso uno, y si no el de
+        su perfil. Sin ninguno, None: qué hacer entonces lo decide quien pregunta
+        (la Ryder juega con cero; el stroke play no deja empezar).
+
+        Args:
+            del_perfil: El hándicap del perfil del jugador, si lo tiene
+        """
+        # `is not None` y no `or`: un personalizado de 0,0 es un hándicap
+        return self._custom_handicap if self._custom_handicap is not None else del_perfil
 
     def has_custom_handicap(self) -> bool:
         """Verifica si tiene hándicap personalizado."""

@@ -21,11 +21,13 @@ import pytest
 from src.modules.competition.application.dto.round_match_dto import (
     ReassignMatchPlayersRequestDTO,
 )
+from src.modules.competition.application.services.jugadores_del_partido import (
+    PlayerNotEnrolledError,
+)
 from src.modules.competition.application.services.match_players_builder import (
     TeeColorNotFoundError,
 )
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
-    PlayerNotEnrolledError,
     ReassignMatchPlayersUseCase,
     WrongNumberOfPlayersError,
 )

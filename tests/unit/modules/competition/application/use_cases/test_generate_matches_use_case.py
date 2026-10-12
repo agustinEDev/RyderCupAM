@@ -229,6 +229,60 @@ class TestGenerateMatchesUseCase:
         assert response.round_status == "SCHEDULED"
         assert response.round_id == round_entity.id.value
 
+    @pytest.mark.parametrize(
+        ("match_format", "partidos"),
+        [
+            (MatchFormat.SINGLES, 60),  # 1 contra 1
+            (MatchFormat.FOURBALL, 30),  # 2 contra 2
+            (MatchFormat.FOURSOMES, 30),  # 2 contra 2
+        ],
+    )
+    async def test_generates_a_match_for_every_player_past_one_hundred(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        golf_course_id: GolfCourseId,
+        gc_repo: AsyncMock,
+        user_repo: AsyncMock,
+        match_format: MatchFormat,
+        partidos: int,
+    ):
+        """
+        Given equipos de 60 contra 60, 120 aprobados, emparejados a mano (BE #314)
+        When se generan los partidos de cada formato
+        Then juegan los 120: 60 individuales, o 30 de fourball o foursomes. Con
+        el límite oculto de 100, el mapa de inscripciones se quedaba sin los
+        jugadores a partir del 101 y la generación los rechazaba como no inscritos
+        """
+        competition = await self._create_closed_competition(uow, creator_id)
+        round_entity = await self._create_round_pending_matches(
+            uow, competition, golf_course_id, match_format
+        )
+        team_a, team_b = await self._create_teams_and_enrollments(uow, competition, 60, 60)
+        por_equipo = match_format.players_per_team()
+        request = GenerateMatchesRequestDTO(
+            round_id=round_entity.id.value,
+            manual_pairings=[
+                ManualPairingDTO(
+                    team_a_player_ids=[u.value for u in team_a[i : i + por_equipo]],
+                    team_b_player_ids=[u.value for u in team_b[i : i + por_equipo]],
+                )
+                for i in range(0, 60, por_equipo)
+            ],
+        )
+
+        response = await GenerateMatchesUseCase(
+            uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+        ).execute(request, creator_id)
+
+        assert response.matches_generated == partidos
+        jugadores = {
+            p.user_id
+            for m in await uow.matches.find_by_round(round_entity.id)
+            for p in (*m.team_a_players, *m.team_b_players)
+        }
+        assert jugadores == set(team_a) | set(team_b)
+
     async def test_should_generate_fourball_matches_auto(
         self,
         uow: InMemoryUnitOfWork,
@@ -1791,3 +1845,34 @@ class TestGenerateMatchesUseCase:
         response = await use_case.execute(request, creator_id)
 
         assert response.matches_generated == 1
+
+    @pytest.mark.asyncio
+    async def test_a_tee_window_has_no_matches(
+        self, uow, creator_id, golf_course_id, gc_repo, user_repo
+    ):
+        """Una franja de stroke play se reparte en partidas, nunca en partidos (#251, PR 4)."""
+        from datetime import time
+
+        from src.modules.competition.application.use_cases.generate_matches_use_case import (
+            RoundNotPendingMatchesError,
+        )
+        from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+
+        competition = await self._create_closed_competition(uow, creator_id)
+        franja = Round.create_franja(
+            competition_id=competition.id,
+            golf_course_id=golf_course_id,
+            round_date=date(2026, 6, 1),
+            session_type=SessionType.MORNING,
+            hoja_de_salidas=HojaDeSalidas(time(9, 0), time(10, 0), 10, 4),
+        )
+        # Asignar equipos pasa todas las sesiones PENDING_TEAMS a PENDING_MATCHES
+        franja.mark_teams_assigned()
+        async with uow:
+            await uow.rounds.add(franja)
+        await self._create_teams_and_enrollments(uow, competition, 2, 2)
+
+        with pytest.raises(RoundNotPendingMatchesError, match="partidas"):
+            await GenerateMatchesUseCase(
+                uow=uow, golf_course_repository=gc_repo, user_repository=user_repo
+            ).execute(GenerateMatchesRequestDTO(round_id=franja.id.value), creator_id)

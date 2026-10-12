@@ -40,12 +40,6 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # La misma tabla, por el nombre de la franja que viaja en el DTO
 ORDEN_DE_SESION_POR_NOMBRE = {tipo.value: orden for tipo, orden in ORDEN_DE_SESION.items()}
 
-# Un jugador veterano acumula filas de inscripcion —rechazos, retiros, altas de
-# nuevo—, y el filtro de APROBADAS se aplica DESPUES del corte del repositorio:
-# con el limite por defecto de 100 se perderian en silencio las competiciones
-# mas antiguas y el aviso no saldria nunca
-_TODAS_SUS_INSCRIPCIONES = 1000
-
 
 class ListMyPendingEnvelopesUseCase:
     """Caso de uso para listar los sobres que un capitan tiene sin entregar."""
@@ -153,9 +147,7 @@ class ListMyPendingEnvelopesUseCase:
         """
         competiciones = []
         vistas = set()
-        for inscripcion in await self._uow.enrollments.find_by_user(
-            user_id, limit=_TODAS_SUS_INSCRIPCIONES
-        ):
+        for inscripcion in await self._uow.enrollments.find_by_user(user_id):
             if inscripcion.status != EnrollmentStatus.APPROVED:
                 continue
             if inscripcion.competition_id in vistas:

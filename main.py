@@ -12,6 +12,8 @@ load_dotenv()  # Cargar variables de entorno desde .env
 
 # All imports below must be after load_dotenv() to access environment variables
 
+import asyncio  # noqa: E402
+import contextlib  # noqa: E402
 import secrets  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
@@ -26,7 +28,12 @@ from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from src.config.cors_config import get_cors_config  # noqa: E402
+from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
+from src.config.refresco_de_handicaps import (  # noqa: E402
+    LanzadorEnSegundoPlano,
+    VigilanteDeActualizaciones,
+)
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
 from src.config.version import (  # noqa: E402
@@ -48,6 +55,8 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     invitation_routes,
     round_match_routes,
     scoring_routes,
+    tee_group_routes,
+    tee_group_scoring_routes,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
     start_mappers as start_competition_mappers,
@@ -60,17 +69,19 @@ from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # 
 from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (  # noqa: E402
     start_quick_match_mappers,
 )
-from src.modules.social.infrastructure.api.v1 import friend_routes  # noqa: E402
-from src.modules.social.infrastructure.api.v1 import profile_photo_routes  # noqa: E402
-from src.modules.social.infrastructure.api.v1 import profile_routes  # noqa: E402
+from src.modules.social.infrastructure.api.v1 import (  # noqa: E402
+    friend_routes,
+    profile_photo_routes,
+    profile_routes,
+)
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (  # noqa: E402
     start_activity_event_mappers,
 )
-from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper import (  # noqa: E402
-    start_profile_photo_mappers,
-)
 from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (  # noqa: E402
     start_social_mappers,
+)
+from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper import (  # noqa: E402
+    start_profile_photo_mappers,
 )
 from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
 from src.modules.user.application.use_cases.upload_avatar_use_case import (  # noqa: E402
@@ -128,7 +139,18 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     start_profile_photo_mappers()  # Profile photo gallery (depends on User)
     start_activity_event_mappers()  # Activity feed (depends on User)
     start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
+
+    # El vigilante de las actualizaciones de hándicaps: lanza las programadas y
+    # recupera las cortadas por un reinicio. Solo en producción (#251)
+    vigilante = None
+    lanzador = get_lanzador_de_actualizaciones()
+    if isinstance(lanzador, LanzadorEnSegundoPlano):
+        vigilante = asyncio.create_task(VigilanteDeActualizaciones(lanzador).vigilar())
     yield
+    if vigilante is not None:
+        vigilante.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await vigilante
     print("INFO:     Apagando aplicación...")
 
 
@@ -222,6 +244,7 @@ register_competition_exception_handlers(app)
 # ================================
 # Los middlewares se ejecutan en el orden INVERSO al que se registran:
 # El último en añadirse es el primero en ejecutarse
+
 
 # ================================
 # SECURITY HEADERS MIDDLEWARE
@@ -425,6 +448,16 @@ app.include_router(
 
 app.include_router(
     round_match_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    tee_group_routes.router,
+    prefix="/api/v1/competitions",
+)
+
+app.include_router(
+    tee_group_scoring_routes.router,
     prefix="/api/v1/competitions",
 )
 

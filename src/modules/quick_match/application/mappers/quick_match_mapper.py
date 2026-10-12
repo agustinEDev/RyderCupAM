@@ -54,14 +54,15 @@ class QuickMatchDTOMapper:
                 # Un invitado no tiene cuenta, así que tampoco alias: se queda
                 # con el nombre que tecleó quien lo añadió (BE #239)
                 name = f"{p.first_name} {p.last_name}"
-                handicap = p.handicap
+                handicap = p.effective_handicap(profile_handicap=None)
             else:
                 user = users_by_id.get(p.user_id)
                 # `display_name`: su alias si lo tiene, y si no su nombre
                 # completo. Este campo ya era «nombre para enseñar»
                 name = user.display_name if user else "Unknown"
                 profile_handicap = user.handicap.value if user and user.handicap else None
-                handicap = p.custom_handicap if p.custom_handicap is not None else profile_handicap
+                # El fijado al empezar si lo hay (BE #514); si no, el de siempre
+                handicap = p.effective_handicap(profile_handicap)
             participants_dto.append(
                 QuickMatchParticipantDTO(
                     participant_id=p.participant_id.value,

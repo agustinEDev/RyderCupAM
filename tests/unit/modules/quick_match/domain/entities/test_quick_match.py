@@ -838,3 +838,78 @@ class TestAllowsPickedUpHoles:
         )
 
         assert qm.allows_picked_up_holes() is True
+
+
+class TestQuickMatchFreezeHandicaps:
+    """
+    BE #514: la partida guarda al empezar el índice con el que juega cada uno.
+
+    Sin esto todo se recalculaba con el hándicap del perfil DE HOY: si el de un
+    jugador cambiaba (la actualización de la RFEG está activa en producción),
+    cambiaban los golpes, los puntos y «Tu vuelta» de todas sus partidas.
+    """
+
+    def _empezada(self):
+        """Partida libre empezada con un registrado, uno con personalizado y un invitado."""
+        qm = _make_free_play_quick_match()
+        registrado = _registered()
+        con_personalizado = _registered()
+        invitado = QuickMatchParticipant.for_guest(
+            first_name="Inv", last_name="Itado", handicap=12.3
+        )
+        for p in (registrado, con_personalizado, invitado):
+            qm.add_participant(p)
+        qm.set_participant_handicap(con_personalizado.participant_id, 9.0)
+        qm.start([qm.creator_participant_id])
+        return qm, registrado, con_personalizado, invitado
+
+    def test_cada_uno_juega_con_el_indice_que_tenia_al_empezar(self):
+        """Given fijados When cambia el perfil Then manda lo fijado."""
+        qm, registrado, con_personalizado, invitado = self._empezada()
+
+        qm.freeze_handicaps(
+            {qm.creator_id: 18.5, registrado.user_id: 20.1, con_personalizado.user_id: 30.0}
+        )
+
+        por_id = {p.participant_id: p for p in qm.participants}
+        # Aunque el perfil cambie después, manda lo fijado
+        assert por_id[registrado.participant_id].effective_handicap(profile_handicap=25.0) == 20.1
+        assert por_id[qm.creator_participant_id].effective_handicap(profile_handicap=17.0) == 18.5
+        # El personalizado gana al perfil, como siempre
+        assert (
+            por_id[con_personalizado.participant_id].effective_handicap(profile_handicap=1.0) == 9.0
+        )
+        assert por_id[invitado.participant_id].effective_handicap(profile_handicap=None) == 12.3
+
+    def test_quien_empezo_sin_handicap_sigue_sin_el_aunque_luego_lo_tenga(self):
+        """Given empezó sin hándicap When luego lo tiene Then esa partida sigue sin él."""
+        qm, registrado, _, _ = self._empezada()
+
+        qm.freeze_handicaps({qm.creator_id: 18.5, registrado.user_id: None})
+
+        fijado = next(p for p in qm.participants if p.participant_id == registrado.participant_id)
+        assert fijado.effective_handicap(profile_handicap=15.0) is None
+
+    def test_sin_fijar_sigue_mirando_el_perfil(self):
+        """Las partidas empezadas antes del cambio no tienen nada fijado."""
+        qm, registrado, _, _ = self._empezada()
+
+        participante = next(
+            p for p in qm.participants if p.participant_id == registrado.participant_id
+        )
+        assert participante.effective_handicap(profile_handicap=15.0) == 15.0
+
+    def test_solo_se_fija_una_vez(self):
+        """Given ya fijada When se fija otra vez Then se rechaza."""
+        qm, registrado, _, _ = self._empezada()
+        qm.freeze_handicaps({qm.creator_id: 18.5, registrado.user_id: 20.1})
+
+        with pytest.raises(InvalidQuickMatchStatusViolation):
+            qm.freeze_handicaps({qm.creator_id: 1.0, registrado.user_id: 1.0})
+
+    def test_no_se_fija_antes_de_empezar(self):
+        """Given sin empezar When se fija Then se rechaza."""
+        qm = _make_free_play_quick_match()
+
+        with pytest.raises(InvalidQuickMatchStatusViolation):
+            qm.freeze_handicaps({qm.creator_id: 18.5})

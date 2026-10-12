@@ -15,6 +15,7 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_ocupar_una_plaza,
 )
@@ -154,6 +155,14 @@ class DirectEnrollPlayerUseCase:
 
             # Sin género no se sabe desde qué barras juega (#710)
             await exigir_genero(self._user_repo, player_id, es_quien_se_apunta=False)
+            # Y en un Stableford o un Medal, un hándicap: el suyo o el que le pongan (#251)
+            await exigir_handicap(
+                self._user_repo,
+                competition,
+                player_id,
+                es_quien_se_apunta=False,
+                personalizado=request.custom_handicap,
+            )
 
             # 6. Crear enrollment con factory method (directamente APPROVED)
             try:

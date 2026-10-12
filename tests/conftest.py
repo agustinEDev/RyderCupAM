@@ -1080,7 +1080,8 @@ async def create_admin_user(
 async def add_one_session(client: AsyncClient, cookies: dict, competition: dict) -> dict:
     """Una sesión en la competición: sin ninguna no se puede iniciar (#710, 25 sep).
 
-    Un campo aprobado, añadido a la competición, y una sesión el día de inicio.
+    Un campo aprobado, añadido a la competición, y una sesión el día de inicio
+    (en un stroke play, una franja de 9:00 a 11:00).
     Devuelve la sesión creada.
     """
     admin = await create_admin_user(
@@ -1094,14 +1095,51 @@ async def add_one_session(client: AsyncClient, cookies: dict, competition: dict)
         json={"golf_course_id": campo["id"]},
     )
     assert anadido.status_code == 201, anadido.text
-    sesion = await client.post(
-        f"/api/v1/competitions/{competition['id']}/rounds",
-        json={
-            "golf_course_id": campo["id"],
-            "round_date": competition["start_date"],
-            "session_type": "MORNING",
-            "match_format": "SINGLES",
-        },
-    )
+    datos = {
+        "golf_course_id": campo["id"],
+        "round_date": competition["start_date"],
+        "session_type": "MORNING",
+    }
+    # En un Stableford o un Medal, una franja con su hoja de salidas (#251)
+    if competition.get("tournament_type", "RYDER_CUP") != "RYDER_CUP":
+        datos["tee_sheet"] = {
+            "first_tee_time": "09:00",
+            "last_tee_time": "11:00",
+            "interval_minutes": 10,
+            "group_size": 4,
+        }
+    else:
+        datos["match_format"] = "SINGLES"
+    sesion = await client.post(f"/api/v1/competitions/{competition['id']}/rounds", json=datos)
     assert sesion.status_code == 201, sesion.text
     return sesion.json()
+
+
+async def plaza_para_todos(client: AsyncClient, cookies: dict, competition: dict) -> None:
+    """Coloca, como organizador, a cada aprobado sin franja en la primera franja (#251).
+
+    Sin franja no se cierran las inscripciones de un Stableford o un Medal. Si la
+    competición no tiene franjas, añade una con `add_one_session`. En una Ryder, nada.
+    """
+    if competition.get("tournament_type", "RYDER_CUP") == "RYDER_CUP":
+        return
+    set_auth_cookies(client, cookies)
+    calendario = (await client.get(f"/api/v1/competitions/{competition['id']}/schedule")).json()
+    franjas = [r for d in calendario.get("days", []) for r in d["rounds"] if r.get("tee_sheet")]
+    if not franjas:
+        await add_one_session(client, cookies, competition)
+        set_auth_cookies(client, cookies)
+        calendario = (await client.get(f"/api/v1/competitions/{competition['id']}/schedule")).json()
+        franjas = [r for d in calendario["days"] for r in d["rounds"] if r.get("tee_sheet")]
+    con_plaza = {u for f in franjas for u in f["tee_sheet"]["player_ids"]}
+    inscritos = (
+        await client.get(f"/api/v1/competitions/{competition['id']}/enrollments?status=APPROVED")
+    ).json()
+    for inscrito in inscritos:
+        if inscrito["user_id"] in con_plaza:
+            continue
+        respuesta = await client.post(
+            f"/api/v1/competitions/rounds/{franjas[0]['id']}/places",
+            json={"user_id": inscrito["user_id"]},
+        )
+        assert respuesta.status_code == 201, respuesta.text

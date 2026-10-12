@@ -150,6 +150,19 @@ class CompetitionStatus(StrEnum):
             CompetitionStatus.CANCELLED,
         }
 
+    def allows_tee_window_edits(self) -> bool:
+        """Si se pueden crear, cambiar o borrar las franjas de un stroke play (#251).
+
+        Hasta iniciar la competición (decidido el 7 oct 2026): de ahí salen las
+        partidas y las horas de salida. Regla propia y no `allows_handicap_edits`
+        aunque hoy coincidan: son cosas distintas y no deben moverse juntas.
+        """
+        return self in {
+            CompetitionStatus.DRAFT,
+            CompetitionStatus.ACTIVE,
+            CompetitionStatus.CLOSED,
+        }
+
     def allows_handicap_edits(self) -> bool:
         """Verifica si el estado permite editar el hándicap personalizado de un jugador."""
         return self in {

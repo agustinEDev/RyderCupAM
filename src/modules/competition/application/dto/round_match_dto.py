@@ -1,6 +1,6 @@
 """DTOs para Rounds, Matches y TeamAssignment - Application Layer."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -70,6 +70,31 @@ class MatchResponseDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeeSheetDTO(BaseModel):
+    """La hoja de salidas de una franja de stroke play (#251)."""
+
+    first_tee_time: time = Field(..., description="Primera salida, hora del campo (HH:MM).")
+    last_tee_time: time = Field(
+        ..., description="ÚLTIMA salida posible (no la hora de acabar), hora del campo."
+    )
+    interval_minutes: int = Field(..., description="Minutos entre salidas, de 5 a 20.")
+    group_size: int = Field(..., description="Jugadores por partida, 3 o 4.")
+
+
+class TeeSheetResponseDTO(TeeSheetDTO):
+    """La hoja de salidas con lo que sale de ella."""
+
+    tee_times: list[time] = Field(..., description="Cada hora de salida, en orden.")
+    capacity: int = Field(..., description="Cupo de la franja: salidas por jugadores por partida.")
+    places_taken: int = Field(0, description="Plazas ya cogidas (#251).")
+    player_ids: list[UUID] = Field(
+        default_factory=list, description="Quién tiene plaza, por orden de llegada (#251)."
+    )
+    waiting_ids: list[UUID] = Field(
+        default_factory=list, description="La lista de espera, por orden de llegada (#251)."
+    )
+
+
 class RoundResponseDTO(BaseModel):
     """DTO de respuesta para una ronda/sesión."""
 
@@ -85,6 +110,9 @@ class RoundResponseDTO(BaseModel):
         None, description="Porcentaje de allowance personalizado."
     )
     effective_allowance: int = Field(..., description="Allowance efectivo (custom o WHS default).")
+    tee_sheet: TeeSheetResponseDTO | None = Field(
+        None, description="Solo en las franjas de un Stableford o un Medal (#251)."
+    )
     matches: list[MatchResponseDTO] = Field(
         default_factory=list, description="Partidos de la ronda."
     )
@@ -156,12 +184,19 @@ class CreateRoundRequestDTO(BaseModel):
     golf_course_id: UUID = Field(..., description="ID del campo de golf.")
     round_date: date = Field(..., description="Fecha de la ronda.")
     session_type: str = Field(..., description="Tipo de sesión (MORNING/AFTERNOON/EVENING).")
-    match_format: str = Field(..., description="Formato (SINGLES/FOURBALL/FOURSOMES).")
+    match_format: str | None = Field(
+        None,
+        description="Formato (SINGLES/FOURBALL/FOURSOMES). Obligatorio en una Ryder; "
+        "una franja de stroke play no lo lleva.",
+    )
     handicap_mode: str | None = Field(
         None, description="Modo de handicap para SINGLES (MATCH_PLAY)."
     )
     allowance_percentage: int | None = Field(
         None, ge=50, le=100, description="Porcentaje de allowance personalizado (50-100)."
+    )
+    tee_sheet: TeeSheetDTO | None = Field(
+        None, description="Obligatoria en un Stableford o un Medal; nunca en una Ryder (#251)."
     )
 
     @field_validator("session_type", mode="before")
@@ -206,9 +241,14 @@ class CreateRoundBodyDTO(BaseModel):
     golf_course_id: UUID = Field(..., description="ID del campo de golf.")
     round_date: date = Field(..., description="Fecha de la ronda.")
     session_type: str = Field(..., description="Tipo de sesión.")
-    match_format: str = Field(..., description="Formato de partido.")
+    match_format: str | None = Field(
+        None, description="Formato de partido: obligatorio en una Ryder, nunca en stroke play."
+    )
     handicap_mode: str | None = Field(None, description="Modo de handicap.")
     allowance_percentage: int | None = Field(None, ge=50, le=100, description="Allowance.")
+    tee_sheet: TeeSheetDTO | None = Field(
+        None, description="Hoja de salidas: obligatoria en stroke play, nunca en una Ryder."
+    )
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
@@ -243,6 +283,9 @@ class UpdateRoundRequestDTO(BaseModel):
     handicap_mode: str | None = Field(None, description="Nuevo modo de handicap.")
     allowance_percentage: int | None = Field(None, ge=50, le=100, description="Nuevo allowance.")
     clear_allowance: bool = Field(default=False, description="Resetear allowance al default WHS.")
+    tee_sheet: TeeSheetDTO | None = Field(
+        None, description="Nueva hoja de salidas, solo en una franja de stroke play (#251)."
+    )
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
@@ -281,6 +324,9 @@ class UpdateRoundBodyDTO(BaseModel):
     handicap_mode: str | None = Field(None, description="Nuevo modo de handicap.")
     allowance_percentage: int | None = Field(None, ge=50, le=100, description="Nuevo allowance.")
     clear_allowance: bool = Field(default=False, description="Resetear allowance.")
+    tee_sheet: TeeSheetDTO | None = Field(
+        None, description="Nueva hoja de salidas, solo en una franja de stroke play."
+    )
 
     @field_validator("session_type", "match_format", mode="before")
     @classmethod
@@ -341,6 +387,13 @@ class GetScheduleResponseDTO(BaseModel):
     )
     total_rounds: int = Field(default=0, description="Total de rondas.")
     total_matches: int = Field(default=0, description="Total de partidos.")
+    tee_sheet_capacity: int | None = Field(
+        None,
+        description=(
+            "Stroke play: cuántos caben en todas las franjas. El techo real es el menor "
+            "entre esto y max_players (#251). Null en una Ryder."
+        ),
+    )
     team_assignment: TeamAssignmentResponseDTO | None = Field(
         None, description="Asignación de equipos actual."
     )
@@ -640,3 +693,47 @@ class ReassignMatchPlayersBodyDTO(BaseModel):
 
     team_a_player_ids: list[UUID] = Field(..., description="Nuevos jugadores equipo A.")
     team_b_player_ids: list[UUID] = Field(..., description="Nuevos jugadores equipo B.")
+
+
+# ======================================================================================
+# Plazas en franjas (#251)
+# ======================================================================================
+
+
+class TakeTeeWindowPlaceBodyDTO(BaseModel):
+    """Coger plaza en una franja de stroke play."""
+
+    user_id: UUID | None = Field(
+        None,
+        description="A quién: vacío para uno mismo; el organizador puede poner a cualquiera.",
+    )
+    instead_of_round_id: UUID | None = Field(
+        None,
+        description="Una franja suya que deja a cambio, de golpe (cambiarse sin perder sitio).",
+    )
+
+
+class TeeWindowPlaceResponseDTO(BaseModel):
+    """La plaza cogida."""
+
+    round_id: UUID
+    user_id: UUID
+
+
+class AssignedPlaceDTO(BaseModel):
+    """Una plaza que te asignó la lista de espera y aún no has visto (#251)."""
+
+    competition_id: UUID
+    competition_name: str
+    round_id: UUID
+    round_date: date
+    session_type: str
+    first_tee_time: time
+    assigned_at: datetime
+
+
+class WaitingListEntryDTO(BaseModel):
+    """Apuntado a la lista de espera de una franja (#251)."""
+
+    round_id: UUID
+    user_id: UUID

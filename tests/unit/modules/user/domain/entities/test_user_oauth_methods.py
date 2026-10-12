@@ -224,7 +224,7 @@ class TestUserRecordLoginOAuth:
             first_name="Default",
             last_name="Method",
             email_str="default@example.com",
-            plain_password="Password123!",
+            plain_password="Segura-Prueba123!",
         )
         user.clear_domain_events()
 

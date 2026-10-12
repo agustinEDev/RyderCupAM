@@ -4,11 +4,22 @@ Caso de Uso: Retirar Inscripción (Withdraw Enrollment).
 Permite a un jugador aprobado retirarse de una competición.
 """
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
     WithdrawEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import EnrollmentNotFoundError
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
+    esta_jugada,
+)
+from src.modules.competition.application.services.partidas_del_jugador import (
+    sacar_de_sus_partidas,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -38,14 +49,24 @@ class WithdrawEnrollmentUseCase:
     - Diferencia con cancel: withdraw es después de estar inscrito
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone | None = None,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            zonas: Para saber qué partidas ya salieron por su hora (#251). Sin ellas,
+                solo cuenta el estado de la partida
+            reloj: El momento de la retirada
         """
         self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
 
     async def execute(
         self, request: WithdrawEnrollmentRequestDTO, user_id: UserId
@@ -87,6 +108,36 @@ class WithdrawEnrollmentUseCase:
 
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
+
+            # Sale de sus partidas sin salir, también ya iniciada (D2, #251)
+            await sacar_de_sus_partidas(
+                self._uow,
+                enrollment.competition_id,
+                enrollment.user_id,
+                zonas=self._zonas,
+                ahora=self._reloj(),
+            )
+
+            # Y suelta sus plazas en las franjas de un stroke play, si aún no se
+            # juega: empezada, son las del historial de lo jugado (#251)
+            if competition is not None and competition.status.allows_tee_window_edits():
+                # Las de franjas ya jugadas (tras volver atrás) se quedan: historial
+                sesiones = {
+                    r.id: r
+                    for r in await self._uow.rounds.find_by_competition(enrollment.competition_id)
+                }
+                suyas = []
+                for plaza in await self._uow.plazas.de_la_competicion(enrollment.competition_id):
+                    if plaza.user_id != enrollment.user_id:
+                        continue
+                    franja = sesiones.get(plaza.round_id)
+                    if franja is not None and not esta_jugada(franja):
+                        await self._uow.plazas.quitar(plaza.round_id, plaza.user_id)
+                        suyas.append(plaza.round_id)
+                # Fuera de las listas, y sus plazas para los que esperan
+                esperas = EsperasDeLaCompeticion(self._uow)
+                await esperas.sacar_de_todas(competition, enrollment.user_id)
+                await esperas.rellenar_varias(competition, suyas, datetime.now(UTC))
 
             #    Si era capitan, su puesto queda libre
             if competition and competition.handle_withdrawal(enrollment.user_id):

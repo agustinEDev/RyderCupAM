@@ -16,8 +16,8 @@ hora entra sin problema si llega despues, que es el caso normal.
 
 import logging
 from datetime import date, datetime, time
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.session_type import SessionType
 
 logger = logging.getLogger(__name__)
@@ -61,15 +61,10 @@ class ScoringOpeningService:
             logger.warning("Tipo de sesion desconocido al calcular la apertura: %s", session_type)
             return None
 
-        try:
-            zone = ZoneInfo(timezone)
-        except (ZoneInfoNotFoundError, ValueError, TypeError):
-            # Una zona que no existe no puede tumbar la LECTURA: esto se llama
-            # tambien al pintar la vista de anotacion y el calendario, y la
-            # entidad valida la zona al crearse, asi que llegar aqui significa
-            # que el dato entro por otro sitio. Sin hora, el partido no se abre
-            # solo —START sigue— pero todo lo demas se sigue viendo
-            logger.warning("Zona horaria desconocida en una competicion: %s", timezone)
+        # Una zona que no existe no puede tumbar la LECTURA: sin hora, no se
+        # abre solo, que es justo lo que se quiere cuando no se sabe cuándo
+        zone = zona_del_campo(timezone)
+        if zone is None:
             return None
 
         return datetime.combine(round_date, time(hour=hour), tzinfo=zone)

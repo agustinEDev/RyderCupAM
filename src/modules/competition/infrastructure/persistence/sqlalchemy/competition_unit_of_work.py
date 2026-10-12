@@ -25,6 +25,15 @@ from src.modules.competition.domain.repositories.enrollment_repository_interface
 from src.modules.competition.domain.repositories.envelope_repository_interface import (
     EnvelopeRepositoryInterface,
 )
+from src.modules.competition.domain.repositories.espera_en_franja_repository_interface import (
+    EsperaEnFranjaRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.golpe_de_partida_repository_interface import (
+    GolpeDePartidaRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.handicap_update_repository_interface import (
+    HandicapUpdateRepositoryInterface,
+)
 from src.modules.competition.domain.repositories.hole_score_repository_interface import (
     HoleScoreRepositoryInterface,
 )
@@ -33,6 +42,12 @@ from src.modules.competition.domain.repositories.invitation_repository_interface
 )
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.partida_repository_interface import (
+    PartidaRepositoryInterface,
+)
+from src.modules.competition.domain.repositories.plaza_en_franja_repository_interface import (
+    PlazaEnFranjaRepositoryInterface,
 )
 from src.modules.competition.domain.repositories.round_repository_interface import (
     RoundRepositoryInterface,
@@ -52,6 +67,15 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_re
 from src.modules.competition.infrastructure.persistence.sqlalchemy.envelope_repository import (
     SQLAlchemyEnvelopeRepository,
 )
+from src.modules.competition.infrastructure.persistence.sqlalchemy.espera_en_franja_repository import (
+    SQLAlchemyEsperaEnFranjaRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.golpe_de_partida_repository import (
+    SQLAlchemyGolpeDePartidaRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.handicap_update_repository import (
+    SQLAlchemyHandicapUpdateRepository,
+)
 from src.modules.competition.infrastructure.persistence.sqlalchemy.hole_score_repository import (
     SQLAlchemyHoleScoreRepository,
 )
@@ -60,6 +84,12 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.invitation_re
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.match_repository import (
     SQLAlchemyMatchRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.partida_repository import (
+    SQLAlchemyPartidaRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.plaza_en_franja_repository import (
+    SQLAlchemyPlazaEnFranjaRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.round_repository import (
     SQLAlchemyRoundRepository,
@@ -94,6 +124,11 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
         self._invitations = SQLAlchemyInvitationRepository(session)
         self._hole_scores = SQLAlchemyHoleScoreRepository(session)
         self._drafts = SQLAlchemyDraftRepository(session)
+        self._handicap_updates = SQLAlchemyHandicapUpdateRepository(session)
+        self._plazas = SQLAlchemyPlazaEnFranjaRepository(session)
+        self._partidas = SQLAlchemyPartidaRepository(session)
+        self._golpes_de_partida = SQLAlchemyGolpeDePartidaRepository(session)
+        self._esperas = SQLAlchemyEsperaEnFranjaRepository(session)
 
     @property
     def competitions(self) -> CompetitionRepositoryInterface:
@@ -134,6 +169,26 @@ class SQLAlchemyCompetitionUnitOfWork(CompetitionUnitOfWorkInterface):
     @property
     def hole_scores(self) -> HoleScoreRepositoryInterface:
         return self._hole_scores
+
+    @property
+    def handicap_updates(self) -> HandicapUpdateRepositoryInterface:
+        return self._handicap_updates
+
+    @property
+    def plazas(self) -> PlazaEnFranjaRepositoryInterface:
+        return self._plazas
+
+    @property
+    def partidas(self) -> PartidaRepositoryInterface:
+        return self._partidas
+
+    @property
+    def golpes_de_partida(self) -> GolpeDePartidaRepositoryInterface:
+        return self._golpes_de_partida
+
+    @property
+    def esperas(self) -> EsperaEnFranjaRepositoryInterface:
+        return self._esperas
 
     async def __aenter__(self):
         return self

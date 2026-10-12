@@ -9,6 +9,7 @@ lugar de inventar una equivalencia.
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -159,6 +160,7 @@ async def played_quick_match(
     name: str | None = None,
     play_mode: PlayMode = PlayMode.HANDICAP,
     creator_custom_handicap: float | None = None,
+    frozen_handicaps: dict | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -190,6 +192,8 @@ async def played_quick_match(
 
     participant_ids = [p.participant_id for p in match.participants]
     match.start(scorer_ids=[participant_ids[0]])
+    if frozen_handicaps is not None:
+        match.freeze_handicaps(frozen_handicaps)
     match.complete()
 
     async with qm_uow:
@@ -224,6 +228,9 @@ async def played_competition_match(
     result: dict,
     match_format: MatchFormat = MatchFormat.SINGLES,
     own_scores_by_user_id: dict | None = None,
+    play_mode: PlayMode = PlayMode.SCRATCH,
+    tee_color: TeeColor = TeeColor.YELLOW,
+    player_handicaps: dict | None = None,
 ):
     """
     Un partido de torneo terminado, con su ronda y su competición.
@@ -239,7 +246,7 @@ async def played_competition_match(
         name=CompetitionName("Ryder Cup Test"),
         dates=DateRange(start_date=round_date, end_date=round_date + timedelta(days=2)),
         location=Location(main_country=CountryCode("ES")),
-        play_mode=PlayMode.SCRATCH,
+        play_mode=play_mode,
         team_1_name="Team A",
         team_2_name="Team B",
         team_assignment=TeamAssignment.MANUAL,
@@ -253,12 +260,14 @@ async def played_competition_match(
     )
 
     def player(user_id):
+        indice = (player_handicaps or {}).get(user_id)
         return MatchPlayer(
             user_id=user_id,
             playing_handicap=10,
-            tee_color=TeeColor.YELLOW,
+            tee_color=tee_color,
             tee_gender=Gender.MALE,
             strokes_received=tuple(range(1, 11)),
+            player_handicap=None if indice is None else Decimal(str(indice)),
         )
 
     match = Match.create(
@@ -1359,6 +1368,149 @@ class TestHandicapDeJuegoComoEnLaPartida:
 
         entry = (
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 18
+
+
+@pytest.mark.asyncio
+class TestHandicapFijadoAlEmpezar:
+    """BE #514: el historial puntúa con el índice fijado al empezar, no con el del perfil de hoy."""
+
+    async def test_un_cambio_del_perfil_no_mueve_los_puntos_de_una_partida_jugada(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Fijado 18 en blancas (21 de juego): 39 puntos, aunque hoy el perfil diga 30."""
+        user = await create_user(user_uow, "Fijado", handicap=30.0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            user,
+            scoring_format=ScoringFormat.STABLEFORD,
+            strokes_per_hole=5,
+            creator_tee_color=TeeColor.WHITE,
+            creator_tee_gender=Gender.MALE,
+            frozen_handicaps={user.id: 18.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 39
+
+    async def test_el_resultado_del_match_play_tambien_usa_lo_fijado(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Singles a la par en golpes brutos. Fijados 5 y 20, el rival recibe la
+        diferencia y gana el partido, aunque hoy los dos perfiles digan 5: con
+        el de hoy salía empatado.
+        """
+        player = await create_user(user_uow, "Bajo", handicap=5.0)
+        rival = await create_user(user_uow, "Alto", handicap=5.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            player,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(rival.id)],
+            strokes_per_hole=5,
+            frozen_handicaps={player.id: 5.0, rival.id: 20.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.result == "LOST"
+
+
+@pytest.mark.asyncio
+class TestTorneoComoVueltaPropia:
+    """BE #517: los puntos de un partido de torneo, como «Tu vuelta», no con el reparto del partido."""
+
+    async def test_un_singles_que_no_le_da_golpes_puntua_con_su_handicap_de_juego(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un singles con hándicap donde el partido no le dio golpes (los
+        hoyos guardan 0) y 18 de índice en blancas (21 de juego)
+        When firma 5 en los 18
+        Then 39 puntos, como la misma vuelta en partida rápida. Antes, 18
+        """
+        player = await create_user(user_uow, "TorneoBajo")
+        rival = await create_user(user_uow, "TorneoAlto")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.HANDICAP,
+            tee_color=TeeColor.WHITE,
+            player_handicaps={player.id: 18.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 39
+
+    async def test_sin_indice_guardado_usa_el_del_perfil(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given un partido sin índice guardado y 18 en el perfil When firma 5 Then 39, como con el guardado."""
+        player = await create_user(user_uow, "TorneoPerfil", handicap=18.0)
+        rival = await create_user(user_uow, "TorneoPerfilR")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.HANDICAP,
+            tee_color=TeeColor.WHITE,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 39
+
+    async def test_una_competicion_scratch_puntua_sin_golpes(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given una competición scratch con 18 de índice When firma 5 Then 18 puntos, sin golpes."""
+        player = await create_user(user_uow, "TorneoScratch", handicap=18.0)
+        rival = await create_user(user_uow, "TorneoScratchR")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id],
+            team_b_user_ids=[rival.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.SCRATCH,
+            tee_color=TeeColor.WHITE,
+            player_handicaps={player.id: 18.0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
         ).matches[0]
 
         assert entry.stableford_points == 18

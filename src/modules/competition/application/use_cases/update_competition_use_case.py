@@ -214,7 +214,9 @@ class UpdateCompetitionUseCase:
         """
         async with self._uow:
             # 1. Buscar la competición
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Bloqueada: mover las fechas no puede cruzarse con un cambio de las
+            # jornadas por jugador (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(
                     f"No existe competición con ID {competition_id.value}"

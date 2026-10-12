@@ -4,6 +4,7 @@ Match Entity - Partido de una sesión.
 Representa un partido individual dentro de una sesión de competición.
 """
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from src.modules.competition.domain.value_objects.marker_assignment import (
@@ -109,6 +110,28 @@ class Match:
         if match_number < 1:
             raise ValueError(f"match_number must be >= 1, got {match_number}")
 
+        handicap_diff, strokes_given_to_team = cls._ventaja(team_a_players, team_b_players)
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        return cls(
+            id=MatchId.generate(),
+            round_id=round_id,
+            match_number=match_number,
+            team_a_players=tuple(team_a_players),
+            team_b_players=tuple(team_b_players),
+            status=MatchStatus.SCHEDULED,
+            handicap_strokes_given=handicap_diff,
+            strokes_given_to_team=strokes_given_to_team,
+            result=None,
+            created_at=now,
+            updated_at=now,
+        )
+
+    @staticmethod
+    def _ventaja(
+        team_a_players: Sequence[MatchPlayer], team_b_players: Sequence[MatchPlayer]
+    ) -> tuple[int, str]:
+        """Golpes de ventaja y a qué equipo se dan ("" si a ninguno)."""
         # Golpes de ventaja: se cuentan los que de verdad se reparten en la
         # vuelta, no se suman los playing_handicap.
         #
@@ -132,26 +155,10 @@ class Match:
 
         handicap_diff = abs(team_a_handicap - team_b_handicap)
         if team_a_handicap > team_b_handicap:
-            strokes_given_to_team = "A"
-        elif team_b_handicap > team_a_handicap:
-            strokes_given_to_team = "B"
-        else:
-            strokes_given_to_team = ""
-
-        now = datetime.now(UTC).replace(tzinfo=None)
-        return cls(
-            id=MatchId.generate(),
-            round_id=round_id,
-            match_number=match_number,
-            team_a_players=tuple(team_a_players),
-            team_b_players=tuple(team_b_players),
-            status=MatchStatus.SCHEDULED,
-            handicap_strokes_given=handicap_diff,
-            strokes_given_to_team=strokes_given_to_team,
-            result=None,
-            created_at=now,
-            updated_at=now,
-        )
+            return handicap_diff, "A"
+        if team_b_handicap > team_a_handicap:
+            return handicap_diff, "B"
+        return handicap_diff, ""
 
     @classmethod
     def reconstruct(
@@ -378,6 +385,26 @@ class Match:
             if p.user_id == user_id:
                 return p
         return None
+
+    def may_mark(self, scorer_id: UserId, marked_id: UserId) -> bool:
+        """
+        Si `scorer_id` puede apuntarle los golpes a `marked_id` como marcador (BE #520).
+
+        Solo al jugador que le asignó el sorteo de marcadores. Así nadie se
+        marca a sí mismo —con eso uno validaba su propio hoyo, o pisaba lo que le
+        había apuntado su marcador de verdad—: `MarkerAssignment` ya prohíbe que
+        alguien se tenga asignado. Un partido sin asignaciones (datos viejos) se
+        queda con la regla de fondo del sorteo, el marcador es siempre del
+        equipo contrario, que deja fuera a uno mismo y al compañero.
+        """
+        if self._marker_assignments:
+            return any(
+                assignment.scorer_user_id == scorer_id and assignment.marks_user_id == marked_id
+                for assignment in self._marker_assignments
+            )
+        scorer_team = self.get_player_team(scorer_id)
+        marked_team = self.get_player_team(marked_id)
+        return scorer_team is not None and marked_team is not None and scorer_team != marked_team
 
     def get_all_player_ids(self) -> list[UserId]:
         """Retorna los IDs de todos los jugadores del partido."""

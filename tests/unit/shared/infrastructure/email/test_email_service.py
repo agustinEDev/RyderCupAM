@@ -65,6 +65,17 @@ async def _los_cinco(servicio):
 
     await servicio.send_friend_request_email("a@b.com", "Ana", "Pablo")
     htmls["amistad"] = _enviado(servicio)[3]
+    servicio._send_email.reset_mock()
+
+    # El sexto, desde el 7 oct 2026 (#251): el nombre de la función se quedó
+    await servicio.send_handicaps_pending_email("a@b.com", "Ana", "Copa", "c-1", ["Luis"])
+    htmls["handicaps"] = _enviado(servicio)[3]
+    servicio._send_email.reset_mock()
+
+    await servicio.send_scheduled_handicaps_update_skipped_email(
+        "a@b.com", "Ana", "Copa", "c-1", "Hay una jornada en marcha."
+    )
+    htmls["programada"] = _enviado(servicio)[3]
     return htmls
 
 
@@ -236,3 +247,61 @@ class TestTheInvitationContent:
         assert "03/10/2026" in cuerpo
         assert "Copa" in asunto
         assert "03/10/2026" in texto
+
+
+class TestTheHandicapsPendingEmail:
+    """El aviso al organizador de hándicaps sin actualizar con la RFEG (#251)."""
+
+    @pytest.mark.asyncio
+    async def test_it_opens_the_competition_and_names_who_is_pending(self, correo):
+        await correo.send_handicaps_pending_email(
+            "org@b.com", "Ana", "Medal de octubre", "c-1", ["Luis Pérez", "Eva Gil"]
+        )
+        destinatario, asunto, texto, cuerpo = _enviado(correo)
+        assert destinatario == '"Ana" <org@b.com>'
+        assert "Medal de octubre" in asunto
+        assert _botones(cuerpo)[0] == f"{WEB}/competitions/c-1"
+        assert f"{WEB}/competitions/c-1" in texto
+        for nombre in ("Luis Pérez", "Eva Gil"):
+            assert nombre in cuerpo and nombre in texto
+
+    @pytest.mark.asyncio
+    async def test_player_names_are_escaped(self, correo):
+        await correo.send_handicaps_pending_email(
+            "org@b.com", "Ana", "Copa & Cena", "c-1", ["<b>Luis</b>"]
+        )
+        _, _, _, cuerpo = _enviado(correo)
+        assert "<b>Luis</b>" not in cuerpo
+        assert "Copa &amp; Cena" in cuerpo
+
+    @pytest.mark.asyncio
+    async def test_it_does_not_say_it_was_the_close(self, correo):
+        """También la manda una actualización con el botón: no siempre fue al cerrar (#251)."""
+        await correo.send_handicaps_pending_email("org@b.com", "Ana", "Copa", "c-1", ["Luis"])
+        _, _, texto, cuerpo = _enviado(correo)
+        for contenido in (texto, cuerpo):
+            assert "cerrar las inscripciones" not in contenido
+            assert "enrollments closed" not in contenido
+
+
+class TestTheScheduledUpdateSkippedEmail:
+    """La programada no se lanzó: a su hora la ventana estaba cerrada (#251)."""
+
+    @pytest.mark.asyncio
+    async def test_it_says_why_and_opens_the_competition(self, correo):
+        await correo.send_scheduled_handicaps_update_skipped_email(
+            "org@b.com", "Ana", "Medal de octubre", "c-1", "Hay una jornada en marcha."
+        )
+        destinatario, asunto, texto, cuerpo = _enviado(correo)
+        assert destinatario == '"Ana" <org@b.com>'
+        assert "Medal de octubre" in asunto
+        assert "Hay una jornada en marcha." in cuerpo and "Hay una jornada en marcha." in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/competitions/c-1"
+
+    @pytest.mark.asyncio
+    async def test_the_reason_is_escaped(self, correo):
+        await correo.send_scheduled_handicaps_update_skipped_email(
+            "org@b.com", "Ana", "Copa", "c-1", "<b>x</b>"
+        )
+        _, _, _, cuerpo = _enviado(correo)
+        assert "<b>x</b>" not in cuerpo

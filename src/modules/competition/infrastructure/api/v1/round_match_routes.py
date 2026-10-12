@@ -13,21 +13,28 @@ from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_assign_teams_use_case,
+    get_coger_plaza_use_case,
     get_configure_schedule_use_case,
     get_create_round_use_case,
     get_current_user,
     get_declare_walkover_use_case,
+    get_dejar_de_esperar_use_case,
     get_delete_round_use_case,
+    get_entendido_use_case,
+    get_esperar_use_case,
     get_generate_matches_use_case,
     get_get_match_detail_use_case,
     get_get_schedule_use_case,
+    get_mis_plazas_asignadas_use_case,
     get_reassign_match_players_use_case,
+    get_soltar_plaza_use_case,
     get_update_match_status_use_case,
     get_update_round_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
+    AssignedPlaceDTO,
     AssignTeamsBodyDTO,
     AssignTeamsRequestDTO,
     AssignTeamsResponseDTO,
@@ -52,25 +59,37 @@ from src.modules.competition.application.dto.round_match_dto import (
     ReassignMatchPlayersBodyDTO,
     ReassignMatchPlayersRequestDTO,
     ReassignMatchPlayersResponseDTO,
+    TakeTeeWindowPlaceBodyDTO,
+    TeeWindowPlaceResponseDTO,
     UpdateMatchStatusBodyDTO,
     UpdateMatchStatusRequestDTO,
     UpdateMatchStatusResponseDTO,
     UpdateRoundBodyDTO,
     UpdateRoundRequestDTO,
     UpdateRoundResponseDTO,
+    WaitingListEntryDTO,
 )
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
     CompetitionNotFoundError as StatusCompNotFoundError,
+    FranjaInvalidaError,
     NotCompetitionCreatorError as ReassignNotCreatorError,
     NotCompetitionCreatorError as StatusNotCreatorError,
     NotCompetitionCreatorError as WalkoverNotCreatorError,
+    PlazaEnFranjaError,
     RoundNotFoundError as StatusRoundNotFoundError,
     ScheduleAlreadyInPlayError,
 )
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
+)
+from src.modules.competition.application.services.jugadores_de_la_partida import (
+    JugadoresSinBarraError,
+    JugadoresSinHandicapError,
+)
+from src.modules.competition.application.services.jugadores_del_partido import (
+    PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
 )
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
@@ -128,11 +147,20 @@ from src.modules.competition.application.use_cases.get_schedule_use_case import 
     CompetitionNotFoundError as GetScheduleNotFoundError,
     GetScheduleUseCase,
 )
+from src.modules.competition.application.use_cases.listas_de_espera_use_case import (
+    DejarDeEsperarUseCase,
+    EntendidoUseCase,
+    EsperarUseCase,
+    MisPlazasAsignadasUseCase,
+)
+from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
+    CogerPlazaUseCase,
+    SoltarPlazaUseCase,
+)
 from src.modules.competition.application.use_cases.reassign_match_players_use_case import (
     MatchNotFoundError as ReassignMatchNotFoundError,
     MatchNotScheduledError,
     NoTeamAssignmentError as ReassignNoTeamAssignmentError,
-    PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
     PlayerNotInTeamError,
     ReassignMatchPlayersUseCase,
     WrongNumberOfPlayersError,
@@ -154,9 +182,13 @@ from src.modules.competition.application.use_cases.update_round_use_case import 
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
 )
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
     CaptainMissingError,
     CaptainOnWrongTeamError,
+)
+from src.modules.competition.infrastructure.api.v1.competition_state_routes import (
+    respuesta_con_jugadores,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -211,6 +243,7 @@ async def create_round(
             match_format=body.match_format,
             handicap_mode=body.handicap_mode,
             allowance_percentage=body.allowance_percentage,
+            tee_sheet=body.tee_sheet,
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
@@ -230,6 +263,8 @@ async def create_round(
         CreateRoundGCNotInCompError,
         CreateRoundDuplicateSessionError,
         DateOutOfRangeError,
+        # Franja sin hoja, solapada o con formato; sesión de Ryder sin formato (#251)
+        FranjaInvalidaError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -277,6 +312,7 @@ async def update_round(
             handicap_mode=body.handicap_mode,
             allowance_percentage=body.allowance_percentage,
             clear_allowance=body.clear_allowance,
+            tee_sheet=body.tee_sheet,
         )
         return await use_case.execute(request_dto, current_user_id, is_admin=current_user.is_admin)
 
@@ -285,6 +321,11 @@ async def update_round(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
+    # Otro campo para una franja con partidas: alguien sin barras en él (#251)
+    except JugadoresSinBarraError as e:
+        return respuesta_con_jugadores(e, "PLAYERS_WITHOUT_TEE", e.players)
+    except JugadoresSinHandicapError as e:
+        return respuesta_con_jugadores(e, "PLAYERS_WITHOUT_HANDICAP", e.players)
     except UpdateRoundNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -298,6 +339,7 @@ async def update_round(
         UpdateRoundNotModifiableError,
         UpdateRoundGCNotInCompError,
         UpdateRoundDuplicateSessionError,
+        FranjaInvalidaError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -352,6 +394,8 @@ async def delete_round(
         # Terminada o cancelada: su agenda ya no se toca (BE #365)
         AgendaNotEditableError,
         DeleteRoundNotModifiableError,
+        # Una franja con gente dentro (#251)
+        FranjaInvalidaError,
     ) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -841,6 +885,8 @@ async def configure_schedule(
     except (
         # Terminada o cancelada: su agenda ya no se toca (BE #365)
         AgendaNotEditableError,
+        # La agenda automática es de la Ryder (#251)
+        FranjaInvalidaError,
         NoGolfCoursesError,
         # Ya hay sesiones con partidos: sustituirlas se llevaría lo jugado
         ScheduleAlreadyInPlayError,
@@ -849,3 +895,174 @@ async def configure_schedule(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+
+
+# ======================================================================================
+# PLAZAS EN FRANJAS (#251)
+# ======================================================================================
+
+
+@router.post(
+    "/rounds/{round_id}/places",
+    response_model=TeeWindowPlaceResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Coger plaza en una franja",
+    description=(
+        "Stableford o Medal. El jugador elige sus franjas mientras las inscripciones están "
+        "abiertas; el organizador coloca a cualquiera hasta iniciar. Una por jornada, hasta "
+        "el máximo de jornadas, y con `instead_of_round_id` se cambia de golpe."
+    ),
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def take_tee_window_place(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    body: TakeTeeWindowPlaceBodyDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: CogerPlazaUseCase = Depends(get_coger_plaza_use_case),
+):
+    """201 con la plaza; 400 con el motivo si no se puede."""
+    quien = UserId(str(current_user.id))
+    jugador = UserId(str(body.user_id)) if body.user_id else quien
+    try:
+        plaza = await use_case.execute(
+            RoundId(round_id),
+            jugador,
+            quien,
+            is_admin=current_user.is_admin,
+            en_lugar_de=RoundId(body.instead_of_round_id) if body.instead_of_round_id else None,
+        )
+    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except StatusNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except PlazaEnFranjaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return TeeWindowPlaceResponseDTO(round_id=plaza.round_id.value, user_id=plaza.user_id.value)
+
+
+@router.delete(
+    "/rounds/{round_id}/places/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soltar la plaza en una franja",
+    description="El propio jugador mientras las inscripciones están abiertas; el organizador hasta iniciar.",
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def leave_tee_window_place(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: SoltarPlazaUseCase = Depends(get_soltar_plaza_use_case),
+):
+    """204 aunque no la tuviera."""
+    try:
+        await use_case.execute(
+            RoundId(round_id),
+            UserId(str(user_id)),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except StatusNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except PlazaEnFranjaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+# ======================================================================================
+# LISTAS DE ESPERA (#251)
+# ======================================================================================
+
+
+@router.post(
+    "/rounds/{round_id}/waiting-list",
+    response_model=WaitingListEntryDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Apuntarse a la lista de espera de una franja",
+    description=(
+        "Stableford o Medal, mientras las inscripciones están abiertas: en una franja llena, "
+        "de un día en que no se juega. La plaza que se libere se asigna sola al primero."
+    ),
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def join_waiting_list(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: EsperarUseCase = Depends(get_esperar_use_case),
+):
+    """201; 400 con el motivo si no se puede."""
+    yo = UserId(str(current_user.id))
+    try:
+        await use_case.execute(RoundId(round_id), yo, yo)
+    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except PlazaEnFranjaError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return WaitingListEntryDTO(round_id=round_id, user_id=yo.value)
+
+
+@router.delete(
+    "/rounds/{round_id}/waiting-list/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Salir de la lista de espera de una franja",
+    description="El propio jugador, o el organizador.",
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def leave_waiting_list(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    user_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: DejarDeEsperarUseCase = Depends(get_dejar_de_esperar_use_case),
+):
+    """204 aunque no estuviera."""
+    try:
+        await use_case.execute(
+            RoundId(round_id),
+            UserId(str(user_id)),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except (StatusRoundNotFoundError, StatusCompNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except StatusNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+
+
+@router.get(
+    "/me/assigned-places",
+    response_model=list[AssignedPlaceDTO],
+    summary="Plazas que me asignó la lista de espera",
+    description="Para «Requiere tu atención»: las que aún no he visto («Entendido»).",
+    tags=["Competitions - Rounds"],
+)
+async def my_assigned_places(
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: MisPlazasAsignadasUseCase = Depends(get_mis_plazas_asignadas_use_case),
+):
+    """Las más antiguas primero."""
+    return await use_case.execute(UserId(str(current_user.id)))
+
+
+@router.post(
+    "/me/assigned-places/{round_id}/acknowledge",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Entendido: ya he visto la plaza que me asignó la lista",
+    tags=["Competitions - Rounds"],
+)
+@limiter.limit("30/minute")
+async def acknowledge_assigned_place(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    round_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: EntendidoUseCase = Depends(get_entendido_use_case),
+):
+    """204; solo marca la suya."""
+    await use_case.execute(RoundId(round_id), UserId(str(current_user.id)))

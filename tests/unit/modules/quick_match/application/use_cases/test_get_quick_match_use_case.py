@@ -373,6 +373,37 @@ class TestStandingAppliesHandicap:
         assert detail.play_mode == "SCRATCH"
         assert all(ps.strokes_by_hole == {} for ps in detail.participant_strokes)
 
+    async def test_un_cambio_del_perfil_no_mueve_una_partida_ya_empezada(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        """
+        BE #514: el detalle juega con el índice fijado al empezar, no con el de hoy.
+
+        Fijados 5 y 20, el de 20 baja después a 5 en su perfil: la partida sigue
+        dándole los golpes de 20 y enseñando 20.
+        """
+        creator = await create_user(user_uow, unique_email("frozen-a"), handicap=5.0)
+        other = await create_user(user_uow, unique_email("frozen-b"), handicap=20.0)
+        qm = await self._match_on_real_course(
+            qm_uow, golf_course_uow, creator, other, PlayMode.HANDICAP
+        )
+        async with qm_uow:
+            guardada = await qm_uow.quick_matches.find_by_id(qm.id)
+            guardada.freeze_handicaps({creator.id: 5.0, other.id: 20.0})
+            await qm_uow.quick_matches.update(guardada)
+        other.update_handicap(5.0)
+        async with user_uow:
+            await user_uow.users.save(other)
+
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+
+        other_dto = next(p for p in detail.participants if p.user_id == other.id.value)
+        assert other_dto.handicap == 20.0
+        by_participant = {ps.participant_id: ps for ps in detail.participant_strokes}
+        assert by_participant[other.id.value].strokes_by_hole
+
     async def test_detail_exposes_the_strokes_used_to_decide_the_holes(
         self, qm_uow, user_uow, golf_course_uow
     ):

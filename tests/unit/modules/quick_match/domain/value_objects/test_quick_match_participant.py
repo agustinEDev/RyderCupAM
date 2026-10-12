@@ -1,5 +1,6 @@
 """Tests para QuickMatchParticipant Value Object."""
 
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -157,3 +158,17 @@ class TestQuickMatchParticipantEquality:
         user_id = UserId(uuid4())
         a = QuickMatchParticipant.for_user(user_id)
         assert hash(a) == hash(ParticipantId(user_id.value))
+
+
+class TestHandicapFijadoValidado:
+    """BE #514: el índice fijado tiene el mismo rango que los demás y solo existe fijado."""
+
+    def test_un_indice_fijado_fuera_de_rango_se_rechaza(self):
+        """Given un índice de 99 When se fija Then se rechaza por rango."""
+        with pytest.raises(ValueError, match="starting_handicap"):
+            QuickMatchParticipant.for_user(UserId.generate()).frozen_with(99.0)
+
+    def test_un_indice_sin_marca_de_fijado_se_rechaza(self):
+        """Given un índice sin marca de fijado When se crea Then se rechaza."""
+        with pytest.raises(ValueError, match="fijado"):
+            replace(QuickMatchParticipant.for_user(UserId.generate()), starting_handicap=12.0)

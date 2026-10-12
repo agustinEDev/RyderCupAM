@@ -14,6 +14,12 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
+    LanzadorDeActualizaciones,
+)
+from src.modules.competition.application.services.actualizaciones_de_handicaps import (
+    ActualizacionesDeHandicaps,
+)
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
 )
@@ -37,7 +43,11 @@ class NameCaptainsUseCase:
     sep): quedarse atascado la vispera es peor que un torneo desigual.
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        lanzador: LanzadorDeActualizaciones | None = None,
+    ):
         """
         Constructor.
 
@@ -45,6 +55,9 @@ class NameCaptainsUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # Nombrarlos con las inscripciones abiertas las cierra: también se
+        # pregunta a la RFEG, como al cerrar con el botón (#251)
+        self._actualizaciones = ActualizacionesDeHandicaps(uow, lanzador)
 
     async def execute(
         self, request: NameCaptainsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -95,9 +108,14 @@ class NameCaptainsUseCase:
                 team_a, team_b, approved_player_ids=aprobados, has_teams=reparto is not None
             )
             await self._uow.competitions.update(competition)
-            # Nombrarlos cierra la inscripción: las pendientes, sin plaza (#710)
+            # Nombrarlos cierra la inscripción: las pendientes, sin plaza (#710), y
+            # la actualización de hándicaps con la RFEG (#251)
+            actualizacion = None
             if estaba != competition.status:
                 await sin_plaza_para_las_pendientes(self._uow, competition_id)
+                actualizacion = await self._actualizaciones.al_cerrar(competition_id)
+
+        self._actualizaciones.lanzar(actualizacion)
 
         return NameCaptainsResponseDTO(
             id=competition.id.value,

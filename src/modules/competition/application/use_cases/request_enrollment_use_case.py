@@ -14,6 +14,7 @@ from src.modules.competition.application.exceptions import (
     InvalidTeeColorError,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
+from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
@@ -181,6 +182,8 @@ class RequestEnrollmentUseCase:
 
             # Sin género no se sabe desde qué barras juega (#710)
             await exigir_genero(self._user_repo, user_id, es_quien_se_apunta=True)
+            # Y en un Stableford o un Medal, su hándicap: de él sale su categoría (#251)
+            await exigir_handicap(self._user_repo, competition, user_id, es_quien_se_apunta=True)
 
             # 4. Crear enrollment con factory method
             try:

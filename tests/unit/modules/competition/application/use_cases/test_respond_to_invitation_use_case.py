@@ -467,3 +467,85 @@ class TestRespondToInvitationUseCase:
         result = await uc.execute(request)
         assert result.status == "ACCEPTED"
         assert result.enrollment_id is not None
+
+
+class TestAceptarUnStrokePlaySinHandicap:
+    """Para aceptar una invitación a un Stableford o un Medal hace falta hándicap (#251)."""
+
+    # Los ayudantes de la clase de arriba, sin heredar: heredando se repetirían sus tests
+    _base = TestRespondToInvitationUseCase()
+
+    @pytest.fixture
+    def comp_uow(self):
+        return CompetitionInMemoryUoW()
+
+    @pytest.fixture
+    def user_uow(self):
+        return UserInMemoryUoW()
+
+    async def _create_user(self, *args, **kwargs):
+        return await self._base._create_user(*args, **kwargs)
+
+    async def _create_pending_invitation(self, *args, **kwargs):
+        return await self._base._create_pending_invitation(*args, **kwargs)
+
+    async def _stableford(self, comp_uow, creator_id):
+        from decimal import Decimal
+
+        from src.modules.competition.application.dto.competition_dto import (
+            StrokePlaySettingsDTO,
+        )
+
+        return await CreateCompetitionUseCase(
+            comp_uow, LocationBuilder(comp_uow.countries), USUARIOS_CON_GENERO
+        ).execute(
+            CreateCompetitionRequestDTO(
+                name="Medal de octubre",
+                start_date=date(2030, 10, 12),
+                end_date=date(2030, 10, 12),
+                main_country="ES",
+                play_mode="HANDICAP",
+                tournament_type="STABLEFORD",
+                stroke_play=StrokePlaySettingsDTO(category_limits=[Decimal("12.0")]),
+            ),
+            creator_id,
+        )
+
+    async def _aceptar(self, comp_uow, user_uow, handicap):
+        from src.modules.competition.application.services.handicap_obligatorio import (
+            HandicapRequiredError,
+        )
+
+        creator = await self._create_user(user_uow, email="org@test.com")
+        invitee = await self._create_user(user_uow, email="inv@test.com")
+        if handicap is not None:
+            invitee.update_handicap(handicap)
+            async with user_uow:
+                await user_uow.users.save(invitee)
+        created = await self._stableford(comp_uow, creator.id)
+        invitation = await self._create_pending_invitation(
+            comp_uow, created.id, creator.id, invitee.id, "inv@test.com"
+        )
+        caso = RespondToInvitationUseCase(comp_uow, user_uow)
+        peticion = RespondInvitationRequestDTO(
+            invitation_id=invitation.id.value, user_id=invitee.id.value, action="ACCEPT"
+        )
+        return caso, peticion, invitation, HandicapRequiredError
+
+    async def test_sin_handicap_no_se_acepta_y_la_invitacion_sigue_pendiente(
+        self, comp_uow, user_uow
+    ):
+        caso, peticion, invitation, error = await self._aceptar(comp_uow, user_uow, None)
+
+        with pytest.raises(error, match="perfil"):
+            await caso.execute(peticion)
+
+        guardada = await comp_uow.invitations.find_by_id(invitation.id)
+        assert guardada.status == InvitationStatus.PENDING
+
+    async def test_con_handicap_se_acepta(self, comp_uow, user_uow):
+        caso, peticion, _, _ = await self._aceptar(comp_uow, user_uow, 14.2)
+
+        resultado = await caso.execute(peticion)
+
+        assert resultado.status == "ACCEPTED"

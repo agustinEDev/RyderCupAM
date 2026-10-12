@@ -160,6 +160,31 @@ class TestAssignTeamsUseCase:
         assert response.mode == "AUTOMATIC"
         assert response.competition_id == competition.id.value
 
+    async def test_assigns_every_approved_player_past_one_hundred(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given 150 aprobados (BE #314)
+        When se reparten los equipos automáticamente
+        Then los 150 quedan en un equipo: con el límite oculto de 100, los demás se
+        quedaban sin equipo
+        """
+        competition = await self._create_closed_competition(uow, creator_id)
+        for i in range(150):
+            await self._add_approved_enrollment(
+                uow, competition, custom_handicap=Decimal(str(i % 30))
+            )
+
+        response = await AssignTeamsUseCase(uow=uow, user_repository=user_repo).execute(
+            AssignTeamsRequestDTO(competition_id=competition.id.value, mode="AUTOMATIC"),
+            creator_id,
+        )
+
+        assert len(response.team_a_player_ids) + len(response.team_b_player_ids) == 150
+
     async def test_should_assign_teams_manually(
         self,
         uow: InMemoryUnitOfWork,

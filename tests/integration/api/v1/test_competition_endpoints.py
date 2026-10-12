@@ -592,7 +592,7 @@ class TestUpdateCompetition:
 
     @pytest.mark.asyncio
     async def test_update_competition_rejects_a_cap_above_the_limit(self, client: AsyncClient):
-        """Un cupo por encima de 100 debe dar 422, no un 200 silencioso."""
+        """Un cupo por encima de 200 debe dar 422, no un 200 silencioso (BE #314)."""
         user = await create_authenticated_user(
             client, "capmax@test.com", "P@ssw0rd123!", "Cap", "Max"
         )
@@ -601,7 +601,7 @@ class TestUpdateCompetition:
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
-            json={"number_of_players": 101},
+            json={"number_of_players": 201},
             cookies=user["cookies"],
         )
 
@@ -609,7 +609,7 @@ class TestUpdateCompetition:
 
     @pytest.mark.asyncio
     async def test_update_competition_accepts_the_maximum_cap(self, client: AsyncClient):
-        """100 jugadores: el cupo máximo debe entrar."""
+        """200 jugadores: el cupo máximo debe entrar (BE #314)."""
         user = await create_authenticated_user(
             client, "capmaximo@test.com", "P@ssw0rd123!", "Cap", "Maximo"
         )
@@ -618,14 +618,14 @@ class TestUpdateCompetition:
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
-            json={"number_of_players": 100},
+            json={"number_of_players": 200},
             cookies=user["cookies"],
         )
 
         assert response.status_code == 200
 
         despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
-        assert despues.json()["max_players"] == 100
+        assert despues.json()["max_players"] == 200
 
     @pytest.mark.asyncio
     async def test_update_competition_applies_the_countries_sent_by_the_client(

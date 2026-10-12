@@ -66,6 +66,8 @@ class StrokeContext:
     # 25 par distinto. Repartir con el orden de otra barra pone los golpes en los
     # hoyos equivocados.
     holes_by_tee: dict[TeeKey, list[int]] = field(default_factory=dict)
+    # Y el par de cada hoyo de cada barra, por el mismo motivo (#251, PR 5)
+    pars_by_tee: dict[TeeKey, dict[int, int]] = field(default_factory=dict)
     unrated_tees: tuple[UnratedTee, ...] = ()
     rated_with_course_par: tuple[TeeKey, ...] = ()
 
@@ -76,6 +78,13 @@ class StrokeContext:
     def holes_for(self, tee_color: TeeColor | None, tee_gender: Gender | None) -> list[int]:
         """Orden de dificultad de una barra; el del campo si no trae tarjeta."""
         return holes_for_tee(self.holes_by_tee, tee_color, tee_gender, self.holes_by_stroke_index)
+
+    def pars_for(self, tee_color: TeeColor | None, tee_gender: Gender | None) -> dict[int, int]:
+        """Par de cada hoyo de una barra; el del campo si no trae tarjeta."""
+        if tee_color is None:
+            return dict(self.par_by_hole)
+        gender = tee_gender.value if tee_gender else None
+        return dict(find_tee(self.pars_by_tee, tee_color.value, gender, default=self.par_by_hole))
 
     def rating_for(self, tee_color: TeeColor | None, tee_gender: Gender | None) -> TeeRating | None:
         """
@@ -100,6 +109,7 @@ class StrokeContextBuilder:
 
         tee_ratings: dict[TeeKey, TeeRating] = {}
         holes_by_tee: dict[TeeKey, list[int]] = {}
+        pars_by_tee: dict[TeeKey, dict[int, int]] = {}
         unrated: list[UnratedTee] = []
         with_course_par: list[TeeKey] = []
 
@@ -143,17 +153,20 @@ class StrokeContextBuilder:
             tee_card = _card_for(tee)
             if tee_card:
                 holes_by_tee[key] = tee_card
+                pars_by_tee[key] = {h.number: h.par for h in tee.holes}
             else:
                 # Misma regla que con la valoración: si la última de dos salidas
                 # repetidas no trae tarjeta válida, la de la anterior no vale y
                 # se cae al orden del campo, como `GolfCourse.hole_card_for`.
                 holes_by_tee.pop(key, None)
+                pars_by_tee.pop(key, None)
 
         return StrokeContext(
             tee_ratings=tee_ratings,
             holes_by_stroke_index=holes_by_stroke_index,
             par_by_hole=par_by_hole,
             holes_by_tee=holes_by_tee,
+            pars_by_tee=pars_by_tee,
             unrated_tees=tuple(unrated),
             rated_with_course_par=tuple(with_course_par),
         )

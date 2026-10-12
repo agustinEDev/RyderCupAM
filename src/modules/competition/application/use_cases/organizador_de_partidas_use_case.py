@@ -1,0 +1,356 @@
+"""
+Casos de Uso: Lo que hace el organizador con la anotación de las partidas (#251, PR 5).
+
+Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 2026):
+
+- **Corregir un hoyo**: mete el lado del jugador, el del marcador o los dos;
+  así resuelve un desacuerdo (P4) y hace de marcador en una partida de uno
+  (P11). Queda registrado que lo metió él (P9). Una tarjeta cerrada se reabre
+  antes, a propósito: que la corrección se vea.
+- **Reabrir una tarjeta** (P9) y **marcar a alguien como no presentado** (P6).
+  Si el no presentado deja a uno solo sin salir, el último en salir de la
+  siguiente partida de 4 aún sin salir (si no hay, de 3) pasa a acompañarle
+  (QA del 11 oct 2026).
+- **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
+  una vez; los que no coinciden se corrigen uno a uno (QA del 11 oct 2026).
+- **Cerrar la franja**, la red (P3): las tarjetas aún en juego quedan
+  entregadas si están completas, no presentado si nadie les anotó ningún
+  golpe, y retirado el resto (también con hoyos anotados sin validar).
+
+Solo el organizador o un admin, con la partida bloqueada.
+"""
+
+from collections.abc import Callable
+from datetime import UTC, datetime
+from uuid import UUID
+
+from src.modules.competition.application.dto.partidas_dto import (
+    CorrectHoleBodyDTO,
+    TeeGroupsResponseDTO,
+)
+from src.modules.competition.application.exceptions import (
+    InvalidHoleNumberError,
+    NotCompetitionCreatorError,
+    PartidaNotFoundError,
+    RoundNotFoundError,
+)
+from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.partidas_del_jugador import (
+    que_no_se_quede_solo,
+)
+from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
+from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
+    arrancar_la_competicion,
+    comprobar_que_abrio,
+    comprobar_que_abrio_la_franja,
+    comprobar_que_se_juega,
+)
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.golpe_de_partida import (
+    PRIMER_HOYO,
+    ULTIMO_HOYO,
+    GolpeDePartida,
+)
+from src.modules.competition.domain.entities.partida import (
+    MAX_JUGADORES,
+    Partida,
+    TarjetaCerradaError,
+)
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
+from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+from src.modules.competition.domain.value_objects.jugador_de_partida import HOYOS
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
+
+
+async def _del_organizador(
+    uow: CompetitionUnitOfWorkInterface, group_id: UUID, quien: UserId, is_admin: bool
+) -> tuple[Partida, Competition]:
+    """La partida y su competición, si quien pide la organiza. Sin bloquear aún."""
+    partida = await uow.partidas.find_by_id(PartidaId(group_id))
+    if partida is None:
+        raise PartidaNotFoundError(f"No existe la partida {group_id}")
+    competicion = await uow.competitions.find_by_id(partida.competition_id)
+    if competicion is None:
+        raise PartidaNotFoundError(f"No existe la partida {group_id}")
+    if not (is_admin or competicion.is_creator(quien)):
+        raise NotCompetitionCreatorError("Solo el organizador corrige la anotación")
+    return partida, competicion
+
+
+async def _bloqueada(uow: CompetitionUnitOfWorkInterface, partida: Partida) -> Partida:
+    bloqueada = await uow.partidas.find_by_id_for_update(partida.id)
+    if bloqueada is None:
+        raise PartidaNotFoundError(f"No existe la partida {partida.id}")
+    return bloqueada
+
+
+class TieneMarcadorError(Exception):
+    """Ese jugador tiene marcador: sus hoyos los valida él, no el organizador."""
+
+    error_code = "PLAYER_HAS_MARKER"
+
+
+def _del_jugador(partida: Partida, user_id: UUID) -> UserId:
+    jugador = UserId(user_id)
+    if jugador not in partida.user_ids:
+        raise PartidaNotFoundError("Ese jugador no está en la partida")
+    return jugador
+
+
+class CorregirHoyoDePartidaUseCase:
+    """El organizador mete uno o los dos lados de un hoyo de un jugador."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(
+        self,
+        group_id: UUID,
+        user_id: UUID,
+        hoyo: int,
+        body: CorrectHoleBodyDTO,
+        quien: UserId,
+        is_admin: bool,
+    ) -> None:
+        """
+        Raises:
+            PartidaNotFoundError, NotCompetitionCreatorError, InvalidHoleNumberError
+            PartidaNoAnotableError, ScoringNotOpenYetError, RayaNoPermitidaError
+            TarjetaCerradaError: Si su tarjeta está cerrada: se reabre antes
+        """
+        llegada = self._reloj()
+        if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
+            raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            jugador = _del_jugador(partida, user_id)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD
+            for campo in ("own_score", "marker_score"):
+                if campo in body.model_fields_set:
+                    GolpeDePartida.comprobar(getattr(body, campo), acepta_raya)
+
+            if competicion.status == CompetitionStatus.CLOSED:
+                await arrancar_la_competicion(self._uow, competicion)
+            bloqueada = await _bloqueada(self._uow, partida)
+            # Otra vez, ya bloqueada: pudieron moverlo mientras tanto
+            jugador = _del_jugador(bloqueada, user_id)
+            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
+                raise TarjetaCerradaError("Esa tarjeta está cerrada: reábrela para corregirla.")
+            if bloqueada.estado == EstadoPartida.SCHEDULED:
+                bloqueada.empezar()
+                await self._uow.partidas.guardar([bloqueada])
+
+            golpe = next(
+                (
+                    g
+                    for g in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
+                    if g.user_id == jugador and g.hoyo == hoyo
+                ),
+                None,
+            ) or GolpeDePartida.crear(
+                bloqueada.id, bloqueada.round_id, bloqueada.competition_id, jugador, hoyo, llegada
+            )
+            if "own_score" in body.model_fields_set:
+                golpe.anotar_propio(body.own_score, acepta_raya, quien, llegada)
+            if "marker_score" in body.model_fields_set:
+                golpe.anotar_del_marcador(body.marker_score, acepta_raya, quien, llegada)
+            await self._uow.golpes_de_partida.guardar(golpe)
+
+
+class ReabrirTarjetaUseCase:
+    """El organizador vuelve a abrir una tarjeta cerrada para corregirla (P9)."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            # Un no presentado vuelve solo si cabe en las partidas de su franja
+            franja = await self._uow.rounds.find_by_id(bloqueada.round_id)
+            hoja = franja.hoja_de_salidas if franja else None
+            bloqueada.reabrir_tarjeta(
+                _del_jugador(bloqueada, user_id),
+                hoja.jugadores_por_partida if hoja else MAX_JUGADORES,
+            )
+            await self._uow.partidas.guardar([bloqueada])
+
+
+class MarcarNoPresentadoUseCase:
+    """El organizador marca a alguien como no presentado (P6)."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            # La competición antes que las partidas, como la baja, que también
+            # rehace partidas sin salir: así no se cruzan (revisión)
+            await self._uow.competitions.find_by_id_for_update(competicion.id)
+            bloqueada = await _bloqueada(self._uow, partida)
+            bloqueada.no_presentado(_del_jugador(bloqueada, user_id))
+            await self._uow.partidas.guardar([bloqueada])
+            await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
+
+
+class ValidarLoAnotadoUseCase:
+    """El organizador valida de una vez lo que anotó quien juega sin marcador."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Valida los hoyos con su golpe y sin el del marcador; un hoyo con los dos
+        y distintos no se toca: se corrige uno a uno.
+
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+            TarjetaCerradaError: Su tarjeta ya está cerrada
+            TieneMarcadorError: Alguien en juego le marca
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            jugador = _del_jugador(bloqueada, user_id)
+            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
+                raise TarjetaCerradaError("Esa tarjeta ya está cerrada.")
+            if jugador not in bloqueada.sin_marcador_en_juego:
+                raise TieneMarcadorError("Ese jugador tiene marcador.")
+            acepta_raya = competicion.tournament_type == TournamentType.STABLEFORD
+            for golpe in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id):
+                if golpe.user_id != jugador or not golpe.propio_enviado or golpe.marcador_enviado:
+                    continue
+                golpe.anotar_del_marcador(golpe.propio, acepta_raya, quien, llegada)
+                await self._uow.golpes_de_partida.guardar(golpe)
+
+
+class CerrarFranjaUseCase:
+    """El organizador cierra todas las partidas sin acabar de una franja (P3)."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        user_repository: UserRepositoryInterface,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._usuarios = user_repository
+        self._reloj = reloj
+
+    async def execute(self, round_id: UUID, quien: UserId, is_admin: bool) -> TeeGroupsResponseDTO:
+        """
+        Raises:
+            RoundNotFoundError, NotCompetitionCreatorError
+            ScoringNotOpenYetError: Antes de su primera salida: se cerraría con
+                todos no presentados y la franja ya no podría rehacerse
+            PartidaNoAnotableError: Con la competición sin jugarse
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            franja = await self._uow.rounds.find_by_id(RoundId(round_id))
+            if franja is None or franja.hoja_de_salidas is None:
+                raise RoundNotFoundError(f"No existe la franja {round_id}")
+            competicion = await self._uow.competitions.find_by_id_for_update(franja.competition_id)
+            if competicion is None:
+                raise RoundNotFoundError(f"No existe la franja {round_id}")
+            if not (is_admin or competicion.is_creator(quien)):
+                raise NotCompetitionCreatorError("Solo el organizador cierra la franja")
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio_la_franja(franja, self._zonas, llegada)
+            # Cada partida, bloqueada antes de decidir, y los golpes leídos
+            # después: anotar, entregar o retirarse bloquean la partida, y sin
+            # esto un 18 anotado a la vez quedaría como retirado
+            partidas = [
+                bloqueada
+                for p in await self._uow.partidas.de_la_franja(franja.id)
+                if (bloqueada := await self._uow.partidas.find_by_id_for_update(p.id))
+            ]
+            golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
+            # Por partida y jugador: sus golpes de otra partida no cuentan aquí
+            validados: dict[tuple[PartidaId, UserId], int] = {}
+            # Con algo anotado por cualquiera de los dos lados jugó, aunque no se
+            # le validara nada (su marcador no vino): retirado, no no presentado
+            anotaron: set[tuple[PartidaId, UserId]] = set()
+            for golpe in golpes:
+                suyo = (golpe.partida_id, golpe.user_id)
+                if golpe.validado:
+                    validados[suyo] = validados.get(suyo, 0) + 1
+                if golpe.propio_enviado or golpe.marcador_enviado:
+                    anotaron.add(suyo)
+            sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
+            for partida in sin_acabar:
+                partida.cerrar(
+                    completas={
+                        u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS
+                    },
+                    sin_golpes={u for u in partida.user_ids if (partida.id, u) not in anotaron},
+                )
+            await self._uow.partidas.guardar(sin_acabar)
+            return await vista_de_la_franja(
+                self._uow, competicion, franja, partidas, self._zonas, self._usuarios, llegada
+            )
