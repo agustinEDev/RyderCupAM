@@ -8,11 +8,13 @@ La partida para anotar y las tarjetas de los suyos (#251, PR 5; pestañas 1 y 3)
 | Tras anotar                       | Cada lado, su estado; totales solo de lo validado    |
 | Quién puso el lado del marcador   | `marker_by`; sin anotar, null (QA 2, 12 oct)         |
 | Y su nombre, aunque ya no esté    | `marker_by_name`                                     |
+| El género de sus barras           | FEMALE de ella; sin género, null (12 oct)            |
 | Una tarjeta entregada             | Su estado                                            |
 | Medal                             | Sin levantar bola                                    |
 | Una partida que no existe         | PartidaNotFoundError                                 |
 """
 
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -99,6 +101,8 @@ async def test_after_scoring_only_the_validated_count():
     assert suyo.totals.thru == 1
     assert suyo.totals.gross == 5
     assert suyo.marked_by_user_id == a.value
+    # Su género, para «Retirada» / «No presentada» (pasada en el móvil, 12 oct)
+    assert suyo.tee_gender == next(j for j in partida.jugadores if j.user_id == b).tee_gender.value
     assert vista.status == "IN_PROGRESS"
     # El número del lado del marcador lleva quién lo puso: tras cambiar el
     # círculo, el nuevo marcador ve que no es suyo (2.ª pasada del QA)
@@ -156,3 +160,30 @@ async def test_a_group_that_does_not_exist():
 
     with pytest.raises(PartidaNotFoundError):
         await _ver(escenario).execute(uuid4(), partida.user_ids[0])
+
+
+async def test_each_player_carries_the_gender_of_their_tee():
+    from src.shared.domain.value_objects.gender import Gender
+
+    escenario, partida = await _partida()
+    a, b, c = partida.user_ids
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida._jugadores = [
+        replace(
+            j,
+            tee_gender=Gender.FEMALE
+            if j.user_id == a
+            else None
+            if j.user_id == b
+            else j.tee_gender,
+        )
+        for j in leida._jugadores
+    ]
+    await escenario.uow.partidas.guardar([leida])
+
+    vista = await _ver(escenario).execute(partida.id.value, c)
+
+    genero = {p.user_id: p.tee_gender for p in vista.players}
+    assert genero[a.value] == "FEMALE"
+    assert genero[b.value] is None
+    assert genero[c.value] == "MALE"

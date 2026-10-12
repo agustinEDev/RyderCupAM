@@ -121,6 +121,7 @@ def _jugador(
         name=nombres.get(foto.user_id, ""),
         playing_handicap=foto.playing_handicap,
         tee_color=foto.tee_color.value,
+        tee_gender=foto.tee_gender.value if foto.tee_gender else None,
         card_status=partida.estados_de_tarjeta[foto.user_id].value,
         marks_user_id=marca.value if marca else None,
         marked_by_user_id=le_marca.value if le_marca else None,
