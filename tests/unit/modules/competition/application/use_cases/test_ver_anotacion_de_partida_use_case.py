@@ -99,6 +99,8 @@ async def test_after_scoring_only_the_validated_count():
     assert suyo.totals.thru == 1
     assert suyo.totals.gross == 5
     assert suyo.marked_by_user_id == a.value
+    # Su género, para «Retirada» / «No presentada» (pasada en el móvil, 12 oct)
+    assert suyo.tee_gender == next(j for j in partida.jugadores if j.user_id == b).tee_gender.value
     assert vista.status == "IN_PROGRESS"
     # El número del lado del marcador lleva quién lo puso: tras cambiar el
     # círculo, el nuevo marcador ve que no es suyo (2.ª pasada del QA)

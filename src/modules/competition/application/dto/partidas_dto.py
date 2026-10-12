@@ -163,6 +163,9 @@ class TeeGroupScoringPlayerDTO(BaseModel):
     name: str
     playing_handicap: int
     tee_color: str
+    tee_gender: str | None = Field(
+        None, description="El de sus barras (MALE o FEMALE): para «Retirada», «No presentada»."
+    )
     card_status: str = Field(..., description="JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO.")
     marks_user_id: UUID | None
     marked_by_user_id: UUID | None = Field(
