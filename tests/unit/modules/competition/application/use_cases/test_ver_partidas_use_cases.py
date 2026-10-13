@@ -9,8 +9,10 @@ organizador aún puede tocarlas; mirar nunca falla por eso.
 | Un jugador mira la franja                                | La vista, igual que al generar    |
 | Antes de generar                                         | Sin partidas, todos en unassigned |
 | Abiertas / tras la 1.ª salida / una empezada / sin zona  | editable: false, sin error        |
-| Con la primera fuera y la segunda sin salir (#544)       | editable de la franja: true; el   |
-|                                                          |   de cada partida, el suyo        |
+| Con la primera fuera y la segunda sin salir (#544)       | editable: false (generar, como    |
+|                                                          |   siempre); can_change por partida|
+| Una con golpes antes de su hora, la siguiente sin salir  | can_change: false / true          |
+| Justo a la hora de la segunda                            | Las dos fuera                     |
 | unassigned                                               | Ni retirados ni ya colocados      |
 | Una sesión de Ryder / una franja que no existe           | PartidasError / RoundNotFound     |
 | Mis partidas, en dos franjas                             | Las dos, por día y hora           |
@@ -154,8 +156,42 @@ async def test_with_the_first_group_out_the_second_can_still_be_touched():
 
     vista = await _vista(escenario)
 
-    assert vista.editable is True
-    assert [g.editable for g in vista.groups] == [False, True]
+    # `editable` no cambia de significado: el front de producción lo usa para generar
+    assert vista.editable is False
+    assert [g.can_change for g in vista.groups] == [False, True]
+
+
+async def test_a_group_with_strokes_before_its_time_is_out():
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    primera, _ = sorted(
+        await escenario.uow.partidas.de_la_franja(escenario.manana.id), key=lambda p: p.numero
+    )
+    empezada = await escenario.uow.partidas.find_by_id(primera.id)
+    empezada.empezar()
+    await escenario.uow.partidas.guardar([empezada])
+
+    vista = await _vista(escenario)
+
+    assert [g.can_change for g in vista.groups] == [False, True]
+
+
+async def test_right_at_the_second_tee_time_both_are_out():
+    from datetime import timedelta
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=10)
+
+    vista = await _vista(escenario)
+
+    assert [g.can_change for g in vista.groups] == [False, False]
 
 
 async def test_a_ryder_session_and_a_window_that_does_not_exist():

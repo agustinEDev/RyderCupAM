@@ -724,6 +724,14 @@ async def test_a_group_already_out_cannot_be_touched(client: AsyncClient):
     set_auth_cookies(client, organizador["cookies"])
 
     vista = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
+    movido = await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": jugador},
+    )
+    reordenadas = await client.put(
+        f"/api/v1/competitions/rounds/{franja}/groups/order",
+        json={"group_ids": [partida["id"]]},
+    )
     marcadores = await client.put(
         f"/api/v1/competitions/groups/{partida['id']}/markers",
         json={
@@ -734,6 +742,11 @@ async def test_a_group_already_out_cannot_be_touched(client: AsyncClient):
         },
     )
 
-    assert vista.json()["groups"][0]["editable"] is False
+    assert vista.json()["groups"][0]["can_change"] is False
+    assert vista.json()["editable"] is False
+    assert movido.status_code == 409, movido.text
+    assert movido.json()["error_code"] == "GROUP_ALREADY_OUT"
+    # Reordenar sin mover la que salió no cambia nada
+    assert reordenadas.status_code == 200, reordenadas.text
     assert marcadores.status_code == 409, marcadores.text
     assert marcadores.json()["error_code"] == "GROUP_ALREADY_OUT"

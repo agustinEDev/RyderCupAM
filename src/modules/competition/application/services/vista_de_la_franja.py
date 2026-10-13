@@ -21,6 +21,7 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.salidas_de_la_franja import salidas_por_hora
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.entities.round import Round
@@ -110,7 +111,8 @@ async def vista_de_la_franja(
     nombres = await PlayerNames.de_la_competicion(
         [*en_partida, *sin_partida], competicion.id, usuarios, uow
     )
-    editable, tocables = await _editables(competicion, franja, hoja, partidas, zonas, ahora)
+    editable = await _editable(competicion, franja, partidas, zonas, ahora)
+    tocables = await _tocables(competicion, franja, partidas, zonas, ahora, editable)
     return TeeGroupsResponseDTO(
         round_id=franja.id.value,
         editable=editable,
@@ -119,7 +121,7 @@ async def vista_de_la_franja(
         ],
         groups=[
             partida_dto(partida, hoja, nombres).model_copy(
-                update={"editable": partida.id in tocables}
+                update={"can_change": partida.id in tocables}
             )
             for partida in sorted(partidas, key=lambda p: p.numero)
         ],
@@ -139,29 +141,33 @@ def partida_dto(partida: Partida, hoja: HojaDeSalidas, nombres: dict[UserId, str
     )
 
 
-async def _editables(
-    competicion, franja, hoja, partidas, zonas, ahora
-) -> tuple[bool, set[PartidaId]]:
-    """
-    Si se puede tocar la franja y qué partidas (#544): antes de la primera salida,
-    todo (también generarlas); después, las que no han salido. Mirar nunca falla.
-    """
+async def _editable(competicion, franja, partidas, zonas, ahora) -> bool:
+    """Generar o borrar (y todo lo demás): del cierre a la primera salida, sin ninguna fuera."""
     try:
-        primera = await primera_salida(franja, zonas)
-    except ZonaDesconocidaError:
-        return False, set()
+        PlazoDePartidas.comprobar(
+            competicion.status, await primera_salida(franja, zonas), ahora, partidas
+        )
+    except (PlazoCerradoError, PartidaEmpezadaError, ZonaDesconocidaError):
+        return False
+    return True
+
+
+async def _tocables(competicion, franja, partidas, zonas, ahora, editable) -> set[PartidaId]:
+    """Las que aún se pueden mover o cambiar: todas en plazo; si no, las sin salir (#544)."""
+    if editable:
+        return {p.id for p in partidas}
     try:
-        PlazoDePartidas.comprobar(competicion.status, primera, ahora, partidas)
-        return True, {p.id for p in partidas}
-    except (PlazoCerradoError, PartidaEmpezadaError):
-        pass
-    try:
-        PlazoDePartidas.comprobar_que_se_pueden_tocar(competicion.status, [], frozenset())
+        PlazoDePartidas.comprobar_estado(competicion.status)
     except PlazoCerradoError:
-        return False, set()
-    salidas = PlazoDePartidas.salidas(partidas, hoja, primera, ahora)
-    tocables = {p.id for p in partidas if p.id not in salidas}
-    return bool(tocables), tocables
+        return set()
+    try:
+        await primera_salida(franja, zonas)
+    except ZonaDesconocidaError:
+        return set()
+    salidas = {p.id for p in partidas if p.empezada} | await salidas_por_hora(
+        franja, partidas, zonas, ahora
+    )
+    return {p.id for p in partidas if p.id not in salidas}
 
 
 def _jugador(

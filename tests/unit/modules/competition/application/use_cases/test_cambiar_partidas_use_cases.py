@@ -448,3 +448,20 @@ class TestConLaFranjaEmpezada:
 
         with pytest.raises(PlazoCerradoError):
             await escenario.generar()
+
+    async def test_scored_between_reading_and_moving(self, monkeypatch):
+        # Revisor: anotar y mover ya pueden coincidir. Con las partidas bloqueadas
+        # antes de decidir, la que empezó mientras se ve como salida
+        from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
+            cambiada_al_bloquear,
+        )
+
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        _, segunda = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+        cambiada_al_bloquear(
+            monkeypatch, lambda p: p.empezar() if p.id == segunda.id and not p.empezada else None
+        )
+
+        with pytest.raises(PartidaYaSalidaError):
+            await _mover(escenario, segunda.user_ids[0])

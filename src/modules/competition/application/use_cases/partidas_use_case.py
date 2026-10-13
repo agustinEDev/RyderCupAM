@@ -9,13 +9,14 @@ Decidido con Agustín el 6-9 oct 2026:
 - Por hándicap fijado, en el orden que elija; a igual hándicap, quien cogió antes
   la plaza; si sobrara uno, la penúltima cede uno (D6).
 - Sin zona horaria en el campo no se sabe cuándo sale nadie: no se generan (D10).
-- Mover, reordenar, cambiar marcadores y borrar, con el mismo plazo (D11) y las
-  reglas de `MovimientosDePartidas` (D13, M1-M3).
+- Borrar, con el mismo plazo (D11). Mover, reordenar y cambiar marcadores,
+  también con la franja empezada en las partidas que no han salido (#544, 13 oct
+  2026), con las reglas de `MovimientosDePartidas` (D13, M1-M3).
 
 Con la competición bloqueada, como las plazas: dos a la vez, una sola.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
@@ -37,6 +38,7 @@ from src.modules.competition.application.ports.competition_timezone import IComp
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
+from src.modules.competition.application.services.salidas_de_la_franja import salidas_por_hora
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.vista_de_la_franja import (
     con_plaza_y_aprobados,
@@ -155,11 +157,18 @@ class _ConLaFranja:
             self._uow, round_id, quien, is_admin
         )
         ahora = self._reloj()
-        partidas = await self._uow.partidas.de_la_franja(franja.id)
-        PlazoDePartidas.comprobar_que_se_pueden_tocar(competicion.status, [], frozenset())
-        salidas = PlazoDePartidas.salidas(
-            partidas, hoja, await primera_salida(franja, self._zonas), ahora
-        )
+        PlazoDePartidas.comprobar_estado(competicion.status)
+        # Bloqueadas antes de decidir, por número: anotar el primer golpe ya puede
+        # coincidir con mover, y sin esto se pisaría (revisor). El mismo orden que
+        # cerrar la franja: competición, franja y partidas
+        partidas = [
+            bloqueada
+            for p in sorted(
+                await self._uow.partidas.de_la_franja(franja.id), key=lambda p: p.numero
+            )
+            if (bloqueada := await self._uow.partidas.find_by_id_for_update(p.id))
+        ]
+        salidas = await _las_que_salieron(franja, partidas, self._zonas, ahora)
         return _Abierta(franja, competicion, hoja, partidas, ahora, frozenset(salidas))
 
     async def _vista(
@@ -256,7 +265,7 @@ class MoverJugadorUseCase(_ConLaFranja):
             swap_with_user_id: Con quién de la de destino se intercambia
 
         Raises:
-            Los de `_abrir`, y además:
+            Los de `_abrir_para_tocar`, y además:
             MovimientoImposibleError: Con la clave del motivo
             PartidaYaSalidaError: Desde o hacia una que ya salió, o una nueva tarde
         """
@@ -288,12 +297,7 @@ class MoverJugadorUseCase(_ConLaFranja):
                 abierta.salidas,
             )
             # La nueva va detrás de la última: si su hora ya pasó, no llegaría (#544)
-            if PlazoDePartidas.salidas(
-                cambios.crear,
-                abierta.hoja,
-                await primera_salida(abierta.franja, self._zonas),
-                abierta.ahora,
-            ):
+            if await salidas_por_hora(abierta.franja, cambios.crear, self._zonas, abierta.ahora):
                 raise PartidaYaSalidaError("La partida nueva saldría a una hora ya pasada.")
             await self._uow.partidas.borrar(cambios.borrar)
             await self._uow.partidas.guardar(cambios.guardar)
@@ -312,7 +316,7 @@ class ReordenarPartidasUseCase(_ConLaFranja):
     ) -> TeeGroupsResponseDTO:
         """
         Raises:
-            Los de `_abrir`, y además:
+            Los de `_abrir_para_tocar`, y además:
             MovimientoImposibleError: INVALID_GROUP_ORDER, si no van todas una vez
             PartidaYaSalidaError: Si cambia de sitio una que ya salió
         """
@@ -343,7 +347,7 @@ class CambiarMarcadoresUseCase(_ConLaFranja):
 
         Raises:
             PartidaNotFoundError: Si no existe
-            Los de `_abrir`, y además:
+            Los de `_abrir_para_tocar`, y además:
             MarcadoresInvalidosError: Si alguien se marca a sí mismo, o no es biyección
             PartidaYaSalidaError: Si esa partida ya salió (#544)
         """
@@ -469,3 +473,12 @@ class MisPartidasUseCase:
                     )
                 )
         return MyTeeGroupsResponseDTO(groups=[dto for _, dto in sorted(mias, key=lambda m: m[0])])
+
+
+async def _las_que_salieron(
+    franja: Round, partidas: Sequence[Partida], zonas: ICompetitionTimezone, ahora: datetime
+) -> set[PartidaId]:
+    """Las que ya salieron (#544): su hora llegó, con la zona del campo, o tienen golpes."""
+    return {p.id for p in partidas if p.empezada} | await salidas_por_hora(
+        franja, partidas, zonas, ahora
+    )

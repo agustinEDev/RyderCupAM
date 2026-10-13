@@ -12,11 +12,10 @@ calcula quien llama.
 """
 
 from collections.abc import Collection, Sequence
-from datetime import date, datetime
+from datetime import datetime
 
 from ..entities.partida import Partida, PartidaEmpezadaError
 from ..value_objects.competition_status import CompetitionStatus
-from ..value_objects.hoja_de_salidas import HojaDeSalidas
 from ..value_objects.partida_id import PartidaId
 
 ESTADOS_CON_PARTIDAS = frozenset({CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS})
@@ -62,27 +61,15 @@ class PlazoDePartidas:
             raise PartidaEmpezadaError("Ya ha salido alguna partida de la franja.")
 
     @staticmethod
-    def salidas(
-        partidas: Sequence[Partida],
-        hoja: HojaDeSalidas,
-        primera_salida: datetime,
-        ahora: datetime,
-    ) -> set[PartidaId]:
+    def comprobar_estado(estado: CompetitionStatus) -> None:
         """
-        Las que ya han salido: les llegó su hora o ya tienen golpes (#544).
-
-        La hora de cada una es la de la primera más lo que va de la primera a la
-        suya en la hoja: el mismo día, sin cambio de hora en medio (la franja que
-        cae en el hueco del cambio de hora no se puede crear).
+        Raises:
+            PlazoCerradoError: Si la competición no está cerrada o iniciada
         """
-        dia = date(2000, 1, 1)
-        inicio = datetime.combine(dia, hoja.hora_de(1))
-        return {
-            p.id
-            for p in partidas
-            if p.empezada
-            or primera_salida + (datetime.combine(dia, hoja.hora_de(p.numero)) - inicio) <= ahora
-        }
+        if estado not in ESTADOS_CON_PARTIDAS:
+            raise PlazoCerradoError(
+                "Las partidas se tocan con las inscripciones cerradas o la competición en juego."
+            )
 
     @staticmethod
     def comprobar_que_se_pueden_tocar(
@@ -92,15 +79,13 @@ class PlazoDePartidas:
     ) -> None:
         """
         Mover, reordenar o cambiar marcadores: solo partidas que aún no han salido,
-        también con la franja empezada (#544).
+        también con la franja empezada (#544). Las que salieron (su hora llegó o
+        tienen golpes) las calcula quien llama, con la zona del campo.
 
         Raises:
             PlazoCerradoError: Si la competición no está cerrada o iniciada
             PartidaYaSalidaError: Si alguna de las tocadas ya ha salido
         """
-        if estado not in ESTADOS_CON_PARTIDAS:
-            raise PlazoCerradoError(
-                "Las partidas se tocan con las inscripciones cerradas o la competición en juego."
-            )
+        PlazoDePartidas.comprobar_estado(estado)
         if any(p.id in salidas for p in tocadas):
             raise PartidaYaSalidaError("Esa partida ya ha salido: no se puede cambiar.")

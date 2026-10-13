@@ -83,11 +83,13 @@ class TeeGroupDTO(BaseModel):
     tee_time: str = Field(..., description="HH:MM, hora del campo.")
     status: str
     incomplete: bool = Field(..., description="De un solo jugador, por bajas: sin marcador.")
-    editable: bool = Field(
-        False,
+    can_change: bool | None = Field(
+        None,
         description=(
-            "Si aún se puede mover, reordenar o cambiar sus marcadores: no ha salido "
-            "(ni le llegó su hora ni tiene golpes), también con la franja empezada (#544)."
+            "Solo en la vista de la franja: si aún se puede mover, reordenar o cambiar sus "
+            "marcadores, porque no ha salido (ni le llegó su hora ni tiene golpes), también "
+            "con la franja empezada (#544). `editable` de la franja sigue diciendo si se "
+            "pueden generar o borrar."
         ),
     )
     players: list[TeeGroupPlayerDTO]
