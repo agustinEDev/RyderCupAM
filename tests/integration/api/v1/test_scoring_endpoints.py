@@ -183,6 +183,25 @@ async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = Tr
     }
 
 
+class TestTarjetaDeLaRyder:
+    """FE #846: la próxima salida de un jugador de la Ryder, con los partidos de la BD."""
+
+    @pytest.mark.asyncio
+    async def test_a_player_with_a_match_in_play_has_its_session_without_time(
+        self, client: AsyncClient
+    ):
+        datos = await setup_match_in_progress(client)
+        set_auth_cookies(client, datos["player_a"]["cookies"])
+
+        ficha = await client.get(f"/api/v1/competitions/{datos['competition_id']}")
+
+        assert ficha.status_code == 200, ficha.text
+        salida = ficha.json()["my_next_session"]
+        assert salida["session_type"] == "MORNING"
+        assert salida["tee_time"] is None
+        assert ficha.json()["playing_days"] is None
+
+
 # ======================================================================================
 # SCORING VIEW TESTS
 # ======================================================================================

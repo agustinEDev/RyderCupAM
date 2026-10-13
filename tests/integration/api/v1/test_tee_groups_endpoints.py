@@ -482,6 +482,35 @@ async def test_my_groups(client: AsyncClient):
     assert ningunas.json() == {"groups": []}
 
 
+async def test_the_competition_card_has_courses_days_and_my_next_tee_time(client: AsyncClient):
+    """FE #846: en el listado y en la ficha, con los campos leídos de la BD de verdad."""
+    organizador, competicion, franja, otros = await _stableford(client)
+    assert (await _generar(client, organizador, franja)).status_code == 200
+    ajeno = await _usuario(client)
+
+    set_auth_cookies(client, otros[0]["cookies"])
+    lista = await client.get("/api/v1/competitions", params={"my_competitions": "true"})
+    ficha = await client.get(f"/api/v1/competitions/{competicion['id']}")
+    set_auth_cookies(client, ajeno["cookies"])
+    de_otro = await client.get(f"/api/v1/competitions/{competicion['id']}")
+
+    assert lista.status_code == 200, lista.text
+    (suya,) = [c for c in lista.json() if c["id"] == competicion["id"]]
+    for dto in (suya, ficha.json()):
+        (campo,) = dto["golf_courses"]
+        assert campo["name"].startswith("Campo partidas")
+        assert campo["country_code"] == "ES"
+        assert dto["playing_days"] == 1
+        assert dto["my_next_session"] == {
+            "date": competicion["start_date"],
+            "session_type": "MORNING",
+            "tee_time": "09:00",
+        }
+    # Quien no juega ve los campos y las jornadas, pero no tiene salida
+    assert de_otro.json()["my_next_session"] is None
+    assert de_otro.json()["playing_days"] == 1
+
+
 # ======================================================================================
 # CAMBIAR LA FRANJA CON PARTIDAS (D9, G2)
 # ======================================================================================

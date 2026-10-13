@@ -4,6 +4,7 @@ Competition Repository - SQLAlchemy Implementation.
 Implementación concreta del repositorio de competiciones usando SQLAlchemy async.
 """
 
+from collections.abc import Sequence
 from datetime import date
 
 from sqlalchemy import and_, func, or_, select
@@ -16,6 +17,9 @@ from src.modules.competition.domain.entities.competition_golf_course import (
 )
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
+)
+from src.modules.competition.domain.value_objects.campo_de_la_competicion import (
+    CampoDeLaCompeticion,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import (
@@ -145,6 +149,30 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .selectinload(CompetitionGolfCourse.golf_course)
             .options(selectinload(GolfCourse._tees)),
         )
+
+    async def campos_de(
+        self, competition_ids: Sequence[CompetitionId]
+    ) -> dict[CompetitionId, list[CampoDeLaCompeticion]]:
+        """Dos consultas para todas: los enlaces y, con `selectinload`, sus campos."""
+        if not competition_ids:
+            return {}
+        stmt = (
+            select(CompetitionGolfCourse)
+            .where(CompetitionGolfCourse._competition_id.in_(list(competition_ids)))
+            .order_by(CompetitionGolfCourse._display_order)
+            .options(selectinload(CompetitionGolfCourse.golf_course))
+        )
+        result = await self._session.execute(stmt)
+        campos: dict[CompetitionId, list[CampoDeLaCompeticion]] = {}
+        for enlace in result.scalars().all():
+            campo = enlace.golf_course
+            # Un enlace sin su campo no se puede nombrar: fuera
+            if campo is None:
+                continue
+            campos.setdefault(enlace.competition_id, []).append(
+                CampoDeLaCompeticion(campo.id, campo.name, campo.country_code)
+            )
+        return campos
 
     async def find_by_creator(
         self, creator_id: UserId, limit: int = 100, offset: int = 0

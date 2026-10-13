@@ -1,5 +1,7 @@
 """Match Repository - SQLAlchemy Implementation."""
 
+from collections.abc import Sequence
+
 from sqlalchemy import cast, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,6 +89,17 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
         statement = (
             select(Match).where(Match._round_id == round_id).order_by(Match._match_number.asc())
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_by_rounds(self, round_ids: Sequence[RoundId]) -> list[Match]:
+        if not round_ids:
+            return []
+        statement = (
+            select(Match)
+            .where(Match._round_id.in_(list(round_ids)))
+            .order_by(Match._match_number.asc())
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

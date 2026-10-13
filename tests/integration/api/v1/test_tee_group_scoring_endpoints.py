@@ -553,6 +553,8 @@ async def test_the_window_standings(client: AsyncClient):
     primera = respuesta.json()["rows"][0]
     assert (primera["user_id"], primera["position"], primera["thru"]) == (jugador, 1, 1)
     assert primera["name"]
+    # Para «No presentada», «Retirada» (#856)
+    assert primera["tee_gender"] == "MALE"
 
 
 async def test_overall_and_scratch(client: AsyncClient):
