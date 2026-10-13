@@ -45,6 +45,10 @@ class TestCompetitionNameCreation:
             ("abc<\u2060svg onload=alert(1)>", "abc"),
             ("<<\u200bscript>script>Copa", "Copa"),
             ("<\u200b<b>script>Copa", "Copa"),
+            # Sin cerrar: el `<` pegado a la etiqueta se va (revisor)
+            ("Copa <img src=x onerror=alert(1)//", "Copa img src=x onerror=alert(1)//"),
+            ("Copa <script", "Copa script"),
+            ("Copa </b <!-- x", "Copa /b !-- x"),
             # Invisibles y de dirección: fuera (/code-review)
             ("Copa\u200b de\u202e Otoño\ufeff", "Copa de Otoño"),
             # No son etiquetas: se quedan (revisor)
@@ -62,7 +66,17 @@ class TestCompetitionNameCreation:
         with pytest.raises(InvalidCompetitionNameError):
             CompetitionName(escrito)
 
-    @pytest.mark.parametrize("escrito", ["\u3164\u3164\u3164", "\u2800\u2800\u2800", "..."])
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "\u3164\u3164\u3164",
+            "\u115f\u115f\u115f",
+            "\u1160\u1160\u1160",
+            "\uffa0\uffa0\uffa0",
+            "\u2800\u2800\u2800",
+            "...",
+        ],
+    )
     def test_needs_a_letter_or_a_digit(self, escrito):
         """Rellenos que no son ni letra ni cifra no son un nombre (revisor)."""
         with pytest.raises(InvalidCompetitionNameError, match="letra o cifra"):

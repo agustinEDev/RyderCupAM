@@ -1433,6 +1433,49 @@ class TestEdgeCases:
         assert respuesta.status_code == 409, respuesta.text
 
     @pytest.mark.asyncio
+    async def test_an_old_short_name_resent_as_it_is_can_still_be_edited(self, client: AsyncClient):
+        """#540 (revisor): «A», guardado con las reglas de antes, no impide editar."""
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        from tests.conftest import _URL_DE_LA_BD_DE_TEST
+
+        user = await create_authenticated_user(
+            client, "oldname540@test.com", "P@ssw0rd123!", "Old", "Name"
+        )
+        start = date.today() + timedelta(days=30)
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Nombre largo",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=user["cookies"],
+        )
+        # En la base de datos de la API, como si viniera de antes
+        engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("UPDATE competitions SET name = 'A' WHERE id = :id"),
+                    {"id": creada.json()["id"]},
+                )
+        finally:
+            await engine.dispose()
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{creada.json()['id']}",
+            json={"name": "A", "max_players": 30},
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["name"] == "A"
+
+    @pytest.mark.asyncio
     async def test_in_a_ryder_the_organiser_always_plays(self, client: AsyncClient):
         """#552: `organizer_plays` solo vale en stroke play."""
         user = await create_authenticated_user(

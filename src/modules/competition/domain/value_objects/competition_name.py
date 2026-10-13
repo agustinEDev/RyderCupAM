@@ -23,18 +23,25 @@ class InvalidCompetitionNameError(ValueError):
 # Solo etiquetas de verdad (`<b>`, `</script>`, `<img src=x>`): «Hcp < 10» o
 # «Copa <3 amigos>» no lo son. [^<>]* sin retroceso polinómico (ReDoS)
 _ETIQUETA = re.compile(r"</?[A-Za-z][^<>]*>")
+# Lo que queda de una etiqueta sin cerrar («Copa <img src=x onerror=…»): fuera
+# el `<` que la abre. «Hcp < 10» y «<3» no lo tienen pegado y se quedan
+_APERTURA = re.compile(r"<(?=[A-Za-z/!?])")
+# Rellenos de letra (Hangul) que no se ven: no cuentan como letra (revisor)
+_RELLENOS = frozenset("\u115f\u1160\u3164\uffa0")
+# Riesgo aceptado: los que se parecen a `<` (U+FF1C, U+FE64) se quedan; el navegador no
+# los toma por etiqueta y aquí no se aplica NFKC
 
 
 def _sin_etiquetas(texto: str) -> str:
     """Hasta que no quede ninguna: anidadas, una pasada dejaba un `<script>` (/code-review)."""
     while (limpio := _ETIQUETA.sub("", texto)) != texto:
         texto = limpio
-    return texto
+    return _APERTURA.sub("", texto)
 
 
 def _se_lee(texto: str) -> bool:
     """Alguna letra o cifra de verdad: «ㅤㅤㅤ» (relleno Hangul) o «...» no son un nombre."""
-    return any(c != "\u3164" and unicodedata.category(c)[0] in ("L", "N") for c in texto)
+    return any(c not in _RELLENOS and unicodedata.category(c)[0] in ("L", "N") for c in texto)
 
 
 def _sin_invisibles(texto: str) -> str:

@@ -455,9 +455,11 @@ class UpdateCompetitionRequestDTO(BaseModel):
 
     name: str | None = Field(
         None,
-        min_length=3,
         max_length=100,
-        description="Nuevo nombre de la competición.",
+        description=(
+            "Nuevo nombre de la competición. El mínimo lo mira el nombre ya limpio; uno "
+            "guardado con las reglas antiguas (de menos de 3) se puede reenviar igual (#540)."
+        ),
     )
     start_date: date | None = Field(None, description="Nueva fecha de inicio.")
     end_date: date | None = Field(None, description="Nueva fecha de fin.")
