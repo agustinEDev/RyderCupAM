@@ -4,7 +4,8 @@ MovimientosDePartidas - Mover jugadores entre partidas y reordenarlas (#251, PR 
 Decidido con Agustín el 9 oct 2026:
 
 - A una partida llena se entra **intercambiando** con uno de ella (D13).
-- También a una **partida nueva al final**, si quedan salidas: nace de 1,
+- También a una **partida nueva** (al final; con la franja empezada, en la primera
+  salida libre aún por llegar, #544), si quedan salidas: nace de 1,
   incompleta, y se completa moviendo a otro (M1, excepción a D4).
 - Al mover, el origen **nunca se queda con uno solo**, salvo intercambio (M2).
 - Si una partida se **vacía**, desaparece y las de detrás suben: sus horas se
@@ -25,6 +26,7 @@ from ..value_objects.hoja_de_salidas import HojaDeSalidas
 from ..value_objects.jugador_de_partida import JugadorDePartida
 from ..value_objects.partida_id import PartidaId
 from ..value_objects.round_id import RoundId
+from .plazo_de_partidas import PartidaYaSalidaError
 
 
 class MovimientoImposibleError(ValueError):
@@ -60,27 +62,46 @@ class MovimientosDePartidas:
         hoja: HojaDeSalidas,
         competition_id: CompetitionId,
         round_id: RoundId,
+        salidas: Collection[PartidaId] = frozenset(),
+        libres: Sequence[int] | None = None,
     ) -> Cambios:
         """
         Args:
             partidas: Todas las de la franja
             jugador: Quien se mueve, con su foto (la de su partida, o una nueva si no tenía)
-            destino_id: A qué partida; None para una nueva al final
+            destino_id: A qué partida; None para una nueva (ver `libres`)
             intercambiar_con: Con quién de la de destino se cambia, si se cambia
+            salidas: Las que ya salieron (#544): ni origen ni destino
+            libres: Con la franja empezada, los números de salida libres cuya hora
+                aún no ha llegado; None si no ha empezado. Empezada, nadie cambia de
+                hora (la que se vacía deja su hueco) y una nueva ocupa la primera libre
 
         Raises:
             MovimientoImposibleError: Si no se puede, con el motivo
+            PartidaYaSalidaError: Si el origen o el destino ya han salido
         """
         origen = next((p for p in partidas if jugador.user_id in p.user_ids), None)
         MovimientosDePartidas._no_presentado(origen, jugador.user_id)
         destino = MovimientosDePartidas._destino(partidas, destino_id, origen)
+        if any(p is not None and p.id in salidas for p in (origen, destino)):
+            raise PartidaYaSalidaError("Esa partida ya ha salido: no se puede cambiar.")
         if intercambiar_con is not None:
             return MovimientosDePartidas._intercambiar(
                 origen, destino, jugador, intercambiar_con, hoja
             )
         se_vacia = origen is not None and len(origen.jugadores) == 1
         quedan = [p for p in partidas if not (se_vacia and p is origen)]
-        MovimientosDePartidas._comprobar(origen, destino, jugador, len(quedan), hoja)
+        # Empezada la franja nadie cambia de hora: la nueva, a la primera salida
+        # libre aún por llegar (también la de la que se vacía)
+        empezada = libres is not None
+        if empezada:
+            candidatas = sorted(
+                set(libres or ()) | ({origen.numero} if se_vacia and origen else set())
+            )
+            siguiente = candidatas[0] if candidatas else None
+        else:
+            siguiente = len(quedan) + 1 if len(quedan) < hoja.numero_de_salidas else None
+        MovimientosDePartidas._comprobar(origen, destino, jugador, siguiente, hoja)
 
         cambios = Cambios()
         if origen is not None:
@@ -89,18 +110,17 @@ class MovimientosDePartidas:
             else:
                 origen.quitar(jugador.user_id)
                 cambios.a_guardar(origen)
-        # Sin huecos en la hoja: las de detrás de la que desaparece suben (M3)
+        # Sin huecos en la hoja: las de detrás de la que desaparece suben (M3),
+        # salvo con la franja ya empezada, que deja el hueco (#544)
         for numero, partida in enumerate(sorted(quedan, key=lambda p: p.numero), start=1):
-            if partida.numero != numero:
+            if not empezada and partida.numero != numero:
                 partida.renumerar(numero)
                 cambios.a_guardar(partida)
-        if destino is None:
-            cambios.crear.append(
-                Partida.crear(competition_id, round_id, len(quedan) + 1, [jugador])
-            )
-        else:
+        if destino is not None:
             destino.meter(jugador, hoja.jugadores_por_partida)
             cambios.a_guardar(destino)
+        elif siguiente is not None:  # sin número ya lo rechazó `_comprobar`
+            cambios.crear.append(Partida.crear(competition_id, round_id, siguiente, [jugador]))
         return cambios
 
     @staticmethod
@@ -135,7 +155,7 @@ class MovimientosDePartidas:
         origen: Partida | None,
         destino: Partida | None,
         jugador: JugadorDePartida,
-        quedan: int,
+        siguiente: int | None,
         hoja: HojaDeSalidas,
     ) -> None:
         """
@@ -154,7 +174,7 @@ class MovimientosDePartidas:
                 "ORIGIN_WOULD_BE_ALONE",
                 "Su partida se quedaría con un solo jugador: intercámbialo, o mueve antes al otro.",
             )
-        if destino is None and quedan >= hoja.numero_de_salidas:
+        if destino is None and siguiente is None:
             raise MovimientoImposibleError(
                 "NO_FREE_TEE_TIME", "No quedan salidas libres para otra partida."
             )
@@ -228,18 +248,31 @@ class MovimientosDePartidas:
         return cambios
 
     @staticmethod
-    def reordenar(partidas: Sequence[Partida], orden: Sequence[PartidaId]) -> list[Partida]:
+    def reordenar(
+        partidas: Sequence[Partida],
+        orden: Sequence[PartidaId],
+        salidas: Collection[PartidaId] = frozenset(),
+    ) -> list[Partida]:
         """
-        Las partidas en el orden dado, numeradas desde 1.
+        Las que cambian de número al ponerlas en el orden dado, con los números que ya hay (1, 2, 3… sin
+        huecos; con huecos, los mismos). Las que ya salieron no cambian de sitio (#544).
 
         Raises:
             MovimientoImposibleError: Si el orden no tiene todas, una vez cada una
+            PartidaYaSalidaError: Si mueve alguna que ya salió
         """
         if len(set(orden)) != len(orden) or set(orden) != {p.id for p in partidas}:
             raise MovimientoImposibleError(
                 "INVALID_GROUP_ORDER", "El orden tiene que llevar todas las partidas, una vez."
             )
         por_id = {p.id: p for p in partidas}
-        for numero, partida_id in enumerate(orden, start=1):
-            por_id[partida_id].renumerar(numero)
-        return list(partidas)
+        nuevos = dict(zip(orden, sorted(p.numero for p in partidas), strict=True))
+        if any(por_id[pid].numero != nuevos[pid] for pid in salidas if pid in por_id):
+            raise PartidaYaSalidaError("Esa partida ya ha salido: no cambia de hora.")
+        cambiadas = []
+        for partida_id, numero in nuevos.items():
+            if por_id[partida_id].numero != numero:
+                por_id[partida_id].renumerar(numero)
+                cambiadas.append(por_id[partida_id])
+        # Solo las que cambian: guardar las demás, en juego, sobra (/code-review)
+        return cambiadas

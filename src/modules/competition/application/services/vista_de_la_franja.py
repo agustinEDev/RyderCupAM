@@ -21,6 +21,10 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.salidas_de_la_franja import (
+    las_que_salieron,
+    numeros_libres,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.entities.round import Round
@@ -35,6 +39,7 @@ from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -109,14 +114,21 @@ async def vista_de_la_franja(
     nombres = await PlayerNames.de_la_competicion(
         [*en_partida, *sin_partida], competicion.id, usuarios, uow
     )
+    editable = await _editable(competicion, franja, partidas, zonas, ahora)
+    tocables = await _tocables(competicion, franja, partidas, zonas, ahora, editable)
     return TeeGroupsResponseDTO(
         round_id=franja.id.value,
-        editable=await _editable(competicion, franja, partidas, zonas, ahora),
+        editable=editable,
+        can_add_group=await _cabe_una_nueva(
+            competicion, franja, hoja, partidas, zonas, ahora, editable
+        ),
         unassigned_players=[
             UnassignedPlayerDTO(user_id=u.value, name=nombres.get(u, "")) for u in sin_partida
         ],
         groups=[
-            partida_dto(partida, hoja, nombres)
+            partida_dto(partida, hoja, nombres).model_copy(
+                update={"can_change": partida.id in tocables}
+            )
             for partida in sorted(partidas, key=lambda p: p.numero)
         ],
     )
@@ -136,6 +148,7 @@ def partida_dto(partida: Partida, hoja: HojaDeSalidas, nombres: dict[UserId, str
 
 
 async def _editable(competicion, franja, partidas, zonas, ahora) -> bool:
+    """Generar o borrar (y todo lo demás): del cierre a la primera salida, sin ninguna fuera."""
     try:
         PlazoDePartidas.comprobar(
             competicion.status, await primera_salida(franja, zonas), ahora, partidas
@@ -143,6 +156,34 @@ async def _editable(competicion, franja, partidas, zonas, ahora) -> bool:
     except (PlazoCerradoError, PartidaEmpezadaError, ZonaDesconocidaError):
         return False
     return True
+
+
+async def _tocables(competicion, franja, partidas, zonas, ahora, editable) -> set[PartidaId]:
+    """Las que aún se pueden mover o cambiar: todas en plazo; si no, las sin salir (#544)."""
+    if editable:
+        return {p.id for p in partidas}
+    try:
+        PlazoDePartidas.comprobar_estado(competicion.status)
+    except PlazoCerradoError:
+        return set()
+    try:
+        await primera_salida(franja, zonas)
+    except ZonaDesconocidaError:
+        return set()
+    salidas = await las_que_salieron(franja, partidas, zonas, ahora)
+    return {p.id for p in partidas if p.id not in salidas}
+
+
+async def _cabe_una_nueva(competicion, franja, hoja, partidas, zonas, ahora, editable) -> bool:
+    """Como al mover a una nueva: antes de salir, si quedan salidas; después, una libre."""
+    if editable:
+        return len(partidas) < hoja.numero_de_salidas
+    try:
+        PlazoDePartidas.comprobar_estado(competicion.status)
+        await primera_salida(franja, zonas)
+    except (PlazoCerradoError, ZonaDesconocidaError):
+        return False
+    return bool(await numeros_libres(franja, partidas, zonas, ahora))
 
 
 def _jugador(

@@ -451,7 +451,10 @@ async def test_a_player_sees_the_window(client: AsyncClient):
     del_organizador = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
 
     assert respuesta.status_code == 200, respuesta.text
-    assert respuesta.json()["groups"] == [partida]
+    # Lo mismo que ve el organizador, salvo lo que es «puedes cambiar» (#544)
+    (vista_jugador,) = respuesta.json()["groups"]
+    assert vista_jugador["can_change"] is False
+    assert {**vista_jugador, "can_change": partida["can_change"]} == partida
     assert respuesta.json()["editable"] is False
     assert sin_sesion.status_code == 401, sin_sesion.text
     assert no_existe.status_code == 404, no_existe.text
@@ -612,6 +615,20 @@ async def test_reopening_leaves_the_window_without_groups(client: AsyncClient):
     assert reabierta.status_code == 200, reabierta.text
     assert vista["groups"] == []
     assert vista["editable"] is False
+
+
+async def test_moving_in_a_course_without_time_zone(client: AsyncClient):
+    # #544: mover también necesita la zona, como generar
+    organizador, _, franja, otros = await _stableford(client, con_zona=False)
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": otros[0]["user"]["id"]},
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "COURSE_WITHOUT_TIMEZONE"
 
 
 async def test_in_the_schedule_a_window_opens_at_its_first_tee_time(client: AsyncClient):

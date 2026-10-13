@@ -83,6 +83,15 @@ class TeeGroupDTO(BaseModel):
     tee_time: str = Field(..., description="HH:MM, hora del campo.")
     status: str
     incomplete: bool = Field(..., description="De un solo jugador, por bajas: sin marcador.")
+    can_change: bool | None = Field(
+        None,
+        description=(
+            "Solo en la vista de la franja: si aún se puede mover, reordenar o cambiar sus "
+            "marcadores, porque no ha salido (ni le llegó su hora ni tiene golpes), también "
+            "con la franja empezada (#544). `editable` de la franja sigue diciendo si se "
+            "pueden generar o borrar."
+        ),
+    )
     players: list[TeeGroupPlayerDTO]
 
 
@@ -102,6 +111,13 @@ class TeeGroupsResponseDTO(BaseModel):
         description=(
             "Si quien pregunta puede generarlas o cambiarlas ahora: solo el organizador "
             "o un admin, hasta la 1.ª salida (#541)."
+        ),
+    )
+    can_add_group: bool = Field(
+        False,
+        description=(
+            "Si cabe una partida nueva: hasta la 1.ª salida, si quedan salidas; con la "
+            "franja empezada, si queda alguna libre cuya hora aún no ha llegado (#544)."
         ),
     )
     unassigned_players: list[UnassignedPlayerDTO] = Field(

@@ -705,3 +705,48 @@ async def test_a_no_show_leaving_one_alone_brings_the_last_of_the_next_group(
     listado = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()["groups"]
     assert viene not in [p["user_id"] for p in listado[1]["players"]]
     assert any(p["brought_in"] for p in listado[0]["players"])
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_group_already_out_cannot_be_touched(client: AsyncClient):
+    # #544: la que ya salió (aquí, por tener golpes) no se toca
+    organizador, franja, partida, por_id = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    anotado = await _anotar(
+        client,
+        por_id[jugador],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, jugador),
+        marked_score=4,
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+
+    vista = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
+    movido = await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": jugador},
+    )
+    reordenadas = await client.put(
+        f"/api/v1/competitions/rounds/{franja}/groups/order",
+        json={"group_ids": [partida["id"]]},
+    )
+    marcadores = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/markers",
+        json={
+            "markers": [
+                {"user_id": p["user_id"], "marks_user_id": p["marks_user_id"]}
+                for p in partida["players"]
+            ]
+        },
+    )
+
+    assert vista.json()["groups"][0]["can_change"] is False
+    assert vista.json()["editable"] is False
+    assert movido.status_code == 409, movido.text
+    assert movido.json()["error_code"] == "GROUP_ALREADY_OUT"
+    # Reordenar sin mover la que salió no cambia nada
+    assert reordenadas.status_code == 200, reordenadas.text
+    assert marcadores.status_code == 409, marcadores.text
+    assert marcadores.json()["error_code"] == "GROUP_ALREADY_OUT"
