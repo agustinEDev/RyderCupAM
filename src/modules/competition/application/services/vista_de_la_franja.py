@@ -21,7 +21,7 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
-from src.modules.competition.application.services.salidas_de_la_franja import salidas_por_hora
+from src.modules.competition.application.services.salidas_de_la_franja import las_que_salieron
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.entities.round import Round
@@ -164,9 +164,7 @@ async def _tocables(competicion, franja, partidas, zonas, ahora, editable) -> se
         await primera_salida(franja, zonas)
     except ZonaDesconocidaError:
         return set()
-    salidas = {p.id for p in partidas if p.empezada} | await salidas_por_hora(
-        franja, partidas, zonas, ahora
-    )
+    salidas = await las_que_salieron(franja, partidas, zonas, ahora)
     return {p.id for p in partidas if p.id not in salidas}
 
 

@@ -23,9 +23,13 @@ Con la franja ya empezada (#544, 13 oct 2026): se tocan las que no han salido.
 | Mover de una sin salir a una nueva                     | Detrás de la última, sin renumerar  |
 | Mover desde una que ya salió                           | PartidaYaSalidaError                |
 | Reordenar las que no han salido / moviendo una fuera   | Renumeradas / PartidaYaSalidaError  |
-| Colocar a quien no tiene partida cuando la nueva ya    | PartidaYaSalidaError                |
-|   no llegaría a tiempo                                 |                                     |
+| Colocar a quien no tiene partida                       | En la primera salida libre aún por  |
+|                                                        |   llegar; sin ninguna, NO_FREE_...  |
 | Generar o borrar                                       | PlazoCerradoError, como antes       |
+| El campo sin zona horaria                              | ZonaDesconocidaError, como antes    |
+| A una nueva con una salida libre aún por llegar        | Ocupa esa salida                    |
+| Cambiar marcadores                                     | Solo bloquea su partida             |
+| Reordenar                                              | Solo guarda las que cambian         |
 """
 
 from datetime import timedelta
@@ -433,14 +437,27 @@ class TestConLaFranjaEmpezada:
                 False,
             )
 
-    async def test_placing_someone_when_a_new_group_would_be_too_late(self):
-        # Las dos ya salieron (9:00 y 9:10): la nueva sería la de las 9:20, ya pasada
+    async def test_placing_someone_goes_to_the_first_free_tee_time_still_ahead(self):
+        # Las dos ya salieron (9:00 y 9:10) y las 9:20 ya pasaron: a las 9:30
         escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
         sin_partida = await escenario.con_plaza("0.5")
         escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=25)
 
-        with pytest.raises(PartidaYaSalidaError):
+        await _mover(escenario, sin_partida)
+
+        nueva = next(p for p in await _guardadas(escenario) if sin_partida in p.user_ids)
+        assert nueva.numero == 4
+
+    async def test_placing_someone_with_no_tee_time_left(self):
+        # La hoja acaba a las 10:00 (7 salidas): a las 10:05 no queda ninguna
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        sin_partida = await escenario.con_plaza("0.5")
+        escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=65)
+
+        with pytest.raises(MovimientoImposibleError) as error:
             await _mover(escenario, sin_partida)
+
+        assert error.value.codigo == "NO_FREE_TEE_TIME"
 
     async def test_generating_once_started_is_still_out_of_time(self):
         escenario, _ = await _generadas("2.0", "1.0")
@@ -465,3 +482,83 @@ class TestConLaFranjaEmpezada:
 
         with pytest.raises(PartidaYaSalidaError):
             await _mover(escenario, segunda.user_ids[0])
+
+    @pytest.mark.parametrize("caso", ["mover", "reordenar", "marcadores"])
+    async def test_a_course_without_time_zone(self, caso):
+        # /code-review: sin zona no se sabe qué salió; se rechaza, como antes
+        from src.modules.competition.application.services.jornadas_de_la_competicion import (
+            ZonaDesconocidaError,
+        )
+
+        escenario, _ = await _generadas("2.0", "1.0")
+        escenario.zonas.zona = None
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        with pytest.raises(ZonaDesconocidaError):
+            await _llamar(escenario, caso, escenario.creador)
+
+    async def test_a_new_group_takes_a_free_tee_time_still_ahead(self):
+        # /code-review: 1 fuera, la 3 vacía (sus 9:20 aún por llegar), la 4 ocupada
+        escenario, _ = await _generadas(*[f"{h}.0" for h in range(12, 0, -1)])
+        _, segunda, tercera = await _guardadas(escenario)
+        guardada = await escenario.uow.partidas.find_by_id(tercera.id)
+        guardada.renumerar(4)
+        await escenario.uow.partidas.guardar([guardada])
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        await _mover(escenario, segunda.user_ids[0])
+
+        numeros = sorted(p.numero for p in await _guardadas(escenario))
+        assert numeros == [1, 2, 3, 4]
+
+    async def test_changing_markers_locks_only_that_group(self, monkeypatch):
+        from src.modules.competition.infrastructure.persistence.in_memory.in_memory_partida_repository import (
+            InMemoryPartidaRepository,
+        )
+
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        _, segunda = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+        bloqueadas = []
+        bloquear = InMemoryPartidaRepository.find_by_id_for_update
+
+        async def espia(self, partida_id):
+            bloqueadas.append(partida_id)
+            return await bloquear(self, partida_id)
+
+        monkeypatch.setattr(InMemoryPartidaRepository, "find_by_id_for_update", espia)
+
+        await _casos(escenario)["marcadores"].execute(
+            segunda.id.value,
+            [(b.value, a.value) for a, b in segunda.marcadores.items()],
+            escenario.creador,
+            False,
+        )
+
+        assert bloqueadas == [segunda.id]
+
+    async def test_reordering_saves_only_the_ones_that_change(self, monkeypatch):
+        from src.modules.competition.infrastructure.persistence.in_memory.in_memory_partida_repository import (
+            InMemoryPartidaRepository,
+        )
+
+        escenario, _ = await _generadas(*[f"{h}.0" for h in range(10, 0, -1)])
+        primera, segunda, tercera = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+        guardadas = []
+        guardar = InMemoryPartidaRepository.guardar
+
+        async def espia(self, partidas):
+            guardadas.extend(p.id for p in partidas)
+            return await guardar(self, partidas)
+
+        monkeypatch.setattr(InMemoryPartidaRepository, "guardar", espia)
+
+        await _casos(escenario)["reordenar"].execute(
+            escenario.manana.id.value,
+            [primera.id.value, tercera.id.value, segunda.id.value],
+            escenario.creador,
+            False,
+        )
+
+        assert set(guardadas) == {segunda.id, tercera.id}

@@ -67,7 +67,15 @@ def _partidas(*tamanos: int) -> list[Partida]:
     ]
 
 
-def _mover(partidas, jugador, destino=None, intercambiar_con=None, salidas=frozenset()):
+def _mover(
+    partidas,
+    jugador,
+    destino=None,
+    intercambiar_con=None,
+    salidas=frozenset(),
+    libres=None,
+):
+    """Con `libres` (los números de salida libres aún por llegar), la franja ha empezado."""
     return MovimientosDePartidas.mover(
         partidas,
         jugador,
@@ -77,6 +85,7 @@ def _mover(partidas, jugador, destino=None, intercambiar_con=None, salidas=froze
         COMPETICION,
         FRANJA,
         salidas,
+        libres,
     )
 
 
@@ -379,8 +388,10 @@ class TestConLaFranjaEmpezada:
     | Desde o hacia una que ya salió                      | PartidaYaSalidaError   |
     | Se vacía una sin salir                              | Deja su hueco: nadie   |
     |                                                     |   cambia de hora       |
-    | A una nueva                                         | Detrás de la última    |
-    | A una nueva sin salidas libres detrás               | NO_FREE_TEE_TIME       |
+    | A una nueva                                         | La primera salida libre|
+    |                                                     |   aún por llegar       |
+    | A una nueva sin salidas libres                      | NO_FREE_TEE_TIME       |
+    | Empezada sin ninguna fuera                          | Tampoco se renumera    |
     | Reordenar las que no han salido entre ellas         | Se cambian sus horas   |
     | Reordenar moviendo una que ya salió                 | PartidaYaSalidaError   |
     | Reordenar con huecos                                | Usa los números que hay|
@@ -390,7 +401,7 @@ class TestConLaFranjaEmpezada:
         fuera, a, b = _partidas(2, 3, 2)
         jugador = a.jugadores[0]
 
-        cambios = _mover([fuera, a, b], jugador, b, salidas={fuera.id})
+        cambios = _mover([fuera, a, b], jugador, b, salidas={fuera.id}, libres=[4])
 
         assert jugador.user_id in _ids(b)
         assert fuera not in cambios.guardar
@@ -401,42 +412,48 @@ class TestConLaFranjaEmpezada:
         origen, destino = (fuera, otra) if cual == "origen" else (otra, fuera)
 
         with pytest.raises(PartidaYaSalidaError):
-            _mover([fuera, otra], origen.jugadores[0], destino, salidas={fuera.id})
+            _mover([fuera, otra], origen.jugadores[0], destino, salidas={fuera.id}, libres=[])
 
     def test_an_emptied_group_leaves_its_hole(self):
         fuera, sola, detras = _partidas(2, 1, 2)
         jugador = sola.jugadores[0]
 
-        cambios = _mover([fuera, sola, detras], jugador, detras, salidas={fuera.id})
+        cambios = _mover([fuera, sola, detras], jugador, detras, salidas={fuera.id}, libres=[4])
 
         assert sola in cambios.borrar
         assert detras.numero == 3
 
-    def test_to_a_new_one_goes_behind_the_last(self):
-        fuera, hueco_antes, ultima = _partidas(2, 3, 2)
-        jugador = hueco_antes.jugadores[0]
-
-        cambios = _mover([fuera, hueco_antes, ultima], jugador, salidas={fuera.id})
-
-        assert [p.numero for p in cambios.crear] == [4]
-
-    def test_to_a_new_one_without_a_free_tee_time_behind(self):
-        fuera, a, b, ultima = _partidas(2, 3, 2, 2)
-
-        with pytest.raises(MovimientoImposibleError) as error:
-            _mover([fuera, a, b, ultima], a.jugadores[0], salidas={fuera.id})
-
-        assert error.value.codigo == "NO_FREE_TEE_TIME"
-
-    def test_to_a_new_one_with_a_hole_counts_from_the_last(self):
-        # Con un hueco (la 3) la nueva iría a la 5, que no existe: antes chocaba con la 4
+    def test_to_a_new_one_takes_the_first_free_tee_time(self):
         fuera, a, b = _partidas(2, 3, 2)
         b.renumerar(4)
 
+        cambios = _mover([fuera, a, b], a.jugadores[0], salidas={fuera.id}, libres=[3])
+
+        assert [p.numero for p in cambios.crear] == [3]
+
+    def test_to_a_new_one_without_a_free_tee_time(self):
+        fuera, a, b, ultima = _partidas(2, 3, 2, 2)
+
         with pytest.raises(MovimientoImposibleError) as error:
-            _mover([fuera, a, b], a.jugadores[0], salidas={fuera.id})
+            _mover([fuera, a, b, ultima], a.jugadores[0], salidas={fuera.id}, libres=[])
 
         assert error.value.codigo == "NO_FREE_TEE_TIME"
+
+    def test_started_without_any_group_out_still_keeps_the_numbers(self):
+        # /code-review: empezada la franja, nadie se renumera aunque ninguna haya salido
+        a, sola, detras = _partidas(3, 1, 2)
+
+        cambios = _mover([a, sola, detras], sola.jugadores[0], detras, libres=[2, 4])
+
+        assert sola in cambios.borrar
+        assert detras.numero == 3
+
+    def test_the_emptied_origin_frees_its_tee_time(self):
+        fuera, sola = _partidas(2, 1)
+
+        cambios = _mover([fuera, sola], sola.jugadores[0], salidas={fuera.id}, libres=[])
+
+        assert [p.numero for p in cambios.crear] == [2]
 
     def test_reordering_the_not_out_among_themselves(self):
         fuera, a, b = _partidas(2, 2, 2)
