@@ -122,6 +122,7 @@ from src.modules.competition.domain.entities.competition import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
     CaptainOnWrongTeamError,
@@ -671,7 +672,8 @@ def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
             "description": (
                 "Fuera de la ventana. Lleva `error_code` HANDICAP_UPDATE_NOT_ALLOWED y "
                 "`reason_code` (#541): STATUS, NO_WINDOWS, RYDER, DAY_IN_PLAY, NO_DAYS_LEFT, "
-                "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT."
+                "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT. "
+                "El 409 lleva RUNNING (ya en marcha) o DISABLED (apagada)."
             )
         }
     },
@@ -697,7 +699,7 @@ async def update_handicaps(
     except ActualizacionNoPermitidaError as e:
         return _no_permitida(e)
     except (ActualizacionEnCursoError, RefrescoDesactivadoError) as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+        return _conflicto(e)
     return HandicapUpdateLaunchedDTO(
         id=actualizacion.id,
         origin=actualizacion.origen.value,
@@ -722,7 +724,8 @@ async def update_handicaps(
             "description": (
                 "Fuera de la ventana. Lleva `error_code` HANDICAP_UPDATE_NOT_ALLOWED y "
                 "`reason_code` (#541): STATUS, NO_WINDOWS, RYDER, DAY_IN_PLAY, NO_DAYS_LEFT, "
-                "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT."
+                "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT. "
+                "El 409 lleva RUNNING (ya en marcha) o DISABLED (apagada)."
             )
         }
     },
@@ -750,7 +753,7 @@ async def schedule_handicap_update(
     except ActualizacionNoPermitidaError as e:
         return _no_permitida(e)
     except RefrescoDesactivadoError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+        return _conflicto(e)
     return ScheduledHandicapUpdateDTO(run_at=para)
 
 
@@ -788,5 +791,22 @@ def _no_permitida(error: ActualizacionNoPermitidaError) -> JSONResponse:
             "detail": str(error),
             "error_code": "HANDICAP_UPDATE_NOT_ALLOWED",
             "reason_code": error.codigo,
+        },
+    )
+
+
+def _conflicto(error: Exception) -> JSONResponse:
+    """El 409 con el mismo código que la ventana: RUNNING o DISABLED (#541)."""
+    codigo = (
+        CodigoDeVentana.RUNNING
+        if isinstance(error, ActualizacionEnCursoError)
+        else CodigoDeVentana.DISABLED
+    )
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "detail": str(error),
+            "error_code": "HANDICAP_UPDATE_NOT_ALLOWED",
+            "reason_code": codigo,
         },
     )

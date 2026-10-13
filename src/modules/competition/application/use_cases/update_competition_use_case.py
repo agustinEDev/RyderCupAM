@@ -12,11 +12,9 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
-)
-from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CompetitionAlreadyExistsError,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (

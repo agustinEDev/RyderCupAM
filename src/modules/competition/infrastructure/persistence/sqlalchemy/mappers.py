@@ -705,7 +705,7 @@ class CompetitionNameComposite:
 
     def __init__(self, name: str):
         if name:
-            self.value = CompetitionName(name)
+            self.value = CompetitionName.guardado(name)
         else:
             self.value = None
 
@@ -1530,7 +1530,10 @@ def start_competition_mappers():
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs
                 "_name_value": competitions_table.c.name,
-                "_name": composite(lambda n: CompetitionName(n) if n else None, "_name_value"),
+                # Tal cual está guardado: no se revalida al leer (#540)
+                "_name": composite(
+                    lambda n: CompetitionName.guardado(n) if n else None, "_name_value"
+                ),
                 "_start_date": competitions_table.c.start_date,
                 "_end_date": competitions_table.c.end_date,
                 "_dates": composite(

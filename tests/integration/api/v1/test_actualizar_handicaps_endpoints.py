@@ -88,6 +88,7 @@ async def test_el_organizador_la_lanza_y_la_ficha_lo_dice(client: AsyncClient):
     assert lanzada.json()["resumed"] is False
     # La primera sigue en curso (aquí nadie la pasa): la segunda, 409
     assert otra.status_code == 409, otra.text
+    assert otra.json()["reason_code"] == "RUNNING"
     assert len(lanzador.lanzadas) == 1
     assert ficha["handicap_update"]["origin"] == "ORGANIZER"
     # La lanzada sigue en curso (aquí nadie la pasa): el botón, apagado
@@ -102,6 +103,7 @@ async def test_sin_el_refresco_encendido_es_un_409(client: AsyncClient):
     respuesta = await client.post(_url(competicion))
 
     assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["reason_code"] == "DISABLED"
 
 
 async def test_sin_zona_del_campo_no_se_sabe_cuando_sale_nadie(client: AsyncClient):

@@ -258,3 +258,9 @@ class CompetitionFullError(Exception):
     traducir llegaba como un 500 sin cabeceras de CORS, y el navegador lo veía
     como un fallo de red.
     """
+
+
+class CompetitionAlreadyExistsError(Exception):
+    """Ya existe una competición del mismo organizador con ese nombre (sin mayúsculas, #540)."""
+
+    pass

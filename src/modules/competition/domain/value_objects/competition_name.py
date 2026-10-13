@@ -6,6 +6,7 @@ Aplica validaciones de negocio y normalización automática.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 # Constantes de validación
@@ -22,7 +23,21 @@ class InvalidCompetitionNameError(ValueError):
 # Solo etiquetas de verdad (`<b>`, `</script>`, `<img src=x>`): «Hcp < 10» o
 # «Copa <3 amigos>» no lo son. [^<>]* sin retroceso polinómico (ReDoS)
 _ETIQUETA = re.compile(r"</?[A-Za-z][^<>]*>")
-_CONTROL = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+
+def _sin_etiquetas(texto: str) -> str:
+    """Hasta que no quede ninguna: anidadas, una pasada dejaba un `<script>` (/code-review)."""
+    while (limpio := _ETIQUETA.sub("", texto)) != texto:
+        texto = limpio
+    return texto
+
+
+def _sin_invisibles(texto: str) -> str:
+    """Fuera los de control y los de formato (anchura cero, dirección): Cc y Cf.
+
+    Los espacios en blanco se quedan: luego se normalizan a uno solo.
+    """
+    return "".join(c for c in texto if c.isspace() or unicodedata.category(c) not in ("Cc", "Cf"))
 
 
 @dataclass(frozen=True)
@@ -61,7 +76,7 @@ class CompetitionName:
 
         # 1. Fuera etiquetas HTML y caracteres de control (#540: sin title(), el
         #    `<script>` ya no salía disfrazado de `<Script>`), sin escapar el `&`
-        sin_html = _CONTROL.sub("", _ETIQUETA.sub("", self.value))
+        sin_html = _sin_invisibles(_sin_etiquetas(self.value))
         # 2. Normalizar los espacios: fuera los de los extremos y uno solo dentro
         normalized_name = " ".join(sin_html.split())
 
@@ -85,6 +100,16 @@ class CompetitionName:
 
         # 6. Tal cual lo escribió el organizador: «RCG El Prat», «Copa McGregor» (#540)
         object.__setattr__(self, "value", normalized_name)
+
+    @classmethod
+    def guardado(cls, valor: str) -> "CompetitionName":
+        """
+        El nombre tal como está en la base de datos, sin volver a validarlo: lo
+        guardado con las reglas de antes (con title()) no puede romper la carga.
+        """
+        nombre = object.__new__(cls)
+        object.__setattr__(nombre, "value", valor)
+        return nombre
 
     @property
     def clave(self) -> str:

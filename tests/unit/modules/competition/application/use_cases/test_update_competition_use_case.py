@@ -838,7 +838,7 @@ class TestRenombrar:
         ).execute(CompetitionId(competicion.id), UpdateCompetitionRequestDTO(name=nombre), creador)
 
     async def test_a_otro_nombre_que_ya_tiene_es_repetido(self):
-        from src.modules.competition.application.use_cases.create_competition_use_case import (
+        from src.modules.competition.application.exceptions import (
             CompetitionAlreadyExistsError,
         )
 

@@ -8,6 +8,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
 )
+from src.modules.competition.application.exceptions import CompetitionAlreadyExistsError
 from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
@@ -34,12 +35,6 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.play_mode import PlayMode
-
-
-class CompetitionAlreadyExistsError(Exception):
-    """Excepción lanzada cuando ya existe una competición con el mismo nombre."""
-
-    pass
 
 
 class CreateCompetitionUseCase:
@@ -111,7 +106,7 @@ class CreateCompetitionUseCase:
             existing = await self._uow.competitions.exists_with_name(name_vo, creator_id)
             if existing:
                 raise CompetitionAlreadyExistsError(
-                    f"Ya existe una competición con el nombre '{request.name}'"
+                    f"Ya existe una competición con el nombre '{name_vo}'"
                 )
 
             # 4. Construir Location usando Domain Service (valida países y adyacencias)

@@ -36,6 +36,11 @@ class TestCompetitionNameCreation:
             ("Copa <b>de</b> Otoño", "Copa de Otoño"),
             ("Copa & Amigos", "Copa & Amigos"),
             ("Copa\x00 de\x07 Otoño", "Copa de Otoño"),
+            # Anidadas: una pasada sola dejaba un <script> de verdad (/code-review)
+            ("<<script>script>alert(1)<</script>/script>", "alert(1)"),
+            ("<scr<b>ipt>Copa</scr</b>ipt>", "Copa"),
+            # Invisibles y de dirección: fuera (/code-review)
+            ("Copa\u200b de\u202e Otoño\ufeff", "Copa de Otoño"),
             # No son etiquetas: se quedan (revisor)
             ("Hcp < 10 y > 5", "Hcp < 10 y > 5"),
             ("Copa <3 amigos>", "Copa <3 amigos>"),
@@ -45,7 +50,7 @@ class TestCompetitionNameCreation:
         """Sin title(), las etiquetas se quitan de verdad (#540; antes salía «<Script>»)."""
         assert CompetitionName(escrito).value == guardado
 
-    @pytest.mark.parametrize("escrito", ["<b></b>", "<b>ab</b>", " a\x00b "])
+    @pytest.mark.parametrize("escrito", ["<b></b>", "<b>ab</b>", " a\x00b ", "\u200b\u200b\u200b"])
     def test_too_short_once_cleaned(self, escrito):
         """El mínimo de 3 se mira después de limpiar: antes daba un 500 (revisor)."""
         with pytest.raises(InvalidCompetitionNameError):
@@ -143,3 +148,11 @@ class TestCompetitionNameStringRepresentation:
         """__str__ debe retornar el valor."""
         name = CompetitionName("Ryder Cup 2025")
         assert str(name) == "Ryder Cup 2025"
+
+
+class TestLoYaGuardado:
+    def test_a_stored_name_loads_as_it_is(self):
+        """Lo guardado con las reglas de antes no se vuelve a validar al leer (/code-review)."""
+        assert CompetitionName.guardado("A").value == "A"
+        assert CompetitionName.guardado("<B>X</B>").value == "<B>X</B>"
+        assert CompetitionName.guardado("Copa") == CompetitionName("Copa")

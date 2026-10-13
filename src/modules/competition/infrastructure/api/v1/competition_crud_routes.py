@@ -30,6 +30,7 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -44,7 +45,6 @@ from src.modules.competition.application.use_cases.actualizar_handicaps_use_case
     VentanaDeActualizacionUseCase,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (

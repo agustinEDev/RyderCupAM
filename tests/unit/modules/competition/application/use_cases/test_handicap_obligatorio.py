@@ -329,7 +329,7 @@ class TestLoQueEncontroCodeRabbitEnLa506:
 class TestElNombreRepetido:
     async def test_el_mismo_nombre_con_otras_mayusculas_es_repetido(self, e):
         # #540: se guarda tal cual, pero «medal  de OCTUBRE» repite «Medal de octubre»
-        from src.modules.competition.application.use_cases.create_competition_use_case import (
+        from src.modules.competition.application.exceptions import (
             CompetitionAlreadyExistsError,
         )
 
