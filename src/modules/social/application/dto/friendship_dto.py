@@ -33,6 +33,10 @@ class FriendshipResponseDTO(BaseModel):
     responded_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    # El hándicap de cada lado, solo en la lista de amigos: el asistente de
+    # partida rápida lo enseña antes de crear nada (FE #848). Nulo si no tiene
+    requester_handicap: float | None = None
+    addressee_handicap: float | None = None
 
 
 class PaginatedFriendshipResponseDTO(BaseModel):

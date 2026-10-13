@@ -137,6 +137,58 @@ class StartQuickMatchRequestDTO(BaseModel):
     scorer_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
 
 
+class QuickStartFriendDTO(BaseModel):
+    """Un amigo en la partida que se crea e inicia de una vez (FE #848)."""
+
+    friend_user_id: UUID
+    team: str | None = Field(None, pattern="^(A|B)$")
+    tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
+    tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
+    handicap: float | None = Field(
+        None,
+        ge=MIN_HANDICAP,
+        le=MAX_HANDICAP,
+        description="Override del hándicap del perfil para esta partida; sin él, el del perfil.",
+    )
+
+    @model_validator(mode="after")
+    def _tee_gender_requires_color(self) -> "QuickStartFriendDTO":
+        _require_tee_color_for_gender(self.tee_color, self.tee_gender)
+        return self
+
+
+class QuickStartGuestDTO(BaseModel):
+    """Un invitado sin cuenta en la partida que se crea e inicia de una vez (FE #848)."""
+
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
+    team: str | None = Field(None, pattern="^(A|B)$")
+    tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
+    tee_gender: str | None = Field(None, pattern=TEE_GENDER_PATTERN)
+
+    @model_validator(mode="after")
+    def _tee_gender_requires_color(self) -> "QuickStartGuestDTO":
+        _require_tee_color_for_gender(self.tee_color, self.tee_gender)
+        return self
+
+
+class CreateAndStartQuickMatchRequestDTO(CreateQuickMatchRequestDTO):
+    """
+    Crear e iniciar una partida rápida en una sola petición (FE #848).
+
+    Lo del alta, más los jugadores, los cambios de hándicap y quién anota: el
+    asistente no crea nada hasta «Confirmar e iniciar», y salir a medias no
+    deja una partida pendiente. Los anotadores van por su UserId, que es el
+    `participant_id` de un registrado; un invitado no puede anotar.
+    """
+
+    creator_handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
+    friends: list[QuickStartFriendDTO] = Field(default_factory=list, max_length=3)
+    guests: list[QuickStartGuestDTO] = Field(default_factory=list, max_length=3)
+    scorer_user_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
+
+
 class SubmitHoleScoreRequestDTO(BaseModel):
     """
     DTO para registrar/actualizar el score propio de un hoyo (solo anotadores).
