@@ -40,6 +40,7 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -130,12 +131,14 @@ class VentanaDeActualizacionUseCase:
             return HandicapUpdateWindowDTO(
                 open=False,
                 reason="La actualización con la RFEG solo está encendida en producción.",
-                reason_code="DISABLED",
+                reason_code=CodigoDeVentana.DISABLED,
             )
         ultima = await self._uow.handicap_updates.ultima_de(competition.id)
         if ultima is not None and ultima.sigue():
             return HandicapUpdateWindowDTO(
-                open=False, reason="Ya se están actualizando los hándicaps.", reason_code="RUNNING"
+                open=False,
+                reason="Ya se están actualizando los hándicaps.",
+                reason_code=CodigoDeVentana.RUNNING,
             )
         ventana = await ventana_de(self._uow, self._zonas, competition, self._reloj())
         return HandicapUpdateWindowDTO(

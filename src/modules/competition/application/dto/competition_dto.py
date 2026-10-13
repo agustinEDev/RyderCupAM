@@ -21,6 +21,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
@@ -625,20 +626,7 @@ class HandicapUpdateWindowDTO(BaseModel):
         ),
     )
     reason: str | None = Field(None, description="Por qué no, si está cerrada.")
-    reason_code: (
-        Literal[
-            "STATUS",
-            "NO_WINDOWS",
-            "RYDER",
-            "DAY_IN_PLAY",
-            "NO_DAYS_LEFT",
-            "TOO_CLOSE",
-            "NO_TIMEZONE",
-            "DISABLED",
-            "RUNNING",
-        ]
-        | None
-    ) = Field(
+    reason_code: CodigoDeVentana | None = Field(
         None, description="El motivo como código, para decirlo en el idioma de la app (#541)."
     )
     scheduled_at: datetime | None = Field(

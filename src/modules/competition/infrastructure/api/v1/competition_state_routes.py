@@ -666,6 +666,15 @@ def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
         "jornada en marcha; en una Ryder, hasta iniciar."
     ),
     tags=["Competitions - State Transitions"],
+    responses={
+        400: {
+            "description": (
+                "Fuera de la ventana. Lleva `error_code` HANDICAP_UPDATE_NOT_ALLOWED y "
+                "`reason_code` (#541): STATUS, NO_WINDOWS, RYDER, DAY_IN_PLAY, NO_DAYS_LEFT, "
+                "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT."
+            )
+        }
+    },
 )
 @limiter.limit("10/minute")
 async def update_handicaps(
@@ -708,6 +717,15 @@ async def update_handicaps(
         "y se avisa al organizador."
     ),
     tags=["Competitions - State Transitions"],
+    responses={
+        400: {
+            "description": (
+                "Fuera de la ventana. Lleva `error_code` HANDICAP_UPDATE_NOT_ALLOWED y "
+                "`reason_code` (#541): STATUS, NO_WINDOWS, RYDER, DAY_IN_PLAY, NO_DAYS_LEFT, "
+                "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT."
+            )
+        }
+    },
 )
 @limiter.limit("10/minute")
 async def schedule_handicap_update(

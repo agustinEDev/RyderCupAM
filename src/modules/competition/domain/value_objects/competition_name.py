@@ -9,17 +9,19 @@ import re
 from dataclasses import dataclass
 
 # Constantes de validación
+MIN_COMPETITION_NAME_LENGTH = 3
 MAX_COMPETITION_NAME_LENGTH = 100
 
 
-class InvalidCompetitionNameError(Exception):
+class InvalidCompetitionNameError(ValueError):
     """Excepción lanzada cuando el nombre de una competición no es válido."""
 
     pass
 
 
-# [^<>]+ y no [^>]+: sin retroceso polinómico (ReDoS), como `sanitize_html`
-_ETIQUETA = re.compile(r"<[^<>]+>")
+# Solo etiquetas de verdad (`<b>`, `</script>`, `<img src=x>`): «Hcp < 10» o
+# «Copa <3 amigos>» no lo son. [^<>]* sin retroceso polinómico (ReDoS)
+_ETIQUETA = re.compile(r"</?[A-Za-z][^<>]*>")
 _CONTROL = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 
 
@@ -67,14 +69,21 @@ class CompetitionName:
         if not normalized_name:
             raise InvalidCompetitionNameError("El nombre de la competición no puede estar vacío")
 
-        # 4. Validar longitud máxima
+        # 4. Validar longitud mínima, ya limpio: «<b>ab</b>» se quedaría en «ab»
+        if len(normalized_name) < MIN_COMPETITION_NAME_LENGTH:
+            raise InvalidCompetitionNameError(
+                f"El nombre de la competición necesita al menos {MIN_COMPETITION_NAME_LENGTH} "
+                "caracteres."
+            )
+
+        # 5. Validar longitud máxima
         if len(normalized_name) > MAX_COMPETITION_NAME_LENGTH:
             raise InvalidCompetitionNameError(
                 f"El nombre de la competición no puede exceder {MAX_COMPETITION_NAME_LENGTH} caracteres. "
                 f"Longitud actual: {len(normalized_name)}"
             )
 
-        # 5. Tal cual lo escribió el organizador: «RCG El Prat», «Copa McGregor» (#540)
+        # 6. Tal cual lo escribió el organizador: «RCG El Prat», «Copa McGregor» (#540)
         object.__setattr__(self, "value", normalized_name)
 
     @property

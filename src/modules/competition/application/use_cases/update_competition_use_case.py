@@ -15,6 +15,9 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.use_cases.create_competition_use_case import (
+    CompetitionAlreadyExistsError,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -259,6 +262,13 @@ class UpdateCompetitionUseCase:
 
             # 4. Construir los Value Objects y obtener valores opcionales
             name = CompetitionName(request.name) if request.name else None
+            # Renombrar a un nombre que ya tiene es repetirlo, sin mirar mayúsculas (#540)
+            if name is not None and await self._uow.competitions.exists_with_name(
+                name, competition.creator_id, except_id=competition.id
+            ):
+                raise CompetitionAlreadyExistsError(
+                    f"Ya existe una competición con el nombre '{name}'"
+                )
 
             dates = None
             if request.start_date and request.end_date:

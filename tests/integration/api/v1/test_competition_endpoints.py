@@ -1383,6 +1383,83 @@ class TestEdgeCases:
         assert repetida.status_code == 409, repetida.text
 
     @pytest.mark.asyncio
+    async def test_a_name_left_too_short_after_cleaning_is_a_400(self, client: AsyncClient):
+        """#540 (revisor): «<b></b>» pasaba el DTO y daba un 500."""
+        user = await create_authenticated_user(
+            client, "shortname540@test.com", "P@ssw0rd123!", "Short", "Name"
+        )
+        start = date.today() + timedelta(days=30)
+
+        respuesta = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "<b>ab</b>",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_renaming_to_a_name_it_already_has_is_a_409(self, client: AsyncClient):
+        """#540: «copa x» repite «Copa X» del mismo organizador."""
+        user = await create_authenticated_user(
+            client, "rename540@test.com", "P@ssw0rd123!", "Re", "Name"
+        )
+        start = date.today() + timedelta(days=30)
+        base = {
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=1)).isoformat(),
+            "main_country": "ES",
+            "play_mode": "SCRATCH",
+        }
+        await client.post(
+            "/api/v1/competitions", json={**base, "name": "Copa X"}, cookies=user["cookies"]
+        )
+        otra = await client.post(
+            "/api/v1/competitions", json={**base, "name": "Otra copa"}, cookies=user["cookies"]
+        )
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{otra.json()['id']}",
+            json={"name": "copa x"},
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 409, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_in_a_ryder_the_organiser_always_plays(self, client: AsyncClient):
+        """#552: `organizer_plays` solo vale en stroke play."""
+        user = await create_authenticated_user(
+            client, "ryderplays552@test.com", "P@ssw0rd123!", "Ry", "Der"
+        )
+        start = date.today() + timedelta(days=30)
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Ryder 552",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "organizer_plays": False,
+            },
+            cookies=user["cookies"],
+        )
+        inscritos = await client.get(
+            f"/api/v1/competitions/{creada.json()['id']}/enrollments", cookies=user["cookies"]
+        )
+
+        assert creada.status_code == 201, creada.text
+        assert user["user"]["id"] in {i["user_id"] for i in inscritos.json()}
+
+    @pytest.mark.asyncio
     async def test_update_while_enrollment_is_open_succeeds(self, client: AsyncClient):
         """BE #323: con las inscripciones abiertas todavía se corrige el montaje."""
         user = await create_authenticated_user(

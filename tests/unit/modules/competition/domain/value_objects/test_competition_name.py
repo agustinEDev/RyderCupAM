@@ -36,15 +36,24 @@ class TestCompetitionNameCreation:
             ("Copa <b>de</b> Otoño", "Copa de Otoño"),
             ("Copa & Amigos", "Copa & Amigos"),
             ("Copa\x00 de\x07 Otoño", "Copa de Otoño"),
+            # No son etiquetas: se quedan (revisor)
+            ("Hcp < 10 y > 5", "Hcp < 10 y > 5"),
+            ("Copa <3 amigos>", "Copa <3 amigos>"),
         ],
     )
     def test_strips_html_tags_and_control_characters(self, escrito, guardado):
         """Sin title(), las etiquetas se quitan de verdad (#540; antes salía «<Script>»)."""
         assert CompetitionName(escrito).value == guardado
 
-    def test_only_tags_is_empty(self):
+    @pytest.mark.parametrize("escrito", ["<b></b>", "<b>ab</b>", " a\x00b "])
+    def test_too_short_once_cleaned(self, escrito):
+        """El mínimo de 3 se mira después de limpiar: antes daba un 500 (revisor)."""
         with pytest.raises(InvalidCompetitionNameError):
-            CompetitionName("<b></b>")
+            CompetitionName(escrito)
+
+    def test_the_error_is_a_value_error(self):
+        """Así las rutas lo devuelven como 400 y no como 500."""
+        assert issubclass(InvalidCompetitionNameError, ValueError)
 
     def test_collapses_inner_whitespace(self):
         """Espacios de más dentro del nombre: uno solo (#540)."""

@@ -545,6 +545,8 @@ async def update_competition(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except CompetitionAlreadyExistsError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     # Los tres errores de país se nombran uno a uno porque NINGUNO hereda de
     # ValueError, y todos llegan hasta aquí desde que el PUT acepta `countries`:
     # el país que no existe o no es adyacente (InvalidCountryError), el código de

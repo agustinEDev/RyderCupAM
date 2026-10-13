@@ -99,7 +99,10 @@ class TeeGroupsResponseDTO(BaseModel):
     round_id: UUID
     editable: bool = Field(
         ...,
-        description="Si el organizador aún puede generarlas o cambiarlas (hasta la 1.ª salida).",
+        description=(
+            "Si quien pregunta puede generarlas o cambiarlas ahora: solo el organizador "
+            "o un admin, hasta la 1.ª salida (#541)."
+        ),
     )
     unassigned_players: list[UnassignedPlayerDTO] = Field(
         ..., description="Con plaza en la franja y sin partida, por orden de llegada."

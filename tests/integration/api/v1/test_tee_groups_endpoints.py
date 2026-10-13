@@ -612,3 +612,16 @@ async def test_reopening_leaves_the_window_without_groups(client: AsyncClient):
     assert reabierta.status_code == 200, reabierta.text
     assert vista["groups"] == []
     assert vista["editable"] is False
+
+
+async def test_in_the_schedule_a_window_opens_at_its_first_tee_time(client: AsyncClient):
+    # #541/#551: ni las 12:00 de la sesión ni «SINGLES», que son de la Ryder
+    _, competicion, _, _ = await _stableford(client, jugadores=0, cerrar=False)
+
+    calendario = (await client.get(f"/api/v1/competitions/{competicion['id']}/schedule")).json()
+
+    franja = calendario["days"][0]["rounds"][0]
+    primera = franja["tee_sheet"]["tee_times"][0]
+    assert franja["match_format"] is None
+    assert franja["scoring_opens_at"][11:16] == primera[:5]
+    assert franja["scoring_opens_at"][19:] in ("+01:00", "+02:00")

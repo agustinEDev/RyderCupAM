@@ -128,7 +128,8 @@ class RoundResponseDTO(BaseModel):
             "Hora a la que se puede empezar a anotar los partidos de esta ronda, "
             "con su desfase (BE #305). El cliente la usa para ofrecer «Anotar» "
             "—también sin cobertura, desde lo que tenga guardado— en vez de "
-            "adivinar si alguien pulsó START."
+            "adivinar si alguien pulsó START. En una franja de Stableford o Medal, "
+            "la de su primera salida (#551)."
         ),
     )
     match_generation_block: MatchGenerationBlockDTO | None = Field(

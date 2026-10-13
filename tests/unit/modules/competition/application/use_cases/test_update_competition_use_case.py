@@ -813,3 +813,46 @@ class TestLaUbicacionNoDejaCamposFuera:
 
         guardada = await uow.competitions.find_by_id(competicion)
         assert str(guardada.location.main_country) == "FR"
+
+
+class TestRenombrar:
+    """#540: el nombre se guarda tal cual, pero no se repite sin distinguir mayúsculas."""
+
+    async def _crear(self, uow, creador, nombre):
+        return await CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        ).execute(
+            CreateCompetitionRequestDTO(
+                name=nombre,
+                start_date=date(2030, 6, 1),
+                end_date=date(2030, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+            ),
+            creador,
+        )
+
+    async def _renombrar(self, uow, competicion, creador, nombre):
+        return await UpdateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), _campos()
+        ).execute(CompetitionId(competicion.id), UpdateCompetitionRequestDTO(name=nombre), creador)
+
+    async def test_a_otro_nombre_que_ya_tiene_es_repetido(self):
+        from src.modules.competition.application.use_cases.create_competition_use_case import (
+            CompetitionAlreadyExistsError,
+        )
+
+        uow, creador = InMemoryUnitOfWork(), UserId(uuid4())
+        await self._crear(uow, creador, "Copa X")
+        otra = await self._crear(uow, creador, "Otra copa")
+
+        with pytest.raises(CompetitionAlreadyExistsError):
+            await self._renombrar(uow, otra, creador, "copa  x")
+
+    async def test_cambiar_solo_las_mayusculas_de_la_suya_se_puede(self):
+        uow, creador = InMemoryUnitOfWork(), UserId(uuid4())
+        copa = await self._crear(uow, creador, "Copa x")
+
+        renombrada = await self._renombrar(uow, copa, creador, "COPA X")
+
+        assert renombrada.name == "COPA X"

@@ -181,3 +181,22 @@ async def test_programar_sin_huso_es_un_422_y_sin_refresco_un_409(client: AsyncC
 
     assert sin_huso.status_code == 422, sin_huso.text
     assert sin_refresco.status_code == 409, sin_refresco.text
+
+
+async def test_programar_en_el_pasado_es_un_400_con_su_codigo(client: AsyncClient):
+    # #541: el motivo como código, para decirlo en el idioma de la app
+    from main import app
+    from src.config.dependencies import get_lanzador_de_actualizaciones
+
+    _, competicion = await _cerrada(client, "RYDER_CUP")
+    app.dependency_overrides[get_lanzador_de_actualizaciones] = _LanzadorQueApunta
+    try:
+        respuesta = await client.put(
+            f"{_url(competicion)}/schedule", json={"run_at": "2000-01-01T03:00:00Z"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_lanzador_de_actualizaciones, None)
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "HANDICAP_UPDATE_NOT_ALLOWED"
+    assert respuesta.json()["reason_code"] == "IN_THE_PAST"
