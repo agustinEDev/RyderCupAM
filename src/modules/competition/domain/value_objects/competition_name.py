@@ -32,6 +32,11 @@ def _sin_etiquetas(texto: str) -> str:
     return texto
 
 
+def _se_lee(texto: str) -> bool:
+    """Alguna letra o cifra de verdad: «ㅤㅤㅤ» (relleno Hangul) o «...» no son un nombre."""
+    return any(c != "\u3164" and unicodedata.category(c)[0] in ("L", "N") for c in texto)
+
+
 def _sin_invisibles(texto: str) -> str:
     """Fuera los de control y los de formato (anchura cero, dirección): Cc y Cf.
 
@@ -76,7 +81,9 @@ class CompetitionName:
 
         # 1. Fuera etiquetas HTML y caracteres de control (#540: sin title(), el
         #    `<script>` ya no salía disfrazado de `<Script>`), sin escapar el `&`
-        sin_html = _sin_invisibles(_sin_etiquetas(self.value))
+        # Primero los invisibles: uno entre `<` y `script` escondía la etiqueta y,
+        # quitado después, la recomponía (revisor)
+        sin_html = _sin_etiquetas(_sin_invisibles(self.value))
         # 2. Normalizar los espacios: fuera los de los extremos y uno solo dentro
         normalized_name = " ".join(sin_html.split())
 
@@ -84,11 +91,16 @@ class CompetitionName:
         if not normalized_name:
             raise InvalidCompetitionNameError("El nombre de la competición no puede estar vacío")
 
-        # 4. Validar longitud mínima, ya limpio: «<b>ab</b>» se quedaría en «ab»
+        # 4. Validar longitud mínima, ya limpio: «<b>ab</b>» se quedaría en «ab»;
+        #    y con algo que se lea: una letra o una cifra (no solo rellenos)
         if len(normalized_name) < MIN_COMPETITION_NAME_LENGTH:
             raise InvalidCompetitionNameError(
                 f"El nombre de la competición necesita al menos {MIN_COMPETITION_NAME_LENGTH} "
                 "caracteres."
+            )
+        if not _se_lee(normalized_name):
+            raise InvalidCompetitionNameError(
+                "El nombre de la competición necesita alguna letra o cifra."
             )
 
         # 5. Validar longitud máxima

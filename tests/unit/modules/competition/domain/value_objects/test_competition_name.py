@@ -39,6 +39,12 @@ class TestCompetitionNameCreation:
             # Anidadas: una pasada sola dejaba un <script> de verdad (/code-review)
             ("<<script>script>alert(1)<</script>/script>", "alert(1)"),
             ("<scr<b>ipt>Copa</scr</b>ipt>", "Copa"),
+            # Un invisible dentro de la etiqueta no la salva (revisor)
+            ("<\u200bscript>alert(1)</script>Copa", "alert(1)Copa"),
+            ("<\x00img src=x onerror=alert(1)>Copa", "Copa"),
+            ("abc<\u2060svg onload=alert(1)>", "abc"),
+            ("<<\u200bscript>script>Copa", "Copa"),
+            ("<\u200b<b>script>Copa", "Copa"),
             # Invisibles y de dirección: fuera (/code-review)
             ("Copa\u200b de\u202e Otoño\ufeff", "Copa de Otoño"),
             # No son etiquetas: se quedan (revisor)
@@ -54,6 +60,12 @@ class TestCompetitionNameCreation:
     def test_too_short_once_cleaned(self, escrito):
         """El mínimo de 3 se mira después de limpiar: antes daba un 500 (revisor)."""
         with pytest.raises(InvalidCompetitionNameError):
+            CompetitionName(escrito)
+
+    @pytest.mark.parametrize("escrito", ["\u3164\u3164\u3164", "\u2800\u2800\u2800", "..."])
+    def test_needs_a_letter_or_a_digit(self, escrito):
+        """Rellenos que no son ni letra ni cifra no son un nombre (revisor)."""
+        with pytest.raises(InvalidCompetitionNameError, match="letra o cifra"):
             CompetitionName(escrito)
 
     def test_the_error_is_a_value_error(self):

@@ -23,7 +23,7 @@ from tests.integration.modules.competition.infrastructure.persistence.sqlalchemy
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
-@pytest.mark.parametrize("guardado", ["A", "<B>X</B>"])
+@pytest.mark.parametrize("guardado", ["A", "<B>X</B>", "Copa Del Rey"])
 async def test_an_old_name_loads_as_it_is(db_session, creator_id, golf_course_id, guardado):  # noqa: F811
     creada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
     await db_session.execute(

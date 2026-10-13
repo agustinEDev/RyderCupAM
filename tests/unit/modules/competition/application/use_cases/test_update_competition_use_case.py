@@ -24,6 +24,7 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -856,3 +857,16 @@ class TestRenombrar:
         renombrada = await self._renombrar(uow, copa, creador, "COPA X")
 
         assert renombrada.name == "COPA X"
+
+    async def test_un_nombre_antiguo_que_no_cambia_no_se_revalida(self):
+        """Uno guardado con las reglas de antes no impide editar otros campos (revisor)."""
+        uow, creador = InMemoryUnitOfWork(), UserId(uuid4())
+        copa = await self._crear(uow, creador, "Copa x")
+        async with uow:
+            guardada = await uow.competitions.find_by_id(CompetitionId(copa.id))
+            guardada._name = CompetitionName.guardado("<B>X</B>")
+            await uow.competitions.update(guardada)
+
+        editada = await self._renombrar(uow, copa, creador, "<B>X</B>")
+
+        assert editada.name == "<B>X</B>"
