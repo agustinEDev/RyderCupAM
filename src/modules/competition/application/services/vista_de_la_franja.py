@@ -21,7 +21,10 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
     ZonaDesconocidaError,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
-from src.modules.competition.application.services.salidas_de_la_franja import las_que_salieron
+from src.modules.competition.application.services.salidas_de_la_franja import (
+    las_que_salieron,
+    numeros_libres,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.entities.round import Round
@@ -116,6 +119,9 @@ async def vista_de_la_franja(
     return TeeGroupsResponseDTO(
         round_id=franja.id.value,
         editable=editable,
+        can_add_group=await _cabe_una_nueva(
+            competicion, franja, hoja, partidas, zonas, ahora, editable
+        ),
         unassigned_players=[
             UnassignedPlayerDTO(user_id=u.value, name=nombres.get(u, "")) for u in sin_partida
         ],
@@ -166,6 +172,18 @@ async def _tocables(competicion, franja, partidas, zonas, ahora, editable) -> se
         return set()
     salidas = await las_que_salieron(franja, partidas, zonas, ahora)
     return {p.id for p in partidas if p.id not in salidas}
+
+
+async def _cabe_una_nueva(competicion, franja, hoja, partidas, zonas, ahora, editable) -> bool:
+    """Como al mover a una nueva: antes de salir, si quedan salidas; después, una libre."""
+    if editable:
+        return len(partidas) < hoja.numero_de_salidas
+    try:
+        PlazoDePartidas.comprobar_estado(competicion.status)
+        await primera_salida(franja, zonas)
+    except (PlazoCerradoError, ZonaDesconocidaError):
+        return False
+    return bool(await numeros_libres(franja, partidas, zonas, ahora))
 
 
 def _jugador(

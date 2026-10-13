@@ -20,7 +20,8 @@ Con la franja ya empezada (#544, 13 oct 2026): se tocan las que no han salido.
 | Caso                                                   | Resultado                           |
 |--------------------------------------------------------|-------------------------------------|
 | Marcadores de una sin salir / de una que ya salió      | Guardados / PartidaYaSalidaError    |
-| Mover de una sin salir a una nueva                     | Detrás de la última, sin renumerar  |
+| Mover de una sin salir a una nueva                     | La primera salida libre por llegar, |
+|                                                        |   sin renumerar                     |
 | Mover desde una que ya salió                           | PartidaYaSalidaError                |
 | Reordenar las que no han salido / moviendo una fuera   | Renumeradas / PartidaYaSalidaError  |
 | Colocar a quien no tiene partida                       | En la primera salida libre aún por  |
@@ -562,3 +563,14 @@ class TestConLaFranjaEmpezada:
         )
 
         assert set(guardadas) == {segunda.id, tercera.id}
+
+    async def test_a_tee_time_right_now_is_not_free(self):
+        # A las 9:20 justas, la salida de las 9:20 ya no está libre: a la de las 9:30
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        sin_partida = await escenario.con_plaza("0.5")
+        escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=20)
+
+        await _mover(escenario, sin_partida)
+
+        nueva = next(p for p in await _guardadas(escenario) if sin_partida in p.user_ids)
+        assert nueva.numero == 4

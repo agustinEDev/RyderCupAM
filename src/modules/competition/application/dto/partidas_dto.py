@@ -110,6 +110,13 @@ class TeeGroupsResponseDTO(BaseModel):
         ...,
         description="Si el organizador aún puede generarlas o cambiarlas (hasta la 1.ª salida).",
     )
+    can_add_group: bool = Field(
+        False,
+        description=(
+            "Si cabe una partida nueva: hasta la 1.ª salida, si quedan salidas; con la "
+            "franja empezada, si queda alguna libre cuya hora aún no ha llegado (#544)."
+        ),
+    )
     unassigned_players: list[UnassignedPlayerDTO] = Field(
         ..., description="Con plaza en la franja y sin partida, por orden de llegada."
     )

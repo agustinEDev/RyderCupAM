@@ -159,6 +159,7 @@ async def test_with_the_first_group_out_the_second_can_still_be_touched():
     # `editable` no cambia de significado: el front de producción lo usa para generar
     assert vista.editable is False
     assert [g.can_change for g in vista.groups] == [False, True]
+    assert vista.can_add_group is True
 
 
 async def test_a_group_with_strokes_before_its_time_is_out():
@@ -192,6 +193,21 @@ async def test_right_at_the_second_tee_time_both_are_out():
     vista = await _vista(escenario)
 
     assert [g.can_change for g in vista.groups] == [False, False]
+    # Quedan salidas libres por llegar (9:20…10:00): aún cabe una nueva
+    assert vista.can_add_group is True
+
+
+async def test_no_new_group_once_the_sheet_is_over():
+    from datetime import timedelta
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=65)
+
+    assert (await _vista(escenario)).can_add_group is False
 
 
 async def test_a_ryder_session_and_a_window_that_does_not_exist():

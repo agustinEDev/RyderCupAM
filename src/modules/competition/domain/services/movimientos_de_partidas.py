@@ -4,7 +4,8 @@ MovimientosDePartidas - Mover jugadores entre partidas y reordenarlas (#251, PR 
 Decidido con Agustín el 9 oct 2026:
 
 - A una partida llena se entra **intercambiando** con uno de ella (D13).
-- También a una **partida nueva al final**, si quedan salidas: nace de 1,
+- También a una **partida nueva** (al final; con la franja empezada, en la primera
+  salida libre aún por llegar, #544), si quedan salidas: nace de 1,
   incompleta, y se completa moviendo a otro (M1, excepción a D4).
 - Al mover, el origen **nunca se queda con uno solo**, salvo intercambio (M2).
 - Si una partida se **vacía**, desaparece y las de detrás suben: sus horas se
@@ -68,7 +69,7 @@ class MovimientosDePartidas:
         Args:
             partidas: Todas las de la franja
             jugador: Quien se mueve, con su foto (la de su partida, o una nueva si no tenía)
-            destino_id: A qué partida; None para una nueva al final
+            destino_id: A qué partida; None para una nueva (ver `libres`)
             intercambiar_con: Con quién de la de destino se cambia, si se cambia
             salidas: Las que ya salieron (#544): ni origen ni destino
             libres: Con la franja empezada, los números de salida libres cuya hora

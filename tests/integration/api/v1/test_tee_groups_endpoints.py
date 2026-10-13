@@ -608,3 +608,17 @@ async def test_reopening_leaves_the_window_without_groups(client: AsyncClient):
     assert reabierta.status_code == 200, reabierta.text
     assert vista["groups"] == []
     assert vista["editable"] is False
+
+
+async def test_moving_in_a_course_without_time_zone(client: AsyncClient):
+    # #544: mover también necesita la zona, como generar
+    organizador, _, franja, otros = await _stableford(client, con_zona=False)
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": otros[0]["user"]["id"]},
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "COURSE_WITHOUT_TIMEZONE"

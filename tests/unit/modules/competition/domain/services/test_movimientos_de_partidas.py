@@ -443,10 +443,19 @@ class TestConLaFranjaEmpezada:
         # /code-review: empezada la franja, nadie se renumera aunque ninguna haya salido
         a, sola, detras = _partidas(3, 1, 2)
 
-        cambios = _mover([a, sola, detras], sola.jugadores[0], detras, libres=[2, 4])
+        cambios = _mover([a, sola, detras], sola.jugadores[0], detras, libres=[4])
 
         assert sola in cambios.borrar
         assert detras.numero == 3
+
+    def test_the_earliest_free_tee_time_wins(self):
+        # La 2 se vacía, pero la 1 (aún por llegar) está libre antes: a la 1
+        a, sola = _partidas(3, 1)
+        a.renumerar(3)
+
+        cambios = _mover([a, sola], sola.jugadores[0], libres=[1, 4])
+
+        assert [p.numero for p in cambios.crear] == [1]
 
     def test_the_emptied_origin_frees_its_tee_time(self):
         fuera, sola = _partidas(2, 1)

@@ -276,7 +276,8 @@ class MoverJugadorUseCase(_ConLaFranja):
     ) -> TeeGroupsResponseDTO:
         """
         Args:
-            group_id: La partida de destino; None, una nueva al final (M1)
+            group_id: La partida de destino; None, una nueva (M1): al final, o con la
+                franja empezada en la primera salida libre aún por llegar (#544)
             swap_with_user_id: Con quién de la de destino se intercambia
 
         Raises:
