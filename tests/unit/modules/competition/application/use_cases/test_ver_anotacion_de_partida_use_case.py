@@ -187,3 +187,17 @@ async def test_each_player_carries_the_gender_of_their_tee():
     assert genero[a.value] == "FEMALE"
     assert genero[b.value] is None
     assert genero[c.value] == "MALE"
+
+
+async def test_each_player_says_if_they_played():
+    # Para que el organizador vea «Retirar» y no «No presentado» (13 oct 2026):
+    # a anota a b desde su pantalla; c no ha hecho nada
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    b = partida.marcadores[a]
+
+    await _anotar(escenario, partida, a, 1, marked_score=4)
+    vista = await _ver(escenario).execute(partida.id.value, a)
+
+    jugaron = {p.user_id for p in vista.players if p.played}
+    assert jugaron == {a.value, b.value}

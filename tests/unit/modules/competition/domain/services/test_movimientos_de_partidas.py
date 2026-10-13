@@ -102,7 +102,7 @@ class TestMover:
 
     def test_to_a_group_of_four_with_a_no_show(self):
         p1, p2 = _partidas(4, 4)
-        p2.no_presentado(p2.user_ids[0])
+        p2.no_presentado(p2.user_ids[0], [])
         a = p1.jugadores[0]
 
         _mover([p1, p2], a, p2)
@@ -111,14 +111,14 @@ class TestMover:
 
     def test_a_no_show_is_not_moved(self):
         p1, p2 = _partidas(4, 3)
-        p1.no_presentado(p1.user_ids[0])
+        p1.no_presentado(p1.user_ids[0], [])
         with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], p2)
         assert error.value.codigo == "PLAYER_IS_NO_SHOW"
 
     def test_a_no_show_is_not_swapped(self):
         p1, p2 = _partidas(3, 4)
-        p2.no_presentado(p2.user_ids[0])
+        p2.no_presentado(p2.user_ids[0], [])
         with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[0], p2, intercambiar_con=p2.user_ids[0])
         assert error.value.codigo == "PLAYER_IS_NO_SHOW"
@@ -126,8 +126,8 @@ class TestMover:
 
     def test_the_last_one_playing_leaves_a_group_of_no_shows(self):
         p1, p2 = _partidas(3, 2)
-        p1.no_presentado(p1.user_ids[0])
-        p1.no_presentado(p1.user_ids[1])
+        p1.no_presentado(p1.user_ids[0], [])
+        p1.no_presentado(p1.user_ids[1], [])
         a = p1.jugadores[2]
 
         cambios = _mover([p1, p2], a, p2)
@@ -137,7 +137,7 @@ class TestMover:
 
     def test_the_one_playing_beside_a_no_show_can_leave(self):
         p1, p2 = _partidas(2, 2)
-        p1.no_presentado(p1.user_ids[0])
+        p1.no_presentado(p1.user_ids[0], [])
 
         _mover([p1, p2], p1.jugadores[1], p2)
 
@@ -145,7 +145,7 @@ class TestMover:
 
     def test_leaving_the_origin_with_one_playing_and_a_no_show(self):
         p1, p2 = _partidas(3, 3)
-        p1.no_presentado(p1.user_ids[0])
+        p1.no_presentado(p1.user_ids[0], [])
         with pytest.raises(MovimientoImposibleError) as error:
             _mover([p1, p2], p1.jugadores[2], p2)
         assert error.value.codigo == "ORIGIN_WOULD_BE_ALONE"

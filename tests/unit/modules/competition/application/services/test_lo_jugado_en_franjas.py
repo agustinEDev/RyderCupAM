@@ -8,6 +8,8 @@ franja tampoco. Generar las partidas no es jugar.
 |----------------------------------------|-----------|
 | Partidas generadas, sin golpes         | No jugado |
 | Un golpe apuntado (aunque sin validar) | Jugado    |
+| Golpes borrados, pero con la marca     | Jugado (13 oct 2026)  |
+|   «ha jugado» de alguien               |           |
 | Preguntando para borrar (bloquear)     | Bloquea cada partida ANTES de leer sus golpes |
 | La competición entera                  | Lee los golpes una sola vez, no por franja    |
 """
@@ -47,6 +49,20 @@ async def test_one_score_entered_is_played():
     await escenario.uow.golpes_de_partida.guardar(golpe)
 
     assert await LoJugado(escenario.uow).en_la_sesion(escenario.manana.id)
+    assert await LoJugado(escenario.uow).en_la_competicion(escenario.competicion.id, bloquear=True)
+
+
+async def test_the_played_mark_is_played_even_with_the_strokes_deleted():
+    # Con el botón de borrar se pueden vaciar los hoyos: la marca sigue diciendo
+    # que se jugó, y la competición no se borra (13 oct 2026)
+    escenario, partida = await _partida()
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida.marcar_que_jugo(leida.user_ids[0])
+    await escenario.uow.partidas.guardar([leida])
+
+    assert await LoJugado(escenario.uow).en_la_sesion(escenario.manana.id)
+    assert await LoJugado(escenario.uow).en_la_sesion(escenario.manana.id, bloquear=True)
+    assert await LoJugado(escenario.uow).en_la_competicion(escenario.competicion.id)
     assert await LoJugado(escenario.uow).en_la_competicion(escenario.competicion.id, bloquear=True)
 
 
