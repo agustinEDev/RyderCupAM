@@ -59,7 +59,7 @@ class TarjetaYaAbiertaError(ValueError):
 
 
 class TieneGolpesError(ValueError):
-    """Sus golpes dicen que jugó: se retira, no es un no presentado (#550)."""
+    """Jugó (su marca «ha jugado» o algo en su tarjeta): se retira, no es un no presentado."""
 
     error_code = "PLAYER_HAS_STROKES"
     message = "Ya ha jugado (anotó desde su pantalla o tiene algo en su tarjeta): retíralo."
@@ -200,9 +200,10 @@ class Partida:
 
     def no_presentado(self, user_id: UserId, golpes: Iterable[GolpeDePartida]) -> None:
         """
-        No se presentó (P6): también antes de que la partida empiece. Si los
-        golpes de la partida dicen que jugó (`quienes_jugaron`), no lo es: se
-        rechaza y el organizador lo retira (#550).
+        No se presentó (P6): también antes de que la partida empiece. Si jugó
+        (`quienes_jugaron`: su marca «ha jugado», que no se apaga aunque se borren
+        sus golpes, o algo en su tarjeta), no lo es: se rechaza y el organizador
+        lo retira (#550).
         """
         self._de_la_partida(user_id)
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:

@@ -249,7 +249,8 @@ class AnotarHoyoDePartidaUseCase:
             cambiados.append(suyo)
         for golpe in cambiados:
             await self._uow.golpes_de_partida.guardar(golpe)
-        # Anotó desde su pantalla: estuvo en el campo (13 oct 2026)
-        if cambiados and quien not in partida.jugaron:
+        # Envió desde su pantalla: estuvo en el campo, aunque no se aplicara nada
+        # porque esas tarjetas ya estaban cerradas (13 oct 2026)
+        if quien not in partida.jugaron:
             partida.marcar_que_jugo(quien)
             await self._uow.partidas.guardar([partida])

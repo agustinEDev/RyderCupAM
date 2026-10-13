@@ -317,8 +317,9 @@ async def test_a_pick_up_lights_it_too():
     assert yo in (await escenario.uow.partidas.find_by_id(partida.id)).jugaron
 
 
-async def test_nothing_applied_lights_nothing():
-    # Su tarjeta cerrada y la de su marcado también: no se anota nada
+async def test_sending_from_your_screen_lights_it_even_if_nothing_applies():
+    # Su tarjeta y la de su marcado ya cerradas: no se anota nada, pero quien
+    # envía desde su pantalla estaba en el campo (/code-review, 13 oct 2026)
     escenario, partida = await _partida(n=2)
     yo, otro = partida.user_ids
     cerrada = await escenario.uow.partidas.find_by_id(partida.id)
@@ -329,4 +330,4 @@ async def test_nothing_applied_lights_nothing():
 
     await _anotar(escenario, partida, yo, own_score=4, marked_score=5)
 
-    assert (await escenario.uow.partidas.find_by_id(partida.id)).jugaron == set()
+    assert (await escenario.uow.partidas.find_by_id(partida.id)).jugaron == {yo}
