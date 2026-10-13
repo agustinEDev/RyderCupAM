@@ -17,6 +17,9 @@ Lo que el resumen de «Mis competiciones» necesita y la competición no sabe so
 | Quien no juega                                          | null, sin leer nada               |
 | Competición terminada o cancelada (13 oct 2026)         | null; las jornadas sí             |
 | Ryder: partido por walkover o concedido                 | No cuenta                         |
+| Ryder: sesión aún sin partidos (13 oct 2026)            | Esa, sin hora                     |
+| Ryder: sesión con partidos y ninguno suyo (descansa)    | No cuenta                         |
+| Antes de ayer (13 oct 2026)                             | No cuenta; ayer y hoy, sí         |
 """
 
 from datetime import time, timedelta
@@ -39,6 +42,7 @@ from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -60,8 +64,10 @@ pytestmark = pytest.mark.asyncio
 SABADO = VIERNES + timedelta(days=1)
 
 
-async def _resumen(escenario, quien, juega=True):
-    return await ResumenDeLaCompeticion.de(escenario.competicion, quien, juega, escenario.uow)
+async def _resumen(escenario, quien, juega=True, hoy=None):
+    return await ResumenDeLaCompeticion.de(
+        escenario.competicion, quien, juega, escenario.uow, hoy=hoy
+    )
 
 
 async def _franja_el_sabado(escenario, sesion=SessionType.MORNING, primera=time(8, 0)):
@@ -314,10 +320,16 @@ class _Ryder:
         )
         async with self.escenario.uow:
             await self.escenario.uow.matches.add(partido)
+            # Con partidos, la sesión los tiene generados
+            if ronda.status == RoundStatus.PENDING_TEAMS:
+                ronda.mark_teams_assigned()
+            if ronda.status == RoundStatus.PENDING_MATCHES:
+                ronda.mark_matches_generated()
+            await self.escenario.uow.rounds.update(ronda)
         return partido
 
-    async def resumen(self, quien):
-        return await _resumen(self.escenario, quien)
+    async def resumen(self, quien, hoy=None):
+        return await _resumen(self.escenario, quien, hoy=hoy)
 
 
 async def test_ryder_its_scheduled_match_date_and_session_without_time():
@@ -352,6 +364,7 @@ async def test_ryder_in_play_counts():
 
 async def test_ryder_without_matches_left_is_null():
     ryder = await _Ryder.crear()
+    await ryder.partido(ryder.sabado, con=False)
     viernes = await ryder.partido(ryder.viernes)
     viernes.start()
     viernes.complete({"winner": "A"})
@@ -385,6 +398,7 @@ async def test_a_cancelled_ryder_has_no_next_session():
 @pytest.mark.parametrize("cierre", ["walkover", "concedido"])
 async def test_ryder_a_walkover_or_conceded_match_does_not_count(cierre):
     ryder = await _Ryder.crear()
+    await ryder.partido(ryder.sabado, con=False)
     partido = await ryder.partido(ryder.viernes)
     if cierre == "walkover":
         partido.declare_walkover("A")
@@ -394,3 +408,56 @@ async def test_ryder_a_walkover_or_conceded_match_does_not_count(cierre):
     await ryder.escenario.uow.matches.update(partido)
 
     assert (await ryder.resumen(ryder.yo)).proxima is None
+
+
+# --- Sesiones sin partidos y días pasados (decidido el 13 oct 2026) ---------------------
+
+
+async def test_ryder_a_session_without_matches_yet_counts_without_time():
+    ryder = await _Ryder.crear()
+
+    assert (await ryder.resumen(ryder.yo)).proxima == ProximaSalida(
+        VIERNES, SessionType.AFTERNOON, None
+    )
+
+
+async def test_ryder_resting_in_a_session_with_matches_does_not_count():
+    ryder = await _Ryder.crear()
+    await ryder.partido(ryder.viernes, con=False)
+
+    # El viernes descansa; el sábado aún no tiene partidos
+    assert (await ryder.resumen(ryder.yo)).proxima.fecha == SABADO
+
+
+@pytest.mark.parametrize(
+    ("hoy", "esperado"),
+    [
+        (SABADO + timedelta(days=1), SABADO),  # el viernes fue antes de ayer
+        (SABADO, VIERNES),  # el viernes fue ayer: margen sin zona horaria
+        (VIERNES, VIERNES),
+    ],
+)
+async def test_ryder_days_before_yesterday_do_not_count(hoy, esperado):
+    ryder = await _Ryder.crear()
+    await ryder.partido(ryder.viernes)
+    await ryder.partido(ryder.sabado)
+
+    assert (await ryder.resumen(ryder.yo, hoy=hoy)).proxima.fecha == esperado
+
+
+async def test_stroke_play_a_card_left_open_before_yesterday_does_not_count():
+    escenario = _Escenario()
+    await escenario.guardar()
+    sabado = await _franja_el_sabado(escenario)
+    yo = await escenario.con_plaza("9.0")
+    await escenario.con_plaza("8.0")
+    async with escenario.uow:
+        await escenario.uow.plazas.add(
+            PlazaEnFranja.crear(escenario.competicion.id, sabado.id, yo, A_LAS_NUEVE_Y_CINCO)
+        )
+    await escenario.generar()
+
+    # Su tarjeta del viernes sigue JUGANDO, pero fue antes de ayer
+    resumen = await _resumen(escenario, yo, hoy=SABADO + timedelta(days=1))
+
+    assert resumen.proxima == ProximaSalida(SABADO, SessionType.MORNING, None)

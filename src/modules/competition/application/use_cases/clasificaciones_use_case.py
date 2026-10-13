@@ -127,8 +127,10 @@ class _Clasificaciones:
                 estado = partida.estados_de_tarjeta[foto.user_id]
                 tarjetas.setdefault(foto.user_id, []).append(TarjetaDeJornada(tarjeta, estado))
                 handicaps[foto.user_id] = foto.handicap
-                # El de su última partida, como el hándicap (#856)
-                generos[foto.user_id] = foto.tee_gender.value if foto.tee_gender else None
+                # El de su última partida, como el hándicap (#856); sin dato en
+                # ella, el último que se supo (/code-review)
+                if foto.tee_gender is not None:
+                    generos[foto.user_id] = foto.tee_gender.value
         participantes = [
             Participante(u, handicaps[u], categorias.get(u), tuple(tarjetas[u])) for u in user_ids
         ]

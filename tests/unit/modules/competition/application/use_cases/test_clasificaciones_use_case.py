@@ -245,7 +245,9 @@ async def test_each_row_carries_the_gender_of_its_tees(cual):
     [
         (Gender.FEMALE, Gender.MALE, "MALE"),
         (Gender.MALE, Gender.FEMALE, "FEMALE"),
-        (Gender.MALE, None, None),
+        # Sin dato en la última, el último conocido (/code-review)
+        (Gender.FEMALE, None, "FEMALE"),
+        (None, None, None),
     ],
 )
 async def test_the_gender_is_the_one_of_the_last_group(manana, tarde, esperado):
