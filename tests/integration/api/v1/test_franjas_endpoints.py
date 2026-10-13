@@ -70,7 +70,7 @@ async def test_crear_una_franja_y_verla_en_el_calendario_con_su_cupo(client: Asy
     assert sesion["id"] == franja["id"]
     assert sesion["tee_sheet"]["capacity"] == 52  # 9:00 a 11:00 cada 10, de 4
     assert len(sesion["tee_sheet"]["tee_times"]) == 13
-    assert sesion["match_format"] == "SINGLES"
+    assert sesion["match_format"] is None  # una franja no tiene formato de partido (#541)
     assert sesion["effective_allowance"] == 95
     assert cuerpo["tee_sheet_capacity"] == 52
 

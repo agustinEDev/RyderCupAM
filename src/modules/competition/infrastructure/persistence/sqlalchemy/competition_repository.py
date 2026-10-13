@@ -238,7 +238,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
+    async def exists_with_name(
+        self,
+        name: CompetitionName,
+        creator_id: UserId,
+        except_id: CompetitionId | None = None,
+    ) -> bool:
         """
         Verifica si existe una competición con el nombre especificado para un creador.
 
@@ -259,11 +264,15 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .select_from(Competition)
             .where(
                 and_(
-                    Competition._name_value == str(name),
+                    # Sin distinguir mayúsculas: el nombre se guarda tal cual (#540).
+                    # Las dos minúsculas las hace Postgres: no depende de su ctype
+                    func.lower(Competition._name_value) == func.lower(name.value),
                     Competition._creator_id == creator_id,
                 )
             )
         )
+        if except_id is not None:
+            statement = statement.where(Competition._id != except_id)
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 

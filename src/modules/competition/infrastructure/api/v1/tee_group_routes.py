@@ -293,18 +293,19 @@ async def delete_tee_groups(
     response_model=TeeGroupsResponseDTO,
     summary="Ver las partidas de una franja",
     description=(
-        "Cualquiera con sesión. `editable` dice si el organizador aún puede generarlas o "
-        "cambiarlas; `unassigned_players`, quién tiene plaza y no partida."
+        "Cualquiera con sesión. `editable` dice si quien pregunta puede generarlas o "
+        "cambiarlas ahora: solo el organizador o un admin, en plazo (#541); "
+        "`unassigned_players`, quién tiene plaza y no partida."
     ),
     tags=["Competitions - Tee groups"],
 )
 async def get_tee_groups(
     round_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: VerPartidasUseCase = Depends(get_ver_partidas_use_case),
 ):
     """200 con las partidas de la franja."""
-    return await _responder(use_case.execute(round_id))
+    return await _responder(use_case.execute(round_id, _quien(current_user), current_user.is_admin))
 
 
 @router.get(

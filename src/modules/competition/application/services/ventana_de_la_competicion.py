@@ -21,6 +21,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.ventana_de_actualizacion import (
+    CodigoDeVentana,
     Ventana,
     VentanaDeActualizacion,
 )
@@ -39,14 +40,14 @@ async def ventana_de(
     sin_horas = VentanaDeActualizacion.calcular(
         stroke_play=stroke_play, status=competition.status, jornadas=[], jugadores=0, ahora=ahora
     )
-    if not stroke_play or sin_horas.motivo == VentanaDeActualizacion.MOTIVO_ESTADO:
+    if not stroke_play or sin_horas.codigo == CodigoDeVentana.STATUS:
         return sin_horas
     try:
         jornadas = await JornadasDeLaCompeticion.de(
             await uow.rounds.find_by_competition(competition.id), zonas
         )
     except ZonaDesconocidaError as e:
-        return Ventana(False, motivo=str(e))
+        return Ventana(False, motivo=str(e), codigo=CodigoDeVentana.NO_TIMEZONE)
     inscritos = await uow.enrollments.find_by_competition_and_status(
         competition.id, EnrollmentStatus.APPROVED
     )

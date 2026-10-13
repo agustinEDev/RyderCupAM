@@ -40,8 +40,8 @@ async def test_out_of_the_old_group_and_without_group_in_the_new_window():
         user_repository=escenario.usuarios,
         reloj=lambda: escenario.ahora,
     )
-    manana = await ver.execute(escenario.manana.id.value)
-    tarde = await ver.execute(escenario.tarde.id.value)
+    manana = await ver.execute(escenario.manana.id.value, escenario.creador, False)
+    tarde = await ver.execute(escenario.tarde.id.value, escenario.creador, False)
     assert quien.value not in {p.user_id for g in manana.groups for p in g.players}
     assert len(manana.groups[0].players) == 2
     assert [p.user_id for p in tarde.unassigned_players] == [quien.value]

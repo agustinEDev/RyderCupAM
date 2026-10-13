@@ -333,7 +333,7 @@ class TestEditarLaCompeticionConAgenda:
 
         async with uow:
             guardada = await uow.competitions.find_by_id(competicion.id)
-        assert str(guardada.name) == "Ryder De Los Amigos"
+        assert str(guardada.name) == "Ryder de los amigos"
 
     async def test_e2_mover_las_fechas_con_las_sesiones_dentro_se_puede(self):
         uow, competicion, organizador, campo = await _montar("ACTIVE")

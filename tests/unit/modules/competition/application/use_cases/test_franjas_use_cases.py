@@ -97,6 +97,15 @@ def _hoja(primera="09:00", ultima="12:00", intervalo=10, partida=4) -> TeeSheetD
     )
 
 
+class _CampoDeMadrid:
+    """El repositorio de campos solo para la zona horaria del calendario."""
+
+    async def find_by_id(self, _):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(timezone="Europe/Madrid")
+
+
 class _Escenario:
     def __init__(self):
         self.uow = InMemoryUnitOfWork()
@@ -374,6 +383,31 @@ class TestElCalendario:
         assert manana.tee_sheet.capacity == 12
         assert tarde.tee_sheet.capacity == 6
         assert calendario.tee_sheet_capacity == 18
+
+    async def test_una_franja_abre_a_su_primera_salida_y_sin_formato(self, e):
+        # #541/#551: la de Tarde decía 12:00 y «SINGLES», que es de la Ryder
+        await e.torneo()
+        await e.crear(_hoja("16:50", "17:10", partida=4), sesion="AFTERNOON")
+
+        calendario = await GetScheduleUseCase(e.uow, _CampoDeMadrid()).execute(
+            GetScheduleRequestDTO(competition_id=e.competicion.id.value)
+        )
+
+        (tarde,) = calendario.days[0].rounds
+        assert tarde.scoring_opens_at.isoformat() == "2030-10-12T16:50:00+02:00"
+        assert tarde.match_format is None
+
+    async def test_una_sesion_de_ryder_sigue_igual(self, e):
+        await e.torneo(TournamentType.RYDER_CUP)
+        await e.crear(sesion="AFTERNOON", formato="SINGLES")
+
+        calendario = await GetScheduleUseCase(e.uow, _CampoDeMadrid()).execute(
+            GetScheduleRequestDTO(competition_id=e.competicion.id.value)
+        )
+
+        (tarde,) = calendario.days[0].rounds
+        assert tarde.scoring_opens_at.isoformat() == "2030-10-12T12:00:00+02:00"
+        assert tarde.match_format == "SINGLES"
 
     async def test_en_una_ryder_no_hay_cupo_de_franjas(self, e):
         await e.torneo(TournamentType.RYDER_CUP)

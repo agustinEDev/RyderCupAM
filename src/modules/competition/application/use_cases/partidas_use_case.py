@@ -358,8 +358,10 @@ class VerPartidasUseCase:
         self._usuarios = user_repository
         self._reloj = reloj
 
-    async def execute(self, round_id: UUID) -> TeeGroupsResponseDTO:
+    async def execute(self, round_id: UUID, quien: UserId, is_admin: bool) -> TeeGroupsResponseDTO:
         """
+        `editable` solo para quien puede editar: el organizador o un admin (#541).
+
         Raises:
             RoundNotFoundError, CompetitionNotFoundError: Si no existen
             PartidasError: Si no es una franja de stroke play
@@ -374,9 +376,12 @@ class VerPartidasUseCase:
             if competicion is None:
                 raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
             partidas = await self._uow.partidas.de_la_franja(franja.id)
-            return await vista_de_la_franja(
+            vista = await vista_de_la_franja(
                 self._uow, competicion, franja, partidas, self._zonas, self._usuarios, self._reloj()
             )
+            if is_admin or competicion.is_creator(quien):
+                return vista
+            return vista.model_copy(update={"editable": False})
 
 
 class MisPartidasUseCase:

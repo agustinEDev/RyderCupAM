@@ -566,7 +566,7 @@ class TestDondeSeVe:
         de_otro = await ListMySessionsWithoutMatchesUseCase(torneo.uow).execute(torneo.equipo_b[0])
 
         assert [s.round_id for s in mias] == [torneo.ronda_id.value]
-        assert mias[0].competition_name == "Ryder De Prueba"
+        assert mias[0].competition_name == "Ryder de prueba"
         assert mias[0].reason == "PLAYERS_WITHOUT_TEE"
         assert de_otro == []
 
