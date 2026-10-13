@@ -7,10 +7,13 @@ marcar no presentado y cómo queda al cerrar la franja. Lo que el organizador
 anota o borra no la toca.
 
 Las filas que ya existen la toman de lo ya anotado: su propio lado lo metió él,
-o metió el lado del marcador de otro de su partida. Solo SQL plano: cabe en el
-guion del modo offline.
+o metió el lado del marcador de otro de su partida. Es algo más amplio que la
+regla en marcha (un organizador que juega y corrigió o validó también queda
+encendido: aquí no se distingue), pero solo hay datos de stroke play en el Kind.
+Solo SQL plano: cabe en el guion del modo offline. ID nuevo: el e8b0c2d4f6a7
+fue otra migración de esta rama que nunca se mergeó.
 
-Revision ID: e8b0c2d4f6a7
+Revision ID: f2b4d6e8a0c1
 Revises: d5f7a9b1c3e6
 Create Date: 2026-10-13
 
@@ -19,7 +22,7 @@ Create Date: 2026-10-13
 import sqlalchemy as sa
 from alembic import op
 
-revision = "e8b0c2d4f6a7"
+revision = "f2b4d6e8a0c1"
 down_revision = "d5f7a9b1c3e6"
 branch_labels = None
 depends_on = None

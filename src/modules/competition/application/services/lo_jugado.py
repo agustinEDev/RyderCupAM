@@ -50,8 +50,11 @@ class LoJugado:
         """
         # Una franja de stroke play: jugado es un golpe apuntado en una de sus
         # partidas (#251, PR 5). Generarlas no es jugar
+        partidas = await self._uow.partidas.de_la_franja(round_id)
         if bloquear:
-            await self._bloquear(await self._uow.partidas.de_la_franja(round_id))
+            partidas = await self._bloquear(partidas)
+        if _alguno_jugo(partidas):
+            return True
         if _alguno_apuntado(await self._uow.golpes_de_partida.de_la_franja(round_id)):
             return True
         return await self._partidos_jugados(round_id, bloquear)
@@ -66,8 +69,11 @@ class LoJugado:
         estar de vuelta en ACTIVE y la cascada se llevaria sus partidos y sus
         golpes. Los golpes de las partidas se leen una vez para todo el torneo.
         """
+        partidas = await self._uow.partidas.de_la_competicion(competition_id)
         if bloquear:
-            await self._bloquear(await self._uow.partidas.de_la_competicion(competition_id))
+            partidas = await self._bloquear(partidas)
+        if _alguno_jugo(partidas):
+            return True
         if _alguno_apuntado(await self._uow.golpes_de_partida.de_la_competicion(competition_id)):
             return True
         for ronda in await self._uow.rounds.find_by_competition(competition_id):
@@ -75,15 +81,20 @@ class LoJugado:
                 return True
         return False
 
-    async def _bloquear(self, partidas: Sequence[Partida]) -> None:
+    async def _bloquear(self, partidas: Sequence[Partida]) -> list[Partida]:
         """Bloquea cada partida antes de leer sus golpes.
 
         Anotar bloquea la partida antes de escribir: un primer golpe aun sin
         confirmar no se ve, y sin esperarlo el borrado se llevaria al jugador y
         su golpe reventaria la clave ajena al confirmar (un 500).
         """
+        bloqueadas = []
         for partida in partidas:
-            await self._uow.partidas.find_by_id_for_update(partida.id)
+            if (
+                bloqueada := await self._uow.partidas.find_by_id_for_update(partida.id)
+            ) is not None:
+                bloqueadas.append(bloqueada)
+        return bloqueadas
 
     async def _partidos_jugados(self, round_id: RoundId, bloquear: bool) -> bool:
         partidos_de = (
@@ -106,6 +117,11 @@ class LoJugado:
                 if any(tarjeta.is_recorded for tarjeta in tarjetas):
                     return True
         return False
+
+
+def _alguno_jugo(partidas: Sequence[Partida]) -> bool:
+    """La marca «ha jugado» de alguien: sigue aunque se borren sus golpes (13 oct 2026)."""
+    return any(partida.jugaron for partida in partidas)
 
 
 def _alguno_apuntado(golpes: Sequence[GolpeDePartida]) -> bool:

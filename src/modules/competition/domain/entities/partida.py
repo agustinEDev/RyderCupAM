@@ -62,7 +62,7 @@ class TieneGolpesError(ValueError):
     """Sus golpes dicen que jugó: se retira, no es un no presentado (#550)."""
 
     error_code = "PLAYER_HAS_STROKES"
-    message = "Tiene golpes anotados: retíralo en su lugar."
+    message = "Ya ha jugado (anotó desde su pantalla o tiene algo en su tarjeta): retíralo."
 
 
 class Partida:

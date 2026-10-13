@@ -446,6 +446,25 @@ async def test_a_player_cannot_delete_and_the_side_is_checked(client: AsyncClien
 
 
 @pytest.mark.usefixtures("_ya_abrio")
+async def test_deleting_a_hole_with_nothing_a_bad_hole_and_a_closed_card(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}"
+
+    vacio = await client.delete(f"{base}/holes/7", params={"side": "both"})
+    hoyo_19 = await client.delete(f"{base}/holes/19", params={"side": "both"})
+    await client.put(f"{base}/holes/1", json={"own_score": 4})
+    await client.post(f"{base}/retire")
+    cerrada = await client.delete(f"{base}/holes/1", params={"side": "own"})
+
+    assert vacio.status_code == 200, vacio.text
+    assert hoyo_19.status_code == 400, hoyo_19.text
+    assert cerrada.status_code == 409, cerrada.text
+    assert cerrada.json()["error_code"] == "SCORECARD_ALREADY_SUBMITTED"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
 async def test_a_player_cannot_retire_another(client: AsyncClient):
     _, _, partida, por_id = await _con_partida_y_organizador(client)
     jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]

@@ -696,14 +696,68 @@ async def _borra(escenario, partida, jugador, lado, hoyo=1, quien=None):
 async def test_deleting_what_was_entered(lado, propio, del_marcador):
     escenario, partida = await _en_juego(n=3)
     a = partida.user_ids[0]
-    await _anotar(escenario, partida, a, range(1, 2), 4, 4)
-    assert (await _golpe(escenario, partida, a)).validado
+    await _anotar(escenario, partida, a, range(1, 2), 4, 5)
 
     await _borra(escenario, partida, a, lado)
 
     golpe = await _golpe(escenario, partida, a)
-    assert (golpe.propio, golpe.del_marcador) == (propio, None if lado != "own" else 4)
+    assert (golpe.propio, golpe.del_marcador) == (propio, del_marcador)
     assert not golpe.validado
+
+
+async def test_deleting_a_validated_hole_unvalidates_it():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 2), 4, 4)
+    assert (await _golpe(escenario, partida, a)).validado
+
+    await _borra(escenario, partida, a, "marker")
+
+    assert not (await _golpe(escenario, partida, a)).validado
+
+
+async def test_closing_after_deleting_a_mistaken_stroke_is_a_no_show():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _corrige(escenario, partida, a, own_score=4)
+    await _borra(escenario, partida, a, "own")
+
+    await _cerrar(escenario)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_closing_after_deleting_what_a_player_scored_keeps_them_retired():
+    # Su marca sigue encendida aunque se borre lo que anotó desde su pantalla
+    escenario, partida = await _en_juego(n=3)
+    marcador = partida.user_ids[0]
+    await _anoto_a_su_marcado(escenario, partida, marcador)
+    await _borra(escenario, partida, partida.marcadores[marcador], "marker")
+
+    await _cerrar(escenario)
+
+    assert (await _tarjetas(escenario, partida))[marcador] == EstadoDeTarjeta.RETIRADO
+
+
+@pytest.mark.parametrize(
+    "cuerpo", [{"own_score": 4}, {"marker_score": 4}], ids=["su-golpe", "otra-tarjeta"]
+)
+async def test_a_playing_organiser_correcting_does_not_light_their_mark(cuerpo):
+    escenario, partida = await _en_juego(n=3)
+    organizador = partida.user_ids[0]
+    competicion = await escenario.uow.competitions.find_by_id(escenario.competicion.id)
+    competicion._creator_id = organizador
+    await escenario.uow.competitions.update(competicion)
+    no_marca = next(
+        u for u in partida.user_ids if u not in (organizador, partida.marcadores[organizador])
+    )
+    # Su propio golpe desde la vista de organizador no es «desde su pantalla»;
+    # el del marcador de quien no marca, tampoco
+    jugador = organizador if "own_score" in cuerpo else no_marca
+
+    await _corrige(escenario, partida, jugador, quien=organizador, **cuerpo)
+
+    assert organizador not in (await escenario.uow.partidas.find_by_id(partida.id)).jugaron
 
 
 async def test_deleting_a_mistaken_stroke_allows_the_no_show():
@@ -765,3 +819,13 @@ async def test_deleting_a_hole_with_nothing():
     await _borra(escenario, partida, a, "both", hoyo=7)
 
     assert await escenario.uow.golpes_de_partida.de_la_partida(partida.id) == []
+
+
+async def test_an_admin_can_delete():
+    escenario, partida = await _en_juego(n=3)
+    a, b, _ = partida.user_ids
+    await _anotar(escenario, partida, a, range(1, 2), 4)
+
+    await _borrar(escenario).execute(partida.id.value, a.value, 1, "own", b, True)
+
+    assert not (await _golpe(escenario, partida, a)).apuntado

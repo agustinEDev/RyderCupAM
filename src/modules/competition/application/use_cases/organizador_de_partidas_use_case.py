@@ -218,7 +218,8 @@ class BorrarHoyoDePartidaUseCase:
     ) -> None:
         """
         Raises:
-            InvalidHoleNumberError, PartidaNoAnotableError, ScoringNotOpenYetError
+            PartidaNotFoundError, NotCompetitionCreatorError, InvalidHoleNumberError
+            PartidaNoAnotableError, ScoringNotOpenYetError
             TarjetaCerradaError: Si su tarjeta está cerrada: se reabre antes
         """
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:

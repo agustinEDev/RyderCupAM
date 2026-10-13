@@ -349,7 +349,7 @@ async def correct_tee_group_hole(
     ),
     tags=["Competitions - Tee groups"],
 )
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def delete_tee_group_hole(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     group_id: UUID,
