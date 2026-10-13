@@ -46,7 +46,7 @@ async def ventana_de(
             await uow.rounds.find_by_competition(competition.id), zonas
         )
     except ZonaDesconocidaError as e:
-        return Ventana(False, motivo=str(e))
+        return Ventana(False, motivo=str(e), codigo="NO_TIMEZONE")
     inscritos = await uow.enrollments.find_by_competition_and_status(
         competition.id, EnrollmentStatus.APPROVED
     )

@@ -103,7 +103,13 @@ class RoundResponseDTO(BaseModel):
     golf_course_id: UUID = Field(..., description="ID del campo de golf.")
     round_date: date = Field(..., description="Fecha de la ronda.")
     session_type: str = Field(..., description="Tipo de sesión (MORNING/AFTERNOON/EVENING).")
-    match_format: str = Field(..., description="Formato de partido (SINGLES/FOURBALL/FOURSOMES).")
+    match_format: str | None = Field(
+        ...,
+        description=(
+            "Formato de partido (SINGLES/FOURBALL/FOURSOMES). Null en las franjas de un "
+            "Stableford o un Medal, que no tienen partidos (#541)."
+        ),
+    )
     status: str = Field(..., description="Estado de la ronda.")
     handicap_mode: str | None = Field(None, description="Modo de handicap (MATCH_PLAY).")
     allowance_percentage: int | None = Field(

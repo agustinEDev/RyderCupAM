@@ -1,6 +1,7 @@
 """Caso de Uso: Obtener Schedule de la competición."""
 
 from collections import defaultdict
+from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
@@ -164,7 +166,10 @@ class GetScheduleUseCase:
                 golf_course_id=round_entity.golf_course_id.value,
                 round_date=round_entity.round_date,
                 session_type=round_entity.session_type.value,
-                match_format=round_entity.match_format.value,
+                # Una franja de stroke play no tiene formato de partido (#541)
+                match_format=None
+                if round_entity.hoja_de_salidas
+                else round_entity.match_format.value,
                 status=round_entity.status.value,
                 handicap_mode=round_entity.handicap_mode.value
                 if round_entity.handicap_mode
@@ -177,10 +182,8 @@ class GetScheduleUseCase:
                     [e.user_id.value for e in esperas if e.round_id == round_entity.id],
                 ),
                 matches=match_dtos,
-                scoring_opens_at=ScoringOpeningService.opens_at(
-                    round_entity.round_date,
-                    round_entity.session_type,
-                    zonas_por_campo.get(round_entity.golf_course_id),
+                scoring_opens_at=_abre(
+                    round_entity, zonas_por_campo.get(round_entity.golf_course_id)
                 ),
                 match_generation_block=block_to_dto(round_entity.match_generation_block),
                 resting_player_ids=[
@@ -265,3 +268,17 @@ def _hoja(
         player_ids=jugadores,
         waiting_ids=esperan,
     )
+
+
+def _abre(ronda, zona: str | None) -> datetime | None:
+    """
+    Una franja de stroke play abre a su primera salida, como en su vista de
+    anotar (#551); una sesión de Ryder, a la hora de su sesión (BE #305).
+    """
+    hoja = ronda.hoja_de_salidas
+    if hoja is None:
+        return ScoringOpeningService.opens_at(ronda.round_date, ronda.session_type, zona)
+    campo = zona_del_campo(zona)
+    if campo is None or ronda.round_date is None:
+        return None
+    return datetime.combine(ronda.round_date, hoja.hora_de(1), tzinfo=campo)

@@ -546,7 +546,7 @@ class TestUpdateCompetitionUseCase:
             CompetitionId(created.id), UpdateCompetitionRequestDTO(name="Ya con nombre"), creator_id
         )
 
-        assert result.name == "Ya Con Nombre"
+        assert result.name == "Ya con nombre"
 
     async def test_should_raise_error_once_enrollment_is_closed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

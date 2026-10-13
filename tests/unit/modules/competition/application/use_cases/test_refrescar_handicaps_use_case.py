@@ -464,7 +464,7 @@ class TestLaPasada:
         e.avisos.send_handicaps_pending_email.assert_awaited_once_with(
             to_email=creador.email.value,
             organizer_name=creador.get_full_name(),
-            competition_name="Medal De Octubre",  # el dominio lo guarda así
+            competition_name="Medal de octubre",  # el dominio lo guarda así
             competition_id=str(torneo.value),
             pending_names=[e.nombre(roto)],
         )

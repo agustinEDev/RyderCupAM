@@ -686,7 +686,7 @@ async def update_handicaps(
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ActualizacionNoPermitidaError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        return _no_permitida(e)
     except (ActualizacionEnCursoError, RefrescoDesactivadoError) as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     return HandicapUpdateLaunchedDTO(
@@ -730,7 +730,7 @@ async def schedule_handicap_update(
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ActualizacionNoPermitidaError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        return _no_permitida(e)
     except RefrescoDesactivadoError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     return ScheduledHandicapUpdateDTO(run_at=para)
@@ -760,3 +760,15 @@ async def cancel_scheduled_handicap_update(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+
+
+def _no_permitida(error: ActualizacionNoPermitidaError) -> JSONResponse:
+    """El 400 con el motivo como código, para decirlo en el idioma de la app (#541)."""
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": str(error),
+            "error_code": "HANDICAP_UPDATE_NOT_ALLOWED",
+            "reason_code": error.codigo,
+        },
+    )

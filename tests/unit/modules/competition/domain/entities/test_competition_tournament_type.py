@@ -150,7 +150,7 @@ class TestUnTorneoDeStrokePlay:
 
         competicion.update_info(name=CompetitionName("Stableford de otoño"))
 
-        assert str(competicion.name) == "Stableford De Otoño"
+        assert str(competicion.name) == "Stableford de otoño"
         assert competicion.ryder_cup is None
 
     def test_la_baja_de_un_jugador_no_toca_capitanes(self):

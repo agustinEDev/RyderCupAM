@@ -5,6 +5,7 @@ Este Value Object representa el nombre de una competición de golf.
 Aplica validaciones de negocio y normalización automática.
 """
 
+import re
 from dataclasses import dataclass
 
 # Constantes de validación
@@ -17,23 +18,29 @@ class InvalidCompetitionNameError(Exception):
     pass
 
 
+# [^<>]+ y no [^>]+: sin retroceso polinómico (ReDoS), como `sanitize_html`
+_ETIQUETA = re.compile(r"<[^<>]+>")
+_CONTROL = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+
 @dataclass(frozen=True)
 class CompetitionName:
     """
     Value Object para nombres de competición.
 
     Inmutable y validado automáticamente.
-    Aplica capitalización (Title Case) para mantener consistencia.
 
     Reglas de negocio:
     - No puede estar vacío
     - Máximo 100 caracteres
-    - Se normaliza aplicando capitalización
+    - Se guarda tal cual lo escribe el organizador, sin etiquetas HTML ni
+      caracteres de control y con los espacios normalizados (#540); para no
+      repetir nombre se compara sin mayúsculas
 
     Ejemplos:
-        >>> name = CompetitionName("ryder cup 2025")
+        >>> name = CompetitionName("  RCG  El Prat ")
         >>> print(name.value)
-        'Ryder Cup 2025'
+        'RCG El Prat'
 
         >>> CompetitionName("")  # Lanza InvalidCompetitionNameError
     """
@@ -50,27 +57,30 @@ class CompetitionName:
         if not isinstance(self.value, str):
             raise InvalidCompetitionNameError("El nombre debe ser un string")
 
-        # 1. Normalizar: eliminar espacios en blanco al inicio/final
-        normalized_name = self.value.strip()
+        # 1. Fuera etiquetas HTML y caracteres de control (#540: sin title(), el
+        #    `<script>` ya no salía disfrazado de `<Script>`), sin escapar el `&`
+        sin_html = _CONTROL.sub("", _ETIQUETA.sub("", self.value))
+        # 2. Normalizar los espacios: fuera los de los extremos y uno solo dentro
+        normalized_name = " ".join(sin_html.split())
 
-        # 2. Validar que no esté vacío
+        # 3. Validar que no esté vacío
         if not normalized_name:
             raise InvalidCompetitionNameError("El nombre de la competición no puede estar vacío")
 
-        # 3. Validar longitud máxima
+        # 4. Validar longitud máxima
         if len(normalized_name) > MAX_COMPETITION_NAME_LENGTH:
             raise InvalidCompetitionNameError(
                 f"El nombre de la competición no puede exceder {MAX_COMPETITION_NAME_LENGTH} caracteres. "
                 f"Longitud actual: {len(normalized_name)}"
             )
 
-        # 4. Aplicar capitalización (Title Case)
-        # Cada palabra comienza con mayúscula
-        capitalized_name = normalized_name.title()
+        # 5. Tal cual lo escribió el organizador: «RCG El Prat», «Copa McGregor» (#540)
+        object.__setattr__(self, "value", normalized_name)
 
-        # 5. Asignar el valor normalizado y validado
-        # Usar object.__setattr__ porque la clase es frozen
-        object.__setattr__(self, "value", capitalized_name)
+    @property
+    def clave(self) -> str:
+        """Para no repetir nombre: sin distinguir mayúsculas (#540)."""
+        return self.value.lower()
 
     def __str__(self) -> str:
         """Representación string legible."""

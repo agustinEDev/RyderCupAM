@@ -1355,6 +1355,34 @@ class TestEdgeCases:
         assert response.status_code == 409
 
     @pytest.mark.asyncio
+    async def test_the_name_keeps_its_capitals_and_repeats_ignore_them(self, client: AsyncClient):
+        """#540: «RCG El Prat» se guarda tal cual; «rcg  el prat» es el mismo nombre."""
+        user = await create_authenticated_user(
+            client, "capitals540@test.com", "P@ssw0rd123!", "Cap", "Itals"
+        )
+        start = date.today() + timedelta(days=30)
+        comp_data = {
+            "name": "RCG El Prat",
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=3)).isoformat(),
+            "main_country": "ES",
+            "play_mode": "SCRATCH",
+            "max_players": 24,
+            "team_assignment": "MANUAL",
+        }
+
+        creada = await client.post("/api/v1/competitions", json=comp_data, cookies=user["cookies"])
+        repetida = await client.post(
+            "/api/v1/competitions",
+            json={**comp_data, "name": "rcg  el prat"},
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201, creada.text
+        assert creada.json()["name"] == "RCG El Prat"
+        assert repetida.status_code == 409, repetida.text
+
+    @pytest.mark.asyncio
     async def test_update_while_enrollment_is_open_succeeds(self, client: AsyncClient):
         """BE #323: con las inscripciones abiertas todavía se corrige el montaje."""
         user = await create_authenticated_user(

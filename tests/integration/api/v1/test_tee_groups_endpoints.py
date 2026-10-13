@@ -432,7 +432,8 @@ async def test_swapping_with_one_of_a_full_group(client: AsyncClient):
 #
 # | Caso                                       | Respuesta                               |
 # |--------------------------------------------|-----------------------------------------|
-# | Un jugador mira la franja                  | 200, la misma vista                     |
+# | Un jugador mira la franja                  | 200, la misma vista, editable false     |
+# | El organizador la mira (en plazo)          | editable true (#541)                    |
 # | Sin sesión                                 | 401                                     |
 # | Una franja que no existe                   | 404                                     |
 # | Mis partidas / de quien no juega ninguna   | 200 con la suya / 200 vacía             |
@@ -447,11 +448,14 @@ async def test_a_player_sees_the_window(client: AsyncClient):
     sin_sesion = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
     set_auth_cookies(client, organizador["cookies"])
     no_existe = await client.get(f"/api/v1/competitions/rounds/{uuid.uuid4()}/groups")
+    del_organizador = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
 
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["groups"] == [partida]
+    assert respuesta.json()["editable"] is False
     assert sin_sesion.status_code == 401, sin_sesion.text
     assert no_existe.status_code == 404, no_existe.text
+    assert del_organizador.json()["editable"] is True
 
 
 async def test_my_groups(client: AsyncClient):

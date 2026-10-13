@@ -192,8 +192,10 @@ class TestElBoton:
     async def test_cerca_de_la_salida_400_con_el_motivo(self, e):
         await e.torneo()
 
-        with pytest.raises(ActualizacionNoPermitidaError, match="salida"):
+        with pytest.raises(ActualizacionNoPermitidaError, match="salida") as error:
             await e.pulsar(CERCA)
+
+        assert error.value.codigo == "TOO_CLOSE"
 
     async def test_con_la_jornada_en_marcha_400(self, e):
         await e.torneo(status=CompetitionStatus.IN_PROGRESS)
@@ -258,6 +260,7 @@ class TestLaVentanaEnLaFicha:
         assert ventana.open
         assert ventana.closes_at == datetime(2030, 10, 11, 6, 59, tzinfo=UTC)
         assert ventana.reason is None
+        assert ventana.reason_code is None
 
     async def test_cerrada_con_el_motivo(self, e):
         await e.torneo()
@@ -268,6 +271,7 @@ class TestLaVentanaEnLaFicha:
 
         assert not ventana.open
         assert "salida" in ventana.reason
+        assert ventana.reason_code == "TOO_CLOSE"
 
     async def test_sin_el_refresco_encendido_apagado_y_dice_por_que(self, e):
         """Si no, el botón saldría activo y respondería 409 (code-review de la 3b)."""
@@ -279,6 +283,7 @@ class TestLaVentanaEnLaFicha:
 
         assert not ventana.open
         assert "producción" in ventana.reason
+        assert ventana.reason_code == "DISABLED"
 
     async def test_con_una_en_marcha_apagado(self, e):
         await e.torneo()
@@ -290,6 +295,7 @@ class TestLaVentanaEnLaFicha:
 
         assert not ventana.open
         assert "Ya se están" in ventana.reason
+        assert ventana.reason_code == "RUNNING"
 
     async def test_por_estado_sin_mirar_las_zonas(self, e):
         """Con las inscripciones abiertas el motivo es ese, aunque el campo no tenga zona."""
@@ -310,3 +316,16 @@ class TestLaVentanaEnLaFicha:
         )
 
         assert ventana is None
+
+
+class TestElCodigoSinZona:
+    async def test_sin_zona_del_campo_tambien_con_codigo(self, e):
+        await e.torneo()
+        e.zonas.zona = None
+
+        ventana = await VentanaDeActualizacionUseCase(e.uow, e.zonas, lambda: A_TIEMPO).execute(
+            e.competicion.id, e.creador
+        )
+
+        assert not ventana.open
+        assert ventana.reason_code == "NO_TIMEZONE"

@@ -259,7 +259,8 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .select_from(Competition)
             .where(
                 and_(
-                    Competition._name_value == str(name),
+                    # Sin distinguir mayúsculas: el nombre se guarda tal cual (#540)
+                    func.lower(Competition._name_value) == name.clave,
                     Competition._creator_id == creator_id,
                 )
             )

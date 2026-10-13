@@ -17,6 +17,7 @@ medianoche, hora del campo). En una Ryder, del cierre a iniciar.
 | Con una jornada en marcha                           | Cerrada                                 |
 | Entre jornadas (pasada la medianoche)               | Abierta hasta la siguiente              |
 | Tras la última jornada                              | Cerrada                                 |
+| Cada motivo                                         | Con su código, para traducirlo (#541)   |
 """
 
 from datetime import UTC, datetime, timedelta
@@ -131,3 +132,30 @@ class TestAntesDeCadaJornada:
 
         assert not ventana.abierta
         assert "no quedan" in ventana.motivo
+
+
+class TestElCodigoDeCadaMotivo:
+    """El aviso llegaba en español con la app en inglés: el front traduce el código (#541)."""
+
+    def test_cada_caso_cerrado_con_su_codigo(self):
+        casos = {
+            "STATUS": _ventana(datetime(2030, 10, 1, tzinfo=UTC), status=CompetitionStatus.ACTIVE),
+            "RYDER": _ventana(
+                datetime(2030, 10, 1, tzinfo=UTC),
+                status=CompetitionStatus.IN_PROGRESS,
+                stroke_play=False,
+                jornadas=(),
+            ),
+            "NO_WINDOWS": _ventana(
+                datetime(2030, 10, 1, tzinfo=UTC), status=CompetitionStatus.IN_PROGRESS, jornadas=()
+            ),
+            "DAY_IN_PLAY": _ventana(VIERNES.primera_salida, status=CompetitionStatus.IN_PROGRESS),
+            "NO_DAYS_LEFT": _ventana(SABADO.fin, status=CompetitionStatus.IN_PROGRESS),
+            "TOO_CLOSE": _ventana(VIERNES.primera_salida - timedelta(seconds=300)),
+        }
+
+        assert {codigo: v.codigo for codigo, v in casos.items()} == {c: c for c in casos}
+        assert not any(v.abierta for v in casos.values())
+
+    def test_abierta_sin_codigo(self):
+        assert _ventana(datetime(2030, 10, 10, 12, 0, tzinfo=UTC)).codigo is None

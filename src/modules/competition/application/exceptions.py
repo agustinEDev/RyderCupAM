@@ -54,7 +54,10 @@ class FranjaEnElPasadoError(FranjaInvalidaError):
 class ActualizacionNoPermitidaError(Exception):
     """Fuera de la ventana para actualizar los hándicaps a mano (#251)."""
 
-    pass
+    def __init__(self, mensaje: str | None, codigo: str | None = None):
+        super().__init__(mensaje)
+        # Para que el cliente lo diga en su idioma (#541)
+        self.codigo = codigo
 
 
 class ActualizacionEnCursoError(Exception):

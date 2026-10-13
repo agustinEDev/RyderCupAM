@@ -265,6 +265,15 @@ class CreateCompetitionRequestDTO(BaseModel):
         ),
     )
 
+    organizer_plays: bool = Field(
+        True,
+        description=(
+            "Solo en un STABLEFORD o un MEDAL: si el organizador juega (#552). Si no, no "
+            "queda inscrito y puede cerrar las inscripciones sin plaza. En una Ryder Cup "
+            "se ignora: el organizador siempre queda inscrito."
+        ),
+    )
+
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
     def uppercase_country_codes(cls, v):
@@ -616,6 +625,22 @@ class HandicapUpdateWindowDTO(BaseModel):
         ),
     )
     reason: str | None = Field(None, description="Por qué no, si está cerrada.")
+    reason_code: (
+        Literal[
+            "STATUS",
+            "NO_WINDOWS",
+            "RYDER",
+            "DAY_IN_PLAY",
+            "NO_DAYS_LEFT",
+            "TOO_CLOSE",
+            "NO_TIMEZONE",
+            "DISABLED",
+            "RUNNING",
+        ]
+        | None
+    ) = Field(
+        None, description="El motivo como código, para decirlo en el idioma de la app (#541)."
+    )
     scheduled_at: datetime | None = Field(
         None, description="Si hay una actualización programada, para cuándo (#251)."
     )

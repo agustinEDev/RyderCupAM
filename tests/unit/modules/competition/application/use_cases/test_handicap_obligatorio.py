@@ -93,15 +93,15 @@ class _Escenario:
         self.usuarios = _Usuarios()
         self.creador = self.usuarios.alta(10.0)
 
-    async def torneo(self, tipo="STABLEFORD", creador=None) -> CompetitionId:
-        extra = {"tournament_type": tipo}
+    async def torneo(self, tipo="STABLEFORD", creador=None, **mas) -> CompetitionId:
+        extra = {"tournament_type": tipo, **mas}
         if tipo != "RYDER_CUP":
             extra["stroke_play"] = StrokePlaySettingsDTO(category_limits=[Decimal("12.0")])
         respuesta = await CreateCompetitionUseCase(
             self.uow, LocationBuilder(self.uow.countries), self.usuarios
         ).execute(
             CreateCompetitionRequestDTO(
-                name="Medal de octubre",
+                name=extra.pop("name", "Medal de octubre"),
                 start_date=date(2030, 10, 12),
                 end_date=date(2030, 10, 12),
                 main_country="ES",
@@ -209,6 +209,35 @@ class TestParaEntrarHaceFaltaHandicap:
         )
 
 
+class TestElOrganizadorQueNoJuega:
+    """
+    #552 (decidido el 13 oct 2026): al crear un Stableford o un Medal se dice si
+    el organizador juega. Si no, no se inscribe y puede cerrar sin plaza.
+    """
+
+    async def _inscritos(self, e, torneo):
+        async with e.uow:
+            return await e.uow.enrollments.find_by_competition(torneo)
+
+    async def test_por_defecto_juega_y_queda_inscrito(self, e):
+        torneo = await e.torneo()
+
+        assert [i.user_id for i in await self._inscritos(e, torneo)] == [e.creador]
+
+    async def test_si_no_juega_no_se_inscribe(self, e):
+        torneo = await e.torneo(organizer_plays=False)
+
+        assert await self._inscritos(e, torneo) == []
+
+    async def test_si_no_juega_no_le_hace_falta_handicap(self, e):
+        await e.torneo(creador=e.usuarios.alta(None), organizer_plays=False)
+
+    async def test_en_una_ryder_se_ignora(self, e):
+        torneo = await e.torneo(tipo="RYDER_CUP", organizer_plays=False)
+
+        assert [i.user_id for i in await self._inscritos(e, torneo)] == [e.creador]
+
+
 class TestElHandicapPersonalizado:
     async def test_no_se_quita_si_se_queda_sin_ninguno(self, e):
         torneo = await e.torneo()
@@ -295,3 +324,16 @@ class TestLoQueEncontroCodeRabbitEnLa506:
     async def test_quitar_el_personalizado_exige_los_usuarios(self, e):
         with pytest.raises(TypeError):
             RemoveCustomHandicapUseCase(e.uow)  # type: ignore[call-arg]
+
+
+class TestElNombreRepetido:
+    async def test_el_mismo_nombre_con_otras_mayusculas_es_repetido(self, e):
+        # #540: se guarda tal cual, pero «medal  de OCTUBRE» repite «Medal de octubre»
+        from src.modules.competition.application.use_cases.create_competition_use_case import (
+            CompetitionAlreadyExistsError,
+        )
+
+        await e.torneo()
+
+        with pytest.raises(CompetitionAlreadyExistsError):
+            await e.torneo(name="medal  de OCTUBRE")

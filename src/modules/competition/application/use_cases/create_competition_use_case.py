@@ -168,8 +168,11 @@ class CreateCompetitionUseCase:
             # 10. Persistir la competición
             await self._uow.competitions.add(competition)
 
-            # 11. Auto-enroll del creador como jugador APPROVED. Juega, así que
-            # su género hace falta como el de cualquier inscrito (#710)
+            # 11. Auto-enroll del creador como jugador APPROVED, salvo que en un
+            # stroke play diga que no juega (#552). Juega, así que su género hace
+            # falta como el de cualquier inscrito (#710)
+            if competition.stroke_play is not None and not request.organizer_plays:
+                return self._respuesta(competition)
             await exigir_genero(self._user_repo, creator_id, es_quien_se_apunta=True, al_crear=True)
             # Y en un Stableford o un Medal, su hándicap: de él sale su categoría (#251)
             await exigir_handicap(
@@ -183,6 +186,26 @@ class CreateCompetitionUseCase:
             await self._uow.enrollments.add(creator_enrollment)
 
         # 12. Retornar DTO de respuesta
+        return self._respuesta(competition)
+
+    @staticmethod
+    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict:
+        """Lo que llega de stroke play, tal cual: la pieza pone los valores por defecto."""
+        if request.stroke_play is None:
+            return {}
+        # Mandar `stroke_play`, aunque venga vacío, ya es pedir algo que una Ryder no tiene
+        if request.tournament_type.has_teams:
+            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
+        return {
+            "category_limits": request.stroke_play.category_limits,
+            "max_matchdays_per_player": request.stroke_play.max_matchdays_per_player,
+            "overall_standing": request.stroke_play.overall_standing,
+            "category_count": request.stroke_play.category_count,
+        }
+
+    @staticmethod
+    def _respuesta(competition: Competition) -> CreateCompetitionResponseDTO:
+        """La competición recién creada, para la respuesta."""
         return CreateCompetitionResponseDTO(
             id=competition.id.value,
             creator_id=competition.creator_id.value,
@@ -216,18 +239,3 @@ class CreateCompetitionUseCase:
             created_at=competition.created_at,
             updated_at=competition.updated_at,
         )
-
-    @staticmethod
-    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict:
-        """Lo que llega de stroke play, tal cual: la pieza pone los valores por defecto."""
-        if request.stroke_play is None:
-            return {}
-        # Mandar `stroke_play`, aunque venga vacío, ya es pedir algo que una Ryder no tiene
-        if request.tournament_type.has_teams:
-            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
-        return {
-            "category_limits": request.stroke_play.category_limits,
-            "max_matchdays_per_player": request.stroke_play.max_matchdays_per_player,
-            "overall_standing": request.stroke_play.overall_standing,
-            "category_count": request.stroke_play.category_count,
-        }

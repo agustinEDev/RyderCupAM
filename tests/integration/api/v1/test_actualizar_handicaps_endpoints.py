@@ -93,6 +93,7 @@ async def test_el_organizador_la_lanza_y_la_ficha_lo_dice(client: AsyncClient):
     # La lanzada sigue en curso (aquí nadie la pasa): el botón, apagado
     assert ficha["handicap_update_window"]["open"] is False
     assert "Ya se están" in ficha["handicap_update_window"]["reason"]
+    assert ficha["handicap_update_window"]["reason_code"] == "RUNNING"
 
 
 async def test_sin_el_refresco_encendido_es_un_409(client: AsyncClient):
@@ -111,6 +112,8 @@ async def test_sin_zona_del_campo_no_se_sabe_cuando_sale_nadie(client: AsyncClie
 
     assert respuesta.status_code == 400, respuesta.text
     assert "zona horaria" in respuesta.json()["detail"]
+    # El código, para decirlo en el idioma de la app (#541)
+    assert respuesta.json()["reason_code"] == "NO_TIMEZONE"
     assert ficha["handicap_update_window"]["open"] is False
 
 

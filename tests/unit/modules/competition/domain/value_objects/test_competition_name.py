@@ -16,20 +16,39 @@ class TestCompetitionNameCreation:
         name = CompetitionName("Ryder Cup 2025")
         assert name.value == "Ryder Cup 2025"
 
-    def test_create_name_with_lowercase(self):
-        """Debe aplicar capitalización (Title Case)."""
-        name = CompetitionName("ryder cup amateur")
-        assert name.value == "Ryder Cup Amateur"
+    @pytest.mark.parametrize(
+        "escrito",
+        ["QA Medal qcf15", "RCG El Prat", "Copa McGregor", "ryder cup amateur"],
+    )
+    def test_keeps_the_name_as_written(self, escrito):
+        """Las mayúsculas del organizador se respetan (#540): nada de title()."""
+        assert CompetitionName(escrito).value == escrito
 
     def test_create_name_with_spaces(self):
         """Debe remover espacios al inicio y final."""
         name = CompetitionName("  Ryder Cup 2025  ")
         assert name.value == "Ryder Cup 2025"
 
-    def test_create_name_with_mixed_case(self):
-        """Debe normalizar capitalización correctamente."""
-        name = CompetitionName("rYdEr CuP aMaTeUr")
-        assert name.value == "Ryder Cup Amateur"
+    @pytest.mark.parametrize(
+        ("escrito", "guardado"),
+        [
+            ("<script>alert('x')</script>Ryder Cup", "alert('x')Ryder Cup"),
+            ("Copa <b>de</b> Otoño", "Copa de Otoño"),
+            ("Copa & Amigos", "Copa & Amigos"),
+            ("Copa\x00 de\x07 Otoño", "Copa de Otoño"),
+        ],
+    )
+    def test_strips_html_tags_and_control_characters(self, escrito, guardado):
+        """Sin title(), las etiquetas se quitan de verdad (#540; antes salía «<Script>»)."""
+        assert CompetitionName(escrito).value == guardado
+
+    def test_only_tags_is_empty(self):
+        with pytest.raises(InvalidCompetitionNameError):
+            CompetitionName("<b></b>")
+
+    def test_collapses_inner_whitespace(self):
+        """Espacios de más dentro del nombre: uno solo (#540)."""
+        assert CompetitionName("Copa  de\tOtoño   2026").value == "Copa de Otoño 2026"
 
 
 class TestCompetitionNameValidation:
@@ -85,11 +104,12 @@ class TestCompetitionNameEquality:
         name2 = CompetitionName("Masters 2025")
         assert name1 != name2
 
-    def test_normalized_names_are_equal(self):
-        """Nombres normalizados iguales son iguales."""
+    def test_names_differing_only_in_case_share_the_key(self):
+        """Son valores distintos, pero la misma clave para no repetir nombre (#540)."""
         name1 = CompetitionName("ryder cup")
-        name2 = CompetitionName("RYDER CUP")
-        assert name1 == name2
+        name2 = CompetitionName("RYDER  CUP")
+        assert name1 != name2
+        assert name1.clave == name2.clave
 
     def test_hash_is_consistent(self):
         """Hash debe ser consistente para nombres iguales."""
