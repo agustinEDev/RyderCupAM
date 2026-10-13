@@ -261,7 +261,11 @@ class UpdateCompetitionUseCase:
             # 4. Construir los Value Objects y obtener valores opcionales
             # El mismo de antes no se revalida: uno guardado con las reglas antiguas
             # no impide editar el resto (la app manda siempre el nombre, revisor)
-            mismo = request.name == competition.name.value
+            # Con los espacios ya normalizados: «A » sigue siendo «A» (CodeRabbit)
+            mismo = (
+                request.name is not None
+                and " ".join(request.name.split()) == competition.name.value
+            )
             name = CompetitionName(request.name) if request.name and not mismo else None
             # Renombrar a un nombre que ya tiene es repetirlo, sin mirar mayúsculas (#540)
             if name is not None and await self._uow.competitions.exists_with_name(

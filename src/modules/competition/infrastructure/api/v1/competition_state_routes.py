@@ -35,6 +35,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CompleteCompetitionRequestDTO,
     FillCaptainRequestDTO,
     HandicapUpdateLaunchedDTO,
+    HandicapUpdateRefusedDTO,
     NameCaptainsBodyDTO,
     NameCaptainsRequestDTO,
     NameCaptainsResponseDTO,
@@ -669,13 +670,18 @@ def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
     tags=["Competitions - State Transitions"],
     responses={
         400: {
+            "model": HandicapUpdateRefusedDTO,
             "description": (
                 "Fuera de la ventana. Lleva `error_code` HANDICAP_UPDATE_NOT_ALLOWED y "
                 "`reason_code` (#541): STATUS, NO_WINDOWS, RYDER, DAY_IN_PLAY, NO_DAYS_LEFT, "
                 "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT. "
                 "El 409 lleva RUNNING (ya en marcha) o DISABLED (apagada)."
-            )
-        }
+            ),
+        },
+        409: {
+            "model": HandicapUpdateRefusedDTO,
+            "description": "Ya en marcha (reason_code RUNNING) o apagada (DISABLED).",
+        },
     },
 )
 @limiter.limit("10/minute")
@@ -721,13 +727,18 @@ async def update_handicaps(
     tags=["Competitions - State Transitions"],
     responses={
         400: {
+            "model": HandicapUpdateRefusedDTO,
             "description": (
                 "Fuera de la ventana. Lleva `error_code` HANDICAP_UPDATE_NOT_ALLOWED y "
                 "`reason_code` (#541): STATUS, NO_WINDOWS, RYDER, DAY_IN_PLAY, NO_DAYS_LEFT, "
                 "TOO_CLOSE, NO_TIMEZONE y, al programar, IN_THE_PAST o TOO_TIGHT. "
                 "El 409 lleva RUNNING (ya en marcha) o DISABLED (apagada)."
-            )
-        }
+            ),
+        },
+        409: {
+            "model": HandicapUpdateRefusedDTO,
+            "description": "Ya en marcha (reason_code RUNNING) o apagada (DISABLED).",
+        },
     },
 )
 @limiter.limit("10/minute")

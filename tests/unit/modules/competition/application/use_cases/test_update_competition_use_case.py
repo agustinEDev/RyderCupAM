@@ -868,5 +868,8 @@ class TestRenombrar:
             await uow.competitions.update(guardada)
 
         editada = await self._renombrar(uow, copa, creador, "<B>X</B>")
+        # Reenviado con espacios de más sigue siendo el mismo (CodeRabbit)
+        con_espacios = await self._renombrar(uow, copa, creador, " <B>X</B>  ")
 
         assert editada.name == "<B>X</B>"
+        assert con_espacios.name == "<B>X</B>"

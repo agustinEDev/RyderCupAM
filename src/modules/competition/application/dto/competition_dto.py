@@ -636,6 +636,16 @@ class HandicapUpdateWindowDTO(BaseModel):
     )
 
 
+class HandicapUpdateRefusedDTO(BaseModel):
+    """Por qué no se puede lanzar o programar la actualización de hándicaps (#541)."""
+
+    detail: str = Field(..., description="El motivo, en español.")
+    error_code: Literal["HANDICAP_UPDATE_NOT_ALLOWED"]
+    reason_code: CodigoDeVentana | None = Field(
+        None, description="El motivo como código, para decirlo en el idioma de la app."
+    )
+
+
 class ScheduleHandicapUpdateRequestDTO(BaseModel):
     """Para cuándo programar la actualización de hándicaps (#251)."""
 
