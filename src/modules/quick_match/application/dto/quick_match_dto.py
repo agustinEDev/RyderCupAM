@@ -181,7 +181,8 @@ QuickStartPlayerDTO = Annotated[
 ]
 
 
-def _require_unique(ids: list[UUID], field: str) -> list[UUID]:
+def require_unique(ids: list[UUID], field: str) -> list[UUID]:
+    """Sin repetidos: lo comparten el DTO y el body de la ruta."""
     if len(set(ids)) != len(ids):
         raise ValueError(f"{field} must not contain duplicates.")
     return ids
@@ -209,10 +210,10 @@ class CreateAndStartQuickMatchRequestDTO(CreateQuickMatchRequestDTO):
     @field_validator("scorer_user_ids")
     @classmethod
     def _unique_scorer_user_ids(cls, value: list[UUID]) -> list[UUID]:
-        return _require_unique(value, "scorer_user_ids")
+        return require_unique(value, "scorer_user_ids")
 
 
-class CreateAndStartQuickMatchResultDTO(BaseModel):
+class CreateAndStartQuickMatchResponseDTO(BaseModel):
     """La partida, y si se acaba de crear o ya existía (reintento con el mismo id)."""
 
     quick_match: "QuickMatchResponseDTO"
@@ -345,4 +346,4 @@ class QuickMatchDetailResponseDTO(QuickMatchResponseDTO):
     participant_strokes: list[ParticipantStrokesDTO] = Field(default_factory=list)
 
 
-CreateAndStartQuickMatchResultDTO.model_rebuild()
+CreateAndStartQuickMatchResponseDTO.model_rebuild()

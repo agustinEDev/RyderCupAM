@@ -7,7 +7,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import (
     CreateAndStartQuickMatchRequestDTO,
-    CreateAndStartQuickMatchResultDTO,
+    CreateAndStartQuickMatchResponseDTO,
     QuickStartFriendDTO,
     QuickStartGuestDTO,
 )
@@ -79,23 +79,15 @@ class CreateAndStartQuickMatchUseCase:
 
     async def execute(
         self, request: CreateAndStartQuickMatchRequestDTO
-    ) -> CreateAndStartQuickMatchResultDTO:
+    ) -> CreateAndStartQuickMatchResponseDTO:
         creator_id = UserId(request.creator_id)
         quick_match_id = QuickMatchId(request.quick_match_id)
 
         # Un reintento con el mismo id: la que ya hay, sin volver a validar
         # nada —se validó al crearla— ni crear otra
-        async with self._uow:
-            existing = await self._uow.quick_matches.find_by_id(quick_match_id)
+        existing = await self._already_created(quick_match_id, creator_id)
         if existing is not None:
-            if existing.creator_id != creator_id:
-                raise QuickMatchIdTakenError(f"Quick match id already in use: {quick_match_id}")
-            return CreateAndStartQuickMatchResultDTO(
-                quick_match=await QuickMatchDTOMapper.to_response_dto(
-                    existing, self._user_uow, requester_id=creator_id
-                ),
-                created=False,
-            )
+            return existing
 
         creator_tee = _tee(request.creator_tee_color, request.creator_tee_gender)
         await check_course_and_tees(
@@ -122,19 +114,23 @@ class CreateAndStartQuickMatchUseCase:
         # propio creador, cupo y equipos los dice el dominio antes de preguntar
         # a nadie por nada
         for player in request.participants:
-            quick_match.add_participant(self._participant(player))
+            participant = self._participant(player)
+            quick_match.add_participant(participant)
+            # El hándicap cambiado de un amigo, junto a él: el del invitado ya
+            # va dentro de su participante
+            if isinstance(player, QuickStartFriendDTO) and player.handicap is not None:
+                quick_match.set_participant_handicap(participant.participant_id, player.handicap)
+        if request.creator_handicap is not None:
+            quick_match.set_participant_handicap(
+                ParticipantId(creator_id.value), request.creator_handicap
+            )
 
-        friends = [p for p in request.participants if isinstance(p, QuickStartFriendDTO)]
-        friend_ids = [UserId(f.friend_user_id) for f in friends]
-        await check_friends(self._user_uow, self._social_uow, creator_id, friend_ids)
-
-        overrides = [(creator_id, request.creator_handicap)] + [
-            (friend_id, friend.handicap)
-            for friend_id, friend in zip(friend_ids, friends, strict=True)
+        friend_ids = [
+            UserId(p.friend_user_id)
+            for p in request.participants
+            if isinstance(p, QuickStartFriendDTO)
         ]
-        for user_id, handicap in overrides:
-            if handicap is not None:
-                quick_match.set_participant_handicap(ParticipantId(user_id.value), handicap)
+        await check_friends(self._user_uow, self._social_uow, creator_id, friend_ids)
 
         # El `participant_id` de un registrado es su UserId
         quick_match.start([ParticipantId(sid) for sid in request.scorer_user_ids])
@@ -142,14 +138,40 @@ class CreateAndStartQuickMatchUseCase:
             await profile_handicaps(self._user_uow, [creator_id, *friend_ids])
         )
 
-        async with self._uow:
-            await self._uow.quick_matches.add(quick_match)
+        try:
+            async with self._uow:
+                await self._uow.quick_matches.add(quick_match)
+        except Exception:
+            # Dos reintentos que se cruzan: los dos vieron que no existía y la
+            # otra petición la guardó antes. No es un fallo: es la misma
+            # partida. Si no está, el error era otro y sigue su camino
+            existing = await self._already_created(quick_match_id, creator_id)
+            if existing is None:
+                raise
+            return existing
 
-        return CreateAndStartQuickMatchResultDTO(
+        return CreateAndStartQuickMatchResponseDTO(
             quick_match=await QuickMatchDTOMapper.to_response_dto(
                 quick_match, self._user_uow, requester_id=creator_id
             ),
             created=True,
+        )
+
+    async def _already_created(
+        self, quick_match_id: QuickMatchId, creator_id: UserId
+    ) -> CreateAndStartQuickMatchResponseDTO | None:
+        """La partida con ese id si ya la creó este creador; de otro, 409."""
+        async with self._uow:
+            existing = await self._uow.quick_matches.find_by_id(quick_match_id)
+        if existing is None:
+            return None
+        if existing.creator_id != creator_id:
+            raise QuickMatchIdTakenError(f"Quick match id already in use: {quick_match_id}")
+        return CreateAndStartQuickMatchResponseDTO(
+            quick_match=await QuickMatchDTOMapper.to_response_dto(
+                existing, self._user_uow, requester_id=creator_id
+            ),
+            created=False,
         )
 
     @staticmethod

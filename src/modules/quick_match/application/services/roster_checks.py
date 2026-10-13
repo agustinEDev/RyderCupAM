@@ -21,6 +21,10 @@ from src.modules.quick_match.application.exceptions import (
     InvalidTeeSelectionError,
     NotFriendsError,
 )
+from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
+    QuickMatchUnitOfWorkInterface,
+)
+from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
@@ -96,3 +100,31 @@ async def profile_handicaps(
         for user in users
         if user.id is not None
     }
+
+
+async def check_tee_of_match(
+    quick_match_uow: QuickMatchUnitOfWorkInterface,
+    golf_course_uow: GolfCourseUnitOfWorkInterface,
+    quick_match_id: QuickMatchId,
+    requester_id: UserId,
+    tee: Tee,
+) -> None:
+    """
+    La barra elegida existe en el campo de la partida, al añadir a alguien.
+
+    Se mira ANTES de abrir la transacción que bloquea la partida: dentro, el
+    `async with` del campo hacía commit a mitad sobre la sesión compartida y
+    soltaba el bloqueo. Solo para su creador —a otro le toca el 403 de
+    siempre—, y un campo que ya no está es una barra que no vale, como antes.
+    """
+    color, gender = tee
+    if color is None:
+        return
+    async with quick_match_uow:
+        quick_match = await quick_match_uow.quick_matches.find_by_id(quick_match_id)
+    if quick_match is None or quick_match.creator_id != requester_id:
+        return
+    async with golf_course_uow:
+        golf_course = await golf_course_uow.golf_courses.find_by_id(quick_match.golf_course_id)
+    if not golf_course or not golf_course.has_tee(color, gender):
+        raise InvalidTeeSelectionError(f"{color.value} is not a valid tee for this golf course.")

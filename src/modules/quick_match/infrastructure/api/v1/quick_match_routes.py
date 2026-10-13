@@ -5,7 +5,7 @@ Endpoints FastAPI para gestion de partidas rapidas siguiendo Clean Architecture.
 """
 
 import logging
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
@@ -47,13 +47,13 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     PaginatedQuickMatchResponseDTO,
     QuickMatchDetailResponseDTO,
     QuickMatchResponseDTO,
-    QuickStartFriendDTO,
-    QuickStartGuestDTO,
+    QuickStartPlayerDTO,
     RemoveParticipantRequestDTO,
     SetParticipantHandicapRequestDTO,
     StartQuickMatchRequestDTO,
     SubmitHoleScoreRequestDTO,
     SubmitProxyHoleScoreRequestDTO,
+    require_unique,
 )
 from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
@@ -238,19 +238,6 @@ class StartQuickMatchBody(BaseModel):
         return v
 
 
-class QuickStartFriendBody(AddParticipantBody):
-    """Un amigo al crear e iniciar de una vez, con su hándicap cambiado si se cambió."""
-
-    kind: Literal["FRIEND"]
-    handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
-
-
-class QuickStartGuestBody(AddGuestParticipantBody):
-    """Un invitado sin cuenta al crear e iniciar de una vez."""
-
-    kind: Literal["GUEST"]
-
-
 class CreateAndStartQuickMatchBody(CreateQuickMatchBody):
     """
     Body para crear e iniciar una partida rápida de una vez (FE #848).
@@ -262,17 +249,15 @@ class CreateAndStartQuickMatchBody(CreateQuickMatchBody):
 
     quick_match_id: UUID
     creator_handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
-    participants: list[
-        Annotated[QuickStartFriendBody | QuickStartGuestBody, Field(discriminator="kind")]
-    ] = Field(default_factory=list, max_length=3)
+    # Los mismos jugadores que el DTO, no una copia: si no, un cambio en uno
+    # dejaría pasar en el body lo que el DTO rechaza, y eso es un 500
+    participants: list[QuickStartPlayerDTO] = Field(default_factory=list, max_length=3)
     scorer_user_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
 
     @field_validator("scorer_user_ids")
     @classmethod
     def _unique_scorer_user_ids(cls, v: list[UUID]) -> list[UUID]:
-        if len(set(v)) != len(v):
-            raise ValueError("scorer_user_ids must not contain duplicates.")
-        return v
+        return require_unique(v, "scorer_user_ids")
 
 
 class SubmitHoleScoreBody(BaseModel):
@@ -361,12 +346,7 @@ async def create_and_start_quick_match(
         creator_tee_color=body.creator_tee_color,
         creator_tee_gender=body.creator_tee_gender,
         creator_handicap=body.creator_handicap,
-        participants=[
-            QuickStartFriendDTO(**p.model_dump())
-            if isinstance(p, QuickStartFriendBody)
-            else QuickStartGuestDTO(**p.model_dump())
-            for p in body.participants
-        ],
+        participants=body.participants,
         scorer_user_ids=body.scorer_user_ids,
     )
     try:

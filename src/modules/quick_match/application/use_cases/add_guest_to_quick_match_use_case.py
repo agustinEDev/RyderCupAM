@@ -10,11 +10,11 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
 )
 from src.modules.quick_match.application.exceptions import (
     InvalidParticipantError,
-    InvalidTeeSelectionError,
     NotQuickMatchCreatorError,
     QuickMatchNotFoundError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
+from src.modules.quick_match.application.services.roster_checks import check_tee_of_match
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -53,6 +53,14 @@ class AddGuestToQuickMatchUseCase:
         tee_color = TeeColor(request.tee_color) if request.tee_color else None
         tee_gender = Gender(request.tee_gender) if request.tee_gender else None
 
+        await check_tee_of_match(
+            self._uow,
+            self._golf_course_uow,
+            QuickMatchId(request.quick_match_id),
+            requester_id,
+            (tee_color, tee_gender),
+        )
+
         async with self._uow:
             quick_match = await self._uow.quick_matches.find_by_id_for_update(
                 QuickMatchId(request.quick_match_id)
@@ -64,16 +72,6 @@ class AddGuestToQuickMatchUseCase:
                 raise NotQuickMatchCreatorError(
                     "Only the quick match creator can add participants."
                 )
-
-            if tee_color is not None:
-                async with self._golf_course_uow:
-                    golf_course = await self._golf_course_uow.golf_courses.find_by_id(
-                        quick_match.golf_course_id
-                    )
-                    if not golf_course or not golf_course.has_tee(tee_color, tee_gender):
-                        raise InvalidTeeSelectionError(
-                            f"{tee_color.value} is not a valid tee for this golf course."
-                        )
 
             try:
                 participant = QuickMatchParticipant.for_guest(

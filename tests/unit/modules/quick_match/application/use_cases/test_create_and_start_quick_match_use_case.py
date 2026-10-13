@@ -485,3 +485,43 @@ class TestLoQueAnadioLaRevision:
                     scorer_user_ids=[creator.id.value, uuid4()],
                 )
             )
+
+
+class TestDosReintentosALaVez:
+    """
+    Dos peticiones con el mismo id que se cruzan (`/code-review`): las dos ven
+    que no existe y la segunda falla al guardar. No es un 500: es la misma
+    partida, que ya guardó la otra.
+    """
+
+    async def test_9c_si_la_guardo_otra_peticion_devuelve_esa(
+        self, use_case, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
+        peticion = _peticion(creator, course, friends=[_amigo(friend)])
+        guardar = qm_uow.quick_matches.add
+
+        async def otra_se_adelanta(quick_match):
+            await guardar(quick_match)
+            raise RuntimeError("duplicate key value violates unique constraint")
+
+        qm_uow.quick_matches.add = otra_se_adelanta
+
+        resultado = await use_case.execute(peticion)
+
+        assert resultado.created is False
+        assert resultado.quick_match.id == peticion.quick_match_id
+        assert len(await _guardadas(qm_uow, creator)) == 1
+
+    async def test_9d_si_falla_al_guardar_y_no_esta_el_error_sigue(
+        self, use_case, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
+
+        async def falla(_quick_match):
+            raise RuntimeError("database is gone")
+
+        qm_uow.quick_matches.add = falla
+
+        with pytest.raises(RuntimeError, match="database is gone"):
+            await use_case.execute(_peticion(creator, course, friends=[_amigo(friend)]))
