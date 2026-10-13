@@ -831,7 +831,7 @@ class TestQuienesJugaron:
         return golpe
 
     def _corrige(self, golpe, quien):
-        golpe.anotar_del_marcador(5, True, quien, self.AHORA)
+        golpe.anotar_del_marcador(5, True, quien, self.AHORA, como_marcador=False)
         return golpe
 
     def test_whoever_has_something_on_their_card(self):

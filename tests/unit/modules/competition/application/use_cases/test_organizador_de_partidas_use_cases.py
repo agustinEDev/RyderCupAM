@@ -627,7 +627,7 @@ async def _organiza_y_juega(escenario, partida):
     golpe = GolpeDePartida.crear(
         partida.id, partida.round_id, partida.competition_id, no_marca, 1, escenario.ahora
     )
-    golpe.anotar_del_marcador(4, True, organizador, escenario.ahora)
+    golpe.anotar_del_marcador(4, True, organizador, escenario.ahora, como_marcador=False)
     await escenario.uow.golpes_de_partida.guardar(golpe)
     return organizador
 
@@ -649,3 +649,21 @@ async def test_closing_with_a_playing_organiser_who_only_corrected():
     await _cerrar(escenario, quien=organizador)
 
     assert (await _tarjetas(escenario, partida))[organizador] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_a_playing_organiser_scoring_whom_they_mark_from_the_organiser_view():
+    # /code-review (13 oct): marcó de verdad, aunque fuera desde la vista de organizador
+    escenario, partida = await _en_juego(n=3)
+    organizador = partida.user_ids[0]
+    competicion = await escenario.uow.competitions.find_by_id(escenario.competicion.id)
+    competicion._creator_id = organizador
+    await escenario.uow.competitions.update(competicion)
+    marcado = partida.marcadores[organizador]
+
+    await _corrige(escenario, partida, marcado, quien=organizador, marker_score=4)
+
+    assert (await _golpe(escenario, partida, marcado)).anotado_como_marcador_por == organizador
+    with pytest.raises(TieneGolpesError):
+        await _no_presentado(escenario).execute(
+            partida.id.value, organizador.value, organizador, False
+        )

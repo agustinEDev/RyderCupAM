@@ -174,7 +174,15 @@ class CorregirHoyoDePartidaUseCase:
             if "own_score" in body.model_fields_set:
                 golpe.anotar_propio(body.own_score, acepta_raya, quien, llegada)
             if "marker_score" in body.model_fields_set:
-                golpe.anotar_del_marcador(body.marker_score, acepta_raya, quien, llegada)
+                # Si quien corrige es el marcador de esa tarjeta (el organizador
+                # que juega), está marcando de verdad, no corrigiendo (/code-review)
+                golpe.anotar_del_marcador(
+                    body.marker_score,
+                    acepta_raya,
+                    quien,
+                    llegada,
+                    como_marcador=bloqueada.marcadores.get(quien) == jugador,
+                )
             await self._uow.golpes_de_partida.guardar(golpe)
 
 
@@ -320,7 +328,9 @@ class ValidarLoAnotadoUseCase:
             for golpe in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id):
                 if golpe.user_id != jugador or not golpe.propio_enviado or golpe.marcador_enviado:
                     continue
-                golpe.anotar_del_marcador(golpe.propio, acepta_raya, quien, llegada)
+                golpe.anotar_del_marcador(
+                    golpe.propio, acepta_raya, quien, llegada, como_marcador=False
+                )
                 await self._uow.golpes_de_partida.guardar(golpe)
 
 

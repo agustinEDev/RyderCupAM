@@ -113,7 +113,8 @@ class GolpeDePartida:
         acepta_raya: bool,
         quien: UserId,
         momento: datetime,
-        como_marcador: bool = False,
+        *,
+        como_marcador: bool,
     ) -> None:
         """
         El lado del marcador: lo anota él desde su pantalla (`como_marcador`) o

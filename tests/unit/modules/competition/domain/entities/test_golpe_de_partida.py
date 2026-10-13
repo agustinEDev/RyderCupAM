@@ -78,7 +78,9 @@ def test_both_sides(propio, del_marcador, estado):
     golpe = _golpe()
 
     golpe.anotar_propio(propio, acepta_raya=False, quien=JUGADOR, momento=AHORA)
-    golpe.anotar_del_marcador(del_marcador, acepta_raya=False, quien=MARCADOR, momento=AHORA)
+    golpe.anotar_del_marcador(
+        del_marcador, acepta_raya=False, quien=MARCADOR, momento=AHORA, como_marcador=True
+    )
 
     assert golpe.estado == estado
     assert golpe.validado == (estado == ValidationStatus.MATCH)
@@ -88,24 +90,39 @@ def test_a_picked_up_ball_in_stableford_validates_without_strokes():
     golpe = _golpe()
 
     golpe.anotar_propio(None, acepta_raya=True, quien=JUGADOR, momento=AHORA)
-    golpe.anotar_del_marcador(None, acepta_raya=True, quien=MARCADOR, momento=AHORA)
+    golpe.anotar_del_marcador(
+        None, acepta_raya=True, quien=MARCADOR, momento=AHORA, como_marcador=True
+    )
 
     assert golpe.validado
     assert golpe.golpes_validados is None
 
 
-@pytest.mark.parametrize("lado", ["anotar_propio", "anotar_del_marcador"])
+@pytest.mark.parametrize(
+    "lado",
+    [
+        lambda g: g.anotar_propio(None, acepta_raya=False, quien=JUGADOR, momento=AHORA),
+        lambda g: g.anotar_del_marcador(
+            None, acepta_raya=False, quien=JUGADOR, momento=AHORA, como_marcador=True
+        ),
+    ],
+    ids=["anotar_propio", "anotar_del_marcador"],
+)
 def test_no_picked_up_ball_in_medal(lado):
     with pytest.raises(RayaNoPermitidaError):
-        getattr(_golpe(), lado)(None, acepta_raya=False, quien=JUGADOR, momento=AHORA)
+        lado(_golpe())
 
 
 def test_correcting_a_validated_side_unvalidates_it():
     golpe = _golpe()
     golpe.anotar_propio(4, acepta_raya=False, quien=JUGADOR, momento=AHORA)
-    golpe.anotar_del_marcador(4, acepta_raya=False, quien=MARCADOR, momento=AHORA)
+    golpe.anotar_del_marcador(
+        4, acepta_raya=False, quien=MARCADOR, momento=AHORA, como_marcador=True
+    )
 
-    golpe.anotar_del_marcador(5, acepta_raya=False, quien=MARCADOR, momento=AHORA)
+    golpe.anotar_del_marcador(
+        5, acepta_raya=False, quien=MARCADOR, momento=AHORA, como_marcador=True
+    )
 
     assert golpe.estado == ValidationStatus.MISMATCH
     assert golpe.golpes_validados is None
@@ -116,7 +133,9 @@ def test_who_entered_each_side_is_kept():
     golpe = _golpe()
 
     golpe.anotar_propio(4, acepta_raya=False, quien=organizador, momento=AHORA)
-    golpe.anotar_del_marcador(4, acepta_raya=False, quien=MARCADOR, momento=AHORA)
+    golpe.anotar_del_marcador(
+        4, acepta_raya=False, quien=MARCADOR, momento=AHORA, como_marcador=True
+    )
 
     assert (golpe.propio_por, golpe.marcador_por) == (organizador, MARCADOR)
     assert golpe.golpes_validados == 4
@@ -137,7 +156,9 @@ def test_entered_means_someone_wrote_something(lado, golpes, apuntado):
     if lado == "propio":
         golpe.anotar_propio(golpes, acepta_raya=True, quien=JUGADOR, momento=AHORA)
     elif lado == "marcador":
-        golpe.anotar_del_marcador(golpes, acepta_raya=True, quien=MARCADOR, momento=AHORA)
+        golpe.anotar_del_marcador(
+            golpes, acepta_raya=True, quien=MARCADOR, momento=AHORA, como_marcador=True
+        )
 
     assert golpe.apuntado is apuntado
 
@@ -160,7 +181,9 @@ def test_a_correction_does_not_change_who_scored_it_as_marker():
     )
     organizador = UserId.generate()
 
-    golpe.anotar_del_marcador(5, acepta_raya=True, quien=organizador, momento=AHORA)
+    golpe.anotar_del_marcador(
+        5, acepta_raya=True, quien=organizador, momento=AHORA, como_marcador=False
+    )
 
     assert golpe.marcador_por == organizador
     assert golpe.anotado_como_marcador_por == MARCADOR

@@ -57,7 +57,7 @@ async def _validar(escenario, partida, user_id, hoyos=range(1, 19), golpes=4, ma
             partida.id, partida.round_id, partida.competition_id, user_id, hoyo, A_LAS_NUEVE_Y_CINCO
         )
         golpe.anotar_propio(golpes, False, user_id, A_LAS_NUEVE_Y_CINCO)
-        golpe.anotar_del_marcador(golpes, False, marcador, A_LAS_NUEVE_Y_CINCO)
+        golpe.anotar_del_marcador(golpes, False, marcador, A_LAS_NUEVE_Y_CINCO, como_marcador=True)
         await escenario.uow.golpes_de_partida.guardar(golpe)
 
 
@@ -135,7 +135,9 @@ async def test_a_hole_where_player_and_marker_disagree():
         partida.id, partida.round_id, partida.competition_id, a, 18, A_LAS_NUEVE_Y_CINCO
     )
     golpe.anotar_propio(4, False, a, A_LAS_NUEVE_Y_CINCO)
-    golpe.anotar_del_marcador(5, False, partida.marcadores[a], A_LAS_NUEVE_Y_CINCO)
+    golpe.anotar_del_marcador(
+        5, False, partida.marcadores[a], A_LAS_NUEVE_Y_CINCO, como_marcador=True
+    )
     await escenario.uow.golpes_de_partida.guardar(golpe)
 
     with pytest.raises(TarjetaIncompletaError) as error:
