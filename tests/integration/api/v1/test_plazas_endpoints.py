@@ -31,7 +31,7 @@ async def _usuario(client: AsyncClient) -> dict:
     return usuario
 
 
-async def _stableford_con_franja(client: AsyncClient) -> tuple[dict, dict, str]:
+async def _stableford_con_franja(client: AsyncClient, **mas) -> tuple[dict, dict, str]:
     organizador = await _usuario(client)
     start = date.today() + timedelta(days=30)
     competicion = await create_competition(
@@ -45,6 +45,7 @@ async def _stableford_con_franja(client: AsyncClient) -> tuple[dict, dict, str]:
             "play_mode": "HANDICAP",
             "tournament_type": "STABLEFORD",
             "stroke_play": {"category_limits": [12.0]},
+            **mas,
         },
     )
     franja = await add_one_session(client, organizador["cookies"], competicion)
@@ -114,6 +115,21 @@ async def test_cerrar_con_un_aprobado_sin_franja_es_un_400_con_la_lista(client: 
     assert cuerpo["error_code"] == "PLAYERS_WITHOUT_TEE_WINDOW"
     assert [p["missing"] for p in cuerpo["players"]] == ["TEE_WINDOW"]
     assert colocado.status_code == 201, colocado.text
+    assert cerrada.status_code == 200, cerrada.text
+
+
+async def test_un_organizador_que_no_juega_cierra_sin_plaza(client: AsyncClient):
+    # #552 (13 oct 2026): dice al crear que no juega, así que no está inscrito
+    organizador, competicion, franja = await _stableford_con_franja(client, organizer_plays=False)
+    jugador = await _jugador_aprobado(client, organizador, competicion)
+    set_auth_cookies(client, jugador["cookies"])
+    await client.post(f"/api/v1/competitions/rounds/{franja}/places", json={})
+    set_auth_cookies(client, organizador["cookies"])
+
+    inscritos = await client.get(f"/api/v1/competitions/{competicion['id']}/enrollments")
+    cerrada = await client.post(f"/api/v1/competitions/{competicion['id']}/close-enrollments")
+
+    assert organizador["user"]["id"] not in {i["user_id"] for i in inscritos.json()}
     assert cerrada.status_code == 200, cerrada.text
 
 

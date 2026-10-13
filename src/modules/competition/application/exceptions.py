@@ -1,6 +1,10 @@
 """Excepciones compartidas de la capa de aplicación del módulo Competition."""
 
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 
 
 class CompetitionNotFoundError(Exception):
@@ -54,7 +58,10 @@ class FranjaEnElPasadoError(FranjaInvalidaError):
 class ActualizacionNoPermitidaError(Exception):
     """Fuera de la ventana para actualizar los hándicaps a mano (#251)."""
 
-    pass
+    def __init__(self, mensaje: str | None, codigo: "CodigoDeVentana | None" = None):
+        super().__init__(mensaje)
+        # Para que el cliente lo diga en su idioma (#541)
+        self.codigo = codigo
 
 
 class ActualizacionEnCursoError(Exception):
@@ -251,3 +258,9 @@ class CompetitionFullError(Exception):
     traducir llegaba como un 500 sin cabeceras de CORS, y el navegador lo veía
     como un fallo de red.
     """
+
+
+class CompetitionAlreadyExistsError(Exception):
+    """Ya existe una competición del mismo organizador con ese nombre (sin mayúsculas, #540)."""
+
+    pass

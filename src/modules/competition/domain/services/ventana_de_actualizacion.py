@@ -16,6 +16,7 @@ Aquí solo está la decisión: las jornadas llegan ya en horas absolutas.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 
@@ -31,6 +32,23 @@ class Jornada:
     fin: datetime
 
 
+class CodigoDeVentana(StrEnum):
+    """Por qué no se puede actualizar, como código para el idioma de la app (#541)."""
+
+    STATUS = "STATUS"
+    NO_WINDOWS = "NO_WINDOWS"
+    RYDER = "RYDER"
+    DAY_IN_PLAY = "DAY_IN_PLAY"
+    NO_DAYS_LEFT = "NO_DAYS_LEFT"
+    TOO_CLOSE = "TOO_CLOSE"
+    NO_TIMEZONE = "NO_TIMEZONE"
+    DISABLED = "DISABLED"
+    RUNNING = "RUNNING"
+    # Solo al programarla
+    IN_THE_PAST = "IN_THE_PAST"
+    TOO_TIGHT = "TOO_TIGHT"
+
+
 @dataclass(frozen=True)
 class Ventana:
     """Si se puede actualizar ahora, hasta cuándo, y si no, por qué."""
@@ -38,6 +56,8 @@ class Ventana:
     abierta: bool
     cierra: datetime | None = None
     motivo: str | None = None
+    # El motivo como código, para que el cliente lo diga en su idioma (#541)
+    codigo: CodigoDeVentana | None = None
 
 
 class VentanaDeActualizacion:
@@ -65,15 +85,23 @@ class VentanaDeActualizacion:
             ahora: La hora actual, con huso
         """
         if status not in (CompetitionStatus.CLOSED, CompetitionStatus.IN_PROGRESS):
-            return Ventana(False, motivo=VentanaDeActualizacion.MOTIVO_ESTADO)
+            return Ventana(
+                False, motivo=VentanaDeActualizacion.MOTIVO_ESTADO, codigo=CodigoDeVentana.STATUS
+            )
         if not stroke_play or not jornadas:
             if status is CompetitionStatus.CLOSED:
                 return Ventana(True)
             if stroke_play:
                 return Ventana(
-                    False, motivo="Sin franjas, se actualizan hasta iniciar la competición."
+                    False,
+                    motivo="Sin franjas, se actualizan hasta iniciar la competición.",
+                    codigo=CodigoDeVentana.NO_WINDOWS,
                 )
-            return Ventana(False, motivo="En una Ryder se actualizan hasta iniciar la competición.")
+            return Ventana(
+                False,
+                motivo="En una Ryder se actualizan hasta iniciar la competición.",
+                codigo=CodigoDeVentana.RYDER,
+            )
         return VentanaDeActualizacion._entre_jornadas(jornadas, jugadores, ahora)
 
     @staticmethod
@@ -82,11 +110,17 @@ class VentanaDeActualizacion:
         for jornada in jornadas:
             if jornada.primera_salida <= ahora < jornada.fin:
                 return Ventana(
-                    False, motivo="Hay una jornada en marcha: se podrá al acabar el día."
+                    False,
+                    motivo="Hay una jornada en marcha: se podrá al acabar el día.",
+                    codigo=CodigoDeVentana.DAY_IN_PLAY,
                 )
         siguientes = [j.primera_salida for j in jornadas if j.primera_salida > ahora]
         if not siguientes:
-            return Ventana(False, motivo="Ya no quedan jornadas por jugar.")
+            return Ventana(
+                False,
+                motivo="Ya no quedan jornadas por jugar.",
+                codigo=CodigoDeVentana.NO_DAYS_LEFT,
+            )
         cierra = min(siguientes) - timedelta(seconds=SEGUNDOS_POR_JUGADOR * jugadores)
         if ahora >= cierra:
             return Ventana(
@@ -94,5 +128,6 @@ class VentanaDeActualizacion:
                 cierra=cierra,
                 motivo="Queda muy poco para la siguiente salida: no daría tiempo a "
                 "preguntar por todos.",
+                codigo=CodigoDeVentana.TOO_CLOSE,
             )
         return Ventana(True, cierra=cierra)

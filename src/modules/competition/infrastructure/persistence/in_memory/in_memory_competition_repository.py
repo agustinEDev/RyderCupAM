@@ -75,10 +75,15 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
             )
         ]
 
-    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
+    async def exists_with_name(
+        self,
+        name: CompetitionName,
+        creator_id: UserId,
+        except_id: CompetitionId | None = None,
+    ) -> bool:
         """Verifica si existe una competición con un nombre específico para un creador."""
         return any(
-            comp.name == name and comp.creator_id == creator_id
+            comp.name.clave == name.clave and comp.creator_id == creator_id and comp.id != except_id
             for comp in self._competitions.values()
         )
 

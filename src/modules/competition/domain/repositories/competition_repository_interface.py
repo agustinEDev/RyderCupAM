@@ -174,15 +174,22 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
+    async def exists_with_name(
+        self,
+        name: CompetitionName,
+        creator_id: UserId,
+        except_id: CompetitionId | None = None,
+    ) -> bool:
         """
         Verifica si existe una competición con el nombre especificado para un creador.
 
-        Útil para: Prevenir duplicados por creador (mismo creador, mismo nombre).
+        Útil para: Prevenir duplicados por creador (mismo creador, mismo nombre),
+        sin distinguir mayúsculas (#540).
 
         Args:
             name: El nombre de la competición
             creator_id: El ID del usuario creador
+            except_id: La que se renombra, que no cuenta como repetida
 
         Returns:
             bool: True si existe, False si no existe

@@ -57,20 +57,36 @@ def _ver(escenario: _Escenario) -> VerPartidasUseCase:
     )
 
 
-async def _vista(escenario: _Escenario, franja=None):
-    return await _ver(escenario).execute((franja or escenario.manana).id.value)
+async def _vista(escenario: _Escenario, franja=None, quien=None, is_admin=False):
+    return await _ver(escenario).execute(
+        (franja or escenario.manana).id.value, quien or escenario.creador, is_admin
+    )
 
 
-async def test_a_player_sees_the_same_as_the_organiser():
+async def test_a_player_sees_the_same_as_the_organiser_but_cannot_edit():
+    # `editable` dice «puedes editar»: a un jugador, siempre no (#541)
     escenario = _Escenario()
     await escenario.guardar()
     jugadores = [await escenario.con_plaza(f"{h}.0") for h in (3, 2, 1)]
     generada = await escenario.generar()
 
-    vista = await _vista(escenario)
+    vista = await _vista(escenario, quien=jugadores[0])
 
-    assert vista == generada
+    assert generada.editable
+    assert generada.can_add_group
+    assert vista.editable is False
+    # Ni las partidas ni una nueva: nada es «puedes editar» para un jugador (#544)
+    assert vista.can_add_group is False
+    assert [g.can_change for g in vista.groups] == [False]
     assert {p.user_id for p in vista.groups[0].players} == {u.value for u in jugadores}
+
+
+async def test_an_admin_can_edit():
+    escenario = _Escenario()
+    await escenario.guardar()
+    jugador = await escenario.con_plaza("3.0")
+
+    assert (await _vista(escenario, quien=jugador, is_admin=True)).editable
 
 
 async def test_before_generating_everybody_is_unassigned():
@@ -226,7 +242,7 @@ async def test_a_ryder_session_and_a_window_that_does_not_exist():
     with pytest.raises(PartidasError):
         await _vista(escenario, sesion)
     with pytest.raises(RoundNotFoundError):
-        await _ver(escenario).execute(RoundId.generate().value)
+        await _ver(escenario).execute(RoundId.generate().value, escenario.creador, False)
 
 
 async def test_my_groups_in_two_windows_by_day_and_time():

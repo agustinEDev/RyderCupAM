@@ -435,7 +435,7 @@ class TestRequiereTuAtencion:
         assert [(a.competition_id, a.round_id) for a in antes] == [
             (e.competicion.id.value, e.manana.id.value)
         ]
-        assert antes[0].competition_name == "Medal De Octubre"
+        assert antes[0].competition_name == "Medal de octubre"
         assert despues == []
 
     async def test_la_que_coge_el_mismo_no_sale(self, e):

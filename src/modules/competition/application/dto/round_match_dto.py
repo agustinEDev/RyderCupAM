@@ -103,7 +103,13 @@ class RoundResponseDTO(BaseModel):
     golf_course_id: UUID = Field(..., description="ID del campo de golf.")
     round_date: date = Field(..., description="Fecha de la ronda.")
     session_type: str = Field(..., description="Tipo de sesión (MORNING/AFTERNOON/EVENING).")
-    match_format: str = Field(..., description="Formato de partido (SINGLES/FOURBALL/FOURSOMES).")
+    match_format: str | None = Field(
+        ...,
+        description=(
+            "Formato de partido (SINGLES/FOURBALL/FOURSOMES). Null en las franjas de un "
+            "Stableford o un Medal, que no tienen partidos (#541)."
+        ),
+    )
     status: str = Field(..., description="Estado de la ronda.")
     handicap_mode: str | None = Field(None, description="Modo de handicap (MATCH_PLAY).")
     allowance_percentage: int | None = Field(
@@ -122,7 +128,8 @@ class RoundResponseDTO(BaseModel):
             "Hora a la que se puede empezar a anotar los partidos de esta ronda, "
             "con su desfase (BE #305). El cliente la usa para ofrecer «Anotar» "
             "—también sin cobertura, desde lo que tenga guardado— en vez de "
-            "adivinar si alguien pulsó START."
+            "adivinar si alguien pulsó START. En una franja de Stableford o Medal, "
+            "la de su primera salida (#551)."
         ),
     )
     match_generation_block: MatchGenerationBlockDTO | None = Field(

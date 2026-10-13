@@ -16,20 +16,79 @@ class TestCompetitionNameCreation:
         name = CompetitionName("Ryder Cup 2025")
         assert name.value == "Ryder Cup 2025"
 
-    def test_create_name_with_lowercase(self):
-        """Debe aplicar capitalización (Title Case)."""
-        name = CompetitionName("ryder cup amateur")
-        assert name.value == "Ryder Cup Amateur"
+    @pytest.mark.parametrize(
+        "escrito",
+        ["QA Medal qcf15", "RCG El Prat", "Copa McGregor", "ryder cup amateur"],
+    )
+    def test_keeps_the_name_as_written(self, escrito):
+        """Las mayúsculas del organizador se respetan (#540): nada de title()."""
+        assert CompetitionName(escrito).value == escrito
 
     def test_create_name_with_spaces(self):
         """Debe remover espacios al inicio y final."""
         name = CompetitionName("  Ryder Cup 2025  ")
         assert name.value == "Ryder Cup 2025"
 
-    def test_create_name_with_mixed_case(self):
-        """Debe normalizar capitalización correctamente."""
-        name = CompetitionName("rYdEr CuP aMaTeUr")
-        assert name.value == "Ryder Cup Amateur"
+    @pytest.mark.parametrize(
+        ("escrito", "guardado"),
+        [
+            ("<script>alert('x')</script>Ryder Cup", "alert('x')Ryder Cup"),
+            ("Copa <b>de</b> Otoño", "Copa de Otoño"),
+            ("Copa & Amigos", "Copa & Amigos"),
+            ("Copa\x00 de\x07 Otoño", "Copa de Otoño"),
+            # Anidadas: una pasada sola dejaba un <script> de verdad (/code-review)
+            ("<<script>script>alert(1)<</script>/script>", "alert(1)"),
+            ("<scr<b>ipt>Copa</scr</b>ipt>", "Copa"),
+            # Un invisible dentro de la etiqueta no la salva (revisor)
+            ("<\u200bscript>alert(1)</script>Copa", "alert(1)Copa"),
+            ("<\x00img src=x onerror=alert(1)>Copa", "Copa"),
+            ("abc<\u2060svg onload=alert(1)>", "abc"),
+            ("<<\u200bscript>script>Copa", "Copa"),
+            ("<\u200b<b>script>Copa", "Copa"),
+            # Sin cerrar: el `<` pegado a la etiqueta se va (revisor)
+            ("Copa <img src=x onerror=alert(1)//", "Copa img src=x onerror=alert(1)//"),
+            ("Copa <script", "Copa script"),
+            ("Copa </b <!-- x", "Copa /b !-- x"),
+            # Invisibles y de dirección: fuera (/code-review)
+            ("Copa\u200b de\u202e Otoño\ufeff", "Copa de Otoño"),
+            # No son etiquetas: se quedan (revisor)
+            ("Hcp < 10 y > 5", "Hcp < 10 y > 5"),
+            ("Copa <3 amigos>", "Copa <3 amigos>"),
+        ],
+    )
+    def test_strips_html_tags_and_control_characters(self, escrito, guardado):
+        """Sin title(), las etiquetas se quitan de verdad (#540; antes salía «<Script>»)."""
+        assert CompetitionName(escrito).value == guardado
+
+    @pytest.mark.parametrize("escrito", ["<b></b>", "<b>ab</b>", " a\x00b ", "\u200b\u200b\u200b"])
+    def test_too_short_once_cleaned(self, escrito):
+        """El mínimo de 3 se mira después de limpiar: antes daba un 500 (revisor)."""
+        with pytest.raises(InvalidCompetitionNameError):
+            CompetitionName(escrito)
+
+    @pytest.mark.parametrize(
+        "escrito",
+        [
+            "\u3164\u3164\u3164",
+            "\u115f\u115f\u115f",
+            "\u1160\u1160\u1160",
+            "\uffa0\uffa0\uffa0",
+            "\u2800\u2800\u2800",
+            "...",
+        ],
+    )
+    def test_needs_a_letter_or_a_digit(self, escrito):
+        """Rellenos que no son ni letra ni cifra no son un nombre (revisor)."""
+        with pytest.raises(InvalidCompetitionNameError, match="letra o cifra"):
+            CompetitionName(escrito)
+
+    def test_the_error_is_a_value_error(self):
+        """Así las rutas lo devuelven como 400 y no como 500."""
+        assert issubclass(InvalidCompetitionNameError, ValueError)
+
+    def test_collapses_inner_whitespace(self):
+        """Espacios de más dentro del nombre: uno solo (#540)."""
+        assert CompetitionName("Copa  de\tOtoño   2026").value == "Copa de Otoño 2026"
 
 
 class TestCompetitionNameValidation:
@@ -85,11 +144,12 @@ class TestCompetitionNameEquality:
         name2 = CompetitionName("Masters 2025")
         assert name1 != name2
 
-    def test_normalized_names_are_equal(self):
-        """Nombres normalizados iguales son iguales."""
+    def test_names_differing_only_in_case_share_the_key(self):
+        """Son valores distintos, pero la misma clave para no repetir nombre (#540)."""
         name1 = CompetitionName("ryder cup")
-        name2 = CompetitionName("RYDER CUP")
-        assert name1 == name2
+        name2 = CompetitionName("RYDER  CUP")
+        assert name1 != name2
+        assert name1.clave == name2.clave
 
     def test_hash_is_consistent(self):
         """Hash debe ser consistente para nombres iguales."""
@@ -114,3 +174,11 @@ class TestCompetitionNameStringRepresentation:
         """__str__ debe retornar el valor."""
         name = CompetitionName("Ryder Cup 2025")
         assert str(name) == "Ryder Cup 2025"
+
+
+class TestLoYaGuardado:
+    def test_a_stored_name_loads_as_it_is(self):
+        """Lo guardado con las reglas de antes no se vuelve a validar al leer (/code-review)."""
+        assert CompetitionName.guardado("A").value == "A"
+        assert CompetitionName.guardado("<B>X</B>").value == "<B>X</B>"
+        assert CompetitionName.guardado("Copa") == CompetitionName("Copa")

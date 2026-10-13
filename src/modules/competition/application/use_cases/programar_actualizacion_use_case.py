@@ -25,6 +25,7 @@ from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -86,17 +87,22 @@ class ProgramarActualizacionUseCase:
                     "La actualización con la RFEG solo está encendida en producción."
                 )
             if para <= ahora:
-                raise ActualizacionNoPermitidaError("Prográmala para un momento en el futuro.")
+                raise ActualizacionNoPermitidaError(
+                    "Prográmala para un momento en el futuro.", CodigoDeVentana.IN_THE_PAST
+                )
             ventana = await ventana_de(self._uow, self._zonas, competition, para)
             if not ventana.abierta:
-                raise ActualizacionNoPermitidaError(f"A esa hora no se podría: {ventana.motivo}")
+                raise ActualizacionNoPermitidaError(
+                    f"A esa hora no se podría: {ventana.motivo}", ventana.codigo
+                )
             # El vigilante pasa cada minuto: tiene que seguir abierta un rato después
             con_margen = await ventana_de(self._uow, self._zonas, competition, para + MARGEN)
             if not con_margen.abierta:
                 raise ActualizacionNoPermitidaError(
                     "Demasiado justo: prográmala con al menos "
                     f"{int(MARGEN.total_seconds() // 60)} minutos de margen antes de que "
-                    "se cierre la ventana."
+                    "se cierre la ventana.",
+                    CodigoDeVentana.TOO_TIGHT,
                 )
             await self._uow.handicap_updates.programar(competition_id, para, ahora)
         return para

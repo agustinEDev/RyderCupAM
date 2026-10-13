@@ -76,7 +76,7 @@ class TestWhatAStrangerSees:
         uc = ListCompetitionsUseCase(uow)
         visibles = await uc.execute(viewer_id=str(desconocido.value))
 
-        assert [str(c.name) for c in visibles] == ["Campeonato Del Club"]
+        assert [str(c.name) for c in visibles] == ["Campeonato del club"]
 
     async def test_the_organiser_sees_their_own_private_one(self, uow):
         """Quien la monta tiene que poder encontrarla."""
@@ -275,4 +275,4 @@ class TestWhatAStrangerSees:
         uc = ListCompetitionsUseCase(uow)
         visibles = await uc.execute()
 
-        assert [str(c.name) for c in visibles] == ["Campeonato Del Club"]
+        assert [str(c.name) for c in visibles] == ["Campeonato del club"]
