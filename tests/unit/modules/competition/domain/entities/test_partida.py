@@ -803,7 +803,10 @@ class TestQuienesJugaron:
     | Anotó como marcador desde su pantalla a otro de la   | Sí (él también),   |
     |   partida, aunque luego el círculo se rehaga         |   aunque ya no le  |
     |                                                      |   marque           |
-    | Una corrección (organizador o admin, juegue o no)    | Solo el dueño      |
+    | Una corrección (organizador o admin, juegue o no)    | Solo el dueño: su  |
+    |                                                      |   tarjeta ya tiene |
+    |                                                      |   algo (p. ej. la  |
+    |                                                      |   de papel)        |
     | Una corrección encima de lo que anotó el marcador    | El marcador sigue  |
     |                                                      |   contando         |
     | Lo anotó alguien que ya no está en la partida        | No cuenta          |

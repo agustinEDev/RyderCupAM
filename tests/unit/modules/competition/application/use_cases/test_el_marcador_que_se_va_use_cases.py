@@ -307,6 +307,9 @@ async def test_validating_what_the_lone_player_scored():
     assert golpes[(a, 1)].validado and golpes[(a, 2)].validado
     assert golpes[(a, 1)].marcador_por == escenario.creador
     assert not golpes[(a, 3)].validado
+    # Validar es corregir, no marcar: no dice que el organizador jugara (13 oct 2026)
+    assert golpes[(a, 1)].anotado_como_marcador_por is None
+    assert golpes[(a, 3)].anotado_como_marcador_por == partida.user_ids[1]
 
 
 async def test_validating_someone_who_has_a_marker():

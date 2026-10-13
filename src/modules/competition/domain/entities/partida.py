@@ -197,7 +197,8 @@ class Partida:
     def no_presentado(self, user_id: UserId, golpes: Iterable[GolpeDePartida]) -> None:
         """
         No se presentó (P6): también antes de que la partida empiece. Si los
-        golpes de la partida dicen que jugó (`quienes_jugaron`), se retira (#550).
+        golpes de la partida dicen que jugó (`quienes_jugaron`), no lo es: se
+        rechaza y el organizador lo retira (#550).
         """
         self._de_la_partida(user_id)
         if self._tarjetas[user_id] != EstadoDeTarjeta.JUGANDO:
