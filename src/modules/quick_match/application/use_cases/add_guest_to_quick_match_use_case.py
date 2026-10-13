@@ -9,6 +9,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     QuickMatchResponseDTO,
 )
 from src.modules.quick_match.application.exceptions import (
+    InvalidParticipantError,
     InvalidTeeSelectionError,
     NotQuickMatchCreatorError,
     QuickMatchNotFoundError,
@@ -74,14 +75,18 @@ class AddGuestToQuickMatchUseCase:
                             f"{tee_color.value} is not a valid tee for this golf course."
                         )
 
-            participant = QuickMatchParticipant.for_guest(
-                first_name=request.first_name,
-                last_name=request.last_name,
-                handicap=request.handicap,
-                team=request.team,
-                tee_color=tee_color,
-                tee_gender=tee_gender,
-            )
+            try:
+                participant = QuickMatchParticipant.for_guest(
+                    first_name=request.first_name,
+                    last_name=request.last_name,
+                    handicap=request.handicap,
+                    team=request.team,
+                    tee_color=tee_color,
+                    tee_gender=tee_gender,
+                )
+            except ValueError as e:
+                # Un nombre que solo era espacios: 422, no un 500 (FE #848)
+                raise InvalidParticipantError(str(e)) from e
             quick_match.add_participant(participant)
             await self._uow.quick_matches.update(quick_match)
 

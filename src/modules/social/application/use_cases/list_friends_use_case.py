@@ -1,8 +1,8 @@
 """Caso de Uso: Listar los amigos (ACCEPTED) de un usuario."""
 
 from src.modules.social.application.dto.friendship_dto import (
-    FriendshipResponseDTO,
-    PaginatedFriendshipResponseDTO,
+    FriendResponseDTO,
+    PaginatedFriendResponseDTO,
 )
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
@@ -28,7 +28,7 @@ class ListFriendsUseCase:
 
     async def execute(
         self, user_id_raw: str, page: int = 1, limit: int = 20
-    ) -> PaginatedFriendshipResponseDTO:
+    ) -> PaginatedFriendResponseDTO:
         user_id = UserId(user_id_raw)
         offset = (page - 1) * limit
 
@@ -46,7 +46,7 @@ class ListFriendsUseCase:
 
         items = [self._to_dto(f, by_id) for f in friendships]
 
-        return PaginatedFriendshipResponseDTO(
+        return PaginatedFriendResponseDTO(
             friendships=items,
             total_count=total_count,
             page=page,
@@ -54,14 +54,14 @@ class ListFriendsUseCase:
         )
 
     @staticmethod
-    def _to_dto(friendship: Friendship, by_id: dict[UserId, User]) -> FriendshipResponseDTO:
+    def _to_dto(friendship: Friendship, by_id: dict[UserId, User]) -> FriendResponseDTO:
         requester = by_id.get(friendship.requester_id)
         addressee = by_id.get(friendship.addressee_id)
 
         def handicap(user: User | None) -> float | None:
             return user.handicap.value if user and user.handicap else None
 
-        return FriendshipResponseDTO(
+        return FriendResponseDTO(
             id=friendship.id.value,
             requester_id=friendship.requester_id.value,
             # `display_name`: el alias de quien lo tenga, y si no su nombre

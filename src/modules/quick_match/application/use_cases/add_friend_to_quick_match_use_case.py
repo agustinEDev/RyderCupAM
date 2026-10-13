@@ -9,13 +9,12 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     QuickMatchResponseDTO,
 )
 from src.modules.quick_match.application.exceptions import (
-    FriendUserNotFoundError,
     InvalidTeeSelectionError,
-    NotFriendsError,
     NotQuickMatchCreatorError,
     QuickMatchNotFoundError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
+from src.modules.quick_match.application.services.roster_checks import check_friends
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -59,17 +58,7 @@ class AddFriendToQuickMatchUseCase:
         tee_color = TeeColor(request.tee_color) if request.tee_color else None
         tee_gender = Gender(request.tee_gender) if request.tee_gender else None
 
-        async with self._user_uow:
-            friend_user = await self._user_uow.users.find_by_id(friend_id)
-            if not friend_user:
-                raise FriendUserNotFoundError(f"User not found: {request.friend_user_id}")
-
-        async with self._social_uow:
-            are_friends = await self._social_uow.friendships.are_friends(requester_id, friend_id)
-            if not are_friends:
-                raise NotFriendsError(
-                    "Only accepted friends can be added directly to a quick match."
-                )
+        await check_friends(self._user_uow, self._social_uow, requester_id, [friend_id])
 
         async with self._uow:
             quick_match = await self._uow.quick_matches.find_by_id_for_update(

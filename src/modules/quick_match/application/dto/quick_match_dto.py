@@ -1,6 +1,7 @@
 """DTOs para el modulo QuickMatch."""
 
 from datetime import datetime
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -140,6 +141,7 @@ class StartQuickMatchRequestDTO(BaseModel):
 class QuickStartFriendDTO(BaseModel):
     """Un amigo en la partida que se crea e inicia de una vez (FE #848)."""
 
+    kind: Literal["FRIEND"] = "FRIEND"
     friend_user_id: UUID
     team: str | None = Field(None, pattern="^(A|B)$")
     tee_color: str | None = Field(None, pattern=TEE_COLOR_PATTERN)
@@ -160,6 +162,7 @@ class QuickStartFriendDTO(BaseModel):
 class QuickStartGuestDTO(BaseModel):
     """Un invitado sin cuenta en la partida que se crea e inicia de una vez (FE #848)."""
 
+    kind: Literal["GUEST"] = "GUEST"
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
@@ -173,20 +176,47 @@ class QuickStartGuestDTO(BaseModel):
         return self
 
 
+QuickStartPlayerDTO = Annotated[
+    QuickStartFriendDTO | QuickStartGuestDTO, Field(discriminator="kind")
+]
+
+
+def _require_unique(ids: list[UUID], field: str) -> list[UUID]:
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"{field} must not contain duplicates.")
+    return ids
+
+
 class CreateAndStartQuickMatchRequestDTO(CreateQuickMatchRequestDTO):
     """
     Crear e iniciar una partida rápida en una sola petición (FE #848).
 
-    Lo del alta, más los jugadores, los cambios de hándicap y quién anota: el
-    asistente no crea nada hasta «Confirmar e iniciar», y salir a medias no
-    deja una partida pendiente. Los anotadores van por su UserId, que es el
-    `participant_id` de un registrado; un invitado no puede anotar.
+    Lo del alta, más los jugadores EN EL ORDEN en que se añadieron, los cambios
+    de hándicap y quién anota: el asistente no crea nada hasta «Confirmar e
+    iniciar», y salir a medias no deja una partida pendiente.
+
+    - `quick_match_id` lo genera el cliente: reintentar tras perder la
+      respuesta devuelve la misma partida en vez de crear otra.
+    - Los anotadores van por su UserId, que es el `participant_id` de un
+      registrado; un invitado no puede anotar.
     """
 
+    quick_match_id: UUID
     creator_handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
-    friends: list[QuickStartFriendDTO] = Field(default_factory=list, max_length=3)
-    guests: list[QuickStartGuestDTO] = Field(default_factory=list, max_length=3)
+    participants: list[QuickStartPlayerDTO] = Field(default_factory=list, max_length=3)
     scorer_user_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
+
+    @field_validator("scorer_user_ids")
+    @classmethod
+    def _unique_scorer_user_ids(cls, value: list[UUID]) -> list[UUID]:
+        return _require_unique(value, "scorer_user_ids")
+
+
+class CreateAndStartQuickMatchResultDTO(BaseModel):
+    """La partida, y si se acaba de crear o ya existía (reintento con el mismo id)."""
+
+    quick_match: "QuickMatchResponseDTO"
+    created: bool
 
 
 class SubmitHoleScoreRequestDTO(BaseModel):
@@ -313,3 +343,6 @@ class QuickMatchDetailResponseDTO(QuickMatchResponseDTO):
     standing: QuickMatchStandingResponseDTO | None = None
     scoring_assignments: list[ScoringAssignmentDTO] = Field(default_factory=list)
     participant_strokes: list[ParticipantStrokesDTO] = Field(default_factory=list)
+
+
+CreateAndStartQuickMatchResultDTO.model_rebuild()

@@ -5,10 +5,10 @@ Endpoints FastAPI para gestion de partidas rapidas siguiendo Clean Architecture.
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.config.dependencies import (
@@ -59,12 +59,14 @@ from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    InvalidParticipantError,
     InvalidTeeSelectionError,
     NotAScorerError,
     NotAuthorizedToRemoveError,
     NotFriendsError,
     NotQuickMatchCreatorError,
     NotQuickMatchParticipantError,
+    QuickMatchIdTakenError,
     QuickMatchNotFoundError,
     TargetParticipantNotFoundError,
 )
@@ -239,20 +241,30 @@ class StartQuickMatchBody(BaseModel):
 class QuickStartFriendBody(AddParticipantBody):
     """Un amigo al crear e iniciar de una vez, con su hándicap cambiado si se cambió."""
 
+    kind: Literal["FRIEND"]
     handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
+
+
+class QuickStartGuestBody(AddGuestParticipantBody):
+    """Un invitado sin cuenta al crear e iniciar de una vez."""
+
+    kind: Literal["GUEST"]
 
 
 class CreateAndStartQuickMatchBody(CreateQuickMatchBody):
     """
     Body para crear e iniciar una partida rápida de una vez (FE #848).
 
-    Lo del alta, los jugadores, los cambios de hándicap y quién anota (sus
-    UserId: un invitado no anota).
+    Lo del alta, los jugadores en el orden en que se añadieron, los cambios de
+    hándicap y quién anota (sus UserId: un invitado no anota). El id lo genera
+    el cliente: reintentar devuelve la misma partida.
     """
 
+    quick_match_id: UUID
     creator_handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
-    friends: list[QuickStartFriendBody] = Field(default_factory=list, max_length=3)
-    guests: list[AddGuestParticipantBody] = Field(default_factory=list, max_length=3)
+    participants: list[
+        Annotated[QuickStartFriendBody | QuickStartGuestBody, Field(discriminator="kind")]
+    ] = Field(default_factory=list, max_length=3)
     scorer_user_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
 
     @field_validator("scorer_user_ids")
@@ -332,48 +344,55 @@ async def create_quick_match(
 @limiter.limit("20/hour")
 async def create_and_start_quick_match(
     request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
+    response: Response,
     body: CreateAndStartQuickMatchBody,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: CreateAndStartQuickMatchUseCase = Depends(get_create_and_start_quick_match_use_case),
 ):
+    request_dto = CreateAndStartQuickMatchRequestDTO(
+        quick_match_id=body.quick_match_id,
+        creator_id=current_user.id,
+        golf_course_id=body.golf_course_id,
+        match_format=body.match_format,
+        scoring_format=body.scoring_format,
+        name=body.name,
+        allowance_percentage=body.allowance_percentage,
+        play_mode=body.play_mode,
+        creator_tee_color=body.creator_tee_color,
+        creator_tee_gender=body.creator_tee_gender,
+        creator_handicap=body.creator_handicap,
+        participants=[
+            QuickStartFriendDTO(**p.model_dump())
+            if isinstance(p, QuickStartFriendBody)
+            else QuickStartGuestDTO(**p.model_dump())
+            for p in body.participants
+        ],
+        scorer_user_ids=body.scorer_user_ids,
+    )
     try:
-        request_dto = CreateAndStartQuickMatchRequestDTO(
-            creator_id=current_user.id,
-            golf_course_id=body.golf_course_id,
-            match_format=body.match_format,
-            scoring_format=body.scoring_format,
-            name=body.name,
-            allowance_percentage=body.allowance_percentage,
-            play_mode=body.play_mode,
-            creator_tee_color=body.creator_tee_color,
-            creator_tee_gender=body.creator_tee_gender,
-            creator_handicap=body.creator_handicap,
-            friends=[QuickStartFriendDTO(**f.model_dump()) for f in body.friends],
-            guests=[QuickStartGuestDTO(**g.model_dump()) for g in body.guests],
-            scorer_user_ids=body.scorer_user_ids,
-        )
-        return await use_case.execute(request_dto)
-
+        result = await use_case.execute(request_dto)
     except (GolfCourseNotFoundError, FriendUserNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotFriendsError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except DuplicateParticipantViolation as e:
+    except (DuplicateParticipantViolation, QuickMatchIdTakenError) as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except (
         GolfCourseNotApprovedError,
         InvalidTeeSelectionError,
         InvalidAllowanceViolation,
+        InvalidParticipantError,
         QuickMatchFullViolation,
         InvalidTeamAssignmentViolation,
         IncompleteRosterViolation,
         InvalidScorerConfigurationViolation,
     ) as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except ValueError as e:
-        # Lo que rechaza un value object (un invitado con el nombre en blanco):
-        # una petición que no vale, no un 500
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+    # Un reintento con el mismo id devuelve la que ya había: 200, no 201
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.quick_match
 
 
 @router.post(
@@ -458,6 +477,8 @@ async def add_guest_participant(
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvalidTeeSelectionError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except InvalidParticipantError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 

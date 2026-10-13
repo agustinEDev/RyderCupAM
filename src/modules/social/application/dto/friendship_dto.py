@@ -33,8 +33,17 @@ class FriendshipResponseDTO(BaseModel):
     responded_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
-    # El hándicap de cada lado, solo en la lista de amigos: el asistente de
-    # partida rápida lo enseña antes de crear nada (FE #848). Nulo si no tiene
+
+
+class FriendResponseDTO(FriendshipResponseDTO):
+    """
+    Una amistad de la lista de amigos, con el hándicap de cada lado.
+
+    El asistente de partida rápida lo enseña antes de crear nada (FE #848). Va
+    solo aquí: en una solicitud no se consulta, y un `null` que significa «no
+    se ha mirado» se leería como «no tiene». Nulo es que no tiene.
+    """
+
     requester_handicap: float | None = None
     addressee_handicap: float | None = None
 
@@ -43,6 +52,15 @@ class PaginatedFriendshipResponseDTO(BaseModel):
     """DTO paginado de relaciones de amistad."""
 
     friendships: list[FriendshipResponseDTO]
+    total_count: int
+    page: int
+    limit: int
+
+
+class PaginatedFriendResponseDTO(BaseModel):
+    """La lista de amigos paginada, con sus hándicaps (FE #848)."""
+
+    friendships: list[FriendResponseDTO]
     total_count: int
     page: int
     limit: int

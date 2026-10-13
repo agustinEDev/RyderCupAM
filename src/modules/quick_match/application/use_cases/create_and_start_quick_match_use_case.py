@@ -3,21 +3,25 @@
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import (
     CreateAndStartQuickMatchRequestDTO,
-    QuickMatchResponseDTO,
+    CreateAndStartQuickMatchResultDTO,
+    QuickStartFriendDTO,
+    QuickStartGuestDTO,
 )
 from src.modules.quick_match.application.exceptions import (
-    FriendUserNotFoundError,
-    GolfCourseNotApprovedError,
-    GolfCourseNotFoundError,
-    InvalidTeeSelectionError,
-    NotFriendsError,
+    InvalidParticipantError,
+    QuickMatchIdTakenError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
+from src.modules.quick_match.application.services.roster_checks import (
+    Tee,
+    check_course_and_tees,
+    check_friends,
+    profile_handicaps,
+)
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -40,7 +44,7 @@ from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 
-def _tee(color: str | None, gender: str | None) -> tuple[TeeColor | None, Gender | None]:
+def _tee(color: str | None, gender: str | None) -> Tee:
     return (TeeColor(color) if color else None, Gender(gender) if gender else None)
 
 
@@ -54,9 +58,11 @@ class CreateAndStartQuickMatchUseCase:
     pide a la BD entre un paso y otro— y se guarda UNA vez al final: si algo
     falla, no queda nada.
 
-    Las lecturas de fuera (campo, usuarios, amistades) van antes de abrir la
-    unidad de trabajo de la partida: la sesión es compartida y salir de un
-    `async with` anidado hace commit a mitad.
+    El id lo manda el cliente: si la respuesta se pierde con mala cobertura y
+    se reintenta, se devuelve la partida que ya existe en vez de crear otra.
+
+    Las lecturas de fuera (campo, usuarios, amistades) van antes de guardar: la
+    sesión es compartida y salir de un `async with` anidado hace commit a mitad.
     """
 
     def __init__(
@@ -71,19 +77,37 @@ class CreateAndStartQuickMatchUseCase:
         self._social_uow = social_uow
         self._user_uow = user_uow
 
-    async def execute(self, request: CreateAndStartQuickMatchRequestDTO) -> QuickMatchResponseDTO:
+    async def execute(
+        self, request: CreateAndStartQuickMatchRequestDTO
+    ) -> CreateAndStartQuickMatchResultDTO:
         creator_id = UserId(request.creator_id)
-        golf_course_id = GolfCourseId(request.golf_course_id)
-        creator_tee = _tee(request.creator_tee_color, request.creator_tee_gender)
-        friend_tees = [_tee(f.tee_color, f.tee_gender) for f in request.friends]
-        guest_tees = [_tee(g.tee_color, g.tee_gender) for g in request.guests]
+        quick_match_id = QuickMatchId(request.quick_match_id)
 
-        await self._check_course(golf_course_id, [creator_tee, *friend_tees, *guest_tees])
+        # Un reintento con el mismo id: la que ya hay, sin volver a validar
+        # nada —se validó al crearla— ni crear otra
+        async with self._uow:
+            existing = await self._uow.quick_matches.find_by_id(quick_match_id)
+        if existing is not None:
+            if existing.creator_id != creator_id:
+                raise QuickMatchIdTakenError(f"Quick match id already in use: {quick_match_id}")
+            return CreateAndStartQuickMatchResultDTO(
+                quick_match=await QuickMatchDTOMapper.to_response_dto(
+                    existing, self._user_uow, requester_id=creator_id
+                ),
+                created=False,
+            )
+
+        creator_tee = _tee(request.creator_tee_color, request.creator_tee_gender)
+        await check_course_and_tees(
+            self._golf_course_uow,
+            GolfCourseId(request.golf_course_id),
+            [creator_tee, *(_tee(p.tee_color, p.tee_gender) for p in request.participants)],
+        )
 
         quick_match = QuickMatch.create(
-            id=QuickMatchId.generate(),
+            id=quick_match_id,
             creator_id=creator_id,
-            golf_course_id=golf_course_id,
+            golf_course_id=GolfCourseId(request.golf_course_id),
             match_format=MatchFormat(request.match_format) if request.match_format else None,
             scoring_format=(
                 ScoringFormat(request.scoring_format) if request.scoring_format else None
@@ -94,35 +118,19 @@ class CreateAndStartQuickMatchUseCase:
             creator_tee_color=creator_tee[0],
             creator_tee_gender=creator_tee[1],
         )
-        # La plantilla primero: repetidos, el propio creador, cupo y equipos
-        # los dice el dominio antes de preguntar a nadie por nada
-        friend_ids = [UserId(f.friend_user_id) for f in request.friends]
-        for friend, friend_id, (color, gender) in zip(
-            request.friends, friend_ids, friend_tees, strict=True
-        ):
-            quick_match.add_participant(
-                QuickMatchParticipant.for_user(
-                    friend_id, team=friend.team, tee_color=color, tee_gender=gender
-                )
-            )
-        for guest, (color, gender) in zip(request.guests, guest_tees, strict=True):
-            quick_match.add_participant(
-                QuickMatchParticipant.for_guest(
-                    guest.first_name,
-                    guest.last_name,
-                    handicap=guest.handicap,
-                    team=guest.team,
-                    tee_color=color,
-                    tee_gender=gender,
-                )
-            )
+        # La plantilla primero, en el orden en que se añadieron: repetidos, el
+        # propio creador, cupo y equipos los dice el dominio antes de preguntar
+        # a nadie por nada
+        for player in request.participants:
+            quick_match.add_participant(self._participant(player))
 
-        profile_handicaps = await self._profile_handicaps(creator_id, friend_ids)
-        await self._check_friendships(creator_id, friend_ids)
+        friends = [p for p in request.participants if isinstance(p, QuickStartFriendDTO)]
+        friend_ids = [UserId(f.friend_user_id) for f in friends]
+        await check_friends(self._user_uow, self._social_uow, creator_id, friend_ids)
 
         overrides = [(creator_id, request.creator_handicap)] + [
             (friend_id, friend.handicap)
-            for friend_id, friend in zip(friend_ids, request.friends, strict=True)
+            for friend_id, friend in zip(friend_ids, friends, strict=True)
         ]
         for user_id, handicap in overrides:
             if handicap is not None:
@@ -130,57 +138,39 @@ class CreateAndStartQuickMatchUseCase:
 
         # El `participant_id` de un registrado es su UserId
         quick_match.start([ParticipantId(sid) for sid in request.scorer_user_ids])
-        quick_match.freeze_handicaps(profile_handicaps)
+        quick_match.freeze_handicaps(
+            await profile_handicaps(self._user_uow, [creator_id, *friend_ids])
+        )
 
         async with self._uow:
             await self._uow.quick_matches.add(quick_match)
 
-        return await QuickMatchDTOMapper.to_response_dto(
-            quick_match, self._user_uow, requester_id=creator_id
+        return CreateAndStartQuickMatchResultDTO(
+            quick_match=await QuickMatchDTOMapper.to_response_dto(
+                quick_match, self._user_uow, requester_id=creator_id
+            ),
+            created=True,
         )
 
-    async def _check_course(
-        self,
-        golf_course_id: GolfCourseId,
-        tees: list[tuple[TeeColor | None, Gender | None]],
-    ) -> None:
-        """El campo existe, está aprobado y tiene cada barra elegida."""
-        async with self._golf_course_uow:
-            golf_course = await self._golf_course_uow.golf_courses.find_by_id(golf_course_id)
-        if not golf_course:
-            raise GolfCourseNotFoundError(f"Golf course not found: {golf_course_id.value}")
-        if golf_course.approval_status != ApprovalStatus.APPROVED:
-            raise GolfCourseNotApprovedError(f"Golf course '{golf_course.name}' is not approved.")
-        for color, gender in tees:
-            if color is not None and not golf_course.has_tee(color, gender):
-                raise InvalidTeeSelectionError(
-                    f"{color.value} is not a valid tee for this golf course."
-                )
-
-    async def _profile_handicaps(
-        self, creator_id: UserId, friend_ids: list[UserId]
-    ) -> dict[UserId, float | None]:
-        """
-        El hándicap del perfil del creador y de cada amigo, en una consulta.
-
-        De paso dice si cada amigo existe: el que no está, 404.
-        """
-        async with self._user_uow:
-            users = await self._user_uow.users.find_by_ids([creator_id, *friend_ids])
-        found = {user.id: user for user in users if user.id is not None}
-        for friend_id in friend_ids:
-            if friend_id not in found:
-                raise FriendUserNotFoundError(f"User not found: {friend_id.value}")
-        return {
-            user_id: (user.handicap.value if user.handicap else None)
-            for user_id, user in found.items()
-        }
-
-    async def _check_friendships(self, creator_id: UserId, friend_ids: list[UserId]) -> None:
-        """Solo se añade a quien es amigo ACEPTADO, como al añadirlo uno a uno."""
-        async with self._social_uow:
-            for friend_id in friend_ids:
-                if not await self._social_uow.friendships.are_friends(creator_id, friend_id):
-                    raise NotFriendsError(
-                        "Only accepted friends can be added directly to a quick match."
-                    )
+    @staticmethod
+    def _participant(player: QuickStartFriendDTO | QuickStartGuestDTO) -> QuickMatchParticipant:
+        color, gender = _tee(player.tee_color, player.tee_gender)
+        if isinstance(player, QuickStartFriendDTO):
+            return QuickMatchParticipant.for_user(
+                UserId(player.friend_user_id),
+                team=player.team,
+                tee_color=color,
+                tee_gender=gender,
+            )
+        try:
+            return QuickMatchParticipant.for_guest(
+                player.first_name,
+                player.last_name,
+                handicap=player.handicap,
+                team=player.team,
+                tee_color=color,
+                tee_gender=gender,
+            )
+        except ValueError as e:
+            # Un nombre que solo era espacios: una petición que no vale
+            raise InvalidParticipantError(str(e)) from e

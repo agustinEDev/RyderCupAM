@@ -19,6 +19,14 @@ los hándicaps. Tabla aprobada el 13 oct 2026:
         | plantilla incompleta                        |
     7   anotadores sin el creador, repetidos, un    | 422
         | invitado o alguien que no juega             |
+
+Y lo que añadió la revisión (13 oct):
+
+    8   el orden de los jugadores                   | el de la lista: el que eligió
+    9   el mismo id otra vez, del mismo creador     | la partida que ya existe, sin crear
+        |                                             | otra (reintento seguro)
+    9b  el mismo id, de otro creador                | QuickMatchIdTakenError (409)
+    10  invitado con el nombre en blanco            | InvalidParticipantError (422)
 """
 
 from uuid import uuid4
@@ -37,8 +45,10 @@ from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    InvalidParticipantError,
     InvalidTeeSelectionError,
     NotFriendsError,
+    QuickMatchIdTakenError,
 )
 from src.modules.quick_match.application.use_cases.create_and_start_quick_match_use_case import (
     CreateAndStartQuickMatchUseCase,
@@ -78,14 +88,16 @@ async def _jugadores(user_uow, social_uow, golf_course_uow, amigos=1):
     return creator, friends, course
 
 
-def _peticion(creator, course, **extra):
+def _peticion(creator, course, friends=(), guests=(), **extra):
     datos = {
+        "quick_match_id": uuid4(),
         "creator_id": creator.id.value,
         "golf_course_id": course.id.value,
         "match_format": "SINGLES",
         "creator_tee_color": "WHITE",
         "creator_tee_gender": "MALE",
         "scorer_user_ids": [creator.id.value],
+        "participants": [*friends, *guests],
     }
     datos.update(extra)
     return CreateAndStartQuickMatchRequestDTO(**datos)
@@ -93,6 +105,7 @@ def _peticion(creator, course, **extra):
 
 def _amigo(friend, **extra):
     return {
+        "kind": "FRIEND",
         "friend_user_id": friend.id.value,
         "tee_color": "YELLOW",
         "tee_gender": "MALE",
@@ -102,6 +115,7 @@ def _amigo(friend, **extra):
 
 def _invitado(**extra):
     return {
+        "kind": "GUEST",
         "first_name": "Ana",
         "last_name": "Pérez",
         "handicap": 18.4,
@@ -109,6 +123,12 @@ def _invitado(**extra):
         "tee_gender": "MALE",
         **extra,
     }
+
+
+async def _inicia(use_case, peticion):
+    resultado = await use_case.execute(peticion)
+    assert resultado.created is True
+    return resultado.quick_match
 
 
 async def _guardadas(qm_uow, creator):
@@ -122,13 +142,14 @@ class TestTodoBien:
     ):
         creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
 
-        r = await use_case.execute(
+        r = await _inicia(
+            use_case,
             _peticion(
                 creator,
                 course,
                 friends=[_amigo(friend)],
                 scorer_user_ids=[creator.id.value, friend.id.value],
-            )
+            ),
         )
 
         assert r.status == "IN_PROGRESS"
@@ -142,14 +163,15 @@ class TestTodoBien:
     ):
         creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
 
-        r = await use_case.execute(
+        r = await _inicia(
+            use_case,
             _peticion(
                 creator,
                 course,
                 match_format="FOURBALL",
                 friends=[_amigo(friend, team="A")],
                 guests=[_invitado(team="B"), _invitado(first_name="Bea", team="B")],
-            )
+            ),
         )
 
         assert r.status == "IN_PROGRESS"
@@ -159,8 +181,8 @@ class TestTodoBien:
     async def test_1c_juego_libre_solo(self, use_case, user_uow, social_uow, golf_course_uow):
         creator, _, course = await _jugadores(user_uow, social_uow, golf_course_uow, amigos=0)
 
-        r = await use_case.execute(
-            _peticion(creator, course, match_format=None, scoring_format="STABLEFORD")
+        r = await _inicia(
+            use_case, _peticion(creator, course, match_format=None, scoring_format="STABLEFORD")
         )
 
         assert r.status == "IN_PROGRESS"
@@ -261,7 +283,12 @@ class TestLosAmigos:
         self, use_case, qm_uow, user_uow, social_uow, golf_course_uow
     ):
         creator, _, course = await _jugadores(user_uow, social_uow, golf_course_uow, amigos=0)
-        fantasma = {"friend_user_id": uuid4(), "tee_color": "YELLOW", "tee_gender": "MALE"}
+        fantasma = {
+            "kind": "FRIEND",
+            "friend_user_id": uuid4(),
+            "tee_color": "YELLOW",
+            "tee_gender": "MALE",
+        }
 
         with pytest.raises(FriendUserNotFoundError):
             await use_case.execute(_peticion(creator, course, friends=[fantasma]))
@@ -369,5 +396,92 @@ class TestLosAnotadores:
                     course,
                     guests=[_invitado()],
                     scorer_user_ids=[creator.id.value, friend.id.value],
+                )
+            )
+
+
+class TestLoQueAnadioLaRevision:
+    async def test_8_el_orden_es_el_de_la_lista(
+        self, use_case, user_uow, social_uow, golf_course_uow
+    ):
+        creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
+
+        r = await _inicia(
+            use_case,
+            _peticion(
+                creator,
+                course,
+                match_format=None,
+                scoring_format="MEDAL",
+                participants=[_invitado(), _amigo(friend)],
+            ),
+        )
+
+        assert [p.is_guest for p in r.participants] == [False, True, False]
+        assert r.participants[2].user_id == friend.id.value
+
+    async def test_9_el_mismo_id_del_mismo_creador_devuelve_la_que_hay(
+        self, use_case, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
+        peticion = _peticion(creator, course, friends=[_amigo(friend)])
+
+        primera = await use_case.execute(peticion)
+        segunda = await use_case.execute(peticion)
+
+        assert primera.created is True
+        assert segunda.created is False
+        assert segunda.quick_match.id == primera.quick_match.id
+        assert segunda.quick_match.status == "IN_PROGRESS"
+        assert len(await _guardadas(qm_uow, creator)) == 1
+
+    async def test_9b_el_mismo_id_de_otro_creador(
+        self, use_case, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        creator, (friend,), course = await _jugadores(user_uow, social_uow, golf_course_uow)
+        peticion = _peticion(creator, course, friends=[_amigo(friend)])
+        await use_case.execute(peticion)
+        otro, _, otro_campo = await _jugadores(user_uow, social_uow, golf_course_uow, amigos=0)
+
+        with pytest.raises(QuickMatchIdTakenError):
+            await use_case.execute(
+                _peticion(
+                    otro,
+                    otro_campo,
+                    match_format=None,
+                    scoring_format="MEDAL",
+                    quick_match_id=peticion.quick_match_id,
+                )
+            )
+        assert await _guardadas(qm_uow, otro) == []
+
+    async def test_10_invitado_con_el_nombre_en_blanco(
+        self, use_case, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        creator, _, course = await _jugadores(user_uow, social_uow, golf_course_uow, amigos=0)
+
+        with pytest.raises(InvalidParticipantError):
+            await use_case.execute(_peticion(creator, course, guests=[_invitado(first_name="   ")]))
+        assert await _guardadas(qm_uow, creator) == []
+
+    async def test_7c_anotadores_repetidos_no_pasan_del_dto(
+        self, user_uow, social_uow, golf_course_uow
+    ):
+        creator, _, course = await _jugadores(user_uow, social_uow, golf_course_uow, amigos=0)
+
+        with pytest.raises(ValueError, match="duplicates"):
+            _peticion(creator, course, scorer_user_ids=[creator.id.value, creator.id.value])
+
+    async def test_7d_un_invitado_no_anota(self, use_case, user_uow, social_uow, golf_course_uow):
+        """El invitado no tiene UserId: un id que no es de un registrado no anota."""
+        creator, _, course = await _jugadores(user_uow, social_uow, golf_course_uow, amigos=0)
+
+        with pytest.raises(InvalidScorerConfigurationViolation):
+            await use_case.execute(
+                _peticion(
+                    creator,
+                    course,
+                    guests=[_invitado()],
+                    scorer_user_ids=[creator.id.value, uuid4()],
                 )
             )
