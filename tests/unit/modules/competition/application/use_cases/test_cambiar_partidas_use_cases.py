@@ -14,8 +14,21 @@ salida, sin ninguna empezada (D11). Las reglas de cada cambio, en el dominio.
 | Marcadores válidos / inválidos / partida que no existe | Guardados / error / no existe       |
 | Borrar                                                 | Franja sin partidas                 |
 | Fuera de plazo / quien no organiza                     | PlazoCerradoError / 403             |
+
+Con la franja ya empezada (#544, 13 oct 2026): se tocan las que no han salido.
+
+| Caso                                                   | Resultado                           |
+|--------------------------------------------------------|-------------------------------------|
+| Marcadores de una sin salir / de una que ya salió      | Guardados / PartidaYaSalidaError    |
+| Mover de una sin salir a una nueva                     | Detrás de la última, sin renumerar  |
+| Mover desde una que ya salió                           | PartidaYaSalidaError                |
+| Reordenar las que no han salido / moviendo una fuera   | Renumeradas / PartidaYaSalidaError  |
+| Colocar a quien no tiene partida cuando la nueva ya    | PartidaYaSalidaError                |
+|   no llegaría a tiempo                                 |                                     |
+| Generar o borrar                                       | PlazoCerradoError, como antes       |
 """
 
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -39,7 +52,10 @@ from src.modules.competition.domain.services.marcadores_en_cadena import (
 from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientoImposibleError,
 )
-from src.modules.competition.domain.services.plazo_de_partidas import PlazoCerradoError
+from src.modules.competition.domain.services.plazo_de_partidas import (
+    PartidaYaSalidaError,
+    PlazoCerradoError,
+)
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.test_generar_partidas_use_case import (
@@ -292,11 +308,18 @@ class TestBorrar:
 
 
 class TestQuienYCuando:
-    @pytest.mark.parametrize("caso", ["mover", "reordenar", "marcadores", "borrar"])
-    async def test_out_of_time(self, caso):
+    async def test_deleting_out_of_time(self):
         escenario, _ = await _generadas("2.0", "1.0")
         escenario.ahora = A_LA_PRIMERA_SALIDA
         with pytest.raises(PlazoCerradoError):
+            await _llamar(escenario, "borrar", escenario.creador)
+
+    @pytest.mark.parametrize("caso", ["mover", "marcadores"])
+    async def test_touching_the_only_group_once_out(self, caso):
+        # Antes era «fuera de plazo»; ahora, que esa partida ya salió (#544)
+        escenario, _ = await _generadas("2.0", "1.0")
+        escenario.ahora = A_LA_PRIMERA_SALIDA
+        with pytest.raises(PartidaYaSalidaError):
             await _llamar(escenario, caso, escenario.creador)
 
     @pytest.mark.parametrize("caso", ["mover", "reordenar", "marcadores", "borrar"])
@@ -330,3 +353,98 @@ async def _llamar(escenario: _Escenario, caso: str, quien: UserId):
             False,
         )
     return await _casos(escenario)["borrar"].execute(franja, quien, False)
+
+
+# 9:00 (7:00 UTC) la primera, 9:10 la segunda, 9:20 la tercera
+CON_LA_PRIMERA_FUERA = A_LA_PRIMERA_SALIDA + timedelta(minutes=5)
+
+
+class TestConLaFranjaEmpezada:
+    async def test_markers_of_one_not_out(self):
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        _, segunda = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+        invertidos = [(b.value, a.value) for a, b in segunda.marcadores.items()]
+
+        await _casos(escenario)["marcadores"].execute(
+            segunda.id.value, invertidos, escenario.creador, False
+        )
+
+        (_, guardada) = await _guardadas(escenario)
+        assert guardada.marcadores == {UserId(a): UserId(b) for a, b in invertidos}
+
+    async def test_markers_of_one_already_out(self):
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        primera, _ = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        with pytest.raises(PartidaYaSalidaError):
+            await _casos(escenario)["marcadores"].execute(
+                primera.id.value,
+                [(u.value, m.value) for u, m in primera.marcadores.items()],
+                escenario.creador,
+                False,
+            )
+
+    async def test_moving_from_one_not_out_to_a_new_one(self):
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        primera, segunda = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        await _mover(escenario, segunda.user_ids[0])
+
+        guardadas = sorted(await _guardadas(escenario), key=lambda p: p.numero)
+        assert [p.numero for p in guardadas] == [1, 2, 3]
+        assert guardadas[0].user_ids == primera.user_ids
+
+    async def test_moving_from_one_already_out(self):
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        primera, segunda = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        with pytest.raises(PartidaYaSalidaError):
+            await _mover(escenario, primera.user_ids[0], segunda.id.value)
+
+    async def test_reordering_the_not_out(self):
+        escenario, _ = await _generadas(*[f"{h}.0" for h in range(10, 0, -1)])
+        primera, segunda, tercera = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        await _casos(escenario)["reordenar"].execute(
+            escenario.manana.id.value,
+            [primera.id.value, tercera.id.value, segunda.id.value],
+            escenario.creador,
+            False,
+        )
+
+        numeros = {p.id: p.numero for p in await _guardadas(escenario)}
+        assert (numeros[primera.id], numeros[tercera.id], numeros[segunda.id]) == (1, 2, 3)
+
+    async def test_reordering_one_already_out(self):
+        escenario, _ = await _generadas(*[f"{h}.0" for h in range(10, 0, -1)])
+        primera, segunda, tercera = await _guardadas(escenario)
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        with pytest.raises(PartidaYaSalidaError):
+            await _casos(escenario)["reordenar"].execute(
+                escenario.manana.id.value,
+                [segunda.id.value, primera.id.value, tercera.id.value],
+                escenario.creador,
+                False,
+            )
+
+    async def test_placing_someone_when_a_new_group_would_be_too_late(self):
+        # Las dos ya salieron (9:00 y 9:10): la nueva sería la de las 9:20, ya pasada
+        escenario, _ = await _generadas("7.0", "6.0", "5.0", "4.0", "3.0", "2.0", "1.0")
+        sin_partida = await escenario.con_plaza("0.5")
+        escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=25)
+
+        with pytest.raises(PartidaYaSalidaError):
+            await _mover(escenario, sin_partida)
+
+    async def test_generating_once_started_is_still_out_of_time(self):
+        escenario, _ = await _generadas("2.0", "1.0")
+        escenario.ahora = CON_LA_PRIMERA_FUERA
+
+        with pytest.raises(PlazoCerradoError):
+            await escenario.generar()

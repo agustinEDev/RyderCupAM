@@ -9,6 +9,8 @@ organizador aún puede tocarlas; mirar nunca falla por eso.
 | Un jugador mira la franja                                | La vista, igual que al generar    |
 | Antes de generar                                         | Sin partidas, todos en unassigned |
 | Abiertas / tras la 1.ª salida / una empezada / sin zona  | editable: false, sin error        |
+| Con la primera fuera y la segunda sin salir (#544)       | editable de la franja: true; el   |
+|                                                          |   de cada partida, el suyo        |
 | unassigned                                               | Ni retirados ni ya colocados      |
 | Una sesión de Ryder / una franja que no existe           | PartidasError / RoundNotFound     |
 | Mis partidas, en dos franjas                             | Las dos, por día y hora           |
@@ -138,6 +140,22 @@ async def test_not_editable_once_a_group_started():
 
     assert vista.editable is False
     assert vista.groups[0].status == "IN_PROGRESS"
+
+
+async def test_with_the_first_group_out_the_second_can_still_be_touched():
+    from datetime import timedelta
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=5)
+
+    vista = await _vista(escenario)
+
+    assert vista.editable is True
+    assert [g.editable for g in vista.groups] == [False, True]
 
 
 async def test_a_ryder_session_and_a_window_that_does_not_exist():

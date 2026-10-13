@@ -10,9 +10,19 @@ haya salido ninguna.
 | Borrador, abierta, acabada o cancelada             | Plazo cerrado        |
 | Justo a la hora de la primera salida, o después    | Plazo cerrado        |
 | Alguna partida ya ha salido                        | PartidaEmpezadaError |
+
+Tocar las que no han salido, con la franja empezada (#544, 13 oct 2026):
+
+| Caso                                               | Resultado            |
+|----------------------------------------------------|----------------------|
+| Salida: su hora ya llegó, o ya tiene golpes        | Ha salido            |
+| Su hora aún no ha llegado y sin golpes             | No ha salido         |
+| Tocar solo partidas sin salir (franja empezada)    | Vale                 |
+| Tocar alguna que ya ha salido                      | PartidaYaSalidaError |
+| Tocar con la competición en otro estado            | Plazo cerrado        |
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -20,12 +30,14 @@ import pytest
 
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.services.plazo_de_partidas import (
+    PartidaYaSalidaError,
     PlazoCerradoError,
     PlazoDePartidas,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
     JugadorDePartida,
 )
@@ -92,3 +104,63 @@ def test_a_group_that_already_started_closes_it():
             ANTES,
             [_partida(), _partida(EstadoPartida.IN_PROGRESS)],
         )
+
+
+# 9:00, 9:10, 9:20 y 9:30 en el campo; la primera, a las 7:00 UTC
+HOJA = HojaDeSalidas(time(9, 0), time(9, 30), 10, 4)
+
+
+def _de_la_franja(n: int) -> list[Partida]:
+    partidas = []
+    for numero in range(1, n + 1):
+        partida = _partida()
+        partida._numero = numero
+        partidas.append(partida)
+    return partidas
+
+
+class TestLasQueYaSalieron:
+    def test_por_su_hora(self):
+        primera, segunda, tercera = _de_la_franja(3)
+
+        salidas = PlazoDePartidas.salidas(
+            [primera, segunda, tercera],
+            HOJA,
+            PRIMERA_SALIDA,
+            PRIMERA_SALIDA + timedelta(minutes=10),
+        )
+
+        assert salidas == {primera.id, segunda.id}
+
+    def test_por_sus_golpes_aunque_no_sea_su_hora(self):
+        primera, segunda = _de_la_franja(2)
+        segunda.empezar()
+
+        assert PlazoDePartidas.salidas([primera, segunda], HOJA, PRIMERA_SALIDA, ANTES) == {
+            segunda.id
+        }
+
+    def test_antes_de_la_primera_ninguna(self):
+        assert PlazoDePartidas.salidas(_de_la_franja(3), HOJA, PRIMERA_SALIDA, ANTES) == set()
+
+
+class TestTocarLasQueNoHanSalido:
+    def test_sin_salir_vale_con_la_franja_empezada(self):
+        primera, segunda = _de_la_franja(2)
+
+        PlazoDePartidas.comprobar_que_se_pueden_tocar(
+            CompetitionStatus.IN_PROGRESS, [segunda], {primera.id}
+        )
+
+    def test_una_que_ya_salio_no(self):
+        primera, segunda = _de_la_franja(2)
+
+        with pytest.raises(PartidaYaSalidaError):
+            PlazoDePartidas.comprobar_que_se_pueden_tocar(
+                CompetitionStatus.IN_PROGRESS, [primera, segunda], {primera.id}
+            )
+
+    @pytest.mark.parametrize("estado", [CompetitionStatus.ACTIVE, CompetitionStatus.COMPLETED])
+    def test_en_otro_estado_plazo_cerrado(self, estado):
+        with pytest.raises(PlazoCerradoError):
+            PlazoDePartidas.comprobar_que_se_pueden_tocar(estado, _de_la_franja(1), set())

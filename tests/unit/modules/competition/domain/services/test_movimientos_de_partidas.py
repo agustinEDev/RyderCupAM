@@ -37,6 +37,7 @@ from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientoImposibleError,
     MovimientosDePartidas,
 )
+from src.modules.competition.domain.services.plazo_de_partidas import PartidaYaSalidaError
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
@@ -66,7 +67,7 @@ def _partidas(*tamanos: int) -> list[Partida]:
     ]
 
 
-def _mover(partidas, jugador, destino=None, intercambiar_con=None):
+def _mover(partidas, jugador, destino=None, intercambiar_con=None, salidas=frozenset()):
     return MovimientosDePartidas.mover(
         partidas,
         jugador,
@@ -75,6 +76,7 @@ def _mover(partidas, jugador, destino=None, intercambiar_con=None):
         HOJA,
         COMPETICION,
         FRANJA,
+        salidas,
     )
 
 
@@ -365,3 +367,94 @@ class TestSacar:
         assert cambios.borrar == [p2]
         assert (p1.numero, p3.numero) == (1, 3)
         assert cambios.guardar == []
+
+
+class TestConLaFranjaEmpezada:
+    """
+    #544 (13 oct 2026): con alguna partida ya fuera se tocan las que no han salido.
+
+    | Caso                                                | Resultado              |
+    |-----------------------------------------------------|------------------------|
+    | Mover entre dos sin salir                           | Vale                   |
+    | Desde o hacia una que ya salió                      | PartidaYaSalidaError   |
+    | Se vacía una sin salir                              | Deja su hueco: nadie   |
+    |                                                     |   cambia de hora       |
+    | A una nueva                                         | Detrás de la última    |
+    | A una nueva sin salidas libres detrás               | NO_FREE_TEE_TIME       |
+    | Reordenar las que no han salido entre ellas         | Se cambian sus horas   |
+    | Reordenar moviendo una que ya salió                 | PartidaYaSalidaError   |
+    | Reordenar con huecos                                | Usa los números que hay|
+    """
+
+    def test_between_two_not_out(self):
+        fuera, a, b = _partidas(2, 3, 2)
+        jugador = a.jugadores[0]
+
+        cambios = _mover([fuera, a, b], jugador, b, salidas={fuera.id})
+
+        assert jugador.user_id in _ids(b)
+        assert fuera not in cambios.guardar
+
+    @pytest.mark.parametrize("cual", ["origen", "destino"])
+    def test_from_or_to_one_already_out(self, cual):
+        fuera, otra = _partidas(3, 2)
+        origen, destino = (fuera, otra) if cual == "origen" else (otra, fuera)
+
+        with pytest.raises(PartidaYaSalidaError):
+            _mover([fuera, otra], origen.jugadores[0], destino, salidas={fuera.id})
+
+    def test_an_emptied_group_leaves_its_hole(self):
+        fuera, sola, detras = _partidas(2, 1, 2)
+        jugador = sola.jugadores[0]
+
+        cambios = _mover([fuera, sola, detras], jugador, detras, salidas={fuera.id})
+
+        assert sola in cambios.borrar
+        assert detras.numero == 3
+
+    def test_to_a_new_one_goes_behind_the_last(self):
+        fuera, hueco_antes, ultima = _partidas(2, 3, 2)
+        jugador = hueco_antes.jugadores[0]
+
+        cambios = _mover([fuera, hueco_antes, ultima], jugador, salidas={fuera.id})
+
+        assert [p.numero for p in cambios.crear] == [4]
+
+    def test_to_a_new_one_without_a_free_tee_time_behind(self):
+        fuera, a, b, ultima = _partidas(2, 3, 2, 2)
+
+        with pytest.raises(MovimientoImposibleError) as error:
+            _mover([fuera, a, b, ultima], a.jugadores[0], salidas={fuera.id})
+
+        assert error.value.codigo == "NO_FREE_TEE_TIME"
+
+    def test_to_a_new_one_with_a_hole_counts_from_the_last(self):
+        # Con un hueco (la 3) la nueva iría a la 5, que no existe: antes chocaba con la 4
+        fuera, a, b = _partidas(2, 3, 2)
+        b.renumerar(4)
+
+        with pytest.raises(MovimientoImposibleError) as error:
+            _mover([fuera, a, b], a.jugadores[0], salidas={fuera.id})
+
+        assert error.value.codigo == "NO_FREE_TEE_TIME"
+
+    def test_reordering_the_not_out_among_themselves(self):
+        fuera, a, b = _partidas(2, 2, 2)
+
+        MovimientosDePartidas.reordenar([fuera, a, b], [fuera.id, b.id, a.id], {fuera.id})
+
+        assert (fuera.numero, b.numero, a.numero) == (1, 2, 3)
+
+    def test_reordering_moving_one_already_out(self):
+        fuera, a, b = _partidas(2, 2, 2)
+
+        with pytest.raises(PartidaYaSalidaError):
+            MovimientosDePartidas.reordenar([fuera, a, b], [a.id, fuera.id, b.id], {fuera.id})
+
+    def test_reordering_with_holes_keeps_the_numbers_there_are(self):
+        fuera, a, b = _partidas(2, 2, 2)
+        b.renumerar(4)
+
+        MovimientosDePartidas.reordenar([fuera, a, b], [fuera.id, b.id, a.id], {fuera.id})
+
+        assert (fuera.numero, b.numero, a.numero) == (1, 2, 4)
