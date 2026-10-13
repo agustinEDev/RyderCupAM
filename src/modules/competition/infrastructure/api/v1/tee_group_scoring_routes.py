@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_anotar_hoyo_de_partida_use_case,
+    get_borrar_hoyo_de_partida_use_case,
     get_cerrar_franja_use_case,
     get_clasificacion_de_la_franja_use_case,
     get_clasificacion_general_use_case,
@@ -62,8 +63,10 @@ from src.modules.competition.application.use_cases.entregar_tarjeta_de_partida_u
     TarjetaIncompletaError,
 )
 from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    BorrarHoyoDePartidaUseCase,
     CerrarFranjaUseCase,
     CorregirHoyoDePartidaUseCase,
+    LadoABorrar,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
     RetirarJugadorUseCase,
@@ -329,6 +332,38 @@ async def correct_tee_group_hole(
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
         corregir.execute(group_id, user_id, hole, body, quien, current_user.is_admin),
+        ver,
+        group_id,
+        quien,
+    )
+
+
+@router.delete(
+    "/groups/{group_id}/players/{user_id}/holes/{hole}",
+    response_model=TeeGroupScoringViewDTO,
+    summary="Borrar lo anotado en un hoyo (organizador)",
+    description=(
+        "Deja ese lado del hoyo como si nadie lo hubiera anotado: `side=own` (el del "
+        "jugador), `marker` (el del marcador) o `both`. Para deshacer un golpe puesto "
+        "por error; con la tarjeta cerrada, 409: se reabre antes."
+    ),
+    tags=["Competitions - Tee groups"],
+)
+@limiter.limit("30/minute")
+async def delete_tee_group_hole(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    group_id: UUID,
+    user_id: UUID,
+    hole: int,
+    side: LadoABorrar,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    borrar: BorrarHoyoDePartidaUseCase = Depends(get_borrar_hoyo_de_partida_use_case),
+    ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+):
+    """200 con la partida."""
+    quien = UserId(str(current_user.id))
+    return await _y_la_vista(
+        borrar.execute(group_id, user_id, hole, side, quien, current_user.is_admin),
         ver,
         group_id,
         quien,

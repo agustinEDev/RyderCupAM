@@ -795,28 +795,24 @@ class TestElMarcadorQueSeVa:
 
 class TestQuienesJugaron:
     """
-    Quién estuvo en el campo según los golpes de su partida (#550, 12-13 oct 2026).
+    Quién estuvo en el campo (#550, 12-13 oct 2026): la marca «ha jugado», que se
+    enciende con lo que hace él desde su pantalla y no se apaga, o algo en su
+    tarjeta ahora mismo (lo ponga quien lo ponga; se puede borrar).
 
-    | Caso                                                | ¿Jugó?             |
-    |-----------------------------------------------------|--------------------|
-    | Algo en su tarjeta (su lado, el del marcador, raya)  | Sí                 |
-    | Anotó como marcador desde su pantalla a otro de la   | Sí (él también),   |
-    |   partida, aunque luego el círculo se rehaga         |   aunque ya no le  |
-    |                                                      |   marque           |
-    | Una corrección (organizador o admin, juegue o no)    | Solo el dueño: su  |
-    |                                                      |   tarjeta ya tiene |
-    |                                                      |   algo (p. ej. la  |
-    |                                                      |   de papel)        |
-    | Una corrección encima de lo que anotó el marcador    | El marcador sigue  |
-    |                                                      |   contando         |
-    | Lo anotó alguien que ya no está en la partida        | No cuenta          |
-    | Una fila sin nada enviado                            | Nadie              |
-    | Golpes de otra partida                               | No cuentan         |
+    | Caso                                              | ¿Jugó?                  |
+    |---------------------------------------------------|-------------------------|
+    | Con la marca encendida, sin nada en su tarjeta    | Sí                      |
+    | Algo en su tarjeta (su lado, el del marcador,     | Sí                      |
+    |   una raya, la tarjeta en papel del organizador)  |                         |
+    | Se borra todo lo de su tarjeta y no tiene marca   | No                      |
+    | Una fila sin nada enviado / de otra partida       | No cuenta               |
+    | Encender la marca de quien no es de la partida    | PartidaInvalidaError    |
+    | Quien sale de la partida (antes de salir)         | Se lleva su marca fuera |
     """
 
     AHORA = datetime(2030, 10, 11, 9, 0, tzinfo=UTC)
 
-    def _golpe(self, partida, de, propio=None, partida_id=None):
+    def _golpe(self, partida, de, propio=None, del_marcador=None, partida_id=None):
         from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 
         golpe = GolpeDePartida.crear(
@@ -824,66 +820,44 @@ class TestQuienesJugaron:
         )
         if propio is not None:
             golpe.anotar_propio(propio, True, de, self.AHORA)
+        if del_marcador is not None:
+            golpe.anotar_del_marcador(del_marcador, True, UserId.generate(), self.AHORA)
         return golpe
 
-    def _como_marcador(self, golpe, marcador):
-        golpe.anotar_del_marcador(4, True, marcador, self.AHORA, como_marcador=True)
-        return golpe
-
-    def _corrige(self, golpe, quien):
-        golpe.anotar_del_marcador(5, True, quien, self.AHORA, como_marcador=False)
-        return golpe
-
-    def test_whoever_has_something_on_their_card(self):
+    def test_the_mark_says_played_with_an_empty_card(self):
         partida = _partida(3)
         a = partida.user_ids[0]
 
-        assert partida.quienes_jugaron([self._golpe(partida, a, propio=4)]) == {a}
+        partida.marcar_que_jugo(a)
 
-    def test_scoring_whom_you_mark_shows_you_played(self):
-        partida = _partida(3)
-        marcador, marcado = next(iter(partida.marcadores.items()))
+        assert partida.quienes_jugaron([]) == {a}
+        assert partida.jugaron == {a}
 
-        golpe = self._como_marcador(self._golpe(partida, marcado), marcador)
-
-        assert partida.quienes_jugaron([golpe]) == {marcado, marcador}
-
-    def test_scoring_someone_you_no_longer_mark_still_counts(self):
-        # El círculo se rehízo al retirarse su marcado: lo que anotó sigue diciendo que jugó
-        partida = _partida(4)
-        partida.empezar()
-        marcador, marcado = next(iter(partida.marcadores.items()))
-        golpe = self._como_marcador(self._golpe(partida, marcado), marcador)
-        partida.retirar(marcado)
-
-        assert marcador in partida.quienes_jugaron([golpe])
-
-    def test_a_correction_by_a_playing_organiser_is_not_playing(self):
-        # Corregir desde la casa club no es haber jugado (CodeRabbit, 13 oct)
-        partida = _partida(3)
-        organizador, otro = partida.user_ids[0], partida.user_ids[1]
-
-        golpe = self._corrige(self._golpe(partida, otro), organizador)
-
-        assert partida.quienes_jugaron([golpe]) == {otro}
-
-    def test_a_correction_keeps_the_marker_who_scored(self):
-        partida = _partida(3)
-        marcador, marcado = next(iter(partida.marcadores.items()))
-        organizador = next(u for u in partida.user_ids if u not in (marcador, marcado))
-        golpe = self._como_marcador(self._golpe(partida, marcado), marcador)
-
-        self._corrige(golpe, organizador)
-
-        assert partida.quienes_jugaron([golpe]) == {marcado, marcador}
-
-    def test_someone_no_longer_in_the_group_does_not_count(self):
+    @pytest.mark.parametrize(
+        "anota",
+        [
+            lambda g, a, t: g.anotar_propio(4, True, a, t),
+            lambda g, a, t: g.anotar_del_marcador(4, True, UserId.generate(), t),
+            lambda g, a, t: g.anotar_propio(None, True, a, t),
+        ],
+        ids=["su-lado", "el-del-marcador-o-el-organizador", "una-raya"],
+    )
+    def test_something_on_their_card(self, anota):
         partida = _partida(3)
         a = partida.user_ids[0]
-
-        golpe = self._como_marcador(self._golpe(partida, a), UserId.generate())
+        golpe = self._golpe(partida, a)
+        anota(golpe, a, self.AHORA)
 
         assert partida.quienes_jugaron([golpe]) == {a}
+
+    def test_a_deleted_card_without_the_mark_did_not_play(self):
+        partida = _partida(3)
+        a = partida.user_ids[0]
+        golpe = self._golpe(partida, a, del_marcador=4)
+
+        golpe.borrar_del_marcador(self.AHORA)
+
+        assert partida.quienes_jugaron([golpe]) == set()
 
     def test_an_empty_row_shows_nobody(self):
         partida = _partida(3)
@@ -898,22 +872,28 @@ class TestQuienesJugaron:
 
         assert partida.quienes_jugaron([golpe]) == set()
 
+    def test_the_mark_of_someone_not_in_the_group(self):
+        with pytest.raises(PartidaInvalidaError):
+            _partida(3).marcar_que_jugo(UserId.generate())
+
+    def test_leaving_the_group_takes_the_mark_away(self):
+        partida = _partida(4)
+        a = partida.user_ids[0]
+        partida.marcar_que_jugo(a)
+
+        partida.quitar(a)
+
+        assert partida.jugaron == set()
+
     def test_a_no_show_who_played_is_refused(self):
         partida = _partida(3)
         a = partida.user_ids[0]
+        partida.marcar_que_jugo(a)
 
         with pytest.raises(TieneGolpesError):
-            partida.no_presentado(a, [self._golpe(partida, a, propio=4)])
+            partida.no_presentado(a, [])
 
         assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
-
-    def test_a_no_show_who_only_corrected_is_allowed(self):
-        partida = _partida(3)
-        organizador, otro = partida.user_ids[0], partida.user_ids[1]
-
-        partida.no_presentado(organizador, [self._corrige(self._golpe(partida, otro), organizador)])
-
-        assert partida.estados_de_tarjeta[organizador] == EstadoDeTarjeta.NO_PRESENTADO
 
     def test_a_closed_card_says_closed_before_played(self):
         partida = _partida(3)

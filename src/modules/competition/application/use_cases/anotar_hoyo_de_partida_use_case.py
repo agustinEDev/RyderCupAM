@@ -245,9 +245,11 @@ class AnotarHoyoDePartidaUseCase:
             cambiados.append(propio)
         if marcado is not None and tarjetas[marcado] == EstadoDeTarjeta.JUGANDO:
             suyo = golpe_de(marcado)
-            suyo.anotar_del_marcador(
-                body.marked_score, acepta_raya, quien, llegada, como_marcador=True
-            )
+            suyo.anotar_del_marcador(body.marked_score, acepta_raya, quien, llegada)
             cambiados.append(suyo)
         for golpe in cambiados:
             await self._uow.golpes_de_partida.guardar(golpe)
+        # Anotó desde su pantalla: estuvo en el campo (13 oct 2026)
+        if cambiados and quien not in partida.jugaron:
+            partida.marcar_que_jugo(quien)
+            await self._uow.partidas.guardar([partida])

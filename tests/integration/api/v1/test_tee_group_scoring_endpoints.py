@@ -410,6 +410,42 @@ async def test_who_only_scored_whom_they_mark_played_even_after_a_correction(
 
 
 @pytest.mark.usefixtures("_ya_abrio")
+async def test_deleting_a_mistaken_stroke_then_no_show(client: AsyncClient):
+    # El caso de Agustín (13 oct 2026): el organizador pone un golpe por error a
+    # quien no vino, lo borra y ya puede marcarle no presentado
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    ausente = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{ausente}"
+    await client.put(f"{base}/holes/1", json={"own_score": 4, "marker_score": 4})
+
+    antes = await client.post(f"{base}/no-show")
+    borrado = await client.delete(f"{base}/holes/1", params={"side": "both"})
+    despues = await client.post(f"{base}/no-show")
+
+    assert antes.status_code == 409, antes.text
+    assert borrado.status_code == 200, borrado.text
+    suyo = next(p for p in borrado.json()["players"] if p["user_id"] == ausente)
+    assert suyo["holes"][0]["own_score"] is None
+    assert suyo["holes"][0]["marker_score"] is None
+    assert despues.status_code == 200, despues.text
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_cannot_delete_and_the_side_is_checked(client: AsyncClient):
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]
+    ruta = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/1"
+    set_auth_cookies(client, por_id[otro]["cookies"])
+    de_un_jugador = await client.delete(ruta, params={"side": "own"})
+    set_auth_cookies(client, organizador["cookies"])
+    lado_raro = await client.delete(ruta, params={"side": "all"})
+
+    assert de_un_jugador.status_code == 403, de_un_jugador.text
+    assert lado_raro.status_code == 422, lado_raro.text
+
+
+@pytest.mark.usefixtures("_ya_abrio")
 async def test_a_player_cannot_retire_another(client: AsyncClient):
     _, _, partida, por_id = await _con_partida_y_organizador(client)
     jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]

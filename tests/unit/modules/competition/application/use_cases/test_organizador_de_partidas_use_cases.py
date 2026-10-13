@@ -38,6 +38,11 @@ Lo que hace el organizador con la anotación de las partidas (#251, PR 5; P3, P4
 | El organizador retira a un jugador (#550)         | RETIRADO, círculo rehecho              |
 | Retirar en una partida sin empezar / ya cerrada   | PartidaNoEmpezadaError / Cerrada       |
 | Retirar siendo jugador                            | NotCompetitionCreatorError             |
+| Borrar lo anotado (un lado / los dos)             | Como sin anotar; validado deja de serlo|
+| Borrar el golpe puesto por error a quien no vino  | Ya se le puede marcar no presentado    |
+| Borrar lo que puso su marcador                    | El marcador sigue con su marca         |
+| Borrar con la tarjeta cerrada / siendo jugador    | TarjetaCerradaError / NotCreator       |
+| Borrar un hoyo sin nada                           | No pasa nada                           |
 """
 
 from datetime import UTC, datetime
@@ -55,6 +60,7 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     PartidaNoAnotableError,
 )
 from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    BorrarHoyoDePartidaUseCase,
     CerrarFranjaUseCase,
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
@@ -291,9 +297,7 @@ async def _anotar(
         if propio is not None:
             golpe.anotar_propio(_golpes(propio), True, user_id, escenario.ahora)
         if del_marcador is not None:
-            golpe.anotar_del_marcador(
-                _golpes(del_marcador), True, marcador, escenario.ahora, como_marcador=True
-            )
+            golpe.anotar_del_marcador(_golpes(del_marcador), True, marcador, escenario.ahora)
         await escenario.uow.golpes_de_partida.guardar(golpe)
 
 
@@ -561,8 +565,12 @@ async def _anoto_a_su_marcado(escenario, partida, marcador):
     golpe = GolpeDePartida.crear(
         partida.id, partida.round_id, partida.competition_id, marcado, 1, escenario.ahora
     )
-    golpe.anotar_del_marcador(4, True, marcador, escenario.ahora, como_marcador=True)
+    golpe.anotar_del_marcador(4, True, marcador, escenario.ahora)
     await escenario.uow.golpes_de_partida.guardar(golpe)
+    # Desde su pantalla: enciende su marca «ha jugado»
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida.marcar_que_jugo(marcador)
+    await escenario.uow.partidas.guardar([leida])
 
 
 async def test_no_show_for_someone_who_only_scored_whom_they_mark():
@@ -627,7 +635,7 @@ async def _organiza_y_juega(escenario, partida):
     golpe = GolpeDePartida.crear(
         partida.id, partida.round_id, partida.competition_id, no_marca, 1, escenario.ahora
     )
-    golpe.anotar_del_marcador(4, True, organizador, escenario.ahora, como_marcador=False)
+    golpe.anotar_del_marcador(4, True, organizador, escenario.ahora)
     await escenario.uow.golpes_de_partida.guardar(golpe)
     return organizador
 
@@ -662,8 +670,98 @@ async def test_a_playing_organiser_scoring_whom_they_mark_from_the_organiser_vie
 
     await _corrige(escenario, partida, marcado, quien=organizador, marker_score=4)
 
-    assert (await _golpe(escenario, partida, marcado)).anotado_como_marcador_por == organizador
+    assert organizador in (await escenario.uow.partidas.find_by_id(partida.id)).jugaron
     with pytest.raises(TieneGolpesError):
         await _no_presentado(escenario).execute(
             partida.id.value, organizador.value, organizador, False
         )
+
+
+def _borrar(escenario):
+    return BorrarHoyoDePartidaUseCase(
+        uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
+    )
+
+
+async def _borra(escenario, partida, jugador, lado, hoyo=1, quien=None):
+    await _borrar(escenario).execute(
+        partida.id.value, jugador.value, hoyo, lado, quien or escenario.creador, False
+    )
+
+
+@pytest.mark.parametrize(
+    ("lado", "propio", "del_marcador"),
+    [("own", None, 5), ("marker", 4, None), ("both", None, None)],
+)
+async def test_deleting_what_was_entered(lado, propio, del_marcador):
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 2), 4, 4)
+    assert (await _golpe(escenario, partida, a)).validado
+
+    await _borra(escenario, partida, a, lado)
+
+    golpe = await _golpe(escenario, partida, a)
+    assert (golpe.propio, golpe.del_marcador) == (propio, None if lado != "own" else 4)
+    assert not golpe.validado
+
+
+async def test_deleting_a_mistaken_stroke_allows_the_no_show():
+    # El caso de Agustín (13 oct 2026): un golpe por error a quien no vino
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _corrige(escenario, partida, a, own_score=4)
+    with pytest.raises(TieneGolpesError):
+        await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    await _borra(escenario, partida, a, "both")
+    await _no_presentado(escenario).execute(partida.id.value, a.value, escenario.creador, False)
+
+    assert (await _tarjetas(escenario, partida))[a] == EstadoDeTarjeta.NO_PRESENTADO
+
+
+async def test_deleting_what_the_marker_entered_keeps_the_marker_played():
+    escenario, partida = await _en_juego(n=3)
+    marcador = partida.user_ids[0]
+    marcado = partida.marcadores[marcador]
+    await _anoto_a_su_marcado(escenario, partida, marcador)
+
+    await _borra(escenario, partida, marcado, "marker")
+
+    with pytest.raises(TieneGolpesError):
+        await _no_presentado(escenario).execute(
+            partida.id.value, marcador.value, escenario.creador, False
+        )
+    await _no_presentado(escenario).execute(
+        partida.id.value, marcado.value, escenario.creador, False
+    )
+
+
+async def test_deleting_on_a_closed_card():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+    await _anotar(escenario, partida, a, range(1, 2), 4)
+    cerrada = await escenario.uow.partidas.find_by_id(partida.id)
+    cerrada.retirar(a)
+    await escenario.uow.partidas.guardar([cerrada])
+
+    with pytest.raises(TarjetaCerradaError):
+        await _borra(escenario, partida, a, "both")
+
+
+async def test_a_player_cannot_delete():
+    escenario, partida = await _en_juego(n=3)
+    a, b, _ = partida.user_ids
+    await _anotar(escenario, partida, a, range(1, 2), 4)
+
+    with pytest.raises(NotCompetitionCreatorError):
+        await _borra(escenario, partida, a, "own", quien=b)
+
+
+async def test_deleting_a_hole_with_nothing():
+    escenario, partida = await _en_juego(n=3)
+    a = partida.user_ids[0]
+
+    await _borra(escenario, partida, a, "both", hoyo=7)
+
+    assert await escenario.uow.golpes_de_partida.de_la_partida(partida.id) == []

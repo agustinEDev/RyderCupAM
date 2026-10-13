@@ -13,6 +13,8 @@ Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 20
   presentado deja a uno solo sin salir, el último en salir de la
   siguiente partida de 4 aún sin salir (si no hay, de 3) pasa a acompañarle
   (QA del 11 oct 2026).
+- **Borrar lo anotado** en un hoyo (su lado, el del marcador o los dos), para
+  deshacer un golpe puesto por error (13 oct 2026).
 - **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
   una vez; los que no coinciden se corrigen uno a uno (QA del 11 oct 2026).
 - **Cerrar la franja**, la red (P3): las tarjetas aún en juego quedan
@@ -24,6 +26,7 @@ Solo el organizador o un admin, con la partida bloqueada.
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from src.modules.competition.application.dto.partidas_dto import (
@@ -174,15 +177,75 @@ class CorregirHoyoDePartidaUseCase:
             if "own_score" in body.model_fields_set:
                 golpe.anotar_propio(body.own_score, acepta_raya, quien, llegada)
             if "marker_score" in body.model_fields_set:
-                # Si quien corrige es el marcador de esa tarjeta (el organizador
-                # que juega), está marcando de verdad, no corrigiendo (/code-review)
-                golpe.anotar_del_marcador(
-                    body.marker_score,
-                    acepta_raya,
-                    quien,
-                    llegada,
-                    como_marcador=bloqueada.marcadores.get(quien) == jugador,
-                )
+                golpe.anotar_del_marcador(body.marker_score, acepta_raya, quien, llegada)
+                # El organizador que juega y anota a quien marca está marcando, no
+                # corrigiendo: enciende su marca (/code-review, 13 oct 2026)
+                if bloqueada.marcadores.get(quien) == jugador and quien not in bloqueada.jugaron:
+                    bloqueada.marcar_que_jugo(quien)
+                    await self._uow.partidas.guardar([bloqueada])
+            await self._uow.golpes_de_partida.guardar(golpe)
+
+
+# Qué lado borrar de un hoyo: el del jugador, el del marcador o los dos
+LadoABorrar = Literal["own", "marker", "both"]
+
+
+class BorrarHoyoDePartidaUseCase:
+    """
+    El organizador borra lo anotado en un hoyo de un jugador: su lado, el del
+    marcador o los dos (13 oct 2026). Para deshacer un golpe puesto por error;
+    la marca «ha jugado» de quien anotó desde su pantalla no se toca.
+    """
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(
+        self,
+        group_id: UUID,
+        user_id: UUID,
+        hoyo: int,
+        lado: LadoABorrar,
+        quien: UserId,
+        is_admin: bool,
+    ) -> None:
+        """
+        Raises:
+            InvalidHoleNumberError, PartidaNoAnotableError, ScoringNotOpenYetError
+            TarjetaCerradaError: Si su tarjeta está cerrada: se reabre antes
+        """
+        if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
+            raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            jugador = _del_jugador(bloqueada, user_id)
+            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
+                raise TarjetaCerradaError("Esa tarjeta está cerrada: reábrela para borrar.")
+            golpe = next(
+                (
+                    g
+                    for g in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
+                    if g.user_id == jugador and g.hoyo == hoyo
+                ),
+                None,
+            )
+            if golpe is None:
+                return
+            if lado in ("own", "both"):
+                golpe.borrar_propio(llegada)
+            if lado in ("marker", "both"):
+                golpe.borrar_del_marcador(llegada)
             await self._uow.golpes_de_partida.guardar(golpe)
 
 
@@ -328,9 +391,7 @@ class ValidarLoAnotadoUseCase:
             for golpe in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id):
                 if golpe.user_id != jugador or not golpe.propio_enviado or golpe.marcador_enviado:
                     continue
-                golpe.anotar_del_marcador(
-                    golpe.propio, acepta_raya, quien, llegada, como_marcador=False
-                )
+                golpe.anotar_del_marcador(golpe.propio, acepta_raya, quien, llegada)
                 await self._uow.golpes_de_partida.guardar(golpe)
 
 

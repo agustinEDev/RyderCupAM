@@ -1393,6 +1393,8 @@ tee_group_players_table = Table(
     ),
     # Vino de otra partida a acompañar al que se quedó solo (QA del 11 oct 2026)
     Column("brought_in", Boolean, nullable=False, server_default="false"),
+    # «Ha jugado»: anotó algo desde su pantalla; no se apaga (13 oct 2026)
+    Column("played", Boolean, nullable=False, server_default="false"),
     ForeignKeyConstraint(
         ["group_id", "round_id"],
         ["tee_groups.id", "tee_groups.round_id"],
@@ -1434,9 +1436,6 @@ tee_group_hole_scores_table = Table(
     Column("marker_score", Integer, nullable=True),
     Column("marker_submitted", Boolean, nullable=False),
     Column("marker_by", UserIdDecorator, nullable=True),
-    # Quién lo anotó como marcador desde su pantalla: las correcciones no lo
-    # tocan. Guarda el último; el anterior ya tiene su tarjeta cerrada
-    Column("scored_as_marker_by", UserIdDecorator, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("hole_number BETWEEN 1 AND 18", name="ck_tee_group_hole_scores_hole"),

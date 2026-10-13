@@ -129,6 +129,7 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
                     "card_status": partida.estados_de_tarjeta[jugador.user_id].value,
                     "marks_user_id": partida.marcadores.get(jugador.user_id),
                     "brought_in": jugador.user_id in partida.traidos,
+                    "played": jugador.user_id in partida.jugaron,
                 }
                 for posicion, jugador in enumerate(partida.jugadores, start=1)
             ],
@@ -194,4 +195,5 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             estado=EstadoPartida(grupo.status),
             estados_de_tarjeta={fila.user_id: EstadoDeTarjeta(fila.card_status) for fila in filas},
             traidos={fila.user_id for fila in filas if fila.brought_in},
+            jugaron={fila.user_id for fila in filas if fila.played},
         )

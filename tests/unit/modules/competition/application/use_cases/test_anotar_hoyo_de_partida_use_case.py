@@ -297,12 +297,36 @@ def test_acting_as_does_not_exist_here():
         )
 
 
-async def test_the_marker_side_records_who_scored_it_as_marker():
-    # Para saber quién jugó aunque luego corrijan o cambie el círculo (13 oct 2026)
+async def test_scoring_from_your_screen_lights_your_mark():
+    # «Ha jugado» (13 oct 2026): el que anota, sí; el marcado, por su tarjeta
     escenario, partida = await _partida()
     yo = partida.user_ids[0]
-    marcado = partida.marcadores[yo]
+
+    await _anotar(escenario, partida, yo, marked_score=5)
+
+    # El marcado no: lo suyo es «algo en su tarjeta», que se puede borrar
+    assert (await escenario.uow.partidas.find_by_id(partida.id)).jugaron == {yo}
+
+
+async def test_a_pick_up_lights_it_too():
+    escenario, partida = await _partida()
+    yo = partida.user_ids[0]
+
+    await _anotar(escenario, partida, yo, own_score=None)
+
+    assert yo in (await escenario.uow.partidas.find_by_id(partida.id)).jugaron
+
+
+async def test_nothing_applied_lights_nothing():
+    # Su tarjeta cerrada y la de su marcado también: no se anota nada
+    escenario, partida = await _partida(n=2)
+    yo, otro = partida.user_ids
+    cerrada = await escenario.uow.partidas.find_by_id(partida.id)
+    cerrada.empezar()
+    cerrada.entregar(yo)
+    cerrada.entregar(otro)
+    await escenario.uow.partidas.guardar([cerrada])
 
     await _anotar(escenario, partida, yo, own_score=4, marked_score=5)
 
-    assert (await _golpes(escenario, partida))[(marcado, 1)].anotado_como_marcador_por == yo
+    assert (await escenario.uow.partidas.find_by_id(partida.id)).jugaron == set()

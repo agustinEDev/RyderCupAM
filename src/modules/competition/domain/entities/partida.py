@@ -79,6 +79,7 @@ class Partida:
         estado: EstadoPartida,
         estados_de_tarjeta: Mapping[UserId, EstadoDeTarjeta] | None = None,
         traidos: Collection[UserId] = (),
+        jugaron: Collection[UserId] = (),
     ):
         self._comprobar_numero(numero)
         self._comprobar_jugadores(jugadores)
@@ -96,6 +97,8 @@ class Partida:
         self._comprobar_que_caben()
         MarcadoresEnCadena.validar_leidos(self.quedan, marcadores)
         self._traidos = {u for u in traidos if u in self._tarjetas}
+        # «Ha jugado»: lo que hizo él desde su pantalla; no se apaga (13 oct 2026)
+        self._jugaron = {u for u in jugaron if u in self._tarjetas}
 
     @classmethod
     def crear(
@@ -126,6 +129,7 @@ class Partida:
         self._jugadores = [j for j in self._jugadores if j.user_id != user_id]
         self._tarjetas.pop(user_id, None)
         self._traidos.discard(user_id)
+        self._jugaron.discard(user_id)
         self._rehacer_el_circulo()
 
     def meter(self, jugador: JugadorDePartida, jugadores_por_partida: int) -> None:
@@ -248,23 +252,26 @@ class Partida:
         self._rehacer_el_circulo()
         self._estado = EstadoPartida.COMPLETED
 
+    def marcar_que_jugo(self, user_id: UserId) -> None:
+        """
+        Enciende su marca «ha jugado»: anotó algo desde su pantalla (su golpe o el
+        de quien marca). No se apaga: estuvo en el campo (13 oct 2026).
+        """
+        self._de_la_partida(user_id)
+        self._jugaron.add(user_id)
+
     def quienes_jugaron(self, golpes: Iterable[GolpeDePartida]) -> set[UserId]:
         """
-        Quién estuvo en el campo según los golpes de esta partida: algo en su
-        tarjeta, o anotó como marcador, desde su pantalla, a otro de la partida,
-        aunque luego el círculo se rehaga (12 oct 2026). Corregir (organizador o
-        admin, juegue o no) no es jugar (13 oct 2026).
+        Quién estuvo en el campo: la marca «ha jugado», o algo en su tarjeta
+        ahora mismo, lo pusiera quien lo pusiera (la tarjeta en papel). Lo de la
+        tarjeta se puede borrar; la marca, no (13 oct 2026).
         """
-        jugaron: set[UserId] = set()
-        for golpe in golpes:
-            if golpe.partida_id != self.id:
-                continue
-            if golpe.apuntado:
-                jugaron.add(golpe.user_id)
-            marcador = golpe.anotado_como_marcador_por
-            if marcador in self._tarjetas:
-                jugaron.add(marcador)
-        return jugaron
+        en_su_tarjeta = {
+            golpe.user_id
+            for golpe in golpes
+            if golpe.partida_id == self.id and golpe.apuntado and golpe.user_id in self._tarjetas
+        }
+        return self._jugaron | en_su_tarjeta
 
     def _cerrar_tarjeta(self, user_id: UserId, estado: EstadoDeTarjeta) -> None:
         self._de_la_partida(user_id)
@@ -312,6 +319,11 @@ class Partida:
             if self._tarjetas[u] == EstadoDeTarjeta.JUGANDO
             and (u not in marcado_por or self._tarjetas[marcado_por[u]] != EstadoDeTarjeta.JUGANDO)
         ]
+
+    @property
+    def jugaron(self) -> set[UserId]:
+        """Quién tiene encendida la marca «ha jugado»."""
+        return set(self._jugaron)
 
     @property
     def traidos(self) -> set[UserId]:

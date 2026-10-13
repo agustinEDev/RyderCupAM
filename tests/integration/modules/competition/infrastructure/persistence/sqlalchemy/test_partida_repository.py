@@ -374,9 +374,7 @@ async def test_a_hole_score_comes_back_with_who_entered_it(db_session, ronda, ju
     uow, partida, a, b = await _con_partida(db_session, ronda, jugadores)
     golpe = _golpe(partida, a, 7)
     golpe.anotar_propio(None, acepta_raya=True, quien=a, momento=golpe.creado)
-    golpe.anotar_del_marcador(
-        None, acepta_raya=True, quien=b, momento=golpe.creado, como_marcador=True
-    )
+    golpe.anotar_del_marcador(None, acepta_raya=True, quien=b, momento=golpe.creado)
 
     await uow.golpes_de_partida.guardar(golpe)
     uow = await _releer(db_session)
@@ -394,9 +392,7 @@ async def test_saving_the_same_hole_again_updates_it(db_session, ronda, jugadore
     await uow.golpes_de_partida.guardar(golpe)
     await db_session.commit()
 
-    golpe.anotar_del_marcador(
-        5, acepta_raya=False, quien=b, momento=golpe.creado, como_marcador=True
-    )
+    golpe.anotar_del_marcador(5, acepta_raya=False, quien=b, momento=golpe.creado)
     await uow.golpes_de_partida.guardar(golpe)
     uow = await _releer(db_session)
 
