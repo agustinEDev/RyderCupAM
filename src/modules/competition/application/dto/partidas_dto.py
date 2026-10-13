@@ -281,6 +281,10 @@ class StandingRowDTO(BaseModel):
         ),
     )
     status: str = Field(..., description="CLASIFICADO, SIN_EMPEZAR, NR o NP.")
+    tee_gender: str | None = Field(
+        None,
+        description="El de sus barras (MALE o FEMALE): para «No presentada», «Retirada».",
+    )
 
 
 class StandingsResponseDTO(BaseModel):

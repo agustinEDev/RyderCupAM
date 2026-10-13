@@ -1,5 +1,7 @@
 """In-Memory Match Repository para testing."""
 
+from collections.abc import Sequence
+
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.match_repository_interface import (
     MatchRepositoryInterface,
@@ -54,6 +56,16 @@ class InMemoryMatchRepository(MatchRepositoryInterface):
 
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
         return [m for m in self._matches.values() if m.round_id == round_id]
+
+    async def find_by_rounds_for_player(
+        self, round_ids: Sequence[RoundId], user_id: UserId
+    ) -> list[Match]:
+        rondas = set(round_ids)
+        return [
+            m
+            for m in self._matches.values()
+            if m.round_id in rondas and m.find_player(user_id) is not None
+        ]
 
     async def find_by_round_for_update(self, round_id: RoundId) -> list[Match]:
         # En memoria no hay nada que bloquear. Sin pasar por `find_by_round`:

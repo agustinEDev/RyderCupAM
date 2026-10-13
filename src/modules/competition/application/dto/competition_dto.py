@@ -56,6 +56,32 @@ class CountryResponseDTO(BaseModel):
     name_es: str = Field(..., description="Nombre en español")
 
 
+# El campo `date` de NextSessionDTO taparía al tipo dentro de su clase
+_Fecha = date
+
+
+class CompetitionCourseSummaryDTO(BaseModel):
+    """Un campo de la competición en su tarjeta: nombre y país (FE #846)."""
+
+    id: UUID
+    name: str
+    country_code: str
+
+
+class NextSessionDTO(BaseModel):
+    """La próxima salida de quien mira (FE #846)."""
+
+    date: _Fecha
+    session_type: str = Field(..., description="MORNING, AFTERNOON o EVENING.")
+    tee_time: str | None = Field(
+        None,
+        description=(
+            "HH:MM, hora del campo, de su partida. Null en la Ryder (no hay hora por "
+            "partido) y en una franja sin partidas generadas."
+        ),
+    )
+
+
 class CreatorDTO(BaseModel):
     """
     DTO para representar información básica del creador de una competición.
@@ -840,6 +866,21 @@ class CompetitionResponseDTO(BaseModel):
     user_enrollment_status: str | None = Field(
         None,
         description="Estado de inscripción del usuario actual (REQUESTED, APPROVED, REJECTED, etc.). None si no está inscrito.",
+    )
+
+    # La tarjeta de «Mis competiciones» (FE #846)
+    golf_courses: list[CompetitionCourseSummaryDTO] = Field(
+        default_factory=list, description="Sus campos, en su orden, con nombre y país."
+    )
+    playing_days: int | None = Field(
+        None, description="Stableford/Medal: días con franjas (0 sin franjas). Null en la Ryder."
+    )
+    my_next_session: NextSessionDTO | None = Field(
+        None,
+        description=(
+            "Solo si quien mira juega (inscrito y aprobado): su próxima franja o sesión "
+            "sin terminar, con su partida o partido en juego. Null si no le queda ninguna."
+        ),
     )
 
     # Timestamps

@@ -1,5 +1,7 @@
 """Match Repository - SQLAlchemy Implementation."""
 
+from collections.abc import Sequence
+
 from sqlalchemy import cast, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,6 +89,27 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
         statement = (
             select(Match).where(Match._round_id == round_id).order_by(Match._match_number.asc())
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_by_rounds_for_player(
+        self, round_ids: Sequence[RoundId], user_id: UserId
+    ) -> list[Match]:
+        if not round_ids:
+            return []
+        # Por contención, como `find_completed_for_player`
+        jugador = cast([{"user_id": str(user_id.value)}], JSONB)
+        statement = (
+            select(Match)
+            .where(matches_table.c.round_id.in_(list(round_ids)))
+            .where(
+                or_(
+                    matches_table.c.team_a_players.op("@>")(jugador),
+                    matches_table.c.team_b_players.op("@>")(jugador),
+                )
+            )
+            .order_by(matches_table.c.match_number.asc())
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())

@@ -13,6 +13,7 @@ Las ve cualquiera con sesión, como las partidas (D8).
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, time
 from uuid import UUID
 
@@ -49,6 +50,14 @@ CORTE_DEL_SCRATCH = 25
 _SOLO_STROKE_PLAY = "Solo hay clasificación en un Stableford o un Medal."
 
 
+@dataclass(frozen=True)
+class _Personas:
+    """Lo de cada jugador que no es de la tabla: su nombre y el género de sus barras."""
+
+    nombres: dict[UserId, str]
+    generos: dict[UserId, str | None]
+
+
 class _Clasificaciones:
     """Lo que comparten las tres: leer la competición y montar la tabla."""
 
@@ -66,14 +75,14 @@ class _Clasificaciones:
 
     async def _de_la_competicion(
         self, competicion: Competition, escala: Escala, categoria: int | None
-    ) -> tuple[OverallStanding, list[Fila], dict[UserId, str]]:
+    ) -> tuple[OverallStanding, list[Fila], _Personas]:
         if competicion.stroke_play is None:
             raise PartidasError(_SOLO_STROKE_PLAY)
         regla = competicion.stroke_play.overall_standing
         partidas = await self._uow.partidas.de_la_competicion(competicion.id)
         golpes = await self._uow.golpes_de_partida.de_la_competicion(competicion.id)
-        filas, nombres = await self._tabla(competicion, partidas, golpes, escala, regla, categoria)
-        return regla, filas, nombres
+        filas, personas = await self._tabla(competicion, partidas, golpes, escala, regla, categoria)
+        return regla, filas, personas
 
     async def _tabla(
         self,
@@ -83,7 +92,7 @@ class _Clasificaciones:
         escala: Escala,
         regla: OverallStanding,
         categoria: int | None,
-    ) -> tuple[list[Fila], dict[UserId, str]]:
+    ) -> tuple[list[Fila], _Personas]:
         validados: dict[tuple, dict[int, int | None]] = {}
         for golpe in golpes:
             if golpe.validado:
@@ -99,6 +108,7 @@ class _Clasificaciones:
         }
         tarjetas: dict[UserId, list[TarjetaDeJornada]] = {}
         handicaps = {}
+        generos: dict[UserId, str | None] = {}
         # Por calendario: el hándicap que desempata (P5) es el de su última
         # jornada, y se queda el de la última partida recorrida; y las
         # tarjetas llegan en ese orden a la clasificación (el «tras»)
@@ -117,6 +127,10 @@ class _Clasificaciones:
                 estado = partida.estados_de_tarjeta[foto.user_id]
                 tarjetas.setdefault(foto.user_id, []).append(TarjetaDeJornada(tarjeta, estado))
                 handicaps[foto.user_id] = foto.handicap
+                # El de su última partida, como el hándicap (#856); sin dato en
+                # ella, el último que se supo (/code-review)
+                if foto.tee_gender is not None:
+                    generos[foto.user_id] = foto.tee_gender.value
         participantes = [
             Participante(u, handicaps[u], categorias.get(u), tuple(tarjetas[u])) for u in user_ids
         ]
@@ -126,7 +140,7 @@ class _Clasificaciones:
         nombres = await PlayerNames.de_la_competicion(
             [f.user_id for f in filas], competicion.id, self._usuarios, self._uow
         )
-        return filas, nombres
+        return filas, _Personas(nombres, generos)
 
 
 class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
@@ -147,10 +161,10 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
             partidas = await self._uow.partidas.de_la_franja(franja.id)
             golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
             regla = OverallStanding.ACCUMULATED
-            filas, nombres = await self._tabla(
+            filas, personas = await self._tabla(
                 competicion, partidas, golpes, Escala.NETA, regla, categoria
             )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, nombres)
+        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, personas)
 
 
 class ClasificacionGeneralUseCase(_Clasificaciones):
@@ -165,10 +179,10 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
         """
         async with self._uow:
             competicion = await self._stroke_play(CompetitionId(competition_id))
-            regla, filas, nombres = await self._de_la_competicion(
+            regla, filas, personas = await self._de_la_competicion(
                 competicion, Escala.NETA, categoria
             )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, nombres)
+        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, personas)
 
 
 class ClasificacionScratchUseCase(_Clasificaciones):
@@ -181,17 +195,19 @@ class ClasificacionScratchUseCase(_Clasificaciones):
         """
         async with self._uow:
             competicion = await self._stroke_play(CompetitionId(competition_id))
-            regla, filas, nombres = await self._de_la_competicion(competicion, Escala.SCRATCH, None)
+            regla, filas, personas = await self._de_la_competicion(
+                competicion, Escala.SCRATCH, None
+            )
         visibles, mia = Clasificacion.cortar(filas, CORTE_DEL_SCRATCH, quien)
-        return _respuesta(competicion, Escala.SCRATCH, regla, None, visibles, nombres, mia)
+        return _respuesta(competicion, Escala.SCRATCH, regla, None, visibles, personas, mia)
 
 
-def _fila(fila: Fila, nombres: dict[UserId, str]) -> StandingRowDTO:
+def _fila(fila: Fila, personas: _Personas) -> StandingRowDTO:
     return StandingRowDTO(
         position=fila.puesto,
         tied=fila.empatado,
         user_id=fila.user_id.value,
-        name=nombres.get(fila.user_id, ""),
+        name=personas.nombres.get(fila.user_id, ""),
         category=fila.categoria,
         handicap=fila.handicap,
         value=fila.valor,
@@ -199,6 +215,7 @@ def _fila(fila: Fila, nombres: dict[UserId, str]) -> StandingRowDTO:
         thru=fila.tras,
         status=fila.estado.value,
         retired=fila.retirado,
+        tee_gender=personas.generos.get(fila.user_id),
     )
 
 
@@ -208,7 +225,7 @@ def _respuesta(
     regla: OverallStanding,
     categoria: int | None,
     filas: Sequence[Fila],
-    nombres: dict[UserId, str],
+    personas: _Personas,
     mia: Fila | None = None,
 ) -> StandingsResponseDTO:
     return StandingsResponseDTO(
@@ -216,6 +233,6 @@ def _respuesta(
         scale=escala.value,
         rule=regla.value,
         category=categoria,
-        rows=[_fila(f, nombres) for f in filas],
-        me=_fila(mia, nombres) if mia else None,
+        rows=[_fila(f, personas) for f in filas],
+        me=_fila(mia, personas) if mia else None,
     )

@@ -230,13 +230,9 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
 
     Assumes caller manages the uow/user_uow transaction context.
     """
-    result = []
-    for competition in competitions:
-        dto = await CompetitionDTOMapper.to_response_dto(
-            competition, current_user_id, uow, user_uow, is_admin=is_admin
-        )
-        result.append(dto)
-    return result
+    return await CompetitionDTOMapper.to_response_dtos(
+        competitions, current_user_id, uow, user_uow, is_admin=is_admin
+    )
 
 
 async def _get_all_competitions(
