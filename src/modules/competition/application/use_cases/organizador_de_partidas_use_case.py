@@ -7,10 +7,14 @@ Decidido con Agustín (decisión 11 de la #251 y P3, P4, P6, P9, P11 el 9 oct 20
   así resuelve un desacuerdo (P4) y hace de marcador en una partida de uno
   (P11). Queda registrado que lo metió él (P9). Una tarjeta cerrada se reabre
   antes, a propósito: que la corrección se vea.
-- **Reabrir una tarjeta** (P9) y **marcar a alguien como no presentado** (P6).
-  Si el no presentado deja a uno solo sin salir, el último en salir de la
+- **Reabrir una tarjeta** (P9), solo si está cerrada (#545), y **marcar a
+  alguien como no presentado** (P6), solo si no tiene golpes en su partida;
+  si los tiene, jugó, y el organizador lo **retira** (#550). Si el no
+  presentado deja a uno solo sin salir, el último en salir de la
   siguiente partida de 4 aún sin salir (si no hay, de 3) pasa a acompañarle
   (QA del 11 oct 2026).
+- **Borrar lo anotado** en un hoyo (su lado, el del marcador o los dos), para
+  deshacer un golpe puesto por error (13 oct 2026).
 - **Validar lo anotado** de quien juega sin marcador: sus hoyos con golpe, de
   una vez; los que no coinciden se corrigen uno a uno (QA del 11 oct 2026).
 - **Cerrar la franja**, la red (P3): las tarjetas aún en juego quedan
@@ -22,6 +26,7 @@ Solo el organizador o un admin, con la partida bloqueada.
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from src.modules.competition.application.dto.partidas_dto import (
@@ -173,6 +178,75 @@ class CorregirHoyoDePartidaUseCase:
                 golpe.anotar_propio(body.own_score, acepta_raya, quien, llegada)
             if "marker_score" in body.model_fields_set:
                 golpe.anotar_del_marcador(body.marker_score, acepta_raya, quien, llegada)
+                # El organizador que juega y anota a quien marca está marcando, no
+                # corrigiendo: enciende su marca (/code-review, 13 oct 2026)
+                if bloqueada.marcadores.get(quien) == jugador and quien not in bloqueada.jugaron:
+                    bloqueada.marcar_que_jugo(quien)
+                    await self._uow.partidas.guardar([bloqueada])
+            await self._uow.golpes_de_partida.guardar(golpe)
+
+
+# Qué lado borrar de un hoyo: el del jugador, el del marcador o los dos
+LadoABorrar = Literal["own", "marker", "both"]
+
+
+class BorrarHoyoDePartidaUseCase:
+    """
+    El organizador borra lo anotado en un hoyo de un jugador: su lado, el del
+    marcador o los dos (13 oct 2026). Para deshacer un golpe puesto por error;
+    la marca «ha jugado» de quien anotó desde su pantalla no se toca.
+    """
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(
+        self,
+        group_id: UUID,
+        user_id: UUID,
+        hoyo: int,
+        lado: LadoABorrar,
+        quien: UserId,
+        is_admin: bool,
+    ) -> None:
+        """
+        Raises:
+            PartidaNotFoundError, NotCompetitionCreatorError, InvalidHoleNumberError
+            PartidaNoAnotableError, ScoringNotOpenYetError
+            TarjetaCerradaError: Si su tarjeta está cerrada: se reabre antes
+        """
+        if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
+            raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            jugador = _del_jugador(bloqueada, user_id)
+            if bloqueada.estados_de_tarjeta[jugador] != EstadoDeTarjeta.JUGANDO:
+                raise TarjetaCerradaError("Esa tarjeta está cerrada: reábrela para borrar.")
+            golpe = next(
+                (
+                    g
+                    for g in await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
+                    if g.user_id == jugador and g.hoyo == hoyo
+                ),
+                None,
+            )
+            if golpe is None:
+                return
+            if lado in ("own", "both"):
+                golpe.borrar_propio(llegada)
+            if lado in ("marker", "both"):
+                golpe.borrar_del_marcador(llegada)
             await self._uow.golpes_de_partida.guardar(golpe)
 
 
@@ -194,6 +268,7 @@ class ReabrirTarjetaUseCase:
         Raises:
             PartidaNoAnotableError: Con la competición sin jugarse
             ScoringNotOpenYetError: Antes de abrir la franja
+            TarjetaYaAbiertaError: Si ya estaba abierta (#545)
         """
         llegada = self._reloj()
         async with self._uow:
@@ -229,6 +304,7 @@ class MarcarNoPresentadoUseCase:
         Raises:
             PartidaNoAnotableError: Con la competición sin jugarse
             ScoringNotOpenYetError: Antes de abrir la franja
+            TieneGolpesError: Si sus golpes dicen que jugó (#550)
         """
         llegada = self._reloj()
         async with self._uow:
@@ -239,9 +315,42 @@ class MarcarNoPresentadoUseCase:
             # rehace partidas sin salir: así no se cruzan (revisión)
             await self._uow.competitions.find_by_id_for_update(competicion.id)
             bloqueada = await _bloqueada(self._uow, partida)
-            bloqueada.no_presentado(_del_jugador(bloqueada, user_id))
+            jugador = _del_jugador(bloqueada, user_id)
+            # Leídos con la partida bloqueada: un golpe a la vez no se cuela
+            golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
+            bloqueada.no_presentado(jugador, golpes)
             await self._uow.partidas.guardar([bloqueada])
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
+
+
+class RetirarJugadorUseCase:
+    """El organizador retira a quien ya jugó algún hoyo (#550): como si se retirara él."""
+
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        zonas: ICompetitionTimezone,
+        reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ):
+        self._uow = uow
+        self._zonas = zonas
+        self._reloj = reloj
+
+    async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
+        """
+        Raises:
+            PartidaNoAnotableError: Con la competición sin jugarse
+            ScoringNotOpenYetError: Antes de abrir la franja
+            PartidaNoEmpezadaError, TarjetaCerradaError
+        """
+        llegada = self._reloj()
+        async with self._uow:
+            partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
+            comprobar_que_se_juega(competicion)
+            await comprobar_que_abrio(self._uow, self._zonas, partida, llegada)
+            bloqueada = await _bloqueada(self._uow, partida)
+            bloqueada.retirar(_del_jugador(bloqueada, user_id))
+            await self._uow.partidas.guardar([bloqueada])
 
 
 class ValidarLoAnotadoUseCase:
@@ -333,22 +442,23 @@ class CerrarFranjaUseCase:
             golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
             # Por partida y jugador: sus golpes de otra partida no cuentan aquí
             validados: dict[tuple[PartidaId, UserId], int] = {}
-            # Con algo anotado por cualquiera de los dos lados jugó, aunque no se
-            # le validara nada (su marcador no vino): retirado, no no presentado
-            anotaron: set[tuple[PartidaId, UserId]] = set()
+            # Jugó si algo lo dice, aunque no se le validara nada (su marcador
+            # no vino) o solo anotara a quien marca: retirado, no no presentado
+            # De una pasada, por partida: cada una mira solo los suyos (/code-review)
+            golpes_de: dict[PartidaId, list[GolpeDePartida]] = {}
             for golpe in golpes:
                 suyo = (golpe.partida_id, golpe.user_id)
                 if golpe.validado:
                     validados[suyo] = validados.get(suyo, 0) + 1
-                if golpe.propio_enviado or golpe.marcador_enviado:
-                    anotaron.add(suyo)
+                golpes_de.setdefault(golpe.partida_id, []).append(golpe)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
+                jugaron = partida.quienes_jugaron(golpes_de.get(partida.id, []))
                 partida.cerrar(
                     completas={
                         u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS
                     },
-                    sin_golpes={u for u in partida.user_ids if (partida.id, u) not in anotaron},
+                    sin_golpes={u for u in partida.user_ids if u not in jugaron},
                 )
             await self._uow.partidas.guardar(sin_acabar)
             return await vista_de_la_franja(

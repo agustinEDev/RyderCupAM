@@ -177,6 +177,13 @@ class TeeGroupScoringPlayerDTO(BaseModel):
     brought_in: bool = Field(
         False, description="Vino de otra partida a acompañar al que se quedó solo."
     )
+    played: bool = Field(
+        False,
+        description=(
+            "Si jugó: anotó algo desde su pantalla o tiene algo en su tarjeta. Entonces no "
+            "se le puede marcar no presentado (409 PLAYER_HAS_STROKES): se le retira."
+        ),
+    )
     holes: list[TeeGroupHoleDTO]
     totals: TeeGroupTotalsDTO
 

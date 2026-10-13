@@ -92,7 +92,7 @@ def _de_cinco_con_un_np() -> Partida:
     from tests.unit.modules.competition.domain.entities.test_partida import _jugador, _partida
 
     partida = _partida(4)
-    partida.no_presentado(partida.user_ids[0])
+    partida.no_presentado(partida.user_ids[0], [])
     partida.meter(_jugador(), 4)
     return partida
 

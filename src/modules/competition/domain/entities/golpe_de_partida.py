@@ -111,6 +111,16 @@ class GolpeDePartida:
         self._del_marcador, self._marcador_enviado, self._marcador_por = golpes, True, quien
         self._actualizado = momento
 
+    def borrar_propio(self, momento: datetime) -> None:
+        """El organizador borra lo anotado en el lado del jugador (13 oct 2026)."""
+        self._propio, self._propio_enviado, self._propio_por = None, False, None
+        self._actualizado = momento
+
+    def borrar_del_marcador(self, momento: datetime) -> None:
+        """El organizador borra lo anotado en el lado del marcador (13 oct 2026)."""
+        self._del_marcador, self._marcador_enviado, self._marcador_por = None, False, None
+        self._actualizado = momento
+
     @staticmethod
     def comprobar(golpes: int | None, acepta_raya: bool) -> None:
         """
@@ -139,6 +149,11 @@ class GolpeDePartida:
     @property
     def validado(self) -> bool:
         return self.estado == ValidationStatus.MATCH
+
+    @property
+    def apuntado(self) -> bool:
+        """Alguien anotó algo en este hoyo (su lado, el del marcador o una raya): jugó."""
+        return self._propio_enviado or self._marcador_enviado
 
     @property
     def golpes_validados(self) -> int | None:

@@ -154,10 +154,12 @@ from src.modules.competition.application.use_cases.name_vice_captain_use_case im
     NameViceCaptainUseCase,
 )
 from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    BorrarHoyoDePartidaUseCase,
     CerrarFranjaUseCase,
     CorregirHoyoDePartidaUseCase,
     MarcarNoPresentadoUseCase,
     ReabrirTarjetaUseCase,
+    RetirarJugadorUseCase,
     ValidarLoAnotadoUseCase,
 )
 from src.modules.competition.application.use_cases.partidas_use_case import (
@@ -1935,6 +1937,32 @@ def get_marcar_no_presentado_use_case(
 ) -> MarcarNoPresentadoUseCase:
     """El organizador marca a alguien como no presentado (#251)."""
     return MarcarNoPresentadoUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_retirar_jugador_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> RetirarJugadorUseCase:
+    """El organizador retira a quien ya jugó (#550)."""
+    return RetirarJugadorUseCase(
+        uow=uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=reloj,
+    )
+
+
+def get_borrar_hoyo_de_partida_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+) -> BorrarHoyoDePartidaUseCase:
+    """El organizador borra lo anotado en un hoyo (13 oct 2026)."""
+    return BorrarHoyoDePartidaUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,

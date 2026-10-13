@@ -1393,6 +1393,8 @@ tee_group_players_table = Table(
     ),
     # Vino de otra partida a acompañar al que se quedó solo (QA del 11 oct 2026)
     Column("brought_in", Boolean, nullable=False, server_default="false"),
+    # «Ha jugado»: anotó algo desde su pantalla; no se apaga (13 oct 2026)
+    Column("played", Boolean, nullable=False, server_default="false"),
     ForeignKeyConstraint(
         ["group_id", "round_id"],
         ["tee_groups.id", "tee_groups.round_id"],
