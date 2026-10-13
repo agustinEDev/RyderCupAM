@@ -11,8 +11,8 @@ from src.modules.competition.application.dto.competition_dto import (
     NextSessionDTO,
     StrokePlaySettingsResponseDTO,
 )
-from src.modules.competition.application.services.tarjeta_de_la_competicion import (
-    TarjetaDeLaCompeticion,
+from src.modules.competition.application.services.resumen_de_la_competicion import (
+    ResumenDeLaCompeticion,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -116,8 +116,8 @@ class CompetitionDTOMapper:
         if campos is None:
             campos = (await uow.competitions.campos_de([competition.id])).get(competition.id, [])
         juega = user_enrollment_status == EnrollmentStatus.APPROVED.value
-        tarjeta = await TarjetaDeLaCompeticion.de(competition, current_user_id, juega, uow)
-        proxima = tarjeta.proxima
+        resumen = await ResumenDeLaCompeticion.de(competition, current_user_id, juega, uow)
+        proxima = resumen.proxima
 
         # Construir DTO
         return CompetitionResponseDTO(
@@ -165,7 +165,7 @@ class CompetitionDTOMapper:
                 )
                 for c in campos
             ],
-            playing_days=tarjeta.jornadas,
+            playing_days=resumen.jornadas,
             my_next_session=(
                 NextSessionDTO(
                     date=proxima.fecha,

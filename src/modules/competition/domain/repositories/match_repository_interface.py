@@ -58,8 +58,10 @@ class MatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_by_rounds(self, round_ids: Sequence[RoundId]) -> list[Match]:
-        """Los partidos de varias rondas en una sola lectura (sin rondas, ninguno)."""
+    async def find_by_rounds_for_player(
+        self, round_ids: Sequence[RoundId], user_id: UserId
+    ) -> list[Match]:
+        """Los partidos de un jugador en varias rondas, en una sola lectura (FE #846)."""
         pass
 
     @abstractmethod

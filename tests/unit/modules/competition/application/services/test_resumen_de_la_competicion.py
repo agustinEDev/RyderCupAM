@@ -1,5 +1,5 @@
 """
-Lo que la tarjeta de «Mis competiciones» necesita y la competición no sabe sola
+Lo que el resumen de «Mis competiciones» necesita y la competición no sabe sola
 (FE #846): cuántos días se juega y la próxima salida de quien mira.
 
 | Caso                                                    | Resultado                         |
@@ -15,6 +15,8 @@ Lo que la tarjeta de «Mis competiciones» necesita y la competición no sabe so
 | Ryder: su partido programado                            | Fecha y sesión, sin hora          |
 | Ryder: su partido acabado                               | El siguiente, o null              |
 | Quien no juega                                          | null, sin leer nada               |
+| Competición terminada o cancelada (13 oct 2026)         | null; las jornadas sí             |
+| Ryder: partido por walkover o concedido                 | No cuenta                         |
 """
 
 from datetime import time, timedelta
@@ -22,9 +24,9 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.application.services.tarjeta_de_la_competicion import (
+from src.modules.competition.application.services.resumen_de_la_competicion import (
     ProximaSalida,
-    TarjetaDeLaCompeticion,
+    ResumenDeLaCompeticion,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
@@ -32,6 +34,7 @@ from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranj
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.location import Location
@@ -57,8 +60,8 @@ pytestmark = pytest.mark.asyncio
 SABADO = VIERNES + timedelta(days=1)
 
 
-async def _tarjeta(escenario, quien, juega=True):
-    return await TarjetaDeLaCompeticion.de(escenario.competicion, quien, juega, escenario.uow)
+async def _resumen(escenario, quien, juega=True):
+    return await ResumenDeLaCompeticion.de(escenario.competicion, quien, juega, escenario.uow)
 
 
 async def _franja_el_sabado(escenario, sesion=SessionType.MORNING, primera=time(8, 0)):
@@ -88,7 +91,7 @@ async def test_three_windows_on_two_days_are_two_playing_days():
     await escenario.guardar()
     await _franja_el_sabado(escenario)
 
-    assert (await _tarjeta(escenario, escenario.creador, juega=False)).jornadas == 2
+    assert (await _resumen(escenario, escenario.creador, juega=False)).jornadas == 2
 
 
 async def test_a_stroke_play_without_windows_has_none_yet():
@@ -96,13 +99,13 @@ async def test_a_stroke_play_without_windows_has_none_yet():
     async with escenario.uow:
         await escenario.uow.competitions.add(escenario.competicion)
 
-    assert (await _tarjeta(escenario, escenario.creador, juega=False)).jornadas == 0
+    assert (await _resumen(escenario, escenario.creador, juega=False)).jornadas == 0
 
 
 async def test_a_ryder_cup_has_no_playing_days():
     ryder = await _Ryder.crear()
 
-    assert (await ryder.tarjeta(ryder.yo)).jornadas is None
+    assert (await ryder.resumen(ryder.yo)).jornadas is None
 
 
 # --- Próxima salida en stroke play --------------------------------------------------
@@ -115,10 +118,10 @@ async def test_with_a_group_its_date_window_and_tee_time():
     yo = await escenario.con_plaza("9.0")
     await escenario.generar()  # altos primero: yo en la 1.ª (9:00), cuatro en la 2.ª (9:10)
 
-    assert (await _tarjeta(escenario, yo)).proxima == ProximaSalida(
+    assert (await _resumen(escenario, yo)).proxima == ProximaSalida(
         VIERNES, SessionType.MORNING, time(9, 0)
     )
-    assert (await _tarjeta(escenario, otros[0])).proxima.hora == time(9, 10)
+    assert (await _resumen(escenario, otros[0])).proxima.hora == time(9, 10)
 
 
 async def test_with_a_place_and_no_groups_yet_no_tee_time():
@@ -126,7 +129,7 @@ async def test_with_a_place_and_no_groups_yet_no_tee_time():
     await escenario.guardar()
     yo = await escenario.con_plaza("9.0", franja=escenario.tarde)
 
-    assert (await _tarjeta(escenario, yo)).proxima == ProximaSalida(
+    assert (await _resumen(escenario, yo)).proxima == ProximaSalida(
         VIERNES, SessionType.AFTERNOON, None
     )
 
@@ -157,7 +160,7 @@ async def test_a_closed_card_in_the_morning_goes_on_to_the_afternoon(cierre):
         manana.no_presentado(yo, [])
     await escenario.uow.partidas.guardar([manana])
 
-    assert (await _tarjeta(escenario, yo)).proxima == ProximaSalida(
+    assert (await _resumen(escenario, yo)).proxima == ProximaSalida(
         VIERNES, SessionType.AFTERNOON, time(15, 0)
     )
 
@@ -173,7 +176,7 @@ async def test_nothing_left_to_play_is_null():
     manana.retirar(yo)
     await escenario.uow.partidas.guardar([manana])
 
-    assert (await _tarjeta(escenario, yo)).proxima is None
+    assert (await _resumen(escenario, yo)).proxima is None
 
 
 async def test_another_players_place_is_not_mine():
@@ -188,7 +191,7 @@ async def test_another_players_place_is_not_mine():
     manana.retirar(yo)
     await escenario.uow.partidas.guardar([manana])
 
-    assert (await _tarjeta(escenario, yo)).proxima is None
+    assert (await _resumen(escenario, yo)).proxima is None
 
 
 async def test_a_group_numbered_beyond_the_tee_sheet_has_no_time():
@@ -202,7 +205,7 @@ async def test_a_group_numbered_beyond_the_tee_sheet_has_no_time():
     partida.renumerar(99)
     await escenario.uow.partidas.guardar([partida])
 
-    assert (await _tarjeta(escenario, yo)).proxima == ProximaSalida(
+    assert (await _resumen(escenario, yo)).proxima == ProximaSalida(
         VIERNES, SessionType.MORNING, None
     )
 
@@ -220,7 +223,7 @@ async def test_the_nearest_day_before_the_window_order():
         )
 
     # La tarde del viernes antes que la mañana del sábado
-    assert (await _tarjeta(escenario, yo)).proxima == ProximaSalida(
+    assert (await _resumen(escenario, yo)).proxima == ProximaSalida(
         VIERNES, SessionType.AFTERNOON, None
     )
 
@@ -236,7 +239,7 @@ async def test_morning_before_afternoon_on_the_same_day():
             )
         )
 
-    assert (await _tarjeta(escenario, yo)).proxima.sesion == SessionType.MORNING
+    assert (await _resumen(escenario, yo)).proxima.sesion == SessionType.MORNING
 
 
 async def test_who_does_not_play_has_no_next_session():
@@ -244,7 +247,7 @@ async def test_who_does_not_play_has_no_next_session():
     await escenario.guardar()
     yo = await escenario.con_plaza("9.0")
 
-    assert (await _tarjeta(escenario, yo, juega=False)).proxima is None
+    assert (await _resumen(escenario, yo, juega=False)).proxima is None
 
 
 # --- Próxima salida en la Ryder ---------------------------------------------------------
@@ -313,8 +316,8 @@ class _Ryder:
             await self.escenario.uow.matches.add(partido)
         return partido
 
-    async def tarjeta(self, quien):
-        return await _tarjeta(self.escenario, quien)
+    async def resumen(self, quien):
+        return await _resumen(self.escenario, quien)
 
 
 async def test_ryder_its_scheduled_match_date_and_session_without_time():
@@ -322,7 +325,7 @@ async def test_ryder_its_scheduled_match_date_and_session_without_time():
     await ryder.partido(ryder.viernes, con=False)
     await ryder.partido(ryder.sabado)
 
-    assert (await ryder.tarjeta(ryder.yo)).proxima == ProximaSalida(
+    assert (await ryder.resumen(ryder.yo)).proxima == ProximaSalida(
         SABADO, SessionType.MORNING, None
     )
 
@@ -335,7 +338,7 @@ async def test_ryder_a_finished_match_goes_on_to_the_next():
     await ryder.escenario.uow.matches.update(viernes)
     await ryder.partido(ryder.sabado)
 
-    assert (await ryder.tarjeta(ryder.yo)).proxima.fecha == SABADO
+    assert (await ryder.resumen(ryder.yo)).proxima.fecha == SABADO
 
 
 async def test_ryder_in_play_counts():
@@ -344,7 +347,7 @@ async def test_ryder_in_play_counts():
     viernes.start()
     await ryder.escenario.uow.matches.update(viernes)
 
-    assert (await ryder.tarjeta(ryder.yo)).proxima.fecha == VIERNES
+    assert (await ryder.resumen(ryder.yo)).proxima.fecha == VIERNES
 
 
 async def test_ryder_without_matches_left_is_null():
@@ -354,4 +357,40 @@ async def test_ryder_without_matches_left_is_null():
     viernes.complete({"winner": "A"})
     await ryder.escenario.uow.matches.update(viernes)
 
-    assert (await ryder.tarjeta(ryder.yo)).proxima is None
+    assert (await ryder.resumen(ryder.yo)).proxima is None
+
+
+# --- Competición terminada o cancelada (decidido el 13 oct 2026) -----------------------
+
+
+@pytest.mark.parametrize("estado", [CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED])
+async def test_a_finished_or_cancelled_stroke_play_has_no_next_session(estado):
+    escenario = _Escenario(status=estado)
+    await escenario.guardar()
+    yo = await escenario.con_plaza("9.0")
+
+    resumen = await _resumen(escenario, yo)
+
+    assert (resumen.jornadas, resumen.proxima) == (1, None)
+
+
+async def test_a_cancelled_ryder_has_no_next_session():
+    ryder = await _Ryder.crear()
+    await ryder.partido(ryder.viernes)
+    ryder.escenario.competicion.cancel()
+
+    assert (await ryder.resumen(ryder.yo)).proxima is None
+
+
+@pytest.mark.parametrize("cierre", ["walkover", "concedido"])
+async def test_ryder_a_walkover_or_conceded_match_does_not_count(cierre):
+    ryder = await _Ryder.crear()
+    partido = await ryder.partido(ryder.viernes)
+    if cierre == "walkover":
+        partido.declare_walkover("A")
+    else:
+        partido.start()
+        partido.concede("B")
+    await ryder.escenario.uow.matches.update(partido)
+
+    assert (await ryder.resumen(ryder.yo)).proxima is None

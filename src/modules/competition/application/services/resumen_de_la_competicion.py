@@ -4,7 +4,9 @@ Lo que la tarjeta de «Mis competiciones» necesita y la competición no sabe so
 
 Lo terminado se decide por el estado y no por la fecha, para no depender de la
 zona del campo. En stroke play, por su partida: la franja no se da por acabada
-nunca, cada partida sí. En la Ryder, por el partido.
+nunca, cada partida sí. En la Ryder, por el partido. Y en una competición
+terminada o cancelada no hay próxima salida, quede lo que quede sin cerrar
+(decidido con Agustín el 13 oct 2026).
 """
 
 from collections.abc import Sequence
@@ -35,14 +37,14 @@ class ProximaSalida:
 
 
 @dataclass(frozen=True)
-class Tarjeta:
+class Resumen:
     """Días de juego (solo stroke play) y próxima salida (solo quien juega)."""
 
     jornadas: int | None
     proxima: ProximaSalida | None
 
 
-class TarjetaDeLaCompeticion:
+class ResumenDeLaCompeticion:
     """Como mucho tres lecturas por competición: sesiones, y sus partidas y plazas."""
 
     @staticmethod
@@ -51,24 +53,25 @@ class TarjetaDeLaCompeticion:
         user_id: UserId,
         juega: bool,
         uow: CompetitionUnitOfWorkInterface,
-    ) -> Tarjeta:
+    ) -> Resumen:
         """
         Args:
             juega: Si quien mira está inscrito y aprobado; si no, no tiene salida
         """
         stroke_play = competicion.stroke_play is not None
-        if not stroke_play and not juega:
-            return Tarjeta(None, None)
+        busca_salida = juega and not competicion.status.is_final()
+        if not stroke_play and not busca_salida:
+            return Resumen(None, None)
         sesiones = await uow.rounds.find_by_competition(competicion.id)
         jornadas = len({s.round_date for s in sesiones}) if stroke_play else None
-        if not juega:
-            return Tarjeta(jornadas, None)
+        if not busca_salida:
+            return Resumen(jornadas, None)
         if stroke_play:
             candidatas = await _en_stroke_play(sesiones, competicion, user_id, uow)
         else:
             candidatas = await _en_la_ryder(sesiones, user_id, uow)
         proxima = min(candidatas, key=lambda s: (s.fecha, ORDEN_DE_SESION[s.sesion]), default=None)
-        return Tarjeta(jornadas, proxima)
+        return Resumen(jornadas, proxima)
 
 
 async def _en_stroke_play(
@@ -91,9 +94,9 @@ async def _en_stroke_play(
         )
     # Con plaza y sin partida en esa franja: aún no se han generado
     con_partida = {p.round_id for p in partidas}
-    for plaza in await uow.plazas.de_la_competicion(competicion.id):
+    for plaza in await uow.plazas.del_jugador(competicion.id, user_id):
         franja = franjas.get(plaza.round_id)
-        if plaza.user_id == user_id and franja is not None and franja.id not in con_partida:
+        if franja is not None and franja.id not in con_partida:
             salidas.append(ProximaSalida(franja.round_date, franja.session_type, None))
     return salidas
 
@@ -111,9 +114,9 @@ async def _en_la_ryder(
 ) -> list[ProximaSalida]:
     # Lo terminado lo dice el partido: una sesión acabada solo tiene partidos acabados
     por_id = {s.id: s for s in sesiones}
-    partidos = await uow.matches.find_by_rounds(list(por_id))
+    partidos = await uow.matches.find_by_rounds_for_player(list(por_id), user_id)
     return [
         ProximaSalida(por_id[p.round_id].round_date, por_id[p.round_id].session_type, None)
         for p in partidos
-        if p.status in _EN_JUEGO and p.find_player(user_id) is not None
+        if p.status in _EN_JUEGO
     ]

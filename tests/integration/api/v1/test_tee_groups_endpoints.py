@@ -511,6 +511,20 @@ async def test_the_competition_card_has_courses_days_and_my_next_tee_time(client
     assert de_otro.json()["playing_days"] == 1
 
 
+async def test_with_a_place_and_no_groups_yet_the_next_session_has_no_time(client: AsyncClient):
+    _, competicion, _, otros = await _stableford(client)
+
+    set_auth_cookies(client, otros[0]["cookies"])
+    ficha = await client.get(f"/api/v1/competitions/{competicion['id']}")
+
+    assert ficha.status_code == 200, ficha.text
+    assert ficha.json()["my_next_session"] == {
+        "date": competicion["start_date"],
+        "session_type": "MORNING",
+        "tee_time": None,
+    }
+
+
 # ======================================================================================
 # CAMBIAR LA FRANJA CON PARTIDAS (D9, G2)
 # ======================================================================================

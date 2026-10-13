@@ -240,6 +240,28 @@ async def test_each_row_carries_the_gender_of_its_tees(cual):
         assert (tabla.me.user_id, tabla.me.tee_gender) == (c.value, "MALE")
 
 
+@pytest.mark.parametrize(
+    ("manana", "tarde", "esperado"),
+    [
+        (Gender.FEMALE, Gender.MALE, "MALE"),
+        (Gender.MALE, Gender.FEMALE, "FEMALE"),
+        (Gender.MALE, None, None),
+    ],
+)
+async def test_the_gender_is_the_one_of_the_last_group(manana, tarde, esperado):
+    escenario, a, _, _ = await _dos_franjas()
+    for franja, genero in ((escenario.manana, manana), (escenario.tarde, tarde)):
+        partida = await _partida_de(escenario, franja, a)
+        partida.recalcular(
+            [replace(j, tee_gender=genero) if j.user_id == a else j for j in partida.jugadores]
+        )
+        await escenario.uow.partidas.guardar([partida])
+
+    tabla = await _general(escenario).execute(escenario.competicion.id.value)
+
+    assert next(f for f in tabla.rows if f.user_id == a.value).tee_gender == esperado
+
+
 async def test_a_session_that_is_not_a_window():
     escenario, _, _, _ = await _dos_franjas()
     sesion = Round.create(

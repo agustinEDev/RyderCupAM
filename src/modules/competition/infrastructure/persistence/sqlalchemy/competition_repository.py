@@ -9,7 +9,7 @@ from datetime import date
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import class_mapper, selectinload
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.competition_golf_course import (
@@ -27,6 +27,9 @@ from src.modules.competition.domain.value_objects.competition_name import (
 )
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+    competition_golf_courses_table,
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -153,24 +156,30 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
     async def campos_de(
         self, competition_ids: Sequence[CompetitionId]
     ) -> dict[CompetitionId, list[CampoDeLaCompeticion]]:
-        """Dos consultas para todas: los enlaces y, con `selectinload`, sus campos."""
+        """Una consulta para todas, solo con las columnas: sin hidratar los campos
+        (sus salidas y sus hoyos se cargan con ellos)."""
         if not competition_ids:
             return {}
+        enlaces = competition_golf_courses_table
+        # La tabla del campo, sacada de su mapeo: sin importar la infraestructura
+        # de otro módulo. Sus columnas convierten a los VOs como las entidades
+        campos_t = class_mapper(GolfCourse).local_table
         stmt = (
-            select(CompetitionGolfCourse)
-            .where(CompetitionGolfCourse._competition_id.in_(list(competition_ids)))
-            .order_by(CompetitionGolfCourse._display_order)
-            .options(selectinload(CompetitionGolfCourse.golf_course))
+            select(
+                enlaces.c.competition_id,
+                campos_t.c.id,
+                campos_t.c.name,
+                campos_t.c.country_code,
+            )
+            .join(campos_t, campos_t.c.id == enlaces.c.golf_course_id)
+            .where(enlaces.c.competition_id.in_(list(competition_ids)))
+            .order_by(enlaces.c.competition_id, enlaces.c.display_order)
         )
         result = await self._session.execute(stmt)
         campos: dict[CompetitionId, list[CampoDeLaCompeticion]] = {}
-        for enlace in result.scalars().all():
-            campo = enlace.golf_course
-            # Un enlace sin su campo no se puede nombrar: fuera
-            if campo is None:
-                continue
-            campos.setdefault(enlace.competition_id, []).append(
-                CampoDeLaCompeticion(campo.id, campo.name, campo.country_code)
+        for competition_id, golf_course_id, nombre, pais in result.all():
+            campos.setdefault(competition_id, []).append(
+                CampoDeLaCompeticion(golf_course_id, nombre, pais)
             )
         return campos
 
