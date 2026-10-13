@@ -291,7 +291,9 @@ async def _anotar(
         if propio is not None:
             golpe.anotar_propio(_golpes(propio), True, user_id, escenario.ahora)
         if del_marcador is not None:
-            golpe.anotar_del_marcador(_golpes(del_marcador), True, marcador, escenario.ahora)
+            golpe.anotar_del_marcador(
+                _golpes(del_marcador), True, marcador, escenario.ahora, como_marcador=True
+            )
         await escenario.uow.golpes_de_partida.guardar(golpe)
 
 
@@ -559,7 +561,7 @@ async def _anoto_a_su_marcado(escenario, partida, marcador):
     golpe = GolpeDePartida.crear(
         partida.id, partida.round_id, partida.competition_id, marcado, 1, escenario.ahora
     )
-    golpe.anotar_del_marcador(4, True, marcador, escenario.ahora)
+    golpe.anotar_del_marcador(4, True, marcador, escenario.ahora, como_marcador=True)
     await escenario.uow.golpes_de_partida.guardar(golpe)
 
 

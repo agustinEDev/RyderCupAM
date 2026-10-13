@@ -295,3 +295,14 @@ def test_acting_as_does_not_exist_here():
         SubmitTeeGroupScoreBodyDTO(
             marked_player_id="x", own_score=4, acting_as="11111111-1111-1111-1111-111111111111"
         )
+
+
+async def test_the_marker_side_records_who_scored_it_as_marker():
+    # Para saber quién jugó aunque luego corrijan o cambie el círculo (13 oct 2026)
+    escenario, partida = await _partida()
+    yo = partida.user_ids[0]
+    marcado = partida.marcadores[yo]
+
+    await _anotar(escenario, partida, yo, own_score=4, marked_score=5)
+
+    assert (await _golpes(escenario, partida))[(marcado, 1)].anotado_como_marcador_por == yo

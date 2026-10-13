@@ -39,6 +39,7 @@ class SQLAlchemyGolpeDePartidaRepository(GolpeDePartidaRepositoryInterface):
             "marker_score": golpe.del_marcador,
             "marker_submitted": golpe.marcador_enviado,
             "marker_by": golpe.marcador_por,
+            "scored_as_marker_by": golpe.anotado_como_marcador_por,
             "created_at": golpe.creado,
             "updated_at": golpe.actualizado,
         }
@@ -79,6 +80,7 @@ class SQLAlchemyGolpeDePartidaRepository(GolpeDePartidaRepositoryInterface):
                 del_marcador=f.marker_score,
                 marcador_enviado=f.marker_submitted,
                 marcador_por=f.marker_by,
+                anotado_como_marcador_por=f.scored_as_marker_by,
                 creado=f.created_at,
                 actualizado=f.updated_at,
             )

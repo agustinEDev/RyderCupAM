@@ -246,7 +246,7 @@ class MarcarNoPresentadoUseCase:
             jugador = _del_jugador(bloqueada, user_id)
             # Leídos con la partida bloqueada: un golpe a la vez no se cuela
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
-            bloqueada.no_presentado(jugador, golpes, competicion.creator_id)
+            bloqueada.no_presentado(jugador, golpes)
             await self._uow.partidas.guardar([bloqueada])
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
 
@@ -381,9 +381,7 @@ class CerrarFranjaUseCase:
                 golpes_de.setdefault(golpe.partida_id, []).append(golpe)
             sin_acabar = [p for p in partidas if p.estado != EstadoPartida.COMPLETED]
             for partida in sin_acabar:
-                jugaron = partida.quienes_jugaron(
-                    golpes_de.get(partida.id, []), competicion.creator_id
-                )
+                jugaron = partida.quienes_jugaron(golpes_de.get(partida.id, []))
                 partida.cerrar(
                     completas={
                         u for u in partida.user_ids if validados.get((partida.id, u), 0) == HOYOS

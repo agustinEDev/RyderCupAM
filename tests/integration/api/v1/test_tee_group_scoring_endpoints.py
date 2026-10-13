@@ -383,6 +383,33 @@ async def test_a_player_with_strokes_is_retired_not_a_no_show(client: AsyncClien
 
 
 @pytest.mark.usefixtures("_ya_abrio")
+async def test_who_only_scored_whom_they_mark_played_even_after_a_correction(
+    client: AsyncClient,
+):
+    # Lo guardado en la BD dice quién anotó como marcador (13 oct 2026)
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    marcador = partida["players"][1]["user_id"]
+    marcado = _marca_a(partida, marcador)
+    anotado = await _anotar(
+        client, por_id[marcador], partida, marked_player_id=marcado, marked_score=4
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+    corregido = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{marcado}/holes/1",
+        json={"marker_score": 5},
+    )
+    assert corregido.status_code == 200, corregido.text
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{marcador}/no-show"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "PLAYER_HAS_STROKES"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
 async def test_a_player_cannot_retire_another(client: AsyncClient):
     _, _, partida, por_id = await _con_partida_y_organizador(client)
     jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]

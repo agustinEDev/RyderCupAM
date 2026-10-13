@@ -22,6 +22,7 @@ cambiar sin que nadie se marque a sí mismo (D12). Empezada, ya no se toca.
 | may_mark                                          | Solo a quien le toca            |
 """
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -794,49 +795,53 @@ class TestElMarcadorQueSeVa:
 
 class TestQuienesJugaron:
     """
-    Quién estuvo en el campo según los golpes de su partida (#550, 12 oct 2026).
+    Quién estuvo en el campo según los golpes de su partida (#550, 12-13 oct 2026).
 
-    | Caso                                               | ¿Jugó?            |
-    |----------------------------------------------------|-------------------|
-    | Algo en su tarjeta (su lado, el del marcador, raya) | Sí                |
-    | Un jugador de la partida metió el lado del marcador | Sí (él también),  |
-    |   de otro, aunque ya no le marque (círculo rehecho)  |   12 oct 2026     |
-    | Lo metió alguien de fuera (el organizador)          | Solo el dueño     |
-    | Lo metió el organizador que juega en la partida a   | No: corrige       |
-    |   alguien a quien no marca (CodeRabbit, 13 oct)     |   (salvo que sea  |
-    |                                                     |   su marcador)    |
-    | Una fila sin nada enviado                           | No                |
-    | Golpes de otra partida                              | No cuentan        |
+    | Caso                                                | ¿Jugó?             |
+    |-----------------------------------------------------|--------------------|
+    | Algo en su tarjeta (su lado, el del marcador, raya)  | Sí                 |
+    | Anotó como marcador desde su pantalla a otro de la   | Sí (él también),   |
+    |   partida, aunque luego el círculo se rehaga         |   aunque ya no le  |
+    |                                                      |   marque           |
+    | Una corrección (organizador o admin, juegue o no)    | Solo el dueño      |
+    | Una corrección encima de lo que anotó el marcador    | El marcador sigue  |
+    |                                                      |   contando         |
+    | Lo anotó alguien que ya no está en la partida        | No cuenta          |
+    | Una fila sin nada enviado                            | Nadie              |
+    | Golpes de otra partida                               | No cuentan         |
     """
 
-    def _golpe(self, partida, de, propio=None, del_marcador=None, por=None, partida_id=None):
-        from datetime import UTC, datetime
+    AHORA = datetime(2030, 10, 11, 9, 0, tzinfo=UTC)
 
+    def _golpe(self, partida, de, propio=None, partida_id=None):
         from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 
-        ahora = datetime(2030, 10, 11, 9, 0, tzinfo=UTC)
         golpe = GolpeDePartida.crear(
-            partida_id or partida.id, partida.round_id, partida.competition_id, de, 1, ahora
+            partida_id or partida.id, partida.round_id, partida.competition_id, de, 1, self.AHORA
         )
         if propio is not None:
-            golpe.anotar_propio(propio, True, de, ahora)
-        if del_marcador is not None:
-            golpe.anotar_del_marcador(del_marcador, True, por, ahora)
+            golpe.anotar_propio(propio, True, de, self.AHORA)
+        return golpe
+
+    def _como_marcador(self, golpe, marcador):
+        golpe.anotar_del_marcador(4, True, marcador, self.AHORA, como_marcador=True)
+        return golpe
+
+    def _corrige(self, golpe, quien):
+        golpe.anotar_del_marcador(5, True, quien, self.AHORA)
         return golpe
 
     def test_whoever_has_something_on_their_card(self):
         partida = _partida(3)
         a = partida.user_ids[0]
 
-        jugaron = partida.quienes_jugaron([self._golpe(partida, a, propio=4)])
-
-        assert jugaron == {a}
+        assert partida.quienes_jugaron([self._golpe(partida, a, propio=4)]) == {a}
 
     def test_scoring_whom_you_mark_shows_you_played(self):
         partida = _partida(3)
         marcador, marcado = next(iter(partida.marcadores.items()))
 
-        golpe = self._golpe(partida, marcado, del_marcador=4, por=marcador)
+        golpe = self._como_marcador(self._golpe(partida, marcado), marcador)
 
         assert partida.quienes_jugaron([golpe]) == {marcado, marcador}
 
@@ -845,51 +850,37 @@ class TestQuienesJugaron:
         partida = _partida(4)
         partida.empezar()
         marcador, marcado = next(iter(partida.marcadores.items()))
-        golpe = self._golpe(partida, marcado, del_marcador=4, por=marcador)
+        golpe = self._como_marcador(self._golpe(partida, marcado), marcador)
         partida.retirar(marcado)
 
         assert marcador in partida.quienes_jugaron([golpe])
 
-    def test_someone_outside_the_group_does_not_count(self):
-        # El organizador que corrige desde fuera no está en la partida
+    def test_a_correction_by_a_playing_organiser_is_not_playing(self):
+        # Corregir desde la casa club no es haber jugado (CodeRabbit, 13 oct)
+        partida = _partida(3)
+        organizador, otro = partida.user_ids[0], partida.user_ids[1]
+
+        golpe = self._corrige(self._golpe(partida, otro), organizador)
+
+        assert partida.quienes_jugaron([golpe]) == {otro}
+
+    def test_a_correction_keeps_the_marker_who_scored(self):
+        partida = _partida(3)
+        marcador, marcado = next(iter(partida.marcadores.items()))
+        organizador = next(u for u in partida.user_ids if u not in (marcador, marcado))
+        golpe = self._como_marcador(self._golpe(partida, marcado), marcador)
+
+        self._corrige(golpe, organizador)
+
+        assert partida.quienes_jugaron([golpe]) == {marcado, marcador}
+
+    def test_someone_no_longer_in_the_group_does_not_count(self):
         partida = _partida(3)
         a = partida.user_ids[0]
 
-        golpe = self._golpe(partida, a, del_marcador=4, por=UserId.generate())
+        golpe = self._como_marcador(self._golpe(partida, a), UserId.generate())
 
         assert partida.quienes_jugaron([golpe]) == {a}
-
-    def test_the_playing_organiser_correcting_another_card_did_not_play(self):
-        partida = _partida(3)
-        organizador = partida.user_ids[0]
-        no_marca = next(
-            u for u in partida.user_ids if u not in (organizador, partida.marcadores[organizador])
-        )
-
-        golpe = self._golpe(partida, no_marca, del_marcador=4, por=organizador)
-
-        assert partida.quienes_jugaron([golpe], organizador) == {no_marca}
-
-    def test_the_playing_organiser_scoring_whom_they_mark_did_play(self):
-        partida = _partida(3)
-        organizador = partida.user_ids[0]
-        marcado = partida.marcadores[organizador]
-
-        golpe = self._golpe(partida, marcado, del_marcador=4, por=organizador)
-
-        assert partida.quienes_jugaron([golpe], organizador) == {marcado, organizador}
-
-    def test_a_no_show_organiser_who_only_corrected_is_allowed(self):
-        partida = _partida(3)
-        organizador = partida.user_ids[0]
-        no_marca = next(
-            u for u in partida.user_ids if u not in (organizador, partida.marcadores[organizador])
-        )
-        golpe = self._golpe(partida, no_marca, del_marcador=4, por=organizador)
-
-        partida.no_presentado(organizador, [golpe], organizador)
-
-        assert partida.estados_de_tarjeta[organizador] == EstadoDeTarjeta.NO_PRESENTADO
 
     def test_an_empty_row_shows_nobody(self):
         partida = _partida(3)
@@ -912,6 +903,14 @@ class TestQuienesJugaron:
             partida.no_presentado(a, [self._golpe(partida, a, propio=4)])
 
         assert partida.estados_de_tarjeta[a] == EstadoDeTarjeta.JUGANDO
+
+    def test_a_no_show_who_only_corrected_is_allowed(self):
+        partida = _partida(3)
+        organizador, otro = partida.user_ids[0], partida.user_ids[1]
+
+        partida.no_presentado(organizador, [self._corrige(self._golpe(partida, otro), organizador)])
+
+        assert partida.estados_de_tarjeta[organizador] == EstadoDeTarjeta.NO_PRESENTADO
 
     def test_a_closed_card_says_closed_before_played(self):
         partida = _partida(3)

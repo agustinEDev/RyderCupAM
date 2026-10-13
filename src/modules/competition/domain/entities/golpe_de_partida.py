@@ -49,6 +49,7 @@ class GolpeDePartida:
         marcador_por: UserId | None,
         creado: datetime,
         actualizado: datetime,
+        anotado_como_marcador_por: UserId | None = None,
     ):
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
             raise ValueError(f"El hoyo va del {PRIMER_HOYO} al {ULTIMO_HOYO}, no {hoyo}.")
@@ -63,6 +64,9 @@ class GolpeDePartida:
         self._del_marcador = del_marcador
         self._marcador_enviado = marcador_enviado
         self._marcador_por = marcador_por
+        # Quién lo anotó desde su pantalla de jugador como marcador: las
+        # correcciones no lo cambian (dice quién jugó, 13 oct 2026)
+        self._anotado_como_marcador_por = anotado_como_marcador_por
         self._creado = creado
         self._actualizado = actualizado
 
@@ -104,11 +108,21 @@ class GolpeDePartida:
         self._actualizado = momento
 
     def anotar_del_marcador(
-        self, golpes: int | None, acepta_raya: bool, quien: UserId, momento: datetime
+        self,
+        golpes: int | None,
+        acepta_raya: bool,
+        quien: UserId,
+        momento: datetime,
+        como_marcador: bool = False,
     ) -> None:
-        """El lado del marcador (o del organizador, que hace de marcador)."""
+        """
+        El lado del marcador: lo anota él desde su pantalla (`como_marcador`) o
+        lo corrige el organizador, que no cuenta como haber jugado.
+        """
         self.comprobar(golpes, acepta_raya)
         self._del_marcador, self._marcador_enviado, self._marcador_por = golpes, True, quien
+        if como_marcador:
+            self._anotado_como_marcador_por = quien
         self._actualizado = momento
 
     @staticmethod
@@ -193,6 +207,10 @@ class GolpeDePartida:
     @property
     def marcador_por(self) -> UserId | None:
         return self._marcador_por
+
+    @property
+    def anotado_como_marcador_por(self) -> UserId | None:
+        return self._anotado_como_marcador_por
 
     @property
     def creado(self) -> datetime:

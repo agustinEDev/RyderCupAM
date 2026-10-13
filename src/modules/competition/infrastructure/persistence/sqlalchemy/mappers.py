@@ -1434,6 +1434,8 @@ tee_group_hole_scores_table = Table(
     Column("marker_score", Integer, nullable=True),
     Column("marker_submitted", Boolean, nullable=False),
     Column("marker_by", UserIdDecorator, nullable=True),
+    # Quién lo anotó como marcador desde su pantalla: las correcciones no lo tocan
+    Column("scored_as_marker_by", UserIdDecorator, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("hole_number BETWEEN 1 AND 18", name="ck_tee_group_hole_scores_hole"),
