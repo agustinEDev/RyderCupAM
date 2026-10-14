@@ -9,6 +9,7 @@ from src.modules.quick_match.application.exceptions import (
     QuickMatchNotFoundError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
+from src.modules.quick_match.application.services.roster_checks import profile_handicaps
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -64,19 +65,6 @@ class StartQuickMatchUseCase:
         )
 
     async def _profile_handicaps(self, quick_match) -> dict[UserId, float | None]:
-        """
-        Hándicap del perfil de cada participante registrado, en una sola consulta.
-
-        Sin `async with self._user_uow`: comparte la sesión de la petición y su
-        salida hace commit, que partía «empezar» en dos —la partida quedaba en
-        juego y sin fijar, y soltaba el bloqueo de su fila— (revisión de la BE
-        #514; es el patrón de la BE #497). Se lee dentro de la transacción de la
-        partida, sin cerrarla.
-        """
+        """El del perfil de cada registrado, dentro de la transacción (ver `profile_handicaps`)."""
         user_ids = [p.user_id for p in quick_match.participants if p.user_id is not None]
-        users = await self._user_uow.users.find_by_ids(user_ids)
-        return {
-            user.id: (user.handicap.value if user.handicap else None)
-            for user in users
-            if user.id is not None
-        }
+        return await profile_handicaps(self._user_uow, user_ids)

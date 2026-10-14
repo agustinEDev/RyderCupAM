@@ -328,6 +328,9 @@ from src.modules.quick_match.application.use_cases.cancel_quick_match_use_case i
 from src.modules.quick_match.application.use_cases.complete_quick_match_use_case import (
     CompleteQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.create_and_start_quick_match_use_case import (
+    CreateAndStartQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
     CreateQuickMatchUseCase,
 )
@@ -1424,6 +1427,16 @@ def get_create_quick_match_use_case(
 ) -> CreateQuickMatchUseCase:
     """Proveedor del caso de uso CreateQuickMatchUseCase."""
     return CreateQuickMatchUseCase(uow, golf_course_uow, user_uow)
+
+
+def get_create_and_start_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CreateAndStartQuickMatchUseCase:
+    """Proveedor del caso de uso CreateAndStartQuickMatchUseCase (FE #848)."""
+    return CreateAndStartQuickMatchUseCase(uow, golf_course_uow, social_uow, user_uow)
 
 
 def get_add_friend_to_quick_match_use_case(

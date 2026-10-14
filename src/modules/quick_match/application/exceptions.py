@@ -65,3 +65,15 @@ class NotAScorerError(Exception):
     """El usuario no esta configurado como anotador de esta partida."""
 
     pass
+
+
+class InvalidParticipantError(Exception):
+    """Un jugador que no se puede construir (un invitado con el nombre en blanco)."""
+
+    pass
+
+
+class QuickMatchIdTakenError(Exception):
+    """El id que manda el cliente ya es de una partida de otro creador (FE #848)."""
+
+    pass
