@@ -10,7 +10,16 @@ import uuid
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Table
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    inspect,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR
 
@@ -371,7 +380,7 @@ def start_quick_match_mappers() -> None:
 
     Es idempotente: puede llamarse multiples veces sin efectos adversos.
     """
-    if not any(mapper.class_ is QuickMatch for mapper in mapper_registry.mappers):
+    if inspect(QuickMatch, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             QuickMatch,
             quick_matches_table,
@@ -396,7 +405,7 @@ def start_quick_match_mappers() -> None:
             },
         )
 
-    if not any(mapper.class_ is QuickMatchHoleScore for mapper in mapper_registry.mappers):
+    if inspect(QuickMatchHoleScore, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             QuickMatchHoleScore,
             quick_match_hole_scores_table,

@@ -235,6 +235,10 @@ class TestSchemaParity:
     def test_alembic_env_knows_every_migrated_table(self, migrated_schema):
         """El `alembic/env.py` real conoce las mismas tablas que crean las migraciones (#565).
 
+        GIVEN: Una base de datos con todas las migraciones aplicadas
+        WHEN: Se ejecuta el `env.py` real con una migración vacía
+        THEN: Su `target_metadata` tiene exactamente las tablas de esa base
+
         La suite carga todos los mappers por su cuenta, así que el test de arriba
         no ve lo que carga `env.py`. Con solo 21 de las 35 tablas, un
         `alembic revision --autogenerate` habría propuesto borrar las que no
@@ -264,7 +268,13 @@ class TestSchemaParity:
             check=False,
         )
         assert result.returncode == 0, result.stderr
-        line = next(line for line in result.stdout.splitlines() if line.startswith("TABLES="))
+        line = next(
+            (line for line in result.stdout.splitlines() if line.startswith("TABLES=")), None
+        )
+        assert line is not None, (
+            f"env.py no llegó a dar sus tablas.\nstdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr[-2000:]}"
+        )
         env_tables = set(json.loads(line.removeprefix("TABLES=")))
         migrated_tables = set(inspect(migrated_schema).get_table_names()) - {"alembic_version"}
 

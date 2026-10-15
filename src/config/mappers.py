@@ -1,7 +1,8 @@
 """
 Arranque de todos los mappers de SQLAlchemy, en un solo sitio (#565).
 
-Lo usan la aplicación (`main.py`), Alembic (`alembic/env.py`) y los tests. Antes
+Lo usan la aplicación (`main.py`), Alembic (`alembic/env.py`), los tests y los
+scripts. Antes
 cada uno llevaba su lista, y la de Alembic se había quedado con 3 de los 8
 grupos: no conocía las tablas de campos, partidas rápidas ni las sociales, y un
 `alembic revision --autogenerate` habría propuesto borrarlas.

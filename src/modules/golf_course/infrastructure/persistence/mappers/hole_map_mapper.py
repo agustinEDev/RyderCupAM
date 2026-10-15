@@ -13,7 +13,7 @@ garantiza el dominio.
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, String, Table
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, String, Table, inspect
 from sqlalchemy.dialects.postgresql import JSONB
 
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
@@ -190,7 +190,7 @@ golf_course_hole_maps_table = Table(
 
 def start_hole_map_mappers() -> None:
     """Mapea CourseHoleMap a su tabla. Idempotente."""
-    if any(mapper.class_ is CourseHoleMap for mapper in mapper_registry.mappers):
+    if inspect(CourseHoleMap, raiseerr=False) is not None:
         return
     table = golf_course_hole_maps_table
     mapper_registry.map_imperatively(

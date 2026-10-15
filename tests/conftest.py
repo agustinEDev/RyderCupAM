@@ -130,11 +130,8 @@ def pytest_configure(config):
 
     # Fallback por si un worker arranca sin que el maestro haya terminado
     else:
-        try:
-            start_all_mappers()
-        except Exception:
-            # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.
-            pass
+        # Son idempotentes: un fallo aquí es un error de mapeo de verdad (#565)
+        start_all_mappers()
 
 
 def pytest_sessionfinish(session, exitstatus):
