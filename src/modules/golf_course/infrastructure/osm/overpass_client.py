@@ -1,0 +1,180 @@
+"""
+Cliente de Overpass, la API de lectura de OpenStreetMap (BE #532).
+
+Pide en una sola consulta lo que hace falta para el mapa de un campo alrededor de
+su coordenada (contornos de campo, hoyos y greens, con su geometría) y lo traduce
+a datos propios. Los datos de OSM van bajo licencia ODbL.
+
+Overpass es un servicio público de uso justo: limita a quien abusa (429) y a
+menudo se satura (502, 503, 504). Esos se reintentan con esperas crecientes;
+cualquier otro fallo, y una respuesta ilegible, llegan como OsmUnavailableError.
+"""
+
+import asyncio
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
+import httpx
+
+from src.modules.golf_course.application.ports.osm_hole_map_source import OsmUnavailableError
+
+DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Overpass pide que cada cliente se identifique
+USER_AGENT = "RyderCupFriends/1.0 (+https://www.rydercupfriends.com)"
+SEARCH_RADIUS_M = 2500
+QUERY_TIMEOUT_S = 60
+# 429: límite de uso; 502/503/504: la pasarela de Overpass cargada, muy habitual
+RETRY_STATUSES = frozenset({429, 502, 503, 504})
+RETRY_WAITS_S = (10.0, 30.0)
+
+Point = tuple[float, float]  # (latitud, longitud)
+MIN_WAY_POINTS = 2  # una vía con menos no dibuja nada
+
+
+@dataclass(frozen=True)
+class OsmWay:
+    """Una vía de OSM: su id, sus etiquetas y sus puntos en orden."""
+
+    id: int
+    tags: Mapping[str, str]
+    points: tuple[Point, ...]
+
+
+@dataclass(frozen=True)
+class OsmRelation:
+    """Una relación multipolígono: sus trozos de anillo exterior e interior."""
+
+    id: int
+    tags: Mapping[str, str]
+    outer: tuple[tuple[Point, ...], ...]
+    inner: tuple[tuple[Point, ...], ...] = ()
+
+
+@dataclass(frozen=True)
+class OsmArea:
+    """Lo que OSM tiene alrededor de un campo."""
+
+    course_ways: tuple[OsmWay, ...] = ()
+    course_relations: tuple[OsmRelation, ...] = ()
+    holes: tuple[OsmWay, ...] = ()
+    greens: tuple[OsmWay, ...] = field(default=())
+
+
+def build_query(latitude: float, longitude: float, radius_m: int = SEARCH_RADIUS_M) -> str:
+    """La consulta Overpass QL de la zona de un campo."""
+    around = f"around:{radius_m},{latitude},{longitude}"
+    return (
+        f"[out:json][timeout:{QUERY_TIMEOUT_S}];"
+        "("
+        f'way["leisure"="golf_course"]({around});'
+        f'relation["leisure"="golf_course"]({around});'
+        f'way["golf"="hole"]({around});'
+        f'way["golf"="green"]({around});'
+        ");"
+        "out tags geom;"
+    )
+
+
+def _points(geometry: Any) -> tuple[Point, ...]:
+    if not isinstance(geometry, list):
+        return ()
+    return tuple(
+        (float(node["lat"]), float(node["lon"]))
+        for node in geometry
+        if isinstance(node, dict) and "lat" in node and "lon" in node
+    )
+
+
+def parse_area(payload: Any) -> OsmArea:
+    """
+    Traduce la respuesta de Overpass; ignora lo que no se usa o no se entiende.
+
+    Raises:
+        OsmUnavailableError: si la respuesta no trae la lista de elementos
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
+        raise OsmUnavailableError("Overpass answered without a list of elements")
+
+    course_ways: list[OsmWay] = []
+    course_relations: list[OsmRelation] = []
+    holes: list[OsmWay] = []
+    greens: list[OsmWay] = []
+    for element in payload["elements"]:
+        if not isinstance(element, dict):
+            continue
+        tags = element.get("tags") or {}
+        kind = element.get("type")
+        if kind == "relation" and tags.get("leisure") == "golf_course":
+            members = [m for m in element.get("members") or [] if isinstance(m, dict)]
+            outer = tuple(
+                p for m in members if m.get("role") == "outer" and (p := _points(m.get("geometry")))
+            )
+            inner = tuple(
+                p for m in members if m.get("role") == "inner" and (p := _points(m.get("geometry")))
+            )
+            if outer:
+                course_relations.append(
+                    OsmRelation(id=element["id"], tags=tags, outer=outer, inner=inner)
+                )
+            continue
+        if kind != "way":
+            continue
+        points = _points(element.get("geometry"))
+        if len(points) < MIN_WAY_POINTS:
+            continue
+        way = OsmWay(id=element["id"], tags=tags, points=points)
+        if tags.get("leisure") == "golf_course":
+            course_ways.append(way)
+        elif tags.get("golf") == "hole":
+            holes.append(way)
+        elif tags.get("golf") == "green":
+            greens.append(way)
+
+    return OsmArea(
+        course_ways=tuple(course_ways),
+        course_relations=tuple(course_relations),
+        holes=tuple(holes),
+        greens=tuple(greens),
+    )
+
+
+class OverpassClient:
+    """Pide a Overpass la zona de un campo."""
+
+    def __init__(
+        self,
+        url: str = DEFAULT_OVERPASS_URL,
+        timeout_s: float = QUERY_TIMEOUT_S + 15,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        self._url = url
+        self._timeout_s = timeout_s
+        self._sleep = sleep
+
+    async def fetch_area(self, latitude: float, longitude: float) -> OsmArea:
+        """
+        La zona alrededor de esa coordenada.
+
+        Raises:
+            OsmUnavailableError: si Overpass no responde o responde algo ilegible
+        """
+        data = {"data": build_query(latitude, longitude)}
+        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        waits = list(RETRY_WAITS_S)
+        async with httpx.AsyncClient(timeout=self._timeout_s) as client:
+            while True:
+                try:
+                    response = await client.post(self._url, data=data, headers=headers)
+                except httpx.HTTPError as e:
+                    raise OsmUnavailableError(f"Overpass is unreachable: {e!r}") from e
+                if response.status_code in RETRY_STATUSES and waits:
+                    await self._sleep(waits.pop(0))
+                    continue
+                if response.status_code != httpx.codes.OK:
+                    raise OsmUnavailableError(f"Overpass answered {response.status_code}")
+                try:
+                    payload = response.json()
+                except ValueError as e:
+                    raise OsmUnavailableError("Overpass answered something that is not JSON") from e
+                return parse_area(payload)

@@ -186,3 +186,13 @@ tzdata==2026.4
 # fronteras de husos del mundo en 3 MB y sin dependencias; la alternativa
 # habitual, `timezonefinder`, arrastra numpy
 tzfpy==2.1.0
+
+# shapely - Geometría (polígonos, líneas, distancias) para el mapa de hoyos (BE #532)
+# Empareja un campo con OpenStreetMap: qué contorno es el nuestro, qué hoyos caen
+# dentro, qué green está al final de cada hoyo y dónde quedan delante y fondo.
+# Monta también los contornos que OSM guarda como relación de varios trozos
+shapely==2.2.0
+
+# numpy - Dependencia de shapely, fijada aquí para auditarla con las demás
+# 2.4.x y no 2.5: la 2.5 pide Python 3.12 y el CI prueba también en 3.11
+numpy==2.4.4

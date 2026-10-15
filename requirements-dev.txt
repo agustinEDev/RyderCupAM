@@ -95,6 +95,11 @@ pytest-json-report==1.5.0
 # Acelera significativamente la suite de tests distribuyendo el trabajo
 pytest-xdist==3.8.0
 
+# respx - Simula respuestas de httpx en los tests (BE #532)
+# El cliente de Overpass (OpenStreetMap) se prueba sin red: sus caídas, límites
+# de uso y respuestas ilegibles, sin depender de un servicio público
+respx==0.23.1
+
 # pytest-asyncio - Plugin para pytest que proporciona soporte para tests asíncronos
 # Permite usar async/await en tests y fixtures con asyncio_mode = auto
 # Actualizado a 1.4.0: soporta pytest>=8.4,<10 (compatible con pytest 9.x)
