@@ -40,6 +40,7 @@ class RoundInfoDTO(BaseModel):
     date: str
     session_type: str
     golf_course_name: str
+    golf_course_id: str = Field(..., description="Campo de la ronda: para pedir su mapa de hoyos")
 
 
 class MarkerAssignmentResponseDTO(BaseModel):

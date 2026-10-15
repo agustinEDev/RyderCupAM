@@ -62,7 +62,11 @@ class TestScoringViewResponseDTO:
             is_decided=False,
             decided_result=None,
             round_info=RoundInfoDTO(
-                id="r1", date="2026-03-01", session_type="MORNING", golf_course_name="Club"
+                id="r1",
+                date="2026-03-01",
+                session_type="MORNING",
+                golf_course_name="Club",
+                golf_course_id="gc1",
             ),
             competition_id="c1",
             team_a_name="Team A",

@@ -29,6 +29,7 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -123,7 +124,7 @@ async def _setup(uow, course: GolfCourse | None):
     # El de verdad: un MagicMock contesta «sí» a `one_ball_per_side()` y
     # convertiría cualquier partido en un foursomes
     mock_round.match_format = MatchFormat.SINGLES
-    mock_round.golf_course_id = MagicMock()
+    mock_round.golf_course_id = GolfCourseId.generate()
 
     match = Match.create(
         round_id=round_id, match_number=1, team_a_players=[yellow], team_b_players=[red]
@@ -142,6 +143,23 @@ async def _setup(uow, course: GolfCourse | None):
     gc_repo = AsyncMock()
     gc_repo.find_by_id = AsyncMock(return_value=course)
     return match, yellow, red, gc_repo
+
+
+class TestGolfCourseOfTheRound:
+    @pytest.mark.asyncio
+    async def test_g1_la_ronda_dice_su_campo(self, uow, user_repo):
+        """
+        GIVEN: Un partido cuya ronda se juega en un campo
+        WHEN: Se pide la vista de anotar
+        THEN: La ronda lleva el id de su campo (para pedir el mapa de hoyos, BE #532)
+        """
+        match, _, _, gc_repo = await _setup(uow, _course_two_tees())
+        ronda = uow._rounds._rounds[match.round_id]
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.round_info.golf_course_id == str(ronda.golf_course_id)
 
 
 class TestHoleCardPerPlayer:

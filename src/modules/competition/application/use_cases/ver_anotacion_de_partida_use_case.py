@@ -91,6 +91,7 @@ class VerAnotacionDePartidaUseCase:
         return TeeGroupScoringViewDTO(
             group_id=partida.id.value,
             round_id=partida.round_id.value,
+            golf_course_id=franja.golf_course_id.value,
             number=partida.numero,
             tee_time=franja.hoja_de_salidas.hora_de(partida.numero).strftime("%H:%M"),
             status=partida.estado.value,
