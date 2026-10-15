@@ -13,6 +13,7 @@ from src.shared.domain.repositories.country_repository_interface import (
 from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInterface
 
 from .golf_course_repository import IGolfCourseRepository
+from .hole_map_repository import IHoleMapRepository
 
 
 class GolfCourseUnitOfWorkInterface(UnitOfWorkInterface):
@@ -57,5 +58,16 @@ class GolfCourseUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             CountryRepositoryInterface: Repositorio de países transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def hole_maps(self) -> IHoleMapRepository:
+        """
+        Acceso al repositorio de mapas de hoyos dentro de la transacción (BE #532).
+
+        Returns:
+            IHoleMapRepository: Repositorio de mapas transaccional
         """
         pass

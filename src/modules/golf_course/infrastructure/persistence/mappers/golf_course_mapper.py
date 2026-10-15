@@ -461,3 +461,9 @@ def start_golf_course_mappers():
             # evento de carga las relaciones eager aún no están garantizadas.
             if not hasattr(target, "_holes"):
                 target._holes = []
+
+    # El mapa de hoyos del recorrido (BE #532) vive en su propio módulo; se
+    # importa aquí dentro porque ese módulo importa los TypeDecorators de este
+    from .hole_map_mapper import start_hole_map_mappers  # noqa: PLC0415 - Circular import
+
+    start_hole_map_mappers()

@@ -2,7 +2,7 @@
 SQLAlchemy Unit of Work - Golf Course Module Infrastructure Layer.
 
 Implementación asíncrona del Unit of Work para el módulo de campos de golf.
-Coordina transacciones entre 2 repositorios: golf_courses, countries.
+Coordina transacciones entre 3 repositorios: golf_courses, hole_maps, countries.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,12 @@ from src.modules.golf_course.domain.repositories.golf_course_repository import (
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.repositories.hole_map_repository import IHoleMapRepository
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
+)
+from src.modules.golf_course.infrastructure.persistence.repositories.hole_map_repository import (
+    HoleMapRepository,
 )
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -57,8 +61,9 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
             session: Sesión asíncrona de SQLAlchemy compartida por todos los repositorios
         """
         self._session = session
-        # Inicializar los 2 repositorios con la misma sesión (transacción compartida)
+        # Inicializar los 3 repositorios con la misma sesión (transacción compartida)
         self._golf_courses = GolfCourseRepository(session)
+        self._hole_maps = HoleMapRepository(session)
         self._countries = SQLAlchemyCountryRepository(session)
 
     @property
@@ -70,6 +75,11 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
             IGolfCourseRepository: Repositorio transaccional
         """
         return self._golf_courses
+
+    @property
+    def hole_maps(self) -> IHoleMapRepository:
+        """Repositorio de mapas de hoyos (BE #532)."""
+        return self._hole_maps
 
     @property
     def countries(self) -> CountryRepositoryInterface:
