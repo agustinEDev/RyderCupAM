@@ -360,13 +360,11 @@ async def test_u5_unknown_course():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("physical_holes", "hole"), [(9, 10), (9, 0), (18, 19), (None, 19), (None, 0)]
-)
-async def test_u5_hole_not_in_the_course(physical_holes, hole):
+@pytest.mark.parametrize(("physical_holes", "hole"), [(9, 0), (18, 19), (None, 19), (None, 0)])
+async def test_u5_hole_outside_a_round(physical_holes, hole):
     """
-    GIVEN: Un campo de 9 hoyos, uno de 18 y uno sin el dato (cuenta como 18)
-    WHEN: Se marca un hoyo que no tiene (10 en el de 9, 19, o 0)
+    GIVEN: Un campo de 9, uno de 18 y uno sin el dato
+    WHEN: Se marca el 0 o el 19
     THEN: HoleNotInCourseError
     """
     uow, course = await _setup(physical_holes=physical_holes)
@@ -376,11 +374,14 @@ async def test_u5_hole_not_in_the_course(physical_holes, hole):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("physical_holes", "hole"), [(9, 9), (18, 18), (None, 18), (9, 1)])
-async def test_u5_last_hole_of_the_course_is_fine(physical_holes, hole):
+@pytest.mark.parametrize(
+    ("physical_holes", "hole"), [(9, 9), (9, 10), (9, 18), (18, 18), (None, 18), (9, 1)]
+)
+async def test_u5_any_hole_of_the_round_is_fine_even_on_nine_holes(physical_holes, hole):
     """
-    GIVEN: Un campo de 9, de 18 y sin el dato
-    WHEN: Se marca su último hoyo (o el primero)
+    GIVEN: Un campo de 9 (se juega dos veces), uno de 18 y uno sin el dato
+    WHEN: Se marca cualquier hoyo del 1 al 18 (en el de 9, también del 10 al 18:
+          la segunda vuelta suele salir de otras salidas)
     THEN: Se guarda
     """
     uow, course = await _setup(physical_holes=physical_holes)
@@ -388,6 +389,25 @@ async def test_u5_last_hole_of_the_course_is_fine(physical_holes, hole):
     dto = await SaveHoleMarkUseCase(uow).execute(_request(course, hole=hole))
 
     assert dto.hole_number == hole
+
+
+@pytest.mark.asyncio
+async def test_u5_on_nine_holes_the_10th_is_its_own_mark():
+    """
+    GIVEN: Un campo de 9 hoyos
+    WHEN: El jugador marca el 1 y el 10 con salidas distintas
+    THEN: Quedan las dos, cada una con su salida
+    """
+    uow, course = await _setup(physical_holes=9)
+    use_case = SaveHoleMarkUseCase(uow)
+    otra_salida = (SALIDA[0] - 0.0003, SALIDA[1])
+    await use_case.execute(_request(course, hole=1))
+    await use_case.execute(_request(course, hole=10, tee=otra_salida))
+
+    assert [(m.hole_number, m.tee) for m in await _mine(uow, course)] == [
+        (1, _p(SALIDA)),
+        (10, _p(otra_salida)),
+    ]
 
 
 # ============================================================================

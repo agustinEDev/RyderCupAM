@@ -90,7 +90,7 @@ class SaveHoleMarkUseCase:
         """
         Raises:
             GolfCourseNotFoundError: si el campo no existe o no lo ven los jugadores
-            HoleNotInCourseError: si el campo no tiene ese hoyo
+            HoleNotInCourseError: si el hoyo no es del 1 al 18
             HoleAlreadyMappedError: si el hoyo ya tiene salida y green aprobados
             TeeRequiredError: si el hoyo no tiene salida y la marca no la trae
             InvalidHoleMarkError: (del dominio) coordenadas o codos imposibles
@@ -102,7 +102,9 @@ class SaveHoleMarkUseCase:
             course = await self._uow.golf_courses.find_by_id(course_id)
             if not _visible(course):
                 raise GolfCourseNotFoundError(request.golf_course_id)
-            if not 1 <= request.hole_number <= (course.physical_holes or MAX_HOLE_NUMBER):
+            # Del 1 al 18 también en un campo de 9: la segunda vuelta suele salir
+            # de otras salidas, y se marca aparte (Agustín, 15 oct)
+            if not 1 <= request.hole_number <= MAX_HOLE_NUMBER:
                 raise HoleNotInCourseError(request.hole_number)
 
             green_center = _point(request.green_center)

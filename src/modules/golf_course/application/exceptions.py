@@ -14,7 +14,7 @@ class GolfCourseNotFoundError(Exception):
 
 
 class HoleNotInCourseError(Exception):
-    """El campo no tiene ese hoyo (un campo de 9 no tiene el 14)."""
+    """No hay ese hoyo en una vuelta: solo del 1 al 18 (un campo de 9 se juega dos veces)."""
 
 
 class HoleAlreadyMappedError(Exception):
