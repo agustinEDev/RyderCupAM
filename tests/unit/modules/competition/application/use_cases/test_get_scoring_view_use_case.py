@@ -154,12 +154,12 @@ class TestGolfCourseOfTheRound:
         THEN: La ronda lleva el id de su campo (para pedir el mapa de hoyos, BE #532)
         """
         match, _, _, gc_repo = await _setup(uow, _course_two_tees())
-        ronda = uow._rounds._rounds[match.round_id]
+        ronda = await uow.rounds.find_by_id(match.round_id)
         uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
 
         view = await uc.execute(str(match.id))
 
-        assert view.round_info.golf_course_id == str(ronda.golf_course_id)
+        assert view.round_info.golf_course_id == ronda.golf_course_id.value
 
 
 class TestHoleCardPerPlayer:

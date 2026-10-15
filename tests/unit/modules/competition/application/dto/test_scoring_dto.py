@@ -66,7 +66,7 @@ class TestScoringViewResponseDTO:
                 date="2026-03-01",
                 session_type="MORNING",
                 golf_course_name="Club",
-                golf_course_id="gc1",
+                golf_course_id="9f3c2a1e-0d4b-4c6a-8e7f-1a2b3c4d5e6f",
             ),
             competition_id="c1",
             team_a_name="Team A",

@@ -97,7 +97,7 @@ class GetScoringViewUseCase:
                 date=str(round_entity.round_date) if round_entity.round_date else "",
                 session_type=round_entity.session_type.value if round_entity.session_type else "",
                 golf_course_name=golf_course_name,
-                golf_course_id=str(round_entity.golf_course_id),
+                golf_course_id=round_entity.golf_course_id.value,
             )
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
