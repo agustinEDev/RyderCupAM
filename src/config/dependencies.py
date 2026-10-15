@@ -286,6 +286,13 @@ from src.modules.golf_course.application.use_cases.create_direct_golf_course_use
 from src.modules.golf_course.application.use_cases.get_golf_course_by_id_use_case import (
     GetGolfCourseByIdUseCase,
 )
+from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
+    ApproveHoleMapUseCase,
+    GetApprovedHoleMapUseCase,
+    GetHoleMapForReviewUseCase,
+    ListPendingHoleMapsUseCase,
+    RejectHoleMapUseCase,
+)
 from src.modules.golf_course.application.use_cases.list_approved_golf_courses_use_case import (
     ListApprovedGolfCoursesUseCase,
 )
@@ -2991,6 +2998,44 @@ def get_reject_update_golf_course_use_case(
 ) -> RejectUpdateGolfCourseUseCase:
     """Proveedor del caso de uso RejectUpdateGolfCourseUseCase."""
     return RejectUpdateGolfCourseUseCase(uow)
+
+
+# Mapa de hoyos (BE #532)
+
+
+def get_approved_hole_map_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetApprovedHoleMapUseCase:
+    """Proveedor del caso de uso GetApprovedHoleMapUseCase."""
+    return GetApprovedHoleMapUseCase(uow)
+
+
+def get_list_pending_hole_maps_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ListPendingHoleMapsUseCase:
+    """Proveedor del caso de uso ListPendingHoleMapsUseCase."""
+    return ListPendingHoleMapsUseCase(uow)
+
+
+def get_hole_map_for_review_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetHoleMapForReviewUseCase:
+    """Proveedor del caso de uso GetHoleMapForReviewUseCase."""
+    return GetHoleMapForReviewUseCase(uow)
+
+
+def get_approve_hole_map_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ApproveHoleMapUseCase:
+    """Proveedor del caso de uso ApproveHoleMapUseCase."""
+    return ApproveHoleMapUseCase(uow)
+
+
+def get_reject_hole_map_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> RejectHoleMapUseCase:
+    """Proveedor del caso de uso RejectHoleMapUseCase."""
+    return RejectHoleMapUseCase(uow)
 
 
 # ============================================================================

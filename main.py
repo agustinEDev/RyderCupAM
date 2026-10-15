@@ -59,7 +59,10 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     tee_group_routes,
     tee_group_scoring_routes,
 )
-from src.modules.golf_course.infrastructure.api.v1 import golf_course_routes  # noqa: E402
+from src.modules.golf_course.infrastructure.api.v1 import (  # noqa: E402
+    golf_course_routes,
+    hole_map_routes,
+)
 from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # noqa: E402
 from src.modules.social.infrastructure.api.v1 import (  # noqa: E402
     friend_routes,
@@ -480,6 +483,12 @@ app.include_router(
 
 app.include_router(
     golf_course_routes.router,
+    prefix="/api/v1",
+    tags=["Golf Courses"],
+)
+
+app.include_router(
+    hole_map_routes.router,
     prefix="/api/v1",
     tags=["Golf Courses"],
 )
