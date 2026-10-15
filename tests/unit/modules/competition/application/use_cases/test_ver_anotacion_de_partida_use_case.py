@@ -201,3 +201,18 @@ async def test_each_player_says_if_they_played():
 
     jugaron = {p.user_id for p in vista.players if p.played}
     assert jugaron == {a.value, b.value}
+
+
+async def test_g2_the_group_says_the_golf_course_of_its_round():
+    """
+    GIVEN: Una partida de una franja que se juega en un campo
+    WHEN: Se pide la vista de anotar
+    THEN: Lleva el id de ese campo (para pedir el mapa de hoyos, BE #532)
+    """
+    escenario, partida = await _partida()
+    a, _, _ = partida.user_ids
+    franja = await escenario.uow.rounds.find_by_id(partida.round_id)
+
+    vista = await _ver(escenario).execute(partida.id.value, a)
+
+    assert vista.golf_course_id == franja.golf_course_id.value

@@ -209,6 +209,7 @@ class TeeGroupScoringViewDTO(BaseModel):
 
     group_id: UUID
     round_id: UUID
+    golf_course_id: UUID = Field(..., description="Campo de la franja: para pedir su mapa de hoyos")
     number: int
     tee_time: str
     status: str

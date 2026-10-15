@@ -209,6 +209,25 @@ async def test_the_view(client: AsyncClient):
     assert vista.status_code == 200, vista.text
     assert len(vista.json()["players"]) == 4
     assert no_existe.status_code == 404, no_existe.text
+    # El campo de su franja, para pedir su mapa de hoyos (BE #532)
+    assert vista.json()["golf_course_id"] == await _campo_de_la_franja(vista.json()["round_id"])
+
+
+async def _campo_de_la_franja(round_id: str) -> str:
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.dependencies import get_db_session
+
+    async for session in app.dependency_overrides[get_db_session]():
+        try:
+            fila = await session.execute(
+                text("SELECT golf_course_id FROM rounds WHERE id = :id"), {"id": round_id}
+            )
+            return str(fila.scalar_one())
+        finally:
+            await session.close()
+    raise AssertionError("sin sesión de BD")
 
 
 # | Entregar / retirarse                        | Respuesta                                  |
