@@ -25,15 +25,18 @@ from src.config.dependencies import (
     get_reject_hole_map_use_case,
 )
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
+    ApproveHoleMapBodyDTO,
+    GetHoleMapRequestDTO,
     HoleMapDTO,
     HoleMapReviewDTO,
+    ListPendingHoleMapsRequestDTO,
     PendingHoleMapDTO,
+    RejectHoleMapBodyDTO,
     ReviewHoleMapRequestDTO,
 )
 from src.modules.golf_course.application.exceptions import (
     HoleMapChangedError,
     HoleMapNotFoundError,
-    HoleMapNotPendingError,
 )
 from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ApproveHoleMapUseCase,
@@ -42,9 +45,11 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
-from src.modules.golf_course.domain.entities.course_hole_map import RejectionReasonTooLongError
+from src.modules.golf_course.domain.entities.course_hole_map import (
+    HoleMapNotPendingError,
+    RejectionReasonTooLongError,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.modules.user.domain.value_objects.user_id import UserId
 
 router = APIRouter(prefix="/golf-courses")
 
@@ -77,7 +82,7 @@ async def get_hole_map(
 ):
     """El mapa APROBADO del campo, en GeoJSON. Sin mapa aprobado: 404 HOLE_MAP_NOT_FOUND."""
     try:
-        return await use_case.execute(str(golf_course_id))
+        return await use_case.execute(GetHoleMapRequestDTO(golf_course_id=str(golf_course_id)))
     except HoleMapNotFoundError:
         return _not_found()
 
@@ -95,7 +100,7 @@ async def list_pending_hole_maps(
     """Los mapas pendientes de revisión, del más antiguo al más reciente."""
     if not current_user.is_admin:
         return _forbidden()
-    return await use_case.execute()
+    return await use_case.execute(ListPendingHoleMapsRequestDTO())
 
 
 @router.get(
@@ -113,7 +118,7 @@ async def get_hole_map_for_review(
     if not current_user.is_admin:
         return _forbidden()
     try:
-        return await use_case.execute(str(golf_course_id))
+        return await use_case.execute(GetHoleMapRequestDTO(golf_course_id=str(golf_course_id)))
     except HoleMapNotFoundError:
         return _not_found()
 
@@ -122,12 +127,19 @@ async def _review(
     use_case: ApproveHoleMapUseCase | RejectHoleMapUseCase,
     golf_course_id: UUID,
     current_user: UserResponseDTO,
-    request: ReviewHoleMapRequestDTO,
+    body: ApproveHoleMapBodyDTO,
 ):
     if not current_user.is_admin:
         return _forbidden()
     try:
-        return await use_case.execute(str(golf_course_id), UserId(str(current_user.id)), request)
+        return await use_case.execute(
+            ReviewHoleMapRequestDTO(
+                golf_course_id=str(golf_course_id),
+                reviewer_id=str(current_user.id),
+                version=body.version,
+                reason=getattr(body, "reason", None),
+            )
+        )
     except HoleMapNotFoundError:
         return _not_found()
     except HoleMapChangedError:
@@ -163,12 +175,12 @@ REVIEW_RESPONSES: dict[int | str, dict[str, Any]] = {
 )
 async def approve_hole_map(
     golf_course_id: UUID,
-    request: ReviewHoleMapRequestDTO,
+    body: ApproveHoleMapBodyDTO,
     current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
     use_case: Annotated[ApproveHoleMapUseCase, Depends(get_approve_hole_map_use_case)],
 ):
     """Aprueba la versión vista (`version`); si cambió, 409 HOLE_MAP_CHANGED."""
-    return await _review(use_case, golf_course_id, current_user, request)
+    return await _review(use_case, golf_course_id, current_user, body)
 
 
 @router.put(
@@ -179,9 +191,9 @@ async def approve_hole_map(
 )
 async def reject_hole_map(
     golf_course_id: UUID,
-    request: ReviewHoleMapRequestDTO,
+    body: RejectHoleMapBodyDTO,
     current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
     use_case: Annotated[RejectHoleMapUseCase, Depends(get_reject_hole_map_use_case)],
 ):
     """Rechaza la versión vista, con un motivo opcional (500 caracteres como mucho)."""
-    return await _review(use_case, golf_course_id, current_user, request)
+    return await _review(use_case, golf_course_id, current_user, body)

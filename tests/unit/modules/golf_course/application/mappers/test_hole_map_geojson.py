@@ -168,7 +168,7 @@ def test_j5_metadata_outside_the_geojson():
 
     assert dto.golf_course_id == str(hole_map.golf_course_id)
     assert dto.status == "PENDING_REVIEW"
-    assert dto.version == IMPORTADO
+    assert dto.version == "2026-10-15T09:00:00.123456Z"
     assert dto.geojson.type == "FeatureCollection"
     assert dto.holes_needing_green == []
 
@@ -211,6 +211,7 @@ def test_j5_a_date_with_time_zone_is_sent_in_utc_too():
         holes=1,
         holes_needing_green=0,
         imported_at=madrid,
+        version="v",
         osm_reference="way/1",
     )
 

@@ -7,7 +7,3 @@ class HoleMapNotFoundError(Exception):
 
 class HoleMapChangedError(Exception):
     """El admin revisaba otra versión: el mapa se reimportó entretanto."""
-
-
-class HoleMapNotPendingError(Exception):
-    """El mapa ya está aprobado o rechazado."""

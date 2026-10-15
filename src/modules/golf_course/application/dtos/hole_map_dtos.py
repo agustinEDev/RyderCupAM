@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from geojson_pydantic import FeatureCollection
-from pydantic import BaseModel, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
 
 def _utc_z(moment: datetime) -> str:
@@ -30,10 +30,10 @@ class HoleMapDTO(BaseModel):
 
     golf_course_id: str
     status: str
-    version: UtcDatetime = Field(
+    version: str = Field(
         description=(
-            "Versión del mapa (su fecha de importación, UTC). Para aprobar o rechazar "
-            "se devuelve TAL CUAL se recibió"
+            "Versión del mapa: un texto opaco. Para aprobar o rechazar se devuelve TAL "
+            "CUAL se recibió (no es para interpretarlo como fecha)"
         )
     )
     attribution: str | None = None
@@ -58,11 +58,43 @@ class PendingHoleMapDTO(BaseModel):
     holes: int
     holes_needing_green: int
     imported_at: UtcDatetime
+    version: str = Field(description="La versión que hay que devolver para revisarlo")
     osm_reference: str
 
 
-class ReviewHoleMapRequestDTO(BaseModel):
-    """Aprobar o rechazar la versión que el admin tiene delante."""
+def version_of(imported_at: datetime) -> str:
+    """La versión de un mapa: su fecha de importación como texto (UTC, con µs)."""
+    return _utc_z(imported_at)
 
-    version: datetime = Field(description="La `version` del mapa, tal cual se recibió")
+
+class GetHoleMapRequestDTO(BaseModel):
+    """El mapa de un campo."""
+
+    golf_course_id: str
+
+
+class ListPendingHoleMapsRequestDTO(BaseModel):
+    """Los mapas pendientes de revisión (sin filtros)."""
+
+
+class ApproveHoleMapBodyDTO(BaseModel):
+    """Cuerpo de aprobar: solo la versión vista (un motivo no se acepta)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str = Field(description="La `version` del mapa, tal cual se recibió")
+
+
+class RejectHoleMapBodyDTO(ApproveHoleMapBodyDTO):
+    """Cuerpo de rechazar: la versión vista y un motivo opcional (500 caracteres como mucho)."""
+
+    reason: str | None = None
+
+
+class ReviewHoleMapRequestDTO(BaseModel):
+    """Aprobar o rechazar, por un admin, la versión que tiene delante."""
+
+    golf_course_id: str
+    reviewer_id: str
+    version: str
     reason: str | None = None

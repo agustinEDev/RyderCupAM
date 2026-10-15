@@ -12,6 +12,7 @@ from geojson_pydantic.types import Position2D
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
     HoleMapDTO,
     HoleMapReviewDTO,
+    version_of,
 )
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
@@ -81,7 +82,7 @@ def _common(hole_map: CourseHoleMap) -> dict[str, Any]:
     return {
         "golf_course_id": str(hole_map.golf_course_id),
         "status": hole_map.status.value,
-        "version": hole_map.imported_at,
+        "version": version_of(hole_map.imported_at),
         "attribution": _attribution(hole_map),
         "holes_needing_green": [hole.number for hole in hole_map.holes if hole.needs_green],
         "geojson": FeatureCollection(type="FeatureCollection", features=_features(hole_map)),

@@ -6,18 +6,18 @@ la VERSIÓN que tiene delante (su fecha de importación): si mientras la miraba 
 reimportó, la revisión no vale y tiene que volver a mirarlo.
 """
 
-from datetime import UTC, datetime
-
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
+    GetHoleMapRequestDTO,
     HoleMapDTO,
     HoleMapReviewDTO,
+    ListPendingHoleMapsRequestDTO,
     PendingHoleMapDTO,
     ReviewHoleMapRequestDTO,
+    version_of,
 )
 from src.modules.golf_course.application.exceptions import (
     HoleMapChangedError,
     HoleMapNotFoundError,
-    HoleMapNotPendingError,
 )
 from src.modules.golf_course.application.mappers.hole_map_geojson import (
     to_hole_map_dto,
@@ -32,28 +32,23 @@ from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMap
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-def _naive_utc(moment: datetime) -> datetime:
-    """La versión que llega puede traer zona; las del mapa van en UTC sin zona."""
-    return moment if moment.tzinfo is None else moment.astimezone(UTC).replace(tzinfo=None)
-
-
 class GetApprovedHoleMapUseCase:
     """El mapa aprobado de un campo, para el jugador."""
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
-    async def execute(self, golf_course_id: str) -> HoleMapDTO:
+    async def execute(self, request: GetHoleMapRequestDTO) -> HoleMapDTO:
         """
         Raises:
             HoleMapNotFoundError: si el campo no tiene mapa aprobado
         """
         async with self._uow:
             hole_map = await self._uow.hole_maps.find_by_golf_course_id(
-                GolfCourseId(golf_course_id)
+                GolfCourseId(request.golf_course_id)
             )
             if hole_map is None or hole_map.status is not HoleMapStatus.APPROVED:
-                raise HoleMapNotFoundError(golf_course_id)
+                raise HoleMapNotFoundError(request.golf_course_id)
             return to_hole_map_dto(hole_map)
 
 
@@ -63,25 +58,24 @@ class ListPendingHoleMapsUseCase:
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
-    async def execute(self) -> list[PendingHoleMapDTO]:
+    async def execute(self, request: ListPendingHoleMapsRequestDTO) -> list[PendingHoleMapDTO]:
         async with self._uow:
             pending = await self._uow.hole_maps.find_pending()
             names = await self._uow.golf_courses.find_names_by_ids(
                 [hole_map.golf_course_id for hole_map in pending]
             )
-            items = []
-            for hole_map in pending:
-                items.append(
-                    PendingHoleMapDTO(
-                        golf_course_id=str(hole_map.golf_course_id),
-                        golf_course_name=names.get(str(hole_map.golf_course_id), ""),
-                        holes=len(hole_map.holes),
-                        holes_needing_green=sum(1 for h in hole_map.holes if h.needs_green),
-                        imported_at=hole_map.imported_at,
-                        osm_reference=hole_map.osm_reference,
-                    )
+            return [
+                PendingHoleMapDTO(
+                    golf_course_id=str(hole_map.golf_course_id),
+                    golf_course_name=names.get(str(hole_map.golf_course_id), ""),
+                    holes=len(hole_map.holes),
+                    holes_needing_green=sum(1 for h in hole_map.holes if h.needs_green),
+                    imported_at=hole_map.imported_at,
+                    version=version_of(hole_map.imported_at),
+                    osm_reference=hole_map.osm_reference,
                 )
-            return items
+                for hole_map in pending
+            ]
 
 
 class GetHoleMapForReviewUseCase:
@@ -90,17 +84,17 @@ class GetHoleMapForReviewUseCase:
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
-    async def execute(self, golf_course_id: str) -> HoleMapReviewDTO:
+    async def execute(self, request: GetHoleMapRequestDTO) -> HoleMapReviewDTO:
         """
         Raises:
             HoleMapNotFoundError: si el campo no tiene mapa
         """
         async with self._uow:
             hole_map = await self._uow.hole_maps.find_by_golf_course_id(
-                GolfCourseId(golf_course_id)
+                GolfCourseId(request.golf_course_id)
             )
             if hole_map is None:
-                raise HoleMapNotFoundError(golf_course_id)
+                raise HoleMapNotFoundError(request.golf_course_id)
             return to_hole_map_review_dto(hole_map)
 
 
@@ -110,31 +104,29 @@ class _ReviewHoleMapUseCase:
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
-    def _apply(self, hole_map: CourseHoleMap, reviewer_id: UserId, reason: str | None) -> None:
+    def _apply(self, hole_map: CourseHoleMap, request: ReviewHoleMapRequestDTO) -> None:
         raise NotImplementedError
 
-    async def execute(
-        self, golf_course_id: str, reviewer_id: UserId, request: ReviewHoleMapRequestDTO
-    ) -> HoleMapReviewDTO:
+    async def execute(self, request: ReviewHoleMapRequestDTO) -> HoleMapReviewDTO:
         """
         Raises:
             HoleMapNotFoundError: si el campo no tiene mapa
             HoleMapChangedError: si la versión no es la actual
-            HoleMapNotPendingError: si ya está aprobado o rechazado
-            ValueError: si el motivo de rechazo pasa de 500 caracteres
+            HoleMapNotPendingError: (del dominio) si ya está aprobado o rechazado
+            RejectionReasonTooLongError: (del dominio) si el motivo pasa de 500
         """
         async with self._uow:
             # Bloqueado: una reimportación a la vez no se cuela entre comprobar y escribir
             hole_map = await self._uow.hole_maps.find_by_golf_course_id_for_update(
-                GolfCourseId(golf_course_id)
+                GolfCourseId(request.golf_course_id)
             )
             if hole_map is None:
-                raise HoleMapNotFoundError(golf_course_id)
-            if hole_map.status is not HoleMapStatus.PENDING_REVIEW:
-                raise HoleMapNotPendingError(golf_course_id)
-            if _naive_utc(request.version) != hole_map.imported_at:
-                raise HoleMapChangedError(golf_course_id)
-            self._apply(hole_map, reviewer_id, request.reason)
+                raise HoleMapNotFoundError(request.golf_course_id)
+            # La versión es un texto opaco: se compara tal cual, sin interpretarla
+            if request.version != version_of(hole_map.imported_at):
+                raise HoleMapChangedError(request.golf_course_id)
+            # Si se puede revisar (solo un mapa pendiente) lo decide el dominio
+            self._apply(hole_map, request)
             await self._uow.hole_maps.save(hole_map)
             return to_hole_map_review_dto(hole_map)
 
@@ -142,12 +134,12 @@ class _ReviewHoleMapUseCase:
 class ApproveHoleMapUseCase(_ReviewHoleMapUseCase):
     """Un admin aprueba el mapa: a partir de aquí lo ven los jugadores."""
 
-    def _apply(self, hole_map: CourseHoleMap, reviewer_id: UserId, reason: str | None) -> None:
-        hole_map.approve(reviewer_id=reviewer_id)
+    def _apply(self, hole_map: CourseHoleMap, request: ReviewHoleMapRequestDTO) -> None:
+        hole_map.approve(reviewer_id=UserId(request.reviewer_id))
 
 
 class RejectHoleMapUseCase(_ReviewHoleMapUseCase):
     """Un admin rechaza el mapa, con un motivo opcional."""
 
-    def _apply(self, hole_map: CourseHoleMap, reviewer_id: UserId, reason: str | None) -> None:
-        hole_map.reject(reviewer_id=reviewer_id, reason=reason)
+    def _apply(self, hole_map: CourseHoleMap, request: ReviewHoleMapRequestDTO) -> None:
+        hole_map.reject(reviewer_id=UserId(request.reviewer_id), reason=request.reason)

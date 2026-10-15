@@ -29,7 +29,7 @@ from src.modules.golf_course.infrastructure.persistence.repositories.hole_map_re
 from tests.conftest import approve_golf_course, create_authenticated_user, create_golf_course
 
 IMPORTADO = datetime(2026, 10, 15, 9, 0, 0, 123456)
-VERSION = IMPORTADO.isoformat()
+VERSION = "2026-10-15T09:00:00.123456Z"
 
 
 async def _in_db(work):
@@ -149,7 +149,7 @@ async def test_p1_any_player_gets_the_approved_map(client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "APPROVED"
-    assert data["version"].startswith("2026-10-15T09:00:00.123456")
+    assert data["version"] == VERSION
     assert data["attribution"] == "© OpenStreetMap contributors (ODbL)"
     assert data["holes_needing_green"] == [2]
     line = next(f for f in data["geojson"]["features"] if f["properties"]["kind"] == "play_line")
@@ -255,6 +255,7 @@ async def test_a1_admin_lists_pending_maps(client: AsyncClient):
     assert item["holes_needing_green"] == 1
     assert item["osm_reference"] == "way/237391513"
     assert item["imported_at"] == "2026-10-15T09:00:00.123456Z"
+    assert item["version"] == VERSION
 
 
 @pytest.mark.asyncio
@@ -313,7 +314,7 @@ async def test_a4_other_version_is_409_changed(client: AsyncClient, action):
 
     response = await c.put(
         f"/api/v1/golf-courses/admin/{course_id}/hole-map/{action}",
-        json={"version": "2026-10-15T09:00:00.123455"},
+        json={"version": "2026-10-15T09:00:00.123455Z"},
     )
     after = await c.get(f"/api/v1/golf-courses/admin/{course_id}/hole-map")
 
@@ -395,7 +396,7 @@ async def test_a9_errors_never_echo_the_exception_text(client: AsyncClient):
 
     response = await _as(client, admin).put(
         f"/api/v1/golf-courses/admin/{course_id}/hole-map/approve",
-        json={"version": "2026-01-01T00:00:00"},
+        json={"version": "2026-01-01T00:00:00Z"},
     )
 
     assert response.status_code == 409
@@ -451,3 +452,21 @@ async def test_a9_unexpected_error_while_approving_is_a_500_not_a_400(client: As
 
     assert response.status_code == 500
     assert "fila corrupta" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_a10_approve_does_not_take_a_reason(client: AsyncClient):
+    """
+    GIVEN: Un mapa pendiente
+    WHEN: Se aprueba mandando también un motivo
+    THEN: 422: el motivo es solo para rechazar, no se tira sin avisar
+    """
+    course_id, admin, _, _ = await _scenario(client, "a10")
+    await _save_map(course_id)
+
+    response = await _as(client, admin).put(
+        f"/api/v1/golf-courses/admin/{course_id}/hole-map/approve",
+        json={"version": VERSION, "reason": "el 7 tiene mal el green"},
+    )
+
+    assert response.status_code == 422

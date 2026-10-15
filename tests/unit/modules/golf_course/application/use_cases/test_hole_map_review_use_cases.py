@@ -5,15 +5,18 @@ El jugador solo ve un mapa aprobado. El admin aprueba o rechaza la versión que
 tiene delante: si mientras la miraba se reimportó, no vale.
 """
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import pytest
 
-from src.modules.golf_course.application.dtos.hole_map_dtos import ReviewHoleMapRequestDTO
+from src.modules.golf_course.application.dtos.hole_map_dtos import (
+    GetHoleMapRequestDTO,
+    ListPendingHoleMapsRequestDTO,
+    ReviewHoleMapRequestDTO,
+)
 from src.modules.golf_course.application.exceptions import (
     HoleMapChangedError,
     HoleMapNotFoundError,
-    HoleMapNotPendingError,
 )
 from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ApproveHoleMapUseCase,
@@ -22,7 +25,10 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
-from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
+from src.modules.golf_course.domain.entities.course_hole_map import (
+    CourseHoleMap,
+    HoleMapNotPendingError,
+)
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
@@ -42,6 +48,7 @@ from src.shared.domain.value_objects.gender import Gender
 
 PARES = [4, 5, 4, 4, 3, 4, 5, 4, 3, 3, 4, 5, 4, 4, 3, 4, 5, 4]
 IMPORTADO = datetime(2026, 10, 15, 9, 0, 0, 123456)
+VERSION = "2026-10-15T09:00:00.123456Z"
 ADMIN = UserId.generate()
 
 
@@ -74,6 +81,12 @@ def _hole(number: int) -> MappedHole:
             GeoPoint(latitude=36.29, longitude=-5.33),
         ),
         line_source=PositionSource.OSM,
+    )
+
+
+def _review(course_id, version=VERSION, reason=None) -> ReviewHoleMapRequestDTO:
+    return ReviewHoleMapRequestDTO(
+        golf_course_id=str(course_id), reviewer_id=str(ADMIN), version=version, reason=reason
     )
 
 
@@ -113,7 +126,9 @@ async def test_p1_approved_map_is_returned():
     """
     uow, course, _ = await _setup(HoleMapStatus.APPROVED)
 
-    dto = await GetApprovedHoleMapUseCase(uow).execute(str(course.id))
+    dto = await GetApprovedHoleMapUseCase(uow).execute(
+        GetHoleMapRequestDTO(golf_course_id=str(course.id))
+    )
 
     assert dto.status == "APPROVED"
     assert len(dto.geojson.features) == 2
@@ -130,7 +145,9 @@ async def test_p2_pending_or_rejected_map_is_not_found(status):
     uow, course, _ = await _setup(status)
 
     with pytest.raises(HoleMapNotFoundError):
-        await GetApprovedHoleMapUseCase(uow).execute(str(course.id))
+        await GetApprovedHoleMapUseCase(uow).execute(
+            GetHoleMapRequestDTO(golf_course_id=str(course.id))
+        )
 
 
 @pytest.mark.asyncio
@@ -143,7 +160,9 @@ async def test_p3_course_without_map_is_not_found():
     uow = InMemoryGolfCourseUnitOfWork()
 
     with pytest.raises(HoleMapNotFoundError):
-        await GetApprovedHoleMapUseCase(uow).execute(str(GolfCourseId.generate()))
+        await GetApprovedHoleMapUseCase(uow).execute(
+            GetHoleMapRequestDTO(golf_course_id=str(GolfCourseId.generate()))
+        )
 
 
 # ============================================================================
@@ -169,12 +188,13 @@ async def test_a1_pending_list_oldest_first_with_course_name_and_counts():
     ya.approve(reviewer_id=ADMIN)
     await uow.hole_maps.save(ya)
 
-    pending = await ListPendingHoleMapsUseCase(uow).execute()
+    pending = await ListPendingHoleMapsUseCase(uow).execute(ListPendingHoleMapsRequestDTO())
 
     assert [p.golf_course_name for p in pending] == ["Viejo", "Nuevo"]
     assert pending[0].holes == 1
     assert pending[0].holes_needing_green == 1
     assert pending[0].imported_at == IMPORTADO
+    assert pending[0].version == VERSION
     assert pending[0].osm_reference == "way/1"
     assert pending[0].golf_course_id == str(viejo.id)
 
@@ -189,7 +209,9 @@ async def test_a2_admin_sees_the_map_in_any_status(status):
     """
     uow, course, hole_map = await _setup(status)
 
-    dto = await GetHoleMapForReviewUseCase(uow).execute(str(course.id))
+    dto = await GetHoleMapForReviewUseCase(uow).execute(
+        GetHoleMapRequestDTO(golf_course_id=str(course.id))
+    )
 
     assert dto.status == status.value
     assert dto.osm_reference == "way/1"
@@ -205,7 +227,7 @@ async def test_a2_review_of_missing_map_is_not_found():
     """
     with pytest.raises(HoleMapNotFoundError):
         await GetHoleMapForReviewUseCase(InMemoryGolfCourseUnitOfWork()).execute(
-            str(GolfCourseId.generate())
+            GetHoleMapRequestDTO(golf_course_id=str(GolfCourseId.generate()))
         )
 
 
@@ -223,9 +245,7 @@ async def test_a3_approve_the_seen_version():
     """
     uow, course, hole_map = await _setup()
 
-    dto = await ApproveHoleMapUseCase(uow).execute(
-        str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO)
-    )
+    dto = await ApproveHoleMapUseCase(uow).execute(_review(course.id))
 
     assert dto.status == "APPROVED"
     assert hole_map.status is HoleMapStatus.APPROVED
@@ -234,20 +254,20 @@ async def test_a3_approve_the_seen_version():
 
 
 @pytest.mark.asyncio
-async def test_a3_version_with_time_zone_is_the_same_moment():
+async def test_a3_version_is_an_opaque_token_compared_as_is():
     """
-    GIVEN: La versión enviada con zona (UTC+2), el mismo instante que la importación
-    WHEN: El admin aprueba
-    THEN: Se acepta
+    GIVEN: El mismo instante escrito de otra forma (sin microsegundos, o con zona)
+    WHEN: El admin aprueba con él
+    THEN: No vale: la versión es un texto que se devuelve tal cual, no una fecha
+         que el front deba interpretar (un Date de JavaScript pierde los µs)
     """
     uow, course, hole_map = await _setup()
-    madrid = IMPORTADO.replace(tzinfo=UTC).astimezone(timezone(timedelta(hours=2)))
 
-    await ApproveHoleMapUseCase(uow).execute(
-        str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=madrid)
-    )
+    for other in ("2026-10-15T09:00:00.123Z", "2026-10-15T11:00:00.123456+02:00"):
+        with pytest.raises(HoleMapChangedError):
+            await ApproveHoleMapUseCase(uow).execute(_review(course.id, version=other))
 
-    assert hole_map.status is HoleMapStatus.APPROVED
+    assert hole_map.status is HoleMapStatus.PENDING_REVIEW
 
 
 @pytest.mark.asyncio
@@ -261,11 +281,7 @@ async def test_a4_other_version_changes_nothing(use_case):
     uow, course, hole_map = await _setup()
 
     with pytest.raises(HoleMapChangedError):
-        await use_case(uow).execute(
-            str(course.id),
-            ADMIN,
-            ReviewHoleMapRequestDTO(version=IMPORTADO - timedelta(microseconds=1)),
-        )
+        await use_case(uow).execute(_review(course.id, version="2026-10-15T09:00:00.123455Z"))
 
     assert hole_map.status is HoleMapStatus.PENDING_REVIEW
 
@@ -282,9 +298,7 @@ async def test_a5_reviewed_map_is_not_pending(use_case, status):
     uow, course, _ = await _setup(status)
 
     with pytest.raises(HoleMapNotPendingError):
-        await use_case(uow).execute(
-            str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO)
-        )
+        await use_case(uow).execute(_review(course.id))
 
 
 @pytest.mark.asyncio
@@ -297,9 +311,7 @@ async def test_a6_reject_with_or_without_reason(reason):
     """
     uow, course, hole_map = await _setup()
 
-    dto = await RejectHoleMapUseCase(uow).execute(
-        str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO, reason=reason)
-    )
+    dto = await RejectHoleMapUseCase(uow).execute(_review(course.id, reason=reason))
 
     assert dto.status == "REJECTED"
     assert hole_map.rejection_reason == reason
@@ -316,9 +328,7 @@ async def test_a6_reason_too_long_is_rejected():
     uow, course, hole_map = await _setup()
 
     with pytest.raises(ValueError, match="500"):
-        await RejectHoleMapUseCase(uow).execute(
-            str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO, reason="x" * 501)
-        )
+        await RejectHoleMapUseCase(uow).execute(_review(course.id, reason="x" * 501))
 
     assert hole_map.status is HoleMapStatus.PENDING_REVIEW
 
@@ -332,9 +342,7 @@ async def test_a7_review_of_missing_map_is_not_found(use_case):
     THEN: No se encuentra
     """
     with pytest.raises(HoleMapNotFoundError):
-        await use_case(InMemoryGolfCourseUnitOfWork()).execute(
-            str(GolfCourseId.generate()), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO)
-        )
+        await use_case(InMemoryGolfCourseUnitOfWork()).execute(_review(GolfCourseId.generate()))
 
 
 @pytest.mark.asyncio
@@ -355,7 +363,7 @@ async def test_a8_review_reads_the_map_locked(use_case):
 
     uow.hole_maps.find_by_golf_course_id_for_update = espia
 
-    await use_case(uow).execute(str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO))
+    await use_case(uow).execute(_review(course.id))
 
     assert lecturas == ["for_update"]
 
@@ -378,6 +386,6 @@ async def test_a1_pending_list_reads_course_names_in_one_query():
 
     uow.golf_courses.find_by_id = no_cargar
 
-    pending = await ListPendingHoleMapsUseCase(uow).execute()
+    pending = await ListPendingHoleMapsUseCase(uow).execute(ListPendingHoleMapsRequestDTO())
 
     assert sorted(p.golf_course_name for p in pending) == ["Campo A", "Campo B", "Campo C"]
