@@ -9,7 +9,7 @@ import uuid
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import Column, DateTime, ForeignKey, String, Table
+from sqlalchemy import Column, DateTime, ForeignKey, String, Table, inspect
 from sqlalchemy.types import CHAR
 
 from src.modules.social.domain.entities.friendship import Friendship
@@ -116,7 +116,7 @@ def start_social_mappers() -> None:
     Mapea:
     - Friendship entity -> friendships table
     """
-    if Friendship not in mapper_registry.mappers:
+    if inspect(Friendship, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Friendship,
             friendships_table,

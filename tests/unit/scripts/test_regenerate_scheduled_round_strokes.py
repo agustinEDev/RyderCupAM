@@ -45,30 +45,17 @@ def test_the_command_registers_the_mappers_before_querying():
     assert order == ["mappers", "session"]
 
 
-def test_the_mappers_are_registered_with_golf_course_before_competition():
+def test_the_mappers_are_the_application_list():
     """
     GIVEN: El registro del mapeo del comando
     WHEN: Se ejecuta
-    THEN: GolfCourse se registra antes que Competition
-
-    Competition referencia a GolfCourse en una relación, y al revés SQLAlchemy
-    falla con `UnmappedClassError: Class GolfCourse is not mapped`.
+    THEN: Arranca todos los mappers con la lista única de la aplicación (#565),
+         que ya pone GolfCourse antes que Competition
     """
-    order = []
-
-    with (
-        patch.object(command, "start_user_mappers", side_effect=lambda: order.append("user")),
-        patch.object(command, "start_country_mappers", side_effect=lambda: order.append("country")),
-        patch.object(
-            command, "start_golf_course_mappers", side_effect=lambda: order.append("golf_course")
-        ),
-        patch.object(
-            command, "start_competition_mappers", side_effect=lambda: order.append("competition")
-        ),
-    ):
+    with patch.object(command, "start_all_mappers") as start_all:
         command.start_mappers()
 
-    assert order.index("golf_course") < order.index("competition")
+    start_all.assert_called_once_with()
 
 
 class _SessionOpenedError(Exception):

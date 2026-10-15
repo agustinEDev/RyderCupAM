@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select, text
 
 from src.config.database import async_session_maker
+from src.config.mappers import start_all_mappers
 from src.modules.golf_course.application.dtos.golf_course_dtos import (
     UpdateGolfCourseRequestDTO,
 )
@@ -55,7 +56,6 @@ from src.modules.golf_course.infrastructure.importers.rfeg_mapper import (
 )
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
     golf_courses_table,
-    start_golf_course_mappers,
 )
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
@@ -63,14 +63,8 @@ from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_u
 from src.modules.user.application.use_cases.ensure_system_user_use_case import (
     EnsureSystemUserUseCase,
 )
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
-    start_mappers as start_user_mappers,
-)
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork as SQLAlchemyUserUnitOfWork,
-)
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
-    start_mappers as start_country_mappers,
 )
 
 SYSTEM_USER_EMAIL = "course.import@rydercupfriends.com"
@@ -269,9 +263,7 @@ async def main() -> int:
     """Punto de entrada."""
     args = parse_args()
 
-    start_user_mappers()
-    start_country_mappers()
-    start_golf_course_mappers()
+    start_all_mappers()  # la lista única de la aplicación (#565)
 
     dataset = load_dataset(args.dataset)
     mapped, problems = map_all(dataset, args.limit)
