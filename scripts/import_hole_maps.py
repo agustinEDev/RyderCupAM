@@ -57,6 +57,8 @@ DEFAULT_PAUSE_S = 5.0
 ERROR = "ERROR"
 # Resultados a los que se llega sin preguntar a OSM: tras ellos no hace falta pausa
 NO_OSM_CALL = frozenset({ImportHoleMapStatus.SKIPPED_APPROVED, ImportHoleMapStatus.NO_COORDINATES})
+# Tantos «OSM no disponible» seguidos = Overpass caído o limitándonos: se para
+MAX_CONSECUTIVE_UNAVAILABLE = 5
 
 ImportOne = Callable[[str, bool], Awaitable[ImportHoleMapResponseDTO]]
 
@@ -69,6 +71,7 @@ class Summary:
     holes_imported: int = 0
     discarded: Counter[str] = field(default_factory=Counter)
     errors: list[tuple[str, str]] = field(default_factory=list)
+    aborted: bool = False
 
 
 def course_id(value: str) -> str:
@@ -127,7 +130,11 @@ async def run(
     """Importa campo a campo; un fallo se cuenta y no para la pasada."""
     summary = Summary()
     asked_osm = False  # si el campo anterior preguntó a OSM, toca esperar
+    unavailable_in_a_row = 0
     for course in course_ids:
+        if unavailable_in_a_row >= MAX_CONSECUTIVE_UNAVAILABLE:
+            summary.aborted = True
+            break
         if asked_osm:
             await sleep(pause)
         asked_osm = True  # ante un error no se sabe: se espera por si acaso
@@ -138,6 +145,10 @@ async def run(
             summary.errors.append((course, f"{type(error).__name__}: {error}"))
             continue
         asked_osm = result.status not in NO_OSM_CALL
+        if result.status is ImportHoleMapStatus.OSM_UNAVAILABLE:
+            unavailable_in_a_row += 1
+        else:
+            unavailable_in_a_row = 0
         summary.statuses[result.status.value] += 1
         summary.holes_imported += result.holes_imported
         summary.discarded.update(result.discarded)
@@ -157,7 +168,32 @@ def report(summary: Summary, *, apply: bool) -> str:
             lines.append(f"    {reason:<16} {count}")
     for course_id, error in summary.errors:
         lines.append(f"  ERROR {course_id}: {error}")
+    if summary.aborted:
+        lines.append(
+            f"  PASADA CORTADA: {MAX_CONSECUTIVE_UNAVAILABLE} campos seguidos sin respuesta de "
+            "Overpass (caído o limitándonos). Repítela más tarde."
+        )
     return "\n".join(lines)
+
+
+def exit_code(summary: Summary) -> int:
+    """
+    0 solo si todo se pudo hacer: sin errores ni campos sin poder consultar a OSM.
+
+    Una pasada cortada siempre tiene campos sin consultar, así que también da 1.
+    """
+    unavailable = summary.statuses.get(ImportHoleMapStatus.OSM_UNAVAILABLE.value, 0)
+    return 1 if summary.errors or unavailable else 0
+
+
+def nothing_to_import(args: argparse.Namespace, course_ids: Sequence[str]) -> str | None:
+    """Por qué un --course no sale en la selección, para no salir callado."""
+    if args.course is None or course_ids:
+        return None
+    return (
+        f"El campo {args.course} no se puede importar: no existe, no está aprobado "
+        "o no tiene coordenadas."
+    )
 
 
 async def main() -> int:
@@ -167,9 +203,14 @@ async def main() -> int:
 
     async with async_session_maker() as session:
         course_ids = await select_course_ids(session, country=args.country, course=args.course)
+    message = nothing_to_import(args, course_ids)
+    if message is not None:
+        print(message)
+        return 1
     print(f"{len(course_ids)} campos que importar{'' if args.apply else ' (en seco)'}.")
 
-    source = OsmHoleMapSource(OverpassClient())
+    client = OverpassClient()
+    source = OsmHoleMapSource(client)
 
     async def import_one(course_id: str, apply: bool) -> ImportHoleMapResponseDTO:
         # Una sesión por campo: el fallo de uno no arrastra a los demás
@@ -179,9 +220,12 @@ async def main() -> int:
                 ImportHoleMapRequestDTO(golf_course_id=course_id, apply=apply)
             )
 
-    summary = await run(course_ids, import_one, apply=args.apply, pause=args.pause)
+    try:
+        summary = await run(course_ids, import_one, apply=args.apply, pause=args.pause)
+    finally:
+        await client.aclose()
     print(report(summary, apply=args.apply))
-    return 1 if summary.errors else 0
+    return exit_code(summary)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,9 @@ su coordenada (contornos de campo, hoyos y greens, con su geometría) y lo tradu
 a datos propios. Los datos de OSM van bajo licencia ODbL.
 
 Overpass es un servicio público de uso justo: limita a quien abusa (429) y a
-menudo se satura (502, 503, 504). Esos se reintentan con esperas crecientes;
-cualquier otro fallo, y una respuesta ilegible, llegan como OsmUnavailableError.
+menudo se satura (502, 503, 504, o no llega a responder). Esos se reintentan con
+esperas crecientes; cualquier otro fallo, y una respuesta ilegible, llegan como
+OsmUnavailableError.
 """
 
 import asyncio
@@ -169,7 +170,12 @@ def _wait(own: float, response: httpx.Response) -> float:
 
 
 class OverpassClient:
-    """Pide a Overpass la zona de un campo."""
+    """
+    Pide a Overpass la zona de un campo.
+
+    Usa una sola conexión para toda la pasada (Overpass es un servicio de uso
+    justo): quien lo crea lo cierra con `aclose()` al terminar.
+    """
 
     def __init__(
         self,
@@ -180,6 +186,13 @@ class OverpassClient:
         self._url = url
         self._timeout_s = timeout_s
         self._sleep = sleep
+        self._http: httpx.AsyncClient | None = None
+
+    async def aclose(self) -> None:
+        """Cierra la conexión, si llegó a abrirse."""
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
     async def fetch_area(self, latitude: float, longitude: float) -> OsmArea:
         """
@@ -188,22 +201,29 @@ class OverpassClient:
         Raises:
             OsmUnavailableError: si Overpass no responde o responde algo ilegible
         """
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=self._timeout_s)
         data = {"data": build_query(latitude, longitude)}
         headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
         waits = list(RETRY_WAITS_S)
-        async with httpx.AsyncClient(timeout=self._timeout_s) as client:
-            while True:
-                try:
-                    response = await client.post(self._url, data=data, headers=headers)
-                except httpx.HTTPError as e:
-                    raise OsmUnavailableError(f"Overpass is unreachable: {e!r}") from e
-                if response.status_code in RETRY_STATUSES and waits:
-                    await self._sleep(_wait(waits.pop(0), response))
+        while True:
+            try:
+                response = await self._http.post(self._url, data=data, headers=headers)
+            except httpx.TransportError as e:
+                # Tiempo agotado o conexión caída: lo más común con Overpass saturado
+                if waits:
+                    await self._sleep(waits.pop(0))
                     continue
-                if response.status_code != httpx.codes.OK:
-                    raise OsmUnavailableError(f"Overpass answered {response.status_code}")
-                try:
-                    payload = response.json()
-                except ValueError as e:
-                    raise OsmUnavailableError("Overpass answered something that is not JSON") from e
-                return parse_area(payload)
+                raise OsmUnavailableError(f"Overpass is unreachable: {e!r}") from e
+            except httpx.HTTPError as e:
+                raise OsmUnavailableError(f"Overpass is unreachable: {e!r}") from e
+            if response.status_code in RETRY_STATUSES and waits:
+                await self._sleep(_wait(waits.pop(0), response))
+                continue
+            if response.status_code != httpx.codes.OK:
+                raise OsmUnavailableError(f"Overpass answered {response.status_code}")
+            try:
+                payload = response.json()
+            except ValueError as e:
+                raise OsmUnavailableError("Overpass answered something that is not JSON") from e
+            return parse_area(payload)

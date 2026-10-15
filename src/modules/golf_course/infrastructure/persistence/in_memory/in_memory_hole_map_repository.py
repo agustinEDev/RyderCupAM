@@ -24,6 +24,11 @@ class InMemoryHoleMapRepository(IHoleMapRepository):
     async def find_by_golf_course_id(self, golf_course_id: GolfCourseId) -> CourseHoleMap | None:
         return self._maps.get(str(golf_course_id))
 
+    async def find_by_golf_course_id_for_update(
+        self, golf_course_id: GolfCourseId
+    ) -> CourseHoleMap | None:
+        return self._maps.get(str(golf_course_id))
+
     async def find_pending(self) -> list[CourseHoleMap]:
         pending = [m for m in self._maps.values() if m.status is HoleMapStatus.PENDING_REVIEW]
         return sorted(pending, key=lambda m: m.imported_at)

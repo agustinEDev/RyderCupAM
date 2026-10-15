@@ -29,6 +29,17 @@ class HoleMapRepository(IHoleMapRepository):
         )
         return result.scalars().first()
 
+    async def find_by_golf_course_id_for_update(
+        self, golf_course_id: GolfCourseId
+    ) -> CourseHoleMap | None:
+        result = await self._session.execute(
+            select(CourseHoleMap)
+            .where(_table.c.golf_course_id == golf_course_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalars().first()
+
     async def find_pending(self) -> list[CourseHoleMap]:
         result = await self._session.execute(
             select(CourseHoleMap)

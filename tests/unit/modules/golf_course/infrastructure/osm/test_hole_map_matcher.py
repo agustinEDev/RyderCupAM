@@ -724,3 +724,59 @@ def test_c7_self_crossing_outline_keeps_both_halves():
 
     assert candidate is not None
     assert [h.number for h in candidate.holes] == [1, 2]
+
+
+def test_h6_reversed_line_with_tee_near_the_previous_green_is_turned():
+    """
+    GIVEN: Una línea dibujada del green a la salida, que empieza dentro de su
+           green y acaba (en la salida) a 35 m del green del hoyo anterior
+    WHEN: Se empareja
+    THEN: Se gira, y el green es el suyo, no el del hoyo anterior
+    """
+    propio = green(20, 500, 400)
+    anterior = green(21, 500, 55)  # su borde norte en y=65: 35 m de la salida
+    al_reves = hoyo(10, "1", (500, 400), (500, 100))
+
+    candidate = _match(zona(cursos=[campo()], hoyos=[al_reves], greens=[propio, anterior]))
+
+    assert candidate is not None
+    hole = candidate.holes[0]
+    assert _cerca((hole.tee.latitude, hole.tee.longitude), pt(500, 100))
+    assert hole.green is not None
+    assert _cerca((hole.green.center.latitude, hole.green.center.longitude), pt(500, 400))
+
+
+def test_g7_green_of_the_neighbour_course_is_not_used():
+    """
+    GIVEN: Nuestro hoyo acaba junto al borde del contorno y el único green
+           cercano (a 50 m) es del campo vecino, fuera de nuestro contorno
+    WHEN: Se empareja
+    THEN: El hoyo entra sin green: no se le pone el del vecino
+    """
+    hoyo_al_borde = hoyo(10, "1", (900, 500), (990, 500))
+    del_vecino = green(20, 1050, 500)  # de x=1040 a 1060, fuera del contorno + 20 m
+
+    candidate = _match(zona(cursos=[campo()], hoyos=[hoyo_al_borde], greens=[del_vecino]))
+
+    assert candidate is not None
+    assert candidate.holes[0].green is None
+
+
+def test_h6_line_from_a_green_to_its_own_green_is_not_turned():
+    """
+    GIVEN: Un hoyo bien dibujado cuya salida cae sobre el green del hoyo
+           anterior y cuyo final está dentro de su propio green
+    WHEN: Se empareja
+    THEN: No se gira: acabar dentro de un green dice que va bien
+    """
+    anterior = green(20, 500, 100)
+    propio = green(21, 500, 400)
+    linea = hoyo(10, "1", (500, 100), (500, 400))
+
+    candidate = _match(zona(cursos=[campo()], hoyos=[linea], greens=[anterior, propio]))
+
+    assert candidate is not None
+    hole = candidate.holes[0]
+    assert _cerca((hole.tee.latitude, hole.tee.longitude), pt(500, 100))
+    assert hole.green is not None
+    assert _cerca((hole.green.center.latitude, hole.green.center.longitude), pt(500, 400))

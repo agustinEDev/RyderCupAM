@@ -29,5 +29,15 @@ class IHoleMapRepository(ABC):
         """El mapa del campo, o None si no tiene."""
 
     @abstractmethod
+    async def find_by_golf_course_id_for_update(
+        self, golf_course_id: GolfCourseId
+    ) -> CourseHoleMap | None:
+        """
+        El mapa del campo leído de la base de datos (no la copia que ya tuviera
+        la sesión) y bloqueado hasta el final de la transacción: para escribir
+        sobre lo último que hay, sin que nadie lo cambie entretanto.
+        """
+
+    @abstractmethod
     async def find_pending(self) -> list[CourseHoleMap]:
         """Los mapas pendientes de revisión, del más antiguo al más reciente."""

@@ -120,7 +120,8 @@ class ImportHoleMapFromOsmUseCase:
     ) -> ImportHoleMapResponseDTO:
         """Vuelve a leer el mapa y lo crea o reimporta, salvo que ya esté aprobado."""
         async with self._uow:
-            current = await self._uow.hole_maps.find_by_golf_course_id(course_id)
+            # Lo último de la BD y bloqueado: un admin pudo aprobarlo mientras OSM respondía
+            current = await self._uow.hole_maps.find_by_golf_course_id_for_update(course_id)
             if current is not None and current.status is HoleMapStatus.APPROVED:
                 return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.SKIPPED_APPROVED)
             now = datetime.now(UTC).replace(tzinfo=None)

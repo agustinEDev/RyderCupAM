@@ -8,7 +8,14 @@ se eligen, contra la base de datos en los tests de integración.
 
 import pytest
 
-from scripts.import_hole_maps import parse_args, report, run
+from scripts.import_hole_maps import (
+    MAX_CONSECUTIVE_UNAVAILABLE,
+    exit_code,
+    nothing_to_import,
+    parse_args,
+    report,
+    run,
+)
 from src.modules.golf_course.application.dtos.hole_map_import_dtos import (
     ImportHoleMapResponseDTO,
     ImportHoleMapStatus,
@@ -230,3 +237,92 @@ async def test_s3_no_pause_after_a_course_that_did_not_ask_osm():
     await run(list("abcd"), importador, apply=False, pause=5.0, sleep=sleep)
 
     assert esperas == [5.0]
+
+
+@pytest.mark.asyncio
+async def test_s6_stops_after_5_osm_unavailable_in_a_row():
+    """
+    GIVEN: Ocho campos y OSM no disponible en todos
+    WHEN: Se hace la pasada
+    THEN: Para tras 5 seguidos, sin insistir contra un servicio que nos limita
+    """
+    importador = Importador(
+        {c: _resultado(ImportHoleMapStatus.OSM_UNAVAILABLE) for c in "abcdefgh"}
+    )
+
+    summary = await run(list("abcdefgh"), importador, apply=True, pause=0, sleep=_sin_espera)
+
+    assert MAX_CONSECUTIVE_UNAVAILABLE == 5
+    assert len(importador.llamadas) == 5
+    assert summary.aborted is True
+    assert "Overpass" in report(summary, apply=True)
+
+
+@pytest.mark.asyncio
+async def test_s6_a_success_resets_the_streak():
+    """
+    GIVEN: Cuatro «OSM no disponible», uno bueno y otros cuatro
+    WHEN: Se hace la pasada
+    THEN: No para: la racha se corta con el bueno
+    """
+    resultados = {c: _resultado(ImportHoleMapStatus.OSM_UNAVAILABLE) for c in "abcdfghi"}
+    resultados["e"] = _resultado(ImportHoleMapStatus.CREATED, 18)
+
+    summary = await run(
+        list("abcdefghi"), Importador(resultados), apply=True, pause=0, sleep=_sin_espera
+    )
+
+    assert summary.aborted is False
+    assert summary.statuses == {"OSM_UNAVAILABLE": 8, "CREATED": 1}
+
+
+@pytest.mark.parametrize(
+    ("statuses", "errors", "aborted", "code"),
+    [
+        ({"CREATED": 3}, [], False, 0),
+        ({"CREATED": 3, "OSM_UNAVAILABLE": 1}, [], False, 1),
+        ({"CREATED": 2, "ERROR": 1}, [("x", "boom")], False, 1),
+        ({"OSM_UNAVAILABLE": 5}, [], True, 1),
+    ],
+    ids=["todo-bien", "osm-caido-en-uno", "error", "cortada"],
+)
+def test_s6_exit_code_says_when_something_could_not_be_done(statuses, errors, aborted, code):
+    """
+    GIVEN: El resumen de una pasada
+    WHEN: Se calcula el código de salida
+    THEN: 0 solo si no hubo errores, ni campos sin poder consultar a OSM, ni corte
+    """
+    from collections import Counter
+
+    from scripts.import_hole_maps import Summary
+
+    summary = Summary(statuses=Counter(statuses), errors=errors, aborted=aborted)
+
+    assert exit_code(summary) == code
+
+
+def test_s7_course_that_cannot_be_imported_is_explained():
+    """
+    GIVEN: --course de un campo que no sale en la selección
+    WHEN: No hay nada que importar
+    THEN: Se explica por qué (no existe, no está aprobado o no tiene coordenadas)
+    """
+    args = parse_args(["--course", "cd995c5f-0aec-4396-994d-380b32540421"])
+
+    message = nothing_to_import(args, [])
+
+    assert message is not None
+    assert "aprobado" in message and "coordenadas" in message
+
+
+def test_s7_nothing_to_explain_when_there_are_courses():
+    """
+    GIVEN: Una selección con campos, o un país sin campos
+    WHEN: Se mira si hay que explicar algo
+    THEN: Solo se explica el caso del campo suelto que no sale
+    """
+    assert (
+        nothing_to_import(parse_args(["--course", "cd995c5f-0aec-4396-994d-380b32540421"]), ["x"])
+        is None
+    )
+    assert nothing_to_import(parse_args(["--country", "ES"]), []) is None

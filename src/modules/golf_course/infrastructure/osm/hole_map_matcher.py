@@ -31,8 +31,16 @@ from src.modules.golf_course.application.ports.osm_hole_map_source import (
     OsmHoleMapCandidate,
 )
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
-from src.modules.golf_course.domain.value_objects.green_position import GreenPosition
-from src.modules.golf_course.domain.value_objects.mapped_hole import MappedHole
+from src.modules.golf_course.domain.value_objects.green_position import (
+    MIN_OUTLINE_POINTS,
+    GreenPosition,
+)
+from src.modules.golf_course.domain.value_objects.mapped_hole import (
+    MAX_HOLE_NUMBER,
+    MIN_HOLE_NUMBER,
+    MIN_PLAY_LINE_POINTS,
+    MappedHole,
+)
 from src.modules.golf_course.domain.value_objects.position_source import PositionSource
 
 from .overpass_client import OsmArea, OsmRelation, OsmWay
@@ -45,13 +53,10 @@ MAX_GREEN_DISTANCE_M = 60.0
 OUTLINE_TOLERANCE_M = 0.5
 MAX_OUTLINE_POINTS = 64
 DECIMALS = 7  # 1 cm
-MIN_HOLE_NUMBER = 1
-MAX_HOLE_NUMBER = 18
-# Un anillo cerrado necesita 4 puntos (el último repite el primero); una línea, 2;
-# un contorno sin el punto de cierre, 3
+# Un anillo cerrado necesita 4 puntos: el último repite el primero
 MIN_RING_POINTS = 4
-MIN_LINE_POINTS = 2
-MIN_OUTLINE_POINTS = 3
+# Un punto está «dentro» de un green a menos de esto (redondeos de coordenadas)
+INSIDE_GREEN_M = 1.0
 
 
 class _Projection:
@@ -114,7 +119,7 @@ def _relation_shape(relation: OsmRelation, proj: _Projection) -> BaseGeometry | 
         lines = [
             LineString([proj.xy(p) for p in piece])
             for piece in pieces
-            if len(piece) >= MIN_LINE_POINTS
+            if len(piece) >= MIN_PLAY_LINE_POINTS
         ]
         return unary_union(list(polygonize(unary_union(lines)))) if lines else None
 
@@ -228,7 +233,12 @@ def match_hole_map(
     reference, outline = chosen
     inside = outline.buffer(HOLE_INSIDE_MARGIN_M)
     by_number = {hole.number: hole for hole in card}
-    greens = [g for g in (_green_polygon([proj.xy(p) for p in w.points]) for w in area.greens) if g]
+    # Solo los greens de este campo: el de un vecino puede quedar a menos de 60 m
+    greens = [
+        g
+        for g in (_green_polygon([proj.xy(p) for p in w.points]) for w in area.greens)
+        if g is not None and inside.intersects(g)
+    ]
 
     discarded: Counter[DiscardReason] = Counter()
     candidates: dict[int, list[tuple[OsmWay, list[tuple[float, float]]]]] = {}
@@ -276,8 +286,11 @@ def _mapped_hole(
     # OSM dibuja el hoyo de la salida al green. Solo se gira si su final no tiene
     # ningún green cerca y su principio sí: la salida suele estar pegada al green
     # del hoyo anterior, y comparar sin más los dos extremos giraría los buenos
+    # (o, más claro, si empieza DENTRO de un green y acaba fuera de todos)
     start, end_distance = distance_to_green(line[0]), distance_to_green(line[-1])
-    if end_distance > MAX_GREEN_DISTANCE_M and start <= MAX_GREEN_DISTANCE_M:
+    far_end = end_distance > MAX_GREEN_DISTANCE_M and start <= MAX_GREEN_DISTANCE_M
+    starts_on_green = start <= INSIDE_GREEN_M < end_distance
+    if far_end or starts_on_green:
         line = list(reversed(line))  # dibujada del green a la salida
     end = Point(line[-1])
     nearest = min(greens, key=lambda g: g.distance(end), default=None)

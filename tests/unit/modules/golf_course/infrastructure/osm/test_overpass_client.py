@@ -223,14 +223,36 @@ async def test_o3_other_error_status_is_not_retried(status):
 )
 async def test_o4_network_failure_is_osm_unavailable(error):
     """
-    GIVEN: Se agota el tiempo o falla la red
+    GIVEN: Se agota el tiempo o falla la red siempre
     WHEN: Se pide la zona
-    THEN: «OSM no disponible»
+    THEN: Tres intentos (es el síntoma más común de un Overpass saturado) y
+         «OSM no disponible»
     """
-    respx.post(DEFAULT_OVERPASS_URL).mock(side_effect=error)
+    route = respx.post(DEFAULT_OVERPASS_URL).mock(side_effect=error)
+    sleeps = []
 
     with pytest.raises(OsmUnavailableError):
-        await _client().fetch_area(LAT, LON)
+        await _client(sleeps).fetch_area(LAT, LON)
+
+    assert route.call_count == 3
+    assert len(sleeps) == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_o4_timeout_then_answer_is_retried():
+    """
+    GIVEN: Una consulta que agota el tiempo y luego responde
+    WHEN: Se pide la zona
+    THEN: Se reintenta y se devuelve la respuesta
+    """
+    respx.post(DEFAULT_OVERPASS_URL).mock(
+        side_effect=[httpx.ReadTimeout("t"), httpx.Response(200, json={"elements": []})]
+    )
+
+    area = await _client().fetch_area(LAT, LON)
+
+    assert area.holes == ()
 
 
 @pytest.mark.asyncio
@@ -402,3 +424,32 @@ async def test_o3_retry_after_never_shortens_nor_explodes_the_wait(header):
     await _client(sleeps).fetch_area(LAT, LON)
 
     assert 10.0 <= sleeps[0] <= 120.0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_o7_one_connection_for_the_whole_run(monkeypatch):
+    """
+    GIVEN: Un cliente que pide dos zonas
+    WHEN: Se cierra al terminar
+    THEN: Ha usado una sola conexión (un solo httpx.AsyncClient) y queda cerrada
+    """
+    from src.modules.golf_course.infrastructure.osm import overpass_client
+
+    creados = []
+    original = overpass_client.httpx.AsyncClient
+
+    def contar(*args, **kwargs):
+        creados.append(original(*args, **kwargs))
+        return creados[-1]
+
+    monkeypatch.setattr(overpass_client.httpx, "AsyncClient", contar)
+    respx.post(DEFAULT_OVERPASS_URL).mock(return_value=httpx.Response(200, json={"elements": []}))
+    client = _client()
+
+    await client.fetch_area(LAT, LON)
+    await client.fetch_area(LAT, LON)
+    await client.aclose()
+
+    assert len(creados) == 1
+    assert creados[0].is_closed
