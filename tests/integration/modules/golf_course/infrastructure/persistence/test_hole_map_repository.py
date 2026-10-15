@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -293,3 +294,100 @@ async def test_r5_course_without_map_returns_none(db_session, creator_id):
     course_id = await _saved_course(db_session, creator_id)
 
     assert await _reload(db_session, course_id) is None
+
+
+# ============================================================================
+# R6-R8 — Revisor borrado, reimportar un rechazado y restricciones de la BD
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_r6_deleting_the_reviewer_keeps_the_review(db_session, creator_id):
+    """
+    GIVEN: Un mapa aprobado por un admin
+    WHEN: Se borra a ese admin
+    THEN: El mapa sigue aprobado, con su fecha de revisión y sin revisor
+    """
+    course_id = await _saved_course(db_session, creator_id)
+    admin = UserId.generate()
+    await _insert_user(db_session, admin)
+    hole_map = _map(course_id)
+    hole_map.approve(reviewer_id=admin)
+    await HoleMapRepository(db_session).save(hole_map)
+    await db_session.flush()
+
+    await db_session.execute(text("DELETE FROM users WHERE id = :id"), {"id": str(admin.value)})
+    found = await _reload(db_session, course_id)
+
+    assert found is not None
+    assert found.status is HoleMapStatus.APPROVED
+    assert found.reviewed_by is None
+    assert found.reviewed_at == hole_map.reviewed_at
+
+
+@pytest.mark.asyncio
+async def test_r7_reimporting_a_rejected_map_clears_the_review(db_session, creator_id):
+    """
+    GIVEN: Un mapa rechazado y guardado
+    WHEN: Se lee, se reimporta y se guarda
+    THEN: Vuelve a pendiente en la BD, sin revisor, fecha ni motivo
+    """
+    course_id = await _saved_course(db_session, creator_id)
+    repository = HoleMapRepository(db_session)
+    hole_map = _map(course_id)
+    hole_map.reject(reviewer_id=creator_id, reason="Otro recorrido")
+    await repository.save(hole_map)
+    loaded = await _reload(db_session, course_id)
+    assert loaded is not None
+
+    loaded.reimport(holes=hole_map.holes[:1], osm_reference="way/8", imported_at=IMPORTADO)
+    await repository.save(loaded)
+    found = await _reload(db_session, course_id)
+
+    assert found is not None
+    assert found.status is HoleMapStatus.PENDING_REVIEW
+    assert found.reviewed_by is None
+    assert found.reviewed_at is None
+    assert found.rejection_reason is None
+    assert len(found.holes) == 1
+
+
+async def _insert_raw(db_session, course_id, status, reviewed_at, reason=None):
+    await db_session.execute(
+        text(
+            "INSERT INTO golf_course_hole_maps (golf_course_id, holes, osm_reference, "
+            "imported_at, status, reviewed_at, rejection_reason, created_at, updated_at) "
+            "VALUES (:id, '[]', 'way/1', :now, :status, :reviewed_at, :reason, :now, :now)"
+        ),
+        {
+            "id": course_id.value,
+            "now": IMPORTADO,
+            "status": status,
+            "reviewed_at": reviewed_at,
+            "reason": reason,
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "reviewed", "reason"),
+    [
+        ("DRAFT", True, None),  # estado que no existe (con fecha: solo lo para su CHECK)
+        ("APPROVED", False, None),  # revisado sin fecha de revisión
+        ("PENDING_REVIEW", True, None),  # pendiente con fecha de revisión
+        ("APPROVED", True, "motivo"),  # motivo de rechazo en un mapa aprobado
+    ],
+)
+async def test_r8_database_rejects_inconsistent_rows(
+    db_session, creator_id, status, reviewed, reason
+):
+    """
+    GIVEN: Una fila escrita a mano que rompe una regla del mapa
+    WHEN: Se inserta
+    THEN: La propia base de datos la rechaza
+    """
+    course_id = await _saved_course(db_session, creator_id)
+
+    with pytest.raises(IntegrityError):
+        await _insert_raw(db_session, course_id, status, IMPORTADO if reviewed else None, reason)

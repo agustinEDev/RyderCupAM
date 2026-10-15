@@ -24,7 +24,7 @@ class MappedHole:
     Un hoyo del mapa de un recorrido.
 
     Business Rules:
-    - Número de 1 a 18.
+    - Número entero de 1 a 18.
     - La línea de juego tiene al menos dos puntos; el primero es la salida.
     - El green es opcional («pendiente de marcar»).
     - La línea y el green guardan cada uno su origen.
@@ -37,6 +37,9 @@ class MappedHole:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "play_line", tuple(self.play_line))
+        # bool es un int en Python; un 3.0 o un True acabarían tal cual en el JSONB
+        if not isinstance(self.number, int) or isinstance(self.number, bool):
+            raise ValueError(f"Hole number must be an integer, got {self.number!r}")
         if not MIN_HOLE_NUMBER <= self.number <= MAX_HOLE_NUMBER:
             raise ValueError(f"Hole number must be between 1 and 18, got {self.number}")
         if len(self.play_line) < MIN_PLAY_LINE_POINTS:

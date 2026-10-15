@@ -87,6 +87,17 @@ def test_p4_point_rejects_nan_and_infinity(latitude, longitude):
         GeoPoint(latitude=latitude, longitude=longitude)
 
 
+@pytest.mark.parametrize(("latitude", "longitude"), [(True, 0.0), (0.0, False)])
+def test_p5_point_rejects_booleans(latitude, longitude):
+    """
+    GIVEN: Un booleano como coordenada (en Python, True vale 1)
+    WHEN: Se construye el punto
+    THEN: Se rechaza
+    """
+    with pytest.raises(ValueError, match="number"):
+        GeoPoint(latitude=latitude, longitude=longitude)
+
+
 def test_p1b_point_limits_are_valid():
     """
     GIVEN: Los extremos exactos de los rangos
@@ -177,6 +188,19 @@ def test_h2_hole_number_out_of_range(number):
     THEN: Se rechaza
     """
     with pytest.raises(ValueError, match="number"):
+        MappedHole(
+            number=number, play_line=(SALIDA, CENTRO), line_source=PositionSource.OSM, green=None
+        )
+
+
+@pytest.mark.parametrize("number", [1.5, 3.0, True])
+def test_h2b_hole_number_must_be_an_integer(number):
+    """
+    GIVEN: Un número de hoyo que no es un entero (1.5, 3.0 o True)
+    WHEN: Se construye el hoyo
+    THEN: Se rechaza: acabaría tal cual en el JSONB
+    """
+    with pytest.raises(ValueError, match="integer"):
         MappedHole(
             number=number, play_line=(SALIDA, CENTRO), line_source=PositionSource.OSM, green=None
         )

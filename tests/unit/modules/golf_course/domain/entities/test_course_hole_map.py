@@ -6,7 +6,7 @@ ya revisó no se pisa con una reimportación: esas dos reglas son las que impide
 que a un jugador le lleguen distancias sin mirar.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -225,12 +225,15 @@ def test_m7_reviewed_map_cannot_be_reviewed_again(first, second):
     admin = UserId.generate()
     getattr(hole_map, first)(reviewer_id=admin)
     status = hole_map.status
+    reviewed_at = hole_map.reviewed_at
 
     with pytest.raises(ValueError, match="pending"):
         getattr(hole_map, second)(reviewer_id=UserId.generate())
 
     assert hole_map.status is status
     assert hole_map.reviewed_by == admin
+    assert hole_map.reviewed_at == reviewed_at
+    assert hole_map.rejection_reason is None
 
 
 # ============================================================================
@@ -305,3 +308,65 @@ def test_m8b_reimport_validates_like_create():
         )
 
     assert hole_map.holes == holes
+    assert hole_map.osm_reference == "way/237391513"
+    assert hole_map.imported_at == IMPORTADO
+
+
+def test_m8c_reimport_with_bad_reference_changes_nothing():
+    """
+    GIVEN: Un mapa rechazado
+    WHEN: Se reimporta con hoyos válidos pero una referencia OSM inválida
+    THEN: Se rechaza y no queda nada a medias: ni hoyos nuevos ni vuelta a pendiente
+    """
+    hole_map = _map()
+    hole_map.reject(reviewer_id=UserId.generate(), reason="Otro recorrido")
+    holes = hole_map.holes
+
+    with pytest.raises(ValueError, match="OSM reference"):
+        hole_map.reimport(holes=[_hole(1)], osm_reference="node/5", imported_at=REIMPORTADO)
+
+    assert hole_map.holes == holes
+    assert hole_map.status is HoleMapStatus.REJECTED
+    assert hole_map.rejection_reason == "Otro recorrido"
+    assert hole_map.imported_at == IMPORTADO
+
+
+# ============================================================================
+# M9 — Fecha de importación
+# ============================================================================
+
+
+def test_m9_aware_import_date_is_stored_as_naive_utc():
+    """
+    GIVEN: Una fecha de importación con zona horaria (UTC+2)
+    WHEN: Se crea el mapa
+    THEN: Se guarda en UTC y sin zona, como el resto de fechas del módulo
+         (la columna es `timestamp without time zone`)
+    """
+    madrid = timezone(timedelta(hours=2))
+
+    hole_map = CourseHoleMap.create(
+        golf_course_id=GolfCourseId.generate(),
+        holes=[_hole(1)],
+        osm_reference="way/1",
+        imported_at=datetime(2026, 10, 15, 11, 0, tzinfo=madrid),
+    )
+
+    assert hole_map.imported_at == datetime(2026, 10, 15, 9, 0)
+    assert hole_map.imported_at.tzinfo is None
+
+
+def test_m9_aware_reimport_date_is_stored_as_naive_utc():
+    """
+    GIVEN: Un mapa pendiente
+    WHEN: Se reimporta con una fecha en UTC con zona
+    THEN: Se guarda sin zona
+    """
+    hole_map = _map()
+
+    hole_map.reimport(
+        holes=[_hole(1)], osm_reference="way/1", imported_at=datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
+    )
+
+    assert hole_map.imported_at == datetime(2026, 11, 2, 9, 0)
+    assert hole_map.imported_at.tzinfo is None

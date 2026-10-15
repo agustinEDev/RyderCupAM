@@ -16,7 +16,13 @@ class IHoleMapRepository(ABC):
 
     @abstractmethod
     async def save(self, hole_map: CourseHoleMap) -> None:
-        """Guarda el mapa; si el campo ya tenía uno leído en esta transacción, lo actualiza."""
+        """
+        Guarda el mapa.
+
+        Para actualizar, se guarda el mismo mapa que se leyó con
+        `find_by_golf_course_id`. Guardar un mapa recién creado para un campo
+        que ya tiene uno es un error: se lee y se reimporta.
+        """
 
     @abstractmethod
     async def find_by_golf_course_id(self, golf_course_id: GolfCourseId) -> CourseHoleMap | None:

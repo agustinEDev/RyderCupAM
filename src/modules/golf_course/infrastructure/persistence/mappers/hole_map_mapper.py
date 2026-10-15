@@ -45,10 +45,11 @@ class HoleMapStatusType(sqlalchemy.types.TypeDecorator[HoleMapStatus]):
     impl = String(20)
     cache_ok = True
 
-    def process_bind_param(self, value: HoleMapStatus | None, dialect: Any) -> str | None:
+    def process_bind_param(self, value: HoleMapStatus | str | None, dialect: Any) -> str | None:
         if value is None:
             return None
-        return value.value
+        # Admite también el texto, para filtrar por estado sin construir el enum
+        return HoleMapStatus(value).value
 
     def process_result_value(self, value: str | None, dialect: Any) -> HoleMapStatus | None:
         if value is None:
@@ -167,6 +168,11 @@ golf_course_hole_maps_table = Table(
     CheckConstraint(
         "(status = 'PENDING_REVIEW') = (reviewed_at IS NULL)",
         name="ck_golf_course_hole_maps_review_consistency",
+    ),
+    # Solo un mapa rechazado lleva motivo de rechazo
+    CheckConstraint(
+        "rejection_reason IS NULL OR status = 'REJECTED'",
+        name="ck_golf_course_hole_maps_reason_only_if_rejected",
     ),
     comment="Mapa de los hoyos de cada recorrido (posiciones de OSM o propias)",
 )

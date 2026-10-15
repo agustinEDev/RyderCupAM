@@ -13,7 +13,13 @@ class InMemoryHoleMapRepository(IHoleMapRepository):
         self._maps: dict[str, CourseHoleMap] = {}
 
     async def save(self, hole_map: CourseHoleMap) -> None:
-        self._maps[str(hole_map.golf_course_id)] = hole_map
+        # Como en PostgreSQL, donde el campo es la clave: un mapa NUEVO para un
+        # campo que ya tiene uno es un error; la misma instancia, una actualización
+        key = str(hole_map.golf_course_id)
+        existing = self._maps.get(key)
+        if existing is not None and existing is not hole_map:
+            raise ValueError(f"Golf course {key} already has a hole map")
+        self._maps[key] = hole_map
 
     async def find_by_golf_course_id(self, golf_course_id: GolfCourseId) -> CourseHoleMap | None:
         return self._maps.get(str(golf_course_id))

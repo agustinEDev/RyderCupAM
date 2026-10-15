@@ -66,6 +66,10 @@ def upgrade() -> None:
             "(status = 'PENDING_REVIEW') = (reviewed_at IS NULL)",
             name="ck_golf_course_hole_maps_review_consistency",
         ),
+        sa.CheckConstraint(
+            "rejection_reason IS NULL OR status = 'REJECTED'",
+            name="ck_golf_course_hole_maps_reason_only_if_rejected",
+        ),
         comment="Mapa de los hoyos de cada recorrido (posiciones de OSM o propias)",
     )
 

@@ -31,6 +31,13 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _naive_utc(moment: datetime) -> datetime:
+    """Las fechas del módulo van en UTC y sin zona (`timestamp without time zone`)."""
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(UTC).replace(tzinfo=None)
+
+
 class CourseHoleMap:
     """
     Agregado raíz del mapa de un recorrido.
@@ -43,6 +50,7 @@ class CourseHoleMap:
     - Reimportar sustituye los hoyos de un mapa pendiente o rechazado (este vuelve
       a pendiente), pero nunca los de uno aprobado: ya lo miró un admin.
     - El motivo de rechazo es opcional y de 500 caracteres como mucho.
+    - La fecha de importación se guarda en UTC y sin zona, como el resto del módulo.
     """
 
     def __init__(
@@ -62,7 +70,7 @@ class CourseHoleMap:
         self._golf_course_id = golf_course_id
         self._holes = self._validated_holes(holes)
         self._osm_reference = self._validated_osm_reference(osm_reference)
-        self._imported_at = imported_at
+        self._imported_at = _naive_utc(imported_at)
         self._status = status
         self._reviewed_by = reviewed_by
         self._reviewed_at = reviewed_at
@@ -157,7 +165,7 @@ class CourseHoleMap:
         new_reference = self._validated_osm_reference(osm_reference)
         self._holes = new_holes
         self._osm_reference = new_reference
-        self._imported_at = imported_at
+        self._imported_at = _naive_utc(imported_at)
         self._status = HoleMapStatus.PENDING_REVIEW
         self._reviewed_by = None
         self._reviewed_at = None
