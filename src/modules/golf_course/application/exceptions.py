@@ -7,3 +7,23 @@ class HoleMapNotFoundError(Exception):
 
 class HoleMapChangedError(Exception):
     """El admin revisaba otra versión: el mapa se reimportó entretanto."""
+
+
+class GolfCourseNotFoundError(Exception):
+    """No hay ningún campo con ese id."""
+
+
+class HoleNotInCourseError(Exception):
+    """El campo no tiene ese hoyo (un campo de 9 no tiene el 14)."""
+
+
+class HoleAlreadyMappedError(Exception):
+    """El hoyo ya tiene salida y green en el mapa aprobado: no hay nada que marcar."""
+
+
+class HoleAlreadyHasTeeError(Exception):
+    """El hoyo ya tiene salida en el mapa aprobado: solo se marca el green."""
+
+
+class TeeRequiredError(Exception):
+    """El hoyo no tiene salida que vean los jugadores: la marca tiene que traerla."""

@@ -7,6 +7,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.repositories.hole_map_repository import IHoleMapRepository
+from src.modules.golf_course.domain.repositories.hole_mark_repository import (
+    IHoleMarkRepository,
+)
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
@@ -16,6 +19,7 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
 
 from .in_memory_golf_course_repository import InMemoryGolfCourseRepository
 from .in_memory_hole_map_repository import InMemoryHoleMapRepository
+from .in_memory_hole_mark_repository import InMemoryHoleMarkRepository
 
 
 class InMemoryGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
@@ -25,12 +29,14 @@ class InMemoryGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     Proporciona acceso a repositorios in-memory de:
     - Campos de golf
     - Mapas de hoyos
+    - Marcas de hoyo de los jugadores
     - Países (shared)
     """
 
     def __init__(self):
         self._golf_courses = InMemoryGolfCourseRepository()
         self._hole_maps = InMemoryHoleMapRepository()
+        self._hole_marks = InMemoryHoleMarkRepository()
         self._countries = InMemoryCountryRepository()
         self.committed = False
 
@@ -43,6 +49,11 @@ class InMemoryGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     def hole_maps(self) -> IHoleMapRepository:
         """Acceso al repositorio de mapas de hoyos."""
         return self._hole_maps
+
+    @property
+    def hole_marks(self) -> IHoleMarkRepository:
+        """Acceso al repositorio de marcas de hoyo."""
+        return self._hole_marks
 
     @property
     def countries(self) -> CountryRepositoryInterface:

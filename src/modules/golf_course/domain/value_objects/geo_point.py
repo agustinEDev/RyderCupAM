@@ -11,6 +11,7 @@ MIN_LATITUDE = -90.0
 MAX_LATITUDE = 90.0
 MIN_LONGITUDE = -180.0
 MAX_LONGITUDE = 180.0
+EARTH_RADIUS_M = 6_371_000.0  # el mismo que el importador de campos
 
 
 @dataclass(frozen=True)
@@ -48,3 +49,14 @@ class GeoPoint:
                 f"Longitude must be between {MIN_LONGITUDE} and {MAX_LONGITUDE}, "
                 f"got {self.longitude}"
             )
+
+    def distance_to(self, other: "GeoPoint") -> float:
+        """Distancia sobre la superficie terrestre hasta otro punto, en metros (haversine)."""
+        lat1, lon1, lat2, lon2 = map(
+            math.radians, (self.latitude, self.longitude, other.latitude, other.longitude)
+        )
+        half_chord = (
+            math.sin((lat2 - lat1) / 2) ** 2
+            + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
+        )
+        return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(half_chord))

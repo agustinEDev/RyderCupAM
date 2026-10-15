@@ -5,6 +5,8 @@ Endpoints del mapa de hoyos de un recorrido (BE #532).
 - GET  /golf-courses/admin/hole-maps/pending             pendientes de revisión (admin)
 - GET  /golf-courses/admin/{id}/hole-map                 mapa en cualquier estado (admin)
 - PUT  /golf-courses/admin/{id}/hole-map/approve|reject  revisar la versión vista (admin)
+- PUT  /golf-courses/{id}/hole-map/marks/{hole}          marcar un hoyo (cualquier usuario)
+- GET  /golf-courses/{id}/hole-map/marks/mine            mis marcas en el campo
 
 Los errores llevan un mensaje fijo y un `error_code` del que se fía el front:
 nunca el texto de una excepción (CodeQL, BE #562).
@@ -21,8 +23,10 @@ from src.config.dependencies import (
     get_approved_hole_map_use_case,
     get_current_user,
     get_hole_map_for_review_use_case,
+    get_list_my_hole_marks_use_case,
     get_list_pending_hole_maps_use_case,
     get_reject_hole_map_use_case,
+    get_save_hole_mark_use_case,
 )
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
     ApproveHoleMapBodyDTO,
@@ -34,9 +38,20 @@ from src.modules.golf_course.application.dtos.hole_map_dtos import (
     RejectHoleMapBodyDTO,
     ReviewHoleMapRequestDTO,
 )
+from src.modules.golf_course.application.dtos.hole_mark_dtos import (
+    HoleMarkBodyDTO,
+    HoleMarkDTO,
+    ListMyHoleMarksRequestDTO,
+    SaveHoleMarkRequestDTO,
+)
 from src.modules.golf_course.application.exceptions import (
+    GolfCourseNotFoundError,
+    HoleAlreadyHasTeeError,
+    HoleAlreadyMappedError,
     HoleMapChangedError,
     HoleMapNotFoundError,
+    HoleNotInCourseError,
+    TeeRequiredError,
 )
 from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ApproveHoleMapUseCase,
@@ -45,9 +60,18 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
+from src.modules.golf_course.application.use_cases.hole_mark_use_cases import (
+    ListMyHoleMarksUseCase,
+    SaveHoleMarkUseCase,
+)
 from src.modules.golf_course.domain.entities.course_hole_map import (
     HoleMapNotPendingError,
     RejectionReasonTooLongError,
+)
+from src.modules.golf_course.domain.entities.hole_mark import (
+    HoleMarkFarFromCourseError,
+    HoleMarkOutOfRangeError,
+    InvalidHoleMarkError,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 
@@ -197,3 +221,127 @@ async def reject_hole_map(
 ):
     """Rechaza la versión vista, con un motivo opcional (500 caracteres como mucho)."""
     return await _review(use_case, golf_course_id, current_user, body)
+
+
+# ============================================================================
+# Marcas de hoyo de los jugadores (PR C)
+# ============================================================================
+
+
+def _course_not_found() -> JSONResponse:
+    return _error(status.HTTP_404_NOT_FOUND, "GOLF_COURSE_NOT_FOUND", "Golf course not found")
+
+
+MARK_RESPONSES: dict[int | str, dict[str, Any]] = {
+    404: {"description": "GOLF_COURSE_NOT_FOUND"},
+    409: {"description": "HOLE_ALREADY_MAPPED or HOLE_ALREADY_HAS_TEE"},
+    422: {
+        "description": (
+            "HOLE_NOT_IN_COURSE, TEE_REQUIRED, INVALID_HOLE_MARK, HOLE_MARK_OUT_OF_RANGE "
+            "or HOLE_MARK_TOO_FAR_FROM_COURSE"
+        )
+    },
+}
+
+# Del más concreto al más general: los dos de distancia son también ValueError
+_MARK_ERRORS: tuple[tuple[type[Exception], int, str, str], ...] = (
+    (
+        HoleNotInCourseError,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "HOLE_NOT_IN_COURSE",
+        "This course has no such hole",
+    ),
+    (
+        HoleAlreadyMappedError,
+        status.HTTP_409_CONFLICT,
+        "HOLE_ALREADY_MAPPED",
+        "This hole already has its tee and green",
+    ),
+    (
+        HoleAlreadyHasTeeError,
+        status.HTTP_409_CONFLICT,
+        "HOLE_ALREADY_HAS_TEE",
+        "This hole already has its tee: mark only the green",
+    ),
+    (
+        TeeRequiredError,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "TEE_REQUIRED",
+        "This hole has no tee: mark the tee too",
+    ),
+    (
+        HoleMarkOutOfRangeError,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "HOLE_MARK_OUT_OF_RANGE",
+        "The green must be 40-750 m from the tee",
+    ),
+    (
+        HoleMarkFarFromCourseError,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "HOLE_MARK_TOO_FAR_FROM_COURSE",
+        "Every point must be within 3 km of the course",
+    ),
+    (
+        InvalidHoleMarkError,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "INVALID_HOLE_MARK",
+        "The hole mark is not valid",
+    ),
+)
+
+
+@router.put(
+    "/{golf_course_id}/hole-map/marks/{hole_number}",
+    response_model=HoleMarkDTO,
+    responses=MARK_RESPONSES,
+)
+async def save_hole_mark(
+    golf_course_id: UUID,
+    hole_number: int,
+    body: HoleMarkBodyDTO,
+    current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
+    use_case: Annotated[SaveHoleMarkUseCase, Depends(get_save_hole_mark_use_case)],
+):
+    """
+    Marca un hoyo (o lo vuelve a marcar: sustituye tu marca). Sin salida en el
+    mapa: salida, hasta dos codos y centro del green; con salida, solo el green.
+    """
+    try:
+        return await use_case.execute(
+            SaveHoleMarkRequestDTO(
+                golf_course_id=str(golf_course_id),
+                hole_number=hole_number,
+                user_id=str(current_user.id),
+                tee=body.tee,
+                bends=body.bends,
+                green_center=body.green_center,
+            )
+        )
+    except GolfCourseNotFoundError:
+        return _course_not_found()
+    except tuple(kind for kind, *_ in _MARK_ERRORS) as e:
+        status_code, error_code, detail = next(
+            (code, name, text) for kind, code, name, text in _MARK_ERRORS if isinstance(e, kind)
+        )
+        return _error(status_code, error_code, detail)
+
+
+@router.get(
+    "/{golf_course_id}/hole-map/marks/mine",
+    response_model=list[HoleMarkDTO],
+    responses={404: {"description": "GOLF_COURSE_NOT_FOUND"}},
+)
+async def list_my_hole_marks(
+    golf_course_id: UUID,
+    current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
+    use_case: Annotated[ListMyHoleMarksUseCase, Depends(get_list_my_hole_marks_use_case)],
+):
+    """Tus marcas en el campo, por orden de hoyo."""
+    try:
+        return await use_case.execute(
+            ListMyHoleMarksRequestDTO(
+                golf_course_id=str(golf_course_id), user_id=str(current_user.id)
+            )
+        )
+    except GolfCourseNotFoundError:
+        return _course_not_found()
