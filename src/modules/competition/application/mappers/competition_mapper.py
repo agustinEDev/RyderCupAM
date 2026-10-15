@@ -4,15 +4,24 @@ import logging
 
 from src.modules.competition.application.dto.competition_dto import (
     CaptaincyResponseDTO,
+    CompetitionCourseSummaryDTO,
     CompetitionResponseDTO,
     CountryResponseDTO,
     CreatorDTO,
+    NextSessionDTO,
     StrokePlaySettingsResponseDTO,
+)
+from src.modules.competition.application.services.resumen_de_la_competicion import (
+    ResumenDeLaCompeticion,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.campo_de_la_competicion import (
+    CampoDeLaCompeticion,
+)
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -39,6 +48,7 @@ class CompetitionDTOMapper:
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface | None = None,
         is_admin: bool = False,
+        campos: list[CampoDeLaCompeticion] | None = None,
     ) -> CompetitionResponseDTO:
         """
         Convierte una entidad Competition a CompetitionResponseDTO.
@@ -51,6 +61,9 @@ class CompetitionDTOMapper:
 
         pending_enrollments_count solo se calcula y expone para el creador
         de la competición o para administradores (is_admin=True).
+
+        `campos`: los de esta competición si ya se leyeron (un listado los lee
+        todos de una vez con `to_response_dtos`); si no, se leen aquí.
         """
         is_creator = competition.creator_id == current_user_id
 
@@ -99,6 +112,13 @@ class CompetitionDTOMapper:
                 competition.creator_id, user_uow
             )
 
+        # La tarjeta de «Mis competiciones» (FE #846)
+        if campos is None:
+            campos = (await uow.competitions.campos_de([competition.id])).get(competition.id, [])
+        juega = user_enrollment_status == EnrollmentStatus.APPROVED.value
+        resumen = await ResumenDeLaCompeticion.de(competition, current_user_id, juega, uow)
+        proxima = resumen.proxima
+
         # Construir DTO
         return CompetitionResponseDTO(
             id=competition.id.value,
@@ -139,10 +159,43 @@ class CompetitionDTOMapper:
             enrolled_count=enrolled_count,
             pending_enrollments_count=pending_enrollments_count,
             user_enrollment_status=user_enrollment_status,
+            golf_courses=[
+                CompetitionCourseSummaryDTO(
+                    id=c.golf_course_id.value, name=c.nombre, country_code=c.country_code.value
+                )
+                for c in campos
+            ],
+            playing_days=resumen.jornadas,
+            my_next_session=(
+                NextSessionDTO(
+                    date=proxima.fecha,
+                    session_type=proxima.sesion.value,
+                    tee_time=proxima.hora.strftime("%H:%M") if proxima.hora else None,
+                )
+                if proxima
+                else None
+            ),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,
         )
+
+    @staticmethod
+    async def to_response_dtos(
+        competitions: list[Competition],
+        current_user_id: UserId,
+        uow: CompetitionUnitOfWorkInterface,
+        user_uow: UserUnitOfWorkInterface | None = None,
+        is_admin: bool = False,
+    ) -> list[CompetitionResponseDTO]:
+        """Un listado: los campos de todas en una sola lectura (FE #846)."""
+        campos = await uow.competitions.campos_de([c.id for c in competitions])
+        return [
+            await CompetitionDTOMapper.to_response_dto(
+                c, current_user_id, uow, user_uow, is_admin=is_admin, campos=campos.get(c.id, [])
+            )
+            for c in competitions
+        ]
 
     @staticmethod
     def tournament_fields(competition: Competition) -> dict:

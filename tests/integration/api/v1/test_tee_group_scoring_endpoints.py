@@ -342,6 +342,165 @@ async def test_no_show_and_reopen(client: AsyncClient):
     assert tarjeta(reabierta) == "JUGANDO"
 
 
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_reopening_an_open_card(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/reopen"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "SCORECARD_ALREADY_OPEN"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_with_strokes_is_retired_not_a_no_show(client: AsyncClient):
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    anotado = await _anotar(
+        client,
+        por_id[jugador],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, jugador),
+        marked_score=4,
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}"
+
+    no_presentado = await client.post(f"{base}/no-show")
+    retirado = await client.post(f"{base}/retire")
+
+    assert no_presentado.status_code == 409, no_presentado.text
+    assert no_presentado.json()["error_code"] == "PLAYER_HAS_STROKES"
+    assert retirado.status_code == 200, retirado.text
+    suyo = next(p for p in retirado.json()["players"] if p["user_id"] == jugador)
+    assert suyo["card_status"] == "RETIRADO"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_who_only_scored_whom_they_mark_played_even_after_a_correction(
+    client: AsyncClient,
+):
+    # Lo guardado en la BD dice quién anotó como marcador (13 oct 2026)
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    marcador = partida["players"][1]["user_id"]
+    marcado = _marca_a(partida, marcador)
+    anotado = await _anotar(
+        client, por_id[marcador], partida, marked_player_id=marcado, marked_score=4
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+    corregido = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{marcado}/holes/1",
+        json={"marker_score": 5},
+    )
+    assert corregido.status_code == 200, corregido.text
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{marcador}/no-show"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "PLAYER_HAS_STROKES"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_deleting_a_mistaken_stroke_then_no_show(client: AsyncClient):
+    # El caso de Agustín (13 oct 2026): el organizador pone un golpe por error a
+    # quien no vino, lo borra y ya puede marcarle no presentado
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    ausente = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{ausente}"
+    await client.put(f"{base}/holes/1", json={"own_score": 4, "marker_score": 4})
+
+    antes = await client.post(f"{base}/no-show")
+    borrado = await client.delete(f"{base}/holes/1", params={"side": "both"})
+    despues = await client.post(f"{base}/no-show")
+
+    assert antes.status_code == 409, antes.text
+    assert borrado.status_code == 200, borrado.text
+    suyo = next(p for p in borrado.json()["players"] if p["user_id"] == ausente)
+    assert suyo["holes"][0]["own_score"] is None
+    assert suyo["holes"][0]["marker_score"] is None
+    assert despues.status_code == 200, despues.text
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_cannot_delete_and_the_side_is_checked(client: AsyncClient):
+    organizador, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]
+    ruta = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/holes/1"
+    set_auth_cookies(client, por_id[otro]["cookies"])
+    de_un_jugador = await client.delete(ruta, params={"side": "own"})
+    set_auth_cookies(client, organizador["cookies"])
+    lado_raro = await client.delete(ruta, params={"side": "all"})
+
+    assert de_un_jugador.status_code == 403, de_un_jugador.text
+    assert lado_raro.status_code == 422, lado_raro.text
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_deleting_a_hole_with_nothing_a_bad_hole_and_a_closed_card(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+    base = f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}"
+
+    vacio = await client.delete(f"{base}/holes/7", params={"side": "both"})
+    hoyo_19 = await client.delete(f"{base}/holes/19", params={"side": "both"})
+    await client.put(f"{base}/holes/1", json={"own_score": 4})
+    await client.post(f"{base}/retire")
+    cerrada = await client.delete(f"{base}/holes/1", params={"side": "own"})
+
+    assert vacio.status_code == 200, vacio.text
+    assert hoyo_19.status_code == 400, hoyo_19.text
+    assert cerrada.status_code == 409, cerrada.text
+    assert cerrada.json()["error_code"] == "SCORECARD_ALREADY_SUBMITTED"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_player_cannot_retire_another(client: AsyncClient):
+    _, _, partida, por_id = await _con_partida_y_organizador(client)
+    jugador, otro = partida["players"][1]["user_id"], partida["players"][2]["user_id"]
+    anotado = await _anotar(
+        client,
+        por_id[jugador],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, jugador),
+        marked_score=4,
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, por_id[otro]["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/retire"
+    )
+
+    assert respuesta.status_code == 403, respuesta.text
+    assert respuesta.json()["error_code"] == "NOT_ORGANIZER"
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_retiring_in_a_group_not_started(client: AsyncClient):
+    organizador, _, partida, _ = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/groups/{partida['id']}/players/{jugador}/retire"
+    )
+
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["error_code"] == "GROUP_NOT_STARTED"
+
+
 async def test_no_show_before_the_first_tee_time(client: AsyncClient):
     organizador, _, partida, _ = await _con_partida_y_organizador(client)
     jugador = partida["players"][1]["user_id"]
@@ -394,6 +553,8 @@ async def test_the_window_standings(client: AsyncClient):
     primera = respuesta.json()["rows"][0]
     assert (primera["user_id"], primera["position"], primera["thru"]) == (jugador, 1, 1)
     assert primera["name"]
+    # Para «No presentada», «Retirada» (#856)
+    assert primera["tee_gender"] == "MALE"
 
 
 async def test_overall_and_scratch(client: AsyncClient):
@@ -546,3 +707,48 @@ async def test_a_no_show_leaving_one_alone_brings_the_last_of_the_next_group(
     listado = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()["groups"]
     assert viene not in [p["user_id"] for p in listado[1]["players"]]
     assert any(p["brought_in"] for p in listado[0]["players"])
+
+
+@pytest.mark.usefixtures("_ya_abrio")
+async def test_a_group_already_out_cannot_be_touched(client: AsyncClient):
+    # #544: la que ya salió (aquí, por tener golpes) no se toca
+    organizador, franja, partida, por_id = await _con_partida_y_organizador(client)
+    jugador = partida["players"][1]["user_id"]
+    anotado = await _anotar(
+        client,
+        por_id[jugador],
+        partida,
+        own_score=4,
+        marked_player_id=_marca_a(partida, jugador),
+        marked_score=4,
+    )
+    assert anotado.status_code == 200, anotado.text
+    set_auth_cookies(client, organizador["cookies"])
+
+    vista = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
+    movido = await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": jugador},
+    )
+    reordenadas = await client.put(
+        f"/api/v1/competitions/rounds/{franja}/groups/order",
+        json={"group_ids": [partida["id"]]},
+    )
+    marcadores = await client.put(
+        f"/api/v1/competitions/groups/{partida['id']}/markers",
+        json={
+            "markers": [
+                {"user_id": p["user_id"], "marks_user_id": p["marks_user_id"]}
+                for p in partida["players"]
+            ]
+        },
+    )
+
+    assert vista.json()["groups"][0]["can_change"] is False
+    assert vista.json()["editable"] is False
+    assert movido.status_code == 409, movido.text
+    assert movido.json()["error_code"] == "GROUP_ALREADY_OUT"
+    # Reordenar sin mover la que salió no cambia nada
+    assert reordenadas.status_code == 200, reordenadas.text
+    assert marcadores.status_code == 409, marcadores.text
+    assert marcadores.json()["error_code"] == "GROUP_ALREADY_OUT"

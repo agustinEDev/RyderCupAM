@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.28.0] - 2026-10-15
+
+**Partida rápida en una sola petición, tarjetas de «Mis competiciones» y lo que
+quedaba de la API de stroke play.** La partida rápida se crea e inicia de una
+vez (el asistente guarda un borrador local y ya no deja partidas «Pendiente» a
+medias), el organizador gana acciones sobre las tarjetas de una partida y puede
+mover las partidas que aún no han salido, y las competiciones traen sus campos,
+sus jornadas y mi próxima sesión. Va con el frontend **2.42.0**.
+
+**Notas de despliegue.**
+
+- **1 migración** (`d5f7a9b1c3e6` → `f2b4d6e8a0c1`): añade
+  `tee_group_players.played BOOLEAN NOT NULL DEFAULT false` y la enciende con
+  los golpes que ya metieron los propios jugadores. SQL plano, generación en
+  modo offline comprobada.
+- **Sin variables nuevas.**
+- **Contrato: un cambio incompatible** (#556, etiqueta `api-breaking`):
+  `match_format` pasa a admitir nulo en `RoundResponseDTO`, solo en las franjas
+  de un Stableford o un Medal. El frontend 2.41.0 no lo espera: **desplegar el
+  backend y el frontend 2.42.0 seguidos.** Todo lo demás es aditivo.
+
+### Added
+
+- **`POST /api/v1/quick-matches/start`**: crea e inicia una partida rápida en
+  una sola escritura, con el id generado por el cliente; los reintentos con el
+  mismo id devuelven la partida existente (200) y uno ajeno da 409. Mismas reglas
+  que el flujo paso a paso, comprobaciones compartidas en `roster_checks`
+  (#559, RyderCupWeb#848).
+- **Acciones del organizador sobre las tarjetas**: retirar a un jugador
+  (`POST /groups/{id}/players/{uid}/retire`) y borrar lo anotado en un hoyo
+  (`DELETE /groups/{id}/players/{uid}/holes/{hole}`); marca de «ha jugado» por
+  jugador, y la vista de anotación la trae (#553).
+- **Mover las partidas que aún no han salido** con la franja ya empezada:
+  cambiar jugadores, reordenar y cambiar marcadores; `groups[].can_change` y
+  `can_add_group` en la vista de la franja (#557, #544).
+- **Las competiciones traen** `golf_courses`, `playing_days` y
+  `my_next_session`, y cada fila de clasificación su `tee_gender`
+  (#558, RyderCupWeb#846 y #856).
+- Crear un Stableford o un Medal acepta `organizer_plays`: un organizador que no
+  juega no queda inscrito (#556, #552).
+- La ventana de actualización de hándicaps y sus errores traen `reason_code` y
+  `error_code: HANDICAP_UPDATE_NOT_ALLOWED`, para traducirlos (#556, #541).
+
+### Changed
+
+- **El nombre de la competición se guarda como se escribe** (sin `title()`), con
+  limpieza de caracteres invisibles y etiquetas HTML; los repetidos se comparan
+  sin distinguir mayúsculas (#556, #540).
+- La agenda abre la franja de un stroke play a su primera salida, en la hora del
+  campo, con `match_format` nulo (#556, #541).
+- Cerrar una franja: tarjeta completa → entregada; quien no jugó → no
+  presentado; el resto → retirado (#553).
+
+### Fixed
+
+- Reabrir una tarjeta ya abierta (dos organizadores a la vez) da 409
+  `SCORECARD_ALREADY_OPEN` sin tocar nada (#553, #545).
+- No se puede dar por no presentado a quien ha jugado: 409 `PLAYER_HAS_STROKES`
+  (#553, #550).
+- `editable` en la vista de partidas solo es cierto para el organizador o un
+  administrador (#556, #551).
+- Un nombre de competición no válido da 400 en vez de 500 (#556).
+
 ## [2.27.0] - 2026-10-12
 
 **Torneos Stableford y Medal** (stroke play individual, #251): ajustes de

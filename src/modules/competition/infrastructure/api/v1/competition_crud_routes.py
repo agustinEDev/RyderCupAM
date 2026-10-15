@@ -30,6 +30,7 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -44,7 +45,6 @@ from src.modules.competition.application.use_cases.actualizar_handicaps_use_case
     VentanaDeActualizacionUseCase,
 )
 from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
@@ -230,13 +230,9 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
 
     Assumes caller manages the uow/user_uow transaction context.
     """
-    result = []
-    for competition in competitions:
-        dto = await CompetitionDTOMapper.to_response_dto(
-            competition, current_user_id, uow, user_uow, is_admin=is_admin
-        )
-        result.append(dto)
-    return result
+    return await CompetitionDTOMapper.to_response_dtos(
+        competitions, current_user_id, uow, user_uow, is_admin=is_admin
+    )
 
 
 async def _get_all_competitions(
@@ -545,6 +541,8 @@ async def update_competition(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except CompetitionAlreadyExistsError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     # Los tres errores de país se nombran uno a uno porque NINGUNO hereda de
     # ValueError, y todos llegan hasta aquí desde que el PUT acepta `countries`:
     # el país que no existe o no es adyacente (InvalidCountryError), el código de

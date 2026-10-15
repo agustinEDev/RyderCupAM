@@ -9,8 +9,9 @@ Decidido con Agustín el 6-9 oct 2026:
 - Por hándicap fijado, en el orden que elija; a igual hándicap, quien cogió antes
   la plaza; si sobrara uno, la penúltima cede uno (D6).
 - Sin zona horaria en el campo no se sabe cuándo sale nadie: no se generan (D10).
-- Mover, reordenar, cambiar marcadores y borrar, con el mismo plazo (D11) y las
-  reglas de `MovimientosDePartidas` (D13, M1-M3).
+- Borrar, con el mismo plazo (D11). Mover, reordenar y cambiar marcadores,
+  también con la franja empezada en las partidas que no han salido (#544, 13 oct
+  2026), con las reglas de `MovimientosDePartidas` (D13, M1-M3).
 
 Con la competición bloqueada, como las plazas: dos a la vez, una sola.
 """
@@ -38,6 +39,10 @@ from src.modules.competition.application.services.jugadores_de_la_partida import
     JugadoresDeLaPartida,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.salidas_de_la_franja import (
+    las_que_salieron,
+    numeros_libres,
+)
 from src.modules.competition.application.services.vista_de_la_franja import (
     con_plaza_y_aprobados,
     partida_dto,
@@ -57,7 +62,9 @@ from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientoImposibleError,
     MovimientosDePartidas,
 )
-from src.modules.competition.domain.services.plazo_de_partidas import PlazoDePartidas
+from src.modules.competition.domain.services.plazo_de_partidas import (
+    PlazoDePartidas,
+)
 from src.modules.competition.domain.services.reparto_de_partidas import (
     ParaRepartir,
     RepartoDePartidas,
@@ -104,6 +111,10 @@ class _Abierta:
     hoja: HojaDeSalidas
     partidas: list[Partida]
     ahora: datetime
+    # Las que ya salieron: su hora llegó o tienen golpes (#544)
+    salidas: frozenset[PartidaId] = frozenset()
+    # Con la franja empezada, las salidas libres aún por llegar; None si no (#544)
+    libres: list[int] | None = None
 
 
 class _ConLaFranja:
@@ -136,6 +147,44 @@ class _ConLaFranja:
             competicion.status, await primera_salida(franja, self._zonas), ahora, partidas
         )
         return _Abierta(franja, competicion, hoja, partidas, ahora)
+
+    async def _abrir_para_tocar(
+        self,
+        round_id: RoundId,
+        quien: UserId,
+        is_admin: bool,
+        solo: PartidaId | None = None,
+    ) -> _Abierta:
+        """
+        Para mover, reordenar o cambiar marcadores: también con la franja empezada,
+        en las partidas que no han salido (#544). Cada caso dice cuáles toca.
+
+        Args:
+            solo: La única que se va a tocar (marcadores): solo se bloquea esa
+
+        Raises:
+            RoundNotFoundError, CompetitionNotFoundError, NotCompetitionCreatorError,
+            PartidasError, ZonaDesconocidaError, PlazoCerradoError
+        """
+        franja, competicion, hoja = await _franja_del_organizador(
+            self._uow, round_id, quien, is_admin
+        )
+        ahora = self._reloj()
+        PlazoDePartidas.comprobar_estado(competicion.status)
+        # Sin zona no se sabe qué ha salido: se rechaza, como antes (/code-review)
+        empezada = ahora >= await primera_salida(franja, self._zonas)
+        # Bloqueadas antes de decidir, por número: anotar el primer golpe ya puede
+        # coincidir con mover, y sin esto se pisaría (revisor). El mismo orden que
+        # cerrar la franja: competición, franja y partidas
+        partidas = []
+        for p in sorted(await self._uow.partidas.de_la_franja(franja.id), key=lambda p: p.numero):
+            if solo is not None and p.id != solo:
+                partidas.append(p)
+            elif bloqueada := await self._uow.partidas.find_by_id_for_update(p.id):
+                partidas.append(bloqueada)
+        salidas = await las_que_salieron(franja, partidas, self._zonas, ahora)
+        libres = await numeros_libres(franja, partidas, self._zonas, ahora) if empezada else None
+        return _Abierta(franja, competicion, hoja, partidas, ahora, frozenset(salidas), libres)
 
     async def _vista(
         self, abierta: _Abierta, partidas: list[Partida], plazas: list | None = None
@@ -227,15 +276,17 @@ class MoverJugadorUseCase(_ConLaFranja):
     ) -> TeeGroupsResponseDTO:
         """
         Args:
-            group_id: La partida de destino; None, una nueva al final (M1)
+            group_id: La partida de destino; None, una nueva (M1): al final, o con la
+                franja empezada en la primera salida libre aún por llegar (#544)
             swap_with_user_id: Con quién de la de destino se intercambia
 
         Raises:
-            Los de `_abrir`, y además:
+            Los de `_abrir_para_tocar`, y además:
             MovimientoImposibleError: Con la clave del motivo
+            PartidaYaSalidaError: Desde o hacia una que ya salió
         """
         async with self._uow:
-            abierta = await self._abrir(RoundId(round_id), quien, is_admin)
+            abierta = await self._abrir_para_tocar(RoundId(round_id), quien, is_admin)
             jugador = UserId(user_id)
             plazas = await con_plaza_y_aprobados(self._uow, abierta.franja)
             if jugador not in {p.user_id for p in plazas}:
@@ -259,6 +310,8 @@ class MoverJugadorUseCase(_ConLaFranja):
                 abierta.hoja,
                 abierta.competicion.id,
                 abierta.franja.id,
+                abierta.salidas,
+                abierta.libres,
             )
             await self._uow.partidas.borrar(cambios.borrar)
             await self._uow.partidas.guardar(cambios.guardar)
@@ -277,16 +330,17 @@ class ReordenarPartidasUseCase(_ConLaFranja):
     ) -> TeeGroupsResponseDTO:
         """
         Raises:
-            Los de `_abrir`, y además:
+            Los de `_abrir_para_tocar`, y además:
             MovimientoImposibleError: INVALID_GROUP_ORDER, si no van todas una vez
+            PartidaYaSalidaError: Si cambia de sitio una que ya salió
         """
         async with self._uow:
-            abierta = await self._abrir(RoundId(round_id), quien, is_admin)
-            partidas = MovimientosDePartidas.reordenar(
-                abierta.partidas, [PartidaId(g) for g in group_ids]
+            abierta = await self._abrir_para_tocar(RoundId(round_id), quien, is_admin)
+            cambiadas = MovimientosDePartidas.reordenar(
+                abierta.partidas, [PartidaId(g) for g in group_ids], abierta.salidas
             )
-            await self._uow.partidas.guardar(partidas)
-            vista = await self._vista(abierta, partidas)
+            await self._uow.partidas.guardar(cambiadas)
+            vista = await self._vista(abierta, abierta.partidas)
             await self._uow.commit()
         return vista
 
@@ -307,18 +361,24 @@ class CambiarMarcadoresUseCase(_ConLaFranja):
 
         Raises:
             PartidaNotFoundError: Si no existe
-            Los de `_abrir`, y además:
+            Los de `_abrir_para_tocar`, y además:
             MarcadoresInvalidosError: Si alguien se marca a sí mismo, o no es biyección
+            PartidaYaSalidaError: Si esa partida ya salió (#544)
         """
         async with self._uow:
             encontrada = await self._uow.partidas.find_by_id(PartidaId(group_id))
             if encontrada is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
-            abierta = await self._abrir(encontrada.round_id, quien, is_admin)
+            abierta = await self._abrir_para_tocar(
+                encontrada.round_id, quien, is_admin, solo=encontrada.id
+            )
             # Releída con el candado: si otra petición la borró mientras, no existe
             partida = next((p for p in abierta.partidas if p.id == encontrada.id), None)
             if partida is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
+            PlazoDePartidas.comprobar_que_se_pueden_tocar(
+                abierta.competicion.status, [partida], abierta.salidas
+            )
             marcadores = {UserId(a): UserId(b) for a, b in markers}
             if len(marcadores) != len(markers):
                 raise MarcadoresInvalidosError("Cada jugador marca a uno solo.")
@@ -358,8 +418,10 @@ class VerPartidasUseCase:
         self._usuarios = user_repository
         self._reloj = reloj
 
-    async def execute(self, round_id: UUID) -> TeeGroupsResponseDTO:
+    async def execute(self, round_id: UUID, quien: UserId, is_admin: bool) -> TeeGroupsResponseDTO:
         """
+        `editable` solo para quien puede editar: el organizador o un admin (#541).
+
         Raises:
             RoundNotFoundError, CompetitionNotFoundError: Si no existen
             PartidasError: Si no es una franja de stroke play
@@ -374,8 +436,18 @@ class VerPartidasUseCase:
             if competicion is None:
                 raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
             partidas = await self._uow.partidas.de_la_franja(franja.id)
-            return await vista_de_la_franja(
+            vista = await vista_de_la_franja(
                 self._uow, competicion, franja, partidas, self._zonas, self._usuarios, self._reloj()
+            )
+            if is_admin or competicion.is_creator(quien):
+                return vista
+            # Nada es «puedes editar» para quien no organiza (#541, #544)
+            return vista.model_copy(
+                update={
+                    "editable": False,
+                    "can_add_group": False,
+                    "groups": [g.model_copy(update={"can_change": False}) for g in vista.groups],
+                }
             )
 
 

@@ -8,7 +8,7 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.config.dependencies import (
@@ -16,6 +16,7 @@ from src.config.dependencies import (
     get_add_guest_to_quick_match_use_case,
     get_cancel_quick_match_use_case,
     get_complete_quick_match_use_case,
+    get_create_and_start_quick_match_use_case,
     get_create_quick_match_use_case,
     get_current_user,
     get_exclude_quick_match_from_stats_use_case,
@@ -39,28 +40,33 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     TEE_COLOR_PATTERN,
     AddGuestParticipantRequestDTO,
     AddParticipantRequestDTO,
+    CreateAndStartQuickMatchRequestDTO,
     CreateQuickMatchRequestDTO,
     HideQuickMatchRequestDTO,
     HoleScoreResponseDTO,
     PaginatedQuickMatchResponseDTO,
     QuickMatchDetailResponseDTO,
     QuickMatchResponseDTO,
+    QuickStartPlayerDTO,
     RemoveParticipantRequestDTO,
     SetParticipantHandicapRequestDTO,
     StartQuickMatchRequestDTO,
     SubmitHoleScoreRequestDTO,
     SubmitProxyHoleScoreRequestDTO,
+    require_unique,
 )
 from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
     GolfCourseNotApprovedError,
     GolfCourseNotFoundError,
+    InvalidParticipantError,
     InvalidTeeSelectionError,
     NotAScorerError,
     NotAuthorizedToRemoveError,
     NotFriendsError,
     NotQuickMatchCreatorError,
     NotQuickMatchParticipantError,
+    QuickMatchIdTakenError,
     QuickMatchNotFoundError,
     TargetParticipantNotFoundError,
 )
@@ -75,6 +81,9 @@ from src.modules.quick_match.application.use_cases.cancel_quick_match_use_case i
 )
 from src.modules.quick_match.application.use_cases.complete_quick_match_use_case import (
     CompleteQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.create_and_start_quick_match_use_case import (
+    CreateAndStartQuickMatchUseCase,
 )
 from src.modules.quick_match.application.use_cases.create_quick_match_use_case import (
     CreateQuickMatchUseCase,
@@ -229,6 +238,28 @@ class StartQuickMatchBody(BaseModel):
         return v
 
 
+class CreateAndStartQuickMatchBody(CreateQuickMatchBody):
+    """
+    Body para crear e iniciar una partida rápida de una vez (FE #848).
+
+    Lo del alta, los jugadores en el orden en que se añadieron, los cambios de
+    hándicap y quién anota (sus UserId: un invitado no anota). El id lo genera
+    el cliente: reintentar devuelve la misma partida.
+    """
+
+    quick_match_id: UUID
+    creator_handicap: float | None = Field(None, ge=MIN_HANDICAP, le=MAX_HANDICAP)
+    # Los mismos jugadores que el DTO, no una copia: si no, un cambio en uno
+    # dejaría pasar en el body lo que el DTO rechaza, y eso es un 500
+    participants: list[QuickStartPlayerDTO] = Field(default_factory=list, max_length=3)
+    scorer_user_ids: list[UUID] = Field(..., min_length=1, max_length=MAX_SCORERS)
+
+    @field_validator("scorer_user_ids")
+    @classmethod
+    def _unique_scorer_user_ids(cls, v: list[UUID]) -> list[UUID]:
+        return require_unique(v, "scorer_user_ids")
+
+
 class SubmitHoleScoreBody(BaseModel):
     """
     Body para registrar el score de un hoyo.
@@ -282,6 +313,66 @@ async def create_quick_match(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except InvalidTeeSelectionError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.post(
+    "/quick-matches/start",
+    response_model=QuickMatchResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create and start quick match",
+    description=(
+        "Creates the quick match with its whole roster, handicap overrides and scorers, "
+        "starts it and freezes the handicaps in a single request. Nothing is saved if "
+        "any part fails."
+    ),
+)
+@limiter.limit("20/hour")
+async def create_and_start_quick_match(
+    request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
+    response: Response,
+    body: CreateAndStartQuickMatchBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: CreateAndStartQuickMatchUseCase = Depends(get_create_and_start_quick_match_use_case),
+):
+    request_dto = CreateAndStartQuickMatchRequestDTO(
+        quick_match_id=body.quick_match_id,
+        creator_id=current_user.id,
+        golf_course_id=body.golf_course_id,
+        match_format=body.match_format,
+        scoring_format=body.scoring_format,
+        name=body.name,
+        allowance_percentage=body.allowance_percentage,
+        play_mode=body.play_mode,
+        creator_tee_color=body.creator_tee_color,
+        creator_tee_gender=body.creator_tee_gender,
+        creator_handicap=body.creator_handicap,
+        participants=body.participants,
+        scorer_user_ids=body.scorer_user_ids,
+    )
+    try:
+        result = await use_case.execute(request_dto)
+    except (GolfCourseNotFoundError, FriendUserNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotFriendsError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (DuplicateParticipantViolation, QuickMatchIdTakenError) as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except (
+        GolfCourseNotApprovedError,
+        InvalidTeeSelectionError,
+        InvalidAllowanceViolation,
+        InvalidParticipantError,
+        QuickMatchFullViolation,
+        InvalidTeamAssignmentViolation,
+        IncompleteRosterViolation,
+        InvalidScorerConfigurationViolation,
+    ) as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+    # Un reintento con el mismo id devuelve la que ya había: 200, no 201
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.quick_match
 
 
 @router.post(
@@ -366,6 +457,8 @@ async def add_guest_participant(
     except InvalidQuickMatchStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvalidTeeSelectionError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except InvalidParticipantError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 

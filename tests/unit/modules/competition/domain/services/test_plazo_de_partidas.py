@@ -10,6 +10,14 @@ haya salido ninguna.
 | Borrador, abierta, acabada o cancelada             | Plazo cerrado        |
 | Justo a la hora de la primera salida, o después    | Plazo cerrado        |
 | Alguna partida ya ha salido                        | PartidaEmpezadaError |
+
+Tocar las que no han salido, con la franja empezada (#544, 13 oct 2026):
+
+| Caso                                               | Resultado            |
+|----------------------------------------------------|----------------------|
+| Tocar solo partidas sin salir (franja empezada)    | Vale                 |
+| Tocar alguna que ya ha salido                      | PartidaYaSalidaError |
+| Tocar con la competición en otro estado            | Plazo cerrado        |
 """
 
 from datetime import UTC, datetime, timedelta
@@ -20,6 +28,7 @@ import pytest
 
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.services.plazo_de_partidas import (
+    PartidaYaSalidaError,
     PlazoCerradoError,
     PlazoDePartidas,
 )
@@ -92,3 +101,36 @@ def test_a_group_that_already_started_closes_it():
             ANTES,
             [_partida(), _partida(EstadoPartida.IN_PROGRESS)],
         )
+
+
+def _de_la_franja(n: int) -> list[Partida]:
+    partidas = []
+    for numero in range(1, n + 1):
+        partida = _partida()
+        partida._numero = numero
+        partidas.append(partida)
+    return partidas
+
+
+class TestTocarLasQueNoHanSalido:
+    def test_sin_salir_vale_con_la_franja_empezada(self):
+        primera, segunda = _de_la_franja(2)
+
+        PlazoDePartidas.comprobar_que_se_pueden_tocar(
+            CompetitionStatus.IN_PROGRESS, [segunda], {primera.id}
+        )
+
+    def test_una_que_ya_salio_no(self):
+        primera, segunda = _de_la_franja(2)
+
+        with pytest.raises(PartidaYaSalidaError):
+            PlazoDePartidas.comprobar_que_se_pueden_tocar(
+                CompetitionStatus.IN_PROGRESS, [primera, segunda], {primera.id}
+            )
+
+    @pytest.mark.parametrize("estado", [CompetitionStatus.ACTIVE, CompetitionStatus.COMPLETED])
+    def test_en_otro_estado_plazo_cerrado(self, estado):
+        with pytest.raises(PlazoCerradoError):
+            PlazoDePartidas.comprobar_que_se_pueden_tocar(estado, _de_la_franja(1), set())
+        with pytest.raises(PlazoCerradoError):
+            PlazoDePartidas.comprobar_estado(estado)

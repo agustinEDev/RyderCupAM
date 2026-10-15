@@ -12,15 +12,16 @@ salir (por una baja o un no presentado) recibe compañero de otra partida (QA de
 11 oct 2026); antes, lo arregla el organizador (D4).
 """
 
-from collections.abc import Sequence
 from datetime import datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
 )
+from src.modules.competition.application.services.salidas_de_la_franja import (
+    salidas_por_hora,
+)
 from src.modules.competition.application.services.vista_de_la_franja import primera_salida
-from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -28,37 +29,10 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientosDePartidas,
 )
-from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-async def salidas_por_hora(
-    franja: Round,
-    partidas: Sequence[Partida],
-    zonas: ICompetitionTimezone | None,
-    ahora: datetime | None,
-) -> set[PartidaId]:
-    """
-    Las partidas de la franja a las que ya les llegó su hora.
-
-    Sin zona horaria (o sin reloj) no se sabe: entonces cuenta solo su estado.
-    """
-    hoja = franja.hoja_de_salidas
-    if hoja is None or zonas is None or ahora is None:
-        return set()
-    zona = zona_del_campo(await zonas.for_course(franja.golf_course_id))
-    if zona is None:
-        return set()
-    return {
-        p.id
-        for p in partidas
-        # Con huecos en la numeración puede no tener salida en la hoja: su estado manda
-        if 1 <= p.numero <= hoja.numero_de_salidas
-        and ahora >= datetime.combine(franja.round_date, hoja.hora_de(p.numero), zona)
-    }
 
 
 async def sacar_de_sus_partidas(

@@ -24,6 +24,7 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -546,7 +547,7 @@ class TestUpdateCompetitionUseCase:
             CompetitionId(created.id), UpdateCompetitionRequestDTO(name="Ya con nombre"), creator_id
         )
 
-        assert result.name == "Ya Con Nombre"
+        assert result.name == "Ya con nombre"
 
     async def test_should_raise_error_once_enrollment_is_closed(
         self, uow: InMemoryUnitOfWork, creator_id: UserId
@@ -813,3 +814,62 @@ class TestLaUbicacionNoDejaCamposFuera:
 
         guardada = await uow.competitions.find_by_id(competicion)
         assert str(guardada.location.main_country) == "FR"
+
+
+class TestRenombrar:
+    """#540: el nombre se guarda tal cual, pero no se repite sin distinguir mayúsculas."""
+
+    async def _crear(self, uow, creador, nombre):
+        return await CreateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), USUARIOS_CON_GENERO
+        ).execute(
+            CreateCompetitionRequestDTO(
+                name=nombre,
+                start_date=date(2030, 6, 1),
+                end_date=date(2030, 6, 3),
+                main_country="ES",
+                play_mode="SCRATCH",
+            ),
+            creador,
+        )
+
+    async def _renombrar(self, uow, competicion, creador, nombre):
+        return await UpdateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), _campos()
+        ).execute(CompetitionId(competicion.id), UpdateCompetitionRequestDTO(name=nombre), creador)
+
+    async def test_a_otro_nombre_que_ya_tiene_es_repetido(self):
+        from src.modules.competition.application.exceptions import (
+            CompetitionAlreadyExistsError,
+        )
+
+        uow, creador = InMemoryUnitOfWork(), UserId(uuid4())
+        await self._crear(uow, creador, "Copa X")
+        otra = await self._crear(uow, creador, "Otra copa")
+
+        with pytest.raises(CompetitionAlreadyExistsError):
+            await self._renombrar(uow, otra, creador, "copa  x")
+
+    async def test_cambiar_solo_las_mayusculas_de_la_suya_se_puede(self):
+        uow, creador = InMemoryUnitOfWork(), UserId(uuid4())
+        copa = await self._crear(uow, creador, "Copa x")
+
+        renombrada = await self._renombrar(uow, copa, creador, "COPA X")
+
+        assert renombrada.name == "COPA X"
+
+    async def test_un_nombre_antiguo_que_no_cambia_no_se_revalida(self):
+        """Uno guardado con las reglas de antes no impide editar otros campos (revisor)."""
+        uow, creador = InMemoryUnitOfWork(), UserId(uuid4())
+        copa = await self._crear(uow, creador, "Copa x")
+        async with uow:
+            guardada = await uow.competitions.find_by_id(CompetitionId(copa.id))
+            guardada._name = CompetitionName.guardado("<B>X</B>")
+            await uow.competitions.update(guardada)
+
+        editada = await self._renombrar(uow, copa, creador, "<B>X</B>")
+        # Reenviado con espacios de más sigue siendo el mismo (CodeRabbit)
+        con_espacios = await self._renombrar(uow, copa, creador, " <B>X</B>  ")
+
+        assert editada.name == "<B>X</B>"
+        assert con_espacios.name == "<B>X</B>"

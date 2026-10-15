@@ -11,6 +11,7 @@ Las clasificaciones de un stroke play por casos de uso (#251, PR 5).
 | Scratch                                      | Puntos brutos, con la fila propia          |
 | Una sesión que no es franja                  | PartidasError                              |
 | Retirado en Stableford                       | Cuenta lo jugado, `retired` (QA 11 oct)    |
+| Género de sus barras en cada fila            | «No presentada», «Retirada» (#856)         |
 """
 
 from dataclasses import replace
@@ -32,6 +33,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_part
     InMemoryPartidaRepository,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
     A_LAS_NUEVE_Y_CINCO,
@@ -199,6 +201,67 @@ async def test_the_scratch_with_my_row():
     assert [f.user_id for f in tabla.rows] == [a.value]
     # B no ha empezado: fuera de la tabla visible, su fila debajo y sin puesto
     assert (tabla.me.user_id, tabla.me.position) == (b.value, None)
+
+
+async def _ella_es(escenario, user_id):
+    """Barras de mujer en todas sus partidas."""
+    for franja in (escenario.manana, escenario.tarde):
+        for partida in await escenario.uow.partidas.de_la_franja(franja.id):
+            if user_id in partida.user_ids:
+                partida.recalcular(
+                    [
+                        replace(j, tee_gender=Gender.FEMALE) if j.user_id == user_id else j
+                        for j in partida.jugadores
+                    ]
+                )
+                await escenario.uow.partidas.guardar([partida])
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_each_row_carries_the_gender_of_its_tees(cual):
+    escenario, a, b, c = await _dos_franjas()
+    await _ella_es(escenario, b)
+    partida = await _partida_de(escenario, escenario.manana, a)
+    await _validar(escenario, partida, a, hoyos=range(1, 3))
+    await _validar(escenario, partida, b, hoyos=range(1, 3))
+
+    if cual == "franja":
+        tabla = await _de_la_franja(escenario).execute(escenario.manana.id.value)
+    elif cual == "general":
+        tabla = await _general(escenario).execute(escenario.competicion.id.value)
+    else:
+        # C no ha empezado: su fila va aparte, en `me`
+        tabla = await _scratch(escenario).execute(escenario.competicion.id.value, c)
+
+    generos = {f.user_id: f.tee_gender for f in tabla.rows}
+    assert generos[a.value] == "MALE"
+    assert generos[b.value] == "FEMALE"
+    if cual == "scratch":
+        assert (tabla.me.user_id, tabla.me.tee_gender) == (c.value, "MALE")
+
+
+@pytest.mark.parametrize(
+    ("manana", "tarde", "esperado"),
+    [
+        (Gender.FEMALE, Gender.MALE, "MALE"),
+        (Gender.MALE, Gender.FEMALE, "FEMALE"),
+        # Sin dato en la última, el último conocido (/code-review)
+        (Gender.FEMALE, None, "FEMALE"),
+        (None, None, None),
+    ],
+)
+async def test_the_gender_is_the_one_of_the_last_group(manana, tarde, esperado):
+    escenario, a, _, _ = await _dos_franjas()
+    for franja, genero in ((escenario.manana, manana), (escenario.tarde, tarde)):
+        partida = await _partida_de(escenario, franja, a)
+        partida.recalcular(
+            [replace(j, tee_gender=genero) if j.user_id == a else j for j in partida.jugadores]
+        )
+        await escenario.uow.partidas.guardar([partida])
+
+    tabla = await _general(escenario).execute(escenario.competicion.id.value)
+
+    assert next(f for f in tabla.rows if f.user_id == a.value).tee_gender == esperado
 
 
 async def test_a_session_that_is_not_a_window():

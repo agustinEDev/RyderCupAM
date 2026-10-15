@@ -432,7 +432,8 @@ async def test_swapping_with_one_of_a_full_group(client: AsyncClient):
 #
 # | Caso                                       | Respuesta                               |
 # |--------------------------------------------|-----------------------------------------|
-# | Un jugador mira la franja                  | 200, la misma vista                     |
+# | Un jugador mira la franja                  | 200, la misma vista, editable false     |
+# | El organizador la mira (en plazo)          | editable true (#541)                    |
 # | Sin sesión                                 | 401                                     |
 # | Una franja que no existe                   | 404                                     |
 # | Mis partidas / de quien no juega ninguna   | 200 con la suya / 200 vacía             |
@@ -447,11 +448,17 @@ async def test_a_player_sees_the_window(client: AsyncClient):
     sin_sesion = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
     set_auth_cookies(client, organizador["cookies"])
     no_existe = await client.get(f"/api/v1/competitions/rounds/{uuid.uuid4()}/groups")
+    del_organizador = await client.get(f"/api/v1/competitions/rounds/{franja}/groups")
 
     assert respuesta.status_code == 200, respuesta.text
-    assert respuesta.json()["groups"] == [partida]
+    # Lo mismo que ve el organizador, salvo lo que es «puedes cambiar» (#544)
+    (vista_jugador,) = respuesta.json()["groups"]
+    assert vista_jugador["can_change"] is False
+    assert {**vista_jugador, "can_change": partida["can_change"]} == partida
+    assert respuesta.json()["editable"] is False
     assert sin_sesion.status_code == 401, sin_sesion.text
     assert no_existe.status_code == 404, no_existe.text
+    assert del_organizador.json()["editable"] is True
 
 
 async def test_my_groups(client: AsyncClient):
@@ -473,6 +480,49 @@ async def test_my_groups(client: AsyncClient):
     )
     assert otros[0]["user"]["id"] in {p["user_id"] for p in mia["group"]["players"]}
     assert ningunas.json() == {"groups": []}
+
+
+async def test_the_competition_card_has_courses_days_and_my_next_tee_time(client: AsyncClient):
+    """FE #846: en el listado y en la ficha, con los campos leídos de la BD de verdad."""
+    organizador, competicion, franja, otros = await _stableford(client)
+    assert (await _generar(client, organizador, franja)).status_code == 200
+    ajeno = await _usuario(client)
+
+    set_auth_cookies(client, otros[0]["cookies"])
+    lista = await client.get("/api/v1/competitions", params={"my_competitions": "true"})
+    ficha = await client.get(f"/api/v1/competitions/{competicion['id']}")
+    set_auth_cookies(client, ajeno["cookies"])
+    de_otro = await client.get(f"/api/v1/competitions/{competicion['id']}")
+
+    assert lista.status_code == 200, lista.text
+    (suya,) = [c for c in lista.json() if c["id"] == competicion["id"]]
+    for dto in (suya, ficha.json()):
+        (campo,) = dto["golf_courses"]
+        assert campo["name"].startswith("Campo partidas")
+        assert campo["country_code"] == "ES"
+        assert dto["playing_days"] == 1
+        assert dto["my_next_session"] == {
+            "date": competicion["start_date"],
+            "session_type": "MORNING",
+            "tee_time": "09:00",
+        }
+    # Quien no juega ve los campos y las jornadas, pero no tiene salida
+    assert de_otro.json()["my_next_session"] is None
+    assert de_otro.json()["playing_days"] == 1
+
+
+async def test_with_a_place_and_no_groups_yet_the_next_session_has_no_time(client: AsyncClient):
+    _, competicion, _, otros = await _stableford(client)
+
+    set_auth_cookies(client, otros[0]["cookies"])
+    ficha = await client.get(f"/api/v1/competitions/{competicion['id']}")
+
+    assert ficha.status_code == 200, ficha.text
+    assert ficha.json()["my_next_session"] == {
+        "date": competicion["start_date"],
+        "session_type": "MORNING",
+        "tee_time": None,
+    }
 
 
 # ======================================================================================
@@ -608,3 +658,30 @@ async def test_reopening_leaves_the_window_without_groups(client: AsyncClient):
     assert reabierta.status_code == 200, reabierta.text
     assert vista["groups"] == []
     assert vista["editable"] is False
+
+
+async def test_moving_in_a_course_without_time_zone(client: AsyncClient):
+    # #544: mover también necesita la zona, como generar
+    organizador, _, franja, otros = await _stableford(client, con_zona=False)
+    set_auth_cookies(client, organizador["cookies"])
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/rounds/{franja}/groups/players",
+        json={"user_id": otros[0]["user"]["id"]},
+    )
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "COURSE_WITHOUT_TIMEZONE"
+
+
+async def test_in_the_schedule_a_window_opens_at_its_first_tee_time(client: AsyncClient):
+    # #541/#551: ni las 12:00 de la sesión ni «SINGLES», que son de la Ryder
+    _, competicion, _, _ = await _stableford(client, jugadores=0, cerrar=False)
+
+    calendario = (await client.get(f"/api/v1/competitions/{competicion['id']}/schedule")).json()
+
+    franja = calendario["days"][0]["rounds"][0]
+    primera = franja["tee_sheet"]["tee_times"][0]
+    assert franja["match_format"] is None
+    assert franja["scoring_opens_at"][11:16] == primera[:5]
+    assert franja["scoring_opens_at"][19:] in ("+01:00", "+02:00")

@@ -79,7 +79,7 @@ async def _vista(escenario: _Escenario):
         zonas=escenario.zonas,
         user_repository=escenario.usuarios,
         reloj=lambda: escenario.ahora,
-    ).execute(escenario.manana.id.value)
+    ).execute(escenario.manana.id.value, escenario.creador, False)
 
 
 async def _partidas(escenario: _Escenario):

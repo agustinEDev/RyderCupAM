@@ -12,6 +12,7 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -258,7 +259,21 @@ class UpdateCompetitionUseCase:
                     )
 
             # 4. Construir los Value Objects y obtener valores opcionales
-            name = CompetitionName(request.name) if request.name else None
+            # El mismo de antes no se revalida: uno guardado con las reglas antiguas
+            # no impide editar el resto (la app manda siempre el nombre, revisor)
+            # Con los espacios ya normalizados: «A » sigue siendo «A» (CodeRabbit)
+            mismo = (
+                request.name is not None
+                and " ".join(request.name.split()) == competition.name.value
+            )
+            name = CompetitionName(request.name) if request.name and not mismo else None
+            # Renombrar a un nombre que ya tiene es repetirlo, sin mirar mayúsculas (#540)
+            if name is not None and await self._uow.competitions.exists_with_name(
+                name, competition.creator_id, except_id=competition.id
+            ):
+                raise CompetitionAlreadyExistsError(
+                    f"Ya existe una competición con el nombre '{name}'"
+                )
 
             dates = None
             if request.start_date and request.end_date:

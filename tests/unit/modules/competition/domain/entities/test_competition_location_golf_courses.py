@@ -95,7 +95,7 @@ def test_l6_lo_demas_no_los_necesita():
 
     competicion.update_info(name=CompetitionName("Otro nombre"))
 
-    assert str(competicion.name) == "Otro Nombre"
+    assert str(competicion.name) == "Otro nombre"
 
 
 def test_el_error_es_un_valueerror():

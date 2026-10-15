@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
@@ -53,6 +53,14 @@ class SQLAlchemyPlazaEnFranjaRepository(PlazaEnFranjaRepositoryInterface):
 
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[PlazaEnFranja]:
         return await self._donde(tee_window_places_table.c.competition_id == competition_id)
+
+    async def del_jugador(
+        self, competition_id: CompetitionId, user_id: UserId
+    ) -> list[PlazaEnFranja]:
+        tabla = tee_window_places_table
+        return await self._donde(
+            and_(tabla.c.competition_id == competition_id, tabla.c.user_id == user_id)
+        )
 
     async def de_la_franja(self, round_id: RoundId) -> list[PlazaEnFranja]:
         return await self._donde(tee_window_places_table.c.round_id == round_id)

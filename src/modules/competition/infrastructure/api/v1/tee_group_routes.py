@@ -61,7 +61,10 @@ from src.modules.competition.domain.services.marcadores_en_cadena import (
 from src.modules.competition.domain.services.movimientos_de_partidas import (
     MovimientoImposibleError,
 )
-from src.modules.competition.domain.services.plazo_de_partidas import PlazoCerradoError
+from src.modules.competition.domain.services.plazo_de_partidas import (
+    PartidaYaSalidaError,
+    PlazoCerradoError,
+)
 from src.modules.competition.domain.services.reparto_de_partidas import RepartoImposibleError
 from src.modules.competition.infrastructure.api.v1.competition_state_routes import (
     respuesta_con_jugadores,
@@ -77,6 +80,7 @@ T = TypeVar("T")
 _CON_CODIGO: dict[type[Exception], tuple[int, str]] = {
     PlazoCerradoError: (status.HTTP_400_BAD_REQUEST, "GROUPS_WINDOW_CLOSED"),
     PartidaEmpezadaError: (status.HTTP_409_CONFLICT, "GROUP_ALREADY_STARTED"),
+    PartidaYaSalidaError: (status.HTTP_409_CONFLICT, "GROUP_ALREADY_OUT"),
     ZonaDesconocidaError: (status.HTTP_400_BAD_REQUEST, "COURSE_WITHOUT_TIMEZONE"),
     RepartoImposibleError: (status.HTTP_400_BAD_REQUEST, "NOT_ENOUGH_PLAYERS"),
     MarcadoresInvalidosError: (status.HTTP_400_BAD_REQUEST, "INVALID_MARKERS"),
@@ -101,6 +105,9 @@ _DETALLE: dict[str, str] = {
         "Las partidas se hacen del cierre de inscripciones a la primera salida de la franja."
     ),
     "GROUP_ALREADY_STARTED": "Ya ha salido alguna partida de la franja: no se puede cambiar.",
+    "GROUP_ALREADY_OUT": (
+        "Esa partida ya ha salido (le llegó su hora o tiene golpes): no se puede cambiar."
+    ),
     "COURSE_WITHOUT_TIMEZONE": (
         "El campo de la franja no tiene zona horaria: no se sabe a qué hora sale nadie."
     ),
@@ -192,7 +199,8 @@ async def generate_tee_groups(
         "A una partida con hueco, intercambiando con uno de una llena (`swap_with_user_id`) "
         "o, sin `group_id`, a una nueva al final si quedan salidas (nace incompleta). El "
         "origen nunca se queda con uno solo salvo intercambio; una partida que se vacía "
-        "desaparece y las de detrás suben."
+        "desaparece y las de detrás suben. Con la franja empezada, solo entre partidas que "
+        "no han salido (409 GROUP_ALREADY_OUT), y la que se vacía deja su hueco (#544)."
     ),
     tags=["Competitions - Tee groups"],
 )
@@ -222,7 +230,10 @@ async def move_tee_group_player(
     "/rounds/{round_id}/groups/order",
     response_model=TeeGroupsResponseDTO,
     summary="Reordenar las partidas de una franja",
-    description="Todas las partidas, una vez, en el nuevo orden de salida.",
+    description=(
+        "Todas las partidas, una vez, en el nuevo orden de salida. Con la franja empezada, "
+        "las que ya salieron se quedan en su sitio (409 GROUP_ALREADY_OUT si no, #544)."
+    ),
     tags=["Competitions - Tee groups"],
 )
 @limiter.limit("30/minute")
@@ -243,7 +254,10 @@ async def reorder_tee_groups(
     "/groups/{group_id}/markers",
     response_model=TeeGroupsResponseDTO,
     summary="Cambiar los marcadores de una partida",
-    description="Todos los jugadores de la partida; cada uno marca a uno y nadie a sí mismo.",
+    description=(
+        "Todos los jugadores de la partida; cada uno marca a uno y nadie a sí mismo. Solo "
+        "si la partida no ha salido (409 GROUP_ALREADY_OUT, #544)."
+    ),
     tags=["Competitions - Tee groups"],
 )
 @limiter.limit("30/minute")
@@ -293,18 +307,19 @@ async def delete_tee_groups(
     response_model=TeeGroupsResponseDTO,
     summary="Ver las partidas de una franja",
     description=(
-        "Cualquiera con sesión. `editable` dice si el organizador aún puede generarlas o "
-        "cambiarlas; `unassigned_players`, quién tiene plaza y no partida."
+        "Cualquiera con sesión. `editable` dice si quien pregunta puede generarlas o "
+        "cambiarlas ahora: solo el organizador o un admin, en plazo (#541); "
+        "`unassigned_players`, quién tiene plaza y no partida."
     ),
     tags=["Competitions - Tee groups"],
 )
 async def get_tee_groups(
     round_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: VerPartidasUseCase = Depends(get_ver_partidas_use_case),
 ):
     """200 con las partidas de la franja."""
-    return await _responder(use_case.execute(round_id))
+    return await _responder(use_case.execute(round_id, _quien(current_user), current_user.is_admin))
 
 
 @router.get(

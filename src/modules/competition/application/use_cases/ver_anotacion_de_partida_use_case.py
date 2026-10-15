@@ -85,6 +85,7 @@ class VerAnotacionDePartidaUseCase:
                 quienes, partida.competition_id, self._usuarios, self._uow
             )
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
+        jugaron = partida.quienes_jugaron(golpes)
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
         marca = partida.marcadores.get(quien)
         return TeeGroupScoringViewDTO(
@@ -98,7 +99,7 @@ class VerAnotacionDePartidaUseCase:
             picked_up_allowed=competicion.tournament_type == TournamentType.STABLEFORD,
             i_mark_user_id=marca.value if marca else None,
             players=[
-                _jugador(partida, foto, de_quien, nombres, marcado_por)
+                _jugador(partida, foto, de_quien, nombres, marcado_por, jugaron)
                 for foto in partida.jugadores
             ],
         )
@@ -110,6 +111,7 @@ def _jugador(
     de_quien: dict[tuple[UserId, int], GolpeDePartida],
     nombres: dict[UserId, str],
     marcado_por: dict[UserId, UserId],
+    jugaron: set[UserId],
 ) -> TeeGroupScoringPlayerDTO:
     suyos = {hoyo: de_quien.get((foto.user_id, hoyo)) for hoyo in range(1, HOYOS + 1)}
     validados = {h: g.golpes_validados for h, g in suyos.items() if g is not None and g.validado}
@@ -126,6 +128,7 @@ def _jugador(
         marks_user_id=marca.value if marca else None,
         marked_by_user_id=le_marca.value if le_marca else None,
         brought_in=foto.user_id in partida.traidos,
+        played=foto.user_id in jugaron,
         holes=[_hoyo(foto, hoyo, golpe, nombres) for hoyo, golpe in suyos.items()],
         totals=TeeGroupTotalsDTO(
             thru=tarjeta.tras,

@@ -83,6 +83,15 @@ class TeeGroupDTO(BaseModel):
     tee_time: str = Field(..., description="HH:MM, hora del campo.")
     status: str
     incomplete: bool = Field(..., description="De un solo jugador, por bajas: sin marcador.")
+    can_change: bool | None = Field(
+        None,
+        description=(
+            "Solo en la vista de la franja: si aún se puede mover, reordenar o cambiar sus "
+            "marcadores, porque no ha salido (ni le llegó su hora ni tiene golpes), también "
+            "con la franja empezada (#544). `editable` de la franja sigue diciendo si se "
+            "pueden generar o borrar."
+        ),
+    )
     players: list[TeeGroupPlayerDTO]
 
 
@@ -99,7 +108,17 @@ class TeeGroupsResponseDTO(BaseModel):
     round_id: UUID
     editable: bool = Field(
         ...,
-        description="Si el organizador aún puede generarlas o cambiarlas (hasta la 1.ª salida).",
+        description=(
+            "Si quien pregunta puede generarlas o cambiarlas ahora: solo el organizador "
+            "o un admin, hasta la 1.ª salida (#541)."
+        ),
+    )
+    can_add_group: bool = Field(
+        False,
+        description=(
+            "Si cabe una partida nueva: hasta la 1.ª salida, si quedan salidas; con la "
+            "franja empezada, si queda alguna libre cuya hora aún no ha llegado (#544)."
+        ),
     )
     unassigned_players: list[UnassignedPlayerDTO] = Field(
         ..., description="Con plaza en la franja y sin partida, por orden de llegada."
@@ -173,6 +192,13 @@ class TeeGroupScoringPlayerDTO(BaseModel):
     )
     brought_in: bool = Field(
         False, description="Vino de otra partida a acompañar al que se quedó solo."
+    )
+    played: bool = Field(
+        False,
+        description=(
+            "Si jugó: anotó algo desde su pantalla o tiene algo en su tarjeta. Entonces no "
+            "se le puede marcar no presentado (409 PLAYER_HAS_STROKES): se le retira."
+        ),
     )
     holes: list[TeeGroupHoleDTO]
     totals: TeeGroupTotalsDTO
@@ -255,6 +281,10 @@ class StandingRowDTO(BaseModel):
         ),
     )
     status: str = Field(..., description="CLASIFICADO, SIN_EMPEZAR, NR o NP.")
+    tee_gender: str | None = Field(
+        None,
+        description="El de sus barras (MALE o FEMALE): para «No presentada», «Retirada».",
+    )
 
 
 class StandingsResponseDTO(BaseModel):

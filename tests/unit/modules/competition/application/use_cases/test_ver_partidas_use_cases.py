@@ -9,6 +9,10 @@ organizador aún puede tocarlas; mirar nunca falla por eso.
 | Un jugador mira la franja                                | La vista, igual que al generar    |
 | Antes de generar                                         | Sin partidas, todos en unassigned |
 | Abiertas / tras la 1.ª salida / una empezada / sin zona  | editable: false, sin error        |
+| Con la primera fuera y la segunda sin salir (#544)       | editable: false (generar, como    |
+|                                                          |   siempre); can_change por partida|
+| Una con golpes antes de su hora, la siguiente sin salir  | can_change: false / true          |
+| Justo a la hora de la segunda                            | Las dos fuera                     |
 | unassigned                                               | Ni retirados ni ya colocados      |
 | Una sesión de Ryder / una franja que no existe           | PartidasError / RoundNotFound     |
 | Mis partidas, en dos franjas                             | Las dos, por día y hora           |
@@ -53,20 +57,36 @@ def _ver(escenario: _Escenario) -> VerPartidasUseCase:
     )
 
 
-async def _vista(escenario: _Escenario, franja=None):
-    return await _ver(escenario).execute((franja or escenario.manana).id.value)
+async def _vista(escenario: _Escenario, franja=None, quien=None, is_admin=False):
+    return await _ver(escenario).execute(
+        (franja or escenario.manana).id.value, quien or escenario.creador, is_admin
+    )
 
 
-async def test_a_player_sees_the_same_as_the_organiser():
+async def test_a_player_sees_the_same_as_the_organiser_but_cannot_edit():
+    # `editable` dice «puedes editar»: a un jugador, siempre no (#541)
     escenario = _Escenario()
     await escenario.guardar()
     jugadores = [await escenario.con_plaza(f"{h}.0") for h in (3, 2, 1)]
     generada = await escenario.generar()
 
-    vista = await _vista(escenario)
+    vista = await _vista(escenario, quien=jugadores[0])
 
-    assert vista == generada
+    assert generada.editable
+    assert generada.can_add_group
+    assert vista.editable is False
+    # Ni las partidas ni una nueva: nada es «puedes editar» para un jugador (#544)
+    assert vista.can_add_group is False
+    assert [g.can_change for g in vista.groups] == [False]
     assert {p.user_id for p in vista.groups[0].players} == {u.value for u in jugadores}
+
+
+async def test_an_admin_can_edit():
+    escenario = _Escenario()
+    await escenario.guardar()
+    jugador = await escenario.con_plaza("3.0")
+
+    assert (await _vista(escenario, quien=jugador, is_admin=True)).editable
 
 
 async def test_before_generating_everybody_is_unassigned():
@@ -140,6 +160,72 @@ async def test_not_editable_once_a_group_started():
     assert vista.groups[0].status == "IN_PROGRESS"
 
 
+async def test_with_the_first_group_out_the_second_can_still_be_touched():
+    from datetime import timedelta
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=5)
+
+    vista = await _vista(escenario)
+
+    # `editable` no cambia de significado: el front de producción lo usa para generar
+    assert vista.editable is False
+    assert [g.can_change for g in vista.groups] == [False, True]
+    assert vista.can_add_group is True
+
+
+async def test_a_group_with_strokes_before_its_time_is_out():
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    primera, _ = sorted(
+        await escenario.uow.partidas.de_la_franja(escenario.manana.id), key=lambda p: p.numero
+    )
+    empezada = await escenario.uow.partidas.find_by_id(primera.id)
+    empezada.empezar()
+    await escenario.uow.partidas.guardar([empezada])
+
+    vista = await _vista(escenario)
+
+    assert [g.can_change for g in vista.groups] == [False, True]
+
+
+async def test_right_at_the_second_tee_time_both_are_out():
+    from datetime import timedelta
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=10)
+
+    vista = await _vista(escenario)
+
+    assert [g.can_change for g in vista.groups] == [False, False]
+    # Quedan salidas libres por llegar (9:20…10:00): aún cabe una nueva
+    assert vista.can_add_group is True
+
+
+async def test_no_new_group_once_the_sheet_is_over():
+    from datetime import timedelta
+
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in range(7, 0, -1):
+        await escenario.con_plaza(f"{h}.0")
+    await escenario.generar()
+    escenario.ahora = A_LA_PRIMERA_SALIDA + timedelta(minutes=65)
+
+    assert (await _vista(escenario)).can_add_group is False
+
+
 async def test_a_ryder_session_and_a_window_that_does_not_exist():
     escenario = _Escenario()
     await escenario.guardar()
@@ -156,7 +242,7 @@ async def test_a_ryder_session_and_a_window_that_does_not_exist():
     with pytest.raises(PartidasError):
         await _vista(escenario, sesion)
     with pytest.raises(RoundNotFoundError):
-        await _ver(escenario).execute(RoundId.generate().value)
+        await _ver(escenario).execute(RoundId.generate().value, escenario.creador, False)
 
 
 async def test_my_groups_in_two_windows_by_day_and_time():

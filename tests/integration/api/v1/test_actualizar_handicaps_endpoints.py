@@ -88,11 +88,13 @@ async def test_el_organizador_la_lanza_y_la_ficha_lo_dice(client: AsyncClient):
     assert lanzada.json()["resumed"] is False
     # La primera sigue en curso (aquí nadie la pasa): la segunda, 409
     assert otra.status_code == 409, otra.text
+    assert otra.json()["reason_code"] == "RUNNING"
     assert len(lanzador.lanzadas) == 1
     assert ficha["handicap_update"]["origin"] == "ORGANIZER"
     # La lanzada sigue en curso (aquí nadie la pasa): el botón, apagado
     assert ficha["handicap_update_window"]["open"] is False
     assert "Ya se están" in ficha["handicap_update_window"]["reason"]
+    assert ficha["handicap_update_window"]["reason_code"] == "RUNNING"
 
 
 async def test_sin_el_refresco_encendido_es_un_409(client: AsyncClient):
@@ -101,6 +103,7 @@ async def test_sin_el_refresco_encendido_es_un_409(client: AsyncClient):
     respuesta = await client.post(_url(competicion))
 
     assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["reason_code"] == "DISABLED"
 
 
 async def test_sin_zona_del_campo_no_se_sabe_cuando_sale_nadie(client: AsyncClient):
@@ -111,6 +114,8 @@ async def test_sin_zona_del_campo_no_se_sabe_cuando_sale_nadie(client: AsyncClie
 
     assert respuesta.status_code == 400, respuesta.text
     assert "zona horaria" in respuesta.json()["detail"]
+    # El código, para decirlo en el idioma de la app (#541)
+    assert respuesta.json()["reason_code"] == "NO_TIMEZONE"
     assert ficha["handicap_update_window"]["open"] is False
 
 
@@ -178,3 +183,22 @@ async def test_programar_sin_huso_es_un_422_y_sin_refresco_un_409(client: AsyncC
 
     assert sin_huso.status_code == 422, sin_huso.text
     assert sin_refresco.status_code == 409, sin_refresco.text
+
+
+async def test_programar_en_el_pasado_es_un_400_con_su_codigo(client: AsyncClient):
+    # #541: el motivo como código, para decirlo en el idioma de la app
+    from main import app
+    from src.config.dependencies import get_lanzador_de_actualizaciones
+
+    _, competicion = await _cerrada(client, "RYDER_CUP")
+    app.dependency_overrides[get_lanzador_de_actualizaciones] = _LanzadorQueApunta
+    try:
+        respuesta = await client.put(
+            f"{_url(competicion)}/schedule", json={"run_at": "2000-01-01T03:00:00Z"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_lanzador_de_actualizaciones, None)
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json()["error_code"] == "HANDICAP_UPDATE_NOT_ALLOWED"
+    assert respuesta.json()["reason_code"] == "IN_THE_PAST"

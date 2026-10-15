@@ -65,7 +65,7 @@ class TestEditingWhileEnrollmentIsOpen:
 
         competition.update_info(name=CompetitionName("Ryder de los amigos"))
 
-        assert str(competition.name) == "Ryder De Los Amigos"
+        assert str(competition.name) == "Ryder de los amigos"
 
     def test_the_cap_can_be_fixed(self):
         competition = open_competition(max_players=12)

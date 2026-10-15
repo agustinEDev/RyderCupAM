@@ -25,7 +25,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 A, B, C = UserId.generate(), UserId.generate(), UserId.generate()
 
 
-def _fila(user_id, marca, tarjeta="JUGANDO", traido=False):
+def _fila(user_id, marca, tarjeta="JUGANDO", traido=False, jugo=False):
     return SimpleNamespace(
         user_id=user_id,
         handicap_index=Decimal("10.0"),
@@ -37,6 +37,7 @@ def _fila(user_id, marca, tarjeta="JUGANDO", traido=False):
         card_status=tarjeta,
         marks_user_id=marca,
         brought_in=traido,
+        played=jugo,
     )
 
 
@@ -71,6 +72,13 @@ def test_who_was_brought_in():
     partida = SQLAlchemyPartidaRepository._partida(GRUPO, [_fila(A, B), _fila(B, A, traido=True)])
 
     assert partida.traidos == {B}
+
+
+def test_who_played():
+    # La marca «ha jugado» se lee de su fila (13 oct 2026)
+    partida = SQLAlchemyPartidaRepository._partida(GRUPO, [_fila(A, B, jugo=True), _fila(B, A)])
+
+    assert partida.jugaron == {A}
 
 
 def test_five_rows_with_three_no_shows():

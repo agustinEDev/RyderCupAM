@@ -92,6 +92,33 @@ class TestAddFriendToQuickMatchUseCase:
                 )
             )
 
+    async def test_non_creator_with_an_invalid_tee_still_gets_not_creator(
+        self, qm_uow, golf_course_uow, social_uow, user_uow
+    ):
+        """
+        Given a non-creator who picks a tee the course does not have
+        When they try to add a friend
+        Then it is the usual 403, not a tee error: the tee check runs before
+        the lock (`/code-review`) but only for the creator
+        """
+        creator = await create_user(user_uow, "creator3b@test.com")
+        other_participant = await create_user(user_uow, "other3b@test.com")
+        friend = await create_user(user_uow, "friend3b@test.com")
+        await create_accepted_friendship(social_uow, other_participant.id, friend.id)
+        qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
+
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
+        with pytest.raises(NotQuickMatchCreatorError):
+            await use_case.execute(
+                AddParticipantRequestDTO(
+                    quick_match_id=qm.id.value,
+                    requester_id=other_participant.id.value,
+                    friend_user_id=friend.id.value,
+                    tee_color="RED",
+                    tee_gender="FEMALE",
+                )
+            )
+
     async def test_friend_user_not_found_raises(
         self, qm_uow, golf_course_uow, social_uow, user_uow
     ):

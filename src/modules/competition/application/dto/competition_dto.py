@@ -21,6 +21,7 @@ from src.modules.competition.domain.entities.competition import (
     MIN_ENROLLMENT_OPENING_DAYS,
     MIN_PLAYERS,
 )
+from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
@@ -53,6 +54,32 @@ class CountryResponseDTO(BaseModel):
     code: str = Field(..., description="Código ISO 3166-1 alpha-2 del país")
     name_en: str = Field(..., description="Nombre en inglés")
     name_es: str = Field(..., description="Nombre en español")
+
+
+# El campo `date` de NextSessionDTO taparía al tipo dentro de su clase
+_Fecha = date
+
+
+class CompetitionCourseSummaryDTO(BaseModel):
+    """Un campo de la competición en su tarjeta: nombre y país (FE #846)."""
+
+    id: UUID
+    name: str
+    country_code: str
+
+
+class NextSessionDTO(BaseModel):
+    """La próxima salida de quien mira (FE #846)."""
+
+    date: _Fecha
+    session_type: str = Field(..., description="MORNING, AFTERNOON o EVENING.")
+    tee_time: str | None = Field(
+        None,
+        description=(
+            "HH:MM, hora del campo, de su partida. Null en la Ryder (no hay hora por "
+            "partido) y en una franja sin partidas generadas."
+        ),
+    )
 
 
 class CreatorDTO(BaseModel):
@@ -265,6 +292,15 @@ class CreateCompetitionRequestDTO(BaseModel):
         ),
     )
 
+    organizer_plays: bool = Field(
+        True,
+        description=(
+            "Solo en un STABLEFORD o un MEDAL: si el organizador juega (#552). Si no, no "
+            "queda inscrito y puede cerrar las inscripciones sin plaza. En una Ryder Cup "
+            "se ignora: el organizador siempre queda inscrito."
+        ),
+    )
+
     @field_validator("main_country", "adjacent_country_1", "adjacent_country_2", mode="before")
     @classmethod
     def uppercase_country_codes(cls, v):
@@ -445,9 +481,11 @@ class UpdateCompetitionRequestDTO(BaseModel):
 
     name: str | None = Field(
         None,
-        min_length=3,
         max_length=100,
-        description="Nuevo nombre de la competición.",
+        description=(
+            "Nuevo nombre de la competición. El mínimo lo mira el nombre ya limpio; uno "
+            "guardado con las reglas antiguas (de menos de 3) se puede reenviar igual (#540)."
+        ),
     )
     start_date: date | None = Field(None, description="Nueva fecha de inicio.")
     end_date: date | None = Field(None, description="Nueva fecha de fin.")
@@ -616,8 +654,21 @@ class HandicapUpdateWindowDTO(BaseModel):
         ),
     )
     reason: str | None = Field(None, description="Por qué no, si está cerrada.")
+    reason_code: CodigoDeVentana | None = Field(
+        None, description="El motivo como código, para decirlo en el idioma de la app (#541)."
+    )
     scheduled_at: datetime | None = Field(
         None, description="Si hay una actualización programada, para cuándo (#251)."
+    )
+
+
+class HandicapUpdateRefusedDTO(BaseModel):
+    """Por qué no se puede lanzar o programar la actualización de hándicaps (#541)."""
+
+    detail: str = Field(..., description="El motivo, en español.")
+    error_code: Literal["HANDICAP_UPDATE_NOT_ALLOWED"]
+    reason_code: CodigoDeVentana | None = Field(
+        None, description="El motivo como código, para decirlo en el idioma de la app."
     )
 
 
@@ -815,6 +866,21 @@ class CompetitionResponseDTO(BaseModel):
     user_enrollment_status: str | None = Field(
         None,
         description="Estado de inscripción del usuario actual (REQUESTED, APPROVED, REJECTED, etc.). None si no está inscrito.",
+    )
+
+    # La tarjeta de «Mis competiciones» (FE #846)
+    golf_courses: list[CompetitionCourseSummaryDTO] = Field(
+        default_factory=list, description="Sus campos, en su orden, con nombre y país."
+    )
+    playing_days: int | None = Field(
+        None, description="Stableford/Medal: días con franjas (0 sin franjas). Null en la Ryder."
+    )
+    my_next_session: NextSessionDTO | None = Field(
+        None,
+        description=(
+            "Solo si quien mira juega (inscrito y aprobado): su próxima franja o sesión "
+            "sin terminar, con su partida o partido en juego. Null si no le queda ninguna."
+        ),
     )
 
     # Timestamps

@@ -128,3 +128,81 @@ class TestListFriendsShowsTheAlias:
         result = await ListFriendsUseCase(uow, user_uow).execute(str(me.id.value))
 
         assert result.friendships[0].addressee_name == "Ana User"
+
+
+class TestListFriendsCarriesTheHandicap:
+    """
+    El resumen del asistente de partida rápida enseña el hándicap de cada amigo
+    antes de crear nada (FE #848): la lista lo trae, y nulo si no lo tiene.
+    Los usuarios se leen en una sola consulta, no uno a uno.
+    """
+
+    @pytest.fixture
+    def uow(self):
+        return InMemorySocialUnitOfWork()
+
+    @pytest.fixture
+    def user_uow(self):
+        return UserInMemoryUoW()
+
+    async def _user(self, user_uow, email, handicap=None):
+        user = User.create(
+            first_name="Test",
+            last_name="User",
+            email_str=email,
+            plain_password="SecureP@ssw0rd123",
+        )
+        if handicap is not None:
+            user.update_handicap(handicap)
+        async with user_uow:
+            await user_uow.users.save(user)
+        return user
+
+    async def _friends(self, uow, a, b):
+        friendship = Friendship.create(
+            id=FriendshipId.generate(), requester_id=a.id, addressee_id=b.id
+        )
+        friendship.accept()
+        async with uow:
+            await uow.friendships.add(friendship)
+
+    async def test_list_friends_with_handicaps_returns_both_sides(self, uow, user_uow):
+        """Given two friends with handicap, when listing, then each side carries its own."""
+        me = await self._user(user_uow, "me_hcp@test.com", handicap=12.4)
+        friend = await self._user(user_uow, "friend_hcp@test.com", handicap=20.1)
+        await self._friends(uow, me, friend)
+
+        (item,) = (await ListFriendsUseCase(uow, user_uow).execute(str(me.id.value))).friendships
+
+        assert item.requester_handicap == 12.4
+        assert item.addressee_handicap == 20.1
+
+    async def test_list_friends_without_handicap_returns_none(self, uow, user_uow):
+        """Given a friend without handicap, when listing, then it is None, not 0."""
+        me = await self._user(user_uow, "me_nohcp@test.com", handicap=5.0)
+        friend = await self._user(user_uow, "friend_nohcp@test.com")
+        await self._friends(uow, friend, me)
+
+        (item,) = (await ListFriendsUseCase(uow, user_uow).execute(str(me.id.value))).friendships
+
+        assert item.requester_handicap is None
+        assert item.addressee_handicap == 5.0
+
+    async def test_list_friends_reads_users_in_one_query(self, uow, user_uow):
+        """Given several friends, when listing, then users are read once, not one by one."""
+        me = await self._user(user_uow, "me_n1@test.com")
+        for i in range(3):
+            await self._friends(uow, me, await self._user(user_uow, f"f{i}_n1@test.com"))
+        llamadas = []
+        original = user_uow.users.find_by_id
+
+        async def cuenta(user_id):
+            llamadas.append(user_id)
+            return await original(user_id)
+
+        user_uow.users.find_by_id = cuenta
+
+        result = await ListFriendsUseCase(uow, user_uow).execute(str(me.id.value))
+
+        assert len(result.friendships) == 3
+        assert llamadas == []
