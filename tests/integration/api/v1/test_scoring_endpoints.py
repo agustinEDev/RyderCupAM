@@ -180,6 +180,7 @@ async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = Tr
         "competition_id": comp_id,
         "match_id": match_id,
         "round_id": round_id,
+        "golf_course_id": gc_id,
     }
 
 
@@ -221,6 +222,8 @@ class TestGetScoringView:
         assert response.status_code == 200
         data = response.json()
         assert data["match_id"] == ctx["match_id"]
+        # El campo de la ronda, para pedir su mapa de hoyos (BE #532)
+        assert data["round_info"]["golf_course_id"] == ctx["golf_course_id"]
         assert data["match_status"] == "IN_PROGRESS"
         assert data["match_format"] == "SINGLES"
         assert data["is_decided"] is False
