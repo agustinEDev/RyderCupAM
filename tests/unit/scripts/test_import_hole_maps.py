@@ -6,6 +6,8 @@ nada). Lo que se hace con cada campo se prueba en su caso de uso, y qué campos
 se eligen, contra la base de datos en los tests de integración.
 """
 
+import json
+
 import pytest
 
 from scripts.import_hole_maps import (
@@ -352,3 +354,109 @@ def test_s8_overpass_url_must_be_http(url):
     """
     with pytest.raises(SystemExit):
         parse_args(["--country", "ES", "--overpass-url", url])
+
+
+# ============================================================================
+# F6, F8 — Fichero local de OSM
+# ============================================================================
+
+
+def test_f6_osm_file_uses_the_file_and_no_pause(tmp_path):
+    """
+    GIVEN: --osm-file con un fichero de osmium
+    WHEN: Se preparan la fuente y la pausa
+    THEN: Se lee del fichero (no de Overpass) y sin pausa entre campos
+    """
+    from scripts.import_hole_maps import make_client, pause_between_courses
+    from src.modules.golf_course.infrastructure.osm.osm_file_client import OsmFileClient
+
+    fichero = tmp_path / "golf.geojsonseq"
+    hoyo = {
+        "type": "Feature",
+        "properties": {"@type": "way", "@id": 1, "golf": "hole", "ref": "1"},
+        "geometry": {"type": "LineString", "coordinates": [[-5.33, 36.28], [-5.33, 36.29]]},
+    }
+    fichero.write_text(json.dumps(hoyo) + "\n")
+    args = parse_args(["--country", "ES", "--osm-file", str(fichero)])
+
+    assert isinstance(make_client(args), OsmFileClient)
+    assert pause_between_courses(args) == 0
+
+
+def test_f6_without_osm_file_it_is_overpass_with_its_pause():
+    """
+    GIVEN: Sin --osm-file
+    WHEN: Se preparan la fuente y la pausa
+    THEN: Overpass (con el servidor pedido) y la pausa de siempre
+    """
+    from scripts.import_hole_maps import make_client, pause_between_courses
+    from src.modules.golf_course.infrastructure.osm.overpass_client import OverpassClient
+
+    args = parse_args(
+        ["--country", "ES", "--overpass-url", "https://overpass.kumi.systems/api/interpreter"]
+    )
+
+    client = make_client(args)
+    assert isinstance(client, OverpassClient)
+    assert client._url == "https://overpass.kumi.systems/api/interpreter"
+    assert pause_between_courses(args) == 5.0
+
+
+def test_f6_missing_osm_file_is_a_usage_error(tmp_path):
+    """
+    GIVEN: --osm-file con un fichero que no existe
+    WHEN: Se leen los argumentos
+    THEN: Error de uso al arrancar
+    """
+    with pytest.raises(SystemExit):
+        parse_args(["--country", "ES", "--osm-file", str(tmp_path / "no-esta.geojsonseq")])
+
+
+def test_f8_the_help_explains_how_to_build_the_file():
+    """
+    GIVEN: La ayuda del script
+    WHEN: Se lee
+    THEN: Explica los tres pasos: Geofabrik, osmium tags-filter y osmium export
+    """
+    import scripts.import_hole_maps as script
+
+    assert "download.geofabrik.de" in script.__doc__
+    assert "osmium tags-filter" in script.__doc__
+    assert "osmium export" in script.__doc__
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["--overpass-url", "https://overpass.kumi.systems/api/interpreter"], ["--pause", "10"]],
+    ids=["overpass-url", "pause"],
+)
+def test_f6_osm_file_does_not_mix_with_overpass_options(tmp_path, extra):
+    """
+    GIVEN: --osm-file junto a una opción que solo vale para Overpass
+    WHEN: Se leen los argumentos
+    THEN: Error de uso, en vez de ignorarla sin avisar
+    """
+    fichero = tmp_path / "golf.geojsonseq"
+    fichero.write_text("")
+
+    with pytest.raises(SystemExit):
+        parse_args(["--country", "ES", "--osm-file", str(fichero), *extra])
+
+
+@pytest.mark.asyncio
+async def test_s4_holes_of_maps_not_saved_are_not_counted_as_imported():
+    """
+    GIVEN: Un mapa creado con 18 hoyos y otro con 2 que no se guarda (pocos hoyos)
+    WHEN: Se hace la pasada
+    THEN: Hoyos importados: 18; los 2 no se guardaron
+    """
+    importador = Importador(
+        {
+            "a": _resultado(ImportHoleMapStatus.CREATED, 18),
+            "b": _resultado(ImportHoleMapStatus.TOO_FEW_HOLES, 2),
+        }
+    )
+
+    summary = await run(["a", "b"], importador, apply=True, pause=0, sleep=_sin_espera)
+
+    assert summary.holes_imported == 18

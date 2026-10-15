@@ -157,7 +157,9 @@ async def test_map_approved_while_asking_osm_is_not_overwritten(db_session, esce
             retenido.append(await HoleMapRepository(db_session).find_by_golf_course_id(course.id))
             await db_session.commit()
             await _approve_elsewhere(db_session, course.id, admin)
-            return OsmHoleMapCandidate(osm_reference="way/2", holes=(_hole(1), _hole(2)))
+            return OsmHoleMapCandidate(
+                osm_reference="way/2", holes=tuple(_hole(n) for n in range(1, 11))
+            )
 
     use_case = ImportHoleMapFromOsmUseCase(
         SQLAlchemyGolfCourseUnitOfWork(db_session), FuenteLenta()
