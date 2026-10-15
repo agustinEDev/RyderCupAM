@@ -352,12 +352,21 @@ async def test_r7_reimporting_a_rejected_map_clears_the_review(db_session, creat
     assert len(found.holes) == 1
 
 
-async def _insert_raw(db_session, course_id, status, reviewed_at, reason=None):
+HOYOS_EN_BRUTO = (
+    '[{"number": 1, "play_line": [[36.28, -5.33], [36.29, -5.32]], '
+    '"line_source": "OSM", "green": null}]'
+)
+
+
+async def _insert_raw(
+    db_session, course_id, status, reviewed_at, reason=None, holes=HOYOS_EN_BRUTO
+):
     await db_session.execute(
         text(
             "INSERT INTO golf_course_hole_maps (golf_course_id, holes, osm_reference, "
             "imported_at, status, reviewed_at, rejection_reason, created_at, updated_at) "
-            "VALUES (:id, '[]', 'way/1', :now, :status, :reviewed_at, :reason, :now, :now)"
+            "VALUES (:id, CAST(:holes AS jsonb), 'way/1', :now, :status, :reviewed_at, :reason, "
+            ":now, :now)"
         ),
         {
             "id": course_id.value,
@@ -365,6 +374,7 @@ async def _insert_raw(db_session, course_id, status, reviewed_at, reason=None):
             "status": status,
             "reviewed_at": reviewed_at,
             "reason": reason,
+            "holes": holes,
         },
     )
 
@@ -391,3 +401,33 @@ async def test_r8_database_rejects_inconsistent_rows(
 
     with pytest.raises(IntegrityError):
         await _insert_raw(db_session, course_id, status, IMPORTADO if reviewed else None, reason)
+
+
+@pytest.mark.asyncio
+async def test_r8_valid_raw_row_is_accepted(db_session, creator_id):
+    """
+    GIVEN: Una fila escrita a mano que cumple todas las reglas
+    WHEN: Se inserta y se lee
+    THEN: Entra y se lee como mapa (prueba que los rechazos de arriba son por su regla)
+    """
+    course_id = await _saved_course(db_session, creator_id)
+
+    await _insert_raw(db_session, course_id, "PENDING_REVIEW", None)
+    found = await _reload(db_session, course_id)
+
+    assert found is not None
+    assert [hole.number for hole in found.holes] == [1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("holes", ["[]", '{"number": 1}'], ids=["vacio", "no-lista"])
+async def test_r9_database_rejects_a_map_without_holes(db_session, creator_id, holes):
+    """
+    GIVEN: Una fila sin hoyos o con los hoyos fuera de una lista
+    WHEN: Se inserta
+    THEN: La base de datos la rechaza (al leer no pasa por las reglas del dominio)
+    """
+    course_id = await _saved_course(db_session, creator_id)
+
+    with pytest.raises(IntegrityError):
+        await _insert_raw(db_session, course_id, "PENDING_REVIEW", None, holes=holes)

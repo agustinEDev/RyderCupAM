@@ -67,6 +67,10 @@ def upgrade() -> None:
             name="ck_golf_course_hole_maps_review_consistency",
         ),
         sa.CheckConstraint(
+            "jsonb_typeof(holes) = 'array' AND jsonb_array_length(holes) > 0",
+            name="ck_golf_course_hole_maps_has_holes",
+        ),
+        sa.CheckConstraint(
             "rejection_reason IS NULL OR status = 'REJECTED'",
             name="ck_golf_course_hole_maps_reason_only_if_rejected",
         ),

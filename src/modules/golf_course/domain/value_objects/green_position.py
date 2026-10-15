@@ -34,6 +34,12 @@ class GreenPosition:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "outline", tuple(self.outline))
+        # Un tipo equivocado reventaría al guardar (un 500); aquí es un dato inválido
+        if not isinstance(self.source, PositionSource):
+            raise ValueError(f"GreenPosition source must be a PositionSource, got {self.source!r}")
+        points = (self.front, self.center, self.back, *self.outline)
+        if not all(isinstance(point, GeoPoint) for point in points):
+            raise ValueError("GreenPosition positions must be GeoPoints")
         if self.outline and len(self.outline) < MIN_OUTLINE_POINTS:
             raise ValueError(
                 f"Green outline needs at least {MIN_OUTLINE_POINTS} points, got {len(self.outline)}"

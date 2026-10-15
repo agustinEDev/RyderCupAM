@@ -6,6 +6,8 @@ dispositivo, así que la regla que más se protege aquí es que las coordenadas
 vayan completas: media coordenada no sitúa nada en un mapa.
 """
 
+import math
+
 import pytest
 
 from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
@@ -207,3 +209,18 @@ def test_two_locations_with_same_data_are_equal():
     second = CourseLocation(latitude=36.5, longitude=-4.9, city="MARBELLA")
 
     assert first == second
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude"),
+    [(math.nan, 0.0), (0.0, math.inf), (True, 0.0)],
+    ids=["nan", "infinito", "booleano"],
+)
+def test_coordinates_must_be_finite_numbers(latitude, longitude):
+    """
+    GIVEN: Un NaN, un infinito o un booleano como coordenada del campo
+    WHEN: Se construye la ubicación
+    THEN: Se rechaza, con la misma regla que los puntos del mapa de hoyos (BE #532)
+    """
+    with pytest.raises(ValueError):
+        CourseLocation(latitude=latitude, longitude=longitude)

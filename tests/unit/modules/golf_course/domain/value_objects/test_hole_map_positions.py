@@ -58,7 +58,7 @@ def test_p2_point_rejects_latitude_out_of_range(latitude):
     WHEN: Se construye el punto
     THEN: Se rechaza
     """
-    with pytest.raises(ValueError, match="latitude"):
+    with pytest.raises(ValueError, match="Latitude must be between"):
         GeoPoint(latitude=latitude, longitude=0.0)
 
 
@@ -69,7 +69,7 @@ def test_p3_point_rejects_longitude_out_of_range(longitude):
     WHEN: Se construye el punto
     THEN: Se rechaza
     """
-    with pytest.raises(ValueError, match="longitude"):
+    with pytest.raises(ValueError, match="Longitude must be between"):
         GeoPoint(latitude=0.0, longitude=longitude)
 
 
@@ -93,6 +93,17 @@ def test_p5_point_rejects_booleans(latitude, longitude):
     GIVEN: Un booleano como coordenada (en Python, True vale 1)
     WHEN: Se construye el punto
     THEN: Se rechaza
+    """
+    with pytest.raises(ValueError, match="number"):
+        GeoPoint(latitude=latitude, longitude=longitude)
+
+
+@pytest.mark.parametrize(("latitude", "longitude"), [("36.28", 0.0), (0.0, None)])
+def test_p6_point_rejects_non_numbers(latitude, longitude):
+    """
+    GIVEN: Un texto o un None como coordenada
+    WHEN: Se construye el punto
+    THEN: Se rechaza con ValueError (dato inválido), no con TypeError
     """
     with pytest.raises(ValueError, match="number"):
         GeoPoint(latitude=latitude, longitude=longitude)
@@ -159,6 +170,29 @@ def test_g3b_green_outline_is_stored_as_tuple():
     )
 
     assert green.outline == CONTORNO
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"source": "OSM"},
+        {"front": (36.2878, -5.3282)},
+        {"center": None},
+        {"outline": ((36.1, -5.1), (36.2, -5.2), (36.3, -5.3))},
+    ],
+    ids=["source-texto", "front-tupla", "center-none", "outline-tuplas"],
+)
+def test_g4_green_rejects_wrong_types(kwargs):
+    """
+    GIVEN: Un origen que no es PositionSource o una posición que no es un punto
+    WHEN: Se construye el green
+    THEN: Se rechaza al construir (400), no al guardar (500)
+    """
+    datos = {"front": DELANTE, "center": CENTRO, "back": FONDO, "source": PositionSource.OSM}
+    datos.update(kwargs)
+
+    with pytest.raises(ValueError, match="GreenPosition"):
+        GreenPosition(**datos)
 
 
 # ============================================================================
@@ -288,3 +322,25 @@ def test_h5b_play_line_needs_two_points():
     """
     with pytest.raises(ValueError, match="play line"):
         MappedHole(number=1, play_line=(SALIDA,), line_source=PositionSource.OSM)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"line_source": "OSM"},
+        {"play_line": ((36.28, -5.33), (36.29, -5.32))},
+        {"green": "green"},
+    ],
+    ids=["origen-texto", "linea-tuplas", "green-texto"],
+)
+def test_h6_hole_rejects_wrong_types(kwargs):
+    """
+    GIVEN: Un origen que no es PositionSource, una línea sin puntos o un green que no lo es
+    WHEN: Se construye el hoyo
+    THEN: Se rechaza al construir (400), no al guardar (500)
+    """
+    datos = {"number": 1, "play_line": (SALIDA, CENTRO), "line_source": PositionSource.OSM}
+    datos.update(kwargs)
+
+    with pytest.raises(ValueError, match="MappedHole"):
+        MappedHole(**datos)

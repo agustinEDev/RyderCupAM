@@ -40,6 +40,15 @@ class MappedHole:
         # bool es un int en Python; un 3.0 o un True acabarían tal cual en el JSONB
         if not isinstance(self.number, int) or isinstance(self.number, bool):
             raise ValueError(f"Hole number must be an integer, got {self.number!r}")
+        # Un tipo equivocado reventaría al guardar (un 500); aquí es un dato inválido
+        if not isinstance(self.line_source, PositionSource):
+            raise ValueError(
+                f"MappedHole line_source must be a PositionSource, got {self.line_source!r}"
+            )
+        if not all(isinstance(point, GeoPoint) for point in self.play_line):
+            raise ValueError("MappedHole play line must be made of GeoPoints")
+        if self.green is not None and not isinstance(self.green, GreenPosition):
+            raise ValueError(f"MappedHole green must be a GreenPosition, got {self.green!r}")
         if not MIN_HOLE_NUMBER <= self.number <= MAX_HOLE_NUMBER:
             raise ValueError(f"Hole number must be between 1 and 18, got {self.number}")
         if len(self.play_line) < MIN_PLAY_LINE_POINTS:

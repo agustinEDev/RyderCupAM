@@ -169,6 +169,11 @@ golf_course_hole_maps_table = Table(
         "(status = 'PENDING_REVIEW') = (reviewed_at IS NULL)",
         name="ck_golf_course_hole_maps_review_consistency",
     ),
+    # Al leer, SQLAlchemy no pasa por el dominio: la BD garantiza al menos un hoyo
+    CheckConstraint(
+        "jsonb_typeof(holes) = 'array' AND jsonb_array_length(holes) > 0",
+        name="ck_golf_course_hole_maps_has_holes",
+    ),
     # Solo un mapa rechazado lleva motivo de rechazo
     CheckConstraint(
         "rejection_reason IS NULL OR status = 'REJECTED'",
