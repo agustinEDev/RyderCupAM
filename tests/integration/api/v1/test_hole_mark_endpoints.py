@@ -12,7 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from tests.conftest import create_authenticated_user
+from tests.conftest import create_authenticated_user, create_golf_course
 from tests.integration.api.v1.test_hole_map_endpoints import _as, _in_db, _save_map, _scenario
 
 M_PER_DEGREE = 6_371_000.0 * 3.141592653589793 / 180
@@ -118,23 +118,23 @@ async def test_m2_hole_already_mapped_is_409(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_m2_hole_with_tee_takes_only_the_green(client: AsyncClient):
+async def test_m2_hole_with_tee_keeps_only_the_green(client: AsyncClient):
     """
     GIVEN: Un mapa aprobado con el hoyo 2 con salida y sin green
-    WHEN: Se marca con salida, y luego solo el green
-    THEN: 409 HOLE_ALREADY_HAS_TEE; luego 200 con `tee` a null
+    WHEN: Llega una marca con salida, codo y green (hecha sin cobertura antes de aprobarse)
+    THEN: 200 con `tee` a null y sin codos: cuenta solo su green
     """
     course_id, _, admin_email, player = await _scenario(client, "m2b")
     await _save_map(course_id, approved_by_email=admin_email)
-    c = _as(client, player)
 
-    with_tee = await c.put(_url(course_id, 2), json={"tee": SALIDA, "green_center": GREEN_DEL_2})
-    only_green = await c.put(_url(course_id, 2), json={"green_center": GREEN_DEL_2})
+    response = await _as(client, player).put(
+        _url(course_id, 2), json={"tee": SALIDA, "bends": [CODO], "green_center": GREEN_DEL_2}
+    )
 
-    assert with_tee.status_code == 409
-    assert with_tee.json()["error_code"] == "HOLE_ALREADY_HAS_TEE"
-    assert only_green.status_code == 200
-    assert only_green.json()["tee"] is None
+    assert response.status_code == 200
+    data = response.json()
+    assert (data["tee"], data["bends"]) == (None, [])
+    assert data["green_center"] == pytest.approx(GREEN_DEL_2)
 
 
 @pytest.mark.asyncio
@@ -203,15 +203,16 @@ async def test_m3_hole_not_in_course_is_422(client: AsyncClient, hole):
             "HOLE_MARK_OUT_OF_RANGE",
         ),
         ({"tee": {"latitude": 91, "longitude": 0}, "green_center": GREEN}, "INVALID_HOLE_MARK"),
+        ({"tee": SALIDA, "bends": [CODO, CODO, CODO], "green_center": GREEN}, "INVALID_HOLE_MARK"),
     ],
 )
 async def test_m3_impossible_marks_are_422_with_their_code(client: AsyncClient, body, error_code):
     """
-    GIVEN: Un green a 11 m de la salida, o una latitud de 91
+    GIVEN: Un green a 11 m de la salida, una latitud de 91 o tres codos
     WHEN: Se marca
     THEN: 422 con su código, y no se guarda nada
     """
-    course_id, _, _, player = await _scenario(client, f"m3c{error_code.lower()}")
+    course_id, _, _, player = await _scenario(client, f"m3c{len(str(body))}")
     c = _as(client, player)
 
     response = await c.put(_url(course_id), json=body)
@@ -243,7 +244,6 @@ async def test_m3_far_from_the_course_is_422(client: AsyncClient):
 @pytest.mark.parametrize(
     "body",
     [
-        {"tee": SALIDA, "bends": [CODO, CODO, CODO], "green_center": GREEN},
         {"tee": SALIDA, "green_center": GREEN, "outline": []},
         {"tee": SALIDA},
         {"tee": [36.28, -5.33], "green_center": GREEN},
@@ -251,7 +251,7 @@ async def test_m3_far_from_the_course_is_422(client: AsyncClient):
 )
 async def test_m3_malformed_bodies_are_422(client: AsyncClient, body):
     """
-    GIVEN: Tres codos, un campo de más, sin green, o un punto como lista
+    GIVEN: Un campo de más, sin green, o un punto como lista
     WHEN: Se marca
     THEN: 422 de validación
     """
@@ -278,3 +278,51 @@ async def test_m3_needs_a_session_and_valid_ids(client: AsyncClient):
     c = _as(client, player)
     assert (await c.put(_url("no-es-un-id"), json=body)).status_code == 422
     assert (await c.put(_url(course_id, "uno"), json=body)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_m4_courses_players_cannot_see_are_404(client: AsyncClient):
+    """
+    GIVEN: Un campo pendiente de aprobar
+    WHEN: Un jugador lo marca o pide sus marcas
+    THEN: 404 GOLF_COURSE_NOT_FOUND, como si no existiera
+    """
+    creator = await create_authenticated_user(
+        client, "creator-m4@test.com", "P@ssw0rd123!", "Creator", "Map"
+    )
+    course = await create_golf_course(client, creator["cookies"])
+    player = await create_authenticated_user(
+        client, "player-m4@test.com", "P@ssw0rd123!", "Player", "Map"
+    )
+    c = _as(client, player)
+
+    for response in (
+        await c.put(_url(course["id"]), json={"tee": SALIDA, "green_center": GREEN}),
+        await c.get(_mine(course["id"])),
+    ):
+        assert response.status_code == 404
+        assert response.json()["error_code"] == "GOLF_COURSE_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_m5_a_late_mark_from_the_queue_does_not_replace_a_newer_one(client: AsyncClient):
+    """
+    GIVEN: El jugador marcó el hoyo 1 a las 10:05 (con red)
+    WHEN: Llega de la cola la que hizo a las 10:00 sin cobertura
+    THEN: 200 con la de las 10:05, que es la que queda
+    """
+    course_id, _, _, player = await _scenario(client, "m5")
+    c = _as(client, player)
+    nueva = {"tee": SALIDA, "bends": [CODO], "green_center": GREEN}
+    await c.put(_url(course_id), json={**nueva, "marked_at": "2026-10-15T10:05:00+02:00"})
+
+    response = await c.put(
+        _url(course_id),
+        json={"tee": SALIDA, "green_center": GREEN, "marked_at": "2026-10-15T10:00:00+02:00"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["bends"] == [CODO]
+    assert response.json()["marked_at"] == "2026-10-15T08:05:00Z"
+    (mark,) = (await c.get(_mine(course_id))).json()
+    assert mark["bends"] == [CODO]

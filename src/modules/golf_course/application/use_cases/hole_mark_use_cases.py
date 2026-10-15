@@ -4,7 +4,9 @@ Casos de uso de las marcas de hoyo de los jugadores (BE #532, PR C).
 Lo que se le pide al jugador depende de lo que el hoyo ya tenga en el mapa
 APROBADO (uno pendiente o rechazado no lo ven, así que no cuenta):
 - sin salida: salida, hasta dos codos y el centro del green;
-- con salida y sin green: solo el green, medido desde esa salida;
+- con salida y sin green: solo el green, medido desde esa salida. Si la marca
+  trae salida y codos (se hizo sin cobertura, antes de aprobarse el mapa), se
+  quedan fuera y cuenta su green: lo que marcó no se pierde;
 - con salida y green: nada, el hoyo ya está mapeado.
 """
 
@@ -16,7 +18,6 @@ from src.modules.golf_course.application.dtos.hole_mark_dtos import (
 )
 from src.modules.golf_course.application.exceptions import (
     GolfCourseNotFoundError,
-    HoleAlreadyHasTeeError,
     HoleAlreadyMappedError,
     HoleNotInCourseError,
     TeeRequiredError,
@@ -58,6 +59,14 @@ def _to_dto(mark: HoleMark) -> HoleMarkDTO:
     )
 
 
+def _visible(course: GolfCourse | None) -> bool:
+    """
+    Un campo que ven los jugadores: aprobado. La propuesta de cambio de un campo
+    (su clon) nace pendiente y se borra al aprobarla, así que nunca lo está.
+    """
+    return course is not None and course.approval_status.is_approved()
+
+
 def _location(course: GolfCourse) -> GeoPoint | None:
     location = course.location
     if location.latitude is None or location.longitude is None:
@@ -80,10 +89,9 @@ class SaveHoleMarkUseCase:
     async def execute(self, request: SaveHoleMarkRequestDTO) -> HoleMarkDTO:
         """
         Raises:
-            GolfCourseNotFoundError: si el campo no existe
+            GolfCourseNotFoundError: si el campo no existe o no lo ven los jugadores
             HoleNotInCourseError: si el campo no tiene ese hoyo
             HoleAlreadyMappedError: si el hoyo ya tiene salida y green aprobados
-            HoleAlreadyHasTeeError: si el hoyo ya tiene salida y la marca trae otra
             TeeRequiredError: si el hoyo no tiene salida y la marca no la trae
             InvalidHoleMarkError: (del dominio) coordenadas o codos imposibles
             HoleMarkOutOfRangeError: (del dominio) green a menos de 40 o más de 750 m
@@ -92,19 +100,20 @@ class SaveHoleMarkUseCase:
         course_id = GolfCourseId(request.golf_course_id)
         async with self._uow:
             course = await self._uow.golf_courses.find_by_id(course_id)
-            if course is None:
+            if not _visible(course):
                 raise GolfCourseNotFoundError(request.golf_course_id)
             if not 1 <= request.hole_number <= (course.physical_holes or MAX_HOLE_NUMBER):
                 raise HoleNotInCourseError(request.hole_number)
 
             tee = _point(request.tee) if request.tee is not None else None
+            bends = [_point(bend) for bend in request.bends]
             green_center = _point(request.green_center)
             mapped = await self._approved_hole(course_id, request.hole_number)
             if mapped is not None and mapped.green is not None:
                 raise HoleAlreadyMappedError(request.hole_number)
             if mapped is not None:
-                if tee is not None:
-                    raise HoleAlreadyHasTeeError(request.hole_number)
+                # La salida ya está aprobada: de la marca solo cuenta el green
+                tee, bends = None, []
                 ensure_tee_to_green(mapped.tee, green_center)
             elif tee is None:
                 raise TeeRequiredError(request.hole_number)
@@ -114,12 +123,15 @@ class SaveHoleMarkUseCase:
                 hole_number=request.hole_number,
                 user_id=UserId(request.user_id),
                 tee=tee,
-                bends=[_point(bend) for bend in request.bends],
+                bends=bends,
                 green_center=green_center,
+                marked_at=request.marked_at,
             )
             ensure_near_course(mark, _location(course))
             await self._uow.hole_marks.save(mark)
-            return _to_dto(mark)
+            # La guardada: si la que llegó era más vieja (de la cola), se quedó la otra
+            saved = await self._uow.hole_marks.find(course_id, mark.hole_number, mark.user_id)
+            return _to_dto(saved or mark)
 
 
 class ListMyHoleMarksUseCase:
@@ -131,11 +143,11 @@ class ListMyHoleMarksUseCase:
     async def execute(self, request: ListMyHoleMarksRequestDTO) -> list[HoleMarkDTO]:
         """
         Raises:
-            GolfCourseNotFoundError: si el campo no existe
+            GolfCourseNotFoundError: si el campo no existe o no lo ven los jugadores
         """
         course_id = GolfCourseId(request.golf_course_id)
         async with self._uow:
-            if await self._uow.golf_courses.find_by_id(course_id) is None:
+            if not _visible(await self._uow.golf_courses.find_by_id(course_id)):
                 raise GolfCourseNotFoundError(request.golf_course_id)
             marks = await self._uow.hole_marks.find_by_course_and_user(
                 course_id, UserId(request.user_id)

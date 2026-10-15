@@ -6,7 +6,7 @@ mapa aprobado, solo el green; uno con salida y green aprobados ya no se marca.
 Un mapa pendiente o rechazado no cuenta: los jugadores no lo ven.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -17,7 +17,6 @@ from src.modules.golf_course.application.dtos.hole_mark_dtos import (
 )
 from src.modules.golf_course.application.exceptions import (
     GolfCourseNotFoundError,
-    HoleAlreadyHasTeeError,
     HoleAlreadyMappedError,
     HoleNotInCourseError,
     TeeRequiredError,
@@ -118,7 +117,7 @@ async def _setup(map_status=None, holes=(), **course_args):
     return uow, course
 
 
-def _request(course, hole=1, user=JUGADOR, tee=SALIDA, bends=(), green=GREEN):
+def _request(course, hole=1, user=JUGADOR, tee=SALIDA, bends=(), green=GREEN, marked_at=None):
     return SaveHoleMarkRequestDTO(
         golf_course_id=str(course.id if hasattr(course, "id") else course),
         hole_number=hole,
@@ -126,6 +125,7 @@ def _request(course, hole=1, user=JUGADOR, tee=SALIDA, bends=(), green=GREEN):
         tee=_p(tee) if tee is not None else None,
         bends=[_p(b) for b in bends],
         green_center=_p(green),
+        marked_at=marked_at,
     )
 
 
@@ -287,16 +287,19 @@ async def test_u3_hole_with_tee_only_takes_a_green_only_mark():
 
 
 @pytest.mark.asyncio
-async def test_u3_hole_with_tee_rejects_a_tee_in_the_mark():
+async def test_u3_hole_with_tee_keeps_only_the_green_of_a_full_mark():
     """
-    GIVEN: Un hoyo con salida aprobada
-    WHEN: La marca trae su propia salida
-    THEN: HoleAlreadyHasTeeError
+    GIVEN: Un hoyo con salida aprobada (se aprobó mientras el jugador marcaba sin cobertura)
+    WHEN: Llega su marca con salida, codo y green
+    THEN: Se guarda solo su green, sin salida ni codos (Agustín, 15 oct)
     """
     uow, course = await _setup(map_status=HoleMapStatus.APPROVED, holes=[(2, False)])
 
-    with pytest.raises(HoleAlreadyHasTeeError):
-        await SaveHoleMarkUseCase(uow).execute(_request(course, hole=2))
+    dto = await SaveHoleMarkUseCase(uow).execute(_request(course, hole=2, bends=[CODO]))
+
+    assert (dto.tee, dto.bends, dto.green_center) == (None, [], _p(GREEN))
+    (guardada,) = await _mine(uow, course)
+    assert (guardada.tee, guardada.bends) == (None, [])
 
 
 @pytest.mark.asyncio
@@ -472,3 +475,117 @@ async def test_u6_green_only_far_from_the_course_location():
 
     with pytest.raises(HoleMarkFarFromCourseError):
         await SaveHoleMarkUseCase(uow).execute(_request(course, hole=2, tee=None))
+
+
+# ============================================================================
+# U7 — Campos que no ven los jugadores
+# ============================================================================
+
+
+async def _hidden_course(kind: str):
+    uow = InMemoryGolfCourseUnitOfWork()
+    course = _course()
+    if kind == "pending":
+        course = GolfCourse.create(
+            name="Pendiente",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=UserId.generate(),
+            tees=course.tees,
+            holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
+        )
+    elif kind == "rejected":
+        course = GolfCourse.create(
+            name="Rechazado",
+            country_code=CountryCode("ES"),
+            course_type=CourseType.STANDARD_18,
+            creator_id=UserId.generate(),
+            tees=course.tees,
+            holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
+        )
+        course.reject("El campo no existe en la realidad")
+    await uow.golf_courses.save(course)
+    return uow, course
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["pending", "rejected"])
+async def test_u7_courses_players_cannot_see_are_not_found(kind):
+    """
+    GIVEN: Un campo pendiente (como el clon de una propuesta de cambio) y uno rechazado
+    WHEN: Se marca o se piden las marcas
+    THEN: GolfCourseNotFoundError, como si no existiera
+    """
+    uow, course = await _hidden_course(kind)
+
+    with pytest.raises(GolfCourseNotFoundError):
+        await SaveHoleMarkUseCase(uow).execute(_request(course))
+    with pytest.raises(GolfCourseNotFoundError):
+        await _mine(uow, course)
+
+
+# ============================================================================
+# U8 — La cola sin cobertura: gana la más reciente para el jugador
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_u8_an_older_mark_arriving_late_does_not_replace_a_newer_one():
+    """
+    GIVEN: El jugador marcó el hoyo 1 hace 5 minutos (la marca B, ya guardada)
+    WHEN: Llega de la cola la marca A, que hizo hace 20 minutos
+    THEN: Se queda B, y es la que se devuelve
+    """
+    uow, course = await _setup()
+    use_case = SaveHoleMarkUseCase(uow)
+    ahora = datetime.now(UTC)
+    otro_green = (GREEN[0] + 0.0005, GREEN[1])
+    await use_case.execute(
+        _request(course, green=otro_green, marked_at=ahora - timedelta(minutes=5))
+    )
+
+    dto = await use_case.execute(_request(course, marked_at=ahora - timedelta(minutes=20)))
+
+    assert dto.green_center == _p(otro_green)
+    (guardada,) = await _mine(uow, course)
+    assert guardada.green_center == _p(otro_green)
+
+
+@pytest.mark.asyncio
+async def test_u8_a_newer_mark_replaces_and_its_time_is_kept():
+    """
+    GIVEN: Una marca guardada hecha hace 20 minutos
+    WHEN: Llega otra hecha hace 5
+    THEN: La sustituye, y su fecha es la del jugador (en UTC sin zona)
+    """
+    uow, course = await _setup()
+    use_case = SaveHoleMarkUseCase(uow)
+    ahora = datetime.now(UTC)
+    await use_case.execute(_request(course, marked_at=ahora - timedelta(minutes=20)))
+
+    dto = await use_case.execute(
+        _request(course, bends=[CODO], marked_at=ahora - timedelta(minutes=5))
+    )
+
+    assert dto.bends == [_p(CODO)]
+    assert dto.marked_at == (ahora - timedelta(minutes=5)).replace(tzinfo=None)
+
+
+@pytest.mark.asyncio
+async def test_u8_a_clock_ahead_counts_as_now():
+    """
+    GIVEN: Un móvil con el reloj una hora adelantado
+    WHEN: Marca, y luego llega una marca hecha hace 1 minuto
+    THEN: La primera se guardó con la hora del servidor, y la segunda (posterior a esa) la sustituye
+    """
+    uow, course = await _setup()
+    use_case = SaveHoleMarkUseCase(uow)
+    primera = await use_case.execute(
+        _request(course, marked_at=datetime.now(UTC) + timedelta(hours=1))
+    )
+    assert primera.marked_at <= datetime.now(UTC).replace(tzinfo=None)
+
+    otro_green = (GREEN[0] + 0.0005, GREEN[1])
+    dto = await use_case.execute(_request(course, green=otro_green))
+
+    assert dto.green_center == _p(otro_green)

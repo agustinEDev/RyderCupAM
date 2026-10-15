@@ -180,3 +180,44 @@ async def test_k5_the_database_rejects_impossible_rows(db_session, sql):
 
     with pytest.raises(IntegrityError):
         await db_session.execute(text(sql), {"c": course_id.value, "u": str(player)})
+
+
+@pytest.mark.asyncio
+async def test_k6_an_older_mark_does_not_replace_a_newer_one(db_session):
+    """
+    GIVEN: Una marca guardada de las 10:30
+    WHEN: Se guarda otra del mismo jugador y hoyo hecha a las 9:00 (llegó tarde de la cola)
+    THEN: Se queda la de las 10:30; y `find` la devuelve
+    """
+    player = await _player(db_session)
+    course_id = await _saved_course(db_session, player)
+    repository = HoleMarkRepository(db_session)
+    await repository.save(_mark(course_id, player, bends=(CODO,), at=SEGUNDA))
+
+    await repository.save(_mark(course_id, player, at=PRIMERA))
+
+    mark = await repository.find(course_id, 1, player)
+    assert mark is not None
+    assert mark.bends == (CODO,)
+    assert mark.updated_at == SEGUNDA
+    assert await repository.find(course_id, 2, player) is None
+    assert await repository.find(course_id, 1, UserId.generate()) is None
+
+
+@pytest.mark.asyncio
+async def test_k6_the_same_time_replaces(db_session):
+    """
+    GIVEN: Una marca guardada
+    WHEN: Llega otra con la misma fecha
+    THEN: La sustituye (empate: gana la que llega)
+    """
+    player = await _player(db_session)
+    course_id = await _saved_course(db_session, player)
+    repository = HoleMarkRepository(db_session)
+    await repository.save(_mark(course_id, player))
+
+    await repository.save(_mark(course_id, player, bends=(CODO,)))
+
+    mark = await repository.find(course_id, 1, player)
+    assert mark is not None
+    assert mark.bends == (CODO,)

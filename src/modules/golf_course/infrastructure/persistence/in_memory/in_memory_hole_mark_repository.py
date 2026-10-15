@@ -17,6 +17,8 @@ class InMemoryHoleMarkRepository(IHoleMarkRepository):
     async def save(self, mark: HoleMark) -> None:
         key = (str(mark.golf_course_id), mark.hole_number, str(mark.user_id))
         previous = self._marks.get(key)
+        if previous is not None and previous.updated_at > mark.updated_at:
+            return  # Como en PostgreSQL: una más vieja no pisa a la guardada
         if previous is not None:
             # Como el upsert de PostgreSQL: la fecha de la primera marca se queda
             mark = HoleMark(
@@ -30,6 +32,11 @@ class InMemoryHoleMarkRepository(IHoleMarkRepository):
                 updated_at=mark.updated_at,
             )
         self._marks[key] = mark
+
+    async def find(
+        self, golf_course_id: GolfCourseId, hole_number: int, user_id: UserId
+    ) -> HoleMark | None:
+        return self._marks.get((str(golf_course_id), hole_number, str(user_id)))
 
     async def find_by_course_and_user(
         self, golf_course_id: GolfCourseId, user_id: UserId

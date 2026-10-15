@@ -55,7 +55,8 @@ class HoleMarkRepository(IHoleMarkRepository):
         }
         # Upsert: volver a marcar sustituye la marca y conserva cuándo se hizo la
         # primera; dos envíos a la vez (el de la cola sin cobertura y uno nuevo)
-        # no chocan en la clave
+        # no chocan en la clave. Y gana la más reciente para el jugador, no la
+        # última en llegar: una que esperaba en la cola no pisa a otra posterior
         statement = insert(_table).values(
             golf_course_id=mark.golf_course_id,
             user_id=mark.user_id,
@@ -64,8 +65,25 @@ class HoleMarkRepository(IHoleMarkRepository):
             **values,
         )
         await self._session.execute(
-            statement.on_conflict_do_update(index_elements=list(_table.primary_key), set_=values)
+            statement.on_conflict_do_update(
+                index_elements=list(_table.primary_key),
+                set_=values,
+                where=_table.c.updated_at <= statement.excluded.updated_at,
+            )
         )
+
+    async def find(
+        self, golf_course_id: GolfCourseId, hole_number: int, user_id: UserId
+    ) -> HoleMark | None:
+        result = await self._session.execute(
+            select(_table).where(
+                _table.c.golf_course_id == golf_course_id,
+                _table.c.hole_number == hole_number,
+                _table.c.user_id == user_id,
+            )
+        )
+        row = result.first()
+        return None if row is None else _from_row(row)
 
     async def find_by_course_and_user(
         self, golf_course_id: GolfCourseId, user_id: UserId

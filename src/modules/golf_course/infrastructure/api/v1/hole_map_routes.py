@@ -15,7 +15,7 @@ nunca el texto de una excepción (CodeQL, BE #562).
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
@@ -28,6 +28,7 @@ from src.config.dependencies import (
     get_reject_hole_map_use_case,
     get_save_hole_mark_use_case,
 )
+from src.config.rate_limit import limiter
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
     ApproveHoleMapBodyDTO,
     GetHoleMapRequestDTO,
@@ -46,7 +47,6 @@ from src.modules.golf_course.application.dtos.hole_mark_dtos import (
 )
 from src.modules.golf_course.application.exceptions import (
     GolfCourseNotFoundError,
-    HoleAlreadyHasTeeError,
     HoleAlreadyMappedError,
     HoleMapChangedError,
     HoleMapNotFoundError,
@@ -234,7 +234,7 @@ def _course_not_found() -> JSONResponse:
 
 MARK_RESPONSES: dict[int | str, dict[str, Any]] = {
     404: {"description": "GOLF_COURSE_NOT_FOUND"},
-    409: {"description": "HOLE_ALREADY_MAPPED or HOLE_ALREADY_HAS_TEE"},
+    409: {"description": "HOLE_ALREADY_MAPPED"},
     422: {
         "description": (
             "HOLE_NOT_IN_COURSE, TEE_REQUIRED, INVALID_HOLE_MARK, HOLE_MARK_OUT_OF_RANGE "
@@ -256,12 +256,6 @@ _MARK_ERRORS: tuple[tuple[type[Exception], int, str, str], ...] = (
         status.HTTP_409_CONFLICT,
         "HOLE_ALREADY_MAPPED",
         "This hole already has its tee and green",
-    ),
-    (
-        HoleAlreadyHasTeeError,
-        status.HTTP_409_CONFLICT,
-        "HOLE_ALREADY_HAS_TEE",
-        "This hole already has its tee: mark only the green",
     ),
     (
         TeeRequiredError,
@@ -295,7 +289,9 @@ _MARK_ERRORS: tuple[tuple[type[Exception], int, str, str], ...] = (
     response_model=HoleMarkDTO,
     responses=MARK_RESPONSES,
 )
+@limiter.limit("60/minute")  # Por usuario: una vuelta son 18, y la cola los manda seguidos
 async def save_hole_mark(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     golf_course_id: UUID,
     hole_number: int,
     body: HoleMarkBodyDTO,
@@ -303,8 +299,10 @@ async def save_hole_mark(
     use_case: Annotated[SaveHoleMarkUseCase, Depends(get_save_hole_mark_use_case)],
 ):
     """
-    Marca un hoyo (o lo vuelve a marcar: sustituye tu marca). Sin salida en el
-    mapa: salida, hasta dos codos y centro del green; con salida, solo el green.
+    Marca un hoyo (o lo vuelve a marcar: sustituye tu marca, salvo que la tuya
+    guardada sea más nueva que `marked_at`). Sin salida en el mapa: salida, hasta
+    dos codos y centro del green; con salida, solo cuenta el green. Devuelve la
+    marca que queda guardada.
     """
     try:
         return await use_case.execute(
@@ -315,6 +313,7 @@ async def save_hole_mark(
                 tee=body.tee,
                 bends=body.bends,
                 green_center=body.green_center,
+                marked_at=body.marked_at,
             )
         )
     except GolfCourseNotFoundError:

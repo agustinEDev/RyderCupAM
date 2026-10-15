@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     SmallInteger,
     Table,
     text,
@@ -68,3 +69,6 @@ golf_course_hole_marks_table = Table(
     ),
     comment="Hoyos marcados por los jugadores, pendientes de pasar al mapa",
 )
+
+# La clave empieza por el campo: sin esto, borrar una cuenta recorrería la tabla entera
+Index("ix_golf_course_hole_marks_user_id", golf_course_hole_marks_table.c.user_id)

@@ -19,8 +19,15 @@ class IHoleMarkRepository(ABC):
     async def save(self, mark: HoleMark) -> None:
         """
         Guarda la marca. Si el jugador ya tenía una en ese hoyo, la sustituye
-        (conserva cuándo marcó la primera vez).
+        (conserva cuándo marcó la primera vez), salvo que la guardada sea más
+        nueva: entonces se queda la guardada.
         """
+
+    @abstractmethod
+    async def find(
+        self, golf_course_id: GolfCourseId, hole_number: int, user_id: UserId
+    ) -> HoleMark | None:
+        """La marca del jugador en ese hoyo, o None."""
 
     @abstractmethod
     async def find_by_course_and_user(

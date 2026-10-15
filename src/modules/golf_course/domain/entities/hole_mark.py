@@ -4,7 +4,8 @@ HoleMark Entity - Un hoyo marcado por un jugador (BE #532, PR C).
 En un hoyo sin datos el jugador toca la salida y el centro del green, y en un
 dogleg arrastra hasta dos codos; si el hoyo ya tiene salida, solo marca el
 green. La marca es suya y hay una por jugador y hoyo: volver a marcar la
-sustituye. La ve él al momento; los demás, cuando un admin la apruebe y pase al
+sustituye, salvo que la que llega sea más vieja que la guardada (una que se
+quedó en la cola del móvil sin cobertura). La ve él al momento; los demás, cuando un admin la apruebe y pase al
 mapa con origen PLAYER.
 
 Los límites frenan marcas absurdas (un toque en el hoyo de al lado, o a mitad
@@ -41,6 +42,13 @@ class HoleMarkFarFromCourseError(ValueError):
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _naive_utc(moment: datetime) -> datetime:
+    """Las fechas del módulo van en UTC y sin zona; una sin zona ya se toma por UTC."""
+    if moment.tzinfo is None:
+        return moment
+    return moment.astimezone(UTC).replace(tzinfo=None)
 
 
 def ensure_tee_to_green(tee: GeoPoint, green_center: GeoPoint) -> None:
@@ -137,9 +145,16 @@ class HoleMark:
         green_center: GeoPoint,
         tee: GeoPoint | None = None,
         bends: Iterable[GeoPoint] = (),
+        marked_at: datetime | None = None,
     ) -> "HoleMark":
-        """Una marca recién hecha."""
+        """
+        Una marca recién hecha. `marked_at` es cuándo la hizo el jugador, que
+        llega tarde si se marcó sin cobertura; nunca después de ahora (un reloj
+        adelantado no puede ganar a todas las que vengan detrás).
+        """
         now = _now()
+        if marked_at is not None:
+            now = min(_naive_utc(marked_at), now)
         return cls(
             golf_course_id=golf_course_id,
             hole_number=hole_number,

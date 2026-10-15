@@ -21,9 +21,5 @@ class HoleAlreadyMappedError(Exception):
     """El hoyo ya tiene salida y green en el mapa aprobado: no hay nada que marcar."""
 
 
-class HoleAlreadyHasTeeError(Exception):
-    """El hoyo ya tiene salida en el mapa aprobado: solo se marca el green."""
-
-
 class TeeRequiredError(Exception):
     """El hoyo no tiene salida que vean los jugadores: la marca tiene que traerla."""

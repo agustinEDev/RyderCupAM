@@ -1,9 +1,10 @@
 """DTOs de las marcas de hoyo que hace un jugador (BE #532, PR C)."""
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.modules.golf_course.application.dtos.hole_map_dtos import UtcDatetime
-from src.modules.golf_course.domain.entities.hole_mark import MAX_BENDS
 
 
 class PointDTO(BaseModel):
@@ -21,14 +22,21 @@ class PointDTO(BaseModel):
 class HoleMarkBodyDTO(BaseModel):
     """
     Cuerpo de marcar un hoyo: el centro del green y, si el hoyo no tiene salida,
-    la salida y hasta dos codos.
+    la salida y hasta dos codos (con más, INVALID_HOLE_MARK, del dominio).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     tee: PointDTO | None = None
-    bends: list[PointDTO] = Field(default_factory=list, max_length=MAX_BENDS)
+    bends: list[PointDTO] = Field(default_factory=list)
     green_center: PointDTO
+    marked_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Cuándo marcó el jugador (con zona). La que se envía tarde desde la cola sin "
+            "cobertura no pisa a una posterior. Sin él, ahora"
+        ),
+    )
 
 
 class SaveHoleMarkRequestDTO(BaseModel):
@@ -40,6 +48,7 @@ class SaveHoleMarkRequestDTO(BaseModel):
     tee: PointDTO | None = None
     bends: list[PointDTO] = Field(default_factory=list)
     green_center: PointDTO
+    marked_at: datetime | None = None
 
 
 class ListMyHoleMarksRequestDTO(BaseModel):
@@ -54,7 +63,7 @@ class HoleMarkDTO(BaseModel):
 
     hole_number: int
     tee: PointDTO | None = Field(
-        description="Null si el hoyo ya tenía salida: solo se marcó el green"
+        description="Null si el hoyo ya tenía salida: solo cuenta el green"
     )
     bends: list[PointDTO]
     green_center: PointDTO

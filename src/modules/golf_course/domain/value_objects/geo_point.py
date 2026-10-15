@@ -59,4 +59,6 @@ class GeoPoint:
             math.sin((lat2 - lat1) / 2) ** 2
             + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
         )
-        return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(half_chord))
+        # Con puntos casi opuestos el redondeo pasa de 1 (1 + 2e-16); la raíz lo
+        # devuelve a 1, pero el tope deja asin a salvo sin depender de eso
+        return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(min(1.0, half_chord)))

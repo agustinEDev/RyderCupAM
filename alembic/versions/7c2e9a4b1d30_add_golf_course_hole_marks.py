@@ -73,8 +73,11 @@ def upgrade() -> None:
         ),
         comment="Hoyos marcados por los jugadores, pendientes de pasar al mapa",
     )
+    # La clave empieza por el campo: sin esto, borrar una cuenta recorrería la
+    # tabla entera. Tabla recién creada y vacía: no hace falta CONCURRENTLY
+    op.create_index("ix_golf_course_hole_marks_user_id", "golf_course_hole_marks", ["user_id"])
 
 
 def downgrade() -> None:
-    """Quita la tabla."""
+    """Quita la tabla (y con ella su índice)."""
     op.drop_table("golf_course_hole_marks")

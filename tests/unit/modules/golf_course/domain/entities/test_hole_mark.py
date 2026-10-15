@@ -8,7 +8,7 @@ admin. Los límites frenan marcas absurdas: de la salida al green entre 40 y
 750 m, y nada a más de 3 km del campo.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -329,3 +329,65 @@ def test_d6_distance_along_a_parallel_shrinks_with_latitude():
     este = GeoPoint(latitude=36.28, longitude=-5.32)
 
     assert SALIDA.distance_to(este) == pytest.approx(896.3, abs=0.5)
+
+
+# ============================================================================
+# D7 — Cuándo marcó el jugador
+# ============================================================================
+
+
+def test_d7_marked_at_is_kept_in_utc_without_zone():
+    """
+    GIVEN: Una marca hecha hace 10 minutos, con la hora de Madrid (UTC+2)
+    WHEN: Se crea con ese `marked_at`
+    THEN: Creada y actualizada en ese instante, en UTC sin zona
+    """
+    hace_diez = datetime.now(UTC) - timedelta(minutes=10)
+    madrid = hace_diez.astimezone(timezone(timedelta(hours=2)))
+
+    mark = _mark(marked_at=madrid)
+
+    assert mark.created_at == mark.updated_at == hace_diez.replace(tzinfo=None)
+
+
+def test_d7_a_marked_at_without_zone_is_taken_as_utc():
+    """
+    GIVEN: Una fecha sin zona de hace un minuto (UTC)
+    WHEN: Se crea la marca con ella
+    THEN: Se queda tal cual
+    """
+    hace_uno = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
+
+    assert _mark(marked_at=hace_uno).updated_at == hace_uno
+
+
+def test_d7_a_marked_at_in_the_future_is_now():
+    """
+    GIVEN: Un reloj adelantado (dentro de una hora)
+    WHEN: Se crea la marca
+    THEN: Su fecha es ahora, no la del futuro
+    """
+    antes = datetime.now(UTC).replace(tzinfo=None)
+
+    mark = _mark(marked_at=datetime.now(UTC) + timedelta(hours=1))
+
+    assert antes <= mark.updated_at <= datetime.now(UTC).replace(tzinfo=None)
+
+
+def test_d6_nearly_antipodal_points_do_not_fail():
+    """
+    GIVEN: Dos puntos en lados opuestos del planeta
+    WHEN: Se mide la distancia
+    THEN: Media vuelta a la Tierra (~20 015 km), sin error de redondeo en asin
+    """
+    for a, b in (
+        (GeoPoint(latitude=0, longitude=0), GeoPoint(latitude=0, longitude=180)),
+        (GeoPoint(latitude=36.28, longitude=-5.33), GeoPoint(latitude=-36.28, longitude=174.67)),
+        (GeoPoint(latitude=89.9999999, longitude=0), GeoPoint(latitude=-89.9999999, longitude=180)),
+        # Con estos dos el redondeo da 1,0000000000000002 (la raíz lo vuelve a dejar en 1)
+        (
+            GeoPoint(latitude=-48.82280017131853, longitude=-9.851274800293993),
+            GeoPoint(latitude=48.82280017131853, longitude=170.148725199706),
+        ),
+    ):
+        assert a.distance_to(b) == pytest.approx(20_015_086.8, rel=1e-6)
