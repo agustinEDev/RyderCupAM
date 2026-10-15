@@ -75,6 +75,8 @@ DEFAULT_PAUSE_S = 5.0
 ERROR = "ERROR"
 # Resultados a los que se llega sin preguntar a OSM: tras ellos no hace falta pausa
 NO_OSM_CALL = frozenset({ImportHoleMapStatus.SKIPPED_APPROVED, ImportHoleMapStatus.NO_COORDINATES})
+# Lo que deja (o dejaría, en seco) un mapa guardado: solo esos hoyos cuentan
+SAVED = frozenset({ImportHoleMapStatus.CREATED, ImportHoleMapStatus.REIMPORTED})
 # Tantos «OSM no disponible» seguidos = Overpass caído o limitándonos: se para
 MAX_CONSECUTIVE_UNAVAILABLE = 5
 
@@ -214,7 +216,8 @@ async def run(
         else:
             unavailable_in_a_row = 0
         summary.statuses[result.status.value] += 1
-        summary.holes_imported += result.holes_imported
+        if result.status in SAVED:
+            summary.holes_imported += result.holes_imported
         summary.discarded.update(result.discarded)
         print(f"  {course}  {result.status.value}  hoyos={result.holes_imported}")
     return summary

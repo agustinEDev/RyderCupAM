@@ -441,3 +441,22 @@ def test_f6_osm_file_does_not_mix_with_overpass_options(tmp_path, extra):
 
     with pytest.raises(SystemExit):
         parse_args(["--country", "ES", "--osm-file", str(fichero), *extra])
+
+
+@pytest.mark.asyncio
+async def test_s4_holes_of_maps_not_saved_are_not_counted_as_imported():
+    """
+    GIVEN: Un mapa creado con 18 hoyos y otro con 2 que no se guarda (pocos hoyos)
+    WHEN: Se hace la pasada
+    THEN: Hoyos importados: 18; los 2 no se guardaron
+    """
+    importador = Importador(
+        {
+            "a": _resultado(ImportHoleMapStatus.CREATED, 18),
+            "b": _resultado(ImportHoleMapStatus.TOO_FEW_HOLES, 2),
+        }
+    )
+
+    summary = await run(["a", "b"], importador, apply=True, pause=0, sleep=_sin_espera)
+
+    assert summary.holes_imported == 18
