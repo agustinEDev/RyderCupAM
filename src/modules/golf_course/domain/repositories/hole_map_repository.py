@@ -35,7 +35,9 @@ class IHoleMapRepository(ABC):
         """
         El mapa del campo leído de la base de datos (no la copia que ya tuviera
         la sesión) y bloqueado hasta el final de la transacción: para escribir
-        sobre lo último que hay, sin que nadie lo cambie entretanto.
+        sobre lo último que hay, sin que nadie lo cambie entretanto. Bloquea
+        también cuando el campo aún no tiene mapa, para que dos importaciones a
+        la vez no lo creen las dos.
         """
 
     @abstractmethod

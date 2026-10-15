@@ -20,6 +20,7 @@ from src.modules.golf_course.application.dtos.hole_map_import_dtos import (
     ImportHoleMapResponseDTO,
     ImportHoleMapStatus,
 )
+from src.modules.golf_course.infrastructure.osm.overpass_client import DEFAULT_OVERPASS_URL
 
 # ============================================================================
 # S1-S2 — Argumentos
@@ -38,6 +39,7 @@ def test_s1_by_country():
     assert args.course is None
     assert args.apply is False
     assert args.pause == 5.0
+    assert args.overpass_url == DEFAULT_OVERPASS_URL
 
 
 def test_s1_by_course():
@@ -326,3 +328,27 @@ def test_s7_nothing_to_explain_when_there_are_courses():
         is None
     )
     assert nothing_to_import(parse_args(["--country", "ES"]), []) is None
+
+
+def test_s8_another_overpass_server_can_be_used():
+    """
+    GIVEN: --overpass-url con un espejo de Overpass (el principal, caído)
+    WHEN: Se leen los argumentos
+    THEN: Se usará ese servidor
+    """
+    args = parse_args(
+        ["--country", "ES", "--overpass-url", "https://overpass.kumi.systems/api/interpreter"]
+    )
+
+    assert args.overpass_url == "https://overpass.kumi.systems/api/interpreter"
+
+
+@pytest.mark.parametrize("url", ["overpass.kumi.systems", "ftp://x/api", "http://"])
+def test_s8_overpass_url_must_be_http(url):
+    """
+    GIVEN: Un --overpass-url que no es una URL http(s) con servidor
+    WHEN: Se leen los argumentos
+    THEN: Error de uso
+    """
+    with pytest.raises(SystemExit):
+        parse_args(["--country", "ES", "--overpass-url", url])

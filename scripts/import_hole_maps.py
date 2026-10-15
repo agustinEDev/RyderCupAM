@@ -15,6 +15,8 @@ Uso:
     python scripts/import_hole_maps.py --country ES            # en seco
     python scripts/import_hole_maps.py --country ES --apply    # guarda
     python scripts/import_hole_maps.py --course <id> --apply
+    python scripts/import_hole_maps.py --country ES \\
+        --overpass-url https://overpass.kumi.systems/api/interpreter
 """
 
 import argparse
@@ -25,6 +27,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -44,7 +47,10 @@ from src.modules.golf_course.application.use_cases.import_hole_map_from_osm_use_
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.infrastructure.osm.osm_hole_map_source import OsmHoleMapSource
-from src.modules.golf_course.infrastructure.osm.overpass_client import OverpassClient
+from src.modules.golf_course.infrastructure.osm.overpass_client import (
+    DEFAULT_OVERPASS_URL,
+    OverpassClient,
+)
 from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
     golf_courses_table,
 )
@@ -82,6 +88,14 @@ def course_id(value: str) -> str:
         raise argparse.ArgumentTypeError(f"'{value}' is not a golf course id") from None
 
 
+def http_url(value: str) -> str:
+    """Una URL http(s) con servidor."""
+    parsed = urlparse(value)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise argparse.ArgumentTypeError(f"'{value}' is not an http(s) URL")
+    return value
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Lee la línea de órdenes: un país o un campo, y si se guarda."""
     parser = argparse.ArgumentParser(
@@ -96,6 +110,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_PAUSE_S,
         help=f"segundos entre campos (por defecto {DEFAULT_PAUSE_S:g})",
+    )
+    parser.add_argument(
+        "--overpass-url",
+        type=http_url,
+        default=DEFAULT_OVERPASS_URL,
+        help="servidor de Overpass; un espejo si el principal está caído",
     )
     return parser.parse_args(argv)
 
@@ -209,7 +229,7 @@ async def main() -> int:
         return 1
     print(f"{len(course_ids)} campos que importar{'' if args.apply else ' (en seco)'}.")
 
-    client = OverpassClient()
+    client = OverpassClient(url=args.overpass_url)
     source = OsmHoleMapSource(client)
 
     async def import_one(course_id: str, apply: bool) -> ImportHoleMapResponseDTO:

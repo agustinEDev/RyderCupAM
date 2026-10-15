@@ -6,6 +6,7 @@ sesión del importador ya tiene el mapa cargado, y una lectura normal le
 devolvería esa copia vieja (pendiente) en vez de la aprobada en la base de datos.
 """
 
+import asyncio
 from datetime import UTC, datetime
 
 import pytest
@@ -175,3 +176,45 @@ async def test_map_approved_while_asking_osm_is_not_overwritten(db_session, esce
     ).one()
     assert row.status == "APPROVED"
     assert [hole["number"] for hole in row.holes] == [9]
+
+
+@pytest.mark.asyncio
+async def test_two_imports_of_the_same_course_queue_up(db_session, escenario):
+    """
+    GIVEN: Un campo SIN mapa y dos importaciones que van a escribir a la vez
+    WHEN: La primera relee para escribir (bloqueo) y la segunda también
+    THEN: La segunda espera a que la primera confirme y entonces ve su mapa
+         (lo reimportará), en vez de crear un segundo y chocar
+    """
+    course, _ = escenario
+    await db_session.execute(
+        text("DELETE FROM golf_course_hole_maps WHERE golf_course_id = :id"),
+        {"id": course.id.value},
+    )
+    await db_session.commit()
+
+    async with AsyncSession(bind=db_session.bind, expire_on_commit=False) as primera:
+        repo_a = HoleMapRepository(primera)
+        assert await repo_a.find_by_golf_course_id_for_update(course.id) is None
+
+        async def segunda():
+            async with AsyncSession(bind=db_session.bind, expire_on_commit=False) as otra:
+                return await HoleMapRepository(otra).find_by_golf_course_id_for_update(course.id)
+
+        espera = asyncio.create_task(segunda())
+        await asyncio.sleep(0.5)
+        assert not espera.done(), "la segunda tenía que quedarse esperando"
+
+        await repo_a.save(
+            CourseHoleMap.create(
+                golf_course_id=course.id,
+                holes=[_hole(1)],
+                osm_reference="way/3",
+                imported_at=datetime(2026, 10, 15, 9, 0),
+            )
+        )
+        await primera.commit()
+
+    seen = await asyncio.wait_for(espera, timeout=10)
+    assert seen is not None
+    assert seen.osm_reference == "way/3"
