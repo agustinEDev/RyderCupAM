@@ -46,15 +46,21 @@ def _ring_way_ids(features: list[dict[str, Any]]) -> set[int]:
     """Las vías de contorno o green que vienen también como línea cerrada."""
     ids: set[int] = set()
     for feature in features:
-        properties = feature.get("properties") or {}
-        geometry = feature.get("geometry") or {}
-        if (
-            properties.get("@type") == "way"
-            and geometry.get("type") == "LineString"
-            and (properties.get("leisure") == "golf_course" or properties.get("golf") == "green")
-            and _is_ring(geometry.get("coordinates") or [])
-        ):
-            ids.add(properties["@id"])
+        try:
+            properties = feature.get("properties") or {}
+            geometry = feature.get("geometry") or {}
+            if (
+                properties.get("@type") == "way"
+                and isinstance(properties.get("@id"), int)
+                and geometry.get("type") == "LineString"
+                and (
+                    properties.get("leisure") == "golf_course" or properties.get("golf") == "green"
+                )
+                and _is_ring(geometry.get("coordinates") or [])
+            ):
+                ids.add(properties["@id"])
+        except (AttributeError, TypeError):
+            continue  # un objeto mal formado: lo descarta también la conversión
     return ids
 
 
@@ -122,18 +128,23 @@ class OsmFileClient:
         self._radius_m = radius_m
         self._elements: list[tuple[tuple[float, float, float, float], dict[str, Any]]] = []
         features: list[dict[str, Any]] = []
-        with Path(path).open(encoding="utf-8") as stream:
-            for number, line in enumerate(stream, start=1):
-                text = line.strip().lstrip(RECORD_SEPARATOR)
-                if not text:
-                    continue
-                try:
-                    feature = json.loads(text)
-                except ValueError:
-                    logger.warning("OSM file line %d is not a readable object; skipped", number)
-                    continue
-                if isinstance(feature, dict):
-                    features.append(feature)
+        try:
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError as e:
+            raise ValueError(
+                f"{path} is not text: pass the .geojsonseq from `osmium export`, not the .pbf"
+            ) from e
+        for number, line in enumerate(lines, start=1):
+            text = line.strip().lstrip(RECORD_SEPARATOR)
+            if not text:
+                continue
+            try:
+                feature = json.loads(text)
+            except ValueError:
+                logger.warning("OSM file line %d is not a readable object; skipped", number)
+                continue
+            if isinstance(feature, dict):
+                features.append(feature)
         ring_ways = _ring_way_ids(features)
         for feature in features:
             try:
@@ -141,7 +152,12 @@ class OsmFileClient:
                 if element is not None:
                     self._elements.append((_bounds(element), element))
             except (ValueError, TypeError, KeyError, IndexError, AttributeError):
-                logger.warning("OSM object %s is not usable; skipped", feature.get("properties"))
+                logger.warning("OSM object %r is not usable; skipped", str(feature)[:120])
+        if not self._elements:
+            raise ValueError(
+                f"{path} has no golf course, hole or green: build it with "
+                "`osmium export … -f geojsonseq --attributes=type,id` (see the import script)"
+            )
 
     async def fetch_area(self, latitude: float, longitude: float) -> OsmArea:
         """Lo que hay a menos del radio de esa coordenada, como lo daría Overpass."""

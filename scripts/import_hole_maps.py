@@ -128,13 +128,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pause",
         type=float,
-        default=DEFAULT_PAUSE_S,
+        default=None,
         help=f"segundos entre campos (por defecto {DEFAULT_PAUSE_S:g})",
     )
     parser.add_argument(
         "--overpass-url",
         type=http_url,
-        default=DEFAULT_OVERPASS_URL,
+        default=None,
         help="servidor de Overpass; un espejo si el principal está caído",
     )
     parser.add_argument(
@@ -142,7 +142,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=existing_file,
         help="fichero de osmium export (geojsonseq) en vez de Overpass; sin pausas",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.osm_file is not None and (args.pause is not None or args.overpass_url is not None):
+        parser.error("--pause y --overpass-url son de Overpass: no van con --osm-file")
+    if args.pause is None:
+        args.pause = DEFAULT_PAUSE_S
+    if args.overpass_url is None:
+        args.overpass_url = DEFAULT_OVERPASS_URL
+    return args
 
 
 def make_client(args: argparse.Namespace) -> OverpassClient | OsmFileClient:
@@ -257,6 +264,12 @@ async def main() -> int:
     """Punto de entrada."""
     args = parse_args()
     start_all_mappers()
+    # Antes de tocar la base de datos: un fichero que no vale falla aquí
+    try:
+        client = make_client(args)
+    except ValueError as error:
+        print(error)
+        return 2
 
     async with async_session_maker() as session:
         course_ids = await select_course_ids(session, country=args.country, course=args.course)
@@ -266,7 +279,6 @@ async def main() -> int:
         return 1
     print(f"{len(course_ids)} campos que importar{'' if args.apply else ' (en seco)'}.")
 
-    client = make_client(args)
     source = OsmHoleMapSource(client)
 
     async def import_one(course_id: str, apply: bool) -> ImportHoleMapResponseDTO:

@@ -142,11 +142,13 @@ async def test_f3_ignores_everything_else(tmp_path, caplog):
             leisure="golf_course",
         ),
     ]
-    client = OsmFileClient(_fichero(tmp_path, ruido))
+    # Con un hoyo bueno: un fichero sin nada útil ya es un error al arrancar (F10)
+    client = OsmFileClient(_fichero(tmp_path, [*ruido, HOYO]))
 
     area = await client.fetch_area(LAT, LON)
 
-    assert (area.course_ways, area.course_relations, area.holes, area.greens) == ((), (), (), ())
+    assert (area.course_ways, area.course_relations, area.greens) == ((), (), ())
+    assert [h.id for h in area.holes] == [33]
     assert not [r for r in caplog.records if "not a readable object" in r.getMessage()]
 
 
@@ -279,22 +281,89 @@ async def test_f9_the_closed_line_wins_over_the_area(tmp_path):
     assert green.points[1] == (LAT, LON + 0.001)
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "linea",
+    "malo",
     [
-        "[]",
-        '"texto"',
-        json.dumps(_feature("way", 7, {"type": "LineString", "coordinates": []}, golf="hole")),
+        [],
+        "texto",
+        {"type": "Feature", "properties": "x", "geometry": {}},
+        {"type": "Feature", "properties": {"@type": "way"}, "geometry": []},
+        _feature("way", 7, {"type": "LineString", "coordinates": []}, golf="hole"),
+        # Un green cerrado sin id: no puede marcar su vía como «vino en línea»
+        {
+            "type": "Feature",
+            "properties": {"@type": "way", "golf": "green"},
+            "geometry": {"type": "LineString", "coordinates": _anillo(LAT, LON)},
+        },
+        _feature(
+            ["no", "es", "un", "id"],
+            8,
+            {"type": "LineString", "coordinates": _anillo(LAT, LON)},
+            golf="green",
+        ),
     ],
-    ids=["lista", "texto", "sin-coordenadas"],
+    ids=[
+        "lista",
+        "texto",
+        "props-texto",
+        "geom-lista",
+        "sin-coordenadas",
+        "green-sin-id",
+        "tipo-lista",
+    ],
 )
-def test_f5_malformed_object_does_not_break_the_start(tmp_path, linea):
+async def test_f5_malformed_object_is_skipped_and_the_rest_is_read(tmp_path, malo):
     """
-    GIVEN: Una línea que es JSON pero no un objeto de OSM usable
-    WHEN: Se crea el cliente
-    THEN: Se salta, sin reventar el arranque
+    GIVEN: Un objeto que es JSON pero no un objeto de OSM usable, y un hoyo bueno
+    WHEN: Se crea el cliente y se pide la zona
+    THEN: El malo se salta sin reventar el arranque, y el hoyo bueno sale
     """
     path = tmp_path / "golf.geojsonseq"
-    path.write_text(f"{linea}\n{json.dumps(HOYO)}\n")
+    path.write_text(f"{json.dumps(malo)}\n{json.dumps(HOYO)}\n")
 
-    OsmFileClient(path)
+    area = await OsmFileClient(path).fetch_area(LAT, LON)
+
+    assert [h.id for h in area.holes] == [33]
+
+
+@pytest.mark.parametrize(
+    "contenido",
+    [
+        "",
+        json.dumps({"type": "FeatureCollection", "features": []}),
+        json.dumps(
+            {
+                "type": "Feature",
+                "properties": {"golf": "hole"},
+                "geometry": {"type": "Point", "coordinates": [1, 2]},
+            }
+        ),
+    ],
+    ids=["vacio", "featurecollection", "sin-nada-util"],
+)
+def test_f10_a_file_with_nothing_usable_fails_at_start(tmp_path, contenido):
+    """
+    GIVEN: Un fichero sin ningún contorno, hoyo ni green (otro formato, otro país
+           mal filtrado, export sin --attributes=type,id)
+    WHEN: Se crea el cliente
+    THEN: Error claro al arrancar, en vez de una pasada «sin contorno» en todo
+    """
+    path = tmp_path / "golf.geojsonseq"
+    path.write_text(contenido)
+
+    with pytest.raises(ValueError, match="osmium export"):
+        OsmFileClient(path)
+
+
+def test_f10_a_binary_file_fails_with_a_clear_error(tmp_path):
+    """
+    GIVEN: El .osm.pbf (binario) en vez del .geojsonseq
+    WHEN: Se crea el cliente
+    THEN: Error claro, no un UnicodeDecodeError
+    """
+    path = tmp_path / "golf.osm.pbf"
+    path.write_bytes(bytes(range(256)) * 4)
+
+    with pytest.raises(ValueError, match="geojsonseq"):
+        OsmFileClient(path)

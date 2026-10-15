@@ -6,6 +6,8 @@ nada). Lo que se hace con cada campo se prueba en su caso de uso, y qué campos
 se eligen, contra la base de datos en los tests de integración.
 """
 
+import json
+
 import pytest
 
 from scripts.import_hole_maps import (
@@ -369,7 +371,12 @@ def test_f6_osm_file_uses_the_file_and_no_pause(tmp_path):
     from src.modules.golf_course.infrastructure.osm.osm_file_client import OsmFileClient
 
     fichero = tmp_path / "golf.geojsonseq"
-    fichero.write_text("")
+    hoyo = {
+        "type": "Feature",
+        "properties": {"@type": "way", "@id": 1, "golf": "hole", "ref": "1"},
+        "geometry": {"type": "LineString", "coordinates": [[-5.33, 36.28], [-5.33, 36.29]]},
+    }
+    fichero.write_text(json.dumps(hoyo) + "\n")
     args = parse_args(["--country", "ES", "--osm-file", str(fichero)])
 
     assert isinstance(make_client(args), OsmFileClient)
@@ -416,3 +423,21 @@ def test_f8_the_help_explains_how_to_build_the_file():
     assert "download.geofabrik.de" in script.__doc__
     assert "osmium tags-filter" in script.__doc__
     assert "osmium export" in script.__doc__
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["--overpass-url", "https://overpass.kumi.systems/api/interpreter"], ["--pause", "10"]],
+    ids=["overpass-url", "pause"],
+)
+def test_f6_osm_file_does_not_mix_with_overpass_options(tmp_path, extra):
+    """
+    GIVEN: --osm-file junto a una opción que solo vale para Overpass
+    WHEN: Se leen los argumentos
+    THEN: Error de uso, en vez de ignorarla sin avisar
+    """
+    fichero = tmp_path / "golf.geojsonseq"
+    fichero.write_text("")
+
+    with pytest.raises(SystemExit):
+        parse_args(["--country", "ES", "--osm-file", str(fichero), *extra])

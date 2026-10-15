@@ -60,7 +60,8 @@ def _hole(number: int) -> MappedHole:
 
 CANDIDATO = OsmHoleMapCandidate(
     osm_reference="way/237391513",
-    holes=(_hole(1), _hole(2)),
+    # 10 de los 18: al menos la mitad, para que se guarde (U9)
+    holes=tuple(_hole(n) for n in range(1, 11)),
     discarded={DiscardReason.PAR_MISMATCH: 1, DiscardReason.NO_NUMBER: 2},
 )
 
@@ -192,7 +193,7 @@ async def test_u2_not_approved_course_is_rejected():
 @pytest.mark.asyncio
 async def test_u3_creates_a_pending_map():
     """
-    GIVEN: Un campo sin mapa y un candidato de OSM con dos hoyos
+    GIVEN: Un campo sin mapa y un candidato de OSM con diez hoyos
     WHEN: Se importa
     THEN: Se crea el mapa pendiente de revisión, con su referencia y sus hoyos
     """
@@ -205,7 +206,7 @@ async def test_u3_creates_a_pending_map():
     assert saved is not None
     assert saved.status is HoleMapStatus.PENDING_REVIEW
     assert saved.osm_reference == "way/237391513"
-    assert [h.number for h in saved.holes] == [1, 2]
+    assert [h.number for h in saved.holes] == list(range(1, 11))
     assert uow.committed is True
 
 
@@ -260,7 +261,7 @@ async def test_u4_pending_or_rejected_map_is_reimported(rejected):
     assert result.status is ImportHoleMapStatus.REIMPORTED
     saved = await uow.hole_maps.find_by_golf_course_id(course.id)
     assert saved is existing
-    assert [h.number for h in saved.holes] == [1, 2]
+    assert [h.number for h in saved.holes] == list(range(1, 11))
     assert saved.status is HoleMapStatus.PENDING_REVIEW
 
 
@@ -362,16 +363,16 @@ async def test_u7_osm_unavailable_touches_nothing():
 @pytest.mark.asyncio
 async def test_u8_result_counts_imported_and_discarded_holes():
     """
-    GIVEN: Un candidato con dos hoyos y tres descartados
+    GIVEN: Un candidato con diez hoyos y tres descartados
     WHEN: Se importa
-    THEN: El resultado dice cuántos entraron, cuántos quedaron fuera por motivo
+    THEN: El resultado dice cuántos entraron (10), cuántos quedaron fuera por motivo
          y la referencia OSM
     """
     _, course, _, use_case = await _setup()
 
     result = await use_case.execute(_request(course))
 
-    assert result.holes_imported == 2
+    assert result.holes_imported == 10
     assert result.discarded == {"PAR_MISMATCH": 1, "NO_NUMBER": 2}
     assert result.osm_reference == "way/237391513"
 
@@ -393,7 +394,7 @@ async def test_s2_dry_run_creates_nothing():
     result = await use_case.execute(_request(course, apply=False))
 
     assert result.status is ImportHoleMapStatus.CREATED
-    assert result.holes_imported == 2
+    assert result.holes_imported == 10
     assert await uow.hole_maps.find_by_golf_course_id(course.id) is None
 
 
@@ -512,4 +513,65 @@ async def test_u9_map_created_meanwhile_is_reimported():
     result = await ImportHoleMapFromOsmUseCase(uow, FuenteQueCrea()).execute(_request(course))
 
     assert result.status is ImportHoleMapStatus.REIMPORTED
-    assert [h.number for h in otro.holes] == [1, 2]
+    assert [h.number for h in otro.holes] == list(range(1, 11))
+
+
+# ============================================================================
+# U9 — Menos de la mitad de los hoyos del campo: no se guarda
+# ============================================================================
+
+
+def _candidato(n_hoyos):
+    return OsmHoleMapCandidate(
+        osm_reference="way/9", holes=tuple(_hole(n) for n in range(1, n_hoyos + 1)), discarded={}
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hoyos", "fisicos", "status"),
+    [
+        (8, 18, ImportHoleMapStatus.TOO_FEW_HOLES),
+        (9, 18, ImportHoleMapStatus.CREATED),
+        (4, 9, ImportHoleMapStatus.TOO_FEW_HOLES),
+        (5, 9, ImportHoleMapStatus.CREATED),
+    ],
+    ids=["8-de-18", "9-de-18", "4-de-9", "5-de-9"],
+)
+async def test_u9_a_map_with_less_than_half_the_holes_is_not_saved(hoyos, fisicos, status):
+    """
+    GIVEN: Un candidato con menos de la mitad de los hoyos del campo (los
+           recorridos pequeños que comparten contorno con el grande y se quedan
+           con algún hoyo suyo por coincidir el par)
+    WHEN: Se importa
+    THEN: «Pocos hoyos» y no se guarda; con la mitad o más, se crea
+    """
+    uow, course, _, use_case = await _setup(
+        course=_course(physical_holes=fisicos), fuente=FuenteFalsa(resultado=_candidato(hoyos))
+    )
+
+    result = await use_case.execute(_request(course))
+
+    assert result.status is status
+    guardado = await uow.hole_maps.find_by_golf_course_id(course.id)
+    assert (guardado is not None) is (status is ImportHoleMapStatus.CREATED)
+
+
+@pytest.mark.asyncio
+async def test_u9_too_few_holes_leaves_an_existing_map_alone():
+    """
+    GIVEN: Un mapa pendiente y una reimportación con muy pocos hoyos
+    WHEN: Se importa
+    THEN: «Pocos hoyos» y el mapa que había no cambia
+    """
+    course = _course()
+    existing = _existing(course.id)
+    _, _, _, use_case = await _setup(
+        course=course, existing_map=existing, fuente=FuenteFalsa(resultado=_candidato(2))
+    )
+
+    result = await use_case.execute(_request(course))
+
+    assert result.status is ImportHoleMapStatus.TOO_FEW_HOLES
+    assert result.holes_imported == 2
+    assert [h.number for h in existing.holes] == [9]

@@ -113,6 +113,9 @@ class ImportHoleMapFromOsmUseCase:
             return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.NO_OUTLINE)
         if not candidate.holes:
             return _result(ImportHoleMapStatus.NO_VALID_HOLES, candidate)
+        # Con menos de la mitad no hay mapa: el campo va como sin mapear (GPS y marcar)
+        if len(candidate.holes) * 2 < plan.physical_holes:
+            return _result(ImportHoleMapStatus.TOO_FEW_HOLES, candidate)
         return candidate
 
     async def _save(
