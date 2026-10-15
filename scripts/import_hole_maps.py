@@ -8,13 +8,24 @@ nuestra tarjeta y crea o reimporta el mapa, pendiente de que un admin lo revise.
 Un mapa ya aprobado no se toca.
 
 Sin --apply hace una pasada en seco: calcula y resume, pero no guarda nada.
-Entre campo y campo espera unos segundos: Overpass es un servicio público de uso
-justo. Los datos de OSM van bajo licencia ODbL.
+Los datos de OSM van bajo licencia ODbL.
+
+De dónde sale OSM:
+- Por defecto, Overpass: un servicio público de uso justo, así que entre campo y
+  campo se espera unos segundos. Se satura a menudo; vale para un campo suelto.
+- Con --osm-file, un fichero local: para pasadas de muchos campos, en segundos y
+  sin fallos. Se prepara así (el de España pesa ~1,4 GB y se puede borrar luego):
+
+    curl -LO https://download.geofabrik.de/europe/spain-latest.osm.pbf
+    osmium tags-filter spain-latest.osm.pbf nwr/leisure=golf_course \\
+        w/golf=hole w/golf=green -o golf.osm.pbf
+    osmium export golf.osm.pbf -f geojsonseq --attributes=type,id -o golf.geojsonseq
 
 Uso:
     python scripts/import_hole_maps.py --country ES            # en seco
     python scripts/import_hole_maps.py --country ES --apply    # guarda
     python scripts/import_hole_maps.py --course <id> --apply
+    python scripts/import_hole_maps.py --country ES --osm-file golf.geojsonseq
     python scripts/import_hole_maps.py --country ES \\
         --overpass-url https://overpass.kumi.systems/api/interpreter
 """
@@ -46,6 +57,7 @@ from src.modules.golf_course.application.use_cases.import_hole_map_from_osm_use_
 )
 from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.infrastructure.osm.osm_file_client import OsmFileClient
 from src.modules.golf_course.infrastructure.osm.osm_hole_map_source import OsmHoleMapSource
 from src.modules.golf_course.infrastructure.osm.overpass_client import (
     DEFAULT_OVERPASS_URL,
@@ -96,6 +108,14 @@ def http_url(value: str) -> str:
     return value
 
 
+def existing_file(value: str) -> Path:
+    """Un fichero que existe: mejor fallar al arrancar que a mitad de la pasada."""
+    path = Path(value)
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(f"'{value}' is not a file")
+    return path
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Lee la línea de órdenes: un país o un campo, y si se guarda."""
     parser = argparse.ArgumentParser(
@@ -117,7 +137,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_OVERPASS_URL,
         help="servidor de Overpass; un espejo si el principal está caído",
     )
+    parser.add_argument(
+        "--osm-file",
+        type=existing_file,
+        help="fichero de osmium export (geojsonseq) en vez de Overpass; sin pausas",
+    )
     return parser.parse_args(argv)
+
+
+def make_client(args: argparse.Namespace) -> OverpassClient | OsmFileClient:
+    """De dónde sale OSM: el fichero local si se pide, Overpass si no."""
+    if args.osm_file is not None:
+        return OsmFileClient(args.osm_file)
+    return OverpassClient(url=args.overpass_url)
+
+
+def pause_between_courses(args: argparse.Namespace) -> float:
+    """Con el fichero no hay ningún servicio que respetar: sin pausa."""
+    return 0.0 if args.osm_file is not None else args.pause
 
 
 async def select_course_ids(
@@ -229,7 +266,7 @@ async def main() -> int:
         return 1
     print(f"{len(course_ids)} campos que importar{'' if args.apply else ' (en seco)'}.")
 
-    client = OverpassClient(url=args.overpass_url)
+    client = make_client(args)
     source = OsmHoleMapSource(client)
 
     async def import_one(course_id: str, apply: bool) -> ImportHoleMapResponseDTO:
@@ -241,7 +278,9 @@ async def main() -> int:
             )
 
     try:
-        summary = await run(course_ids, import_one, apply=args.apply, pause=args.pause)
+        summary = await run(
+            course_ids, import_one, apply=args.apply, pause=pause_between_courses(args)
+        )
     finally:
         await client.aclose()
     print(report(summary, apply=args.apply))
