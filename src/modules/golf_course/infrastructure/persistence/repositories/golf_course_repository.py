@@ -117,6 +117,17 @@ class GolfCourseRepository(IGolfCourseRepository):
         self._session.add(golf_course)
         await self._session.flush()
 
+    async def find_names_by_ids(self, golf_course_ids: list[GolfCourseId]) -> dict[str, str]:
+        """Los nombres de esos campos, por id, en una sola consulta (sin cargar el agregado)."""
+        if not golf_course_ids:
+            return {}
+        result = await self._session.execute(
+            select(golf_courses_table.c.id, golf_courses_table.c.name).where(
+                golf_courses_table.c.id.in_(golf_course_ids)
+            )
+        )
+        return {str(row.id): row.name for row in result}
+
     async def find_by_id(self, golf_course_id: GolfCourseId) -> GolfCourse | None:
         """
         Busca un campo de golf por ID.

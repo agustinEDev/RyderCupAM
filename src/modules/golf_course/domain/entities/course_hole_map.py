@@ -27,6 +27,10 @@ MAX_REJECTION_REASON_LENGTH = 500
 OSM_REFERENCE_PATTERN = re.compile(r"^(way|relation)/\d+$")
 
 
+class RejectionReasonTooLongError(ValueError):
+    """El motivo de rechazo pasa del máximo."""
+
+
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -145,7 +149,7 @@ class CourseHoleMap:
         self._ensure_pending()
         cleaned = reason.strip() if reason else None
         if cleaned and len(cleaned) > MAX_REJECTION_REASON_LENGTH:
-            raise ValueError(
+            raise RejectionReasonTooLongError(
                 f"Rejection reason must be at most {MAX_REJECTION_REASON_LENGTH} characters"
             )
         now = _now()

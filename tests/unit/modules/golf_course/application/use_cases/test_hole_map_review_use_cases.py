@@ -358,3 +358,26 @@ async def test_a8_review_reads_the_map_locked(use_case):
     await use_case(uow).execute(str(course.id), ADMIN, ReviewHoleMapRequestDTO(version=IMPORTADO))
 
     assert lecturas == ["for_update"]
+
+
+@pytest.mark.asyncio
+async def test_a1_pending_list_reads_course_names_in_one_query():
+    """
+    GIVEN: Tres mapas pendientes
+    WHEN: El admin pide los pendientes
+    THEN: Los nombres salen de una sola consulta, sin cargar cada campo entero
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    for name in ("Campo A", "Campo B", "Campo C"):
+        course = _course(name)
+        await uow.golf_courses.save(course)
+        await uow.hole_maps.save(_map(course.id))
+
+    async def no_cargar(_id):
+        raise AssertionError("no se carga el campo entero para sacar su nombre")
+
+    uow.golf_courses.find_by_id = no_cargar
+
+    pending = await ListPendingHoleMapsUseCase(uow).execute()
+
+    assert sorted(p.golf_course_name for p in pending) == ["Campo A", "Campo B", "Campo C"]

@@ -66,13 +66,15 @@ class ListPendingHoleMapsUseCase:
     async def execute(self) -> list[PendingHoleMapDTO]:
         async with self._uow:
             pending = await self._uow.hole_maps.find_pending()
+            names = await self._uow.golf_courses.find_names_by_ids(
+                [hole_map.golf_course_id for hole_map in pending]
+            )
             items = []
             for hole_map in pending:
-                course = await self._uow.golf_courses.find_by_id(hole_map.golf_course_id)
                 items.append(
                     PendingHoleMapDTO(
                         golf_course_id=str(hole_map.golf_course_id),
-                        golf_course_name=course.name if course is not None else "",
+                        golf_course_name=names.get(str(hole_map.golf_course_id), ""),
                         holes=len(hole_map.holes),
                         holes_needing_green=sum(1 for h in hole_map.holes if h.needs_green),
                         imported_at=hole_map.imported_at,

@@ -171,3 +171,47 @@ def test_j5_metadata_outside_the_geojson():
     assert dto.version == IMPORTADO
     assert dto.geojson.type == "FeatureCollection"
     assert dto.holes_needing_green == []
+
+
+def test_j5_dates_are_sent_in_utc_with_z():
+    """
+    GIVEN: Un mapa rechazado
+    WHEN: Se pasa a JSON
+    THEN: Versión y fecha de revisión salen en UTC con «Z», con sus
+         microsegundos: un navegador no las puede tomar por hora local
+    """
+    from src.modules.golf_course.application.mappers.hole_map_geojson import (
+        to_hole_map_review_dto,
+    )
+    from src.modules.user.domain.value_objects.user_id import UserId
+
+    hole_map = _map(_hole_with_green())
+    hole_map.reject(reviewer_id=UserId.generate())
+
+    data = to_hole_map_review_dto(hole_map).model_dump(mode="json")
+
+    assert data["version"] == "2026-10-15T09:00:00.123456Z"
+    assert data["reviewed_at"].endswith("Z")
+
+
+def test_j5_a_date_with_time_zone_is_sent_in_utc_too():
+    """
+    GIVEN: Una fecha con zona (UTC+2)
+    WHEN: Se serializa como las del mapa
+    THEN: Sale el mismo instante en UTC con «Z», no la hora de Madrid
+    """
+    from datetime import timedelta, timezone
+
+    from src.modules.golf_course.application.dtos.hole_map_dtos import PendingHoleMapDTO
+
+    madrid = datetime(2026, 10, 15, 11, 0, tzinfo=timezone(timedelta(hours=2)))
+    dto = PendingHoleMapDTO(
+        golf_course_id="x",
+        golf_course_name="Campo",
+        holes=1,
+        holes_needing_green=0,
+        imported_at=madrid,
+        osm_reference="way/1",
+    )
+
+    assert dto.model_dump(mode="json")["imported_at"] == "2026-10-15T09:00:00Z"

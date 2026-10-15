@@ -254,7 +254,7 @@ async def test_a1_admin_lists_pending_maps(client: AsyncClient):
     assert item["holes"] == 2
     assert item["holes_needing_green"] == 1
     assert item["osm_reference"] == "way/237391513"
-    assert item["imported_at"].startswith("2026-10-15T09:00:00.123456")
+    assert item["imported_at"] == "2026-10-15T09:00:00.123456Z"
 
 
 @pytest.mark.asyncio
@@ -353,10 +353,13 @@ async def test_a6_reject_with_reason_and_too_long_reason(client: AsyncClient):
     url = f"/api/v1/golf-courses/admin/{course_id}/hole-map/reject"
 
     too_long = await c.put(url, json={"version": VERSION, "reason": "x" * 501})
+    untouched = (await c.get(f"/api/v1/golf-courses/admin/{course_id}/hole-map")).json()
     response = await c.put(url, json={"version": VERSION, "reason": "Hoyos de otro recorrido"})
 
     assert too_long.status_code == 400
     assert too_long.json()["error_code"] == "INVALID_REJECTION_REASON"
+    assert untouched["status"] == "PENDING_REVIEW"
+    assert untouched["rejection_reason"] is None
     assert response.status_code == 200
     assert response.json()["status"] == "REJECTED"
     assert response.json()["rejection_reason"] == "Hoyos de otro recorrido"
@@ -395,6 +398,56 @@ async def test_a9_errors_never_echo_the_exception_text(client: AsyncClient):
         json={"version": "2026-01-01T00:00:00"},
     )
 
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "HOLE_MAP_CHANGED"
     detail = response.json()["detail"]
     assert course_id not in detail
     assert "2026" not in detail
+
+
+@pytest.mark.asyncio
+async def test_a3_version_echoed_verbatim_from_the_review_screen_is_accepted(client: AsyncClient):
+    """
+    GIVEN: Un mapa pendiente
+    WHEN: El admin aprueba devolviendo la versión tal como se la dio el GET
+    THEN: 200; la versión viaja en UTC con «Z» y vuelve igual
+    """
+    course_id, admin, _, _ = await _scenario(client, "a3z")
+    await _save_map(course_id)
+    c = _as(client, admin)
+
+    seen = (await c.get(f"/api/v1/golf-courses/admin/{course_id}/hole-map")).json()["version"]
+    response = await c.put(
+        f"/api/v1/golf-courses/admin/{course_id}/hole-map/approve", json={"version": seen}
+    )
+
+    assert seen == "2026-10-15T09:00:00.123456Z"
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a9_unexpected_error_while_approving_is_a_500_not_a_400(client: AsyncClient):
+    """
+    GIVEN: Un fallo inesperado al aprobar (un ValueError que no es del motivo)
+    WHEN: El admin aprueba
+    THEN: 500 (lo ve Sentry), no «motivo de rechazo inválido»
+    """
+    from main import app as fastapi_app
+    from src.config.dependencies import get_approve_hole_map_use_case
+
+    course_id, admin, _, _ = await _scenario(client, "a9b")
+
+    class Rompe:
+        async def execute(self, *_args):
+            raise ValueError("fila corrupta")
+
+    fastapi_app.dependency_overrides[get_approve_hole_map_use_case] = Rompe
+    try:
+        response = await _as(client, admin).put(
+            f"/api/v1/golf-courses/admin/{course_id}/hole-map/approve", json={"version": VERSION}
+        )
+    finally:
+        fastapi_app.dependency_overrides.pop(get_approve_hole_map_use_case, None)
+
+    assert response.status_code == 500
+    assert "fila corrupta" not in response.text

@@ -42,6 +42,7 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
+from src.modules.golf_course.domain.entities.course_hole_map import RejectionReasonTooLongError
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -139,7 +140,7 @@ async def _review(
         return _error(
             status.HTTP_409_CONFLICT, "HOLE_MAP_NOT_PENDING", "The hole map is already reviewed"
         )
-    except ValueError:
+    except RejectionReasonTooLongError:
         return _error(
             status.HTTP_400_BAD_REQUEST,
             "INVALID_REJECTION_REASON",

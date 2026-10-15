@@ -1,9 +1,21 @@
 """DTOs del mapa de hoyos: lo que ve el jugador y lo que revisa el admin (BE #532)."""
 
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Annotated
 
 from geojson_pydantic import FeatureCollection
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PlainSerializer
+
+
+def _utc_z(moment: datetime) -> str:
+    """En UTC y con «Z»: sin zona, un navegador la tomaría por hora local."""
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC).replace(tzinfo=None)
+    return moment.isoformat() + "Z"
+
+
+# Las fechas del mapa se guardan en UTC sin zona; al JSON salen con «Z»
+UtcDatetime = Annotated[datetime, PlainSerializer(_utc_z, return_type=str, when_used="json")]
 
 
 class HoleMapDTO(BaseModel):
@@ -18,7 +30,12 @@ class HoleMapDTO(BaseModel):
 
     golf_course_id: str
     status: str
-    version: datetime
+    version: UtcDatetime = Field(
+        description=(
+            "Versión del mapa (su fecha de importación, UTC). Para aprobar o rechazar "
+            "se devuelve TAL CUAL se recibió"
+        )
+    )
     attribution: str | None = None
     holes_needing_green: list[int] = Field(default_factory=list)
     geojson: FeatureCollection
@@ -29,7 +46,7 @@ class HoleMapReviewDTO(HoleMapDTO):
 
     osm_reference: str
     reviewed_by: str | None = None
-    reviewed_at: datetime | None = None
+    reviewed_at: UtcDatetime | None = None
     rejection_reason: str | None = None
 
 
@@ -40,12 +57,12 @@ class PendingHoleMapDTO(BaseModel):
     golf_course_name: str
     holes: int
     holes_needing_green: int
-    imported_at: datetime
+    imported_at: UtcDatetime
     osm_reference: str
 
 
 class ReviewHoleMapRequestDTO(BaseModel):
     """Aprobar o rechazar la versión que el admin tiene delante."""
 
-    version: datetime
+    version: datetime = Field(description="La `version` del mapa, tal cual se recibió")
     reason: str | None = None
