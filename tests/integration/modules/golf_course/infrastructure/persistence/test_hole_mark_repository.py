@@ -221,3 +221,26 @@ async def test_k6_the_same_time_replaces(db_session):
     mark = await repository.find(course_id, 1, player)
     assert mark is not None
     assert mark.bends == (CODO,)
+
+
+@pytest.mark.asyncio
+async def test_k7_a_row_outside_todays_limits_still_loads(db_session):
+    """
+    GIVEN: Una fila con el green a 10 m de la salida (escrita fuera del caso de uso,
+           o válida con unos límites anteriores)
+    WHEN: Se leen las marcas del jugador
+    THEN: Se carga, sin error
+    """
+    player = await _player(db_session)
+    course_id = await _saved_course(db_session, player)
+    await db_session.execute(
+        text(
+            "INSERT INTO golf_course_hole_marks VALUES "
+            "(:c, :u, 1, 36.28, -5.33, '[]', 36.28009, -5.33, now(), now())"
+        ),
+        {"c": course_id.value, "u": str(player)},
+    )
+
+    (mark,) = await HoleMarkRepository(db_session).find_by_course_and_user(course_id, player)
+
+    assert mark.green_center == GeoPoint(latitude=36.28009, longitude=-5.33)

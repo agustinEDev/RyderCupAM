@@ -2,9 +2,13 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from src.modules.golf_course.application.dtos.hole_map_dtos import UtcDatetime
+
+# Para cortar en la entrada un cuerpo absurdo; la regla (dos codos) es del dominio,
+# que responde INVALID_HOLE_MARK con su código
+MAX_BENDS_IN_BODY = 20
 
 
 class PointDTO(BaseModel):
@@ -28,9 +32,11 @@ class HoleMarkBodyDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tee: PointDTO | None = None
-    bends: list[PointDTO] = Field(default_factory=list)
+    bends: list[PointDTO] = Field(default_factory=list, max_length=MAX_BENDS_IN_BODY)
     green_center: PointDTO
-    marked_at: datetime | None = Field(
+    # Con zona obligatoria: una hora local sin ella se tomaría por UTC y la
+    # regla de «gana la más reciente» compararía instantes equivocados
+    marked_at: AwareDatetime | None = Field(
         default=None,
         description=(
             "Cuándo marcó el jugador (con zona). La que se envía tarde desde la cola sin "

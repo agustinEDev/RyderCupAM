@@ -21,7 +21,7 @@ class InMemoryHoleMarkRepository(IHoleMarkRepository):
             return  # Como en PostgreSQL: una más vieja no pisa a la guardada
         if previous is not None:
             # Como el upsert de PostgreSQL: la fecha de la primera marca se queda
-            mark = HoleMark(
+            mark = HoleMark.reconstruct(
                 golf_course_id=mark.golf_course_id,
                 hole_number=mark.hole_number,
                 user_id=mark.user_id,

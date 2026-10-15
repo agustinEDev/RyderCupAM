@@ -101,7 +101,13 @@ class HoleMark:
         green_center: GeoPoint,
         created_at: datetime,
         updated_at: datetime,
+        *,
+        check_distance: bool = True,
     ) -> None:
+        """
+        `check_distance=False` solo al leer de la BD (`reconstruct`): una marca
+        que se guardó válida no deja de cargarse si mañana cambian los límites.
+        """
         if not isinstance(golf_course_id, GolfCourseId):
             raise InvalidHoleMarkError(f"Invalid golf course id {golf_course_id!r}")
         if not isinstance(user_id, UserId):
@@ -124,7 +130,7 @@ class HoleMark:
             raise InvalidHoleMarkError(f"At most {MAX_BENDS} bends, got {len(bends)}")
         if bends and tee is None:
             raise InvalidHoleMarkError("Bends need a tee")
-        if tee is not None:
+        if tee is not None and check_distance:
             ensure_tee_to_green(tee, green_center)
 
         self._golf_course_id = golf_course_id
@@ -164,6 +170,31 @@ class HoleMark:
             green_center=green_center,
             created_at=now,
             updated_at=now,
+        )
+
+    @classmethod
+    def reconstruct(
+        cls,
+        golf_course_id: GolfCourseId,
+        hole_number: int,
+        user_id: UserId,
+        tee: GeoPoint | None,
+        bends: Iterable[GeoPoint],
+        green_center: GeoPoint,
+        created_at: datetime,
+        updated_at: datetime,
+    ) -> "HoleMark":
+        """Una marca leída de la BD: sin volver a medir la salida y el green."""
+        return cls(
+            golf_course_id=golf_course_id,
+            hole_number=hole_number,
+            user_id=user_id,
+            tee=tee,
+            bends=bends,
+            green_center=green_center,
+            created_at=created_at,
+            updated_at=updated_at,
+            check_distance=False,
         )
 
     @property

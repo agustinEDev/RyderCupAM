@@ -247,11 +247,14 @@ async def test_m3_far_from_the_course_is_422(client: AsyncClient):
         {"tee": SALIDA, "green_center": GREEN, "outline": []},
         {"tee": SALIDA},
         {"tee": [36.28, -5.33], "green_center": GREEN},
+        {"tee": SALIDA, "bends": [CODO] * 21, "green_center": GREEN},
+        {"tee": SALIDA, "green_center": GREEN, "marked_at": "2026-10-15T10:00:00"},
     ],
 )
 async def test_m3_malformed_bodies_are_422(client: AsyncClient, body):
     """
-    GIVEN: Un campo de más, sin green, o un punto como lista
+    GIVEN: Un campo de más, sin green, un punto como lista, 21 codos (un cuerpo
+           absurdo se corta en la entrada) o `marked_at` sin zona horaria
     WHEN: Se marca
     THEN: 422 de validación
     """

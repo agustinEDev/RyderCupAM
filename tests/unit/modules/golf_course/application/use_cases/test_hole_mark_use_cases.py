@@ -589,3 +589,20 @@ async def test_u8_a_clock_ahead_counts_as_now():
     dto = await use_case.execute(_request(course, green=otro_green))
 
     assert dto.green_center == _p(otro_green)
+
+
+@pytest.mark.asyncio
+async def test_u3_on_a_hole_with_tee_a_broken_tee_in_the_mark_does_not_lose_the_green():
+    """
+    GIVEN: Un hoyo con salida aprobada
+    WHEN: Llega una marca con una salida imposible (latitud 95) y un codo, y un green bueno
+    THEN: Se guarda el green: la salida y los codos se descartan sin mirarlos
+    """
+    uow, course = await _setup(map_status=HoleMapStatus.APPROVED, holes=[(2, False)])
+    request = _request(course, hole=2, bends=[CODO]).model_copy(
+        update={"tee": PointDTO(latitude=95, longitude=0)}
+    )
+
+    dto = await SaveHoleMarkUseCase(uow).execute(request)
+
+    assert (dto.tee, dto.green_center) == (None, _p(GREEN))

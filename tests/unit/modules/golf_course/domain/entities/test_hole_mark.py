@@ -391,3 +391,49 @@ def test_d6_nearly_antipodal_points_do_not_fail():
         ),
     ):
         assert a.distance_to(b) == pytest.approx(20_015_086.8, rel=1e-6)
+
+
+def test_d8_reconstruct_does_not_measure_again():
+    """
+    GIVEN: Una marca guardada con el green a 10 m (válida con unos límites de antes)
+    WHEN: Se lee de la BD
+    THEN: Se carga igual; crearla nueva sí falla
+    """
+    cerca = _north(10)
+    ahora = datetime(2026, 10, 15, 9, 0)
+
+    mark = HoleMark.reconstruct(
+        golf_course_id=GolfCourseId.generate(),
+        hole_number=1,
+        user_id=UserId.generate(),
+        tee=SALIDA,
+        bends=(),
+        green_center=cerca,
+        created_at=ahora,
+        updated_at=ahora,
+    )
+
+    assert mark.green_center == cerca
+    with pytest.raises(HoleMarkOutOfRangeError):
+        _mark(green_center=cerca)
+
+
+def test_d8_reconstruct_still_checks_the_shape():
+    """
+    GIVEN: Una fila con tres codos
+    WHEN: Se lee de la BD
+    THEN: Error: la forma se sigue comprobando, solo la distancia no
+    """
+    ahora = datetime(2026, 10, 15, 9, 0)
+
+    with pytest.raises(InvalidHoleMarkError):
+        HoleMark.reconstruct(
+            golf_course_id=GolfCourseId.generate(),
+            hole_number=1,
+            user_id=UserId.generate(),
+            tee=SALIDA,
+            bends=(CODO, CODO, CODO),
+            green_center=GREEN,
+            created_at=ahora,
+            updated_at=ahora,
+        )

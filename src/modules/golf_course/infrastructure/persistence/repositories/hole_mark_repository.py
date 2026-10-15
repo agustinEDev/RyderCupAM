@@ -26,7 +26,7 @@ def _from_row(row: Any) -> HoleMark:
         if row.tee_latitude is None
         else GeoPoint(latitude=row.tee_latitude, longitude=row.tee_longitude)
     )
-    return HoleMark(
+    return HoleMark.reconstruct(
         golf_course_id=row.golf_course_id,
         hole_number=row.hole_number,
         user_id=row.user_id,

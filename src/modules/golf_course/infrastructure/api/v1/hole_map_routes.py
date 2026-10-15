@@ -243,45 +243,38 @@ MARK_RESPONSES: dict[int | str, dict[str, Any]] = {
     },
 }
 
-# Del más concreto al más general: los dos de distancia son también ValueError
-_MARK_ERRORS: tuple[tuple[type[Exception], int, str, str], ...] = (
-    (
-        HoleNotInCourseError,
+_MARK_ERRORS: dict[type[Exception], tuple[int, str, str]] = {
+    HoleNotInCourseError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "HOLE_NOT_IN_COURSE",
         "This course has no such hole",
     ),
-    (
-        HoleAlreadyMappedError,
+    HoleAlreadyMappedError: (
         status.HTTP_409_CONFLICT,
         "HOLE_ALREADY_MAPPED",
         "This hole already has its tee and green",
     ),
-    (
-        TeeRequiredError,
+    TeeRequiredError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "TEE_REQUIRED",
         "This hole has no tee: mark the tee too",
     ),
-    (
-        HoleMarkOutOfRangeError,
+    HoleMarkOutOfRangeError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "HOLE_MARK_OUT_OF_RANGE",
         "The green must be 40-750 m from the tee",
     ),
-    (
-        HoleMarkFarFromCourseError,
+    HoleMarkFarFromCourseError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "HOLE_MARK_TOO_FAR_FROM_COURSE",
         "Every point must be within 3 km of the course",
     ),
-    (
-        InvalidHoleMarkError,
+    InvalidHoleMarkError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "INVALID_HOLE_MARK",
         "The hole mark is not valid",
     ),
-)
+}
 
 
 @router.put(
@@ -318,11 +311,8 @@ async def save_hole_mark(
         )
     except GolfCourseNotFoundError:
         return _course_not_found()
-    except tuple(kind for kind, *_ in _MARK_ERRORS) as e:
-        status_code, error_code, detail = next(
-            (code, name, text) for kind, code, name, text in _MARK_ERRORS if isinstance(e, kind)
-        )
-        return _error(status_code, error_code, detail)
+    except tuple(_MARK_ERRORS) as e:
+        return _error(*_MARK_ERRORS[type(e)])
 
 
 @router.get(

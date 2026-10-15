@@ -105,18 +105,20 @@ class SaveHoleMarkUseCase:
             if not 1 <= request.hole_number <= (course.physical_holes or MAX_HOLE_NUMBER):
                 raise HoleNotInCourseError(request.hole_number)
 
-            tee = _point(request.tee) if request.tee is not None else None
-            bends = [_point(bend) for bend in request.bends]
             green_center = _point(request.green_center)
             mapped = await self._approved_hole(course_id, request.hole_number)
             if mapped is not None and mapped.green is not None:
                 raise HoleAlreadyMappedError(request.hole_number)
             if mapped is not None:
-                # La salida ya está aprobada: de la marca solo cuenta el green
+                # La salida ya está aprobada: de la marca solo cuenta el green, y
+                # lo demás no se mira (mal o bien, no tumba el green que marcó)
                 tee, bends = None, []
                 ensure_tee_to_green(mapped.tee, green_center)
-            elif tee is None:
+            elif request.tee is None:
                 raise TeeRequiredError(request.hole_number)
+            else:
+                tee = _point(request.tee)
+                bends = [_point(bend) for bend in request.bends]
 
             mark = HoleMark.create(
                 golf_course_id=course_id,
