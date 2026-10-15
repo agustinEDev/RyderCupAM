@@ -31,19 +31,28 @@ def test_starting_all_mappers_twice_is_harmless():
     """
     GIVEN: Un proceso limpio
     WHEN: Se arrancan todos los mappers dos veces seguidas
-    THEN: La segunda no falla (son idempotentes) y las tablas son las mismas
+    THEN: La segunda no falla (son idempotentes), las tablas son las mismas y
+         las entidades quedan mapeadas de verdad (las tablas solas se
+         registran al importar, aunque no se mapee nada)
     """
     result = _run(
+        "from sqlalchemy import inspect\n"
         "from src.config.mappers import start_all_mappers\n"
+        "from src.modules.competition.domain.entities.competition import Competition\n"
+        "from src.modules.golf_course.domain.entities.golf_course import GolfCourse\n"
         "from src.shared.infrastructure.persistence.sqlalchemy.base import metadata\n"
         "start_all_mappers()\n"
         "first = sorted(metadata.tables)\n"
         "start_all_mappers()\n"
         "print('SAME=' + str(first == sorted(metadata.tables) and len(first) > 0))\n"
+        "mapped = all(inspect(c, raiseerr=False) is not None for c in (GolfCourse, Competition))\n"
+        "print('MAPPED=' + str(mapped))\n"
     )
 
     assert result.returncode == 0, result.stderr[-2000:]
-    assert "SAME=True" in result.stdout.splitlines()
+    lines = result.stdout.splitlines()
+    assert "SAME=True" in lines
+    assert "MAPPED=True" in lines
 
 
 def test_golf_course_is_mapped_before_competition():
