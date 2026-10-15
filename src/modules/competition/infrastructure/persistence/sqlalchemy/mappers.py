@@ -24,6 +24,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    inspect,
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -1477,7 +1478,7 @@ def start_competition_mappers():
     - HoleScore entity -> hole_scores table
     """
     # Mapear Competition
-    if Competition not in mapper_registry.mappers:
+    if inspect(Competition, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Competition,
             competitions_table,
@@ -1576,7 +1577,7 @@ def start_competition_mappers():
         )
 
     # Mapear Enrollment
-    if Enrollment not in mapper_registry.mappers:
+    if inspect(Enrollment, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Enrollment,
             enrollments_table,
@@ -1600,7 +1601,7 @@ def start_competition_mappers():
         )
 
     # Mapear CompetitionGolfCourse (Association Entity)
-    if CompetitionGolfCourse not in mapper_registry.mappers:
+    if inspect(CompetitionGolfCourse, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             CompetitionGolfCourse,
             competition_golf_courses_table,
@@ -1619,7 +1620,7 @@ def start_competition_mappers():
         )
 
     # Mapear Round
-    if Round not in mapper_registry.mappers:
+    if inspect(Round, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Round,
             rounds_table,
@@ -1642,7 +1643,7 @@ def start_competition_mappers():
         )
 
     # Mapear Match
-    if Match not in mapper_registry.mappers:
+    if inspect(Match, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Match,
             matches_table,
@@ -1666,7 +1667,7 @@ def start_competition_mappers():
         )
 
     # Mapear TeamAssignment (Entity)
-    if TeamAssignmentEntity not in mapper_registry.mappers:
+    if inspect(TeamAssignmentEntity, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             TeamAssignmentEntity,
             team_assignments_table,
@@ -1681,7 +1682,7 @@ def start_competition_mappers():
         )
 
     # Mapear Draft (FE #653)
-    if Draft not in mapper_registry.mappers:
+    if inspect(Draft, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Draft,
             drafts_table,
@@ -1700,7 +1701,7 @@ def start_competition_mappers():
         )
 
     # Mapear Envelope (FE #655)
-    if Envelope not in mapper_registry.mappers:
+    if inspect(Envelope, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Envelope,
             envelopes_table,
@@ -1720,7 +1721,7 @@ def start_competition_mappers():
         )
 
     # Mapear Invitation
-    if Invitation not in mapper_registry.mappers:
+    if inspect(Invitation, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Invitation,
             invitations_table,
@@ -1740,7 +1741,7 @@ def start_competition_mappers():
         )
 
     # Mapear HoleScore
-    if HoleScore not in mapper_registry.mappers:
+    if inspect(HoleScore, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             HoleScore,
             hole_scores_table,

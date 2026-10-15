@@ -26,6 +26,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
     event,
+    inspect,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -375,7 +376,7 @@ def start_golf_course_mappers():
     - Hole value object → golf_course_holes table
     """
     # Mapear Hole (value object collection) — cuelga de la salida
-    if Hole not in mapper_registry.mappers:
+    if inspect(Hole, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Hole,
             golf_course_tee_holes_table,
@@ -386,7 +387,7 @@ def start_golf_course_mappers():
         )
 
     # Mapear Tee (value object collection)
-    if Tee not in mapper_registry.mappers:
+    if inspect(Tee, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Tee,
             golf_course_tees_table,
@@ -403,7 +404,7 @@ def start_golf_course_mappers():
         )
 
     # Mapear GolfCourse (aggregate root)
-    if GolfCourse not in mapper_registry.mappers:
+    if inspect(GolfCourse, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             GolfCourse,
             golf_courses_table,

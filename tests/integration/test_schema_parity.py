@@ -12,8 +12,10 @@ el borrado de un usuario abortaba con ForeignKeyViolationError.
 Ver #156.
 """
 
+import json
 import os
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -58,7 +60,7 @@ def migrated_schema():
     target_url = f"{base_url}/{db_name}"
     try:
         result = subprocess.run(
-            ["alembic", "upgrade", "head"],
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=PROJECT_ROOT,
             env={**os.environ, "DATABASE_URL": target_url},
             capture_output=True,
@@ -229,6 +231,52 @@ class TestSchemaParity:
             )
 
         assert not problems, "\n\n".join(problems)
+
+    def test_alembic_env_knows_every_migrated_table(self, migrated_schema):
+        """El `alembic/env.py` real conoce las mismas tablas que crean las migraciones (#565).
+
+        La suite carga todos los mappers por su cuenta, así que el test de arriba
+        no ve lo que carga `env.py`. Con solo 21 de las 35 tablas, un
+        `alembic revision --autogenerate` habría propuesto borrar las que no
+        conocía. Por eso se ejecuta el `env.py` de verdad, en un proceso limpio,
+        con una migración vacía, y se miran las tablas de su `target_metadata`.
+        """
+        url = migrated_schema.url.render_as_string(hide_password=False)
+        script = (
+            "import json\n"
+            "from alembic.config import Config\n"
+            "from alembic.runtime.environment import EnvironmentContext\n"
+            "from alembic.script import ScriptDirectory\n"
+            "config = Config('alembic.ini')\n"
+            "script = ScriptDirectory.from_config(config)\n"
+            "with EnvironmentContext(config, script, fn=lambda rev, context: []) as env:\n"
+            "    script.run_env()\n"
+            "    tables = sorted(env.context_opts['target_metadata'].tables)\n"
+            "    print('TABLES=' + json.dumps(tables))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "DATABASE_URL": url},
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        line = next(line for line in result.stdout.splitlines() if line.startswith("TABLES="))
+        env_tables = set(json.loads(line.removeprefix("TABLES=")))
+        migrated_tables = set(inspect(migrated_schema).get_table_names()) - {"alembic_version"}
+
+        assert not migrated_tables - env_tables, (
+            "Tablas que crean las migraciones y alembic/env.py no conoce "
+            "(autogenerate propondría borrarlas):\n"
+            f"{_format(migrated_tables - env_tables)}"
+        )
+        assert not env_tables - migrated_tables, (
+            "Tablas que alembic/env.py conoce y ninguna migración crea:\n"
+            f"{_format(env_tables - migrated_tables)}"
+        )
 
     def test_no_columns_missing_from_either_side(self, migrated_schema):
         """Ninguna columna debe existir solo en los mappers o solo en las migraciones."""

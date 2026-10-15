@@ -37,30 +37,9 @@ from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
 )
 from src.config.dependencies import get_db_session
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
-    start_mappers as start_competition_mappers,
-)
-from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
-    start_golf_course_mappers,
-)
-from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (
-    start_quick_match_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
-    start_activity_event_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (
-    start_social_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper import (
-    start_profile_photo_mappers,
-)
+from src.config.mappers import start_all_mappers
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
-    start_mappers,
-)
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
-    start_mappers as start_country_mappers,
 )
 
 # Usamos la URL de la app como base, pero la sobreescribimos si es necesario
@@ -140,14 +119,7 @@ def pytest_configure(config):
             f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         print("🚀 Inicializando mappers de SQLAlchemy...")
-        start_mappers()  # User module
-        start_country_mappers()  # Shared domain (Country)
-        start_competition_mappers()  # Competition module
-        start_golf_course_mappers()  # Golf Course module
-        start_social_mappers()  # Social module
-        start_activity_event_mappers()  # Activity feed (depends on User)
-        start_profile_photo_mappers()  # Profile photo gallery (depends on User)
-        start_quick_match_mappers()  # QuickMatch module
+        start_all_mappers()  # Los mismos que la aplicación y Alembic (#565)
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
 
@@ -159,14 +131,7 @@ def pytest_configure(config):
     # Fallback por si un worker arranca sin que el maestro haya terminado
     else:
         try:
-            start_mappers()
-            start_country_mappers()
-            start_competition_mappers()
-            start_golf_course_mappers()
-            start_social_mappers()
-            start_activity_event_mappers()
-            start_profile_photo_mappers()
-            start_quick_match_mappers()
+            start_all_mappers()
         except Exception:
             # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.
             pass
