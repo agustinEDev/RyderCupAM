@@ -1,6 +1,12 @@
 """
 Cliente de OSM que lee un fichero local en vez de Overpass (BE #532).
 
+LO QUE NO RECUPERA: un contorno que sea una relación que osmium no sabe montar
+(anillos abiertos o que se tocan) no sale en el fichero, y aquí no hay forma de
+saberlo; con Overpass se reconstruía. Y las relaciones que no son multipolígono
+(`type=site`) tampoco. Para un campo que falte, se puede pasar ese solo por
+Overpass (`--course <id>` sin `--osm-file`).
+
 Para las pasadas de muchos campos: Overpass es un servicio público, se satura a
 menudo y limita el uso, y 800 campos llevaban unas diez horas. Con el volcado
 de Geofabrik filtrado en local, la pasada entera son segundos y no falla.
@@ -24,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 METERS_PER_DEGREE = 111_320.0
 RECORD_SEPARATOR = "\x1e"  # osmium separa los objetos de geojsonseq con RS
+MIN_RING_POINTS = 4  # un anillo cerrado: el último punto repite el primero
 
 
 def _geometry(points: list[list[float]]) -> list[dict[str, float]]:
@@ -31,7 +38,48 @@ def _geometry(points: list[list[float]]) -> list[dict[str, float]]:
     return [{"lat": lat, "lon": lon} for lon, lat in points]
 
 
-def _element(feature: dict[str, Any]) -> dict[str, Any] | None:
+def _is_ring(points: list[list[float]]) -> bool:
+    return len(points) >= MIN_RING_POINTS and points[0] == points[-1]
+
+
+def _ring_way_ids(features: list[dict[str, Any]]) -> set[int]:
+    """Las vías de contorno o green que vienen también como línea cerrada."""
+    ids: set[int] = set()
+    for feature in features:
+        properties = feature.get("properties") or {}
+        geometry = feature.get("geometry") or {}
+        if (
+            properties.get("@type") == "way"
+            and geometry.get("type") == "LineString"
+            and (properties.get("leisure") == "golf_course" or properties.get("golf") == "green")
+            and _is_ring(geometry.get("coordinates") or [])
+        ):
+            ids.add(properties["@id"])
+    return ids
+
+
+def _way(
+    osm_id: Any, tags: dict[str, Any], shape: str | None, coordinates: list, ring_ways: set[int]
+) -> dict[str, Any] | None:
+    """Una vía: hoyo (línea), o contorno o green (su anillo)."""
+    is_area = tags.get("leisure") == "golf_course" or tags.get("golf") == "green"
+    ring = None
+    if shape == "LineString":
+        # De un contorno o un green vale la vía tal cual, como la da Overpass:
+        # osmium no da área de un anillo que se cruza, y el emparejado lo repara
+        if tags.get("golf") == "hole":
+            return {"type": "way", "id": osm_id, "tags": tags, "geometry": _geometry(coordinates)}
+        if is_area and _is_ring(coordinates):
+            ring = coordinates
+    elif shape == "MultiPolygon" and coordinates and is_area and osm_id not in ring_ways:
+        # Solo si no vino como línea: las vías con area=yes salen SOLO como área
+        ring = coordinates[0][0]
+    if ring is None:
+        return None
+    return {"type": "way", "id": osm_id, "tags": tags, "geometry": _geometry(ring)}
+
+
+def _element(feature: dict[str, Any], ring_ways: set[int]) -> dict[str, Any] | None:
     """El elemento al estilo Overpass, o None si no es contorno, hoyo ni green."""
     properties = feature.get("properties") or {}
     geometry = feature.get("geometry") or {}
@@ -41,18 +89,10 @@ def _element(feature: dict[str, Any]) -> dict[str, Any] | None:
     shape = geometry.get("type")
     coordinates = geometry.get("coordinates") or []
     is_course = tags.get("leisure") == "golf_course"
-    golf = tags.get("golf")
 
-    # osmium exporta cada vía cerrada dos veces: como línea y como área. De los
-    # contornos y los greens vale el área; de los hoyos, la línea
-    if kind == "way" and shape == "LineString" and golf == "hole":
-        return {"type": "way", "id": osm_id, "tags": tags, "geometry": _geometry(coordinates)}
-    if shape != "MultiPolygon" or not coordinates:
-        return None
-    if kind == "way" and (is_course or golf == "green"):
-        outer = coordinates[0][0]
-        return {"type": "way", "id": osm_id, "tags": tags, "geometry": _geometry(outer)}
-    if kind == "relation" and is_course:
+    if kind == "way":
+        return _way(osm_id, tags, shape, coordinates, ring_ways)
+    if kind == "relation" and is_course and shape == "MultiPolygon":
         members = [
             {"type": "way", "role": "outer" if index == 0 else "inner", "geometry": _geometry(ring)}
             for polygon in coordinates
@@ -81,18 +121,27 @@ class OsmFileClient:
         """
         self._radius_m = radius_m
         self._elements: list[tuple[tuple[float, float, float, float], dict[str, Any]]] = []
+        features: list[dict[str, Any]] = []
         with Path(path).open(encoding="utf-8") as stream:
             for number, line in enumerate(stream, start=1):
                 text = line.strip().lstrip(RECORD_SEPARATOR)
                 if not text:
                     continue
                 try:
-                    element = _element(json.loads(text))
-                except (ValueError, TypeError, KeyError, IndexError):
+                    feature = json.loads(text)
+                except ValueError:
                     logger.warning("OSM file line %d is not a readable object; skipped", number)
                     continue
+                if isinstance(feature, dict):
+                    features.append(feature)
+        ring_ways = _ring_way_ids(features)
+        for feature in features:
+            try:
+                element = _element(feature, ring_ways)
                 if element is not None:
                     self._elements.append((_bounds(element), element))
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+                logger.warning("OSM object %s is not usable; skipped", feature.get("properties"))
 
     async def fetch_area(self, latitude: float, longitude: float) -> OsmArea:
         """Lo que hay a menos del radio de esa coordenada, como lo daría Overpass."""

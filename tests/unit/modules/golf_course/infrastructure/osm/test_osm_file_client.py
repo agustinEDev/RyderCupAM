@@ -118,7 +118,7 @@ async def test_f2_only_what_is_within_2_5_km(tmp_path):
 @pytest.mark.asyncio
 async def test_f3_ignores_everything_else(tmp_path, caplog):
     """
-    GIVEN: Banderas, bunkers, salidas sueltas y la copia en línea de un green
+    GIVEN: Banderas, bunkers, salidas sueltas y líneas abiertas de green y contorno
     WHEN: Se pide la zona
     THEN: No sale nada de eso, y se descarta por regla, no por ilegible
     """
@@ -128,11 +128,17 @@ async def test_f3_ignores_everything_else(tmp_path, caplog):
         _feature(
             "way", 3, {"type": "MultiPolygon", "coordinates": [[_anillo(LAT, LON)]]}, golf="bunker"
         ),
-        _feature("way", 44, {"type": "LineString", "coordinates": _anillo(LAT, LON)}, golf="green"),
+        # Líneas ABIERTAS: no encierran nada (las cerradas sí son el green o el contorno)
+        _feature(
+            "way", 44, {"type": "LineString", "coordinates": _anillo(LAT, LON)[:3]}, golf="green"
+        ),
+        _feature(
+            "way", 45, {"type": "LineString", "coordinates": _anillo(LAT, LON)[:4]}, golf="green"
+        ),
         _feature(
             "way",
             11,
-            {"type": "LineString", "coordinates": _anillo(LAT, LON)},
+            {"type": "LineString", "coordinates": _anillo(LAT, LON)[:3]},
             leisure="golf_course",
         ),
     ]
@@ -226,3 +232,69 @@ async def test_f7_real_valderrama_gets_its_18_holes_with_greens():
     assert candidate.osm_reference == "way/237391513"
     assert [h.number for h in candidate.holes] == list(range(1, 19))
     assert all(h.green is not None for h in candidate.holes)
+
+
+@pytest.mark.asyncio
+async def test_f9_crossed_green_only_as_a_line_is_kept(tmp_path):
+    """
+    GIVEN: Un green dibujado en ocho (se cruza): osmium no lo da como área, solo
+           como línea cerrada
+    WHEN: Se pide la zona
+    THEN: El green sale igual (lo repara el emparejado, como con Overpass)
+    """
+    ocho = [
+        [LON, LAT],
+        [LON + 0.001, LAT + 0.001],
+        [LON + 0.001, LAT],
+        [LON, LAT + 0.001],
+        [LON, LAT],
+    ]
+    cruzado = _feature("way", 66, {"type": "LineString", "coordinates": ocho}, golf="green")
+    client = OsmFileClient(_fichero(tmp_path, [cruzado]))
+
+    area = await client.fetch_area(LAT, LON)
+
+    (green,) = area.greens
+    assert green.id == 66
+    assert green.points[0] == green.points[-1]
+
+
+@pytest.mark.asyncio
+async def test_f9_the_closed_line_wins_over_the_area(tmp_path):
+    """
+    GIVEN: Una vía de green exportada dos veces, como línea cerrada y como área
+    WHEN: Se pide la zona
+    THEN: Sale una sola vez, con los puntos de la vía tal cual (como Overpass)
+    """
+    anillo = _anillo(LAT, LON)
+    como_linea = _feature("way", 44, {"type": "LineString", "coordinates": anillo}, golf="green")
+    como_area = _feature(
+        "way", 44, {"type": "MultiPolygon", "coordinates": [[list(reversed(anillo))]]}, golf="green"
+    )
+    client = OsmFileClient(_fichero(tmp_path, [como_area, como_linea]))
+
+    area = await client.fetch_area(LAT, LON)
+
+    (green,) = area.greens
+    assert green.points[1] == (LAT, LON + 0.001)
+
+
+@pytest.mark.parametrize(
+    "linea",
+    [
+        "[]",
+        '"texto"',
+        json.dumps(_feature("way", 7, {"type": "LineString", "coordinates": []}, golf="hole")),
+    ],
+    ids=["lista", "texto", "sin-coordenadas"],
+)
+def test_f5_malformed_object_does_not_break_the_start(tmp_path, linea):
+    """
+    GIVEN: Una línea que es JSON pero no un objeto de OSM usable
+    WHEN: Se crea el cliente
+    THEN: Se salta, sin reventar el arranque
+    """
+    path = tmp_path / "golf.geojsonseq"
+    path.write_text(f"{linea}\n{json.dumps(HOYO)}\n")
+
+    OsmFileClient(path)
