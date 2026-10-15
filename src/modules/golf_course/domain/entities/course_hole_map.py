@@ -27,6 +27,14 @@ MAX_REJECTION_REASON_LENGTH = 500
 OSM_REFERENCE_PATTERN = re.compile(r"^(way|relation)/\d+$")
 
 
+class HoleMapNotPendingError(ValueError):
+    """Solo se revisa un mapa pendiente; este ya está aprobado o rechazado."""
+
+
+class RejectionReasonTooLongError(ValueError):
+    """El motivo de rechazo pasa del máximo."""
+
+
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -125,7 +133,9 @@ class CourseHoleMap:
 
     def _ensure_pending(self) -> None:
         if self._status is not HoleMapStatus.PENDING_REVIEW:
-            raise ValueError(f"Only a pending hole map can be reviewed; this one is {self._status}")
+            raise HoleMapNotPendingError(
+                f"Only a pending hole map can be reviewed; this one is {self._status}"
+            )
 
     # ------------------------------------------------------------------
     # Comportamiento
@@ -145,7 +155,7 @@ class CourseHoleMap:
         self._ensure_pending()
         cleaned = reason.strip() if reason else None
         if cleaned and len(cleaned) > MAX_REJECTION_REASON_LENGTH:
-            raise ValueError(
+            raise RejectionReasonTooLongError(
                 f"Rejection reason must be at most {MAX_REJECTION_REASON_LENGTH} characters"
             )
         now = _now()

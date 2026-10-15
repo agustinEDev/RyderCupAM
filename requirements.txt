@@ -196,3 +196,8 @@ shapely==2.2.0
 # numpy - Dependencia de shapely, fijada aquí para auditarla con las demás
 # 2.4.x y no 2.5: la 2.5 pide Python 3.12 y el CI prueba también en 3.11
 numpy==2.4.4
+
+# geojson-pydantic - Modelos Pydantic de GeoJSON para el mapa de hoyos (BE #532)
+# El endpoint del mapa devuelve GeoJSON estándar, validado y documentado en
+# OpenAPI: MapLibre o Leaflet lo pintan tal cual en el front
+geojson-pydantic==2.2.0

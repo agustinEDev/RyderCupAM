@@ -80,6 +80,16 @@ class IGolfCourseRepository(ABC):
         pass
 
     @abstractmethod
+    async def find_names_by_ids(self, golf_course_ids: list[GolfCourseId]) -> dict[str, str]:
+        """
+        Los nombres de esos campos, por id (como texto), en una sola consulta.
+
+        Para listas que solo necesitan el nombre (los mapas pendientes, BE #532):
+        no carga cada campo con sus salidas y hoyos.
+        """
+        pass
+
+    @abstractmethod
     async def find_by_approval_status(self, approval_status: ApprovalStatus) -> list[GolfCourse]:
         """
         Busca campos de golf por estado de aprobación.

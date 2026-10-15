@@ -10,7 +10,10 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
+from src.modules.golf_course.domain.entities.course_hole_map import (
+    CourseHoleMap,
+    RejectionReasonTooLongError,
+)
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
@@ -207,8 +210,9 @@ def test_m6c_reason_too_long_is_rejected():
     """
     hole_map = _map()
 
-    with pytest.raises(ValueError, match="500"):
+    with pytest.raises(RejectionReasonTooLongError, match="500"):
         hole_map.reject(reviewer_id=UserId.generate(), reason="x" * 501)
+    assert issubclass(RejectionReasonTooLongError, ValueError)
 
     assert hole_map.status is HoleMapStatus.PENDING_REVIEW
 
