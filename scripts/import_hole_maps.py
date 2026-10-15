@@ -20,6 +20,7 @@ Uso:
 import argparse
 import asyncio
 import sys
+import uuid
 from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from src.config.mappers import start_all_mappers
 from src.modules.golf_course.application.dtos.hole_map_import_dtos import (
     ImportHoleMapRequestDTO,
     ImportHoleMapResponseDTO,
+    ImportHoleMapStatus,
 )
 from src.modules.golf_course.application.use_cases.import_hole_map_from_osm_use_case import (
     ImportHoleMapFromOsmUseCase,
@@ -53,6 +55,8 @@ from src.shared.domain.value_objects.country_code import CountryCode
 
 DEFAULT_PAUSE_S = 5.0
 ERROR = "ERROR"
+# Resultados a los que se llega sin preguntar a OSM: tras ellos no hace falta pausa
+NO_OSM_CALL = frozenset({ImportHoleMapStatus.SKIPPED_APPROVED, ImportHoleMapStatus.NO_COORDINATES})
 
 ImportOne = Callable[[str, bool], Awaitable[ImportHoleMapResponseDTO]]
 
@@ -67,6 +71,14 @@ class Summary:
     errors: list[tuple[str, str]] = field(default_factory=list)
 
 
+def course_id(value: str) -> str:
+    """Un id de campo: tiene que ser un UUID."""
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{value}' is not a golf course id") from None
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Lee la línea de órdenes: un país o un campo, y si se guarda."""
     parser = argparse.ArgumentParser(
@@ -74,7 +86,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--country", type=str.upper, help="código ISO del país, p. ej. ES")
-    target.add_argument("--course", help="id de un campo")
+    target.add_argument("--course", type=course_id, help="id de un campo")
     parser.add_argument("--apply", action="store_true", help="guarda (sin esto, en seco)")
     parser.add_argument(
         "--pause",
@@ -114,19 +126,22 @@ async def run(
 ) -> Summary:
     """Importa campo a campo; un fallo se cuenta y no para la pasada."""
     summary = Summary()
-    for index, course_id in enumerate(course_ids):
-        if index:
+    asked_osm = False  # si el campo anterior preguntó a OSM, toca esperar
+    for course in course_ids:
+        if asked_osm:
             await sleep(pause)
+        asked_osm = True  # ante un error no se sabe: se espera por si acaso
         try:
-            result = await import_one(course_id, apply)
+            result = await import_one(course, apply)
         except Exception as error:
             summary.statuses[ERROR] += 1
-            summary.errors.append((course_id, f"{type(error).__name__}: {error}"))
+            summary.errors.append((course, f"{type(error).__name__}: {error}"))
             continue
+        asked_osm = result.status not in NO_OSM_CALL
         summary.statuses[result.status.value] += 1
         summary.holes_imported += result.holes_imported
         summary.discarded.update(result.discarded)
-        print(f"  {course_id}  {result.status.value}  hoyos={result.holes_imported}")
+        print(f"  {course}  {result.status.value}  hoyos={result.holes_imported}")
     return summary
 
 

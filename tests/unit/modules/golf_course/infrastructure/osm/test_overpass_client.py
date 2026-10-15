@@ -271,3 +271,134 @@ async def test_o6_sends_its_own_user_agent():
     await _client().fetch_area(LAT, LON)
 
     assert "RyderCupFriends" in route.calls[0].request.headers["user-agent"]
+
+
+# ============================================================================
+# Revisión — respuestas raras de Overpass
+# ============================================================================
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "remark",
+    [
+        'runtime error: Query timed out in "query" at line 1 after 61 seconds.',
+        "runtime error: Query run out of memory using about 2048 MB of RAM.",
+    ],
+)
+async def test_o5_runtime_error_remark_is_osm_unavailable(remark):
+    """
+    GIVEN: Un 200 con «runtime error» en `remark` (Overpass cortó la consulta) y
+           una lista de elementos a medias
+    WHEN: Se pide la zona
+    THEN: «OSM no disponible»: lo que llegó no está completo
+    """
+    body = {"remark": remark, "elements": RESPUESTA["elements"][:1]}
+    respx.post(DEFAULT_OVERPASS_URL).mock(return_value=httpx.Response(200, json=body))
+
+    with pytest.raises(OsmUnavailableError):
+        await _client().fetch_area(LAT, LON)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_o2_malformed_elements_are_skipped():
+    """
+    GIVEN: Elementos sin id, con coordenadas que no son números o NaN, o con
+           etiquetas que no son un diccionario, junto a un hoyo bueno
+    WHEN: Se traduce
+    THEN: Se saltan los malos y se queda el bueno, sin reventar
+    """
+    bueno = RESPUESTA["elements"][2]
+    malos = [
+        {"type": "way", "tags": {"golf": "hole", "ref": "3"}, "geometry": _geom((1, 1), (1, 2))},
+        {
+            "type": "way",
+            "id": 50,
+            "tags": {"golf": "hole"},
+            "geometry": [{"lat": "x", "lon": 1}, {"lat": 1, "lon": 2}],
+        },
+        {
+            "type": "way",
+            "id": 51,
+            "tags": {"golf": "hole"},
+            "geometry": [{"lat": "nan", "lon": 1}, {"lat": 1, "lon": 2}],
+        },
+        {"type": "way", "id": 52, "tags": ["golf", "hole"], "geometry": _geom((1, 1), (1, 2))},
+    ]
+    respx.post(DEFAULT_OVERPASS_URL).mock(
+        return_value=httpx.Response(200, json={"elements": [*malos, bueno]})
+    )
+
+    area = await _client().fetch_area(LAT, LON)
+
+    assert [h.id for h in area.holes] == [10]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_o2_relation_member_without_role_is_outer():
+    """
+    GIVEN: Una relación cuyos miembros no tienen rol (multipolígonos antiguos)
+    WHEN: Se traduce
+    THEN: Se toman como anillo exterior
+    """
+    relacion = {
+        "type": "relation",
+        "id": 8,
+        "tags": {"leisure": "golf_course"},
+        "members": [
+            {"type": "way", "ref": 1, "role": "", "geometry": _geom((1, 1), (1, 2), (2, 2), (1, 1))}
+        ],
+    }
+    respx.post(DEFAULT_OVERPASS_URL).mock(
+        return_value=httpx.Response(200, json={"elements": [relacion]})
+    )
+
+    area = await _client().fetch_area(LAT, LON)
+
+    assert area.course_relations[0].outer == (((1, 1), (1, 2), (2, 2), (1, 1)),)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_o3_retry_after_is_respected():
+    """
+    GIVEN: Un 429 que pide esperar 45 s (Retry-After)
+    WHEN: Se pide la zona
+    THEN: Se espera lo que pide, si es más que la espera propia
+    """
+    respx.post(DEFAULT_OVERPASS_URL).mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "45"}),
+            httpx.Response(200, json={"elements": []}),
+        ]
+    )
+    sleeps = []
+
+    await _client(sleeps).fetch_area(LAT, LON)
+
+    assert sleeps == [45.0]
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("header", ["3", "tomorrow", "100000"], ids=["menor", "ilegible", "enorme"])
+async def test_o3_retry_after_never_shortens_nor_explodes_the_wait(header):
+    """
+    GIVEN: Un Retry-After menor que la espera propia, ilegible o desmesurado
+    WHEN: Se reintenta
+    THEN: Se espera al menos lo propio y como mucho 2 minutos
+    """
+    respx.post(DEFAULT_OVERPASS_URL).mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": header}),
+            httpx.Response(200, json={"elements": []}),
+        ]
+    )
+    sleeps = []
+
+    await _client(sleeps).fetch_area(LAT, LON)
+
+    assert 10.0 <= sleeps[0] <= 120.0

@@ -639,3 +639,88 @@ def test_holes_come_sorted_by_number():
 
     assert candidate is not None
     assert [h.number for h in candidate.holes] == [1, 2]
+
+
+# ============================================================================
+# Revisión — casos de datos reales
+# ============================================================================
+
+
+def test_h6_tee_next_to_the_previous_green_is_not_turned():
+    """
+    GIVEN: Un hoyo bien dibujado cuya salida está a 2 m del green del hoyo
+           anterior y cuya línea acaba 6 m antes de su propio green
+    WHEN: Se empareja
+    THEN: No se gira: la salida sigue primero y el green es el suyo
+    """
+    anterior = green(20, 500, 88)  # su borde norte en y=98
+    propio = green(21, 500, 416)  # su borde sur en y=406
+    linea = hoyo(10, "1", (500, 100), (500, 400))
+
+    candidate = _match(zona(cursos=[campo()], hoyos=[linea], greens=[anterior, propio]))
+
+    assert candidate is not None
+    hole = candidate.holes[0]
+    assert _cerca((hole.tee.latitude, hole.tee.longitude), pt(500, 100))
+    assert hole.green is not None
+    assert _cerca((hole.green.center.latitude, hole.green.center.longitude), pt(500, 416))
+
+
+@pytest.mark.parametrize("ref", ["²", "\u0661", "³"])
+def test_h2_exotic_digits_are_no_number(ref):
+    """
+    GIVEN: Un ref con un carácter que Python considera dígito pero no es un número
+    WHEN: Se empareja
+    THEN: Se descarta como sin número, sin reventar el campo entero
+    """
+    candidate = _match(zona(cursos=[campo()], hoyos=[_hoyo_recto(ref=ref)]))
+
+    assert candidate is not None
+    assert candidate.discarded == {DiscardReason.NO_NUMBER: 1}
+
+
+def test_h4_exotic_par_is_taken_as_missing():
+    """
+    GIVEN: Un par «⁴» en OSM
+    WHEN: Se empareja
+    THEN: Se toma como sin par y el hoyo entra
+    """
+    candidate = _match(zona(cursos=[campo()], hoyos=[_hoyo_recto(par="⁴")]))
+
+    assert candidate is not None
+    assert [h.number for h in candidate.holes] == [1]
+
+
+def test_h3_hole_beyond_a_short_card_is_beyond_course():
+    """
+    GIVEN: Una tarjeta de solo 9 hoyos y un hoyo 12 en OSM
+    WHEN: Se empareja
+    THEN: Se cuenta como fuera del campo, no como sin número
+    """
+    corta = TARJETA[:9]
+
+    candidate = _match(
+        zona(cursos=[campo()], hoyos=[_hoyo_recto(ref="12")]), card=corta, physical_holes=9
+    )
+
+    assert candidate is not None
+    assert candidate.discarded == {DiscardReason.BEYOND_COURSE: 1}
+
+
+def test_c7_self_crossing_outline_keeps_both_halves():
+    """
+    GIVEN: Un contorno dibujado en ocho (se corta a sí mismo) con un hoyo en
+           cada mitad
+    WHEN: Se empareja con la coordenada en una mitad
+    THEN: Entran los dos hoyos: no se pierde media figura al repararla
+    """
+    ocho = (pt(0, 0), pt(2000, 1000), pt(2000, 0), pt(0, 1000), pt(0, 0))
+    izquierda = hoyo(10, "1", (300, 300), (300, 700))
+    derecha = hoyo(11, "2", (1700, 300), (1700, 700))
+
+    candidate = _match(
+        zona(cursos=[campo(1, ocho)], hoyos=[izquierda, derecha]), punto=pt(300, 500)
+    )
+
+    assert candidate is not None
+    assert [h.number for h in candidate.holes] == [1, 2]

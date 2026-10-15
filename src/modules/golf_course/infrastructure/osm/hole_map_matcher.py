@@ -21,7 +21,7 @@ import math
 from collections import Counter
 from collections.abc import Sequence
 
-from shapely import LineString, Point, Polygon
+from shapely import LineString, MultiPolygon, Point, Polygon, make_valid
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import polygonize, unary_union
 
@@ -46,6 +46,7 @@ OUTLINE_TOLERANCE_M = 0.5
 MAX_OUTLINE_POINTS = 64
 DECIMALS = 7  # 1 cm
 MIN_HOLE_NUMBER = 1
+MAX_HOLE_NUMBER = 18
 # Un anillo cerrado necesita 4 puntos (el último repite el primero); una línea, 2;
 # un contorno sin el punto de cierre, 3
 MIN_RING_POINTS = 4
@@ -75,13 +76,35 @@ class _Projection:
         )
 
 
-def _polygon(points: Sequence[tuple[float, float]]) -> Polygon | None:
+def _area(points: Sequence[tuple[float, float]]) -> Polygon | MultiPolygon | None:
+    """
+    La superficie que encierra un anillo cerrado, reparada si se corta a sí misma.
+
+    `make_valid` y no `buffer(0)`: un contorno dibujado en ocho se queda con sus
+    dos mitades, mientras que `buffer(0)` tira una y con ella sus hoyos.
+    """
     if len(points) < MIN_RING_POINTS or points[0] != points[-1]:
         return None
-    polygon = Polygon(points)
-    if not polygon.is_valid:
-        polygon = polygon.buffer(0)
-    return polygon if isinstance(polygon, Polygon) and not polygon.is_empty else None
+    shape = Polygon(points)
+    if not shape.is_valid:
+        repaired = make_valid(shape)
+        parts = [
+            g
+            for g in getattr(repaired, "geoms", [repaired])
+            if isinstance(g, Polygon | MultiPolygon)
+        ]
+        if not parts:
+            return None
+        shape = unary_union(parts)
+    return shape if isinstance(shape, Polygon | MultiPolygon) and not shape.is_empty else None
+
+
+def _green_polygon(points: Sequence[tuple[float, float]]) -> Polygon | None:
+    """El green como un solo polígono: si al repararlo sale en trozos, el mayor."""
+    shape = _area(points)
+    if isinstance(shape, MultiPolygon):
+        return max(shape.geoms, key=lambda g: g.area)
+    return shape
 
 
 def _relation_shape(relation: OsmRelation, proj: _Projection) -> BaseGeometry | None:
@@ -105,9 +128,9 @@ def _relation_shape(relation: OsmRelation, proj: _Projection) -> BaseGeometry | 
 def _outlines(area: OsmArea, proj: _Projection) -> list[tuple[str, BaseGeometry]]:
     shapes: list[tuple[str, BaseGeometry]] = []
     for way in area.course_ways:
-        polygon = _polygon([proj.xy(p) for p in way.points])
-        if polygon is not None:
-            shapes.append((f"way/{way.id}", polygon))
+        shape = _area([proj.xy(p) for p in way.points])
+        if shape is not None:
+            shapes.append((f"way/{way.id}", shape))
     for relation in area.course_relations:
         shape = _relation_shape(relation, proj)
         if shape is not None:
@@ -128,8 +151,10 @@ def _choose_outline(
 
 
 def _int_tag(way: OsmWay, key: str) -> int | None:
+    # isdecimal + isascii: «²» o los dígitos arábigos pasan isdigit(), pero int()
+    # revienta con ellos
     value = (way.tags.get(key) or "").strip()
-    return int(value) if value.isdigit() else None
+    return int(value) if value.isascii() and value.isdecimal() else None
 
 
 def _simplified_outline(polygon: Polygon) -> list[tuple[float, float]]:
@@ -203,7 +228,7 @@ def match_hole_map(
     reference, outline = chosen
     inside = outline.buffer(HOLE_INSIDE_MARGIN_M)
     by_number = {hole.number: hole for hole in card}
-    greens = [g for g in (_polygon([proj.xy(p) for p in w.points]) for w in area.greens) if g]
+    greens = [g for g in (_green_polygon([proj.xy(p) for p in w.points]) for w in area.greens) if g]
 
     discarded: Counter[DiscardReason] = Counter()
     candidates: dict[int, list[tuple[OsmWay, list[tuple[float, float]]]]] = {}
@@ -212,10 +237,10 @@ def match_hole_map(
         if not inside.contains(LineString(line).interpolate(0.5, normalized=True)):
             continue
         number = _int_tag(way, "ref")
-        if number is None or not MIN_HOLE_NUMBER <= number <= len(card) or number not in by_number:
+        if number is None or not MIN_HOLE_NUMBER <= number <= MAX_HOLE_NUMBER:
             discarded[DiscardReason.NO_NUMBER] += 1
             continue
-        if number > physical_holes:
+        if number > physical_holes or number not in by_number:
             discarded[DiscardReason.BEYOND_COURSE] += 1
             continue
         par = _int_tag(way, "par")
@@ -248,7 +273,11 @@ def _mapped_hole(
     def distance_to_green(point: tuple[float, float]) -> float:
         return min((g.distance(Point(point)) for g in greens), default=math.inf)
 
-    if distance_to_green(line[0]) < distance_to_green(line[-1]):
+    # OSM dibuja el hoyo de la salida al green. Solo se gira si su final no tiene
+    # ningún green cerca y su principio sí: la salida suele estar pegada al green
+    # del hoyo anterior, y comparar sin más los dos extremos giraría los buenos
+    start, end_distance = distance_to_green(line[0]), distance_to_green(line[-1])
+    if end_distance > MAX_GREEN_DISTANCE_M and start <= MAX_GREEN_DISTANCE_M:
         line = list(reversed(line))  # dibujada del green a la salida
     end = Point(line[-1])
     nearest = min(greens, key=lambda g: g.distance(end), default=None)

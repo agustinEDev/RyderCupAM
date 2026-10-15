@@ -414,3 +414,102 @@ async def test_s2_dry_run_does_not_touch_an_existing_map():
     assert result.status is ImportHoleMapStatus.REIMPORTED
     assert existing.status is HoleMapStatus.REJECTED
     assert [h.number for h in existing.holes] == [9]
+
+
+# ============================================================================
+# Revisión — la llamada a OSM va fuera de la transacción
+# ============================================================================
+
+
+class FuenteQueAprueba(FuenteFalsa):
+    """Mientras «responde» OSM, un admin aprueba el mapa pendiente."""
+
+    def __init__(self, mapa: CourseHoleMap):
+        super().__init__()
+        self.mapa = mapa
+
+    async def find(self, **kwargs):
+        self.mapa.approve(reviewer_id=UserId.generate())
+        return await super().find(**kwargs)
+
+
+class UoWQueCuenta(InMemoryGolfCourseUnitOfWork):
+    """Apunta si hay una transacción abierta cuando se llama a OSM."""
+
+    def __init__(self):
+        super().__init__()
+        self.abierta = False
+
+    async def __aenter__(self):
+        self.abierta = True
+        return await super().__aenter__()
+
+    async def __aexit__(self, *args):
+        self.abierta = False
+        return await super().__aexit__(*args)
+
+
+@pytest.mark.asyncio
+async def test_u9_map_approved_while_asking_osm_is_not_overwritten():
+    """
+    GIVEN: Un mapa pendiente que un admin aprueba mientras se espera a OSM
+    WHEN: Termina la importación
+    THEN: «Ya aprobado» y el mapa sigue aprobado con sus hoyos
+    """
+    course = _course()
+    existing = _existing(course.id)
+    _, _, _, use_case = await _setup(
+        course=course, existing_map=existing, fuente=FuenteQueAprueba(existing)
+    )
+
+    result = await use_case.execute(_request(course))
+
+    assert result.status is ImportHoleMapStatus.SKIPPED_APPROVED
+    assert existing.status is HoleMapStatus.APPROVED
+    assert [h.number for h in existing.holes] == [9]
+
+
+@pytest.mark.asyncio
+async def test_u9_osm_is_asked_with_no_transaction_open():
+    """
+    GIVEN: Una importación (la llamada a OSM puede durar minutos)
+    WHEN: Se pregunta a OSM
+    THEN: No hay ninguna transacción abierta en ese momento
+    """
+    uow = UoWQueCuenta()
+    course = _course()
+    await uow.golf_courses.save(course)
+    abierta_al_preguntar = []
+
+    class Espia(FuenteFalsa):
+        async def find(self, **kwargs):
+            abierta_al_preguntar.append(uow.abierta)
+            return await super().find(**kwargs)
+
+    await ImportHoleMapFromOsmUseCase(uow, Espia()).execute(_request(course))
+
+    assert abierta_al_preguntar == [False]
+
+
+@pytest.mark.asyncio
+async def test_u9_map_created_meanwhile_is_reimported():
+    """
+    GIVEN: Un campo sin mapa al empezar y otra pasada que le crea uno pendiente
+           mientras se espera a OSM
+    WHEN: Termina la importación
+    THEN: Se reimporta ese mapa en lugar de crear un segundo
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    course = _course()
+    await uow.golf_courses.save(course)
+    otro = _existing(course.id)
+
+    class FuenteQueCrea(FuenteFalsa):
+        async def find(self, **kwargs):
+            await uow.hole_maps.save(otro)
+            return await super().find(**kwargs)
+
+    result = await ImportHoleMapFromOsmUseCase(uow, FuenteQueCrea()).execute(_request(course))
+
+    assert result.status is ImportHoleMapStatus.REIMPORTED
+    assert [h.number for h in otro.holes] == [1, 2]

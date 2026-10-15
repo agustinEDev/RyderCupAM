@@ -11,6 +11,7 @@ cualquier otro fallo, y una respuesta ilegible, llegan como OsmUnavailableError.
 """
 
 import asyncio
+import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,6 +28,10 @@ QUERY_TIMEOUT_S = 60
 # 429: límite de uso; 502/503/504: la pasarela de Overpass cargada, muy habitual
 RETRY_STATUSES = frozenset({429, 502, 503, 504})
 RETRY_WAITS_S = (10.0, 30.0)
+# Si Overpass pide esperar más (Retry-After), se le hace caso, con un tope
+MAX_RETRY_WAIT_S = 120.0
+# Overpass corta una consulta larga o pesada con un 200 y esto en `remark`
+RUNTIME_ERROR_MARK = "runtime error"
 
 Point = tuple[float, float]  # (latitud, longitud)
 MIN_WAY_POINTS = 2  # una vía con menos no dibuja nada
@@ -77,13 +82,19 @@ def build_query(latitude: float, longitude: float, radius_m: int = SEARCH_RADIUS
 
 
 def _points(geometry: Any) -> tuple[Point, ...]:
+    """Los puntos de una geometría; vacío si alguno no es una coordenada de verdad."""
     if not isinstance(geometry, list):
         return ()
-    return tuple(
-        (float(node["lat"]), float(node["lon"]))
-        for node in geometry
-        if isinstance(node, dict) and "lat" in node and "lon" in node
-    )
+    points: list[Point] = []
+    for node in geometry:
+        try:
+            lat, lon = float(node["lat"]), float(node["lon"])
+        except (TypeError, KeyError, ValueError):
+            return ()
+        if not (math.isfinite(lat) and math.isfinite(lon)):
+            return ()
+        points.append((lat, lon))
+    return tuple(points)
 
 
 def parse_area(payload: Any) -> OsmArea:
@@ -95,20 +106,29 @@ def parse_area(payload: Any) -> OsmArea:
     """
     if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
         raise OsmUnavailableError("Overpass answered without a list of elements")
+    remark = payload.get("remark")
+    if isinstance(remark, str) and RUNTIME_ERROR_MARK in remark.lower():
+        # La lista que acompaña está a medias: tomarla por buena perdería hoyos
+        raise OsmUnavailableError(f"Overpass cut the query: {remark}")
 
     course_ways: list[OsmWay] = []
     course_relations: list[OsmRelation] = []
     holes: list[OsmWay] = []
     greens: list[OsmWay] = []
     for element in payload["elements"]:
-        if not isinstance(element, dict):
+        if not isinstance(element, dict) or not isinstance(element.get("id"), int):
             continue
         tags = element.get("tags") or {}
+        if not isinstance(tags, dict):
+            continue
         kind = element.get("type")
         if kind == "relation" and tags.get("leisure") == "golf_course":
             members = [m for m in element.get("members") or [] if isinstance(m, dict)]
             outer = tuple(
-                p for m in members if m.get("role") == "outer" and (p := _points(m.get("geometry")))
+                # Sin rol (multipolígonos antiguos) se toma como exterior
+                p
+                for m in members
+                if m.get("role") in ("outer", "") and (p := _points(m.get("geometry")))
             )
             inner = tuple(
                 p for m in members if m.get("role") == "inner" and (p := _points(m.get("geometry")))
@@ -137,6 +157,15 @@ def parse_area(payload: Any) -> OsmArea:
         holes=tuple(holes),
         greens=tuple(greens),
     )
+
+
+def _wait(own: float, response: httpx.Response) -> float:
+    """La espera propia, o la que pida Overpass si es mayor (con un tope)."""
+    try:
+        asked = float(response.headers.get("Retry-After", ""))
+    except ValueError:
+        return own
+    return min(max(own, asked), MAX_RETRY_WAIT_S)
 
 
 class OverpassClient:
@@ -169,7 +198,7 @@ class OverpassClient:
                 except httpx.HTTPError as e:
                     raise OsmUnavailableError(f"Overpass is unreachable: {e!r}") from e
                 if response.status_code in RETRY_STATUSES and waits:
-                    await self._sleep(waits.pop(0))
+                    await self._sleep(_wait(waits.pop(0), response))
                     continue
                 if response.status_code != httpx.codes.OK:
                     raise OsmUnavailableError(f"Overpass answered {response.status_code}")

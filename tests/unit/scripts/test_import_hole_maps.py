@@ -194,3 +194,39 @@ def test_s2_report_says_when_it_was_a_dry_run():
     from scripts.import_hole_maps import Summary
 
     assert "seco" in report(Summary(), apply=False).lower()
+
+
+def test_s1_malformed_course_id_is_a_usage_error():
+    """
+    GIVEN: --course con un id que no es un UUID
+    WHEN: Se leen los argumentos
+    THEN: Error de uso, no una traza
+    """
+    with pytest.raises(SystemExit):
+        parse_args(["--course", "no-es-un-uuid"])
+
+
+@pytest.mark.asyncio
+async def test_s3_no_pause_after_a_course_that_did_not_ask_osm():
+    """
+    GIVEN: Un campo ya aprobado (no pregunta a OSM), uno sin coordenadas y otro
+    WHEN: Se hace la pasada
+    THEN: Tras los que no preguntaron a OSM no se espera
+    """
+    esperas = []
+
+    async def sleep(seconds):
+        esperas.append(seconds)
+
+    importador = Importador(
+        {
+            "a": _resultado(ImportHoleMapStatus.SKIPPED_APPROVED),
+            "b": _resultado(ImportHoleMapStatus.NO_COORDINATES),
+            "c": _resultado(ImportHoleMapStatus.CREATED, 18),
+            "d": _resultado(ImportHoleMapStatus.CREATED, 18),
+        }
+    )
+
+    await run(list("abcd"), importador, apply=False, pause=5.0, sleep=sleep)
+
+    assert esperas == [5.0]
