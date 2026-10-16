@@ -215,6 +215,11 @@ async def test_the_view(client: AsyncClient):
     assert vista.json()["golf_course_name"] == await _nombre_del_campo(
         vista.json()["golf_course_id"]
     )
+    # Los metros de cada hoyo desde su barra (16 oct); las del campo de prueba
+    # no los traen, así que van a null, pero el campo viaja en cada hoyo
+    hoyos = [h for p in vista.json()["players"] for h in p["holes"]]
+    assert len(hoyos) == 4 * 18
+    assert all("meters" in h and h["meters"] is None for h in hoyos)
 
 
 async def _nombre_del_campo(golf_course_id: str) -> str:

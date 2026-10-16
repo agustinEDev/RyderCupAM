@@ -150,6 +150,13 @@ class TeeGroupHoleDTO(BaseModel):
 
     hole: int
     par: int
+    meters: int | None = Field(
+        None,
+        description=(
+            "Metros del hoyo desde la barra del jugador, para el mapa del hoyo; "
+            "null si la barra no los trae o el campo no está."
+        ),
+    )
     strokes_received: int = Field(..., description="Con signo: un plus los da.")
     own_score: int | None
     own_submitted: bool
