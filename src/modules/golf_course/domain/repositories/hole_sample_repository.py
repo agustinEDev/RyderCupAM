@@ -45,5 +45,9 @@ class IHoleSampleRepository(ABC):
         """
 
     @abstractmethod
+    async def delete(self, golf_course_id: GolfCourseId, sample_id: UUID) -> bool:
+        """Borra esa muestra del campo; False si no está en él (BE #575: el admin)."""
+
+    @abstractmethod
     async def list_by_course(self, golf_course_id: GolfCourseId) -> list[HoleSample]:
         """Las muestras del campo, por hoyo y, en cada hoyo, en orden de llegada."""

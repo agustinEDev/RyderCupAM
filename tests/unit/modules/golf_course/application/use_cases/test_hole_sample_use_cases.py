@@ -690,7 +690,14 @@ async def test_s4_the_read_does_not_say_how_many_or_who():
 
     hole = (await _hole(uow, course)).model_dump()
 
-    assert set(hole) == {"hole_number", "first_sample", "first_green", "collecting", "tees"}
+    assert set(hole) == {
+        "hole_number",
+        "saved_line",
+        "first_sample",
+        "first_green",
+        "collecting",
+        "tees",
+    }
     (tee,) = hole["tees"]
     assert set(tee) == {"tee_color", "tee_gender", "first_sample", "collecting"}
     assert set(tee["first_sample"]) == {"tee", "bends", "green_center"}

@@ -36,6 +36,7 @@ from src.modules.golf_course.application.exceptions import (
 from src.modules.golf_course.application.ports.recent_hole_sample_senders import (
     IRecentHoleSampleSenders,
 )
+from src.modules.golf_course.application.use_cases.saved_hole_use_cases import saved_line_dto
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole_sample import (
@@ -203,6 +204,10 @@ class SubmitHoleSampleUseCase:
                 "Hole sample not stored (course %s, hole %s): mapped hole", course_id, hole
             )
             return False
+        # Con su línea guardada por el admin, el hoyo ya no recoge (BE #575)
+        if await self._uow.saved_holes.get(course_id, hole) is not None:
+            logger.debug("Hole sample not stored (course %s, hole %s): saved hole", course_id, hole)
+            return False
         if await samples.exists(sample.id):
             logger.debug(
                 "Hole sample not stored (course %s, hole %s): repeated id", course_id, hole
@@ -259,6 +264,9 @@ class ListHoleSamplesUseCase:
                 raise GolfCourseNotFoundError(request.golf_course_id)
             samples = await self._uow.hole_samples.list_by_course(course_id)
             hole_map = await self._uow.hole_maps.find_by_golf_course_id(course_id)
+            saved = {
+                h.hole_number: h for h in await self._uow.saved_holes.list_by_course(course_id)
+            }
 
         # Ya vienen por hoyo y en orden de llegada
         by_hole: dict[int, list[HoleSample]] = {}
@@ -270,7 +278,12 @@ class ListHoleSamplesUseCase:
             hole_samples = by_hole.get(number, [])
             complete = [x for x in hole_samples if not x.is_green_only]
             loose = [x for x in hole_samples if x.is_green_only]
-            collecting = len(hole_samples) < MAX_SAMPLES_PER_HOLE and not _mapped(hole_map, number)
+            saved_hole = saved.get(number)
+            collecting = (
+                len(hole_samples) < MAX_SAMPLES_PER_HOLE
+                and saved_hole is None
+                and not _mapped(hole_map, number)
+            )
             # La primera vez que sale una barra es su primera muestra completa
             tees: dict[tuple, HoleSample] = {}
             for sample in complete:
@@ -278,6 +291,7 @@ class ListHoleSamplesUseCase:
             holes.append(
                 HoleSampleStatusDTO(
                     hole_number=number,
+                    saved_line=saved_line_dto(saved_hole) if saved_hole else None,
                     first_sample=_sample_dto(complete[0]) if complete else None,
                     first_green=_dto(loose[0].green_center) if loose else None,
                     collecting=collecting,
