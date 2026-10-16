@@ -333,7 +333,8 @@ class Match:
         referencia en vez de la de su barra, y el mapa del hoyo no sabía de qué
         barra era cada muestra. Se rellena sin regenerar el partido: no cambia
         nada más (color, golpes, resultados), y quien ya lo tiene se queda con
-        el suyo, así que repetirlo no hace nada.
+        el suyo, así que repetirlo no hace nada. Un partido terminado no se
+        toca: se jugó con esa tarjeta (Agustín, 16 oct).
 
         Args:
             genero_de: El género que da su barra a ese jugador, o None si no tiene
@@ -341,6 +342,8 @@ class Match:
         Returns:
             Cuántos jugadores se han completado
         """
+        if self.is_finished():
+            return 0
         cambiados = 0
 
         def completar(jugador: MatchPlayer) -> MatchPlayer:
@@ -360,6 +363,16 @@ class Match:
         return cambiados
 
     # ==================== Query Methods ====================
+
+    def jugadores_por_completar(self, genero_de: Callable[[MatchPlayer], Gender | None]) -> int:
+        """Cuántos completaría `completar_genero_de_las_barras`, sin tocar nada."""
+        if self.is_finished():
+            return 0
+        return sum(
+            1
+            for p in (*self._team_a_players, *self._team_b_players)
+            if p.tee_gender is None and genero_de(p) is not None
+        )
 
     def is_finished(self) -> bool:
         """Retorna True si el partido ha terminado."""

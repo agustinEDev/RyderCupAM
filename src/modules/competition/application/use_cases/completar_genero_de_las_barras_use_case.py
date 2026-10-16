@@ -11,7 +11,8 @@ nuevos, sobres, walkovers) y no alcanza a las rondas ya en juego.
 
 Con la misma regla que la generación (`barra_sin_golpes`), sobre el color que ya
 tiene cada uno. Solo a quien no tiene género, y nada más cambia: repetirlo no
-hace nada. Las rondas terminadas no se tocan: se jugaron con esa tarjeta.
+hace nada. Las rondas y los partidos terminados no se tocan: se jugaron con esa
+tarjeta.
 """
 
 from dataclasses import dataclass, field
@@ -21,9 +22,14 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.barra_del_jugador import barra_sin_golpes
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.repositories.user_repository_interface import UserRepositoryInterface
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
 COMPETICIONES_POR_PAGINA = 200
@@ -63,49 +69,61 @@ class CompletarGeneroDeLasBarrasUseCase:
 
     async def execute(self, dry_run: bool) -> ResumenDelCompletado:
         resumen = ResumenDelCompletado()
-        for competicion in await self._competiciones_scratch():
-            async with self._uow:
-                rondas = await self._uow.rounds.find_by_competition(competicion.id)
-            for ronda in rondas:
-                if ronda.status not in SE_COMPLETAN:
-                    continue
+        # Copias de lo que se lee de cada una: tras un fallo se deshace la
+        # transacción, y lo cargado antes caduca (leerlo después ya no se puede)
+        for competition_id, nombre in await self._competiciones_scratch():
+            try:
+                async with self._uow:
+                    rondas = [
+                        (r.id, r.golf_course_id)
+                        for r in await self._uow.rounds.find_by_competition(competition_id)
+                        if r.status in SE_COMPLETAN
+                    ]
+            except Exception as exc:  # se informa y se sigue con las demás
+                resumen.errores.append(f"{nombre}: {exc}")
+                continue
+            for round_id, golf_course_id in rondas:
                 try:
-                    jugadores = await self._completar_ronda(ronda, dry_run)
+                    jugadores = await self._completar_ronda(round_id, golf_course_id, dry_run)
                 except Exception as exc:  # se informa y se sigue con las demás
-                    resumen.errores.append(f"{competicion.name} / ronda {ronda.id.value}: {exc}")
+                    resumen.errores.append(f"{nombre} / ronda {round_id.value}: {exc}")
                     continue
                 if jugadores:
-                    resumen.rondas.append(
-                        RondaCompletada(str(competicion.name), str(ronda.id.value), jugadores)
-                    )
+                    resumen.rondas.append(RondaCompletada(nombre, str(round_id.value), jugadores))
         return resumen
 
-    async def _competiciones_scratch(self):
-        competiciones = []
+    async def _competiciones_scratch(self) -> list[tuple[CompetitionId, str]]:
+        competiciones: list[tuple[CompetitionId, str]] = []
         offset = 0
         while True:
             async with self._uow:
                 pagina = await self._uow.competitions.find_all(
                     limit=COMPETICIONES_POR_PAGINA, offset=offset
                 )
+                competiciones.extend(
+                    (c.id, str(c.name)) for c in pagina if c.play_mode == PlayMode.SCRATCH
+                )
             if not pagina:
-                return [c for c in competiciones if c.play_mode == PlayMode.SCRATCH]
-            competiciones.extend(pagina)
+                return competiciones
             offset += COMPETICIONES_POR_PAGINA
 
-    async def _completar_ronda(self, ronda, dry_run: bool) -> int:
-        campo = await self._campos.find_by_id(ronda.golf_course_id)
-        if campo is None:
-            return 0
-        contexto = course_context_for(campo)
+    async def _completar_ronda(
+        self, round_id: RoundId, golf_course_id: GolfCourseId, dry_run: bool
+    ) -> int:
+        # Todo dentro de la transacción: si algo falla, se deshace entera (y la
+        # sesión queda lista para la ronda siguiente)
         async with self._uow:
-            partidos = await self._uow.matches.find_by_round(ronda.id)
+            campo = await self._campos.find_by_id(golf_course_id)
+            if campo is None:
+                return 0
+            contexto = course_context_for(campo)
+            partidos = await self._uow.matches.find_by_round(round_id)
             ids = list(
                 {p.user_id for m in partidos for p in (*m.team_a_players, *m.team_b_players)}
             )
             generos = {u.id: u.gender for u in await self._usuarios.find_by_ids(ids)}
 
-            def genero_de(jugador):
+            def genero_de(jugador: MatchPlayer) -> Gender | None:
                 return barra_sin_golpes(
                     jugador.tee_color,
                     generos.get(jugador.user_id),
@@ -114,13 +132,7 @@ class CompletarGeneroDeLasBarrasUseCase:
                 ).tee_gender
 
             if dry_run:
-                # Sin tocar los partidos: ni siquiera en memoria
-                return sum(
-                    1
-                    for m in partidos
-                    for p in (*m.team_a_players, *m.team_b_players)
-                    if p.tee_gender is None and genero_de(p) is not None
-                )
+                return sum(m.jugadores_por_completar(genero_de) for m in partidos)
             total = 0
             for partido in partidos:
                 cambiados = partido.completar_genero_de_las_barras(genero_de)

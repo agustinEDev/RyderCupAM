@@ -99,7 +99,9 @@ class _Escenario:
             player_handicap=Decimal("0"),
         )
 
-    async def ronda(self, play_mode=PlayMode.SCRATCH, estado="SCHEDULED", jugadores=None):
+    async def ronda(
+        self, play_mode=PlayMode.SCRATCH, estado="SCHEDULED", jugadores=None, partidos=None
+    ):
         competition = Competition.create(
             id=CompetitionId(uuid4()),
             creator_id=UserId.generate(),
@@ -124,21 +126,29 @@ class _Escenario:
         if estado == "COMPLETED":
             round_entity.complete()
         a, b = jugadores or (self.jugador(Gender.MALE), self.jugador(Gender.MALE))
-        match = Match.create(
-            round_id=round_entity.id, match_number=1, team_a_players=[a], team_b_players=[b]
-        )
+        lados = partidos or [([a], [b])]
         async with self.uow:
             await self.uow.competitions.add(competition)
             await self.uow.rounds.add(round_entity)
-            await self.uow.matches.add(match)
+            for numero, (lado_a, lado_b) in enumerate(lados, start=1):
+                await self.uow.matches.add(
+                    Match.create(
+                        round_id=round_entity.id,
+                        match_number=numero,
+                        team_a_players=lado_a,
+                        team_b_players=lado_b,
+                    )
+                )
         return round_entity
 
     def caso_de_uso(self):
         return CompletarGeneroDeLasBarrasUseCase(self.uow, self.campos, self.usuarios)
 
     async def generos_de(self, round_entity):
-        [match] = await self.uow.matches.find_by_round(round_entity.id)
-        return [p.tee_gender for p in (*match.team_a_players, *match.team_b_players)]
+        partidos = sorted(
+            await self.uow.matches.find_by_round(round_entity.id), key=lambda m: m.match_number
+        )
+        return [p.tee_gender for m in partidos for p in (*m.team_a_players, *m.team_b_players)]
 
 
 async def test_c1_c3_scratch_cada_uno_recibe_el_genero_de_su_barra():
@@ -290,3 +300,74 @@ async def test_c8_si_una_ronda_falla_lo_dice_y_sigue():
     assert await e.generos_de(buena) == [Gender.MALE, Gender.MALE]
     assert len(resumen.errores) == 1
     assert "campo roto" in resumen.errores[0]
+
+
+async def test_c6_en_una_ronda_en_juego_los_partidos_terminados_no_se_tocan():
+    """Agustín: se jugaron con esa tarjeta. Los demás de la ronda, sí."""
+    e = _Escenario()
+    ronda = await e.ronda(
+        estado="IN_PROGRESS",
+        partidos=[
+            ([e.jugador(Gender.MALE)], [e.jugador(Gender.MALE)]),
+            ([e.jugador(Gender.MALE)], [e.jugador(Gender.MALE)]),
+        ],
+    )
+    terminado = sorted(await e.uow.matches.find_by_round(ronda.id), key=lambda m: m.match_number)[0]
+    terminado.start()
+    terminado.concede(conceding_team="B")
+
+    seco = await e.caso_de_uso().execute(dry_run=True)
+    resumen = await e.caso_de_uso().execute(dry_run=False)
+
+    assert await e.generos_de(ronda) == [None, None, Gender.MALE, Gender.MALE]
+    assert (seco.jugadores, resumen.jugadores) == (2, 2)
+
+
+async def test_fourball_cada_uno_de_los_cuatro():
+    e = _Escenario()
+    ronda = await e.ronda(
+        partidos=[
+            (
+                [e.jugador(Gender.MALE), e.jugador(Gender.FEMALE, color=TeeColor.RED)],
+                [e.jugador(Gender.MALE), e.jugador(Gender.MALE)],
+            )
+        ]
+    )
+
+    resumen = await e.caso_de_uso().execute(dry_run=False)
+
+    assert await e.generos_de(ronda) == [Gender.MALE, Gender.FEMALE, Gender.MALE, Gender.MALE]
+    assert resumen.jugadores == 4
+
+
+async def test_c8_si_fallan_las_rondas_de_una_competicion_sigue_con_la_siguiente():
+    e = _Escenario()
+    mala = await e.ronda()
+    buena = await e.ronda()
+    reales = e.uow.rounds.find_by_competition
+
+    async def falla_en_la_mala(competition_id):
+        if competition_id == mala.competition_id:
+            raise RuntimeError("rondas rotas")
+        return await reales(competition_id)
+
+    e.uow.rounds.find_by_competition = AsyncMock(side_effect=falla_en_la_mala)
+
+    resumen = await e.caso_de_uso().execute(dry_run=False)
+
+    assert await e.generos_de(buena) == [Gender.MALE, Gender.MALE]
+    assert len(resumen.errores) == 1
+    assert "rondas rotas" in resumen.errores[0]
+
+
+async def test_c8_tras_un_fallo_se_deshace_la_ronda():
+    e = _Escenario()
+    await e.ronda()
+    deshacer = AsyncMock(wraps=e.uow.rollback)
+    e.uow.rollback = deshacer
+    e.usuarios.find_by_ids = AsyncMock(side_effect=RuntimeError("usuarios rotos"))
+
+    resumen = await e.caso_de_uso().execute(dry_run=False)
+
+    assert len(resumen.errores) == 1
+    deshacer.assert_awaited()

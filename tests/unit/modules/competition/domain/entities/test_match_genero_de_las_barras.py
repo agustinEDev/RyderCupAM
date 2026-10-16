@@ -106,3 +106,27 @@ def test_sin_cambios_no_se_toca_la_fecha():
     partido.completar_genero_de_las_barras(lambda _: Gender.FEMALE)
 
     assert partido.updated_at == antes
+
+
+def test_un_partido_terminado_no_se_toca():
+    """
+    GIVEN: Un partido ya terminado (Agustín: se jugó con esa tarjeta)
+    WHEN: Se completa
+    THEN: Sigue igual, y no cuenta
+    """
+    partido = _partido([_jugador()], [_jugador()])
+    partido.start()
+    partido.declare_walkover(winning_team="A", reason="no se presentó")
+
+    assert partido.jugadores_por_completar(lambda _: Gender.MALE) == 0
+    assert partido.completar_genero_de_las_barras(lambda _: Gender.MALE) == 0
+    assert partido.team_a_players[0].tee_gender is None
+
+
+def test_jugadores_por_completar_cuenta_sin_cambiar_nada():
+    """Lo que usa el dry-run: los mismos que se completarían, sin tocar el partido."""
+    ya = _jugador(tee_gender=Gender.FEMALE)
+    partido = _partido([ya, _jugador()], [_jugador(), _jugador()])
+
+    assert partido.jugadores_por_completar(lambda _: Gender.MALE) == 3
+    assert [p.tee_gender for p in partido.team_b_players] == [None, None]
