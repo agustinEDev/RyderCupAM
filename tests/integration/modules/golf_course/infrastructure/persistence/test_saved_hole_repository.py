@@ -59,10 +59,22 @@ async def test_s1_a_line_comes_back_as_it_went_in_and_saving_again_replaces_it(d
     repository = SavedHoleRepository(db_session)
     await repository.save(_hole(course_id, admin))
 
-    await repository.save(_hole(course_id, admin, bends=()))
+    otro_admin = UserId.generate()
+    await _insert_user(db_session, otro_admin)
+    nueva = SavedHole.reconstruct(
+        golf_course_id=course_id,
+        hole_number=1,
+        tee=SALIDA,
+        bends=(),
+        green_center=GREEN,
+        saved_by=otro_admin,
+        saved_at=datetime(2026, 10, 18, 7, 30),
+    )
+    await repository.save(nueva)
 
     hole = await repository.get(course_id, 1)
-    assert (hole.tee, hole.bends, hole.green_center, hole.saved_by) == (SALIDA, (), GREEN, admin)
+    assert (hole.tee, hole.bends, hole.green_center) == (SALIDA, (), GREEN)
+    assert (hole.saved_by, hole.saved_at) == (otro_admin, datetime(2026, 10, 18, 7, 30))
 
 
 @pytest.mark.asyncio

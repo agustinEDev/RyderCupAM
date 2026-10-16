@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.modules.golf_course.application.dtos.hole_sample_dtos import (
     MAX_BENDS_IN_BODY,
-    HoleSampleDTO,
     PointDTO,
 )
 
@@ -44,7 +43,3 @@ class DeleteHoleSampleRequestDTO(BaseModel):
 
     golf_course_id: str
     sample_id: UUID
-
-
-class SavedHoleLineDTO(HoleSampleDTO):
-    """La línea guardada: salida, codos y green (como una muestra completa)."""

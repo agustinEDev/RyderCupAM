@@ -92,6 +92,13 @@ async def test_l2_only_admins(client: AsyncClient):
             id="green en la salida",
         ),
         pytest.param(19, LINEA, 422, "HOLE_NOT_IN_COURSE", id="hoyo 19"),
+        pytest.param(
+            1,
+            {**LINEA, "bends": [], "green_center": {"latitude": 91, "longitude": -5.33}},
+            422,
+            "INVALID_HOLE_LINE",
+            id="latitud 91",
+        ),
     ],
 )
 async def test_l3_impossible_lines(client: AsyncClient, url_hole, body, status, code):
@@ -140,3 +147,18 @@ async def test_l5_deleting_a_sample(client: AsyncClient):
     assert response.status_code == 204
     assert await _rows(course_id) == 0
     assert (otra_vez.status_code, otra_vez.json()["error_code"]) == (404, "HOLE_SAMPLE_NOT_FOUND")
+
+
+@pytest.mark.asyncio
+async def test_l5_a_sample_of_another_course_is_not_found(client: AsyncClient):
+    course_id, admin, _, player = await _scenario(client, "l5b")
+    otro, _, _, _ = await _scenario(client, "l5c")
+    sample = _new(BODY)
+    await _as(client, player).post(f"{_samples(course_id)}/1", json=sample)
+
+    response = await _as(client, admin).delete(
+        f"/api/v1/golf-courses/admin/{otro}/hole-samples/{sample['id']}"
+    )
+
+    assert (response.status_code, response.json()["error_code"]) == (404, "HOLE_SAMPLE_NOT_FOUND")
+    assert await _rows(course_id) == 1

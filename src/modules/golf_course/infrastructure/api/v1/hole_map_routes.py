@@ -47,6 +47,7 @@ from src.modules.golf_course.application.dtos.hole_map_dtos import (
 )
 from src.modules.golf_course.application.dtos.hole_sample_dtos import (
     HoleSampleBodyDTO,
+    HoleSampleDTO,
     HoleSampleStatusDTO,
     ListHoleSamplesRequestDTO,
     SubmitHoleSampleRequestDTO,
@@ -54,7 +55,6 @@ from src.modules.golf_course.application.dtos.hole_sample_dtos import (
 from src.modules.golf_course.application.dtos.saved_hole_dtos import (
     DeleteHoleSampleRequestDTO,
     ReopenHoleRequestDTO,
-    SavedHoleLineDTO,
     SaveHoleLineBodyDTO,
     SaveHoleLineRequestDTO,
 )
@@ -339,7 +339,7 @@ _HOLE_NOT_IN_COURSE = (
 
 @router.put(
     "/admin/{golf_course_id}/hole-lines/{hole_number}",
-    response_model=SavedHoleLineDTO,
+    response_model=HoleSampleDTO,
     tags=["admin"],
     responses={
         403: {"description": "ADMIN_REQUIRED"},

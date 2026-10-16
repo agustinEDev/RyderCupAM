@@ -273,3 +273,70 @@ async def test_v1_reopened_it_collects_again():
     await _submit(uow, course)
 
     assert len(await uow.hole_samples.list_by_course(course.id)) == 1
+
+
+async def test_a3_a_course_players_cannot_see_is_not_found():
+    """Un campo pendiente (o la propuesta de cambio de otro) no lleva líneas: se borraría con ella."""
+    uow, _ = await _setup()
+    pendiente = GolfCourse.create(
+        name="Pendiente",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=[
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier=None,
+                course_rating=71.2,
+                slope_rating=128,
+            )
+        ],
+        holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
+    )
+    await uow.golf_courses.save(pendiente)
+
+    with pytest.raises(GolfCourseNotFoundError):
+        await SaveHoleLineUseCase(uow).execute(_save_request(pendiente))
+    with pytest.raises(GolfCourseNotFoundError):
+        await ReopenHoleUseCase(uow).execute(
+            ReopenHoleRequestDTO(golf_course_id=str(pendiente.id), hole_number=1)
+        )
+
+
+async def test_a3_the_course_is_checked_before_the_hole():
+    uow, course = await _setup()
+
+    with pytest.raises(GolfCourseNotFoundError):
+        await SaveHoleLineUseCase(uow).execute(
+            _save_request(course, hole=25).model_copy(update={"golf_course_id": str(uuid4())})
+        )
+
+
+async def test_a3_and_a5_lock_the_hole_like_a_sample_does():
+    """Guardar y reabrir bloquean el hoyo: un envío a la vez no se cuela tras la línea."""
+    uow, course = await _setup()
+    bloqueados = []
+    original = uow.hole_samples.lock_hole
+
+    async def espia(course_id, hole):
+        bloqueados.append(hole)
+        await original(course_id, hole)
+
+    uow.hole_samples.lock_hole = espia
+
+    await SaveHoleLineUseCase(uow).execute(_save_request(course, hole=4))
+    await ReopenHoleUseCase(uow).execute(
+        ReopenHoleRequestDTO(golf_course_id=str(course.id), hole_number=4)
+    )
+
+    assert bloqueados == [4, 4]
+
+
+async def test_a4_deleting_on_an_unknown_course_is_course_not_found():
+    uow, _ = await _setup()
+
+    with pytest.raises(GolfCourseNotFoundError):
+        await DeleteHoleSampleUseCase(uow).execute(
+            DeleteHoleSampleRequestDTO(golf_course_id=str(uuid4()), sample_id=uuid4())
+        )

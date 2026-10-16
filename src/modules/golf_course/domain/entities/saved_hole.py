@@ -18,12 +18,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from ..value_objects.geo_point import GeoPoint
 from ..value_objects.golf_course_id import GolfCourseId
 from ..value_objects.mapped_hole import MAX_HOLE_NUMBER, MIN_HOLE_NUMBER
-from .hole_sample import (
-    MAX_BENDS,
-    MAX_DISTANCE_FROM_COURSE_M,
-    MAX_TEE_TO_GREEN_M,
-    MIN_TEE_TO_GREEN_M,
-)
+from .hole_sample import MAX_BENDS, play_line_problem
 
 
 class InvalidSavedHoleError(ValueError):
@@ -101,19 +96,9 @@ class SavedHole:
             saved_by=saved_by,
             saved_at=datetime.now(UTC).replace(tzinfo=None),
         )
-        metres = tee.distance_to(green_center)
-        if not MIN_TEE_TO_GREEN_M <= metres <= MAX_TEE_TO_GREEN_M:
-            raise InvalidSavedHoleError(
-                f"The green must be {MIN_TEE_TO_GREEN_M:.0f}-{MAX_TEE_TO_GREEN_M:.0f} m "
-                f"from the tee, got {metres:.0f} m"
-            )
-        if course_location is not None and any(
-            course_location.distance_to(point) > MAX_DISTANCE_FROM_COURSE_M
-            for point in hole.play_line
-        ):
-            raise InvalidSavedHoleError(
-                f"Every point must be within {MAX_DISTANCE_FROM_COURSE_M:.0f} m of the course"
-            )
+        problem = play_line_problem(tee, green_center, hole.play_line, course_location)
+        if problem:
+            raise InvalidSavedHoleError(problem)
         return hole
 
     @classmethod
