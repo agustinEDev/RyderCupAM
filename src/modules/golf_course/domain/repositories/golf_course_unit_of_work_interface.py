@@ -14,7 +14,7 @@ from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInte
 
 from .golf_course_repository import IGolfCourseRepository
 from .hole_map_repository import IHoleMapRepository
-from .hole_mark_repository import IHoleMarkRepository
+from .hole_sample_repository import IHoleSampleRepository
 
 
 class GolfCourseUnitOfWorkInterface(UnitOfWorkInterface):
@@ -75,11 +75,11 @@ class GolfCourseUnitOfWorkInterface(UnitOfWorkInterface):
 
     @property
     @abstractmethod
-    def hole_marks(self) -> IHoleMarkRepository:
+    def hole_samples(self) -> IHoleSampleRepository:
         """
-        Acceso al repositorio de marcas de hoyo de los jugadores (BE #532, PR C).
+        Acceso al repositorio de muestras anónimas de hoyo (BE #532).
 
         Returns:
-            IHoleMarkRepository: Repositorio de marcas transaccional
+            IHoleSampleRepository: Repositorio de muestras transaccional
         """
         pass

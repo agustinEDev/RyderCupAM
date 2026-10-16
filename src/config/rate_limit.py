@@ -20,6 +20,7 @@ Ninguna clave sale de una cabecera que escriba el cliente (ADR-038).
 """
 
 import hashlib
+import hmac
 import os
 
 from limits import parse
@@ -29,6 +30,7 @@ from slowapi.util import get_remote_address
 from slowapi.wrappers import Limit
 from starlette.requests import Request
 
+from src.config.settings import settings
 from src.modules.user.domain.value_objects.email import Email, InvalidEmailError
 from src.shared.infrastructure.security.cookie_handler import read_access_token
 from src.shared.infrastructure.security.jwt_handler import verify_access_token
@@ -82,8 +84,29 @@ def get_rate_limit_key(request: Request) -> str:
     payload = verify_access_token(token) if token else None
     user_id = payload.get("sub") if payload else None
     if user_id:
-        return f"user:{user_id}"
+        return f"{_USER_PREFIX}{user_id}"
     return get_client_identifier(request)
+
+
+_USER_PREFIX = "user:"
+
+
+def get_hole_sample_rate_limit_key(request: Request) -> str:
+    """
+    Clave de mandar muestras de hoyo (BE #532): por usuario, como las demás rutas
+    con sesión, pero sin su id.
+
+    slowapi escribe la clave en el log al pasar del límite, y las muestras son
+    anónimas: en vez de `user:<uuid>` va un HMAC-SHA256 del id con el secreto de
+    la app, recortado. Sigue siendo uno por usuario y no se puede revertir sin el
+    secreto. Sin sesión válida, la de red, como las demás.
+    """
+    key = get_rate_limit_key(request)
+    if not key.startswith(_USER_PREFIX):
+        return key
+    user_id = key[len(_USER_PREFIX) :]
+    digest = hmac.new(settings.SECRET_KEY.encode(), user_id.encode(), hashlib.sha256)
+    return f"sample:{digest.hexdigest()[:32]}"
 
 
 def email_rate_limit_key(email: str) -> str:
