@@ -21,6 +21,7 @@ import pytest
 
 from src.modules.competition.domain.services.barra_del_jugador import (
     barra_del_jugador,
+    barra_sin_golpes,
     lo_que_le_falta,
 )
 from src.modules.competition.domain.value_objects.match_generation_block import (
@@ -116,3 +117,53 @@ class TestLoQueLeFalta:
         barra = barra_del_jugador(TeeColor.RED, genero, valoradas)
 
         assert lo_que_le_falta(barra, genero, valoradas) == esperado
+
+
+# SCRATCH (P12 de stroke play, y la Ryder desde RyderCupWeb #880): sin golpes las
+# barras no hace falta que estén valoradas, pero su género sí se guarda si tienen
+# tarjeta; con él, el mapa del hoyo sabe de qué barra es cada muestra
+@pytest.mark.parametrize(
+    ("genero", "valoradas", "con_tarjeta", "esperado"),
+    [
+        pytest.param(
+            Gender.MALE,
+            {("YELLOW", "MALE"): AMARILLAS_H},
+            {},
+            (TeeColor.YELLOW, Gender.MALE),
+            id="valorada para su género",
+        ),
+        pytest.param(
+            Gender.MALE,
+            {},
+            {("YELLOW", "MALE"): object()},
+            (TeeColor.YELLOW, Gender.MALE),
+            id="sin valorar, con tarjeta de su género",
+        ),
+        pytest.param(
+            Gender.MALE,
+            {},
+            {("YELLOW", None): object()},
+            (TeeColor.YELLOW, None),
+            id="con tarjeta sin género",
+        ),
+        pytest.param(Gender.MALE, {}, {}, (TeeColor.YELLOW, None), id="ni valorada ni con tarjeta"),
+        pytest.param(
+            Gender.FEMALE,
+            {},
+            {("YELLOW", "MALE"): object()},
+            (TeeColor.YELLOW, None),
+            id="la tarjeta es del otro género",
+        ),
+        pytest.param(
+            None,
+            {},
+            {("YELLOW", "MALE"): object()},
+            (TeeColor.YELLOW, None),
+            id="sin género del jugador",
+        ),
+    ],
+)
+def test_barra_sin_golpes(genero, valoradas, con_tarjeta, esperado):
+    barra = barra_sin_golpes(None, genero, valoradas, con_tarjeta)
+
+    assert (barra.tee_color, barra.tee_gender) == esperado

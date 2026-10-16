@@ -16,7 +16,10 @@ from decimal import Decimal
 from src.modules.competition.application.services.handicaps_de_la_competicion import (
     para_jugar_la_ryder,
 )
-from src.modules.competition.domain.services.barra_del_jugador import barra_del_jugador
+from src.modules.competition.domain.services.barra_del_jugador import (
+    barra_del_jugador,
+    barra_sin_golpes,
+)
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.golf_course.domain.services.stroke_context import holes_for_tee
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -83,18 +86,24 @@ class MatchPlayersBuilder:
         tee_ratings,
         user_handicap_map,
         user_gender_map,
+        con_tarjeta=None,
     ) -> tuple[TeeColor, Gender | None, TeeRating | None, Decimal]:
         """
         Resuelve datos de un jugador: tee colour, gender, tee rating e handicap index.
+
+        Con `con_tarjeta` (las barras con tarjeta, en SCRATCH) el género se busca
+        también entre las que no están valoradas, como en stroke play.
 
         Returns:
             (tee_color, tee_gender, tee_rating, handicap_index)
         """
         enrollment = enrollment_map.get(str(user_id.value))
-        barra = barra_del_jugador(
-            enrollment.tee_color if enrollment else None,
-            user_gender_map.get(str(user_id.value)),
-            tee_ratings,
+        de_la_inscripcion = enrollment.tee_color if enrollment else None
+        genero = user_gender_map.get(str(user_id.value))
+        barra = (
+            barra_del_jugador(de_la_inscripcion, genero, tee_ratings)
+            if con_tarjeta is None
+            else barra_sin_golpes(de_la_inscripcion, genero, tee_ratings, con_tarjeta)
         )
 
         # El que cuenta en la competición: el propio, si no el del perfil
@@ -155,7 +164,12 @@ class MatchPlayersBuilder:
             team_a_players = []
             for uid in team_a_ids:
                 tee_color, tee_gen, _, hi = self.resolve_player_data(
-                    uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                    uid,
+                    enrollment_map,
+                    tee_ratings,
+                    user_handicap_map,
+                    user_gender_map,
+                    con_tarjeta=holes_by_tee or {},
                 )
                 team_a_players.append(
                     MatchPlayer.create(
@@ -170,7 +184,12 @@ class MatchPlayersBuilder:
             team_b_players = []
             for uid in team_b_ids:
                 tee_color, tee_gen, _, hi = self.resolve_player_data(
-                    uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                    uid,
+                    enrollment_map,
+                    tee_ratings,
+                    user_handicap_map,
+                    user_gender_map,
+                    con_tarjeta=holes_by_tee or {},
                 )
                 team_b_players.append(
                     MatchPlayer.create(
@@ -255,10 +274,22 @@ class MatchPlayersBuilder:
             (match_player_a, match_player_b)
         """
         tee_color_a, tee_gen_a, tee_rating_a, hi_a = self.resolve_player_data(
-            a_player_id, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+            a_player_id,
+            enrollment_map,
+            tee_ratings,
+            user_handicap_map,
+            user_gender_map,
+            # En SCRATCH, el género también de las barras con tarjeta sin valorar
+            con_tarjeta=(holes_by_tee or {}) if is_scratch else None,
         )
         tee_color_b, tee_gen_b, tee_rating_b, hi_b = self.resolve_player_data(
-            b_player_id, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+            b_player_id,
+            enrollment_map,
+            tee_ratings,
+            user_handicap_map,
+            user_gender_map,
+            # En SCRATCH, el género también de las barras con tarjeta sin valorar
+            con_tarjeta=(holes_by_tee or {}) if is_scratch else None,
         )
 
         if is_scratch:
@@ -355,7 +386,12 @@ class MatchPlayersBuilder:
             team_a_players = []
             for uid in team_a_ids:
                 tee_color, tee_gen, _, hi = self.resolve_player_data(
-                    uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                    uid,
+                    enrollment_map,
+                    tee_ratings,
+                    user_handicap_map,
+                    user_gender_map,
+                    con_tarjeta=holes_by_tee or {},
                 )
                 team_a_players.append(
                     MatchPlayer.create(
@@ -370,7 +406,12 @@ class MatchPlayersBuilder:
             team_b_players = []
             for uid in team_b_ids:
                 tee_color, tee_gen, _, hi = self.resolve_player_data(
-                    uid, enrollment_map, tee_ratings, user_handicap_map, user_gender_map
+                    uid,
+                    enrollment_map,
+                    tee_ratings,
+                    user_handicap_map,
+                    user_gender_map,
+                    con_tarjeta=holes_by_tee or {},
                 )
                 team_b_players.append(
                     MatchPlayer.create(

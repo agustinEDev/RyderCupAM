@@ -55,6 +55,28 @@ def barra_del_jugador(
     return BarraDelJugador(tee_color, genero if clave[1] is not None else None, valoradas[clave])
 
 
+def barra_sin_golpes(
+    de_la_inscripcion: TeeColor | None,
+    genero: Gender | None,
+    valoradas: Mapping[TeeKey, TeeRating],
+    con_tarjeta: Mapping[TeeKey, object],
+) -> BarraDelJugador:
+    """
+    Las barras de quien juega SCRATCH: sin golpes no hace falta que estén
+    valoradas, pero su género se busca también entre las que traen tarjeta (P12
+    de stroke play). Con él, la tarjeta y el mapa del hoyo son los de su barra
+    (en la Ryder, desde RyderCupWeb #880).
+
+    Args:
+        con_tarjeta: Las barras del campo con tarjeta, por (color, género)
+    """
+    barra = barra_del_jugador(de_la_inscripcion, genero, valoradas)
+    clave = tee_key_for(con_tarjeta, barra.tee_color.value, genero.value if genero else None)
+    if clave is None or clave[1] is None:
+        return barra
+    return BarraDelJugador(barra.tee_color, genero, barra.tee_rating)
+
+
 def lo_que_le_falta(
     barra: BarraDelJugador,
     genero: Gender | None,

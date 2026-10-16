@@ -99,13 +99,13 @@ def user_repo():
     return repo
 
 
-async def _setup(uow, course: GolfCourse | None):
+async def _setup(uow, course: GolfCourse | None, yellow_gender: Gender | None = Gender.MALE):
     """Un partido de dos jugadores, uno por barra, listo para pedir la vista."""
     yellow = MatchPlayer.create(
         user_id=UserId.generate(),
         playing_handicap=10,
         tee_color=TeeColor.YELLOW,
-        tee_gender=Gender.MALE,
+        tee_gender=yellow_gender,
         strokes_received=[],
     )
     red = MatchPlayer.create(
@@ -191,16 +191,7 @@ class TestTeeGenderPerPlayer:
         WHEN: Se pide la vista de anotar
         THEN: Su tee_gender es null
         """
-        match, yellow, _, gc_repo = await _setup(uow, _course_two_tees())
-        sin_sexo = MatchPlayer.create(
-            user_id=yellow.user_id,
-            playing_handicap=10,
-            tee_color=TeeColor.YELLOW,
-            tee_gender=None,
-            strokes_received=[],
-        )
-        match._team_a_players = [sin_sexo]
-        await uow.matches.add(match)
+        match, yellow, _, gc_repo = await _setup(uow, _course_two_tees(), yellow_gender=None)
         uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
 
         view = await uc.execute(str(match.id))
