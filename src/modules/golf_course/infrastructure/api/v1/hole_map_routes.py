@@ -6,7 +6,7 @@ Endpoints del mapa de hoyos de un recorrido (BE #532).
 - GET  /golf-courses/admin/{id}/hole-map                 mapa en cualquier estado (admin)
 - PUT  /golf-courses/admin/{id}/hole-map/approve|reject  revisar la versión vista (admin)
 - POST /golf-courses/{id}/hole-map/samples/{hole}        mandar una muestra anónima de un hoyo
-- GET  /golf-courses/{id}/hole-map/samples               primera muestra de cada barra
+- GET  /golf-courses/{id}/hole-map/samples               primera muestra de cada hoyo
 
 Los errores llevan un mensaje fijo y un `error_code` del que se fía el front:
 nunca el texto de una excepción (CodeQL, BE #562).
@@ -248,10 +248,12 @@ async def submit_hole_sample(
     """
     Manda una muestra de un hoyo desde una barra: su id (lo genera el móvil), el
     color y el género de la barra, la salida, hasta dos codos y el centro del
-    green. Responde 204 tanto si se guarda como si no (la barra ya tiene sus
-    muestras, el id ya llegó, ya mandaste otra a esa barra hace menos de 10
-    minutos, o la muestra no vale). Con la muestra no se guarda quién la manda;
-    Sentry tampoco recibe al usuario en esta ruta.
+    green; sin salida ni codos, una muestra solo green. Responde 204 tanto si se
+    guarda como si no (el hoyo ya tiene sus tres, o ya tiene su solo green; el
+    mapa de OSM aprobado ya lo trae con línea y green; el id ya llegó; ya
+    mandaste otra a ese hoyo hace menos de 10 minutos; o la muestra no vale). Con
+    la muestra no se guarda quién la manda; Sentry tampoco recibe al usuario en
+    esta ruta.
     """
     try:
         await use_case.execute(
@@ -291,8 +293,9 @@ async def list_hole_samples(
     use_case: Annotated[ListHoleSamplesUseCase, Depends(get_list_hole_samples_use_case)],
 ):
     """
-    Los 18 hoyos; de cada uno, sus barras con alguna muestra (por orden de su
-    primera muestra), cada una con esa primera muestra y si sigue recogiendo.
+    Los 18 hoyos; de cada uno, su primera muestra completa, el green de su
+    muestra solo green y si sigue recogiendo. `tees` (por barra) queda para los
+    móviles de antes del 17 oct.
     """
     try:
         response = await use_case.execute(

@@ -2,7 +2,8 @@
 Tabla de las muestras anónimas de hoyo (BE #532, reglas del 16 oct 2026).
 
 Tabla:
-- golf_course_hole_samples (como mucho tres filas por campo, hoyo y barra)
+- golf_course_hole_samples (como mucho tres filas por campo y hoyo, de cualquier
+  barra, y una solo green; BE #575)
 
 No guarda quién mandó cada muestra (no hay columna de usuario), y de cuándo
 llegó solo el día: el orden de llegada lo da `seq`, una identidad de
@@ -62,8 +63,9 @@ golf_course_hole_samples_table = Table(
         nullable=True,
         comment="Género de la barra (MALE, FEMALE, o NULL si no tiene)",
     ),
-    Column("tee_latitude", Float, nullable=False, comment="Salida"),
-    Column("tee_longitude", Float, nullable=False),
+    # NULL en una muestra solo green (17 oct)
+    Column("tee_latitude", Float, nullable=True, comment="Salida (NULL: solo green)"),
+    Column("tee_longitude", Float, nullable=True),
     Column(
         "bends",
         JSONB,
@@ -83,10 +85,15 @@ golf_course_hole_samples_table = Table(
         "tee_gender IS NULL OR tee_gender IN ('MALE', 'FEMALE')",
         name="ck_golf_course_hole_samples_tee_gender",
     ),
-    comment="Muestras anónimas de los hoyos (las tres primeras por barra), sin autor ni hora",
+    CheckConstraint(
+        "(tee_latitude IS NULL AND tee_longitude IS NULL AND jsonb_array_length(bends) = 0)"
+        " OR (tee_latitude IS NOT NULL AND tee_longitude IS NOT NULL)",
+        name="ck_golf_course_hole_samples_green_only",
+    ),
+    comment="Muestras anónimas de los hoyos (las tres primeras por hoyo), sin autor ni hora",
 )
 
-# Contar las de una barra y leer las de un campo en orden de llegada
+# Contar las de un hoyo (su prefijo) y leer las de un campo en orden de llegada
 Index(
     "ix_golf_course_hole_samples_course_hole_tee_seq",
     golf_course_hole_samples_table.c.golf_course_id,

@@ -27,7 +27,8 @@ class PointDTO(BaseModel):
 class HoleSampleBodyDTO(BaseModel):
     """
     Cuerpo de mandar una muestra: su id, la barra desde la que se jugó, la
-    salida, hasta dos codos y el centro del green.
+    salida, hasta dos codos y el centro del green. Sin salida (y sin codos) es
+    una muestra solo green: quien abre el mapa a mitad de hoyo (17 oct).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -41,7 +42,9 @@ class HoleSampleBodyDTO(BaseModel):
     tee_color: TeeColor
     # Obligatorio aunque admita null: una barra sin género se dice, no se supone
     tee_gender: Gender | None = Field(description="MALE, FEMALE, o null si la barra no tiene")
-    tee: PointDTO
+    tee: PointDTO | None = Field(
+        default=None, description="La salida; null en una muestra solo green (sin codos)"
+    )
     bends: list[PointDTO] = Field(default_factory=list, max_length=MAX_BENDS_IN_BODY)
     green_center: PointDTO
 
@@ -58,7 +61,7 @@ class SubmitHoleSampleRequestDTO(BaseModel):
     user_id: str
     tee_color: TeeColor
     tee_gender: Gender | None
-    tee: PointDTO
+    tee: PointDTO | None = None
     bends: list[PointDTO] = Field(default_factory=list)
     green_center: PointDTO
 
@@ -80,23 +83,43 @@ class HoleSampleDTO(BaseModel):
 class TeeSamplesDTO(BaseModel):
     """
     Lo que se sabe de una barra de un hoyo. A propósito no dice cuántas muestras
-    hay ni de quién son.
+    hay ni de quién son. Solo para los móviles de antes del 17 oct: los de ahora
+    leen el hoyo entero.
     """
 
     tee_color: TeeColor
     tee_gender: Gender | None
-    first_sample: HoleSampleDTO = Field(description="La muestra más antigua de esta barra")
-    collecting: bool = Field(description="True mientras la barra admite más muestras")
+    first_sample: HoleSampleDTO = Field(description="La muestra completa más antigua de esta barra")
+    collecting: bool = Field(description="El del hoyo: las tres son por hoyo desde el 17 oct")
 
 
 class HoleSampleStatusDTO(BaseModel):
-    """Un hoyo: sus barras con alguna muestra, por orden de su primera muestra."""
+    """
+    Un hoyo: su primera muestra completa, el green de su primera muestra solo
+    green y si recoge (17 oct: una referencia por hoyo). Nunca cuántas hay ni de
+    quién son.
+    """
 
     hole_number: int
+    first_sample: HoleSampleDTO | None = Field(
+        description="La muestra completa más antigua del hoyo, de la barra que sea"
+    )
+    first_green: PointDTO | None = Field(
+        description=(
+            "El green de la muestra solo green más antigua: quien esté en la salida "
+            "completa el hoyo con él"
+        )
+    )
+    collecting: bool = Field(
+        description=(
+            "True mientras el hoyo admite más muestras: menos de tres, y no lo trae "
+            "con línea y green el mapa de OSM aprobado"
+        )
+    )
     tees: list[TeeSamplesDTO] = Field(
         description=(
-            "Solo las barras con alguna muestra, de la que la tuvo antes a la que la "
-            "tuvo después. Una barra que no sale recoge y no tiene muestra"
+            "Obsoleto (móviles de antes del 17 oct): las barras con alguna muestra "
+            "completa, en el orden de su primera"
         )
     )
 

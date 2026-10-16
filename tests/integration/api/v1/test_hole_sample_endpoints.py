@@ -201,19 +201,22 @@ async def test_e1_far_from_the_course_is_204_and_not_stored(client: AsyncClient)
 
 
 @pytest.mark.asyncio
-async def test_e1_a_hole_with_a_full_approved_map_takes_samples(client: AsyncClient):
+async def test_e1_a_hole_with_a_full_approved_map_does_not_collect(client: AsyncClient):
     """
     GIVEN: Un mapa aprobado con el hoyo 1 completo (salida y green de OSM)
     WHEN: Se manda una muestra del hoyo 1
-    THEN: 204, y se guarda (ya no hay HOLE_ALREADY_MAPPED)
+    THEN: 204 sin error, y no se guarda: con lo de OSM basta (Agustín, 17 oct); el
+          hoyo no recoge
     """
     course_id, _, admin_email, player = await _scenario(client, "e1e")
     await _save_map(course_id, approved_by_email=admin_email)
+    c = _as(client, player)
 
-    response = await _as(client, player).post(_url(course_id), json=BODY)
+    response = await c.post(_url(course_id), json=BODY)
 
     assert response.status_code == 204
-    assert await _rows(course_id) == 1
+    assert await _rows(course_id) == 0
+    assert (await c.get(_list(course_id))).json()[0]["collecting"] is False
 
 
 @pytest.mark.asyncio
@@ -327,7 +330,6 @@ async def test_e2_hole_ten_is_fine(client: AsyncClient):
         {**BODY, "outline": []},
         {**BODY, "marked_at": "2026-10-15T10:00:00+02:00"},
         {"id": BODY["id"], "green_center": GREEN},
-        {**BODY, "tee": None},
         {"id": BODY["id"], "tee": SALIDA},
         {**BODY, "tee": [36.28, -5.33]},
         {**BODY, "bends": [CODO] * 21},
@@ -348,7 +350,6 @@ async def test_e2_hole_ten_is_fine(client: AsyncClient):
         "extra",
         "marked_at",
         "no-tee",
-        "null-tee",
         "no-green",
         "list",
         "21-bends",
@@ -441,7 +442,11 @@ async def test_e3_eighteen_holes_and_nothing_about_who_or_how_many(client: Async
     data = (await c.get(_list(course_id))).json()
 
     assert [h["hole_number"] for h in data] == list(range(1, 19))
-    assert all(set(h) == {"hole_number", "tees"} for h in data)
+    assert all(
+        set(h) == {"hole_number", "first_sample", "first_green", "collecting", "tees"} for h in data
+    )
+    assert (data[0]["collecting"], data[1]["collecting"]) == (True, False)
+    assert set(data[0]["first_sample"]) == {"tee", "bends", "green_center"}
     (uno,), (dos,) = data[0]["tees"], data[1]["tees"]
     assert set(uno) == {"tee_color", "tee_gender", "first_sample", "collecting"}
     assert set(uno["first_sample"]) == {"tee", "bends", "green_center"}
@@ -582,14 +587,13 @@ async def _scenario_with_tees(client: AsyncClient, tag: str, tees: list[dict]):
 
 
 @pytest.mark.asyncio
-async def test_e5_the_cap_is_per_tee_and_the_read_lists_each_tee(client: AsyncClient):
+async def test_e5_the_cap_is_per_hole_and_the_read_lists_each_tee(client: AsyncClient):
     """
-    GIVEN: Un campo con rojas de mujer, amarillas de hombre y blancas sin género; tres
-           jugadores mandan el hoyo 1 desde rojas y desde amarillas (las rojas primero),
-           y otro desde blancas
-    WHEN: Ese otro manda además una desde amarillas, y se leen
-    THEN: 204 todas; 3 + 3 + 1 filas; el hoyo 1 trae tres barras en el orden de su
-          primera muestra: rojas y amarillas llenas, blancas recogiendo
+    GIVEN: Un campo con rojas de mujer, amarillas de hombre y blancas sin género
+    WHEN: Mandan el hoyo 1 un jugador desde rojas, otro desde amarillas, otro desde
+          rojas y un cuarto desde blancas
+    THEN: 204 todas; tres filas (17 oct: tres por hoyo, de cualquier barra); el hoyo
+          ya no recoge, y las barras salen en el orden de su primera muestra
     """
     course_id, player = await _scenario_with_tees(
         client,
@@ -597,24 +601,23 @@ async def test_e5_the_cap_is_per_tee_and_the_read_lists_each_tee(client: AsyncCl
         [_tee("RED", "FEMALE", 70.0), _tee("YELLOW", "MALE", 71.0), _tee("WHITE", None, 72.0)],
     )
     rojas = {"tee_color": "RED", "tee_gender": "FEMALE"}
-    for who in await _players(client, "e5", 3):
-        c = _as(client, who)
-        assert (await c.post(_url(course_id), json=_new({**BODY, **rojas}))).status_code == 204
-        assert (await c.post(_url(course_id), json=_new())).status_code == 204
-    c = _as(client, player)
-    blancas = await c.post(
-        _url(course_id), json=_new({**BODY, "tee_color": "WHITE", "tee_gender": None})
-    )
+    a, b, c3 = await _players(client, "e5", 3)
+    responses = [
+        await _as(client, a).post(_url(course_id), json=_new({**BODY, **rojas})),
+        await _as(client, b).post(_url(course_id), json=_new()),
+        await _as(client, c3).post(_url(course_id), json=_new({**BODY, **rojas})),
+        await _as(client, player).post(
+            _url(course_id), json=_new({**BODY, "tee_color": "WHITE", "tee_gender": None})
+        ),
+    ]
 
-    cuarta = await c.post(_url(course_id), json=_new())
-
-    assert (blancas.status_code, cuarta.status_code) == (204, 204)
-    assert await _rows(course_id) == 7
-    tees = (await c.get(_list(course_id))).json()[0]["tees"]
-    assert [(t["tee_color"], t["tee_gender"], t["collecting"]) for t in tees] == [
-        ("RED", "FEMALE", False),
-        ("YELLOW", "MALE", False),
-        ("WHITE", None, True),
+    assert [r.status_code for r in responses] == [204] * 4
+    assert await _rows(course_id) == 3
+    hole = (await _as(client, player).get(_list(course_id))).json()[0]
+    assert hole["collecting"] is False
+    assert [(t["tee_color"], t["tee_gender"]) for t in hole["tees"]] == [
+        ("RED", "FEMALE"),
+        ("YELLOW", "MALE"),
     ]
 
 
@@ -641,3 +644,43 @@ async def test_e5_the_tee_is_resolved_against_the_course(client: AsyncClient):
     assert await _rows(course_id) == 2
     (tee,) = (await _as(client, player).get(_list(course_id))).json()[0]["tees"]
     assert (tee["tee_color"], tee["tee_gender"]) == ("YELLOW", None)
+
+
+# ============================================================================
+# E6 — Solo green (Agustín, 17 oct): a mitad de hoyo se marca solo el green
+# ============================================================================
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({**BODY, "tee": None, "bends": []}, id="salida null"),
+        pytest.param({k: v for k, v in BODY.items() if k not in ("tee", "bends")}, id="sin salida"),
+    ],
+)
+async def test_e6_a_green_only_sample_is_204_and_read_as_the_first_green(client: AsyncClient, body):
+    """
+    GIVEN: Un campo sin muestras
+    WHEN: Se manda una muestra sin salida ni codos
+    THEN: 204, se guarda, y la lectura del hoyo trae su green y ninguna primera completa
+    """
+    course_id, _, _, player = await _scenario(client, "e6")
+    c = _as(client, player)
+
+    response = await c.post(_url(course_id), json=_new(body))
+
+    assert response.status_code == 204
+    assert await _rows(course_id) == 1
+    hole = (await c.get(_list(course_id))).json()[0]
+    assert (hole["first_sample"], hole["first_green"], hole["tees"]) == (None, GREEN, [])
+
+
+@pytest.mark.asyncio
+async def test_e6_a_green_only_sample_with_bends_is_204_and_not_stored(client: AsyncClient):
+    course_id, _, _, player = await _scenario(client, "e6b")
+
+    response = await _as(client, player).post(_url(course_id), json=_new({**BODY, "tee": None}))
+
+    assert response.status_code == 204
+    assert await _rows(course_id) == 0
