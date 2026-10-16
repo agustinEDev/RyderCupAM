@@ -49,8 +49,8 @@ def _senders(max_entries: int = 1000):
     return InMemoryRecentHoleSampleSenders(clock=reloj, max_entries=max_entries), reloj
 
 
-def _key(user="u1", course=CAMPO, hole=1, tee=AMARILLAS):
-    return (user, course, hole, *tee)
+def _key(user="u1", course=CAMPO, hole=1):
+    return (user, course, hole)
 
 
 def _accepted(senders, key=None) -> None:
@@ -146,20 +146,6 @@ def test_other_player_hole_or_course_can_reserve():
     assert senders.reserve(*_key(user="u2")) is True
     assert senders.reserve(*_key(hole=2)) is True
     assert senders.reserve(*_key(course=OTRO_CAMPO)) is True
-
-
-def test_other_tee_can_reserve():
-    """
-    GIVEN: Una muestra aceptada de u1 en el hoyo 1 desde amarillas de hombre
-    WHEN: Se reserva desde rojas de hombre, amarillas de mujer y amarillas sin género
-    THEN: Entran las tres
-    """
-    senders, _ = _senders()
-    _accepted(senders)
-
-    assert senders.reserve(*_key(tee=(TeeColor.RED, Gender.MALE))) is True
-    assert senders.reserve(*_key(tee=(TeeColor.YELLOW, Gender.FEMALE))) is True
-    assert senders.reserve(*_key(tee=(TeeColor.YELLOW, None))) is True
 
 
 def test_confirming_again_restarts_the_window():

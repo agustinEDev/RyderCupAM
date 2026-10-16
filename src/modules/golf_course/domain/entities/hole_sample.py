@@ -8,9 +8,13 @@ muestras enriquecen los codos. **No guarda quién la mandó**, y de cuándo lleg
 solo el día (UTC): la hora ayudaría a saber quién estaba en el campo. El id lo
 genera el móvil, para que un reenvío cuente una vez, y no dice nada de quién.
 
-Por hoyo y barra se guardan solo las tres primeras que llegan
-(MAX_SAMPLES_PER_HOLE); las demás se reciben igual y no se guardan, sin que el
-jugador lo note.
+Por hoyo se guardan solo las tres primeras que llegan, de cualquier barra
+(MAX_SAMPLES_PER_HOLE; Agustín, 17 oct: una referencia por hoyo); las demás se
+reciben igual y no se guardan, sin que el jugador lo note.
+
+Una muestra puede ser **solo green** (17 oct): quien abre el mapa a mitad de
+hoyo no está en la salida y marca solo el green, sin codos; el siguiente que
+esté en la salida completa el hoyo con él.
 
 Los límites frenan muestras absurdas (un toque en el hoyo de al lado, o a
 mitad de camino): de la salida al green entre 40 y 750 m en recta, y ningún
@@ -62,9 +66,10 @@ class HoleSample:
       lo tiene).
     - Hoyo entero de 1 a 18 (también del 10 al 18 en un campo de 9: la segunda
       vuelta suele salir de otras salidas).
-    - Salida y centro del green obligatorios; hasta 2 codos.
-    - Al crearla: el green a 40-750 m de la salida en recta, y ningún punto a
-      más de 3 km del campo (sin ubicación del campo, no se mira).
+    - Centro del green obligatorio. Con salida, hasta 2 codos; sin salida (solo
+      green), ninguno.
+    - Al crearla: con salida, el green a 40-750 m de ella en recta; y ningún
+      punto a más de 3 km del campo (sin ubicación del campo, no se mira).
     """
 
     def __init__(
@@ -74,7 +79,7 @@ class HoleSample:
         hole_number: int,
         tee_color: TeeColor,
         tee_gender: Gender | None,
-        tee: GeoPoint,
+        tee: GeoPoint | None,
         bends: Iterable[GeoPoint],
         green_center: GeoPoint,
         received_on: date,
@@ -98,7 +103,7 @@ class HoleSample:
         # Un datetime también es un date: con él se colaría la hora
         if not isinstance(received_on, date) or isinstance(received_on, datetime):
             raise InvalidHoleSampleError("The arrival must be a day, without time")
-        if not isinstance(tee, GeoPoint):
+        if tee is not None and not isinstance(tee, GeoPoint):
             raise InvalidHoleSampleError("The tee must be a GeoPoint")
         if not isinstance(green_center, GeoPoint):
             raise InvalidHoleSampleError("The green center must be a GeoPoint")
@@ -107,6 +112,8 @@ class HoleSample:
             raise InvalidHoleSampleError("Bends must be GeoPoints")
         if len(bends) > MAX_BENDS:
             raise InvalidHoleSampleError(f"At most {MAX_BENDS} bends, got {len(bends)}")
+        if tee is None and bends:
+            raise InvalidHoleSampleError("A green-only sample has no bends")
 
         self._id = id
         self._golf_course_id = golf_course_id
@@ -126,7 +133,7 @@ class HoleSample:
         hole_number: int,
         tee_color: TeeColor,
         tee_gender: Gender | None,
-        tee: GeoPoint,
+        tee: GeoPoint | None,
         bends: Iterable[GeoPoint],
         green_center: GeoPoint,
         course_location: GeoPoint | None,
@@ -162,7 +169,7 @@ class HoleSample:
         hole_number: int,
         tee_color: TeeColor,
         tee_gender: Gender | None,
-        tee: GeoPoint,
+        tee: GeoPoint | None,
         bends: Iterable[GeoPoint],
         green_center: GeoPoint,
         received_on: date,
@@ -184,6 +191,8 @@ class HoleSample:
         )
 
     def _ensure_tee_to_green(self) -> None:
+        if self._tee is None:
+            return  # Solo green: no hay salida desde la que medir
         metres = self._tee.distance_to(self._green_center)
         if not MIN_TEE_TO_GREEN_M <= metres <= MAX_TEE_TO_GREEN_M:
             raise HoleSampleOutOfRangeError(
@@ -223,8 +232,13 @@ class HoleSample:
         return self._tee_gender
 
     @property
-    def tee(self) -> GeoPoint:
+    def tee(self) -> GeoPoint | None:
+        """None en una muestra solo green."""
         return self._tee
+
+    @property
+    def is_green_only(self) -> bool:
+        return self._tee is None
 
     @property
     def bends(self) -> tuple[GeoPoint, ...]:
@@ -241,5 +255,7 @@ class HoleSample:
 
     @property
     def play_line(self) -> tuple[GeoPoint, ...]:
-        """Salida, codos y green, en orden."""
+        """Salida, codos y green, en orden; solo el green en una muestra solo green."""
+        if self._tee is None:
+            return (self._green_center,)
         return (self._tee, *self._bends, self._green_center)

@@ -1,7 +1,7 @@
 """
 Quién aportó hace poco una muestra de hoyo, en la memoria del proceso (BE #532).
 
-Una entrada por jugador, campo, hoyo y barra, que caduca a los 10 minutos. Nada
+Una entrada por jugador, campo y hoyo, que caduca a los 10 minutos. Nada
 de esto va a la base de datos ni a los logs, y con un tope de entradas: si se
 llena, se olvidan antes las más viejas (lo peor que pasa es que alguien aporte
 una muestra más pronto).
@@ -19,13 +19,11 @@ from src.modules.golf_course.application.ports.recent_hole_sample_senders import
     IRecentHoleSampleSenders,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
-from src.shared.domain.value_objects.gender import Gender
 
 WINDOW_SECONDS = 600.0
 MAX_ENTRIES = 50_000
 
-_Key = tuple[str, str, int, str, str | None]
+_Key = tuple[str, str, int]
 
 
 class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
@@ -49,15 +47,8 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         self._lock = threading.Lock()
 
     @staticmethod
-    def _key(
-        user_id: str,
-        golf_course_id: GolfCourseId,
-        hole_number: int,
-        tee_color: TeeColor,
-        tee_gender: Gender | None,
-    ) -> _Key:
-        gender = None if tee_gender is None else tee_gender.value
-        return (user_id, str(golf_course_id), hole_number, tee_color.value, gender)
+    def _key(user_id: str, golf_course_id: GolfCourseId, hole_number: int) -> _Key:
+        return (user_id, str(golf_course_id), hole_number)
 
     def _forget_expired(self, now: float) -> None:
         # Ordenado por llegada: las caducadas están todas al principio
@@ -72,10 +63,8 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         user_id: str,
         golf_course_id: GolfCourseId,
         hole_number: int,
-        tee_color: TeeColor,
-        tee_gender: Gender | None,
     ) -> bool:
-        key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
+        key = self._key(user_id, golf_course_id, hole_number)
         with self._lock:  # Mirar y apartar, de una vez
             self._forget_expired(self._clock())
             if key in self._recorded_at or key in self._pending:
@@ -88,10 +77,8 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         user_id: str,
         golf_course_id: GolfCourseId,
         hole_number: int,
-        tee_color: TeeColor,
-        tee_gender: Gender | None,
     ) -> None:
-        key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
+        key = self._key(user_id, golf_course_id, hole_number)
         with self._lock:
             self._pending.discard(key)
             now = self._clock()
@@ -106,10 +93,8 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         user_id: str,
         golf_course_id: GolfCourseId,
         hole_number: int,
-        tee_color: TeeColor,
-        tee_gender: Gender | None,
     ) -> None:
-        key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
+        key = self._key(user_id, golf_course_id, hole_number)
         with self._lock:
             self._pending.discard(key)
 

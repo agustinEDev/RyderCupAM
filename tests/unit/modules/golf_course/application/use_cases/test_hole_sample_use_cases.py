@@ -9,8 +9,12 @@ tenga o no datos en el mapa: las muestras enriquecen los codos.
 Revisión del 16 oct (Agustín): el id lo pone el móvil y una muestra repetida
 cuenta una vez; cada jugador aporta como mucho una muestra por campo y hoyo
 cada 10 minutos (en memoria, nunca en la BD ni en los logs), y solo gasta su
-ventana una muestra que de verdad se guardó y se confirmó. Y todo va por barra
-(color y género): cada una sale de un sitio distinto.
+ventana una muestra que de verdad se guardó y se confirmó.
+
+Revisión del 17 oct (Agustín, BE #575): una referencia por hoyo. Las tres son
+por hoyo, de cualquier barra (la barra se sigue resolviendo y guardando); un
+hoyo que el mapa de OSM aprobado trae con línea y green no recoge; y una muestra
+puede ser solo green (quien abre el mapa a mitad de hoyo).
 
 | Caso                                                | Resultado                                  |
 |-----------------------------------------------------|--------------------------------------------|
@@ -20,7 +24,8 @@ ventana una muestra que de verdad se guardó y se confirmó. Y todo va por barra
 | La misma persona, cinco seguidas                    | Cuenta una (una cada 10 min por hoyo)      |
 | La misma persona, cada 10 minutos                   | Llena las tres                             |
 | El tope es por hoyo y por campo                     | Otro hoyo y otro campo siguen recogiendo   |
-| Hoyo con mapa aprobado completo, o solo con salida  | Se guarda igual                            |
+| Hoyo del mapa OSM aprobado con línea y green        | No se guarda, y no recoge                  |
+| Hoyo del mapa sin green, fuera del mapa, o pendiente| Se guarda                                  |
 | Tres codos                                          | No se guarda, sin error                    |
 | Green a 30 m o a 800 m                              | No se guarda, sin error                    |
 | Un punto a más de 3 km del campo                    | No se guarda, sin error                    |
@@ -32,12 +37,14 @@ ventana una muestra que de verdad se guardó y se confirmó. Y todo va por barra
 | Hoyo 10 en un campo de 9                            | Se guarda                                  |
 | Lectura sin muestras                                | 18 hoyos, sin barras                       |
 | Lectura con muestras                                | La primera de cada barra es la más antigua |
-| Con tres                                            | Esa barra ya no recoge; con dos, sí        |
+| Con tres, de cualquier barra                        | El hoyo ya no recoge; con dos, sí          |
 | Varias barras en un hoyo                            | En el orden de su primera muestra          |
 | La lectura                                          | No dice cuántas hay ni de quién            |
-| 3 amarillas-hombre y 3 rojas-mujer                  | Se guardan las seis; la 4.ª amarilla, no   |
-| Amarillas sin género                                | Otra barra distinta de amarillas-hombre    |
-| Mismo jugador, otra barra del mismo hoyo            | Se guarda (la ventana es por barra)        |
+| 3 amarillas-hombre y luego 1 roja-mujer             | La roja no se guarda (tres por hoyo)       |
+| Mismo jugador, otra barra del mismo hoyo            | No se guarda (la ventana es por hoyo)      |
+| Solo green                                          | Se guarda y cuenta para las tres           |
+| Solo green con codos, o lejos del campo             | No se guarda, sin error                    |
+| Lectura                                             | La primera completa y el primer green suelto |
 | Barra que el campo no tiene                         | No se guarda, sin error, no gasta ventana  |
 | Campo con amarillas sin género                      | Hombre y sin género, la misma barra        |
 | La ventana y el cubo                                | Con la barra resuelta del campo            |
@@ -202,7 +209,7 @@ def _request(
         tee_color=tee_color,
         tee_gender=tee_gender,
         user_id=user or str(uuid4()),
-        tee=_p(tee),
+        tee=_p(tee) if tee is not None else None,
         bends=[_p(b) for b in bends],
         green_center=_p(green),
     )
@@ -232,9 +239,9 @@ async def _tee_of(uow, course, number=1, color=TeeColor.YELLOW, gender=Gender.MA
     return next((t for t in hole.tees if (t.tee_color, t.tee_gender) == (color, gender)), None)
 
 
-def _window_open(uow, course, color=TeeColor.YELLOW, gender=Gender.MALE) -> bool:
-    """Si el jugador podría aportar ya a esa barra del hoyo 1 (sin dejarla reservada)."""
-    key = (JUGADOR, course.id, 1, color, gender)
+def _window_open(uow, course) -> bool:
+    """Si el jugador podría aportar ya al hoyo 1 (sin dejarlo reservado)."""
+    key = (JUGADOR, course.id, 1)
     if not uow.senders.reserve(*key):
         return False
     uow.senders.release(*key)
@@ -242,7 +249,11 @@ def _window_open(uow, course, color=TeeColor.YELLOW, gender=Gender.MALE) -> bool
 
 
 async def _stored(uow, course, hole=1, color=TeeColor.YELLOW, gender=Gender.MALE) -> int:
-    return await uow.hole_samples.count_for_tee(course.id, hole, color, gender)
+    """Las guardadas de esa barra en ese hoyo (la barra se sigue guardando)."""
+    samples = await uow.hole_samples.list_by_course(course.id)
+    return sum(
+        1 for x in samples if (x.hole_number, x.tee_color, x.tee_gender) == (hole, color, gender)
+    )
 
 
 # ============================================================================
@@ -349,20 +360,13 @@ async def test_s1_the_cap_is_per_hole_and_per_course():
     assert await _stored(uow, otro, 1) == 1
 
 
-@pytest.mark.parametrize("with_green", [True, False])
-async def test_s1_holes_with_an_approved_map_take_samples_too(with_green):
-    """
-    GIVEN: Un mapa aprobado con el hoyo 1 completo (salida y green), o solo con salida
-    WHEN: Llega una muestra del hoyo 1
-    THEN: Se guarda: las muestras enriquecen los codos de cualquier hoyo
-    """
-    uow, course = await _setup()
+async def _hole_map(course, with_green=True, approved=True, number=1):
     tee, green = GeoPoint(*SALIDA), GeoPoint(*GREEN)
     hole_map = CourseHoleMap.create(
         golf_course_id=course.id,
         holes=[
             MappedHole(
-                number=1,
+                number=number,
                 play_line=(tee, green),
                 line_source=PositionSource.OSM,
                 green=GreenPosition(
@@ -375,12 +379,43 @@ async def test_s1_holes_with_an_approved_map_take_samples_too(with_green):
         osm_reference="way/1",
         imported_at=datetime(2026, 10, 15, 9, 0),
     )
-    hole_map.approve(reviewer_id=UserId.generate())
-    await uow.hole_maps.save(hole_map)
+    if approved:
+        hole_map.approve(reviewer_id=UserId.generate())
+    return hole_map
+
+
+async def test_s1_a_hole_of_an_approved_osm_map_with_line_and_green_does_not_collect():
+    """
+    GIVEN: Un mapa de OSM aprobado con el hoyo 1 completo (línea y green)
+    WHEN: Llega una muestra del hoyo 1
+    THEN: No se guarda, y el hoyo no recoge (Agustín, 17 oct: con lo de OSM basta)
+    """
+    uow, course = await _setup()
+    await uow.hole_maps.save(await _hole_map(course))
 
     await _submit(uow, course, bends=[CODO])
 
-    assert await _stored(uow, course) == 1
+    assert await _stored(uow, course) == 0
+    assert (await _hole(uow, course)).collecting is False
+
+
+@pytest.mark.parametrize(
+    ("map_args", "hole"),
+    [
+        pytest.param({"with_green": False}, 1, id="el hoyo del mapa no trae green"),
+        pytest.param({}, 2, id="el hoyo no está en el mapa"),
+        pytest.param({"approved": False}, 1, id="el mapa está pendiente"),
+    ],
+)
+async def test_s1_other_holes_of_a_course_with_a_map_collect(map_args, hole):
+    """Sin línea y green aprobados en ese hoyo, se completa con las muestras."""
+    uow, course = await _setup()
+    await uow.hole_maps.save(await _hole_map(course, **map_args))
+
+    await _submit(uow, course, hole=hole)
+
+    assert await _stored(uow, course, hole) == 1
+    assert (await _hole(uow, course, hole)).collecting is True
 
 
 # ============================================================================
@@ -588,42 +623,40 @@ async def test_s4_first_sample_is_the_oldest():
 
 async def test_s4_collecting_until_three():
     """
-    GIVEN: En el hoyo 1, las amarillas de hombre con dos muestras y las rojas de mujer con tres
+    GIVEN: El hoyo 1 con dos muestras (amarillas y rojas) y el hoyo 2 con tres
+           (dos amarillas y una roja)
     WHEN: Se leen
-    THEN: Las amarillas siguen recogiendo; las rojas, no
+    THEN: El hoyo 1 sigue recogiendo; el 2, no, ni en ninguna de sus barras
     """
     uow, course = await _setup()
+    rojas = {"tee_color": TeeColor.RED, "tee_gender": Gender.FEMALE}
+    await _submit(uow, course)
+    await _submit(uow, course, **rojas)
     for _ in range(2):
-        await _submit(uow, course)
-    for _ in range(3):
-        await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
+        await _submit(uow, course, hole=2)
+    await _submit(uow, course, hole=2, **rojas)
 
-    amarillas = await _tee_of(uow, course)
-    rojas = await _tee_of(uow, course, color=TeeColor.RED, gender=Gender.FEMALE)
+    uno, dos = (await _read(uow, course))[:2]
 
-    assert (amarillas.collecting, rojas.collecting) == (True, False)
+    assert (uno.collecting, dos.collecting) == (True, False)
+    assert {t.collecting for t in dos.tees} == {False}
 
 
 async def test_s4_tees_are_ordered_by_their_first_sample():
     """
-    GIVEN: En el hoyo 1 llegan, por este orden: rojas de mujer, amarillas de hombre,
-           otra de rojas y una de blancas sin género
+    GIVEN: En el hoyo 1 llegan, por este orden: rojas de mujer, amarillas de hombre
+           y otra de rojas (las tres del hoyo)
     WHEN: Se leen
-    THEN: Tres barras, en el orden en que llegó su primera muestra
+    THEN: Dos barras, en el orden en que llegó su primera muestra
     """
     uow, course = await _setup()
     await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
     await _submit(uow, course)
     await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
-    await _submit(uow, course, tee_color=TeeColor.WHITE, tee_gender=None)
 
     tees = (await _hole(uow, course)).tees
 
-    assert [(t.tee_color, t.tee_gender) for t in tees] == [
-        ("RED", "FEMALE"),
-        ("YELLOW", "MALE"),
-        ("WHITE", None),
-    ]
+    assert [(t.tee_color, t.tee_gender) for t in tees] == [("RED", "FEMALE"), ("YELLOW", "MALE")]
 
 
 async def test_s4_only_that_course():
@@ -653,7 +686,7 @@ async def test_s4_the_read_does_not_say_how_many_or_who():
 
     hole = (await _hole(uow, course)).model_dump()
 
-    assert set(hole) == {"hole_number", "tees"}
+    assert set(hole) == {"hole_number", "first_sample", "first_green", "collecting", "tees"}
     (tee,) = hole["tees"]
     assert set(tee) == {"tee_color", "tee_gender", "first_sample", "collecting"}
     assert set(tee["first_sample"]) == {"tee", "bends", "green_center"}
@@ -863,52 +896,45 @@ async def test_s7_the_drop_log_has_no_coordinates_and_no_player(cause, caplog):
 # ============================================================================
 
 
-async def test_s8_the_cap_is_per_tee():
+async def test_s8_the_cap_is_per_hole_from_any_tee():
     """
-    GIVEN: Tres muestras del hoyo 1 desde amarillas de hombre y tres desde rojas de mujer
-    WHEN: Llega una cuarta desde amarillas de hombre
-    THEN: Las seis primeras se guardan; la cuarta amarilla, no
-    """
-    uow, course = await _setup()
-    for _ in range(3):
-        await _submit(uow, course)
-        await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
-
-    await _submit(uow, course)
-
-    assert await _stored(uow, course) == 3
-    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 3
-
-
-async def test_s8_a_genderless_tee_is_its_own_tee():
-    """
-    GIVEN: Tres muestras desde amarillas de hombre (esa barra ya no recoge)
-    WHEN: Llega una desde las blancas, sin género
-    THEN: Se guarda, y las blancas siguen recogiendo
+    GIVEN: Tres muestras del hoyo 1 desde amarillas de hombre
+    WHEN: Llega una desde rojas de mujer, y otra desde blancas sin género
+    THEN: No se guardan: son tres por hoyo, de la barra que sea (17 oct)
     """
     uow, course = await _setup()
     for _ in range(3):
         await _submit(uow, course)
 
+    await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
     await _submit(uow, course, tee_color=TeeColor.WHITE, tee_gender=None)
 
-    blancas = {"color": TeeColor.WHITE, "gender": None}
-    assert await _stored(uow, course, **blancas) == 1
-    assert (await _tee_of(uow, course, **blancas)).collecting is True
+    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 0
+    assert await _stored(uow, course, color=TeeColor.WHITE, gender=None) == 0
 
 
-async def test_s8_the_players_window_is_per_tee():
+async def test_s8_each_sample_keeps_its_tee():
+    """La barra se sigue guardando: al admin le sirve para comparar con los metros."""
+    uow, course = await _setup()
+    await _submit(uow, course)
+    await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
+
+    assert await _stored(uow, course) == 1
+    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 1
+
+
+async def test_s8_the_players_window_is_per_hole():
     """
     GIVEN: Una muestra del jugador en el hoyo 1 desde amarillas de hombre
-    WHEN: En seguida manda otra del hoyo 1 desde rojas de mujer (cambió de barra)
-    THEN: Se guarda
+    WHEN: En seguida manda otra del hoyo 1 desde rojas de mujer
+    THEN: No se guarda: la ventana es por hoyo, como las tres
     """
     uow, course = await _setup()
     await _submit(uow, course, user=JUGADOR)
 
     await _submit(uow, course, user=JUGADOR, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
 
-    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 1
+    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 0
 
 
 # ============================================================================
@@ -957,7 +983,7 @@ async def test_s9_a_tee_the_course_does_not_have_is_dropped(color, gender):
     await _submit(uow, course, user=JUGADOR, tee_color=color, tee_gender=gender)
 
     assert (await _hole(uow, course)).tees == []
-    assert _window_open(uow, course, color, gender)
+    assert _window_open(uow, course)
 
 
 async def test_s9_the_window_uses_the_resolved_tee():
@@ -985,3 +1011,76 @@ async def test_s9_a_gendered_request_on_a_genderless_tee_is_stored_under_it():
     await _submit(uow, course, tee_color=TeeColor.WHITE, tee_gender=Gender.MALE)
 
     assert await _stored(uow, course, color=TeeColor.WHITE, gender=None) == 1
+
+
+# ============================================================================
+# S10 — Solo green (Agustín, 17 oct): a mitad de hoyo se marca solo el green
+# ============================================================================
+
+
+async def test_s10_a_green_only_sample_is_stored_and_counts():
+    """
+    GIVEN: Dos muestras completas del hoyo 1
+    WHEN: Llega una solo green, y luego otra completa
+    THEN: Se guarda la de solo green (es la tercera) y la última ya no
+    """
+    uow, course = await _setup()
+    for _ in range(2):
+        await _submit(uow, course)
+
+    await _submit(uow, course, tee=None)
+    await _submit(uow, course)
+
+    samples = await uow.hole_samples.list_by_course(course.id)
+    assert [x.is_green_only for x in samples] == [False, False, True]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        pytest.param({"bends": [CODO]}, id="con codos"),
+        pytest.param({"green": _north(3100, of=(36.285, -5.33))}, id="lejos del campo"),
+    ],
+)
+async def test_s10_a_bad_green_only_sample_is_dropped(changes):
+    uow, course = await _setup(location=CourseLocation(latitude=36.285, longitude=-5.33))
+
+    await _submit(uow, course, tee=None, **changes)
+
+    assert await uow.hole_samples.list_by_course(course.id) == []
+
+
+async def test_s10_the_read_gives_the_first_complete_sample_and_the_first_loose_green():
+    """
+    GIVEN: En el hoyo 1, una solo green (A), una completa con codo, y otra solo green (B)
+    WHEN: Se lee
+    THEN: El hoyo trae su primera completa y el green de la primera solo green (A).
+          En las barras (para los móviles de antes) solo cuentan las completas
+    """
+    uow, course = await _setup()
+    green_a, green_b = _north(310), _north(320)
+    await _submit(uow, course, tee=None, green=green_a)
+    await _submit(uow, course, bends=[CODO])
+    await _submit(uow, course, tee=None, green=green_b)
+
+    hole = await _hole(uow, course)
+
+    assert hole.first_sample.bends == [_p(CODO)]
+    assert hole.first_green == _p(green_a)
+    assert [t.first_sample.bends for t in hole.tees] == [[_p(CODO)]]
+
+
+async def test_s10_only_green_only_samples():
+    """Sin ninguna completa: sin primera muestra, con su green, y sin barras."""
+    uow, course = await _setup()
+    await _submit(uow, course, tee=None)
+
+    hole = await _hole(uow, course)
+
+    assert (hole.first_sample, hole.first_green, hole.tees) == (None, _p(GREEN), [])
+
+
+async def test_s10_without_samples_the_hole_has_nothing_and_collects():
+    hole = await _hole(*await _setup())
+
+    assert (hole.first_sample, hole.first_green, hole.collecting) == (None, None, True)

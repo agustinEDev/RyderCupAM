@@ -220,7 +220,7 @@ def test_d2_any_hole_of_a_round_is_fine(hole):
     "changes",
     [
         {"tee": (36.28, -5.33)},
-        {"tee": None},
+        # Sin salida sí vale (solo green, D6); sin green, nunca
         {"green_center": None},
         {"bends": [(36.28, -5.33)]},
         {"golf_course_id": "no-es-un-id"},
@@ -401,3 +401,55 @@ def test_d5_a_time_cannot_sneak_in_as_the_day():
             green_center=GREEN,
             received_on=datetime(2026, 10, 16, 9, 30),
         )
+
+
+# ============================================================================
+# D6 — Muestra solo green (Agustín, 17 oct): quien abre el mapa a mitad de hoyo
+# marca el green; el siguiente que esté en la salida completa el hoyo
+# ============================================================================
+
+
+def test_d6_a_green_only_sample_is_created():
+    """
+    GIVEN: Sin salida ni codos, solo el centro del green
+    WHEN: Se crea la muestra
+    THEN: Vale, es solo green y su línea es el green
+    """
+    sample = _create(tee=None)
+
+    assert sample.tee is None
+    assert sample.is_green_only
+    assert sample.play_line == (GREEN,)
+    assert not _create().is_green_only
+
+
+def test_d6_a_green_only_sample_has_no_bends():
+    """Sin salida no hay de dónde salen los codos: se rechaza."""
+    with pytest.raises(InvalidHoleSampleError):
+        _create(tee=None, bends=[CODO])
+
+
+def test_d6_a_green_only_sample_is_not_measured_from_a_tee():
+    """Sin salida no hay 40-750 m que medir: un green cualquiera del campo vale."""
+    assert _create(tee=None, green_center=_north(5)).is_green_only
+
+
+def test_d6_a_green_only_sample_far_from_the_course_is_rejected():
+    with pytest.raises(HoleSampleFarFromCourseError):
+        _create(tee=None, green_center=_north(3100, of=CAMPO), course_location=CAMPO)
+
+
+def test_d6_a_green_only_sample_is_reconstructed():
+    sample = HoleSample.reconstruct(
+        id=uuid4(),
+        golf_course_id=GolfCourseId.generate(),
+        hole_number=1,
+        tee_color=TeeColor.YELLOW,
+        tee_gender=None,
+        tee=None,
+        bends=(),
+        green_center=GREEN,
+        received_on=date(2026, 10, 17),
+    )
+
+    assert sample.is_green_only

@@ -7,8 +7,6 @@ from src.modules.golf_course.domain.repositories.hole_sample_repository import (
     IHoleSampleRepository,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
-from src.shared.domain.value_objects.gender import Gender
 
 
 class InMemoryHoleSampleRepository(IHoleSampleRepository):
@@ -18,32 +16,17 @@ class InMemoryHoleSampleRepository(IHoleSampleRepository):
         self._samples: dict[UUID, tuple[int, HoleSample]] = {}
         self._next_seq = 1
 
-    async def lock_tee(
-        self,
-        golf_course_id: GolfCourseId,
-        hole_number: int,
-        tee_color: TeeColor,
-        tee_gender: Gender | None,
-    ) -> None:
+    async def lock_hole(self, golf_course_id: GolfCourseId, hole_number: int) -> None:
         """En memoria no hay dos transacciones a la vez: nada que bloquear."""
 
     async def exists(self, sample_id: UUID) -> bool:
         return sample_id in self._samples
 
-    async def count_for_tee(
-        self,
-        golf_course_id: GolfCourseId,
-        hole_number: int,
-        tee_color: TeeColor,
-        tee_gender: Gender | None,
-    ) -> int:
+    async def count_for_hole(self, golf_course_id: GolfCourseId, hole_number: int) -> int:
         return sum(
             1
             for _, sample in self._samples.values()
-            if sample.golf_course_id == golf_course_id
-            and sample.hole_number == hole_number
-            and sample.tee_color == tee_color
-            and sample.tee_gender == tee_gender
+            if sample.golf_course_id == golf_course_id and sample.hole_number == hole_number
         )
 
     async def add(self, sample: HoleSample) -> bool:

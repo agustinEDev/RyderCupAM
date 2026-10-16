@@ -12,7 +12,9 @@ consultivo por campo y hoyo).
 | El orden de llegada                               | Lo da `seq`, no el id ni el día            |
 | Mismo id otra vez                                 | No entra (ON CONFLICT), y lo dice `add`    |
 | ¿Existe el id?                                    | Sí la guardada; no una nueva               |
-| Contar                                            | Por campo, hoyo y barra (color y género)   |
+| Contar                                            | Por campo y hoyo, de cualquier barra (17 oct) |
+| Solo green                                        | Sale sin salida ni codos                   |
+| Solo green con codos, o media salida              | La tabla lo rechaza                        |
 | La barra                                          | Sale como entró (también sin género)       |
 | Tres codos, hoyo 19, codos que no son una lista,  | La tabla lo rechaza                        |
 | género OTHER o sin color                          |                                            |
@@ -20,8 +22,7 @@ consultivo por campo y hoyo).
 | Ocho envíos a la vez al mismo hoyo                | Quedan tres filas                          |
 | Ocho a la vez repartidos en dos hoyos             | Tres en cada uno                           |
 | Un hoyo bloqueado                                 | Otro hoyo del campo no espera              |
-| Una barra bloqueada                               | Otra barra del mismo hoyo no espera        |
-| Ocho a la vez repartidas en dos barras            | Tres en cada una                           |
+| Ocho a la vez repartidas en dos barras            | Tres entre las dos (el tope es por hoyo)   |
 | El mismo id ocho veces a la vez                   | Una fila, sin errores                      |
 | El mismo jugador, tres a la vez (ids distintos)   | Una fila: la ventana se reserva a la vez   |
 """
@@ -81,7 +82,14 @@ AMARILLAS = (TeeColor.YELLOW, Gender.MALE)
 
 
 def _sample(
-    course_id, hole=1, bends=(), on=DIA, sample_id=None, color=TeeColor.YELLOW, gender=Gender.MALE
+    course_id,
+    hole=1,
+    bends=(),
+    on=DIA,
+    sample_id=None,
+    color=TeeColor.YELLOW,
+    gender=Gender.MALE,
+    tee=SALIDA,
 ) -> HoleSample:
     return HoleSample.reconstruct(
         id=sample_id or uuid4(),
@@ -89,7 +97,7 @@ def _sample(
         hole_number=hole,
         tee_color=color,
         tee_gender=gender,
-        tee=SALIDA,
+        tee=tee,
         bends=bends,
         green_center=GREEN,
         received_on=on,
@@ -150,18 +158,17 @@ async def test_r1_the_same_id_is_not_inserted_twice(db_session):
 
     assert inserted is False
     assert await repository.exists(first.id) is True
-    assert await repository.count_for_tee(course_id, 2, *AMARILLAS) == 0
+    assert await repository.count_for_hole(course_id, 2) == 0
     (kept,) = await repository.list_by_course(course_id)
     assert kept.bends == (CODO,)
 
 
 @pytest.mark.asyncio
-async def test_r1_count_is_per_course_hole_and_tee(db_session):
+async def test_r1_count_is_per_course_and_hole(db_session):
     """
-    GIVEN: Dos muestras del hoyo 1 desde amarillas de hombre, una desde amarillas
-           sin género, una desde rojas de hombre, una del hoyo 2 y una en otro campo
-    WHEN: Se cuentan por barra
-    THEN: Dos amarillas-hombre, una sin género, una roja, y cero en el hoyo 3
+    GIVEN: Cuatro muestras del hoyo 1 desde tres barras, una del hoyo 2 y una en otro campo
+    WHEN: Se cuentan por hoyo
+    THEN: Cuatro en el hoyo 1, una en el 2 y cero en el 3
     """
     course_id = await _course(db_session)
     otro = await _course(db_session)
@@ -176,10 +183,41 @@ async def test_r1_count_is_per_course_hole_and_tee(db_session):
     ):
         await repository.add(sample)
 
-    assert await repository.count_for_tee(course_id, 1, *AMARILLAS) == 2
-    assert await repository.count_for_tee(course_id, 1, TeeColor.YELLOW, None) == 1
-    assert await repository.count_for_tee(course_id, 1, TeeColor.RED, Gender.MALE) == 1
-    assert await repository.count_for_tee(course_id, 3, *AMARILLAS) == 0
+    assert await repository.count_for_hole(course_id, 1) == 4
+    assert await repository.count_for_hole(course_id, 2) == 1
+    assert await repository.count_for_hole(course_id, 3) == 0
+
+
+@pytest.mark.asyncio
+async def test_r1_a_green_only_sample_comes_back_without_tee(db_session):
+    """Una muestra solo green (17 oct) sale sin salida y sin codos."""
+    course_id = await _course(db_session)
+    repository = HoleSampleRepository(db_session)
+    await repository.add(_sample(course_id, tee=None))
+
+    (sample,) = await repository.list_by_course(course_id)
+
+    assert (sample.tee, sample.bends, sample.green_center) == (None, (), GREEN)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "columns",
+    [
+        pytest.param("tee_latitude = NULL, tee_longitude = NULL", id="sin salida con codos"),
+        pytest.param("tee_latitude = NULL", id="media salida"),
+    ],
+)
+async def test_r1_the_table_rejects_a_broken_green_only_sample(db_session, columns):
+    course_id = await _course(db_session)
+    sample = _sample(course_id, bends=(CODO,))
+    await HoleSampleRepository(db_session).add(sample)
+
+    with pytest.raises(IntegrityError):
+        await db_session.execute(
+            text(f"UPDATE golf_course_hole_samples SET {columns} WHERE id = :id"),  # nosec B608 - columnas fijas del test
+            {"id": sample.id},
+        )
 
 
 @pytest.mark.asyncio
@@ -245,7 +283,7 @@ async def test_r2_samples_go_with_the_course(db_session):
         text("DELETE FROM golf_courses WHERE id = :id"), {"id": course_id.value}
     )
 
-    assert await HoleSampleRepository(db_session).count_for_tee(course_id, 1, *AMARILLAS) == 0
+    assert await HoleSampleRepository(db_session).count_for_hole(course_id, 1) == 0
 
 
 # ============================================================================
@@ -314,19 +352,19 @@ def slow_count(monkeypatch):
     Ensancha la ventana entre contar y guardar: sin el bloqueo, todas las que
     llegan a la vez cuentan cero antes de que ninguna guarde (y entrarían todas).
     """
-    count = HoleSampleRepository.count_for_tee
+    count = HoleSampleRepository.count_for_hole
 
     async def slow(self, *args):
         stored = await count(self, *args)
         await asyncio.sleep(0.2)
         return stored
 
-    monkeypatch.setattr(HoleSampleRepository, "count_for_tee", slow)
+    monkeypatch.setattr(HoleSampleRepository, "count_for_hole", slow)
 
 
-async def _count(db_session, course_id, hole: int, tee=AMARILLAS) -> int:
+async def _count(db_session, course_id, hole: int) -> int:
     async with AsyncSession(bind=db_session.bind) as session:
-        return await HoleSampleRepository(session).count_for_tee(course_id, hole, *tee)
+        return await HoleSampleRepository(session).count_for_hole(course_id, hole)
 
 
 @pytest.mark.asyncio
@@ -370,7 +408,7 @@ async def test_r3_another_hole_does_not_wait(db_session):
     course_id = await _approved_course(db_session)
 
     async with AsyncSession(bind=db_session.bind) as holder:
-        await HoleSampleRepository(holder).lock_tee(course_id, 1, *AMARILLAS)
+        await HoleSampleRepository(holder).lock_hole(course_id, 1)
 
         await asyncio.wait_for(_submit_in_own_session(db_session, course_id, 2), timeout=5)
 
@@ -396,36 +434,11 @@ async def test_r3_the_same_id_eight_times_at_once_is_one_row(db_session, slow_co
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "other_tee",
-    [(TeeColor.WHITE, None), (TeeColor.YELLOW, Gender.FEMALE)],
-    ids=["other-colour", "same-colour-other-gender"],
-)
-async def test_r3_another_tee_does_not_wait(db_session, other_tee):
-    """
-    GIVEN: Una transacción que tiene bloqueadas las amarillas de hombre del hoyo 1
-    WHEN: Llega una muestra del hoyo 1 desde blancas sin género, o desde amarillas de mujer
-    THEN: Se guarda sin esperar
-    """
-    course_id = await _approved_course(db_session)
-
-    async with AsyncSession(bind=db_session.bind) as holder:
-        await HoleSampleRepository(holder).lock_tee(course_id, 1, *AMARILLAS)
-
-        await asyncio.wait_for(
-            _submit_in_own_session(db_session, course_id, 1, tee=other_tee), timeout=5
-        )
-
-        assert await _count(db_session, course_id, 1, other_tee) == 1
-        await holder.rollback()
-
-
-@pytest.mark.asyncio
-async def test_r3_eight_at_once_on_two_tees_leave_three_each(db_session, slow_count):
+async def test_r3_eight_at_once_on_two_tees_leave_three_in_the_hole(db_session, slow_count):
     """
     GIVEN: Un hoyo sin muestras
     WHEN: Llegan cuatro a la vez desde amarillas de hombre y cuatro desde rojas de mujer
-    THEN: Tres en cada barra
+    THEN: Tres entre las dos: el tope es por hoyo (17 oct)
     """
     course_id = await _approved_course(db_session)
     rojas = (TeeColor.RED, Gender.FEMALE)
@@ -438,7 +451,6 @@ async def test_r3_eight_at_once_on_two_tees_leave_three_each(db_session, slow_co
     )
 
     assert await _count(db_session, course_id, 1) == 3
-    assert await _count(db_session, course_id, 1, rojas) == 3
 
 
 @pytest.mark.asyncio
