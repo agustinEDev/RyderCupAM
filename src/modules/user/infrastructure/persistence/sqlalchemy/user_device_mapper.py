@@ -5,10 +5,9 @@ User Device Mapper - Infrastructure Layer
 Mapeo imperativo entre la entidad UserDevice y la tabla user_devices.
 """
 
-import contextlib
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text, event
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text, event, inspect
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user_device import UserDevice
@@ -86,9 +85,12 @@ user_devices_table = Table(
 
 
 def start_user_device_mappers():
-    """Inicia el mapper imperativo de UserDevice → user_devices."""
-    with contextlib.suppress(Exception):
-        # Ya mapeado, ignorar (puede suceder en pytest con xdist)
+    """Inicia el mapper imperativo de UserDevice → user_devices. Idempotente.
+
+    Se pregunta con `inspect(..., raiseerr=False)` en vez de tragarse cualquier
+    excepción: así un error de mapeo de verdad no pasa desapercibido (#565).
+    """
+    if inspect(UserDevice, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             UserDevice,
             user_devices_table,

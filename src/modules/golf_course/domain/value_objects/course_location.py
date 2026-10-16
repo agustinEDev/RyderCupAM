@@ -9,10 +9,7 @@ traen).
 
 from dataclasses import dataclass
 
-MIN_LATITUDE = -90.0
-MAX_LATITUDE = 90.0
-MIN_LONGITUDE = -180.0
-MAX_LONGITUDE = 180.0
+from .geo_point import GeoPoint
 
 MAX_ADDRESS_LENGTH = 300
 MAX_CITY_LENGTH = 100
@@ -28,7 +25,8 @@ class CourseLocation:
     - Latitud y longitud van juntas: media coordenada no sitúa nada en un mapa,
       y una búsqueda por cercanía que aceptara solo una devolvería resultados
       arbitrarios.
-    - Los rangos son los geográficos absolutos; no se acotan a España porque el
+    - Las coordenadas cumplen la regla de GeoPoint (BE #532): números finitos
+      dentro de los rangos geográficos absolutos; no se acotan a España porque el
       modelo admite campos de cualquier país.
     - Las cadenas vacías se normalizan a None: un texto en blanco no es un dato,
       y guardarlo obligaría a todos los consumidores a distinguir '' de None.
@@ -63,16 +61,10 @@ class CourseLocation:
                 f"Got latitude={self.latitude}, longitude={self.longitude}"
             )
 
-        if self.latitude is not None and not (MIN_LATITUDE <= self.latitude <= MAX_LATITUDE):
-            raise ValueError(
-                f"Latitude must be between {MIN_LATITUDE} and {MAX_LATITUDE}, got {self.latitude}"
-            )
-
-        if self.longitude is not None and not (MIN_LONGITUDE <= self.longitude <= MAX_LONGITUDE):
-            raise ValueError(
-                f"Longitude must be between {MIN_LONGITUDE} and {MAX_LONGITUDE}, "
-                f"got {self.longitude}"
-            )
+        # La misma regla que los puntos del mapa de hoyos (BE #532): números
+        # finitos dentro de los rangos geográficos
+        if self.latitude is not None and self.longitude is not None:
+            GeoPoint(latitude=self.latitude, longitude=self.longitude)
 
     @property
     def has_coordinates(self) -> bool:

@@ -48,6 +48,7 @@ import argparse
 import asyncio
 
 from src.config.database import async_session_maker
+from src.config.mappers import start_all_mappers
 from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
     ManualPairingDTO,
@@ -59,25 +60,13 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
-    start_mappers as start_competition_mappers,
-)
-from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
-    start_golf_course_mappers,
-)
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
-)
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
-    start_mappers as start_user_mappers,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
 from src.shared.domain.value_objects.play_mode import PlayMode
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
-    start_mappers as start_country_mappers,
-)
 
 COMPETITIONS_PAGE = 200
 
@@ -90,12 +79,10 @@ def start_mappers() -> None:
     queda con las entidades sin mapear y la primera consulta revienta con
     `ArgumentError: ... got <class Competition>`.
 
-    El orden importa: GolfCourse antes que Competition, que la referencia.
+    Se arrancan todos, con la lista única de la aplicación (#565), que ya pone
+    GolfCourse antes que Competition.
     """
-    start_user_mappers()
-    start_country_mappers()
-    start_golf_course_mappers()
-    start_competition_mappers()
+    start_all_mappers()
 
 
 async def main(dry_run: bool) -> int:

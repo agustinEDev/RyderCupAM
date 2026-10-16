@@ -80,6 +80,11 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         """
         return self._golf_courses.get(str(golf_course_id.value))
 
+    async def find_names_by_ids(self, golf_course_ids: list[GolfCourseId]) -> dict[str, str]:
+        """Los nombres de esos campos, por id."""
+        wanted = {str(i.value) for i in golf_course_ids}
+        return {k: c.name for k, c in self._golf_courses.items() if k in wanted}
+
     async def find_by_approval_status(self, approval_status: ApprovalStatus) -> list[GolfCourse]:
         """
         Busca campos por estado de aprobación.

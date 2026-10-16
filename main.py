@@ -29,6 +29,7 @@ from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
+from src.config.mappers import start_all_mappers  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
 from src.config.refresco_de_handicaps import (  # noqa: E402
     LanzadorEnSegundoPlano,
@@ -58,30 +59,15 @@ from src.modules.competition.infrastructure.api.v1 import (  # noqa: E402
     tee_group_routes,
     tee_group_scoring_routes,
 )
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
-    start_mappers as start_competition_mappers,
-)
-from src.modules.golf_course.infrastructure.api.v1 import golf_course_routes  # noqa: E402
-from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (  # noqa: E402
-    start_golf_course_mappers,
+from src.modules.golf_course.infrastructure.api.v1 import (  # noqa: E402
+    golf_course_routes,
+    hole_map_routes,
 )
 from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # noqa: E402
-from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (  # noqa: E402
-    start_quick_match_mappers,
-)
 from src.modules.social.infrastructure.api.v1 import (  # noqa: E402
     friend_routes,
     profile_photo_routes,
     profile_routes,
-)
-from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (  # noqa: E402
-    start_activity_event_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (  # noqa: E402
-    start_social_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper import (  # noqa: E402
-    start_profile_photo_mappers,
 )
 from src.modules.support.infrastructure.api.v1 import support_routes  # noqa: E402
 from src.modules.user.application.use_cases.upload_avatar_use_case import (  # noqa: E402
@@ -96,9 +82,6 @@ from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     handicap_routes,
     user_routes,
 )
-from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (  # noqa: E402
-    start_mappers,
-)
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
@@ -112,9 +95,6 @@ from src.shared.infrastructure.http.unhandled_error_middleware import (  # noqa:
 )
 from src.shared.infrastructure.middleware.csrf_middleware import (  # noqa: E402
     CSRFMiddleware,
-)
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (  # noqa: E402
-    start_mappers as start_country_mappers,
 )
 
 
@@ -131,14 +111,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
 
-    start_mappers()  # User module mappers
-    start_country_mappers()  # Shared domain (Country) mappers
-    start_golf_course_mappers()  # Golf Course module mappers (before Competition - dependency)
-    start_competition_mappers()  # Competition module mappers (depends on GolfCourse)
-    start_social_mappers()  # Social module mappers (depends on User)
-    start_profile_photo_mappers()  # Profile photo gallery (depends on User)
-    start_activity_event_mappers()  # Activity feed (depends on User)
-    start_quick_match_mappers()  # QuickMatch module mappers (depends on User, GolfCourse)
+    start_all_mappers()  # Todos, en un solo sitio (#565)
 
     # El vigilante de las actualizaciones de hándicaps: lanza las programadas y
     # recupera las cortadas por un reinicio. Solo en producción (#251)
@@ -510,6 +483,12 @@ app.include_router(
 
 app.include_router(
     golf_course_routes.router,
+    prefix="/api/v1",
+    tags=["Golf Courses"],
+)
+
+app.include_router(
+    hole_map_routes.router,
     prefix="/api/v1",
     tags=["Golf Courses"],
 )

@@ -23,18 +23,16 @@ from logging.config import fileConfig  # noqa: E402
 from alembic import context  # noqa: E402
 from sqlalchemy import engine_from_config, pool  # noqa: E402
 
-# Importar TODOS los mappers para que Alembic detecte todas las tablas
-# IMPORTANTE: Importar los mappers (no solo metadata) para registrar las tablas
+# Alembic necesita conocer TODAS las tablas; con solo una parte, autogenerate
+# propondría borrar las demás (#565). Se arrancan todos los mappers con la lista
+# de la aplicación: algunas tablas solo se registran al arrancar su grupo (las de
+# usuario, la de mapas de hoyos), no basta con importar. Son idempotentes, y si
+# uno falla la app tampoco arrancaría. Un test lo comprueba contra las
+# migraciones (test_schema_parity)
 from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
-from src.shared.infrastructure.persistence.sqlalchemy import (  # noqa: E402
-    country_mappers,
-)
-from src.modules.user.infrastructure.persistence.sqlalchemy import (  # noqa: E402
-    mappers as user_mappers,
-)
-from src.modules.competition.infrastructure.persistence.sqlalchemy import (  # noqa: E402
-    mappers as competition_mappers,
-)
+from src.config.mappers import start_all_mappers  # noqa: E402
+
+start_all_mappers()
 
 # Constantes para drivers de PostgreSQL
 ASYNCPG_DRIVER = "postgresql+asyncpg"
@@ -56,16 +54,6 @@ def _url_con_driver_sincrono(url: str) -> str:
         return url.replace(SIN_DRIVER, f"{PSYCOPG2_DRIVER}://", 1)
     return url
 
-
-# Iniciar todos los mappers para registrar las tablas en el metadata
-# IMPORTANTE: Proteger contra re-inicialización en tests (pytest ya los inicializa)
-try:
-    country_mappers.start_mappers()
-    user_mappers.start_mappers()
-    competition_mappers.start_mappers()
-except Exception:
-    # Mappers ya inicializados (probablemente en tests), ignorar
-    pass
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
