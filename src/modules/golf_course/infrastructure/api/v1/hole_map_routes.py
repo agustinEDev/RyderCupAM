@@ -6,7 +6,7 @@ Endpoints del mapa de hoyos de un recorrido (BE #532).
 - GET  /golf-courses/admin/{id}/hole-map                 mapa en cualquier estado (admin)
 - PUT  /golf-courses/admin/{id}/hole-map/approve|reject  revisar la versión vista (admin)
 - POST /golf-courses/{id}/hole-map/samples/{hole}        mandar una muestra anónima de un hoyo
-- GET  /golf-courses/{id}/hole-map/samples               primera muestra de cada hoyo
+- GET  /golf-courses/{id}/hole-map/samples               primera muestra de cada barra
 
 Los errores llevan un mensaje fijo y un `error_code` del que se fía el front:
 nunca el texto de una excepción (CodeQL, BE #562).
@@ -240,21 +240,26 @@ async def submit_hole_sample(
     golf_course_id: UUID,
     hole_number: int,
     body: HoleSampleBodyDTO,
-    current_user: Annotated[  # noqa: ARG001 - Solo exige sesión: la muestra es anónima
-        UserResponseDTO, Depends(get_current_user)
-    ],
+    current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
     use_case: Annotated[SubmitHoleSampleUseCase, Depends(get_submit_hole_sample_use_case)],
 ):
     """
-    Manda una muestra de un hoyo: salida, hasta dos codos y centro del green.
-    Responde 204 tanto si se guarda como si no (el hoyo ya tiene sus muestras,
-    o la muestra no vale): no se guarda quién la manda.
+    Manda una muestra de un hoyo desde una barra: su id (lo genera el móvil), el
+    color y el género de la barra, la salida, hasta dos codos y el centro del
+    green. Responde 204 tanto si se guarda como si no (la barra ya tiene sus
+    muestras, el id ya llegó, ya mandaste otra a esa barra hace menos de 10
+    minutos, o la muestra no vale). Con la muestra no se guarda quién la manda;
+    Sentry tampoco recibe al usuario en esta ruta.
     """
     try:
         await use_case.execute(
             SubmitHoleSampleRequestDTO(
+                id=body.id,
                 golf_course_id=str(golf_course_id),
                 hole_number=hole_number,
+                user_id=str(current_user.id),
+                tee_color=body.tee_color,
+                tee_gender=body.tee_gender,
                 tee=body.tee,
                 bends=body.bends,
                 green_center=body.green_center,
@@ -283,7 +288,10 @@ async def list_hole_samples(
     ],
     use_case: Annotated[ListHoleSamplesUseCase, Depends(get_list_hole_samples_use_case)],
 ):
-    """De cada hoyo del 1 al 18: su primera muestra (o null) y si sigue recogiendo."""
+    """
+    Los 18 hoyos; de cada uno, sus barras con alguna muestra (por orden de su
+    primera muestra), cada una con esa primera muestra y si sigue recogiendo.
+    """
     try:
         return await use_case.execute(ListHoleSamplesRequestDTO(golf_course_id=str(golf_course_id)))
     except GolfCourseNotFoundError:

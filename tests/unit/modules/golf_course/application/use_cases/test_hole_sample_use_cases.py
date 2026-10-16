@@ -6,12 +6,19 @@ adelante se responde igual y no se guarda nada, y una muestra que el dominio
 rechaza tampoco se guarda (ni se le dice al jugador). Vale para cualquier hoyo,
 tenga o no datos en el mapa: las muestras enriquecen los codos.
 
+Revisión del 16 oct (Agustín): el id lo pone el móvil y una muestra repetida
+cuenta una vez; cada jugador aporta como mucho una muestra por campo y hoyo
+cada 10 minutos (en memoria, nunca en la BD ni en los logs), y solo gasta su
+ventana una muestra que de verdad se guardó y se confirmó. Y todo va por barra
+(color y género): cada una sale de un sitio distinto.
+
 | Caso                                                | Resultado                                  |
 |-----------------------------------------------------|--------------------------------------------|
 | Primera muestra con codos                           | Se guarda con sus codos                    |
 | Segunda y tercera                                   | Se guardan                                 |
 | Cuarta                                              | No se guarda, sin error                    |
-| La misma persona manda las tres                     | Cuentan las tres (no se guarda quién)      |
+| La misma persona, cinco seguidas                    | Cuenta una (una cada 10 min por hoyo)      |
+| La misma persona, cada 10 minutos                   | Llena las tres                             |
 | El tope es por hoyo y por campo                     | Otro hoyo y otro campo siguen recogiendo   |
 | Hoyo con mapa aprobado completo, o solo con salida  | Se guarda igual                            |
 | Tres codos                                          | No se guarda, sin error                    |
@@ -23,13 +30,28 @@ tenga o no datos en el mapa: las muestras enriquecen los codos.
 | Campo que no existe, pendiente o rechazado          | GolfCourseNotFoundError (al mandar y leer) |
 | Hoyo 0 o 19                                         | HoleNotInCourseError                       |
 | Hoyo 10 en un campo de 9                            | Se guarda                                  |
-| Lectura sin muestras                                | 18 hoyos, sin muestra y recogiendo         |
-| Lectura con muestras                                | La primera es la más antigua               |
-| Con tres                                            | Ya no recoge; con dos, sí                  |
+| Lectura sin muestras                                | 18 hoyos, sin barras                       |
+| Lectura con muestras                                | La primera de cada barra es la más antigua |
+| Con tres                                            | Esa barra ya no recoge; con dos, sí        |
+| Varias barras en un hoyo                            | En el orden de su primera muestra          |
 | La lectura                                          | No dice cuántas hay ni de quién            |
+| 3 amarillas-hombre y 3 rojas-mujer                  | Se guardan las seis; la 4.ª amarilla, no   |
+| Amarillas sin género                                | Otra barra distinta de amarillas-hombre    |
+| Mismo jugador, otra barra del mismo hoyo            | Se guarda (la ventana es por barra)        |
+| Mismo id dos veces                                  | Cuenta una                                 |
+| Mismo id en otro hoyo                               | No se guarda (el id es único)              |
+| Un id repetido no gasta hueco                       | Las nuevas de después llenan el hoyo       |
+| Mismo jugador antes de 10 min (599 s)               | No se guarda, sin error                    |
+| Mismo jugador a los 10 min                          | Se guarda                                  |
+| Otro jugador, otro hoyo u otro campo                | No les afecta la ventana                   |
+| Rechazada, repetida o con el hoyo lleno             | No abre la ventana del jugador             |
+| Falla la transacción                                | No abre la ventana; el reintento se guarda |
+| El log al descartar                                 | Sin coordenadas ni quién la mandó          |
 """
 
+import logging
 from datetime import datetime
+from uuid import uuid4
 
 import pytest
 
@@ -62,12 +84,17 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
+from src.modules.golf_course.infrastructure.services.in_memory_recent_hole_sample_senders import (
+    InMemoryRecentHoleSampleSenders,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 
 pytestmark = pytest.mark.asyncio
 
+JUGADOR = str(uuid4())
+OTRO = str(uuid4())
 M_PER_DEGREE = 6_371_000.0 * 3.141592653589793 / 180
 SALIDA = (36.28, -5.33)
 GREEN = (36.28 + 300 / M_PER_DEGREE, -5.33)  # 300 m al norte de la salida
@@ -107,17 +134,68 @@ def _course(physical_holes=None, location=None, approved=True) -> GolfCourse:
     return course
 
 
-async def _setup(**course_args):
-    uow = InMemoryGolfCourseUnitOfWork()
+class Reloj:
+    """Un reloj que solo avanza cuando el test lo pide (segundos, como time.monotonic)."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class UoWQueFallaAlConfirmar(InMemoryGolfCourseUnitOfWork):
+    """La transacción falla al confirmar las veces que se pida (p. ej. la BD se cae)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures = 0
+
+    async def commit(self) -> None:
+        if self.failures:
+            self.failures -= 1
+            raise RuntimeError("commit failed")
+        await super().commit()
+
+
+async def _setup(uow=None, **course_args):
+    uow = uow or InMemoryGolfCourseUnitOfWork()
+    uow.reloj = Reloj()
+    uow.senders = InMemoryRecentHoleSampleSenders(clock=uow.reloj)
     course = _course(**course_args)
     await uow.golf_courses.save(course)
     return uow, course
 
 
-def _request(course, hole=1, tee=SALIDA, bends=(), green=GREEN):
+def _use_case(uow) -> SubmitHoleSampleUseCase:
+    return SubmitHoleSampleUseCase(uow, uow.senders)
+
+
+def _request(
+    course,
+    hole=1,
+    tee=SALIDA,
+    bends=(),
+    green=GREEN,
+    user=None,
+    sample_id=None,
+    tee_color=TeeColor.YELLOW,
+    tee_gender=Gender.MALE,
+):
+    """
+    Sin `user`, cada envío es de un jugador distinto: la ventana de 10 min no se
+    mete. Sin barra, amarillas de hombre.
+    """
     return SubmitHoleSampleRequestDTO(
+        id=sample_id or uuid4(),
         golf_course_id=str(course.id if hasattr(course, "id") else course),
         hole_number=hole,
+        tee_color=tee_color,
+        tee_gender=tee_gender,
+        user_id=user or str(uuid4()),
         tee=_p(tee),
         bends=[_p(b) for b in bends],
         green_center=_p(green),
@@ -125,7 +203,7 @@ def _request(course, hole=1, tee=SALIDA, bends=(), green=GREEN):
 
 
 async def _submit(uow, course, **kwargs) -> None:
-    result = await SubmitHoleSampleUseCase(uow).execute(_request(course, **kwargs))
+    result = await _use_case(uow).execute(_request(course, **kwargs))
     assert result is None  # Siempre lo mismo: el jugador nunca nota nada
 
 
@@ -139,8 +217,14 @@ async def _hole(uow, course, number=1) -> HoleSampleStatusDTO:
     return (await _read(uow, course))[number - 1]
 
 
-async def _stored(uow, course, hole=1) -> int:
-    return await uow.hole_samples.count_for_hole(course.id, hole)
+async def _tee_of(uow, course, number=1, color=TeeColor.YELLOW, gender=Gender.MALE):
+    """La barra del hoyo en la lectura; None si no tiene ninguna muestra."""
+    hole = await _hole(uow, course, number)
+    return next((t for t in hole.tees if (t.tee_color, t.tee_gender) == (color, gender)), None)
+
+
+async def _stored(uow, course, hole=1, color=TeeColor.YELLOW, gender=Gender.MALE) -> int:
+    return await uow.hole_samples.count_for_tee(course.id, hole, color, gender)
 
 
 # ============================================================================
@@ -158,7 +242,7 @@ async def test_s1_first_sample_is_stored_with_its_bends():
 
     await _submit(uow, course, hole=3, bends=[CODO, CODO_2])
 
-    hole = await _hole(uow, course, 3)
+    hole = await _tee_of(uow, course, 3)
     assert hole.first_sample is not None
     assert hole.first_sample.tee == _p(SALIDA)
     assert hole.first_sample.bends == [_p(CODO), _p(CODO_2)]
@@ -195,22 +279,37 @@ async def test_s1_the_fourth_is_not_stored_and_nothing_is_said():
     await _submit(uow, course, bends=[CODO], green=_north(500))
 
     assert await _stored(uow, course) == 3
-    assert (await _hole(uow, course)).first_sample.bends == []
+    assert (await _tee_of(uow, course)).first_sample.bends == []
 
 
-async def test_s1_the_same_player_can_fill_all_three():
+async def test_s1_the_same_player_in_a_row_counts_once():
     """
-    GIVEN: Un único jugador (no se guarda quién manda: no hay con qué distinguirlo)
-    WHEN: Manda cinco veces el hoyo 2
+    GIVEN: Un único jugador
+    WHEN: Manda cinco veces seguidas el hoyo 2
+    THEN: Cuenta una: como mucho una suya por hoyo cada 10 minutos
+    """
+    uow, course = await _setup()
+
+    for _ in range(5):
+        await _submit(uow, course, hole=2, user=JUGADOR)
+
+    assert await _stored(uow, course, 2) == 1
+
+
+async def test_s1_the_same_player_can_fill_all_three_every_ten_minutes():
+    """
+    GIVEN: Un único jugador (en la BD no se guarda quién manda)
+    WHEN: Manda el hoyo 2 cinco veces, una cada 10 minutos
     THEN: Cuentan las tres primeras, y el hoyo deja de recoger
     """
     uow, course = await _setup()
 
     for _ in range(5):
-        await _submit(uow, course, hole=2)
+        await _submit(uow, course, hole=2, user=JUGADOR)
+        uow.reloj.advance(600)
 
     assert await _stored(uow, course, 2) == 3
-    assert (await _hole(uow, course, 2)).collecting is False
+    assert (await _tee_of(uow, course, 2)).collecting is False
 
 
 async def test_s1_the_cap_is_per_hole_and_per_course():
@@ -294,8 +393,7 @@ async def test_s2_impossible_samples_are_dropped_silently(changes):
     await _submit(uow, course, **changes)
 
     assert await _stored(uow, course) == 0
-    hole = await _hole(uow, course)
-    assert (hole.first_sample, hole.collecting) == (None, True)
+    assert (await _hole(uow, course)).tees == []
 
 
 async def test_s2_far_from_the_course_is_dropped_silently():
@@ -352,7 +450,7 @@ async def test_s2_a_dropped_sample_does_not_use_a_slot():
     await _submit(uow, course)
 
     assert await _stored(uow, course) == 3
-    assert (await _hole(uow, course)).first_sample.bends == [_p(CODO_2)]
+    assert (await _tee_of(uow, course)).first_sample.bends == [_p(CODO_2)]
 
 
 # ============================================================================
@@ -370,7 +468,7 @@ async def test_s3_unknown_course_is_not_found():
     nadie = GolfCourseId.generate()
 
     with pytest.raises(GolfCourseNotFoundError):
-        await SubmitHoleSampleUseCase(uow).execute(_request(nadie))
+        await _use_case(uow).execute(_request(nadie))
     with pytest.raises(GolfCourseNotFoundError):
         await ListHoleSamplesUseCase(uow).execute(
             ListHoleSamplesRequestDTO(golf_course_id=str(nadie))
@@ -384,14 +482,13 @@ async def test_s3_courses_players_cannot_see_are_not_found(kind):
     WHEN: Se manda una muestra o se leen
     THEN: GolfCourseNotFoundError, y no se guarda nada
     """
-    uow = InMemoryGolfCourseUnitOfWork()
-    course = _course(approved=False)
+    uow, course = await _setup(approved=False)
     if kind == "rejected":
         course.reject("El campo no existe en la realidad")
-    await uow.golf_courses.save(course)
+        await uow.golf_courses.save(course)
 
     with pytest.raises(GolfCourseNotFoundError):
-        await SubmitHoleSampleUseCase(uow).execute(_request(course))
+        await _use_case(uow).execute(_request(course))
     with pytest.raises(GolfCourseNotFoundError):
         await _read(uow, course)
     assert await _stored(uow, course) == 0
@@ -407,7 +504,7 @@ async def test_s3_hole_outside_a_round(hole):
     uow, course = await _setup()
 
     with pytest.raises(HoleNotInCourseError):
-        await SubmitHoleSampleUseCase(uow).execute(_request(course, hole=hole))
+        await _use_case(uow).execute(_request(course, hole=hole))
 
 
 async def test_s3_the_hole_is_checked_before_the_sample():
@@ -419,9 +516,7 @@ async def test_s3_the_hole_is_checked_before_the_sample():
     uow, course = await _setup()
 
     with pytest.raises(HoleNotInCourseError):
-        await SubmitHoleSampleUseCase(uow).execute(
-            _request(course, hole=19, bends=[CODO, CODO_2, CODO])
-        )
+        await _use_case(uow).execute(_request(course, hole=19, bends=[CODO, CODO_2, CODO]))
 
 
 @pytest.mark.parametrize(("physical_holes", "hole"), [(9, 10), (9, 18), (9, 1), (None, 18)])
@@ -444,70 +539,95 @@ async def test_s3_any_hole_of_the_round_is_fine_even_on_nine_holes(physical_hole
 # ============================================================================
 
 
-async def test_s4_without_samples_there_are_eighteen_empty_holes():
+async def test_s4_without_samples_there_are_eighteen_holes_without_tees():
     """
     GIVEN: Un campo sin muestras
     WHEN: Se leen
-    THEN: 18 hoyos, del 1 al 18, sin muestra y recogiendo
+    THEN: 18 hoyos, del 1 al 18, sin ninguna barra (todas recogen, sin muestra)
     """
     uow, course = await _setup()
 
     holes = await _read(uow, course)
 
     assert [h.hole_number for h in holes] == list(range(1, 19))
-    assert all(h.first_sample is None and h.collecting is True for h in holes)
+    assert all(h.tees == [] for h in holes)
 
 
 async def test_s4_first_sample_is_the_oldest():
     """
-    GIVEN: Tres muestras del hoyo 5 que llegan una detrás de otra (codo A, codo B, sin codo)
+    GIVEN: Tres muestras del hoyo 5 de la misma barra que llegan una detrás de otra
+           (codo A, codo B, sin codo)
     WHEN: Se leen
-    THEN: La primera del hoyo 5 es la del codo A
+    THEN: La primera de esa barra es la del codo A
     """
     uow, course = await _setup()
     await _submit(uow, course, hole=5, bends=[CODO])
     await _submit(uow, course, hole=5, bends=[CODO_2])
     await _submit(uow, course, hole=5)
 
-    assert (await _hole(uow, course, 5)).first_sample.bends == [_p(CODO)]
+    assert (await _tee_of(uow, course, 5)).first_sample.bends == [_p(CODO)]
 
 
 async def test_s4_collecting_until_three():
     """
-    GIVEN: El hoyo 1 con dos muestras y el 2 con tres
+    GIVEN: En el hoyo 1, las amarillas de hombre con dos muestras y las rojas de mujer con tres
     WHEN: Se leen
-    THEN: El 1 sigue recogiendo; el 2, no
+    THEN: Las amarillas siguen recogiendo; las rojas, no
     """
     uow, course = await _setup()
     for _ in range(2):
-        await _submit(uow, course, hole=1)
+        await _submit(uow, course)
     for _ in range(3):
-        await _submit(uow, course, hole=2)
+        await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
 
-    holes = await _read(uow, course)
+    amarillas = await _tee_of(uow, course)
+    rojas = await _tee_of(uow, course, color=TeeColor.RED, gender=Gender.FEMALE)
 
-    assert (holes[0].collecting, holes[1].collecting) == (True, False)
+    assert (amarillas.collecting, rojas.collecting) == (True, False)
+
+
+async def test_s4_tees_are_ordered_by_their_first_sample():
+    """
+    GIVEN: En el hoyo 1 llegan, por este orden: rojas de mujer, amarillas de hombre,
+           otra de rojas y una de amarillas sin género
+    WHEN: Se leen
+    THEN: Tres barras, en el orden en que llegó su primera muestra
+    """
+    uow, course = await _setup()
+    await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
+    await _submit(uow, course)
+    await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
+    await _submit(uow, course, tee_gender=None)
+
+    tees = (await _hole(uow, course)).tees
+
+    assert [(t.tee_color, t.tee_gender) for t in tees] == [
+        ("RED", "FEMALE"),
+        ("YELLOW", "MALE"),
+        ("YELLOW", None),
+    ]
 
 
 async def test_s4_only_that_course():
     """
     GIVEN: Una muestra del hoyo 1 en otro campo
     WHEN: Se leen las de este
-    THEN: Su hoyo 1 no tiene muestra
+    THEN: Su hoyo 1 no tiene barras
     """
     uow, course = await _setup()
     otro = _course()
     await uow.golf_courses.save(otro)
     await _submit(uow, otro)
 
-    assert (await _hole(uow, course)).first_sample is None
+    assert (await _hole(uow, course)).tees == []
 
 
 async def test_s4_the_read_does_not_say_how_many_or_who():
     """
-    GIVEN: Un hoyo con dos muestras
+    GIVEN: Un hoyo con dos muestras de una barra
     WHEN: Se lee
-    THEN: Solo trae el número de hoyo, la primera muestra (salida, codos, green) y si recoge
+    THEN: Solo trae el número de hoyo y, por barra, color, género, la primera
+          muestra (salida, codos, green) y si recoge
     """
     uow, course = await _setup()
     await _submit(uow, course)
@@ -515,5 +635,258 @@ async def test_s4_the_read_does_not_say_how_many_or_who():
 
     hole = (await _hole(uow, course)).model_dump()
 
-    assert set(hole) == {"hole_number", "first_sample", "collecting"}
-    assert set(hole["first_sample"]) == {"tee", "bends", "green_center"}
+    assert set(hole) == {"hole_number", "tees"}
+    (tee,) = hole["tees"]
+    assert set(tee) == {"tee_color", "tee_gender", "first_sample", "collecting"}
+    assert set(tee["first_sample"]) == {"tee", "bends", "green_center"}
+
+
+# ============================================================================
+# S5 — El id lo pone el móvil: una repetida cuenta una vez
+# ============================================================================
+
+
+async def test_s5_the_same_id_twice_counts_once():
+    """
+    GIVEN: Una muestra guardada (el móvil no recibió la respuesta y la reenvía)
+    WHEN: Llega otra vez con el mismo id, aunque sea de otro jugador o pasados 10 minutos
+    THEN: Sin error, y sigue habiendo una
+    """
+    uow, course = await _setup()
+    sample_id = uuid4()
+    await _submit(uow, course, sample_id=sample_id, user=JUGADOR)
+    uow.reloj.advance(600)
+
+    await _submit(uow, course, sample_id=sample_id, user=JUGADOR)
+    await _submit(uow, course, sample_id=sample_id, user=OTRO)
+
+    assert await _stored(uow, course) == 1
+
+
+async def test_s5_the_same_id_in_another_hole_is_not_stored():
+    """
+    GIVEN: Una muestra guardada en el hoyo 1
+    WHEN: Llega su id en una muestra del hoyo 2
+    THEN: No se guarda: el id es único en toda la tabla
+    """
+    uow, course = await _setup()
+    sample_id = uuid4()
+    await _submit(uow, course, sample_id=sample_id)
+
+    await _submit(uow, course, hole=2, sample_id=sample_id)
+
+    assert await _stored(uow, course, 2) == 0
+
+
+async def test_s5_a_repeated_id_does_not_use_a_slot():
+    """
+    GIVEN: Una muestra guardada, y su id repetido dos veces más
+    WHEN: Llegan dos muestras nuevas
+    THEN: Se guardan las dos: el hoyo se llena con tres muestras distintas
+    """
+    uow, course = await _setup()
+    sample_id = uuid4()
+    for _ in range(3):
+        await _submit(uow, course, sample_id=sample_id)
+
+    await _submit(uow, course)
+    await _submit(uow, course)
+
+    assert await _stored(uow, course) == 3
+    assert (await _tee_of(uow, course)).collecting is False
+
+
+# ============================================================================
+# S6 — Una por jugador, campo y hoyo cada 10 minutos
+# ============================================================================
+
+
+async def test_s6_the_same_player_before_ten_minutes_is_dropped():
+    """
+    GIVEN: Una muestra guardada del jugador en el hoyo 1
+    WHEN: Manda otra a los 599 segundos
+    THEN: Sin error, y no se guarda
+    """
+    uow, course = await _setup()
+    await _submit(uow, course, user=JUGADOR)
+    uow.reloj.advance(599)
+
+    await _submit(uow, course, user=JUGADOR)
+
+    assert await _stored(uow, course) == 1
+
+
+async def test_s6_the_same_player_after_ten_minutes_is_stored():
+    """
+    GIVEN: Una muestra guardada del jugador en el hoyo 1
+    WHEN: Manda otra a los 600 segundos
+    THEN: Se guarda
+    """
+    uow, course = await _setup()
+    await _submit(uow, course, user=JUGADOR)
+    uow.reloj.advance(600)
+
+    await _submit(uow, course, user=JUGADOR)
+
+    assert await _stored(uow, course) == 2
+
+
+async def test_s6_other_players_holes_and_courses_are_not_affected():
+    """
+    GIVEN: Una muestra guardada del jugador en el hoyo 1
+    WHEN: En seguida, otro jugador manda el hoyo 1, y él manda el hoyo 2 y el 1 de otro campo
+    THEN: Se guardan las tres
+    """
+    uow, course = await _setup()
+    otro_campo = _course()
+    await uow.golf_courses.save(otro_campo)
+    await _submit(uow, course, user=JUGADOR)
+
+    await _submit(uow, course, user=OTRO)
+    await _submit(uow, course, hole=2, user=JUGADOR)
+    await _submit(uow, otro_campo, user=JUGADOR)
+
+    assert await _stored(uow, course, 1) == 2
+    assert await _stored(uow, course, 2) == 1
+    assert await _stored(uow, otro_campo, 1) == 1
+
+
+@pytest.mark.parametrize("cause", ["invalid", "duplicate", "full"])
+async def test_s6_a_sample_not_stored_does_not_open_the_window(cause):
+    """
+    GIVEN: Una muestra del jugador que no se guarda: imposible (tres codos), con
+           un id ya guardado, o con el hoyo ya lleno
+    WHEN: Se mira su ventana del hoyo 1
+    THEN: Sigue abierta: solo la gasta una muestra que de verdad se guardó
+    """
+    uow, course = await _setup()
+    if cause == "invalid":
+        await _submit(uow, course, user=JUGADOR, bends=[CODO, CODO_2, CODO])
+    elif cause == "duplicate":
+        sample_id = uuid4()
+        await _submit(uow, course, sample_id=sample_id)
+        await _submit(uow, course, sample_id=sample_id, user=JUGADOR)
+    else:
+        for _ in range(3):
+            await _submit(uow, course)
+        await _submit(uow, course, user=JUGADOR)
+
+    assert uow.senders.allowed(JUGADOR, course.id, 1, TeeColor.YELLOW, Gender.MALE) is True
+
+
+async def test_s6_after_an_invalid_one_the_next_is_stored():
+    """
+    GIVEN: Una muestra imposible del jugador (green a 30 m)
+    WHEN: Manda en seguida una buena
+    THEN: Se guarda la buena
+    """
+    uow, course = await _setup()
+    await _submit(uow, course, user=JUGADOR, green=_north(30))
+
+    await _submit(uow, course, user=JUGADOR)
+
+    assert await _stored(uow, course) == 1
+
+
+async def test_s6_a_failed_transaction_does_not_open_the_window():
+    """
+    GIVEN: Una transacción que falla al confirmar
+    WHEN: El jugador manda una muestra (falla) y la reintenta en seguida
+    THEN: El primer intento da error y no gasta su ventana; el reintento se guarda
+    """
+    uow, course = await _setup(uow=UoWQueFallaAlConfirmar())
+    uow.failures = 1
+
+    with pytest.raises(RuntimeError):
+        await _use_case(uow).execute(_request(course, user=JUGADOR))
+    assert uow.senders.allowed(JUGADOR, course.id, 1, TeeColor.YELLOW, Gender.MALE) is True
+
+    await _submit(uow, course, user=JUGADOR)
+    assert uow.senders.allowed(JUGADOR, course.id, 1, TeeColor.YELLOW, Gender.MALE) is False
+
+
+# ============================================================================
+# S7 — Lo que queda en el log
+# ============================================================================
+
+
+@pytest.mark.parametrize("cause", ["far", "full", "sender", "duplicate"])
+async def test_s7_the_drop_log_has_no_coordinates_and_no_player(cause, caplog):
+    """
+    GIVEN: Una muestra que se descarta: lejos del campo, con el hoyo lleno, por la
+           ventana del jugador o con un id repetido
+    WHEN: Se descarta
+    THEN: El log no lleva latitud, longitud ni el id del jugador
+    """
+    uow, course = await _setup(location=CourseLocation(latitude=36.33, longitude=-5.33))
+    if cause != "far":
+        uow, course = await _setup()
+    sample_id = uuid4()
+    if cause == "full":
+        for _ in range(3):
+            await _submit(uow, course)
+    elif cause == "sender":
+        await _submit(uow, course, user=JUGADOR)
+    elif cause == "duplicate":
+        await _submit(uow, course, sample_id=sample_id)
+    caplog.clear()
+
+    with caplog.at_level(logging.DEBUG):
+        await _submit(uow, course, user=JUGADOR, sample_id=sample_id, bends=[CODO])
+
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert text  # Algo se registró: si no, el test no prueba nada
+    for secret in (JUGADOR, "36.28", "-5.33", "36.2815", "-5.331", str(GREEN[0])[:6]):
+        assert secret not in text
+
+
+# ============================================================================
+# S8 — Por barra: cada una sale de un sitio
+# ============================================================================
+
+
+async def test_s8_the_cap_is_per_tee():
+    """
+    GIVEN: Tres muestras del hoyo 1 desde amarillas de hombre y tres desde rojas de mujer
+    WHEN: Llega una cuarta desde amarillas de hombre
+    THEN: Las seis primeras se guardan; la cuarta amarilla, no
+    """
+    uow, course = await _setup()
+    for _ in range(3):
+        await _submit(uow, course)
+        await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
+
+    await _submit(uow, course)
+
+    assert await _stored(uow, course) == 3
+    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 3
+
+
+async def test_s8_a_genderless_tee_is_its_own_tee():
+    """
+    GIVEN: Tres muestras desde amarillas de hombre (esa barra ya no recoge)
+    WHEN: Llega una desde amarillas sin género
+    THEN: Se guarda, y las amarillas sin género siguen recogiendo
+    """
+    uow, course = await _setup()
+    for _ in range(3):
+        await _submit(uow, course)
+
+    await _submit(uow, course, tee_gender=None)
+
+    assert await _stored(uow, course, gender=None) == 1
+    assert (await _tee_of(uow, course, gender=None)).collecting is True
+
+
+async def test_s8_the_players_window_is_per_tee():
+    """
+    GIVEN: Una muestra del jugador en el hoyo 1 desde amarillas de hombre
+    WHEN: En seguida manda otra del hoyo 1 desde amarillas sin género (cambió de barra)
+    THEN: Se guarda
+    """
+    uow, course = await _setup()
+    await _submit(uow, course, user=JUGADOR)
+
+    await _submit(uow, course, user=JUGADOR, tee_gender=None)
+
+    assert await _stored(uow, course, gender=None) == 1

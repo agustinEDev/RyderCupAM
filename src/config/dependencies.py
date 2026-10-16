@@ -274,6 +274,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_u
 from src.modules.competition.infrastructure.services.competition_timezone_from_course import (
     CompetitionTimezoneFromCourse,
 )
+from src.modules.golf_course.application.ports.recent_hole_sample_senders import (
+    IRecentHoleSampleSenders,
+)
 from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
     ApproveGolfCourseUseCase,
 )
@@ -320,6 +323,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
+)
+from src.modules.golf_course.infrastructure.services.in_memory_recent_hole_sample_senders import (
+    InMemoryRecentHoleSampleSenders,
 )
 from src.modules.golf_course.infrastructure.services.tzfpy_timezone_resolver import (
     TzfpyTimezoneResolver,
@@ -3046,11 +3052,22 @@ def get_reject_hole_map_use_case(
     return RejectHoleMapUseCase(uow)
 
 
+# Una sola para todo el proceso: la ventana de 10 minutos por jugador tiene que
+# verse entre peticiones. Vive solo en memoria (BE #532, 16 oct 2026)
+_recent_hole_sample_senders = InMemoryRecentHoleSampleSenders()
+
+
+def get_recent_hole_sample_senders() -> IRecentHoleSampleSenders:
+    """Proveedor de quién aportó hace poco una muestra de hoyo (singleton del proceso)."""
+    return _recent_hole_sample_senders
+
+
 def get_submit_hole_sample_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    recent_senders: IRecentHoleSampleSenders = Depends(get_recent_hole_sample_senders),
 ) -> SubmitHoleSampleUseCase:
     """Proveedor del caso de uso SubmitHoleSampleUseCase."""
-    return SubmitHoleSampleUseCase(uow)
+    return SubmitHoleSampleUseCase(uow, recent_senders)
 
 
 def get_list_hole_samples_use_case(

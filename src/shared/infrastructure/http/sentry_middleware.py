@@ -19,11 +19,16 @@ Beneficios:
 - Facilita debugging y soporte al usuario
 - Permite identificar patrones de errores por usuario
 
+Excepción: en las rutas de las muestras anónimas de hoyo (BE #532, 16 oct 2026)
+no se pone usuario, para que ni los errores ni las trazas digan quién mandó una
+muestra.
+
 OWASP Coverage:
 - A09: Logging & Monitoring (contexto completo en eventos)
 """
 
 import logging
+import re
 
 import jwt
 import sentry_sdk
@@ -35,6 +40,15 @@ from src.config.settings import settings
 from src.shared.infrastructure.security.cookie_handler import read_access_token
 
 logger = logging.getLogger(__name__)
+
+# POST /golf-courses/{id}/hole-map/samples/{hole} y GET .../samples (con o sin
+# barra final, que FastAPI redirige)
+_ANONYMOUS_PATH = re.compile(r"^/api/v1/golf-courses/[^/]+/hole-map/samples(/[^/]*)?/?$")
+
+
+def is_anonymous_path(path: str) -> bool:
+    """Las rutas en las que Sentry no debe saber quién hace la petición."""
+    return _ANONYMOUS_PATH.match(path) is not None
 
 
 class SentryUserContextMiddleware(BaseHTTPMiddleware):
@@ -123,8 +137,12 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
         Returns:
             Response del handler
         """
-        # Extraer token JWT del request
-        token = self._extract_token_from_request(request)
+        # Extraer token JWT del request (no en las rutas anónimas: ni se mira)
+        token = (
+            None
+            if is_anonymous_path(request.url.path)
+            else self._extract_token_from_request(request)
+        )
 
         if token:
             # Decodificar token para obtener user_id y email

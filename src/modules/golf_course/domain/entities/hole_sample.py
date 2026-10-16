@@ -2,12 +2,15 @@
 HoleSample Entity - Una muestra anónima de un hoyo (BE #532, reglas del 16 oct 2026).
 
 Al jugar un hoyo, el móvil manda la salida, hasta dos codos (un dogleg) y el
-centro del green. Sirve para cualquier hoyo, tenga o no datos en el mapa: las
-muestras enriquecen los codos. **No guarda quién la mandó**: cada envío cuenta,
-aunque venga de la misma persona.
+centro del green, y desde qué barra (color y género: cada una sale de un sitio
+distinto). Sirve para cualquier hoyo, tenga o no datos en el mapa: las
+muestras enriquecen los codos. **No guarda quién la mandó**, y de cuándo llegó
+solo el día (UTC): la hora ayudaría a saber quién estaba en el campo. El id lo
+genera el móvil, para que un reenvío cuente una vez, y no dice nada de quién.
 
-Por hoyo se guardan solo las tres primeras que llegan (MAX_SAMPLES_PER_HOLE);
-las demás se reciben igual y no se guardan, sin que el jugador lo note.
+Por hoyo y barra se guardan solo las tres primeras que llegan
+(MAX_SAMPLES_PER_HOLE); las demás se reciben igual y no se guardan, sin que el
+jugador lo note.
 
 Los límites frenan muestras absurdas (un toque en el hoyo de al lado, o a
 mitad de camino): de la salida al green entre 40 y 750 m en recta, y ningún
@@ -15,12 +18,15 @@ punto a más de 3 km del campo (si el campo tiene ubicación).
 """
 
 from collections.abc import Iterable
-from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from datetime import UTC, date, datetime
+from uuid import UUID
+
+from src.shared.domain.value_objects.gender import Gender
 
 from ..value_objects.geo_point import GeoPoint
 from ..value_objects.golf_course_id import GolfCourseId
 from ..value_objects.mapped_hole import MAX_HOLE_NUMBER, MIN_HOLE_NUMBER
+from ..value_objects.tee_color import TeeColor
 
 MAX_SAMPLES_PER_HOLE = 3
 MAX_BENDS = 2
@@ -41,16 +47,19 @@ class HoleSampleFarFromCourseError(InvalidHoleSampleError):
     """Algún punto de la muestra está a más de 3 km del campo."""
 
 
-def _now() -> datetime:
-    """Las fechas del módulo van en UTC y sin zona."""
-    return datetime.now(UTC).replace(tzinfo=None)
+def _today() -> date:
+    """El día de hoy en UTC: de la llegada no se guarda más."""
+    return datetime.now(UTC).date()
 
 
 class HoleSample:
     """
-    La muestra de un hoyo, sin autor.
+    La muestra de un hoyo desde una barra, sin autor y sin hora.
 
     Business Rules:
+    - El id es un UUID (lo genera el móvil).
+    - La barra es un color (TeeColor) y un género (Gender, o None si la barra no
+      lo tiene).
     - Hoyo entero de 1 a 18 (también del 10 al 18 en un campo de 9: la segunda
       vuelta suele salir de otras salidas).
     - Salida y centro del green obligatorios; hasta 2 codos.
@@ -63,10 +72,12 @@ class HoleSample:
         id: UUID,
         golf_course_id: GolfCourseId,
         hole_number: int,
+        tee_color: TeeColor,
+        tee_gender: Gender | None,
         tee: GeoPoint,
         bends: Iterable[GeoPoint],
         green_center: GeoPoint,
-        created_at: datetime,
+        received_on: date,
     ) -> None:
         """Comprueba la forma; las distancias se miden solo al crearla (`create`)."""
         if not isinstance(id, UUID):
@@ -80,6 +91,13 @@ class HoleSample:
             or not MIN_HOLE_NUMBER <= hole_number <= MAX_HOLE_NUMBER
         ):
             raise InvalidHoleSampleError(f"Hole number must be 1-18, got {hole_number!r}")
+        if not isinstance(tee_color, TeeColor):
+            raise InvalidHoleSampleError(f"Invalid tee color {tee_color!r}")
+        if tee_gender is not None and not isinstance(tee_gender, Gender):
+            raise InvalidHoleSampleError(f"Invalid tee gender {tee_gender!r}")
+        # Un datetime también es un date: con él se colaría la hora
+        if not isinstance(received_on, date) or isinstance(received_on, datetime):
+            raise InvalidHoleSampleError("The arrival must be a day, without time")
         if not isinstance(tee, GeoPoint):
             raise InvalidHoleSampleError("The tee must be a GeoPoint")
         if not isinstance(green_center, GeoPoint):
@@ -93,23 +111,28 @@ class HoleSample:
         self._id = id
         self._golf_course_id = golf_course_id
         self._hole_number = hole_number
+        self._tee_color = tee_color
+        self._tee_gender = tee_gender
         self._tee = tee
         self._bends = bends
         self._green_center = green_center
-        self._created_at = created_at
+        self._received_on = received_on
 
     @classmethod
     def create(
         cls,
+        id: UUID,
         golf_course_id: GolfCourseId,
         hole_number: int,
+        tee_color: TeeColor,
+        tee_gender: Gender | None,
         tee: GeoPoint,
         bends: Iterable[GeoPoint],
         green_center: GeoPoint,
         course_location: GeoPoint | None,
     ) -> "HoleSample":
         """
-        Una muestra recién llegada, con id nuevo y la hora de ahora.
+        Una muestra recién llegada, con el id que puso el móvil y el día de hoy.
 
         Raises:
             InvalidHoleSampleError: hoyo, puntos o codos mal formados
@@ -117,13 +140,15 @@ class HoleSample:
             HoleSampleFarFromCourseError: un punto a más de 3 km del campo
         """
         sample = cls(
-            id=uuid4(),
+            id=id,
             golf_course_id=golf_course_id,
             hole_number=hole_number,
+            tee_color=tee_color,
+            tee_gender=tee_gender,
             tee=tee,
             bends=bends,
             green_center=green_center,
-            created_at=_now(),
+            received_on=_today(),
         )
         sample._ensure_tee_to_green()
         sample._ensure_near(course_location)
@@ -135,10 +160,12 @@ class HoleSample:
         id: UUID,
         golf_course_id: GolfCourseId,
         hole_number: int,
+        tee_color: TeeColor,
+        tee_gender: Gender | None,
         tee: GeoPoint,
         bends: Iterable[GeoPoint],
         green_center: GeoPoint,
-        created_at: datetime,
+        received_on: date,
     ) -> "HoleSample":
         """
         Una muestra leída de la BD: sin volver a medir distancias, para que una
@@ -148,10 +175,12 @@ class HoleSample:
             id=id,
             golf_course_id=golf_course_id,
             hole_number=hole_number,
+            tee_color=tee_color,
+            tee_gender=tee_gender,
             tee=tee,
             bends=bends,
             green_center=green_center,
-            created_at=created_at,
+            received_on=received_on,
         )
 
     def _ensure_tee_to_green(self) -> None:
@@ -186,6 +215,14 @@ class HoleSample:
         return self._hole_number
 
     @property
+    def tee_color(self) -> TeeColor:
+        return self._tee_color
+
+    @property
+    def tee_gender(self) -> Gender | None:
+        return self._tee_gender
+
+    @property
     def tee(self) -> GeoPoint:
         return self._tee
 
@@ -198,8 +235,9 @@ class HoleSample:
         return self._green_center
 
     @property
-    def created_at(self) -> datetime:
-        return self._created_at
+    def received_on(self) -> date:
+        """El día (UTC) en que llegó; sin hora a propósito."""
+        return self._received_on
 
     @property
     def play_line(self) -> tuple[GeoPoint, ...]:
