@@ -228,6 +228,12 @@ class TestGetScoringView:
         assert data["match_format"] == "SINGLES"
         assert data["is_decided"] is False
         assert len(data["players"]) == 2
+        # El sexo de la barra de cada jugador, para las muestras del mapa (#880)
+        # (las barras del campo de prueba no tienen sexo: llegan en null)
+        assert all(
+            "tee_gender" in p and p["tee_gender"] in ("MALE", "FEMALE", None)
+            for p in data["players"]
+        )
         assert len(data["holes"]) == 18
         assert len(data["scores"]) == 18
         assert len(data["marker_assignments"]) > 0
