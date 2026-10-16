@@ -12,6 +12,13 @@ La partida para anotar y las tarjetas de los suyos (#251, PR 5; pestañas 1 y 3)
 | Una tarjeta entregada             | Su estado                                            |
 | Medal                             | Sin levantar bola                                    |
 | Una partida que no existe         | PartidaNotFoundError                                 |
+| El nombre del campo               | De la franja; sin campo o sin repositorio, null      |
+| B1 Los metros de cada hoyo        | Desde SU barra (con la reserva a la sin género)      |
+| B2 Un hoyo sin metros             | null                                                 |
+| B3 Barra sin tarjeta propia       | La que el campo le copió, como la Ryder (16 oct)     |
+| B3 Barra que ya no está           | Todos a null                                         |
+| B4 Sin campo o sin repositorio    | null, sin error                                      |
+| B5 El campo                       | Se carga una vez por vista                           |
 """
 
 from dataclasses import replace
@@ -218,89 +225,16 @@ async def test_g2_the_group_says_the_golf_course_of_its_round():
     assert vista.golf_course_id == franja.golf_course_id.value
 
 
-class _NombresDeCampos:
-    """Solo los nombres, como `find_names_by_ids` del repositorio de campos."""
+class _Campos:
+    """El repositorio de campos: `find_by_id` con el nombre y las barras."""
 
-    def __init__(self, nombres):
-        self.nombres = nombres
-        self.pedidos = []
-
-    async def find_names_by_ids(self, ids):
-        self.pedidos.append(list(ids))
-        return {str(i): self.nombres[str(i)] for i in ids if str(i) in self.nombres}
-
-    async def find_by_id(self, _course_id):
-        return None
-
-
-async def test_the_view_carries_the_course_name():
-    """
-    GIVEN: Una partida de stroke play y su campo
-    WHEN: Se pide la anotación
-    THEN: Lleva el nombre del campo, para enseñarlo bajo el título (BE #532, 16 oct)
-    """
-    escenario, partida = await _partida()
-    franja = await escenario.uow.rounds.find_by_id(partida.round_id)
-    campos = _NombresDeCampos({str(franja.golf_course_id): "Golf de Meis - Par 72"})
-
-    vista = await VerAnotacionDePartidaUseCase(
-        uow=escenario.uow,
-        zonas=escenario.zonas,
-        user_repository=escenario.usuarios,
-        golf_courses=campos,
-    ).execute(partida.id.value, partida.user_ids[0])
-
-    assert vista.golf_course_name == "Golf de Meis - Par 72"
-    assert campos.pedidos == [[franja.golf_course_id]]
-
-
-async def test_the_course_name_is_null_if_the_course_is_not_found():
-    """
-    GIVEN: Un campo que ya no está (o sin repositorio de campos)
-    WHEN: Se pide la anotación
-    THEN: El nombre va a null, sin error
-    """
-    escenario, partida = await _partida()
-
-    sin_campo = await VerAnotacionDePartidaUseCase(
-        uow=escenario.uow,
-        zonas=escenario.zonas,
-        user_repository=escenario.usuarios,
-        golf_courses=_NombresDeCampos({}),
-    ).execute(partida.id.value, partida.user_ids[0])
-    sin_repositorio = await _ver(escenario).execute(partida.id.value, partida.user_ids[0])
-
-    assert sin_campo.golf_course_name is None
-    assert sin_repositorio.golf_course_name is None
-
-
-# Los metros de cada hoyo desde SU barra, para el recuadro del mapa (BE #532, 16 oct)
-
-
-class _Salida:
-    def __init__(self, metros):
-        self.holes = [
-            type("Hoyo", (), {"number": n, "meters": m})() for n, m in enumerate(metros, start=1)
-        ]
-
-
-class _CampoConSalidas(_NombresDeCampos):
-    """Nombres y el campo entero, con sus salidas por (color, género)."""
-
-    def __init__(self, nombres, salidas):
-        super().__init__(nombres)
-        self.salidas = salidas
+    def __init__(self, campo):
+        self.campo = campo
         self.cargados = []
 
     async def find_by_id(self, course_id):
         self.cargados.append(course_id)
-        salidas = self.salidas
-
-        class _Campo:
-            def tee_for(self, color, gender):
-                return salidas.get((color, gender))
-
-        return _Campo() if salidas is not None else None
+        return self.campo
 
 
 def _con(escenario, campos):
@@ -312,9 +246,92 @@ def _con(escenario, campos):
     )
 
 
+def _campo(metros_por_barra, nombre="Golf de Meis - Par 72"):
+    """
+    Un campo de verdad. `metros_por_barra`: {(color, género): metros de los 18}.
+    Una barra con None no trae tarjeta propia (el campo le copia la primera).
+    """
+    from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+    from src.modules.golf_course.domain.entities.hole import Hole
+    from src.modules.golf_course.domain.entities.tee import Tee
+    from src.modules.golf_course.domain.value_objects.course_type import CourseType
+    from src.modules.user.domain.value_objects.user_id import UserId
+    from src.shared.domain.value_objects.country_code import CountryCode
+
+    def tarjeta(metros):
+        return [Hole(number=n, par=4, stroke_index=n, meters=m) for n, m in enumerate(metros, 1)]
+
+    return GolfCourse.create(
+        name=nombre,
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=[
+            Tee(
+                gender=genero,
+                slope_rating=126,
+                course_rating=71.5,
+                color=color,
+                **({"holes": tarjeta(metros)} if metros is not None else {}),
+            )
+            for (color, genero), metros in metros_por_barra.items()
+        ],
+        holes=[],
+    )
+
+
+async def _barras_de(escenario, partida, cambios):
+    """Cambia la barra de algunos jugadores: {user_id: (color, género)}."""
+    leida = await escenario.uow.partidas.find_by_id(partida.id)
+    leida._jugadores = [
+        replace(j, tee_color=cambios[j.user_id][0], tee_gender=cambios[j.user_id][1])
+        if j.user_id in cambios
+        else j
+        for j in leida._jugadores
+    ]
+    await escenario.uow.partidas.guardar([leida])
+    return leida
+
+
+async def test_the_view_carries_the_course_name():
+    """
+    GIVEN: Una partida de stroke play y su campo
+    WHEN: Se pide la anotación
+    THEN: Lleva el nombre del campo, para enseñarlo bajo el título (BE #532, 16 oct)
+    """
+    from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+
+    escenario, partida = await _partida()
+    franja = await escenario.uow.rounds.find_by_id(partida.round_id)
+    campos = _Campos(_campo({(TeeColor.YELLOW, None): [300] * 18}))
+
+    vista = await _con(escenario, campos).execute(partida.id.value, partida.user_ids[0])
+
+    assert vista.golf_course_name == "Golf de Meis - Par 72"
+    assert campos.cargados == [franja.golf_course_id]
+
+
+async def test_the_course_name_is_null_if_the_course_is_not_found():
+    """
+    GIVEN: Un campo que ya no está (o sin repositorio de campos)
+    WHEN: Se pide la anotación
+    THEN: El nombre va a null, sin error
+    """
+    escenario, partida = await _partida()
+
+    sin_campo = await _con(escenario, _Campos(None)).execute(partida.id.value, partida.user_ids[0])
+    sin_repositorio = await _ver(escenario).execute(partida.id.value, partida.user_ids[0])
+
+    assert sin_campo.golf_course_name is None
+    assert sin_repositorio.golf_course_name is None
+
+
+# Los metros de cada hoyo desde SU barra, para el recuadro del mapa (BE #532, 16 oct)
+
+
 async def test_b1_each_hole_carries_the_meters_of_the_players_own_tee():
     """
-    GIVEN: Dos jugadores de la partida en barras distintas
+    GIVEN: Dos jugadores de la partida en barras distintas, cada una con su tarjeta
     WHEN: Se pide la anotación
     THEN: Cada hoyo de cada uno lleva los metros de SU barra
     """
@@ -323,29 +340,44 @@ async def test_b1_each_hole_carries_the_meters_of_the_players_own_tee():
 
     escenario, partida = await _partida()
     a, b, _ = partida.user_ids
-    leida = await escenario.uow.partidas.find_by_id(partida.id)
-    leida._jugadores = [
-        replace(j, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE) if j.user_id == b else j
-        for j in leida._jugadores
-    ]
-    await escenario.uow.partidas.guardar([leida])
-    color_de_a = next(j for j in leida._jugadores if j.user_id == a)
-    amarillas = _Salida([300 + n for n in range(18)])
-    rojas = _Salida([250 + n for n in range(18)])
-    campos = _CampoConSalidas(
-        {},
+    await _barras_de(
+        escenario,
+        partida,
+        {a: (TeeColor.YELLOW, Gender.MALE), b: (TeeColor.RED, Gender.FEMALE)},
+    )
+    campo = _campo(
         {
-            (color_de_a.tee_color, color_de_a.tee_gender): amarillas,
-            (TeeColor.RED, Gender.FEMALE): rojas,
-        },
+            (TeeColor.YELLOW, Gender.MALE): [300 + n for n in range(18)],
+            (TeeColor.RED, Gender.FEMALE): [250 + n for n in range(18)],
+        }
     )
 
-    vista = await _con(escenario, campos).execute(partida.id.value, a)
+    vista = await _con(escenario, _Campos(campo)).execute(partida.id.value, a)
 
     metros = {p.user_id: [h.meters for h in p.holes] for p in vista.players}
     assert metros[a.value][:3] == [300, 301, 302]
     assert metros[b.value][:3] == [250, 251, 252]
     assert metros[a.value][17] == 317
+
+
+async def test_b1_a_gendered_player_on_a_course_with_one_genderless_tee_gets_it():
+    """
+    GIVEN: Un campo con una sola barra azul sin género y un jugador en azules MALE
+    WHEN: Se pide la anotación
+    THEN: Lleva los metros de esa barra (la reserva de `tee_for`)
+    """
+    from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+    from src.shared.domain.value_objects.gender import Gender
+
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    await _barras_de(escenario, partida, {a: (TeeColor.BLUE, Gender.MALE)})
+    campo = _campo({(TeeColor.BLUE, None): [400 + n for n in range(18)]})
+
+    vista = await _con(escenario, _Campos(campo)).execute(partida.id.value, a)
+
+    suyos = next(p for p in vista.players if p.user_id == a.value).holes
+    assert [h.meters for h in suyos[:2]] == [400, 401]
 
 
 async def test_b2_a_hole_without_meters_on_the_tee_is_null():
@@ -354,38 +386,67 @@ async def test_b2_a_hole_without_meters_on_the_tee_is_null():
     WHEN: Se pide la anotación
     THEN: Ese hoyo va con null; el resto, con los suyos
     """
+    from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+    from src.shared.domain.value_objects.gender import Gender
+
     escenario, partida = await _partida()
     a = partida.user_ids[0]
-    leida = await escenario.uow.partidas.find_by_id(partida.id)
-    suyo = next(j for j in leida._jugadores if j.user_id == a)
+    await _barras_de(escenario, partida, {a: (TeeColor.YELLOW, Gender.MALE)})
     metros = [300] * 18
     metros[1] = None
-    campos = _CampoConSalidas({}, {(suyo.tee_color, suyo.tee_gender): _Salida(metros)})
+    campo = _campo({(TeeColor.YELLOW, Gender.MALE): metros})
 
-    vista = await _con(escenario, campos).execute(partida.id.value, a)
+    vista = await _con(escenario, _Campos(campo)).execute(partida.id.value, a)
 
     suyos = next(p for p in vista.players if p.user_id == a.value).holes
     assert [h.meters for h in suyos[:3]] == [300, None, 300]
 
 
+async def test_b3_a_tee_without_its_own_card_carries_the_copied_one():
+    """
+    GIVEN: Un campo dado de alta a mano con una sola tarjeta (amarillas) y unas
+        rojas sin la suya
+    WHEN: Se pide la anotación de quien juega desde rojas
+    THEN: Lleva los metros de la tarjeta que el campo copió a sus rojas, como la
+        Ryder (aceptado por Agustín, 16 oct)
+    """
+    from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+    from src.shared.domain.value_objects.gender import Gender
+
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    await _barras_de(escenario, partida, {a: (TeeColor.RED, Gender.FEMALE)})
+    campo = _campo(
+        {
+            (TeeColor.YELLOW, Gender.MALE): [300 + n for n in range(18)],
+            (TeeColor.RED, Gender.FEMALE): None,
+        }
+    )
+
+    vista = await _con(escenario, _Campos(campo)).execute(partida.id.value, a)
+
+    suyos = next(p for p in vista.players if p.user_id == a.value).holes
+    assert [h.meters for h in suyos[:2]] == [300, 301]
+
+
 async def test_b3_a_tee_no_longer_on_the_course_gives_null_everywhere():
     """
-    GIVEN: Un campo que ya no tiene la barra de los jugadores (o sin tarjeta)
+    GIVEN: Un campo que ya no tiene la barra de los jugadores
     WHEN: Se pide la anotación
     THEN: Todos sus hoyos, con null
     """
-    escenario, partida = await _partida()
-    sin_barra = await _con(escenario, _CampoConSalidas({}, {})).execute(
-        partida.id.value, partida.user_ids[0]
-    )
-    leida = await escenario.uow.partidas.find_by_id(partida.id)
-    suyo = leida._jugadores[0]
-    sin_tarjeta = await _con(
-        escenario, _CampoConSalidas({}, {(suyo.tee_color, suyo.tee_gender): _Salida([])})
-    ).execute(partida.id.value, partida.user_ids[0])
+    from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+    from src.shared.domain.value_objects.gender import Gender
 
-    for vista in (sin_barra, sin_tarjeta):
-        assert all(h.meters is None for p in vista.players for h in p.holes)
+    escenario, partida = await _partida()
+    a = partida.user_ids[0]
+    await _barras_de(escenario, partida, {a: (TeeColor.WHITE, Gender.MALE)})
+    campo = _campo({(TeeColor.YELLOW, Gender.MALE): [300] * 18})
+
+    vista = await _con(escenario, _Campos(campo)).execute(partida.id.value, a)
+
+    suyos = next(p for p in vista.players if p.user_id == a.value).holes
+    assert all(h.meters is None for h in suyos)
 
 
 async def test_b4_without_the_course_or_its_repository_meters_are_null():
@@ -396,23 +457,21 @@ async def test_b4_without_the_course_or_its_repository_meters_are_null():
     """
     escenario, partida = await _partida()
 
-    sin_campo = await _con(escenario, _CampoConSalidas({}, None)).execute(
-        partida.id.value, partida.user_ids[0]
-    )
+    sin_campo = await _con(escenario, _Campos(None)).execute(partida.id.value, partida.user_ids[0])
     sin_repositorio = await _ver(escenario).execute(partida.id.value, partida.user_ids[0])
 
     for vista in (sin_campo, sin_repositorio):
         assert all(h.meters is None for p in vista.players for h in p.holes)
 
 
-async def test_b6_the_course_is_loaded_once_per_view():
+async def test_b5_the_course_is_loaded_once_per_view():
     """
     GIVEN: Una partida de tres jugadores
     WHEN: Se pide la anotación
-    THEN: El campo se carga una sola vez, no una por jugador
+    THEN: El campo se carga una sola vez, no una por jugador (y de ahí el nombre)
     """
     escenario, partida = await _partida()
-    campos = _CampoConSalidas({}, {})
+    campos = _Campos(None)
 
     await _con(escenario, campos).execute(partida.id.value, partida.user_ids[0])
 

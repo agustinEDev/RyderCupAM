@@ -58,7 +58,7 @@ class VerAnotacionDePartidaUseCase:
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
-        # Para el nombre del campo bajo el título de la anotación (BE #532)
+        # El nombre del campo bajo el título y los metros de cada hoyo (BE #532)
         self._campos = golf_courses
 
     async def execute(self, group_id: UUID, quien: UserId) -> TeeGroupScoringViewDTO:
@@ -91,12 +91,8 @@ class VerAnotacionDePartidaUseCase:
             nombres = await PlayerNames.de_la_competicion(
                 quienes, partida.competition_id, self._usuarios, self._uow
             )
-            nombres_de_campos = (
-                await self._campos.find_names_by_ids([franja.golf_course_id])
-                if self._campos
-                else {}
-            )
-            # Para los metros de cada hoyo desde la barra de cada uno (16 oct)
+            # Su nombre, bajo el título, y los metros de cada hoyo desde la barra
+            # de cada uno (BE #532, 16 oct): una sola lectura del campo
             campo = await self._campos.find_by_id(franja.golf_course_id) if self._campos else None
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
         jugaron = partida.quienes_jugaron(golpes)
@@ -106,7 +102,7 @@ class VerAnotacionDePartidaUseCase:
             group_id=partida.id.value,
             round_id=partida.round_id.value,
             golf_course_id=franja.golf_course_id.value,
-            golf_course_name=nombres_de_campos.get(str(franja.golf_course_id)),
+            golf_course_name=campo.name if campo else None,
             number=partida.numero,
             tee_time=franja.hoja_de_salidas.hora_de(partida.numero).strftime("%H:%M"),
             status=partida.estado.value,
@@ -125,8 +121,11 @@ class VerAnotacionDePartidaUseCase:
 
 def _metros(campo: GolfCourse | None, foto: JugadorDePartida) -> dict[int, int | None]:
     """
-    Los metros de cada hoyo desde la barra del jugador. Sin campo, sin esa barra
-    o sin su tarjeta, ninguno: la tarjeta de referencia es de otra barra.
+    Los metros de cada hoyo desde la barra del jugador, tal y como la guarda el
+    campo (con la reserva de `tee_for` a la barra sin género de ese color). Un
+    campo dado de alta a mano con una sola tarjeta la copia a todas sus barras,
+    así que todas llevan esos metros, como en la Ryder (aceptado por Agustín,
+    16 oct). Sin campo o sin esa barra, ninguno.
     """
     salida = campo.tee_for(foto.tee_color, foto.tee_gender) if campo else None
     return {hoyo.number: hoyo.meters for hoyo in salida.holes} if salida else {}
