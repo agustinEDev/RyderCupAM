@@ -107,9 +107,9 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         if competition_id in self._competitions:
             del self._competitions[competition_id]
 
-    async def find_all(self) -> list[Competition]:
-        """Retorna todas las competiciones."""
-        return list(self._competitions.values())
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[Competition]:
+        """Retorna las competiciones, paginadas como el repositorio de verdad."""
+        return list(self._competitions.values())[offset : offset + limit]
 
     async def count_all(self) -> int:
         """Cuenta el total de competiciones en el sistema."""
