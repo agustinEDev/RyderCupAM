@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.29.0] - 2026-10-16
+
+**Mapa de hoyos.** Llega el modelo de mapa de hoyos con su revisión por el
+admin y el importador desde OpenStreetMap, las vistas de anotación traen el
+campo (su id, su nombre y, en stroke play, los metros de cada hoyo desde la
+barra de cada jugador) y los jugadores aportan **muestras anónimas** de la
+salida, los codos y el green de cada hoyo, por barra, para que el admin dibuje
+la línea buena. Va con el frontend **2.43.0**.
+
+**Notas de despliegue.**
+
+- **3 migraciones** (`f2b4d6e8a0c1` → `1f5431235064` → `7c2e9a4b1d30` →
+  `5206fa18886b`): crean `golf_course_hole_maps` (vacía) y
+  `golf_course_hole_samples` (vacía); la tabla intermedia de marcas por jugador
+  se crea y se borra en la misma subida (nunca llegó a producción). SQL plano,
+  generación en modo offline comprobada.
+- **Dependencias nuevas**: `shapely`, `numpy` y `geojson-pydantic` (#567, #569).
+- **Sin variables nuevas.**
+- **Contrato: aditivo para el frontend en producción.** La etiqueta
+  `api-breaking` de #576 es contra `develop`: quita `PUT .../hole-map/marks/{hole}`
+  y `GET .../marks/mine`, que nunca se publicaron. El frontend 2.42.0 no los usa.
+  Orden de siempre: backend, `/health`, frontend.
+- **Los mapas no se importan solos**: `scripts/import_hole_maps.py` corre en
+  seco por defecto; con `--apply` deja mapas pendientes de que el admin los
+  apruebe. Mientras no haya ninguno aprobado, la app trata cada campo como sin
+  mapa.
+
+### Added
+
+- **Modelo de mapa de hoyos** por campo: por hoyo, la línea de juego y el green
+  (delante, centro, fondo y contorno), con estado de revisión (`PENDING`,
+  `APPROVED`, `REJECTED`, `TOO_FEW_HOLES`), su versión opaca y el origen de cada
+  posición (#564).
+- **Importador desde OpenStreetMap** (`scripts/import_hole_maps.py`), por país
+  o por campo, en seco por defecto: casa el contorno del campo, sus hoyos (contra
+  la tarjeta) y sus greens; un mapa aprobado no se toca, y el que cubre menos de
+  la mitad de los hoyos no se guarda. Fuente Overpass o un extracto local de
+  Geofabrik con `--osm-file` (#567, #571).
+- **Endpoints del mapa**: `GET /golf-courses/{id}/hole-map` (el aprobado, en
+  GeoJSON, con atribución ODbL cuando hace falta) y la revisión del admin:
+  pendientes, ver cualquiera y aprobar o rechazar con la versión vista
+  (`HOLE_MAP_CHANGED`, `HOLE_MAP_NOT_PENDING`) (#569).
+- **El campo en las vistas de anotación**: `golf_course_id` en la Ryder y en la
+  partida de stroke play (#570); su nombre en el calendario, en «mis partidas» y
+  en la vista de la partida (#573); y los **metros de cada hoyo** desde la barra
+  de cada jugador en la vista de la partida, con `hole_card_for` como la Ryder
+  (#574).
+- **Muestras anónimas de cada hoyo, por barra** (#576):
+  - `POST /golf-courses/{id}/hole-map/samples/{hole}` con `{id, tee_color,
+    tee_gender, tee, bends, green_center}`, siempre `204`; se guardan las tres
+    primeras **válidas** de cada campo, hoyo y barra (resuelta con la del campo),
+    sin guardar quién las manda;
+  - idempotente por el `id` que pone el móvil; como mucho una aceptada por
+    jugador, hoyo y barra cada 10 minutos (en memoria);
+  - solo el día de llegada y un orden aparte; sin usuario en Sentry ni en la
+    clave del límite de peticiones;
+  - `GET /golf-courses/{id}/hole-map/samples`: los 18 hoyos, con la primera
+    muestra de cada barra y si aún recoge, sin recuentos ni autores.
+
+### Changed
+
+- Las marcas por jugador de los hoyos (#572), que nunca salieron a producción,
+  se sustituyen por las muestras anónimas (#576).
+
+### Fixed
+
+- El `env.py` de Alembic arranca todos los mappers desde un solo sitio: una
+  tabla nueva ya no queda fuera de la autogeneración (#566).
+
 ## [2.28.0] - 2026-10-15
 
 **Partida rápida en una sola petición, tarjetas de «Mis competiciones» y lo que
