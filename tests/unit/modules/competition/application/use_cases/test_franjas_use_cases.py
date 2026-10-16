@@ -411,7 +411,27 @@ class TestElCalendario:
         # El nombre del campo, para «Mis Próximos Partidos» (BE #532, 16 oct)
         assert tarde.golf_course_name == "Golf de Madrid"
 
-    async def test_sin_repositorio_de_campos_o_sin_campo_el_nombre_va_a_null(self, e):
+    async def test_sin_repositorio_de_campos_el_nombre_va_a_null(self, e):
+        """
+        GIVEN: Una sesión, sin repositorio de campos
+        WHEN: Se pide el calendario
+        THEN: El nombre del campo va a null
+        """
+        await e.torneo(TournamentType.RYDER_CUP)
+        await e.crear(sesion="AFTERNOON", formato="SINGLES")
+
+        calendario = await GetScheduleUseCase(e.uow).execute(
+            GetScheduleRequestDTO(competition_id=e.competicion.id.value)
+        )
+
+        assert calendario.days[0].rounds[0].golf_course_name is None
+
+    async def test_con_el_campo_borrado_el_nombre_va_a_null(self, e):
+        """
+        GIVEN: Una sesión cuyo campo ya no se encuentra
+        WHEN: Se pide el calendario
+        THEN: El nombre del campo va a null, sin error
+        """
         await e.torneo(TournamentType.RYDER_CUP)
         await e.crear(sesion="AFTERNOON", formato="SINGLES")
 
@@ -419,11 +439,11 @@ class TestElCalendario:
             async def find_by_id(self, _):
                 return None
 
-        for repositorio in (None, _SinCampo()):
-            calendario = await GetScheduleUseCase(e.uow, repositorio).execute(
-                GetScheduleRequestDTO(competition_id=e.competicion.id.value)
-            )
-            assert calendario.days[0].rounds[0].golf_course_name is None
+        calendario = await GetScheduleUseCase(e.uow, _SinCampo()).execute(
+            GetScheduleRequestDTO(competition_id=e.competicion.id.value)
+        )
+
+        assert calendario.days[0].rounds[0].golf_course_name is None
 
     async def test_en_una_ryder_no_hay_cupo_de_franjas(self, e):
         await e.torneo(TournamentType.RYDER_CUP)

@@ -346,6 +346,11 @@ async def test_my_groups_carry_their_course_id_and_name_in_one_query():
 
 
 async def test_my_groups_without_a_courses_repository_carry_no_name():
+    """
+    GIVEN: Mis partidas, sin repositorio de campos
+    WHEN: Pido mis partidas
+    THEN: Llevan el id del campo y el nombre a null, sin error
+    """
     escenario = _Escenario()
     await escenario.guardar()
     yo = await escenario.con_plaza("5.0", franja=escenario.tarde)
@@ -362,6 +367,11 @@ async def test_my_groups_without_a_courses_repository_carry_no_name():
 
 
 async def test_my_groups_without_any_do_not_ask_for_course_names():
+    """
+    GIVEN: Un jugador sin partidas
+    WHEN: Pide sus partidas
+    THEN: Vacío, y sin consultar nombres de campos
+    """
     escenario = _Escenario()
     await escenario.guardar()
     campos = _NombresDeCampos({})
