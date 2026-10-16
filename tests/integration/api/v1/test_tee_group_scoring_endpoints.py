@@ -211,6 +211,8 @@ async def test_the_view(client: AsyncClient):
     assert no_existe.status_code == 404, no_existe.text
     # El campo de su franja, para pedir su mapa de hoyos (BE #532)
     assert vista.json()["golf_course_id"] == await _campo_de_la_franja(vista.json()["round_id"])
+    # Y su nombre, bajo el título de la anotación (BE #532, 16 oct)
+    assert vista.json()["golf_course_name"]
 
 
 async def _campo_de_la_franja(round_id: str) -> str:

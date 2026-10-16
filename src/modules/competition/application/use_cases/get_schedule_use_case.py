@@ -126,7 +126,9 @@ class GetScheduleUseCase:
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
+        # (y su nombre, para «Mis Próximos Partidos», BE #532)
         zonas_por_campo: dict = {}
+        nombres_por_campo: dict = {}
         if self._gc_repo:
             for round_entity, _ in rounds_with_matches:
                 if round_entity.golf_course_id in zonas_por_campo:
@@ -134,6 +136,9 @@ class GetScheduleUseCase:
                 golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
                 zonas_por_campo[round_entity.golf_course_id] = (
                     golf_course.timezone if golf_course else None
+                )
+                nombres_por_campo[round_entity.golf_course_id] = (
+                    golf_course.name if golf_course else None
                 )
 
         # 6. Agrupar rondas por día
@@ -164,6 +169,7 @@ class GetScheduleUseCase:
                 id=round_entity.id.value,
                 competition_id=round_entity.competition_id.value,
                 golf_course_id=round_entity.golf_course_id.value,
+                golf_course_name=nombres_por_campo.get(round_entity.golf_course_id),
                 round_date=round_entity.round_date,
                 session_type=round_entity.session_type.value,
                 # Una franja de stroke play no tiene formato de partido (#541)

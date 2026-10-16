@@ -479,6 +479,9 @@ async def test_my_groups(client: AsyncClient):
         "09:00",
     )
     assert otros[0]["user"]["id"] in {p["user_id"] for p in mia["group"]["players"]}
+    # El campo de la franja, para «Mis Próximos Partidos» (BE #532, 16 oct)
+    assert mia["golf_course_id"]
+    assert mia["golf_course_name"]
     assert ningunas.json() == {"groups": []}
 
 

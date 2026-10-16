@@ -216,3 +216,56 @@ async def test_g2_the_group_says_the_golf_course_of_its_round():
     vista = await _ver(escenario).execute(partida.id.value, a)
 
     assert vista.golf_course_id == franja.golf_course_id.value
+
+
+class _NombresDeCampos:
+    """Solo los nombres, como `find_names_by_ids` del repositorio de campos."""
+
+    def __init__(self, nombres):
+        self.nombres = nombres
+        self.pedidos = []
+
+    async def find_names_by_ids(self, ids):
+        self.pedidos.append(list(ids))
+        return {str(i): self.nombres[str(i)] for i in ids if str(i) in self.nombres}
+
+
+async def test_the_view_carries_the_course_name():
+    """
+    GIVEN: Una partida de stroke play y su campo
+    WHEN: Se pide la anotación
+    THEN: Lleva el nombre del campo, para enseñarlo bajo el título (BE #532, 16 oct)
+    """
+    escenario, partida = await _partida()
+    franja = await escenario.uow.rounds.find_by_id(partida.round_id)
+    campos = _NombresDeCampos({str(franja.golf_course_id): "Golf de Meis - Par 72"})
+
+    vista = await VerAnotacionDePartidaUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        golf_courses=campos,
+    ).execute(partida.id.value, partida.user_ids[0])
+
+    assert vista.golf_course_name == "Golf de Meis - Par 72"
+    assert campos.pedidos == [[franja.golf_course_id]]
+
+
+async def test_the_course_name_is_null_if_the_course_is_not_found():
+    """
+    GIVEN: Un campo que ya no está (o sin repositorio de campos)
+    WHEN: Se pide la anotación
+    THEN: El nombre va a null, sin error
+    """
+    escenario, partida = await _partida()
+
+    sin_campo = await VerAnotacionDePartidaUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        golf_courses=_NombresDeCampos({}),
+    ).execute(partida.id.value, partida.user_ids[0])
+    sin_repositorio = await _ver(escenario).execute(partida.id.value, partida.user_ids[0])
+
+    assert sin_campo.golf_course_name is None
+    assert sin_repositorio.golf_course_name is None

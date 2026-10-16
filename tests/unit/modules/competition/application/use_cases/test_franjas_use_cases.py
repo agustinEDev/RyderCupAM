@@ -98,12 +98,12 @@ def _hoja(primera="09:00", ultima="12:00", intervalo=10, partida=4) -> TeeSheetD
 
 
 class _CampoDeMadrid:
-    """El repositorio de campos solo para la zona horaria del calendario."""
+    """El repositorio de campos para la zona horaria y el nombre del calendario."""
 
     async def find_by_id(self, _):
         from types import SimpleNamespace
 
-        return SimpleNamespace(timezone="Europe/Madrid")
+        return SimpleNamespace(timezone="Europe/Madrid", name="Golf de Madrid")
 
 
 class _Escenario:
@@ -408,6 +408,22 @@ class TestElCalendario:
         (tarde,) = calendario.days[0].rounds
         assert tarde.scoring_opens_at.isoformat() == "2030-10-12T12:00:00+02:00"
         assert tarde.match_format == "SINGLES"
+        # El nombre del campo, para «Mis Próximos Partidos» (BE #532, 16 oct)
+        assert tarde.golf_course_name == "Golf de Madrid"
+
+    async def test_sin_repositorio_de_campos_o_sin_campo_el_nombre_va_a_null(self, e):
+        await e.torneo(TournamentType.RYDER_CUP)
+        await e.crear(sesion="AFTERNOON", formato="SINGLES")
+
+        class _SinCampo:
+            async def find_by_id(self, _):
+                return None
+
+        for repositorio in (None, _SinCampo()):
+            calendario = await GetScheduleUseCase(e.uow, repositorio).execute(
+                GetScheduleRequestDTO(competition_id=e.competicion.id.value)
+            )
+            assert calendario.days[0].rounds[0].golf_course_name is None
 
     async def test_en_una_ryder_no_hay_cupo_de_franjas(self, e):
         await e.torneo(TournamentType.RYDER_CUP)
