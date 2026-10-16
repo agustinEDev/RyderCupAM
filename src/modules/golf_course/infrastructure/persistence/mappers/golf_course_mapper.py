@@ -469,6 +469,6 @@ def start_golf_course_mappers():
 
     start_hole_map_mappers()
 
-    # Las marcas de los jugadores (PR C) no mapean entidad: basta con que su
-    # tabla entre en el metadata
-    from . import hole_mark_mapper  # noqa: F401, PLC0415 - Circular import
+    # Las muestras anónimas de hoyo no mapean entidad: basta con que su tabla
+    # entre en el metadata
+    from . import hole_sample_mapper  # noqa: F401, PLC0415 - Circular import

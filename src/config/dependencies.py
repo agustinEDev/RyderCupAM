@@ -293,9 +293,9 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
-from src.modules.golf_course.application.use_cases.hole_mark_use_cases import (
-    ListMyHoleMarksUseCase,
-    SaveHoleMarkUseCase,
+from src.modules.golf_course.application.use_cases.hole_sample_use_cases import (
+    ListHoleSamplesUseCase,
+    SubmitHoleSampleUseCase,
 )
 from src.modules.golf_course.application.use_cases.list_approved_golf_courses_use_case import (
     ListApprovedGolfCoursesUseCase,
@@ -3046,18 +3046,18 @@ def get_reject_hole_map_use_case(
     return RejectHoleMapUseCase(uow)
 
 
-def get_save_hole_mark_use_case(
+def get_submit_hole_sample_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
-) -> SaveHoleMarkUseCase:
-    """Proveedor del caso de uso SaveHoleMarkUseCase."""
-    return SaveHoleMarkUseCase(uow)
+) -> SubmitHoleSampleUseCase:
+    """Proveedor del caso de uso SubmitHoleSampleUseCase."""
+    return SubmitHoleSampleUseCase(uow)
 
 
-def get_list_my_hole_marks_use_case(
+def get_list_hole_samples_use_case(
     uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
-) -> ListMyHoleMarksUseCase:
-    """Proveedor del caso de uso ListMyHoleMarksUseCase."""
-    return ListMyHoleMarksUseCase(uow)
+) -> ListHoleSamplesUseCase:
+    """Proveedor del caso de uso ListHoleSamplesUseCase."""
+    return ListHoleSamplesUseCase(uow)
 
 
 # ============================================================================
