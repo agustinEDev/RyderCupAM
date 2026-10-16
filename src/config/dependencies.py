@@ -2055,6 +2055,7 @@ def get_ver_anotacion_de_partida_use_case(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
+        golf_courses=gc_uow.golf_courses,
     )
 
 
@@ -2154,10 +2155,13 @@ def get_ver_partidas_use_case(
 
 def get_mis_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> MisPartidasUseCase:
-    """Mis partidas en una competición (#251)."""
-    return MisPartidasUseCase(uow=uow, user_repository=user_uow.users)
+    """Mis partidas en una competición (#251), con el nombre de su campo (BE #532)."""
+    return MisPartidasUseCase(
+        uow=uow, user_repository=user_uow.users, golf_courses=gc_uow.golf_courses
+    )
 
 
 def get_esperar_use_case(

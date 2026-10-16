@@ -73,6 +73,9 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -455,10 +458,15 @@ class MisPartidasUseCase:
     """Las partidas de quien pregunta en una competición, por día y hora de salida."""
 
     def __init__(
-        self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface,
+        golf_courses: IGolfCourseRepository | None = None,
     ):
         self._uow = uow
         self._usuarios = user_repository
+        # Para el nombre del campo de cada franja («Mis Próximos Partidos», BE #532)
+        self._campos = golf_courses
 
     async def execute(self, competition_id: UUID, quien: UserId) -> MyTeeGroupsResponseDTO:
         """
@@ -484,6 +492,13 @@ class MisPartidasUseCase:
                 self._usuarios,
                 self._uow,
             )
+            campos = (
+                await self._campos.find_names_by_ids(
+                    list({franja.golf_course_id for franja, _ in franjas.values()})
+                )
+                if self._campos and franjas
+                else {}
+            )
             mias = []
             for partida in partidas:
                 if partida.round_id not in franjas:
@@ -496,6 +511,8 @@ class MisPartidasUseCase:
                             round_id=franja.id.value,
                             round_date=franja.round_date,
                             session_type=franja.session_type.value,
+                            golf_course_id=franja.golf_course_id.value,
+                            golf_course_name=campos.get(str(franja.golf_course_id)),
                             group=partida_dto(partida, hoja, nombres),
                         ),
                     )

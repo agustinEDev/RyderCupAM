@@ -292,3 +292,93 @@ async def test_my_groups_without_any():
     )
 
     assert mias.groups == []
+
+
+class _NombresDeCampos:
+    def __init__(self, nombres):
+        self.nombres = nombres
+        self.pedidos = []
+
+    async def find_names_by_ids(self, ids):
+        self.pedidos.append(sorted(str(i) for i in ids))
+        return {str(i): self.nombres[str(i)] for i in ids if str(i) in self.nombres}
+
+
+async def test_my_groups_carry_their_course_id_and_name_in_one_query():
+    """
+    GIVEN: Mis partidas en dos franjas de campos distintos (uno ya no está)
+    WHEN: Pido mis partidas
+    THEN: Cada una lleva el id y el nombre de su campo (null si no está), en una
+          sola consulta de nombres (BE #532, 16 oct: «Mis Próximos Partidos»)
+    """
+    escenario = _Escenario()
+    await escenario.guardar()
+    yo = await escenario.con_plaza("5.0", franja=escenario.tarde)
+    await escenario.con_plaza("6.0", franja=escenario.tarde)
+    await escenario.generar(franja=escenario.tarde)
+    otro_campo = GolfCourseId.generate()
+    temprano = Round.create_franja(
+        competition_id=escenario.competicion.id,
+        golf_course_id=otro_campo,
+        round_date=VIERNES,
+        session_type=SessionType.EVENING,
+        hoja_de_salidas=HojaDeSalidas(time(7, 0), time(8, 0), 10, 4),
+    )
+    async with escenario.uow:
+        await escenario.uow.rounds.add(temprano)
+    tarde_partida = (await escenario.uow.partidas.de_la_franja(escenario.tarde.id))[0]
+    yo_jugador = next(j for j in tarde_partida.jugadores if j.user_id == yo)
+    otro = next(j for j in tarde_partida.jugadores if j.user_id != yo)
+    await escenario.uow.partidas.anadir(
+        [Partida.crear(escenario.competicion.id, temprano.id, 1, [yo_jugador, otro])]
+    )
+    campos = _NombresDeCampos({str(escenario.tarde.golf_course_id): "Golf de Meis - Par 72"})
+
+    mias = await MisPartidasUseCase(
+        uow=escenario.uow, user_repository=escenario.usuarios, golf_courses=campos
+    ).execute(escenario.competicion.id.value, yo)
+
+    assert [(g.golf_course_id, g.golf_course_name) for g in mias.groups] == [
+        (otro_campo.value, None),
+        (escenario.tarde.golf_course_id.value, "Golf de Meis - Par 72"),
+    ]
+    assert campos.pedidos == [sorted([str(otro_campo), str(escenario.tarde.golf_course_id)])]
+
+
+async def test_my_groups_without_a_courses_repository_carry_no_name():
+    """
+    GIVEN: Mis partidas, sin repositorio de campos
+    WHEN: Pido mis partidas
+    THEN: Llevan el id del campo y el nombre a null, sin error
+    """
+    escenario = _Escenario()
+    await escenario.guardar()
+    yo = await escenario.con_plaza("5.0", franja=escenario.tarde)
+    await escenario.con_plaza("6.0", franja=escenario.tarde)
+    await escenario.generar(franja=escenario.tarde)
+
+    mias = await MisPartidasUseCase(uow=escenario.uow, user_repository=escenario.usuarios).execute(
+        escenario.competicion.id.value, yo
+    )
+
+    assert mias.groups
+    assert all(g.golf_course_name is None for g in mias.groups)
+    assert all(g.golf_course_id == escenario.tarde.golf_course_id.value for g in mias.groups)
+
+
+async def test_my_groups_without_any_do_not_ask_for_course_names():
+    """
+    GIVEN: Un jugador sin partidas
+    WHEN: Pide sus partidas
+    THEN: Vacío, y sin consultar nombres de campos
+    """
+    escenario = _Escenario()
+    await escenario.guardar()
+    campos = _NombresDeCampos({})
+
+    mias = await MisPartidasUseCase(
+        uow=escenario.uow, user_repository=escenario.usuarios, golf_courses=campos
+    ).execute(escenario.competicion.id.value, UserId.generate())
+
+    assert mias.groups == []
+    assert campos.pedidos == []

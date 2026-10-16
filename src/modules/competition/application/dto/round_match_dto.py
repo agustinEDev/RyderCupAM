@@ -101,6 +101,9 @@ class RoundResponseDTO(BaseModel):
     id: UUID = Field(..., description="ID de la ronda.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     golf_course_id: UUID = Field(..., description="ID del campo de golf.")
+    golf_course_name: str | None = Field(
+        default=None, description="Nombre del campo de golf; null si no se encuentra."
+    )
     round_date: date = Field(..., description="Fecha de la ronda.")
     session_type: str = Field(..., description="Tipo de sesión (MORNING/AFTERNOON/EVENING).")
     match_format: str | None = Field(

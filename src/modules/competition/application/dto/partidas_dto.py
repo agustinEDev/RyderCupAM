@@ -132,6 +132,10 @@ class MyTeeGroupDTO(BaseModel):
     round_id: UUID
     round_date: date
     session_type: str
+    golf_course_id: UUID = Field(..., description="Campo de la franja")
+    golf_course_name: str | None = Field(
+        default=None, description="Su nombre, para «Mis Próximos Partidos»; null si no está"
+    )
     group: TeeGroupDTO
 
 
@@ -210,6 +214,9 @@ class TeeGroupScoringViewDTO(BaseModel):
     group_id: UUID
     round_id: UUID
     golf_course_id: UUID = Field(..., description="Campo de la franja: para pedir su mapa de hoyos")
+    golf_course_name: str | None = Field(
+        default=None, description="Su nombre, bajo el título de la anotación; null si no está"
+    )
     number: int
     tee_time: str
     status: str

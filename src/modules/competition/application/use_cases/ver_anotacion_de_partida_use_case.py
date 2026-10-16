@@ -35,6 +35,9 @@ from src.modules.competition.domain.value_objects.jugador_de_partida import (
 )
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -49,10 +52,13 @@ class VerAnotacionDePartidaUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
+        golf_courses: IGolfCourseRepository | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
+        # Para el nombre del campo bajo el título de la anotación (BE #532)
+        self._campos = golf_courses
 
     async def execute(self, group_id: UUID, quien: UserId) -> TeeGroupScoringViewDTO:
         """
@@ -84,6 +90,11 @@ class VerAnotacionDePartidaUseCase:
             nombres = await PlayerNames.de_la_competicion(
                 quienes, partida.competition_id, self._usuarios, self._uow
             )
+            nombres_de_campos = (
+                await self._campos.find_names_by_ids([franja.golf_course_id])
+                if self._campos
+                else {}
+            )
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
         jugaron = partida.quienes_jugaron(golpes)
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
@@ -92,6 +103,7 @@ class VerAnotacionDePartidaUseCase:
             group_id=partida.id.value,
             round_id=partida.round_id.value,
             golf_course_id=franja.golf_course_id.value,
+            golf_course_name=nombres_de_campos.get(str(franja.golf_course_id)),
             number=partida.numero,
             tee_time=franja.hoja_de_salidas.hora_de(partida.numero).strftime("%H:%M"),
             status=partida.estado.value,
