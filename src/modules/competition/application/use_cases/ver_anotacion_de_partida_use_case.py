@@ -90,13 +90,15 @@ class VerAnotacionDePartidaUseCase:
             nombres = await PlayerNames.de_la_competicion(
                 quienes, partida.competition_id, self._usuarios, self._uow
             )
+            nombres_de_campos = (
+                await self._campos.find_names_by_ids([franja.golf_course_id])
+                if self._campos
+                else {}
+            )
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
         jugaron = partida.quienes_jugaron(golpes)
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
         marca = partida.marcadores.get(quien)
-        nombres_de_campos = (
-            await self._campos.find_names_by_ids([franja.golf_course_id]) if self._campos else {}
-        )
         return TeeGroupScoringViewDTO(
             group_id=partida.id.value,
             round_id=partida.round_id.value,

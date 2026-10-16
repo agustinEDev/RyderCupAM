@@ -480,8 +480,13 @@ async def test_my_groups(client: AsyncClient):
     )
     assert otros[0]["user"]["id"] in {p["user_id"] for p in mia["group"]["players"]}
     # El campo de la franja, para «Mis Próximos Partidos» (BE #532, 16 oct)
-    assert mia["golf_course_id"]
-    assert mia["golf_course_name"]
+    from tests.integration.api.v1.test_tee_group_scoring_endpoints import (
+        _campo_de_la_franja,
+        _nombre_del_campo,
+    )
+
+    assert mia["golf_course_id"] == await _campo_de_la_franja(franja)
+    assert mia["golf_course_name"] == await _nombre_del_campo(mia["golf_course_id"])
     assert ningunas.json() == {"groups": []}
 
 

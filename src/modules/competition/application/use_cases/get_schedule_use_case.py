@@ -34,6 +34,7 @@ from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 if TYPE_CHECKING:
@@ -128,7 +129,7 @@ class GetScheduleUseCase:
         # competicion juega en uno o dos, no en veinte
         # (y su nombre, para «Mis Próximos Partidos», BE #532)
         zonas_por_campo: dict = {}
-        nombres_por_campo: dict = {}
+        nombres_por_campo: dict[GolfCourseId, str | None] = {}
         if self._gc_repo:
             for round_entity, _ in rounds_with_matches:
                 if round_entity.golf_course_id in zonas_por_campo:
