@@ -43,6 +43,7 @@ puede ser solo green (quien abre el mapa a mitad de hoyo).
 | 3 amarillas-hombre y luego 1 roja-mujer             | La roja no se guarda (tres por hoyo)       |
 | Mismo jugador, otra barra del mismo hoyo            | No se guarda (la ventana es por hoyo)      |
 | Solo green                                          | Se guarda y cuenta para las tres           |
+| Una segunda solo green                              | No se guarda: una por hoyo (deja sitio a las completas) |
 | Solo green con codos, o lejos del campo             | No se guarda, sin error                    |
 | Lectura                                             | La primera completa y el primer green suelto |
 | Barra que el campo no tiene                         | No se guarda, sin error, no gasta ventana  |
@@ -360,7 +361,7 @@ async def test_s1_the_cap_is_per_hole_and_per_course():
     assert await _stored(uow, otro, 1) == 1
 
 
-async def _hole_map(course, with_green=True, approved=True, number=1):
+async def _hole_map(course, with_green=True, approved=True, number=1, rejected=False):
     tee, green = GeoPoint(*SALIDA), GeoPoint(*GREEN)
     hole_map = CourseHoleMap.create(
         golf_course_id=course.id,
@@ -379,7 +380,9 @@ async def _hole_map(course, with_green=True, approved=True, number=1):
         osm_reference="way/1",
         imported_at=datetime(2026, 10, 15, 9, 0),
     )
-    if approved:
+    if rejected:
+        hole_map.reject(reviewer_id=UserId.generate())
+    elif approved:
         hole_map.approve(reviewer_id=UserId.generate())
     return hole_map
 
@@ -405,6 +408,7 @@ async def test_s1_a_hole_of_an_approved_osm_map_with_line_and_green_does_not_col
         pytest.param({"with_green": False}, 1, id="el hoyo del mapa no trae green"),
         pytest.param({}, 2, id="el hoyo no está en el mapa"),
         pytest.param({"approved": False}, 1, id="el mapa está pendiente"),
+        pytest.param({"rejected": True}, 1, id="el mapa está rechazado"),
     ],
 )
 async def test_s1_other_holes_of_a_course_with_a_map_collect(map_args, hole):
@@ -1084,3 +1088,23 @@ async def test_s10_without_samples_the_hole_has_nothing_and_collects():
     hole = await _hole(*await _setup())
 
     assert (hole.first_sample, hole.first_green, hole.collecting) == (None, None, True)
+
+
+async def test_s10_only_one_green_only_sample_per_hole():
+    """
+    GIVEN: Una muestra solo green en el hoyo 1
+    WHEN: Llegan otras dos solo green y luego dos completas
+    THEN: Las solo green de más no se guardan; las dos completas, sí: si no,
+          tres a mitad de hoyo cerrarían el hoyo sin que nadie pudiera completarlo
+          (/code-review, 17 oct; como mucho una, la única que se lee)
+    """
+    uow, course = await _setup()
+    await _submit(uow, course, tee=None)
+
+    for _ in range(2):
+        await _submit(uow, course, tee=None, green=_north(320))
+    for _ in range(2):
+        await _submit(uow, course)
+
+    samples = await uow.hole_samples.list_by_course(course.id)
+    assert [x.is_green_only for x in samples] == [True, False, False]

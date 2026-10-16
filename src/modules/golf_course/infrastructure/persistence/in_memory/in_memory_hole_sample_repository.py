@@ -29,6 +29,14 @@ class InMemoryHoleSampleRepository(IHoleSampleRepository):
             if sample.golf_course_id == golf_course_id and sample.hole_number == hole_number
         )
 
+    async def has_green_only(self, golf_course_id: GolfCourseId, hole_number: int) -> bool:
+        return any(
+            sample.golf_course_id == golf_course_id
+            and sample.hole_number == hole_number
+            and sample.is_green_only
+            for _, sample in self._samples.values()
+        )
+
     async def add(self, sample: HoleSample) -> bool:
         if sample.id in self._samples:
             return False  # Como ON CONFLICT (id) DO NOTHING

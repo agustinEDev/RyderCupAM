@@ -238,6 +238,7 @@ class HoleSample:
 
     @property
     def is_green_only(self) -> bool:
+        """Si es una muestra solo green: sin salida ni codos (17 oct)."""
         return self._tee is None
 
     @property

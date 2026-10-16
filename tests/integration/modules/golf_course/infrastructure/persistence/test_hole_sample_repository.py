@@ -473,3 +473,17 @@ async def test_r3_the_same_player_three_at_once_is_one_row(db_session, slow_coun
     )
 
     assert await _count(db_session, course_id, 1) == 1
+
+
+@pytest.mark.asyncio
+async def test_r1_has_green_only_is_per_course_and_hole(db_session):
+    """Una solo green en el hoyo 1: el 1 la tiene; el 2 (solo completas) y otro campo, no."""
+    course_id = await _course(db_session)
+    otro = await _course(db_session)
+    repository = HoleSampleRepository(db_session)
+    await repository.add(_sample(course_id, tee=None))
+    await repository.add(_sample(course_id, hole=2))
+
+    assert await repository.has_green_only(course_id, 1) is True
+    assert await repository.has_green_only(course_id, 2) is False
+    assert await repository.has_green_only(otro, 1) is False

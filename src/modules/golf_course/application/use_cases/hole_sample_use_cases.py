@@ -9,7 +9,8 @@ Casos de uso de las muestras anónimas de hoyo (BE #532, reglas del 16 oct 2026)
   del campo), si su id ya está guardado (un reenvío), si el jugador ya aportó
   otra a ese hoyo en los últimos 10 minutos, o si el mapa de OSM aprobado ya
   trae el hoyo con línea y green (17 oct: con lo de OSM basta): el jugador no
-  debe notarlo. Una muestra puede ser solo green (sin salida ni codos).
+  debe notarlo. Una muestra puede ser solo green (sin salida ni codos), y de
+  esas, una por hoyo.
 - Leer: de cada hoyo, su primera muestra completa, el green de su primera
   muestra solo green y si sigue recogiendo; y, para los móviles de antes, sus
   barras con muestra completa. Nunca cuántas hay ni de quién son.
@@ -80,7 +81,8 @@ def _mapped(hole_map: CourseHoleMap | None, hole: int) -> bool:
     if hole_map is None or hole_map.status is not HoleMapStatus.APPROVED:
         return False
     mapped = hole_map.hole(hole)
-    return mapped is not None and mapped.green is not None and len(mapped.play_line) > 1
+    # Un hoyo del mapa siempre trae línea (al menos dos puntos); falta el green o no
+    return mapped is not None and not mapped.needs_green
 
 
 def _point(point: PointDTO) -> GeoPoint:
@@ -128,13 +130,6 @@ class SubmitHoleSampleUseCase:
                 # salir de otras salidas, y se muestrea aparte (Agustín, 15 oct)
                 if not MIN_HOLE_NUMBER <= hole <= MAX_HOLE_NUMBER:
                     raise HoleNotInCourseError(hole)
-                if _mapped(await self._uow.hole_maps.find_by_golf_course_id(course_id), hole):
-                    logger.debug(
-                        "Hole sample not stored (course %s, hole %s): mapped hole",
-                        course_id,
-                        hole,
-                    )
-                    return SubmitHoleSampleResponseDTO()
                 sample = self._sample(request, course, course_id)
                 if sample is None:
                     return SubmitHoleSampleResponseDTO()
@@ -201,9 +196,25 @@ class SubmitHoleSampleUseCase:
         course_id, hole = sample.golf_course_id, sample.hole_number
         samples = self._uow.hole_samples
         await samples.lock_hole(course_id, hole)
+        # Con el hoyo ya bloqueado, y tras lo que se mira sin la BD (la muestra,
+        # la ventana del jugador): el mapa de OSM aprobado ya lo trae (17 oct)
+        if _mapped(await self._uow.hole_maps.find_by_golf_course_id(course_id), hole):
+            logger.debug(
+                "Hole sample not stored (course %s, hole %s): mapped hole", course_id, hole
+            )
+            return False
         if await samples.exists(sample.id):
             logger.debug(
                 "Hole sample not stored (course %s, hole %s): repeated id", course_id, hole
+            )
+            return False
+        # Una solo green por hoyo, la única que se lee: tres a mitad de hoyo
+        # dejarían el hoyo lleno sin que nadie pudiera completarlo (17 oct)
+        if sample.is_green_only and await samples.has_green_only(course_id, hole):
+            logger.debug(
+                "Hole sample not stored (course %s, hole %s): hole already has its green",
+                course_id,
+                hole,
             )
             return False
         if await samples.count_for_hole(course_id, hole) >= MAX_SAMPLES_PER_HOLE:

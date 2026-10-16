@@ -37,15 +37,15 @@ def upgrade() -> None:
         "golf_course_hole_samples",
         "Muestras anónimas de los hoyos (las tres primeras por hoyo), sin autor ni hora",
     )
-    op.alter_column(
-        "golf_course_hole_samples", "tee_latitude", comment="Salida (NULL: solo green)"
-    )
+    op.alter_column("golf_course_hole_samples", "tee_latitude", comment="Salida (NULL: solo green)")
 
 
 def downgrade() -> None:
     """Las de solo green no caben en el esquema de antes: se borran."""
+    op.execute(
+        "DELETE FROM golf_course_hole_samples WHERE tee_latitude IS NULL OR tee_longitude IS NULL"
+    )
     op.drop_constraint(_CHECK, "golf_course_hole_samples", type_="check")
-    op.execute("DELETE FROM golf_course_hole_samples WHERE tee_latitude IS NULL")
     op.alter_column("golf_course_hole_samples", "tee_latitude", nullable=False, comment="Salida")
     op.alter_column("golf_course_hole_samples", "tee_longitude", nullable=False)
     op.create_table_comment(

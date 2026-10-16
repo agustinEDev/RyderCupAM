@@ -70,6 +70,18 @@ class HoleSampleRepository(IHoleSampleRepository):
         )
         return int(result.scalar_one())
 
+    async def has_green_only(self, golf_course_id: GolfCourseId, hole_number: int) -> bool:
+        result = await self._session.execute(
+            select(_table.c.id)
+            .where(
+                _table.c.golf_course_id == golf_course_id,
+                _table.c.hole_number == hole_number,
+                _table.c.tee_latitude.is_(None),
+            )
+            .limit(1)
+        )
+        return result.first() is not None
+
     async def add(self, sample: HoleSample) -> bool:
         # `seq` lo pone PostgreSQL (identidad): es el orden de llegada
         statement = (

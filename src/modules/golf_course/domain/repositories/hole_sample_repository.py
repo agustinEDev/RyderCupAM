@@ -1,8 +1,9 @@
 """
 Hole Sample Repository Interface - Golf Course Module Domain Layer.
 
-Las muestras anónimas de hoyo (BE #532, 16 oct 2026): como mucho tres por
-campo, hoyo y barra, sin quién las mandó y sin la hora.
+Las muestras anónimas de hoyo (BE #532): como mucho tres por campo y hoyo, de
+cualquier barra (BE #575, 17 oct), y de ellas como mucho una solo green; sin
+quién las mandó y sin la hora.
 """
 
 from abc import ABC, abstractmethod
@@ -30,6 +31,10 @@ class IHoleSampleRepository(ABC):
     @abstractmethod
     async def count_for_hole(self, golf_course_id: GolfCourseId, hole_number: int) -> int:
         """Cuántas muestras hay guardadas del hoyo, de cualquier barra."""
+
+    @abstractmethod
+    async def has_green_only(self, golf_course_id: GolfCourseId, hole_number: int) -> bool:
+        """Si el hoyo ya tiene una muestra solo green (sin salida)."""
 
     @abstractmethod
     async def add(self, sample: HoleSample) -> bool:
