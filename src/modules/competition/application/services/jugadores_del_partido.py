@@ -110,13 +110,15 @@ class JugadoresDelPartido:
         user_handicap_map: dict[str, Decimal] = {}
         user_gender_map: dict[str, Gender | None] = {}
 
-        if not is_scratch:
-            golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
-            if not golf_course:
-                raise ValueError(
-                    "Se requiere un campo de golf para el modo HANDICAP. "
-                    "Asocie un campo de golf aprobado a la competición."
-                )
+        # También en SCRATCH: sin golpes, pero cada uno guarda el género de su
+        # barra, y con él su tarjeta y las muestras del mapa (RyderCupWeb #880)
+        golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+        if not golf_course and not is_scratch:
+            raise ValueError(
+                "Se requiere un campo de golf para el modo HANDICAP. "
+                "Asocie un campo de golf aprobado a la competición."
+            )
+        if golf_course:
             context = course_context_for(golf_course)
             tee_ratings = context.tee_ratings
             holes_by_stroke_index = context.holes_by_stroke_index
@@ -125,7 +127,8 @@ class JugadoresDelPartido:
             for user in await self._user_repo.find_by_ids(list(player_ids)):
                 if user.id is None:
                     continue
-                if user.handicap is not None:
+                # En SCRATCH solo el género: el hándicap no cuenta
+                if not is_scratch and user.handicap is not None:
                     user_handicap_map[str(user.id.value)] = Decimal(str(user.handicap.value))
                 user_gender_map[str(user.id.value)] = user.gender
 
