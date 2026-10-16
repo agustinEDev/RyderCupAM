@@ -23,6 +23,7 @@ Integration tests de las muestras anónimas de hoyo (BE #532, 16 oct 2026).
 | Sin color o género, o con valores que no existen | 422 de validación (el género puede ser null) |
 | 3 amarillas-hombre y 3 rojas-mujer, y una 4.ª   | 204 todas; seis filas                      |
 | Lectura con varias barras                       | Por orden de su primera muestra            |
+| Barra resuelta contra el campo                  | Hombre en amarillas sin género, misma barra; azules que no tiene, no se guardan |
 | Sentry en estas rutas                           | Nunca recibe al usuario; en otras, sí      |
 """
 
@@ -34,8 +35,14 @@ from httpx import AsyncClient
 from sqlalchemy import text
 
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from tests.conftest import create_authenticated_user, create_golf_course
-from tests.integration.api.v1.test_hole_map_endpoints import _as, _in_db, _save_map, _scenario
+from tests.conftest import approve_golf_course, create_authenticated_user, create_golf_course
+from tests.integration.api.v1.test_hole_map_endpoints import (
+    _as,
+    _in_db,
+    _make_admin,
+    _save_map,
+    _scenario,
+)
 
 M_PER_DEGREE = 6_371_000.0 * 3.141592653589793 / 180
 SALIDA = {"latitude": 36.28, "longitude": -5.33}
@@ -537,31 +544,100 @@ async def test_e4_sentry_never_gets_the_user_on_these_routes(client: AsyncClient
 # ============================================================================
 
 
+def _tee(color: str, gender: str | None, rating: float) -> dict:
+    return {
+        "identifier": f"{color}-{gender}",
+        "color": color,
+        "tee_gender": gender,
+        "course_rating": rating,
+        "slope_rating": 128,
+        "par": 72,
+    }
+
+
+async def _scenario_with_tees(client: AsyncClient, tag: str, tees: list[dict]):
+    """Como `_scenario`, pero con las barras que se pidan."""
+    creator = await create_authenticated_user(
+        client, f"creator-{tag}@test.com", "P@ssw0rd123!", "Creator", "Map"
+    )
+    course = await create_golf_course(
+        client,
+        creator["cookies"],
+        {
+            "name": f"Campo {tag}",
+            "country_code": "ES",
+            "course_type": "STANDARD_18",
+            "tees": tees,
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
+        },
+    )
+    admin_email = f"admin-{tag}@test.com"
+    admin = await create_authenticated_user(client, admin_email, "AdminPass123!", "Admin", "Map")
+    await _make_admin(admin_email)
+    await approve_golf_course(client, admin["cookies"], course["id"])
+    player = await create_authenticated_user(
+        client, f"player-{tag}@test.com", "P@ssw0rd123!", "Player", "Map"
+    )
+    return course["id"], player
+
+
 @pytest.mark.asyncio
 async def test_e5_the_cap_is_per_tee_and_the_read_lists_each_tee(client: AsyncClient):
     """
-    GIVEN: Tres jugadores que mandan el hoyo 1 desde amarillas de hombre y desde rojas
-           de mujer (las rojas primero), y uno más desde amarillas sin género
-    WHEN: Un cuarto manda otra desde amarillas de hombre, y se leen
+    GIVEN: Un campo con rojas de mujer, amarillas de hombre y blancas sin género; tres
+           jugadores mandan el hoyo 1 desde rojas y desde amarillas (las rojas primero),
+           y otro desde blancas
+    WHEN: Ese otro manda además una desde amarillas, y se leen
     THEN: 204 todas; 3 + 3 + 1 filas; el hoyo 1 trae tres barras en el orden de su
-          primera muestra: rojas-mujer y amarillas-hombre llenas, amarillas sin género recogiendo
+          primera muestra: rojas y amarillas llenas, blancas recogiendo
     """
-    course_id, _, _, player = await _scenario(client, "e5")
+    course_id, player = await _scenario_with_tees(
+        client,
+        "e5",
+        [_tee("RED", "FEMALE", 70.0), _tee("YELLOW", "MALE", 71.0), _tee("WHITE", None, 72.0)],
+    )
     rojas = {"tee_color": "RED", "tee_gender": "FEMALE"}
     for who in await _players(client, "e5", 3):
         c = _as(client, who)
         assert (await c.post(_url(course_id), json=_new({**BODY, **rojas}))).status_code == 204
         assert (await c.post(_url(course_id), json=_new())).status_code == 204
     c = _as(client, player)
-    sin_genero = await c.post(_url(course_id), json=_new({**BODY, "tee_gender": None}))
+    blancas = await c.post(
+        _url(course_id), json=_new({**BODY, "tee_color": "WHITE", "tee_gender": None})
+    )
 
     cuarta = await c.post(_url(course_id), json=_new())
 
-    assert (sin_genero.status_code, cuarta.status_code) == (204, 204)
+    assert (blancas.status_code, cuarta.status_code) == (204, 204)
     assert await _rows(course_id) == 7
     tees = (await c.get(_list(course_id))).json()[0]["tees"]
     assert [(t["tee_color"], t["tee_gender"], t["collecting"]) for t in tees] == [
         ("RED", "FEMALE", False),
         ("YELLOW", "MALE", False),
-        ("YELLOW", None, True),
+        ("WHITE", None, True),
     ]
+
+
+@pytest.mark.asyncio
+async def test_e5_the_tee_is_resolved_against_the_course(client: AsyncClient):
+    """
+    GIVEN: Un campo con amarillas sin género (y rojas de mujer)
+    WHEN: Un jugador manda desde amarillas de hombre, otro desde amarillas sin género, y
+          un tercero desde azules (el campo no las tiene)
+    THEN: 204 las tres; las dos amarillas van a la misma barra, sin género; las azules no se guardan
+    """
+    course_id, player = await _scenario_with_tees(
+        client, "e5b", [_tee("YELLOW", None, 71.0), _tee("RED", "FEMALE", 70.0)]
+    )
+    a, b = await _players(client, "e5b", 2)
+
+    responses = [
+        await _as(client, a).post(_url(course_id), json=_new()),
+        await _as(client, b).post(_url(course_id), json=_new({**BODY, "tee_gender": None})),
+        await _as(client, player).post(_url(course_id), json=_new({**BODY, "tee_color": "BLUE"})),
+    ]
+
+    assert [r.status_code for r in responses] == [204, 204, 204]
+    assert await _rows(course_id) == 2
+    (tee,) = (await _as(client, player).get(_list(course_id))).json()[0]["tees"]
+    assert (tee["tee_color"], tee["tee_gender"]) == ("YELLOW", None)

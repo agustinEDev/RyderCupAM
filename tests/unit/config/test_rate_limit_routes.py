@@ -13,7 +13,15 @@ from fastapi.routing import APIRoute
 
 from main import app
 from src.config.dependencies import get_current_user
-from src.config.rate_limit import get_client_identifier, get_rate_limit_key, limiter
+from src.config.rate_limit import (
+    get_client_identifier,
+    get_hole_sample_rate_limit_key,
+    get_rate_limit_key,
+    limiter,
+)
+
+# Rutas con sesión que cuentan por usuario sin decir quién en el log (BE #532)
+ANONYMOUS_USER_KEYS = {"submit_hole_sample": get_hole_sample_rate_limit_key}
 
 
 def _routes(routes) -> Iterator[APIRoute]:
@@ -63,12 +71,16 @@ def test_every_limited_route_with_session_counts_per_user():
     """
     Given: Las rutas con límite que exigen sesión
     When: Se mira la clave de cada límite
-    Then: Todas cuentan por usuario
+    Then: Todas cuentan por usuario (la de muestras de hoyo, con su clave sin el id)
     """
     wrong = [
         _label(route)
         for route, limits, requires_session in _limited_routes()
-        if requires_session and any(lim.key_func is not get_rate_limit_key for lim in limits)
+        if requires_session
+        and any(
+            lim.key_func is not ANONYMOUS_USER_KEYS.get(route.endpoint.__name__, get_rate_limit_key)
+            for lim in limits
+        )
     ]
 
     assert wrong == []

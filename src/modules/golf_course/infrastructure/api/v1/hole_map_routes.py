@@ -28,7 +28,7 @@ from src.config.dependencies import (
     get_reject_hole_map_use_case,
     get_submit_hole_sample_use_case,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import get_hole_sample_rate_limit_key, limiter
 from src.modules.golf_course.application.dtos.hole_map_dtos import (
     ApproveHoleMapBodyDTO,
     GetHoleMapRequestDTO,
@@ -234,7 +234,9 @@ def _course_not_found() -> JSONResponse:
         422: {"description": "HOLE_NOT_IN_COURSE, or a malformed body"},
     },
 )
-@limiter.limit("60/minute")  # Por usuario: una vuelta son 18, y la cola los manda seguidos
+# Por usuario (una vuelta son 18, y la cola los manda seguidos), con una clave que
+# en el log no dice quién
+@limiter.limit("60/minute", key_func=get_hole_sample_rate_limit_key)
 async def submit_hole_sample(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     golf_course_id: UUID,
@@ -293,6 +295,9 @@ async def list_hole_samples(
     primera muestra), cada una con esa primera muestra y si sigue recogiendo.
     """
     try:
-        return await use_case.execute(ListHoleSamplesRequestDTO(golf_course_id=str(golf_course_id)))
+        response = await use_case.execute(
+            ListHoleSamplesRequestDTO(golf_course_id=str(golf_course_id))
+        )
     except GolfCourseNotFoundError:
         return _course_not_found()
+    return response.holes

@@ -38,6 +38,10 @@ ventana una muestra que de verdad se guardó y se confirmó. Y todo va por barra
 | 3 amarillas-hombre y 3 rojas-mujer                  | Se guardan las seis; la 4.ª amarilla, no   |
 | Amarillas sin género                                | Otra barra distinta de amarillas-hombre    |
 | Mismo jugador, otra barra del mismo hoyo            | Se guarda (la ventana es por barra)        |
+| Barra que el campo no tiene                         | No se guarda, sin error, no gasta ventana  |
+| Campo con amarillas sin género                      | Hombre y sin género, la misma barra        |
+| La ventana y el cubo                                | Con la barra resuelta del campo            |
+| Respuesta del caso de uso                           | Siempre SubmitHoleSampleResponseDTO vacío  |
 | Mismo id dos veces                                  | Cuenta una                                 |
 | Mismo id en otro hoyo                               | No se guarda (el id es único)              |
 | Un id repetido no gasta hueco                       | Las nuevas de después llenan el hoyo       |
@@ -58,8 +62,10 @@ import pytest
 from src.modules.golf_course.application.dtos.hole_sample_dtos import (
     HoleSampleStatusDTO,
     ListHoleSamplesRequestDTO,
+    ListHoleSamplesResponseDTO,
     PointDTO,
     SubmitHoleSampleRequestDTO,
+    SubmitHoleSampleResponseDTO,
 )
 from src.modules.golf_course.application.exceptions import (
     GolfCourseNotFoundError,
@@ -110,21 +116,21 @@ def _north(metres: float, of=SALIDA) -> tuple[float, float]:
     return (of[0] + metres / M_PER_DEGREE, of[1])
 
 
-def _course(physical_holes=None, location=None, approved=True) -> GolfCourse:
+def _tee(color: TeeColor, gender: Gender | None) -> Tee:
+    return Tee(color=color, gender=gender, identifier=None, course_rating=71.2, slope_rating=128)
+
+
+# Las barras del campo de prueba: amarillas de hombre, rojas de mujer y blancas sin género
+BARRAS = ((TeeColor.YELLOW, Gender.MALE), (TeeColor.RED, Gender.FEMALE), (TeeColor.WHITE, None))
+
+
+def _course(physical_holes=None, location=None, approved=True, tees=BARRAS) -> GolfCourse:
     course = GolfCourse.create(
         name="Valderrama",
         country_code=CountryCode("ES"),
         course_type=CourseType.STANDARD_18,
         creator_id=UserId.generate(),
-        tees=[
-            Tee(
-                color=TeeColor.YELLOW,
-                gender=Gender.MALE,
-                identifier=None,
-                course_rating=71.2,
-                slope_rating=128,
-            )
-        ],
+        tees=[_tee(color, gender) for color, gender in tees],
         holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
         location=location,
         physical_holes=physical_holes,
@@ -204,13 +210,16 @@ def _request(
 
 async def _submit(uow, course, **kwargs) -> None:
     result = await _use_case(uow).execute(_request(course, **kwargs))
-    assert result is None  # Siempre lo mismo: el jugador nunca nota nada
+    # Siempre lo mismo: el jugador nunca nota nada
+    assert result == SubmitHoleSampleResponseDTO()
 
 
 async def _read(uow, course) -> list[HoleSampleStatusDTO]:
-    return await ListHoleSamplesUseCase(uow).execute(
+    response = await ListHoleSamplesUseCase(uow).execute(
         ListHoleSamplesRequestDTO(golf_course_id=str(course.id))
     )
+    assert isinstance(response, ListHoleSamplesResponseDTO)
+    return response.holes
 
 
 async def _hole(uow, course, number=1) -> HoleSampleStatusDTO:
@@ -221,6 +230,15 @@ async def _tee_of(uow, course, number=1, color=TeeColor.YELLOW, gender=Gender.MA
     """La barra del hoyo en la lectura; None si no tiene ninguna muestra."""
     hole = await _hole(uow, course, number)
     return next((t for t in hole.tees if (t.tee_color, t.tee_gender) == (color, gender)), None)
+
+
+def _window_open(uow, course, color=TeeColor.YELLOW, gender=Gender.MALE) -> bool:
+    """Si el jugador podría aportar ya a esa barra del hoyo 1 (sin dejarla reservada)."""
+    key = (JUGADOR, course.id, 1, color, gender)
+    if not uow.senders.reserve(*key):
+        return False
+    uow.senders.release(*key)
+    return True
 
 
 async def _stored(uow, course, hole=1, color=TeeColor.YELLOW, gender=Gender.MALE) -> int:
@@ -589,7 +607,7 @@ async def test_s4_collecting_until_three():
 async def test_s4_tees_are_ordered_by_their_first_sample():
     """
     GIVEN: En el hoyo 1 llegan, por este orden: rojas de mujer, amarillas de hombre,
-           otra de rojas y una de amarillas sin género
+           otra de rojas y una de blancas sin género
     WHEN: Se leen
     THEN: Tres barras, en el orden en que llegó su primera muestra
     """
@@ -597,14 +615,14 @@ async def test_s4_tees_are_ordered_by_their_first_sample():
     await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
     await _submit(uow, course)
     await _submit(uow, course, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
-    await _submit(uow, course, tee_gender=None)
+    await _submit(uow, course, tee_color=TeeColor.WHITE, tee_gender=None)
 
     tees = (await _hole(uow, course)).tees
 
     assert [(t.tee_color, t.tee_gender) for t in tees] == [
         ("RED", "FEMALE"),
         ("YELLOW", "MALE"),
-        ("YELLOW", None),
+        ("WHITE", None),
     ]
 
 
@@ -771,7 +789,7 @@ async def test_s6_a_sample_not_stored_does_not_open_the_window(cause):
             await _submit(uow, course)
         await _submit(uow, course, user=JUGADOR)
 
-    assert uow.senders.allowed(JUGADOR, course.id, 1, TeeColor.YELLOW, Gender.MALE) is True
+    assert _window_open(uow, course)
 
 
 async def test_s6_after_an_invalid_one_the_next_is_stored():
@@ -799,10 +817,10 @@ async def test_s6_a_failed_transaction_does_not_open_the_window():
 
     with pytest.raises(RuntimeError):
         await _use_case(uow).execute(_request(course, user=JUGADOR))
-    assert uow.senders.allowed(JUGADOR, course.id, 1, TeeColor.YELLOW, Gender.MALE) is True
+    assert _window_open(uow, course)
 
     await _submit(uow, course, user=JUGADOR)
-    assert uow.senders.allowed(JUGADOR, course.id, 1, TeeColor.YELLOW, Gender.MALE) is False
+    assert not _window_open(uow, course)
 
 
 # ============================================================================
@@ -865,28 +883,105 @@ async def test_s8_the_cap_is_per_tee():
 async def test_s8_a_genderless_tee_is_its_own_tee():
     """
     GIVEN: Tres muestras desde amarillas de hombre (esa barra ya no recoge)
-    WHEN: Llega una desde amarillas sin género
-    THEN: Se guarda, y las amarillas sin género siguen recogiendo
+    WHEN: Llega una desde las blancas, sin género
+    THEN: Se guarda, y las blancas siguen recogiendo
     """
     uow, course = await _setup()
     for _ in range(3):
         await _submit(uow, course)
 
-    await _submit(uow, course, tee_gender=None)
+    await _submit(uow, course, tee_color=TeeColor.WHITE, tee_gender=None)
 
-    assert await _stored(uow, course, gender=None) == 1
-    assert (await _tee_of(uow, course, gender=None)).collecting is True
+    blancas = {"color": TeeColor.WHITE, "gender": None}
+    assert await _stored(uow, course, **blancas) == 1
+    assert (await _tee_of(uow, course, **blancas)).collecting is True
 
 
 async def test_s8_the_players_window_is_per_tee():
     """
     GIVEN: Una muestra del jugador en el hoyo 1 desde amarillas de hombre
-    WHEN: En seguida manda otra del hoyo 1 desde amarillas sin género (cambió de barra)
+    WHEN: En seguida manda otra del hoyo 1 desde rojas de mujer (cambió de barra)
     THEN: Se guarda
     """
     uow, course = await _setup()
     await _submit(uow, course, user=JUGADOR)
 
+    await _submit(uow, course, user=JUGADOR, tee_color=TeeColor.RED, tee_gender=Gender.FEMALE)
+
+    assert await _stored(uow, course, color=TeeColor.RED, gender=Gender.FEMALE) == 1
+
+
+# ============================================================================
+# S9 — La barra se resuelve contra el campo, como al anotar
+# ============================================================================
+
+AMARILLAS_SIN_GENERO = ((TeeColor.YELLOW, None), (TeeColor.RED, Gender.FEMALE))
+
+
+async def test_s9_on_a_genderless_tee_both_genders_go_to_the_same_tee():
+    """
+    GIVEN: Un campo con amarillas sin género (las de hombre no existen aparte)
+    WHEN: Llegan dos muestras desde amarillas de hombre y dos desde amarillas sin género
+    THEN: Son la misma barra: se guardan tres, y la lectura trae una sola, sin género, llena
+    """
+    uow, course = await _setup(tees=AMARILLAS_SIN_GENERO)
+
+    for gender in (Gender.MALE, None, Gender.MALE, None):
+        await _submit(uow, course, tee_gender=gender)
+
+    assert await _stored(uow, course, gender=None) == 3
+    assert await _stored(uow, course, gender=Gender.MALE) == 0
+    (tee,) = (await _hole(uow, course)).tees
+    assert (tee.tee_color, tee.tee_gender, tee.collecting) == ("YELLOW", None, False)
+
+
+@pytest.mark.parametrize(
+    ("color", "gender"),
+    [
+        (TeeColor.BLUE, Gender.MALE),
+        (TeeColor.OTHER, None),
+        (TeeColor.YELLOW, Gender.FEMALE),
+        (TeeColor.YELLOW, None),
+    ],
+    ids=["blue-missing", "other-missing", "yellow-female", "yellow-genderless"],
+)
+async def test_s9_a_tee_the_course_does_not_have_is_dropped(color, gender):
+    """
+    GIVEN: El campo de prueba (amarillas de hombre, rojas de mujer, blancas sin género)
+    WHEN: Llega una muestra desde una barra que no tiene: azules, OTHER, o amarillas de
+          mujer o sin género (las amarillas son de hombre: no hay reserva hacia otro género)
+    THEN: Sin error, no se guarda nada y no gasta la ventana del jugador
+    """
+    uow, course = await _setup()
+
+    await _submit(uow, course, user=JUGADOR, tee_color=color, tee_gender=gender)
+
+    assert (await _hole(uow, course)).tees == []
+    assert _window_open(uow, course, color, gender)
+
+
+async def test_s9_the_window_uses_the_resolved_tee():
+    """
+    GIVEN: Un campo con amarillas sin género, y una muestra del jugador desde amarillas de hombre
+    WHEN: En seguida manda otra desde amarillas sin género
+    THEN: No se guarda: para el campo es la misma barra
+    """
+    uow, course = await _setup(tees=AMARILLAS_SIN_GENERO)
+    await _submit(uow, course, user=JUGADOR, tee_gender=Gender.MALE)
+
     await _submit(uow, course, user=JUGADOR, tee_gender=None)
 
     assert await _stored(uow, course, gender=None) == 1
+
+
+async def test_s9_a_gendered_request_on_a_genderless_tee_is_stored_under_it():
+    """
+    GIVEN: El campo de prueba, con blancas sin género
+    WHEN: Llega una muestra desde blancas de hombre
+    THEN: Se guarda en las blancas sin género (la misma reserva que al anotar)
+    """
+    uow, course = await _setup()
+
+    await _submit(uow, course, tee_color=TeeColor.WHITE, tee_gender=Gender.MALE)
+
+    assert await _stored(uow, course, color=TeeColor.WHITE, gender=None) == 1

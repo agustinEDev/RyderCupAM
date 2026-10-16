@@ -23,6 +23,7 @@ consultivo por campo y hoyo).
 | Una barra bloqueada                               | Otra barra del mismo hoyo no espera        |
 | Ocho a la vez repartidas en dos barras            | Tres en cada una                           |
 | El mismo id ocho veces a la vez                   | Una fila, sin errores                      |
+| El mismo jugador, tres a la vez (ids distintos)   | Una fila: la ventana se reserva a la vez   |
 """
 
 import asyncio
@@ -41,7 +42,11 @@ from src.modules.golf_course.application.dtos.hole_sample_dtos import (
 from src.modules.golf_course.application.use_cases.hole_sample_use_cases import (
     SubmitHoleSampleUseCase,
 )
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
+from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
@@ -57,6 +62,7 @@ from src.modules.golf_course.infrastructure.services.in_memory_recent_hole_sampl
     InMemoryRecentHoleSampleSenders,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from tests.integration.modules.golf_course.infrastructure.persistence.test_hole_map_repository import (
     _insert_user,
@@ -248,22 +254,45 @@ async def test_r2_samples_go_with_the_course(db_session):
 
 
 async def _approved_course(db_session):
-    """Un campo aprobado y confirmado, para que lo vean otras sesiones."""
-    course_id = await _course(db_session)
-    course = await GolfCourseRepository(db_session).find_by_id(course_id)
+    """
+    Un campo aprobado y confirmado, para que lo vean otras sesiones, con amarillas
+    de hombre y de mujer, rojas de mujer y blancas sin género.
+    """
+    creator = UserId.generate()
+    await _insert_user(db_session, creator)
+    course = GolfCourse.create(
+        name="Campo con barras",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=creator,
+        tees=[
+            Tee(color=c, gender=g, identifier=None, course_rating=r, slope_rating=128)
+            for c, g, r in (
+                (TeeColor.YELLOW, Gender.MALE, 71.0),
+                (TeeColor.RED, Gender.FEMALE, 70.0),
+                (TeeColor.YELLOW, Gender.FEMALE, 73.0),
+                (TeeColor.WHITE, None, 72.0),
+            )
+        ],
+        holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
+    )
     course.approve()
     await GolfCourseRepository(db_session).save(course)
     await db_session.commit()
-    return course_id
+    return course.id
 
 
 async def _submit_in_own_session(
-    db_session, course_id, hole: int, sample_id=None, tee=AMARILLAS
+    db_session, course_id, hole: int, sample_id=None, tee=AMARILLAS, user=None, senders=None
 ) -> None:
-    """Un envío como lo haría la app: su propia sesión y su unidad de trabajo (de un jugador nuevo)."""
+    """
+    Un envío como lo haría la app: su propia sesión y su unidad de trabajo. Sin
+    `user`, de un jugador nuevo.
+    """
     async with AsyncSession(bind=db_session.bind, expire_on_commit=False) as session:
         await SubmitHoleSampleUseCase(
-            SQLAlchemyGolfCourseUnitOfWork(session), InMemoryRecentHoleSampleSenders()
+            SQLAlchemyGolfCourseUnitOfWork(session),
+            senders if senders is not None else InMemoryRecentHoleSampleSenders(),
         ).execute(
             SubmitHoleSampleRequestDTO(
                 id=sample_id or uuid4(),
@@ -271,7 +300,7 @@ async def _submit_in_own_session(
                 hole_number=hole,
                 tee_color=tee[0],
                 tee_gender=tee[1],
-                user_id=str(uuid4()),
+                user_id=user or str(uuid4()),
                 tee=PointDTO(latitude=SALIDA.latitude, longitude=SALIDA.longitude),
                 bends=[],
                 green_center=PointDTO(latitude=GREEN.latitude, longitude=GREEN.longitude),
@@ -367,23 +396,27 @@ async def test_r3_the_same_id_eight_times_at_once_is_one_row(db_session, slow_co
 
 
 @pytest.mark.asyncio
-async def test_r3_another_tee_does_not_wait(db_session):
+@pytest.mark.parametrize(
+    "other_tee",
+    [(TeeColor.WHITE, None), (TeeColor.YELLOW, Gender.FEMALE)],
+    ids=["other-colour", "same-colour-other-gender"],
+)
+async def test_r3_another_tee_does_not_wait(db_session, other_tee):
     """
     GIVEN: Una transacción que tiene bloqueadas las amarillas de hombre del hoyo 1
-    WHEN: Llega una muestra del hoyo 1 desde amarillas sin género
+    WHEN: Llega una muestra del hoyo 1 desde blancas sin género, o desde amarillas de mujer
     THEN: Se guarda sin esperar
     """
     course_id = await _approved_course(db_session)
-    sin_genero = (TeeColor.YELLOW, None)
 
     async with AsyncSession(bind=db_session.bind) as holder:
         await HoleSampleRepository(holder).lock_tee(course_id, 1, *AMARILLAS)
 
         await asyncio.wait_for(
-            _submit_in_own_session(db_session, course_id, 1, tee=sin_genero), timeout=5
+            _submit_in_own_session(db_session, course_id, 1, tee=other_tee), timeout=5
         )
 
-        assert await _count(db_session, course_id, 1, sin_genero) == 1
+        assert await _count(db_session, course_id, 1, other_tee) == 1
         await holder.rollback()
 
 
@@ -406,3 +439,25 @@ async def test_r3_eight_at_once_on_two_tees_leave_three_each(db_session, slow_co
 
     assert await _count(db_session, course_id, 1) == 3
     assert await _count(db_session, course_id, 1, rojas) == 3
+
+
+@pytest.mark.asyncio
+async def test_r3_the_same_player_three_at_once_is_one_row(db_session, slow_count):
+    """
+    GIVEN: Un hoyo sin muestras y un jugador con tres envíos en vuelo (ids distintos,
+           la misma barra), en el mismo proceso
+    WHEN: Llegan los tres a la vez, cada uno en su sesión
+    THEN: Una fila: el primero aparta la ventana y los otros dos ya no entran
+    """
+    course_id = await _approved_course(db_session)
+    senders = InMemoryRecentHoleSampleSenders()
+    user = str(uuid4())
+
+    await asyncio.gather(
+        *(
+            _submit_in_own_session(db_session, course_id, 1, user=user, senders=senders)
+            for _ in range(3)
+        )
+    )
+
+    assert await _count(db_session, course_id, 1) == 1

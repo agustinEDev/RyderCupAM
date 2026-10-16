@@ -29,7 +29,10 @@ _Key = tuple[str, str, int, str, str | None]
 
 
 class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
-    """Diccionario ordenado por llegada, con caducidad y tamaño acotado."""
+    """
+    Las aceptadas, en un diccionario ordenado por llegada con caducidad y tamaño
+    acotado; las reservas en curso, aparte. Un lock de hilo hace atómica la reserva.
+    """
 
     def __init__(
         self,
@@ -41,6 +44,8 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         self._window = window_seconds
         self._max_entries = max_entries
         self._recorded_at: OrderedDict[_Key, float] = OrderedDict()
+        # Reservas de peticiones en curso: tantas como peticiones a la vez
+        self._pending: set[_Key] = set()
         self._lock = threading.Lock()
 
     @staticmethod
@@ -62,7 +67,7 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
                 return
             del self._recorded_at[key]
 
-    def allowed(
+    def reserve(
         self,
         user_id: str,
         golf_course_id: GolfCourseId,
@@ -70,12 +75,15 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         tee_color: TeeColor,
         tee_gender: Gender | None,
     ) -> bool:
-        with self._lock:
+        key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
+        with self._lock:  # Mirar y apartar, de una vez
             self._forget_expired(self._clock())
-            key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
-            return key not in self._recorded_at
+            if key in self._recorded_at or key in self._pending:
+                return False
+            self._pending.add(key)
+            return True
 
-    def record(
+    def confirm(
         self,
         user_id: str,
         golf_course_id: GolfCourseId,
@@ -83,15 +91,28 @@ class InMemoryRecentHoleSampleSenders(IRecentHoleSampleSenders):
         tee_color: TeeColor,
         tee_gender: Gender | None,
     ) -> None:
+        key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
         with self._lock:
+            self._pending.discard(key)
             now = self._clock()
             self._forget_expired(now)
-            key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
             self._recorded_at.pop(key, None)  # Al final: es la más reciente
             self._recorded_at[key] = now
             while len(self._recorded_at) > self._max_entries:
                 self._recorded_at.popitem(last=False)
 
+    def release(
+        self,
+        user_id: str,
+        golf_course_id: GolfCourseId,
+        hole_number: int,
+        tee_color: TeeColor,
+        tee_gender: Gender | None,
+    ) -> None:
+        key = self._key(user_id, golf_course_id, hole_number, tee_color, tee_gender)
+        with self._lock:
+            self._pending.discard(key)
+
     def __len__(self) -> int:
         with self._lock:
-            return len(self._recorded_at)
+            return len(self._recorded_at) + len(self._pending)

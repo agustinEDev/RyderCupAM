@@ -99,3 +99,16 @@ class HoleSampleStatusDTO(BaseModel):
             "tuvo después. Una barra que no sale recoge y no tiene muestra"
         )
     )
+
+
+class SubmitHoleSampleResponseDTO(BaseModel):
+    """
+    Respuesta de mandar una muestra: vacía a propósito. Es la misma se guarde o no,
+    para que quien la manda nunca note la diferencia (la ruta responde 204).
+    """
+
+
+class ListHoleSamplesResponseDTO(BaseModel):
+    """Los 18 hoyos de un campo, del 1 al 18."""
+
+    holes: list[HoleSampleStatusDTO]

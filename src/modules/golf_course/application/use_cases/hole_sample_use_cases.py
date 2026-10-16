@@ -1,7 +1,8 @@
 """
 Casos de uso de las muestras anónimas de hoyo (BE #532, reglas del 16 oct 2026).
 
-- Mandar: por hoyo y barra (color y género) se guardan las tres primeras
+- Mandar: la barra se resuelve contra las del campo, como al anotar (una que el
+  campo no tiene no se guarda). Por hoyo y barra (color y género) se guardan las tres primeras
   muestras válidas que llegan. Se responde igual y no se guarda nada si es la
   cuarta, si el dominio la rechaza (codos de más, distancias imposibles, lejos
   del campo), si su id ya está guardado (un reenvío) o si el jugador ya aportó
@@ -18,8 +19,10 @@ from src.modules.golf_course.application.dtos.hole_sample_dtos import (
     HoleSampleDTO,
     HoleSampleStatusDTO,
     ListHoleSamplesRequestDTO,
+    ListHoleSamplesResponseDTO,
     PointDTO,
     SubmitHoleSampleRequestDTO,
+    SubmitHoleSampleResponseDTO,
     TeeSamplesDTO,
 )
 from src.modules.golf_course.application.exceptions import (
@@ -87,9 +90,9 @@ class SubmitHoleSampleUseCase:
         self._uow = uow
         self._recent_senders = recent_senders
 
-    async def execute(self, request: SubmitHoleSampleRequestDTO) -> None:
+    async def execute(self, request: SubmitHoleSampleRequestDTO) -> SubmitHoleSampleResponseDTO:
         """
-        No devuelve nada, se guarde o no: quien la manda nunca nota la diferencia.
+        La respuesta es la misma se guarde o no: quien la manda nunca nota la diferencia.
 
         Raises:
             GolfCourseNotFoundError: si el campo no existe o no lo ven los jugadores
@@ -97,33 +100,63 @@ class SubmitHoleSampleUseCase:
         """
         course_id = GolfCourseId(request.golf_course_id)
         hole = request.hole_number
-        tee = (request.tee_color, request.tee_gender)
-        async with self._uow:
-            course = await self._uow.golf_courses.find_by_id(course_id)
-            if not _visible(course):
-                raise GolfCourseNotFoundError(request.golf_course_id)
-            # Del 1 al 18 también en un campo de 9: la segunda vuelta suele salir
-            # de otras salidas, y se muestrea aparte (Agustín, 15 oct)
-            if not MIN_HOLE_NUMBER <= hole <= MAX_HOLE_NUMBER:
-                raise HoleNotInCourseError(hole)
-            stored = await self._store(request, course, course_id)
-        # Solo con la transacción confirmada: si falla, la ventana sigue abierta
-        if stored:
-            self._recent_senders.record(request.user_id, course_id, hole, *tee)
-
-    async def _store(
-        self, request: SubmitHoleSampleRequestDTO, course: GolfCourse, course_id: GolfCourseId
-    ) -> bool:
-        """Guarda la muestra si toca. En los logs, nunca coordenadas ni quién la manda."""
-        hole = request.hole_number
-        tee = (request.tee_color, request.tee_gender)
+        reserved: tuple | None = None
+        accepted = False
         try:
-            sample = HoleSample.create(
+            async with self._uow:
+                course = await self._uow.golf_courses.find_by_id(course_id)
+                if not _visible(course):
+                    raise GolfCourseNotFoundError(request.golf_course_id)
+                # Del 1 al 18 también en un campo de 9: la segunda vuelta suele
+                # salir de otras salidas, y se muestrea aparte (Agustín, 15 oct)
+                if not MIN_HOLE_NUMBER <= hole <= MAX_HOLE_NUMBER:
+                    raise HoleNotInCourseError(hole)
+                sample = self._sample(request, course, course_id)
+                if sample is None:
+                    return SubmitHoleSampleResponseDTO()
+                key = (request.user_id, course_id, hole, sample.tee_color, sample.tee_gender)
+                if not self._recent_senders.reserve(*key):
+                    logger.debug(
+                        "Hole sample not stored (course %s, hole %s): sender window",
+                        course_id,
+                        hole,
+                    )
+                    return SubmitHoleSampleResponseDTO()
+                reserved = key
+                stored = await self._store(sample)
+            # Aquí la transacción ya se confirmó: si el commit falla, no se llega
+            accepted = stored
+        finally:
+            # La ventana solo la gasta una muestra guardada y confirmada; si no se
+            # guardó, o la transacción falló, el hueco se suelta
+            if reserved is not None:
+                if accepted:
+                    self._recent_senders.confirm(*reserved)
+                else:
+                    self._recent_senders.release(*reserved)
+        return SubmitHoleSampleResponseDTO()
+
+    def _sample(
+        self, request: SubmitHoleSampleRequestDTO, course: GolfCourse, course_id: GolfCourseId
+    ) -> HoleSample | None:
+        """
+        La muestra, con la barra del campo resuelta como al anotar (`tee_for`: si
+        el campo no distingue género en ese color, la barra sin género). None si
+        el campo no tiene esa barra o el dominio la rechaza. En los logs, nunca
+        coordenadas ni quién la manda.
+        """
+        hole = request.hole_number
+        tee = course.tee_for(request.tee_color, request.tee_gender)
+        if tee is None:
+            logger.info("Hole sample dropped (course %s, hole %s): unknown tee", course_id, hole)
+            return None
+        try:
+            return HoleSample.create(
                 id=request.id,
                 golf_course_id=course_id,
                 hole_number=hole,
-                tee_color=request.tee_color,
-                tee_gender=request.tee_gender,
+                tee_color=tee.color,
+                tee_gender=tee.gender,
                 tee=_point(request.tee),
                 bends=[_point(bend) for bend in request.bends],
                 green_center=_point(request.green_center),
@@ -133,16 +166,16 @@ class SubmitHoleSampleUseCase:
             logger.info(
                 "Hole sample dropped (course %s, hole %s): %s", course_id, hole, type(e).__name__
             )
-            return False
+            return None
 
-        if not self._recent_senders.allowed(request.user_id, course_id, hole, *tee):
-            logger.debug(
-                "Hole sample not stored (course %s, hole %s): sender window", course_id, hole
-            )
-            return False
-
-        # Contar y guardar con la barra bloqueada: dos que lleguen a la vez no
-        # pueden ver las dos «quedan huecos» y dejar cuatro
+    async def _store(self, sample: HoleSample) -> bool:
+        """
+        Guarda la muestra si es nueva y su barra aún recoge. Con la barra
+        bloqueada: dos que lleguen a la vez no pueden ver las dos «quedan
+        huecos» y dejar cuatro.
+        """
+        course_id, hole = sample.golf_course_id, sample.hole_number
+        tee = (sample.tee_color, sample.tee_gender)
         samples = self._uow.hole_samples
         await samples.lock_tee(course_id, hole, *tee)
         if await samples.exists(sample.id):
@@ -167,7 +200,7 @@ class ListHoleSamplesUseCase:
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
 
-    async def execute(self, request: ListHoleSamplesRequestDTO) -> list[HoleSampleStatusDTO]:
+    async def execute(self, request: ListHoleSamplesRequestDTO) -> ListHoleSamplesResponseDTO:
         """
         Raises:
             GolfCourseNotFoundError: si el campo no existe o no lo ven los jugadores
@@ -185,7 +218,7 @@ class ListHoleSamplesUseCase:
             tees = by_hole.setdefault(sample.hole_number, {})
             tees.setdefault((sample.tee_color, sample.tee_gender), []).append(sample)
 
-        return [
+        holes = [
             HoleSampleStatusDTO(
                 hole_number=number,
                 tees=[
@@ -204,3 +237,4 @@ class ListHoleSamplesUseCase:
             )
             for number in range(MIN_HOLE_NUMBER, MAX_HOLE_NUMBER + 1)
         ]
+        return ListHoleSamplesResponseDTO(holes=holes)
