@@ -98,6 +98,14 @@ class VerAnotacionDePartidaUseCase:
         jugaron = partida.quienes_jugaron(golpes)
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
         marca = partida.marcadores.get(quien)
+        # Una vez por barra: quienes salen de la misma comparten tarjeta
+        por_barra: dict[tuple, dict[int, int | None]] = {}
+        metros = {
+            foto.user_id: por_barra.setdefault(
+                (foto.tee_color, foto.tee_gender), _metros(campo, foto)
+            )
+            for foto in partida.jugadores
+        }
         return TeeGroupScoringViewDTO(
             group_id=partida.id.value,
             round_id=partida.round_id.value,
@@ -112,7 +120,7 @@ class VerAnotacionDePartidaUseCase:
             i_mark_user_id=marca.value if marca else None,
             players=[
                 _jugador(
-                    partida, foto, de_quien, nombres, marcado_por, jugaron, _metros(campo, foto)
+                    partida, foto, de_quien, nombres, marcado_por, jugaron, metros[foto.user_id]
                 )
                 for foto in partida.jugadores
             ],
@@ -121,14 +129,17 @@ class VerAnotacionDePartidaUseCase:
 
 def _metros(campo: GolfCourse | None, foto: JugadorDePartida) -> dict[int, int | None]:
     """
-    Los metros de cada hoyo desde la barra del jugador, tal y como la guarda el
-    campo (con la reserva de `tee_for` a la barra sin género de ese color). Un
-    campo dado de alta a mano con una sola tarjeta la copia a todas sus barras,
-    así que todas llevan esos metros, como en la Ryder (aceptado por Agustín,
-    16 oct). Sin campo o sin esa barra, ninguno.
+    Los metros de cada hoyo desde la barra del jugador, con `hole_card_for`,
+    como la Ryder: con sus reservas (la barra sin género de ese color, y la
+    tarjeta del campo). Un campo dado de alta a mano con una sola tarjeta la
+    copia a todas sus barras, así que todas llevan esos metros (aceptado por
+    Agustín, 16 oct). Sin campo, ninguno.
     """
-    salida = campo.tee_for(foto.tee_color, foto.tee_gender) if campo else None
-    return {hoyo.number: hoyo.meters for hoyo in salida.holes} if salida else {}
+    if campo is None:
+        return {}
+    return {
+        hoyo.number: hoyo.meters for hoyo in campo.hole_card_for(foto.tee_color, foto.tee_gender)
+    }
 
 
 def _jugador(

@@ -16,7 +16,7 @@ La partida para anotar y las tarjetas de los suyos (#251, PR 5; pestañas 1 y 3)
 | B1 Los metros de cada hoyo        | Desde SU barra (con la reserva a la sin género)      |
 | B2 Un hoyo sin metros             | null                                                 |
 | B3 Barra sin tarjeta propia       | La que el campo le copió, como la Ryder (16 oct)     |
-| B3 Barra que ya no está           | Todos a null                                         |
+| B3 Barra que ya no está           | Como la Ryder: la tarjeta del campo                  |
 | B4 Sin campo o sin repositorio    | null, sin error                                      |
 | B5 El campo                       | Se carga una vez por vista                           |
 """
@@ -429,11 +429,11 @@ async def test_b3_a_tee_without_its_own_card_carries_the_copied_one():
     assert [h.meters for h in suyos[:2]] == [300, 301]
 
 
-async def test_b3_a_tee_no_longer_on_the_course_gives_null_everywhere():
+async def test_b3_a_tee_no_longer_on_the_course_falls_back_like_the_ryder():
     """
-    GIVEN: Un campo que ya no tiene la barra de los jugadores
+    GIVEN: Un campo que ya no tiene la barra del jugador
     WHEN: Se pide la anotación
-    THEN: Todos sus hoyos, con null
+    THEN: Como la Ryder (`hole_card_for`): la tarjeta del campo
     """
     from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
     from src.shared.domain.value_objects.gender import Gender
@@ -441,12 +441,12 @@ async def test_b3_a_tee_no_longer_on_the_course_gives_null_everywhere():
     escenario, partida = await _partida()
     a = partida.user_ids[0]
     await _barras_de(escenario, partida, {a: (TeeColor.WHITE, Gender.MALE)})
-    campo = _campo({(TeeColor.YELLOW, Gender.MALE): [300] * 18})
+    campo = _campo({(TeeColor.YELLOW, Gender.MALE): [300 + n for n in range(18)]})
 
     vista = await _con(escenario, _Campos(campo)).execute(partida.id.value, a)
 
     suyos = next(p for p in vista.players if p.user_id == a.value).holes
-    assert all(h.meters is None for h in suyos)
+    assert [h.meters for h in suyos[:2]] == [300, 301]
 
 
 async def test_b4_without_the_course_or_its_repository_meters_are_null():
