@@ -74,6 +74,10 @@ class SavedHoleRepository(ISavedHoleRepository):
         )
         return [_from_row(row) for row in result]
 
+    async def list_all(self) -> list[SavedHole]:
+        result = await self._session.execute(select(_table))
+        return [_from_row(row) for row in result]
+
     async def delete(self, golf_course_id: GolfCourseId, hole_number: int) -> bool:
         result = await self._session.execute(
             delete(_table)

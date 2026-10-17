@@ -49,5 +49,9 @@ class IHoleSampleRepository(ABC):
         """Borra esa muestra del campo; False si no está en él (BE #575: el admin)."""
 
     @abstractmethod
+    async def count_by_hole(self) -> list[tuple[GolfCourseId, int, int]]:
+        """De todos los campos, cuántas muestras hay por hoyo: (campo, hoyo, cuántas). Para el admin."""
+
+    @abstractmethod
     async def list_by_course(self, golf_course_id: GolfCourseId) -> list[HoleSample]:
         """Las muestras del campo, por hoyo y, en cada hoyo, en orden de llegada."""

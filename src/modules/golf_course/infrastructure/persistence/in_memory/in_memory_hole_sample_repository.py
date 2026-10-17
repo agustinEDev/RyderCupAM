@@ -51,6 +51,13 @@ class InMemoryHoleSampleRepository(IHoleSampleRepository):
         del self._samples[sample_id]
         return True
 
+    async def count_by_hole(self) -> list[tuple[GolfCourseId, int, int]]:
+        counts: dict[tuple[GolfCourseId, int], int] = {}
+        for _, sample in self._samples.values():
+            key = (sample.golf_course_id, sample.hole_number)
+            counts[key] = counts.get(key, 0) + 1
+        return [(course, hole, n) for (course, hole), n in counts.items()]
+
     async def list_by_course(self, golf_course_id: GolfCourseId) -> list[HoleSample]:
         mine = [
             (sample.hole_number, seq, sample)

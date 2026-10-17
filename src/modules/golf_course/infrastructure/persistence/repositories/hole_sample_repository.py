@@ -113,6 +113,14 @@ class HoleSampleRepository(IHoleSampleRepository):
         )
         return result.first() is not None
 
+    async def count_by_hole(self) -> list[tuple[GolfCourseId, int, int]]:
+        result = await self._session.execute(
+            select(_table.c.golf_course_id, _table.c.hole_number, func.count()).group_by(
+                _table.c.golf_course_id, _table.c.hole_number
+            )
+        )
+        return [(row[0], row[1], int(row[2])) for row in result]
+
     async def list_by_course(self, golf_course_id: GolfCourseId) -> list[HoleSample]:
         result = await self._session.execute(
             select(_table)
