@@ -276,11 +276,16 @@ async def test_p4_a_reopened_hole_with_samples_is_pending_again():
 
 
 async def test_p5_a_reopened_hole_without_samples_is_not_listed():
+    """El 3 se reabre sin muestras: no vuelve; el 4, con una, sí."""
     uow, con, _ = await _setup()
-    await uow.saved_holes.save(_saved(con, 3))
-    await uow.saved_holes.delete(con.id, 3)
+    await uow.hole_samples.add(_sample(con, hole=4))
+    for hole in (3, 4):
+        await uow.saved_holes.save(_saved(con, hole))
+        await uow.saved_holes.delete(con.id, hole)
 
-    assert (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses == []
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [h.hole_number for h in course.holes] == [4]
 
 
 async def test_p6_the_holes_go_from_lowest_to_highest():
