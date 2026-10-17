@@ -470,7 +470,10 @@ async def list_hole_reviews(
     current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
     use_case: Annotated[ListHoleReviewsUseCase, Depends(get_list_hole_reviews_use_case)],
 ):
-    """Los campos con hoyos por revisar: por hoyo, cuántas muestras tiene y si está guardado."""
+    """
+    Los campos con hoyos pendientes (con muestras y sin línea guardada): por hoyo,
+    de menor a mayor, cuántas muestras tiene. `saved` es siempre false.
+    """
     if not current_user.is_admin:
         return _forbidden()
     return await use_case.execute(ListHoleReviewsRequestDTO())
