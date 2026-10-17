@@ -423,7 +423,7 @@ async def reopen_hole(
     tags=["admin"],
     responses={
         403: {"description": "ADMIN_REQUIRED"},
-        404: {"description": "HOLE_SAMPLE_NOT_FOUND"},
+        404: {"description": "GOLF_COURSE_NOT_FOUND or HOLE_SAMPLE_NOT_FOUND"},
     },
 )
 async def delete_hole_sample(
@@ -439,6 +439,8 @@ async def delete_hole_sample(
         await use_case.execute(
             DeleteHoleSampleRequestDTO(golf_course_id=str(golf_course_id), sample_id=sample_id)
         )
+    except GolfCourseNotFoundError:
+        return _course_not_found()
     except HoleSampleNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "HOLE_SAMPLE_NOT_FOUND", "Hole sample not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

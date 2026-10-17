@@ -162,3 +162,15 @@ async def test_l5_a_sample_of_another_course_is_not_found(client: AsyncClient):
 
     assert (response.status_code, response.json()["error_code"]) == (404, "HOLE_SAMPLE_NOT_FOUND")
     assert await _rows(course_id) == 1
+
+
+@pytest.mark.asyncio
+async def test_l5_deleting_on_an_unknown_course_is_404(client: AsyncClient):
+    """CodeRabbit: sin recoger el error, un campo que no existe daba 500."""
+    _, admin, _, _ = await _scenario(client, "l5d")
+
+    response = await _as(client, admin).delete(
+        f"/api/v1/golf-courses/admin/{uuid4()}/hole-samples/{uuid4()}"
+    )
+
+    assert (response.status_code, response.json()["error_code"]) == (404, "GOLF_COURSE_NOT_FOUND")
