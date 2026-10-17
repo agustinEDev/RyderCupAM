@@ -182,6 +182,6 @@ class GetHoleReviewUseCase:
             golf_course_id=str(course_id),
             name=course.name,
             # Para que el admin marque un hoyo sin nada, el mapa parte del campo
-            location=point_dto(location) if location else None,
+            location=point_dto(location) if location is not None else None,
             holes=holes,
         )
