@@ -215,6 +215,8 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
         "received_on",
     }
     assert dos["saved_line"] == LINEA
+    # Sin mapa de OSM aprobado, ningún hoyo trae su línea (T10, 17 oct)
+    assert uno["osm_line"] is None
     assert set(dos["saved_line"]) == {"tee", "bends", "green_center"}
 
 

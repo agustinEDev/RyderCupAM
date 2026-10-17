@@ -73,11 +73,22 @@ class TeeMetresDTO(BaseModel):
     meters: int | None
 
 
+class OsmLineDTO(BaseModel):
+    """La línea de un hoyo en el mapa de OSM aprobado, tal cual: el admin la ve y parte de ella."""
+
+    points: list[PointDTO] = Field(description="De la salida al green, con todos sus vértices")
+    green_center: PointDTO | None = Field(description="null si el mapa no trae el green")
+
+
 class HoleReviewHoleDTO(BaseModel):
     """Un hoyo para revisar: la línea guardada, todas sus muestras y los metros de cada barra."""
 
     hole_number: int
     saved_line: HoleSampleDTO | None
+    osm_line: OsmLineDTO | None = Field(
+        default=None,
+        description="La del mapa de OSM aprobado; null sin mapa aprobado o sin el hoyo",
+    )
     samples: list[AdminHoleSampleDTO] = Field(description="En orden de llegada")
     tees: list[TeeMetresDTO]
 
