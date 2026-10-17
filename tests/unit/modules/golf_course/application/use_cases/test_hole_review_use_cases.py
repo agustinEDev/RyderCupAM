@@ -15,6 +15,7 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 | A2   | un campo                                         | sus 18 hoyos: la línea guardada, TODAS sus muestras (id, barra, puntos, día) y los metros de cada barra |
 | A2   | una muestra solo green                           | sale con `tee: null`                              |
 | A2   | un campo que no existe, o que no ven los jugadores | GolfCourseNotFoundError                          |
+| A3   | la ubicación del campo                           | viene, para que el admin marque un hoyo sin nada (17 oct); sin ella, null |
 | A1   | por nombre                                       | sin mayúsculas ni acentos                          |
 """
 
@@ -37,6 +38,7 @@ from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
 from src.modules.golf_course.domain.entities.saved_hole import SavedHole
 from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
@@ -54,7 +56,7 @@ CODO = GeoPoint(latitude=36.2815, longitude=-5.331)
 GREEN = GeoPoint(latitude=36.2827, longitude=-5.33)
 
 
-def _course(name="Valderrama"):
+def _course(name="Valderrama", location=None):
     amarillas = [Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350 + i) for i in range(18)]
     rojas = [Hole(number=i + 1, par=4, stroke_index=i + 1, meters=300 + i) for i in range(18)]
     course = GolfCourse.create(
@@ -81,6 +83,7 @@ def _course(name="Valderrama"):
             ),
         ],
         holes=amarillas,
+        location=location,
     )
     course.approve()
     return course
@@ -188,6 +191,40 @@ async def test_a2_a_course_with_every_sample_its_line_and_the_metres_of_each_tee
     ]
     assert review.holes[1].tees[0].meters == 351
     assert review.holes[1].samples == []
+
+
+async def test_get_review_with_coordinates_returns_the_course_location():
+    """
+    GIVEN: un campo con coordenadas (A3)
+    WHEN: el admin pide su revisión
+    THEN: viene su ubicación, para marcar un hoyo sin nada
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    con = _course(location=CourseLocation(latitude=36.28, longitude=-5.33))
+    await uow.golf_courses.save(con)
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    assert (review.location.latitude, review.location.longitude) == (36.28, -5.33)
+
+
+async def test_get_review_without_coordinates_returns_a_null_location():
+    """
+    GIVEN: un campo sin coordenadas (A3)
+    WHEN: el admin pide su revisión
+    THEN: la ubicación viene null
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    sin = _course("Sin ubicación")
+    await uow.golf_courses.save(sin)
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(sin.id))
+    )
+
+    assert review.location is None
 
 
 async def test_a2_the_saved_line_comes_too():

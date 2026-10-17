@@ -17,7 +17,8 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from tests.integration.api.v1.test_hole_map_endpoints import _as, _scenario
+from tests.conftest import approve_golf_course, create_authenticated_user, create_golf_course
+from tests.integration.api.v1.test_hole_map_endpoints import _as, _make_admin, _scenario
 from tests.integration.api.v1.test_hole_sample_endpoints import (
     BODY,
     CODO,
@@ -197,6 +198,9 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
     # El 2 está guardado: ya no está pendiente (17 oct). `saved` sigue, en false
     assert curso["holes"] == [{"hole_number": 1, "samples": 1, "saved": False}]
     assert campo.status_code == 200
+    # La ubicación del campo, para marcar un hoyo sin nada (17 oct): el de la
+    # prueba no tiene coordenadas, y viene null (el caso con ellas, en unitarios)
+    assert campo.json()["location"] is None
     uno, dos = campo.json()["holes"][:2]
     assert [s["id"] for s in uno["samples"]] == [sample["id"]]
     assert (uno["samples"][0]["tee_color"], uno["samples"][0]["tee_gender"]) == ("YELLOW", "MALE")
@@ -238,6 +242,49 @@ async def test_r3_saving_removes_a_hole_from_the_list_and_reopening_brings_it_ba
     assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == []
     assert (await c.delete(_line(course_id, 1))).status_code in (200, 204)
     assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == [1]
+
+
+@pytest.mark.asyncio
+async def test_r4_a_course_with_coordinates_brings_its_location(client: AsyncClient):
+    """
+    GIVEN: un campo aprobado con coordenadas
+    WHEN: el admin pide su revisión
+    THEN: viene su ubicación, como punto
+    """
+    creator = await create_authenticated_user(
+        client, "creator-r4@test.com", "P@ssw0rd123!", "Creator", "Map"
+    )
+    course = await create_golf_course(
+        client,
+        creator["cookies"],
+        {
+            "name": "Campo con coordenadas r4",
+            "country_code": "ES",
+            "course_type": "STANDARD_18",
+            "location": {"latitude": 36.28, "longitude": -5.33},
+            "tees": [
+                {
+                    "identifier": "Amarillo",
+                    "color": "YELLOW",
+                    "tee_gender": "MALE",
+                    "course_rating": 70.2,
+                    "slope_rating": 128,
+                    "par": 72,
+                }
+            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
+        },
+    )
+    admin = await create_authenticated_user(
+        client, "admin-r4@test.com", "AdminPass123!", "Admin", "Map"
+    )
+    await _make_admin("admin-r4@test.com")
+    await approve_golf_course(client, admin["cookies"], course["id"])
+
+    campo = await _as(client, admin).get(f"/api/v1/golf-courses/admin/{course['id']}/hole-reviews")
+
+    assert campo.status_code == 200
+    assert campo.json()["location"] == {"latitude": 36.28, "longitude": -5.33}
 
 
 @pytest.mark.asyncio
