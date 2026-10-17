@@ -202,8 +202,18 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
     uno, dos = campo.json()["holes"][:2]
     assert [s["id"] for s in uno["samples"]] == [sample["id"]]
     assert (uno["samples"][0]["tee_color"], uno["samples"][0]["tee_gender"]) == ("YELLOW", "MALE")
-    assert "user_id" not in uno["samples"][0]
+    # Solo la muestra: nada de quién la mandó (no se guarda)
+    assert set(uno["samples"][0]) == {
+        "id",
+        "tee_color",
+        "tee_gender",
+        "tee",
+        "bends",
+        "green_center",
+        "received_on",
+    }
     assert dos["saved_line"] == LINEA
+    assert set(dos["saved_line"]) == {"tee", "bends", "green_center"}
 
 
 @pytest.mark.asyncio

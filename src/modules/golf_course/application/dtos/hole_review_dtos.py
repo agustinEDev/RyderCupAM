@@ -26,6 +26,10 @@ class HoleReviewSummaryDTO(BaseModel):
     holes: list[HoleReviewCountDTO] = Field(description="Solo los hoyos con muestras o línea")
 
 
+class ListHoleReviewsRequestDTO(BaseModel):
+    """La lista de campos con hoyos por revisar: no pide nada."""
+
+
 class ListHoleReviewsResponseDTO(BaseModel):
     """Los campos con hoyos por revisar, por nombre."""
 

@@ -7,7 +7,8 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 | A1   | un campo sin nada                                | no sale                                            |
 | A2   | un campo                                         | sus 18 hoyos: la línea guardada, TODAS sus muestras (id, barra, puntos, día) y los metros de cada barra |
 | A2   | una muestra solo green                           | sale con `tee: null`                              |
-| A2   | un campo que no existe                           | GolfCourseNotFoundError                            |
+| A2   | un campo que no existe, o que no ven los jugadores | GolfCourseNotFoundError                          |
+| A1   | por nombre                                       | sin mayúsculas ni acentos                          |
 """
 
 from datetime import date
@@ -15,7 +16,10 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.golf_course.application.dtos.hole_review_dtos import GetHoleReviewRequestDTO
+from src.modules.golf_course.application.dtos.hole_review_dtos import (
+    GetHoleReviewRequestDTO,
+    ListHoleReviewsRequestDTO,
+)
 from src.modules.golf_course.application.exceptions import GolfCourseNotFoundError
 from src.modules.golf_course.application.use_cases.hole_review_use_cases import (
     GetHoleReviewUseCase,
@@ -117,7 +121,7 @@ async def test_a1_the_list_has_the_courses_with_samples_or_lines():
         )
     )
 
-    (course,) = (await ListHoleReviewsUseCase(uow).execute()).courses
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
     assert (course.golf_course_id, course.name) == (str(con.id), "Valderrama")
     assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [
@@ -130,7 +134,7 @@ async def test_a1_the_list_has_the_courses_with_samples_or_lines():
 async def test_a1_nothing_to_review_is_an_empty_list():
     uow, _, _ = await _setup()
 
-    assert (await ListHoleReviewsUseCase(uow).execute()).courses == []
+    assert (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses == []
 
 
 async def test_a2_a_course_with_every_sample_its_line_and_the_metres_of_each_tee():
@@ -204,6 +208,65 @@ async def test_a1_the_list_is_by_name():
         await uow.golf_courses.save(c)
         await uow.hole_samples.add(_sample(c))
 
-    courses = (await ListHoleReviewsUseCase(uow).execute()).courses
+    courses = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
     assert [c.name for c in courses] == ["Alcanada", "Zahara"]
+
+
+async def test_a1_by_name_without_case_or_accents():
+    """Á y a, Z y z: el orden de un listado en castellano (revisión, 17 oct)."""
+    uow = InMemoryGolfCourseUnitOfWork()
+    for name in ("Zahara", "el Saler", "Ávila Golf"):
+        c = _course(name)
+        await uow.golf_courses.save(c)
+        await uow.hole_samples.add(_sample(c))
+
+    courses = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [c.name for c in courses] == ["Ávila Golf", "el Saler", "Zahara"]
+
+
+async def test_a1_a_hole_with_samples_and_a_saved_line():
+    uow, con, _ = await _setup()
+    await uow.hole_samples.add(_sample(con))
+    await uow.saved_holes.save(
+        SavedHole.create(
+            golf_course_id=con.id,
+            hole_number=1,
+            tee=SALIDA,
+            bends=(),
+            green_center=GREEN,
+            saved_by=UserId.generate(),
+            course_location=None,
+        )
+    )
+
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [(1, 1, True)]
+
+
+async def test_a2_a_course_players_cannot_see_is_not_found():
+    uow = InMemoryGolfCourseUnitOfWork()
+    pendiente = GolfCourse.create(
+        name="Pendiente",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=UserId.generate(),
+        tees=[
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier=None,
+                course_rating=71.2,
+                slope_rating=128,
+            )
+        ],
+        holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
+    )
+    await uow.golf_courses.save(pendiente)
+
+    with pytest.raises(GolfCourseNotFoundError):
+        await GetHoleReviewUseCase(uow).execute(
+            GetHoleReviewRequestDTO(golf_course_id=str(pendiente.id))
+        )

@@ -52,6 +52,7 @@ from src.modules.golf_course.application.dtos.hole_map_dtos import (
 from src.modules.golf_course.application.dtos.hole_review_dtos import (
     GetHoleReviewRequestDTO,
     HoleReviewDTO,
+    ListHoleReviewsRequestDTO,
     ListHoleReviewsResponseDTO,
 )
 from src.modules.golf_course.application.dtos.hole_sample_dtos import (
@@ -472,7 +473,7 @@ async def list_hole_reviews(
     """Los campos con hoyos por revisar: por hoyo, cuántas muestras tiene y si está guardado."""
     if not current_user.is_admin:
         return _forbidden()
-    return await use_case.execute()
+    return await use_case.execute(ListHoleReviewsRequestDTO())
 
 
 @router.get(
