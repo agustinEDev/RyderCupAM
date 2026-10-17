@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.30.0] - 2026-10-17
+
+**Una línea de referencia por hoyo.** El admin guarda una línea por hoyo
+(salida, hasta dos codos y green) y la revisa desde «Hoyos por revisar» con
+todas las muestras que han llegado; los jugadores la ven antes que nada. Las
+muestras pasan a ser 3 por hoyo de cualquier barra, pueden traer solo el green,
+y los hoyos que OpenStreetMap trae con línea y green ya no recogen. Además, la
+Ryder dice el género de la barra de cada jugador (también en SCRATCH). Va con el
+frontend **2.44.0**.
+
+**Notas de despliegue.**
+
+- **2 migraciones** (`5206fa18886b` → `a3d5f7b9c1e2` → `b4e6a8c0d2f3`): las
+  columnas de la salida de `golf_course_hole_samples` admiten NULL (con un
+  check que prohíbe media salida o codos sin salida), y se crea
+  `golf_course_saved_holes` (vacía). SQL plano, modo offline comprobado.
+- **Sin variables nuevas ni dependencias nuevas.**
+- **Contrato: aditivo.** El frontend 2.43.0 sigue leyendo `tees` sin cambios;
+  puede seguir enviando muestras que ahora se descartan (204, en silencio).
+  Orden de siempre: backend, `/health`, frontend.
+- **Script a pasar en PRO**: `scripts/completar_genero_de_las_barras.py`
+  rellena el género de la barra en los partidos SCRATCH ya generados que no
+  han acabado. Primero con `--dry-run`.
+
+### Added
+
+- **Muestras solo de green**: quien abre el mapa a mitad de hoyo marca solo el
+  green; el siguiente en la salida completa el hoyo con él. Como mucho una por
+  hoyo (#581).
+- **Línea guardada por el admin** por campo y hoyo, con la misma regla que una
+  muestra completa; guardarla otra vez la sustituye (#582):
+  - `PUT /golf-courses/admin/{id}/hole-lines/{hole}` la guarda;
+  - `DELETE /golf-courses/admin/{id}/hole-lines/{hole}` reabre el hoyo;
+  - `DELETE /golf-courses/admin/{id}/hole-samples/{sample_id}` borra una
+    muestra mala y libera su hueco.
+- **Lectura del admin** para revisar hoyos (#583):
+  - `GET /golf-courses/admin/hole-reviews`: los campos con hoyos que revisar
+    (con muestras o línea guardada), ordenados por nombre;
+  - `GET /golf-courses/admin/{id}/hole-reviews`: por hoyo, su línea guardada,
+    todas las muestras (id, barra, puntos y día, nunca quién) y la tarjeta de
+    cada barra.
+- **`tee_gender`** de cada jugador en la vista de anotación de la Ryder, para
+  que el mapa envíe las muestras por barra también allí (#579).
+- **`scripts/completar_genero_de_las_barras.py`**: rellena solo el género de
+  los partidos SCRATCH ya generados, en rondas programadas o en juego; con
+  `--dry-run` y una transacción por ronda (#580).
+
+### Changed
+
+- **3 muestras por hoyo** de cualquier barra (antes por barra), con el bloqueo,
+  la cuenta y la ventana de 10 minutos por hoyo. La lectura da por hoyo la
+  primera muestra completa, el green suelto y si recoge (#581).
+- **Los hoyos con línea y green de OSM aprobado, o con línea guardada, no
+  recogen muestras** (#581, #582).
+- La lectura de muestras trae `saved_line`, la línea del admin (#582).
+
+### Fixed
+
+- **Ryder SCRATCH**: al generar (y al reasignar) los partidos no se leía el
+  campo ni el género, y cada jugador quedaba con una barra sin género: veía la
+  tarjeta de referencia y sus muestras se descartaban. La regla vive ahora en
+  el dominio (`barra_sin_golpes`) y la usa también stroke play (#579).
+
 ## [2.29.0] - 2026-10-16
 
 **Mapa de hoyos.** Llega el modelo de mapa de hoyos con su revisión por el
