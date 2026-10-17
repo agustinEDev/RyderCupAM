@@ -407,7 +407,7 @@ async def test_get_review_with_an_approved_osm_map_returns_each_hole_osm_line():
         GetHoleReviewRequestDTO(golf_course_id=str(con.id))
     )
 
-    uno, dos, tres = review.holes[:3]
+    uno, dos = review.holes[:2]
     assert [(p.latitude, p.longitude) for p in uno.osm_line.points] == [
         (SALIDA.latitude, SALIDA.longitude),
         (CODO.latitude, CODO.longitude),
@@ -419,7 +419,7 @@ async def test_get_review_with_an_approved_osm_map_returns_each_hole_osm_line():
     )
     assert len(dos.osm_line.points) == 2
     assert dos.osm_line.green_center is None
-    assert tres.osm_line is None
+    assert all(h.osm_line is None for h in review.holes[2:])
 
 
 async def test_get_review_with_a_pending_osm_map_returns_no_osm_line():

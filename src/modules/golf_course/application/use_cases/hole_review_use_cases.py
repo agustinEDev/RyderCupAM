@@ -7,8 +7,8 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
   muestras, vuelve. `saved` sigue en la respuesta (siempre false) para no
   romper el contrato.
 - Un campo (de los que ven los jugadores): su ubicación y sus 18 hoyos, cada
-  uno con su línea del mapa de OSM aprobado si la hay, cada uno con su línea guardada, TODAS sus muestras
-  (con su id, para borrar las malas, y su barra) y los metros de cada barra en
+  uno con su línea del mapa de OSM aprobado (si la hay), su línea guardada,
+  TODAS sus muestras (con su id, para borrar las malas, y su barra) y los metros de cada barra en
   ese hoyo, para compararlos con lo que mide la línea.
 
 Las muestras siguen siendo anónimas: no se guarda de quién son. Que quien llama

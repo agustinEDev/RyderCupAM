@@ -18,7 +18,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.conftest import approve_golf_course, create_authenticated_user, create_golf_course
-from tests.integration.api.v1.test_hole_map_endpoints import _as, _make_admin, _scenario
+from tests.integration.api.v1.test_hole_map_endpoints import _as, _make_admin, _save_map, _scenario
 from tests.integration.api.v1.test_hole_sample_endpoints import (
     BODY,
     CODO,
@@ -287,6 +287,30 @@ async def test_r4_a_course_with_coordinates_brings_its_location(client: AsyncCli
 
     assert campo.status_code == 200
     assert campo.json()["location"] == {"latitude": 36.28, "longitude": -5.33}
+
+
+@pytest.mark.asyncio
+async def test_r5_an_approved_osm_map_brings_each_hole_line(client: AsyncClient):
+    """
+    GIVEN: un campo con su mapa de OSM aprobado, guardado en Postgres (T10)
+    WHEN: el admin pide su revisión
+    THEN: el hoyo 1 trae su línea y su green; el 2, su línea sin green; el 3, nada
+    """
+    course_id, admin, admin_email, _ = await _scenario(client, "r5")
+    await _save_map(course_id, approved_by_email=admin_email)
+
+    campo = await _as(client, admin).get(f"/api/v1/golf-courses/admin/{course_id}/hole-reviews")
+
+    uno, dos, tres = campo.json()["holes"][:3]
+    assert uno["osm_line"] == {
+        "points": [
+            {"latitude": 36.28, "longitude": -5.33},
+            {"latitude": 36.29, "longitude": -5.332},
+        ],
+        "green_center": {"latitude": 36.29, "longitude": -5.332},
+    }
+    assert (len(dos["osm_line"]["points"]), dos["osm_line"]["green_center"]) == (2, None)
+    assert tres["osm_line"] is None
 
 
 @pytest.mark.asyncio

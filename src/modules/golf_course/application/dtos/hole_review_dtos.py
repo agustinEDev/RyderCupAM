@@ -86,7 +86,6 @@ class HoleReviewHoleDTO(BaseModel):
     hole_number: int
     saved_line: HoleSampleDTO | None
     osm_line: OsmLineDTO | None = Field(
-        default=None,
         description="La del mapa de OSM aprobado; null sin mapa aprobado o sin el hoyo",
     )
     samples: list[AdminHoleSampleDTO] = Field(description="En orden de llegada")
