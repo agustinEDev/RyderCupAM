@@ -44,6 +44,13 @@ class InMemoryHoleSampleRepository(IHoleSampleRepository):
         self._next_seq += 1
         return True
 
+    async def delete(self, golf_course_id: GolfCourseId, sample_id: UUID) -> bool:
+        found = self._samples.get(sample_id)
+        if found is None or found[1].golf_course_id != golf_course_id:
+            return False
+        del self._samples[sample_id]
+        return True
+
     async def list_by_course(self, golf_course_id: GolfCourseId) -> list[HoleSample]:
         mine = [
             (sample.hole_number, seq, sample)

@@ -443,7 +443,8 @@ async def test_e3_eighteen_holes_and_nothing_about_who_or_how_many(client: Async
 
     assert [h["hole_number"] for h in data] == list(range(1, 19))
     assert all(
-        set(h) == {"hole_number", "first_sample", "first_green", "collecting", "tees"} for h in data
+        set(h) == {"hole_number", "saved_line", "first_sample", "first_green", "collecting", "tees"}
+        for h in data
     )
     assert (data[0]["collecting"], data[1]["collecting"]) == (True, False)
     assert set(data[0]["first_sample"]) == {"tee", "bends", "green_center"}

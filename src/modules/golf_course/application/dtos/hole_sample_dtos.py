@@ -101,6 +101,12 @@ class HoleSampleStatusDTO(BaseModel):
     """
 
     hole_number: int
+    saved_line: HoleSampleDTO | None = Field(
+        description=(
+            "La línea que guardó el admin (BE #575): la referencia del hoyo, la que "
+            "se ve antes que nada; con ella, el hoyo ya no recoge"
+        )
+    )
     first_sample: HoleSampleDTO | None = Field(
         description="La muestra completa más antigua del hoyo, de la barra que sea"
     )
@@ -112,8 +118,8 @@ class HoleSampleStatusDTO(BaseModel):
     )
     collecting: bool = Field(
         description=(
-            "True mientras el hoyo admite más muestras: menos de tres, y no lo trae "
-            "con línea y green el mapa de OSM aprobado"
+            "True mientras el hoyo admite más muestras: menos de tres, sin línea "
+            "guardada por el admin y sin traerlo con línea y green el mapa de OSM aprobado"
         )
     )
     tees: list[TeeSamplesDTO] = Field(

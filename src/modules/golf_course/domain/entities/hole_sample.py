@@ -51,6 +51,32 @@ class HoleSampleFarFromCourseError(InvalidHoleSampleError):
     """Algún punto de la muestra está a más de 3 km del campo."""
 
 
+def play_line_problem(
+    tee: GeoPoint | None,
+    green_center: GeoPoint,
+    points: Iterable[GeoPoint],
+    course_location: GeoPoint | None,
+) -> str | None:
+    """
+    Lo que hace imposible una línea de hoyo, o None si vale: con salida, el green
+    a 40-750 m de ella en recta; y ningún punto a más de 3 km del campo (sin su
+    ubicación, no se mira). La misma regla para una muestra y para la línea que
+    guarda el admin (BE #575).
+    """
+    if tee is not None:
+        metres = tee.distance_to(green_center)
+        if not MIN_TEE_TO_GREEN_M <= metres <= MAX_TEE_TO_GREEN_M:
+            return (
+                f"The green must be {MIN_TEE_TO_GREEN_M:.0f}-{MAX_TEE_TO_GREEN_M:.0f} m "
+                f"from the tee, got {metres:.0f} m"
+            )
+    if course_location is not None and any(
+        course_location.distance_to(point) > MAX_DISTANCE_FROM_COURSE_M for point in points
+    ):
+        return f"Every point must be within {MAX_DISTANCE_FROM_COURSE_M:.0f} m of the course"
+    return None
+
+
 def _today() -> date:
     """El día de hoy en UTC: de la llegada no se guarda más."""
     return datetime.now(UTC).date()
@@ -191,25 +217,14 @@ class HoleSample:
         )
 
     def _ensure_tee_to_green(self) -> None:
-        if self._tee is None:
-            return  # Solo green: no hay salida desde la que medir
-        metres = self._tee.distance_to(self._green_center)
-        if not MIN_TEE_TO_GREEN_M <= metres <= MAX_TEE_TO_GREEN_M:
-            raise HoleSampleOutOfRangeError(
-                f"The green must be {MIN_TEE_TO_GREEN_M:.0f}-{MAX_TEE_TO_GREEN_M:.0f} m "
-                f"from the tee, got {metres:.0f} m"
-            )
+        problem = play_line_problem(self._tee, self._green_center, (), None)
+        if problem:
+            raise HoleSampleOutOfRangeError(problem)
 
     def _ensure_near(self, course_location: GeoPoint | None) -> None:
-        if course_location is None:
-            return  # Sin ubicación del campo no hay con qué comparar
-        if any(
-            course_location.distance_to(point) > MAX_DISTANCE_FROM_COURSE_M
-            for point in self.play_line
-        ):
-            raise HoleSampleFarFromCourseError(
-                f"Every point must be within {MAX_DISTANCE_FROM_COURSE_M:.0f} m of the course"
-            )
+        problem = play_line_problem(None, self._green_center, self.play_line, course_location)
+        if problem:
+            raise HoleSampleFarFromCourseError(problem)
 
     @property
     def id(self) -> UUID:

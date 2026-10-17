@@ -17,14 +17,12 @@ Casos de uso de las muestras anónimas de hoyo (BE #532, reglas del 16 oct 2026)
 """
 
 import logging
-from typing import TypeGuard
 
 from src.modules.golf_course.application.dtos.hole_sample_dtos import (
     HoleSampleDTO,
     HoleSampleStatusDTO,
     ListHoleSamplesRequestDTO,
     ListHoleSamplesResponseDTO,
-    PointDTO,
     SubmitHoleSampleRequestDTO,
     SubmitHoleSampleResponseDTO,
     TeeSamplesDTO,
@@ -36,6 +34,13 @@ from src.modules.golf_course.application.exceptions import (
 from src.modules.golf_course.application.ports.recent_hole_sample_senders import (
     IRecentHoleSampleSenders,
 )
+from src.modules.golf_course.application.use_cases.hole_points import (
+    line_dto,
+    location_of,
+    point_dto,
+    to_point,
+    visible,
+)
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole_sample import (
@@ -46,7 +51,6 @@ from src.modules.golf_course.domain.entities.hole_sample import (
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
 from src.modules.golf_course.domain.value_objects.mapped_hole import (
@@ -55,21 +59,6 @@ from src.modules.golf_course.domain.value_objects.mapped_hole import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _visible(course: GolfCourse | None) -> TypeGuard[GolfCourse]:
-    """
-    Un campo que ven los jugadores: aprobado. La propuesta de cambio de un campo
-    (su clon) nace pendiente y se borra al aprobarla, así que nunca lo está.
-    """
-    return course is not None and course.approval_status.is_approved()
-
-
-def _location(course: GolfCourse) -> GeoPoint | None:
-    location = course.location
-    if location.latitude is None or location.longitude is None:
-        return None
-    return GeoPoint(latitude=location.latitude, longitude=location.longitude)
 
 
 def _mapped(hole_map: CourseHoleMap | None, hole: int) -> bool:
@@ -83,17 +72,6 @@ def _mapped(hole_map: CourseHoleMap | None, hole: int) -> bool:
     mapped = hole_map.hole(hole)
     # Un hoyo del mapa siempre trae línea (al menos dos puntos); falta el green o no
     return mapped is not None and not mapped.needs_green
-
-
-def _point(point: PointDTO) -> GeoPoint:
-    try:
-        return GeoPoint(latitude=point.latitude, longitude=point.longitude)
-    except ValueError as e:
-        raise InvalidHoleSampleError("Invalid coordinates") from e
-
-
-def _dto(point: GeoPoint) -> PointDTO:
-    return PointDTO(latitude=point.latitude, longitude=point.longitude)
 
 
 class SubmitHoleSampleUseCase:
@@ -124,7 +102,7 @@ class SubmitHoleSampleUseCase:
         try:
             async with self._uow:
                 course = await self._uow.golf_courses.find_by_id(course_id)
-                if not _visible(course):
+                if not visible(course):
                     raise GolfCourseNotFoundError(request.golf_course_id)
                 # Del 1 al 18 también en un campo de 9: la segunda vuelta suele
                 # salir de otras salidas, y se muestrea aparte (Agustín, 15 oct)
@@ -176,10 +154,12 @@ class SubmitHoleSampleUseCase:
                 hole_number=hole,
                 tee_color=tee.color,
                 tee_gender=tee.gender,
-                tee=_point(request.tee) if request.tee is not None else None,
-                bends=[_point(bend) for bend in request.bends],
-                green_center=_point(request.green_center),
-                course_location=_location(course),
+                tee=to_point(request.tee, InvalidHoleSampleError)
+                if request.tee is not None
+                else None,
+                bends=[to_point(bend, InvalidHoleSampleError) for bend in request.bends],
+                green_center=to_point(request.green_center, InvalidHoleSampleError),
+                course_location=location_of(course),
             )
         except InvalidHoleSampleError as e:
             logger.info(
@@ -202,6 +182,10 @@ class SubmitHoleSampleUseCase:
             logger.debug(
                 "Hole sample not stored (course %s, hole %s): mapped hole", course_id, hole
             )
+            return False
+        # Con su línea guardada por el admin, el hoyo ya no recoge (BE #575)
+        if await self._uow.saved_holes.get(course_id, hole) is not None:
+            logger.debug("Hole sample not stored (course %s, hole %s): saved hole", course_id, hole)
             return False
         if await samples.exists(sample.id):
             logger.debug(
@@ -232,11 +216,7 @@ def _sample_dto(sample: HoleSample) -> HoleSampleDTO:
     """Una muestra completa (con salida); las solo green van por `first_green`."""
     if sample.tee is None:
         raise ValueError("A green-only sample is not a full sample")
-    return HoleSampleDTO(
-        tee=_dto(sample.tee),
-        bends=[_dto(bend) for bend in sample.bends],
-        green_center=_dto(sample.green_center),
-    )
+    return line_dto(sample.tee, sample.bends, sample.green_center)
 
 
 class ListHoleSamplesUseCase:
@@ -255,10 +235,13 @@ class ListHoleSamplesUseCase:
         """
         course_id = GolfCourseId(request.golf_course_id)
         async with self._uow:
-            if not _visible(await self._uow.golf_courses.find_by_id(course_id)):
+            if not visible(await self._uow.golf_courses.find_by_id(course_id)):
                 raise GolfCourseNotFoundError(request.golf_course_id)
             samples = await self._uow.hole_samples.list_by_course(course_id)
             hole_map = await self._uow.hole_maps.find_by_golf_course_id(course_id)
+            saved = {
+                h.hole_number: h for h in await self._uow.saved_holes.list_by_course(course_id)
+            }
 
         # Ya vienen por hoyo y en orden de llegada
         by_hole: dict[int, list[HoleSample]] = {}
@@ -270,7 +253,12 @@ class ListHoleSamplesUseCase:
             hole_samples = by_hole.get(number, [])
             complete = [x for x in hole_samples if not x.is_green_only]
             loose = [x for x in hole_samples if x.is_green_only]
-            collecting = len(hole_samples) < MAX_SAMPLES_PER_HOLE and not _mapped(hole_map, number)
+            saved_hole = saved.get(number)
+            collecting = (
+                len(hole_samples) < MAX_SAMPLES_PER_HOLE
+                and saved_hole is None
+                and not _mapped(hole_map, number)
+            )
             # La primera vez que sale una barra es su primera muestra completa
             tees: dict[tuple, HoleSample] = {}
             for sample in complete:
@@ -278,8 +266,13 @@ class ListHoleSamplesUseCase:
             holes.append(
                 HoleSampleStatusDTO(
                     hole_number=number,
+                    saved_line=(
+                        line_dto(saved_hole.tee, saved_hole.bends, saved_hole.green_center)
+                        if saved_hole
+                        else None
+                    ),
                     first_sample=_sample_dto(complete[0]) if complete else None,
-                    first_green=_dto(loose[0].green_center) if loose else None,
+                    first_green=point_dto(loose[0].green_center) if loose else None,
                     collecting=collecting,
                     tees=[
                         TeeSamplesDTO(

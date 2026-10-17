@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,6 +103,14 @@ class HoleSampleRepository(IHoleSampleRepository):
             .returning(_table.c.id)
         )
         result = await self._session.execute(statement)
+        return result.first() is not None
+
+    async def delete(self, golf_course_id: GolfCourseId, sample_id: UUID) -> bool:
+        result = await self._session.execute(
+            delete(_table)
+            .where(_table.c.id == sample_id, _table.c.golf_course_id == golf_course_id)
+            .returning(_table.c.id)
+        )
         return result.first() is not None
 
     async def list_by_course(self, golf_course_id: GolfCourseId) -> list[HoleSample]:
