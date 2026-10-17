@@ -174,3 +174,55 @@ async def test_l5_deleting_on_an_unknown_course_is_404(client: AsyncClient):
     )
 
     assert (response.status_code, response.json()["error_code"]) == (404, "GOLF_COURSE_NOT_FOUND")
+
+
+# ============================================================================
+# R — Lo que lee el admin para revisar (BE #575)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
+    course_id, admin, _, player = await _scenario(client, "r1")
+    sample = _new(BODY)
+    await _as(client, player).post(f"{_samples(course_id)}/1", json=sample)
+    await _as(client, admin).put(_line(course_id, 2), json=LINEA)
+    c = _as(client, admin)
+
+    lista = await c.get("/api/v1/golf-courses/admin/hole-reviews")
+    campo = await c.get(f"/api/v1/golf-courses/admin/{course_id}/hole-reviews")
+
+    assert lista.status_code == 200
+    (curso,) = [x for x in lista.json()["courses"] if x["golf_course_id"] == course_id]
+    assert curso["holes"] == [
+        {"hole_number": 1, "samples": 1, "saved": False},
+        {"hole_number": 2, "samples": 0, "saved": True},
+    ]
+    assert campo.status_code == 200
+    uno, dos = campo.json()["holes"][:2]
+    assert [s["id"] for s in uno["samples"]] == [sample["id"]]
+    assert (uno["samples"][0]["tee_color"], uno["samples"][0]["tee_gender"]) == ("YELLOW", "MALE")
+    # Solo la muestra: nada de quién la mandó (no se guarda)
+    assert set(uno["samples"][0]) == {
+        "id",
+        "tee_color",
+        "tee_gender",
+        "tee",
+        "bends",
+        "green_center",
+        "received_on",
+    }
+    assert dos["saved_line"] == LINEA
+    assert set(dos["saved_line"]) == {"tee", "bends", "green_center"}
+
+
+@pytest.mark.asyncio
+async def test_r2_only_admins_and_unknown_course(client: AsyncClient):
+    course_id, admin, _, player = await _scenario(client, "r2")
+
+    lista = await _as(client, player).get("/api/v1/golf-courses/admin/hole-reviews")
+    campo = await _as(client, player).get(f"/api/v1/golf-courses/admin/{course_id}/hole-reviews")
+    sin_campo = await _as(client, admin).get(f"/api/v1/golf-courses/admin/{uuid4()}/hole-reviews")
+
+    assert [lista.status_code, campo.status_code] == [403, 403]
+    assert (sin_campo.status_code, sin_campo.json()["error_code"]) == (404, "GOLF_COURSE_NOT_FOUND")

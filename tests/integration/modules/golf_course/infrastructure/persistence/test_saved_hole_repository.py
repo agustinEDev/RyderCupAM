@@ -153,3 +153,33 @@ async def test_s6_deleting_a_sample_only_in_its_course(db_session):
     assert await samples.delete(otro, sample.id) is False
     assert await samples.delete(course_id, sample.id) is True
     assert await samples.list_by_course(course_id) == []
+
+
+@pytest.mark.asyncio
+async def test_s7_for_the_admin_counts_by_hole_and_every_line(db_session):
+    course_id, admin = await _course(db_session)
+    otro, _ = await _course(db_session)
+    samples = HoleSampleRepository(db_session)
+    for course, hole in ((course_id, 1), (course_id, 1), (course_id, 3), (otro, 1)):
+        await samples.add(
+            HoleSample.reconstruct(
+                id=uuid4(),
+                golf_course_id=course,
+                hole_number=hole,
+                tee_color=TeeColor.YELLOW,
+                tee_gender=Gender.MALE,
+                tee=SALIDA,
+                bends=(),
+                green_center=GREEN,
+                received_on=date(2026, 10, 17),
+            )
+        )
+    await SavedHoleRepository(db_session).save(_hole(course_id, admin, hole=5))
+
+    counts = {(c, h): n for c, h, n in await samples.count_by_hole()}
+    lines = [
+        (h.golf_course_id, h.hole_number) for h in await SavedHoleRepository(db_session).list_all()
+    ]
+
+    assert (counts[(course_id, 1)], counts[(course_id, 3)], counts[(otro, 1)]) == (2, 1, 1)
+    assert (course_id, 5) in lines

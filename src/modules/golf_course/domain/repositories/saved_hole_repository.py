@@ -27,5 +27,9 @@ class ISavedHoleRepository(ABC):
         """Las líneas guardadas del campo, por número de hoyo."""
 
     @abstractmethod
+    async def list_all(self) -> list[SavedHole]:
+        """Las líneas guardadas de todos los campos (una tabla pequeña). Para el admin."""
+
+    @abstractmethod
     async def delete(self, golf_course_id: GolfCourseId, hole_number: int) -> bool:
         """Quita la línea del hoyo (se reabre); False si no había."""

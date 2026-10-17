@@ -25,5 +25,8 @@ class InMemorySavedHoleRepository(ISavedHoleRepository):
             key=lambda h: h.hole_number,
         )
 
+    async def list_all(self) -> list[SavedHole]:
+        return list(self._holes.values())
+
     async def delete(self, golf_course_id: GolfCourseId, hole_number: int) -> bool:
         return self._holes.pop((golf_course_id, hole_number), None) is not None
