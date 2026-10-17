@@ -194,10 +194,8 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
 
     assert lista.status_code == 200
     (curso,) = [x for x in lista.json()["courses"] if x["golf_course_id"] == course_id]
-    assert curso["holes"] == [
-        {"hole_number": 1, "samples": 1, "saved": False},
-        {"hole_number": 2, "samples": 0, "saved": True},
-    ]
+    # El 2 está guardado: ya no está pendiente (17 oct). `saved` sigue, en false
+    assert curso["holes"] == [{"hole_number": 1, "samples": 1, "saved": False}]
     assert campo.status_code == 200
     uno, dos = campo.json()["holes"][:2]
     assert [s["id"] for s in uno["samples"]] == [sample["id"]]

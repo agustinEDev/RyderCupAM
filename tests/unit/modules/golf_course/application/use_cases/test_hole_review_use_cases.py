@@ -3,8 +3,14 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 
 | Caso | Qué                                              | Resultado                                         |
 |------|--------------------------------------------------|---------------------------------------------------|
-| A1   | la lista                                         | los campos con muestras o líneas, con su nombre; por hoyo, cuántas muestras y si está guardado |
+| A1   | la lista                                         | los campos con hoyos PENDIENTES (con muestras y sin línea guardada), con su nombre; por hoyo, cuántas muestras |
 | A1   | un campo sin nada                                | no sale                                            |
+| P2   | un hoyo guardado, tenga las muestras que tenga   | no sale (Agustín, 17 oct: al guardarlo desaparece) |
+| P3   | un campo con todos sus hoyos guardados           | no sale                                            |
+| P4   | un hoyo reabierto que conserva muestras          | vuelve a salir                                     |
+| P5   | un hoyo reabierto sin muestras                   | no sale: no hay nada que revisar                   |
+| P6   | los hoyos                                        | de menor a mayor                                   |
+| P7   | `saved`                                          | sigue en la respuesta, siempre `false`             |
 | A2   | un campo                                         | sus 18 hoyos: la línea guardada, TODAS sus muestras (id, barra, puntos, día) y los metros de cada barra |
 | A2   | una muestra solo green                           | sale con `tee: null`                              |
 | A2   | un campo que no existe, o que no ven los jugadores | GolfCourseNotFoundError                          |
@@ -101,7 +107,19 @@ async def _setup():
     return uow, con, sin
 
 
-async def test_a1_the_list_has_the_courses_with_samples_or_lines():
+def _saved(course, hole):
+    return SavedHole.create(
+        golf_course_id=course.id,
+        hole_number=hole,
+        tee=SALIDA,
+        bends=(),
+        green_center=GREEN,
+        saved_by=UserId.generate(),
+        course_location=None,
+    )
+
+
+async def test_a1_the_list_has_the_courses_with_pending_holes():
     uow, con, _ = await _setup()
     for sample in (
         _sample(con),
@@ -124,10 +142,10 @@ async def test_a1_the_list_has_the_courses_with_samples_or_lines():
     (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
     assert (course.golf_course_id, course.name) == (str(con.id), "Valderrama")
+    # P1/P2: el 7 está guardado y sin muestras: no sale
     assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [
         (1, 2, False),
         (5, 1, False),
-        (7, 0, True),
     ]
 
 
@@ -226,24 +244,53 @@ async def test_a1_by_name_without_case_or_accents():
     assert [c.name for c in courses] == ["Ávila Golf", "el Saler", "Zahara"]
 
 
-async def test_a1_a_hole_with_samples_and_a_saved_line():
+async def test_p2_a_saved_hole_with_samples_is_not_pending():
     uow, con, _ = await _setup()
     await uow.hole_samples.add(_sample(con))
-    await uow.saved_holes.save(
-        SavedHole.create(
-            golf_course_id=con.id,
-            hole_number=1,
-            tee=SALIDA,
-            bends=(),
-            green_center=GREEN,
-            saved_by=UserId.generate(),
-            course_location=None,
-        )
-    )
+    await uow.hole_samples.add(_sample(con, hole=2))
+    await uow.saved_holes.save(_saved(con, 1))
 
     (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
-    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [(1, 1, True)]
+    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [(2, 1, False)]
+
+
+async def test_p3_a_course_with_every_hole_saved_is_not_listed():
+    uow, con, _ = await _setup()
+    for hole in (1, 2):
+        await uow.hole_samples.add(_sample(con, hole=hole))
+        await uow.saved_holes.save(_saved(con, hole))
+
+    assert (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses == []
+
+
+async def test_p4_a_reopened_hole_with_samples_is_pending_again():
+    uow, con, _ = await _setup()
+    await uow.hole_samples.add(_sample(con))
+    await uow.saved_holes.save(_saved(con, 1))
+    await uow.saved_holes.delete(con.id, 1)
+
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [(h.hole_number, h.samples) for h in course.holes] == [(1, 1)]
+
+
+async def test_p5_a_reopened_hole_without_samples_is_not_listed():
+    uow, con, _ = await _setup()
+    await uow.saved_holes.save(_saved(con, 3))
+    await uow.saved_holes.delete(con.id, 3)
+
+    assert (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses == []
+
+
+async def test_p6_the_holes_go_from_lowest_to_highest():
+    uow, con, _ = await _setup()
+    for hole in (12, 3, 9):
+        await uow.hole_samples.add(_sample(con, hole=hole))
+
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [h.hole_number for h in course.holes] == [3, 9, 12]
 
 
 async def test_a2_a_course_players_cannot_see_is_not_found():

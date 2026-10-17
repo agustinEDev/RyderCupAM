@@ -11,10 +11,12 @@ from src.shared.domain.value_objects.gender import Gender
 
 
 class HoleReviewCountDTO(BaseModel):
-    """Un hoyo por revisar: cuántas muestras tiene y si ya está guardado."""
+    """Un hoyo pendiente: cuántas muestras tiene."""
 
     hole_number: int
     samples: int
+    # Desde el 17 oct un hoyo guardado no está pendiente: siempre false. Se
+    # queda para no romper el contrato del frontend en producción
     saved: bool
 
 

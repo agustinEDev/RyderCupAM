@@ -1,8 +1,11 @@
 """
 Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 
-- La lista: los campos con hoyos por revisar (con muestras o con su línea ya
-  guardada), por nombre, y de cada hoyo cuántas muestras tiene y si está guardado.
+- La lista: los campos con hoyos PENDIENTES, por nombre, y de cada hoyo, de menor
+  a mayor, cuántas muestras tiene. Pendiente es con muestras y sin línea guardada:
+  al guardarlo el admin, desaparece (Agustín, 17 oct); al reabrirlo, si conserva
+  muestras, vuelve. `saved` sigue en la respuesta (siempre false) para no
+  romper el contrato.
 - Un campo (de los que ven los jugadores): sus 18 hoyos, cada uno con su línea guardada, TODAS sus muestras
   (con su id, para borrar las malas, y su barra) y los metros de cada barra en
   ese hoyo, para compararlos con lo que mide la línea.
@@ -48,7 +51,7 @@ def _for_sorting(name: str) -> str:
 
 
 class ListHoleReviewsUseCase:
-    """Los campos con hoyos por revisar."""
+    """Los campos con hoyos pendientes de revisar."""
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
@@ -63,7 +66,15 @@ class ListHoleReviewsUseCase:
             saved_holes: dict[GolfCourseId, set[int]] = {}
             for line in saved:
                 saved_holes.setdefault(line.golf_course_id, set()).add(line.hole_number)
-            course_ids = list(samples.keys() | saved_holes.keys())
+            # Pendiente: con muestras (el recuento solo trae hoyos con alguna) y
+            # sin línea guardada
+            pending = {
+                course_id: sorted(
+                    hole for hole in holes if hole not in saved_holes.get(course_id, set())
+                )
+                for course_id, holes in samples.items()
+            }
+            course_ids = [course_id for course_id, holes in pending.items() if holes]
             # Solo los nombres, en una consulta: no cada campo con sus salidas
             names = await self._uow.golf_courses.find_names_by_ids(course_ids)
         courses = []
@@ -71,16 +82,14 @@ class ListHoleReviewsUseCase:
             name = names.get(str(course_id))
             if name is None:
                 continue
-            counted, kept = samples.get(course_id, {}), saved_holes.get(course_id, set())
+            counted = samples[course_id]
             courses.append(
                 HoleReviewSummaryDTO(
                     golf_course_id=str(course_id),
                     name=name,
                     holes=[
-                        HoleReviewCountDTO(
-                            hole_number=hole, samples=counted.get(hole, 0), saved=hole in kept
-                        )
-                        for hole in sorted(counted.keys() | kept)
+                        HoleReviewCountDTO(hole_number=hole, samples=counted[hole], saved=False)
+                        for hole in pending[course_id]
                     ],
                 )
             )
