@@ -36,7 +36,7 @@ from main import app as fastapi_app
 from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
 )
-from src.config.dependencies import get_db_session
+from src.config.dependencies import get_db_session, get_handicap_service
 from src.config.mappers import start_all_mappers
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
@@ -184,6 +184,25 @@ async def unit_client() -> AsyncGenerator[AsyncClient, None]:
 # ======================================================================================
 
 
+def _sin_la_rfeg_de_verdad() -> None:
+    """
+    La RFEG de la app de prueba es el mock, salvo que el test ya ponga el suyo.
+
+    La real falla al azar (429 si se le pregunta mucho, 500 a ratos), y la consultan
+    el registro de un jugador de España, generar los partidos y poner el hándicap
+    con `/handicaps/update`; el último lo convierte en un 503 que tumba el test (CI
+    de develop del 17 oct 2026). Con `setdefault`, los tests que ponen su propio mock
+    antes de pedir el cliente lo conservan.
+    """
+    from src.modules.user.infrastructure.external.mock_handicap_service import (
+        MockHandicapService,
+    )
+
+    fastapi_app.dependency_overrides.setdefault(
+        get_handicap_service, lambda: MockHandicapService(default=None)
+    )
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """
@@ -229,6 +248,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+    _sin_la_rfeg_de_verdad()
 
     # Publicada para los tests que necesitan comprobar que algo se PERSISTIO:
     # cualquier ruta que lea la competicion puede abrirla ella misma, asi que un
@@ -303,6 +323,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+    _sin_la_rfeg_de_verdad()
 
     test_client_id = f"test-module-{uuid.uuid4()}"
 

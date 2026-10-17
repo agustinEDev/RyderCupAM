@@ -21,9 +21,8 @@ import pytest
 from httpx import AsyncClient
 
 from tests.conftest import set_auth_cookies
-from tests.integration.api.v1.test_tee_groups_endpoints import (  # noqa: F401
+from tests.integration.api.v1.test_tee_groups_endpoints import (
     _generar,
-    _sin_la_rfeg_de_verdad,
     _stableford as _stableford_con_el_reloj,
     _usuario,
 )
