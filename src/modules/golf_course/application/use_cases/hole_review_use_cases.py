@@ -30,7 +30,7 @@ from src.modules.golf_course.application.dtos.hole_review_dtos import (
 from src.modules.golf_course.application.exceptions import GolfCourseNotFoundError
 from src.modules.golf_course.application.use_cases.hole_points import (
     line_dto,
-    location_of,
+    location_dto,
     point_dto,
     visible,
 )
@@ -177,11 +177,10 @@ class GetHoleReviewUseCase:
                     tees=_tees(cards, number),
                 )
             )
-        location = location_of(course)
         return HoleReviewDTO(
             golf_course_id=str(course_id),
             name=course.name,
             # Para que el admin marque un hoyo sin nada, el mapa parte del campo
-            location=point_dto(location) if location is not None else None,
+            location=location_dto(course),
             holes=holes,
         )

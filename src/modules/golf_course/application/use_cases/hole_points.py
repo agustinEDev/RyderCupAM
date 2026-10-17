@@ -28,6 +28,12 @@ def location_of(course: GolfCourse) -> GeoPoint | None:
     return GeoPoint(latitude=location.latitude, longitude=location.longitude)
 
 
+def location_dto(course: GolfCourse) -> PointDTO | None:
+    """La ubicación del campo para la API, o None si no la tiene."""
+    location = location_of(course)
+    return point_dto(location) if location is not None else None
+
+
 def to_point(point: PointDTO, error: type[Exception]) -> GeoPoint:
     """El punto de la API, o `error` si sus coordenadas son imposibles."""
     try:

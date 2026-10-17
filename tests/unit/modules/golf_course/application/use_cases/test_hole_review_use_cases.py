@@ -193,19 +193,38 @@ async def test_a2_a_course_with_every_sample_its_line_and_the_metres_of_each_tee
     assert review.holes[1].samples == []
 
 
-async def test_a3_the_course_location_comes_to_mark_a_hole_with_nothing():
+async def test_get_review_with_coordinates_returns_the_course_location():
+    """
+    GIVEN: un campo con coordenadas (A3)
+    WHEN: el admin pide su revisión
+    THEN: viene su ubicación, para marcar un hoyo sin nada
+    """
     uow = InMemoryGolfCourseUnitOfWork()
     con = _course(location=CourseLocation(latitude=36.28, longitude=-5.33))
-    sin = _course("Sin ubicación")
-    for c in (con, sin):
-        await uow.golf_courses.save(c)
-    use_case = GetHoleReviewUseCase(uow)
+    await uow.golf_courses.save(con)
 
-    review = await use_case.execute(GetHoleReviewRequestDTO(golf_course_id=str(con.id)))
-    without = await use_case.execute(GetHoleReviewRequestDTO(golf_course_id=str(sin.id)))
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
 
     assert (review.location.latitude, review.location.longitude) == (36.28, -5.33)
-    assert without.location is None
+
+
+async def test_get_review_without_coordinates_returns_a_null_location():
+    """
+    GIVEN: un campo sin coordenadas (A3)
+    WHEN: el admin pide su revisión
+    THEN: la ubicación viene null
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    sin = _course("Sin ubicación")
+    await uow.golf_courses.save(sin)
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(sin.id))
+    )
+
+    assert review.location is None
 
 
 async def test_a2_the_saved_line_comes_too():
