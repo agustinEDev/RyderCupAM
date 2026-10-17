@@ -87,4 +87,8 @@ class HoleReviewDTO(BaseModel):
 
     golf_course_id: str
     name: str
+    location: PointDTO | None = Field(
+        default=None,
+        description="La ubicación del campo, para marcar un hoyo sin nada; null si no la tiene",
+    )
     holes: list[HoleReviewHoleDTO]

@@ -6,7 +6,7 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
   al guardarlo el admin, desaparece (Agustín, 17 oct); al reabrirlo, si conserva
   muestras, vuelve. `saved` sigue en la respuesta (siempre false) para no
   romper el contrato.
-- Un campo (de los que ven los jugadores): sus 18 hoyos, cada uno con su línea guardada, TODAS sus muestras
+- Un campo (de los que ven los jugadores): su ubicación y sus 18 hoyos, cada uno con su línea guardada, TODAS sus muestras
   (con su id, para borrar las malas, y su barra) y los metros de cada barra en
   ese hoyo, para compararlos con lo que mide la línea.
 
@@ -28,7 +28,12 @@ from src.modules.golf_course.application.dtos.hole_review_dtos import (
     TeeMetresDTO,
 )
 from src.modules.golf_course.application.exceptions import GolfCourseNotFoundError
-from src.modules.golf_course.application.use_cases.hole_points import line_dto, point_dto, visible
+from src.modules.golf_course.application.use_cases.hole_points import (
+    line_dto,
+    location_of,
+    point_dto,
+    visible,
+)
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
@@ -172,4 +177,11 @@ class GetHoleReviewUseCase:
                     tees=_tees(cards, number),
                 )
             )
-        return HoleReviewDTO(golf_course_id=str(course_id), name=course.name, holes=holes)
+        location = location_of(course)
+        return HoleReviewDTO(
+            golf_course_id=str(course_id),
+            name=course.name,
+            # Para que el admin marque un hoyo sin nada, el mapa parte del campo
+            location=point_dto(location) if location else None,
+            holes=holes,
+        )

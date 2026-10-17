@@ -197,6 +197,8 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
     # El 2 está guardado: ya no está pendiente (17 oct). `saved` sigue, en false
     assert curso["holes"] == [{"hole_number": 1, "samples": 1, "saved": False}]
     assert campo.status_code == 200
+    # La ubicación del campo, para marcar un hoyo sin nada (17 oct)
+    assert "location" in campo.json()
     uno, dos = campo.json()["holes"][:2]
     assert [s["id"] for s in uno["samples"]] == [sample["id"]]
     assert (uno["samples"][0]["tee_color"], uno["samples"][0]["tee_gender"]) == ("YELLOW", "MALE")
