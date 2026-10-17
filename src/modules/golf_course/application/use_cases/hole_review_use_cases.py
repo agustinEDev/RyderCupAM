@@ -45,7 +45,6 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
 from src.modules.golf_course.domain.value_objects.mapped_hole import (
     MAX_HOLE_NUMBER,
     MIN_HOLE_NUMBER,
@@ -152,7 +151,7 @@ def _osm_line(hole_map: CourseHoleMap | None, number: int) -> OsmLineDTO | None:
         return None
     return OsmLineDTO(
         points=[point_dto(p) for p in mapped.play_line],
-        green_center=point_dto(mapped.green.center) if mapped.green else None,
+        green_center=None if mapped.needs_green else point_dto(mapped.green.center),
     )
 
 
@@ -179,7 +178,7 @@ class GetHoleReviewUseCase:
             }
             hole_map = await self._uow.hole_maps.find_by_golf_course_id(course_id)
         # Solo el mapa aprobado: es el que ven los jugadores (17 oct)
-        approved = hole_map if hole_map and hole_map.status is HoleMapStatus.APPROVED else None
+        approved = hole_map if hole_map is not None and hole_map.is_approved else None
         by_hole: dict[int, list[HoleSample]] = {}
         for sample in samples:
             by_hole.setdefault(sample.hole_number, []).append(sample)

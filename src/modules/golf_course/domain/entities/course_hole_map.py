@@ -211,6 +211,11 @@ class CourseHoleMap:
         return self._status
 
     @property
+    def is_approved(self) -> bool:
+        """Si está aprobado: solo entonces lo ven los jugadores."""
+        return self._status is HoleMapStatus.APPROVED
+
+    @property
     def reviewed_by(self) -> UserId | None:
         return self._reviewed_by
 

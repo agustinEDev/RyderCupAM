@@ -452,3 +452,24 @@ async def test_get_review_with_a_rejected_osm_map_returns_no_osm_line():
     )
 
     assert all(h.osm_line is None for h in review.holes)
+
+
+async def test_get_review_of_a_hole_with_osm_line_saved_line_and_samples_returns_all_three():
+    """
+    GIVEN: el hoyo 2 del mapa aprobado (sin green), con muestras y con línea guardada (T10)
+    WHEN: el admin pide la revisión
+    THEN: trae las tres cosas, cada una por su lado
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con))
+    await uow.hole_samples.add(_sample(con, hole=2))
+    await uow.saved_holes.save(_saved(con, 2))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    dos = review.holes[1]
+    assert (len(dos.osm_line.points), dos.osm_line.green_center) == (2, None)
+    assert dos.saved_line is not None
+    assert len(dos.samples) == 1

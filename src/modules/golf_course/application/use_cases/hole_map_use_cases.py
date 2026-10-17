@@ -28,7 +28,6 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -47,7 +46,7 @@ class GetApprovedHoleMapUseCase:
             hole_map = await self._uow.hole_maps.find_by_golf_course_id(
                 GolfCourseId(request.golf_course_id)
             )
-            if hole_map is None or hole_map.status is not HoleMapStatus.APPROVED:
+            if hole_map is None or not hole_map.is_approved:
                 raise HoleMapNotFoundError(request.golf_course_id)
             return to_hole_map_dto(hole_map)
 

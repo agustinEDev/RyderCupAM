@@ -158,6 +158,19 @@ def test_m5_approve_pending_map():
     assert hole_map.rejection_reason is None
 
 
+def test_is_approved_only_when_approved():
+    """
+    GIVEN: Un mapa pendiente, uno aprobado y uno rechazado
+    WHEN: Se pregunta si está aprobado (lo que ven los jugadores, 17 oct)
+    THEN: Solo el aprobado
+    """
+    pendiente, aprobado, rechazado = _map(), _map(), _map()
+    aprobado.approve(reviewer_id=UserId.generate())
+    rechazado.reject(reviewer_id=UserId.generate())
+
+    assert [m.is_approved for m in (pendiente, aprobado, rechazado)] == [False, True, False]
+
+
 def test_m6_reject_pending_map_with_reason():
     """
     GIVEN: Un mapa pendiente

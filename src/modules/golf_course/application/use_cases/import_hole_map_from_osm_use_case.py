@@ -25,7 +25,6 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
 
 # Un campo sin hoyos sobre el terreno declarados es uno de 18
 DEFAULT_PHYSICAL_HOLES = 18
@@ -84,7 +83,7 @@ class ImportHoleMapFromOsmUseCase:
             if latitude is None or longitude is None:
                 return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.NO_COORDINATES)
             existing = await self._uow.hole_maps.find_by_golf_course_id(course_id)
-            if existing is not None and existing.status is HoleMapStatus.APPROVED:
+            if existing is not None and existing.is_approved:
                 return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.SKIPPED_APPROVED)
             return _Plan(
                 course_id=course_id,
@@ -125,7 +124,7 @@ class ImportHoleMapFromOsmUseCase:
         async with self._uow:
             # Lo último de la BD y bloqueado: un admin pudo aprobarlo mientras OSM respondía
             current = await self._uow.hole_maps.find_by_golf_course_id_for_update(course_id)
-            if current is not None and current.status is HoleMapStatus.APPROVED:
+            if current is not None and current.is_approved:
                 return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.SKIPPED_APPROVED)
             now = datetime.now(UTC).replace(tzinfo=None)
             if current is None:
