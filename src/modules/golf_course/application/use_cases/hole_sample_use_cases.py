@@ -2,25 +2,27 @@
 Casos de uso de las muestras anónimas de hoyo (BE #532, reglas del 16 oct 2026).
 
 - Mandar: la barra se resuelve contra las del campo, como al anotar (una que el
-  campo no tiene no se guarda). Por hoyo y barra (color y género) se guardan las tres primeras
-  muestras válidas que llegan. Se responde igual y no se guarda nada si es la
+  campo no tiene no se guarda), y se guarda con la muestra. Por hoyo se guardan
+  las tres primeras muestras válidas que llegan, de cualquier barra (17 oct:
+  una referencia por hoyo). Se responde igual y no se guarda nada si es la
   cuarta, si el dominio la rechaza (codos de más, distancias imposibles, lejos
-  del campo), si su id ya está guardado (un reenvío) o si el jugador ya aportó
-  otra a esa barra en los últimos 10 minutos: el jugador no debe notarlo. Vale
-  para cualquier hoyo, tenga o no datos en el mapa.
-- Leer: de cada hoyo, sus barras con muestra, cada una con su primera muestra y
-  si sigue recogiendo. Nunca cuántas hay ni de quién son (no se guarda).
+  del campo), si su id ya está guardado (un reenvío), si el jugador ya aportó
+  otra a ese hoyo en los últimos 10 minutos, o si el mapa de OSM aprobado ya
+  trae el hoyo con línea y green (17 oct: con lo de OSM basta): el jugador no
+  debe notarlo. Una muestra puede ser solo green (sin salida ni codos), y de
+  esas, una por hoyo.
+- Leer: de cada hoyo, su primera muestra completa, el green de su primera
+  muestra solo green y si sigue recogiendo; y, para los móviles de antes, sus
+  barras con muestra completa. Nunca cuántas hay ni de quién son.
 """
 
 import logging
-from typing import TypeGuard
 
 from src.modules.golf_course.application.dtos.hole_sample_dtos import (
     HoleSampleDTO,
     HoleSampleStatusDTO,
     ListHoleSamplesRequestDTO,
     ListHoleSamplesResponseDTO,
-    PointDTO,
     SubmitHoleSampleRequestDTO,
     SubmitHoleSampleResponseDTO,
     TeeSamplesDTO,
@@ -32,6 +34,14 @@ from src.modules.golf_course.application.exceptions import (
 from src.modules.golf_course.application.ports.recent_hole_sample_senders import (
     IRecentHoleSampleSenders,
 )
+from src.modules.golf_course.application.use_cases.hole_points import (
+    line_dto,
+    location_of,
+    point_dto,
+    to_point,
+    visible,
+)
+from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole_sample import (
     MAX_SAMPLES_PER_HOLE,
@@ -41,8 +51,8 @@ from src.modules.golf_course.domain.entities.hole_sample import (
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
 from src.modules.golf_course.domain.value_objects.mapped_hole import (
     MAX_HOLE_NUMBER,
     MIN_HOLE_NUMBER,
@@ -51,37 +61,24 @@ from src.modules.golf_course.domain.value_objects.mapped_hole import (
 logger = logging.getLogger(__name__)
 
 
-def _visible(course: GolfCourse | None) -> TypeGuard[GolfCourse]:
+def _mapped(hole_map: CourseHoleMap | None, hole: int) -> bool:
     """
-    Un campo que ven los jugadores: aprobado. La propuesta de cambio de un campo
-    (su clon) nace pendiente y se borra al aprobarla, así que nunca lo está.
+    Si el mapa de OSM aprobado ya trae el hoyo con línea y green: entonces no
+    recoge muestras (Agustín, 17 oct). Un hoyo que el mapa no trae, o sin green,
+    se completa con ellas.
     """
-    return course is not None and course.approval_status.is_approved()
-
-
-def _location(course: GolfCourse) -> GeoPoint | None:
-    location = course.location
-    if location.latitude is None or location.longitude is None:
-        return None
-    return GeoPoint(latitude=location.latitude, longitude=location.longitude)
-
-
-def _point(point: PointDTO) -> GeoPoint:
-    try:
-        return GeoPoint(latitude=point.latitude, longitude=point.longitude)
-    except ValueError as e:
-        raise InvalidHoleSampleError("Invalid coordinates") from e
-
-
-def _dto(point: GeoPoint) -> PointDTO:
-    return PointDTO(latitude=point.latitude, longitude=point.longitude)
+    if hole_map is None or hole_map.status is not HoleMapStatus.APPROVED:
+        return False
+    mapped = hole_map.hole(hole)
+    # Un hoyo del mapa siempre trae línea (al menos dos puntos); falta el green o no
+    return mapped is not None and not mapped.needs_green
 
 
 class SubmitHoleSampleUseCase:
     """
     Llega la muestra de un hoyo desde una barra: se guarda si es válida, si es de
-    las tres primeras de esa barra, si su id es nuevo y si el jugador no aportó
-    ya otra a esa barra en los últimos 10 minutos.
+    las tres primeras del hoyo, si su id es nuevo, si el jugador no aportó ya otra
+    a ese hoyo en los últimos 10 minutos y si el hoyo no está ya en el mapa de OSM.
     """
 
     def __init__(
@@ -105,7 +102,7 @@ class SubmitHoleSampleUseCase:
         try:
             async with self._uow:
                 course = await self._uow.golf_courses.find_by_id(course_id)
-                if not _visible(course):
+                if not visible(course):
                     raise GolfCourseNotFoundError(request.golf_course_id)
                 # Del 1 al 18 también en un campo de 9: la segunda vuelta suele
                 # salir de otras salidas, y se muestrea aparte (Agustín, 15 oct)
@@ -114,7 +111,7 @@ class SubmitHoleSampleUseCase:
                 sample = self._sample(request, course, course_id)
                 if sample is None:
                     return SubmitHoleSampleResponseDTO()
-                key = (request.user_id, course_id, hole, sample.tee_color, sample.tee_gender)
+                key = (request.user_id, course_id, hole)
                 if not self._recent_senders.reserve(*key):
                     logger.debug(
                         "Hole sample not stored (course %s, hole %s): sender window",
@@ -157,10 +154,12 @@ class SubmitHoleSampleUseCase:
                 hole_number=hole,
                 tee_color=tee.color,
                 tee_gender=tee.gender,
-                tee=_point(request.tee),
-                bends=[_point(bend) for bend in request.bends],
-                green_center=_point(request.green_center),
-                course_location=_location(course),
+                tee=to_point(request.tee, InvalidHoleSampleError)
+                if request.tee is not None
+                else None,
+                bends=[to_point(bend, InvalidHoleSampleError) for bend in request.bends],
+                green_center=to_point(request.green_center, InvalidHoleSampleError),
+                course_location=location_of(course),
             )
         except InvalidHoleSampleError as e:
             logger.info(
@@ -170,32 +169,61 @@ class SubmitHoleSampleUseCase:
 
     async def _store(self, sample: HoleSample) -> bool:
         """
-        Guarda la muestra si es nueva y su barra aún recoge. Con la barra
-        bloqueada: dos que lleguen a la vez no pueden ver las dos «quedan
+        Guarda la muestra si es nueva y su hoyo aún recoge. Con el hoyo
+        bloqueado: dos que lleguen a la vez no pueden ver las dos «quedan
         huecos» y dejar cuatro.
         """
         course_id, hole = sample.golf_course_id, sample.hole_number
-        tee = (sample.tee_color, sample.tee_gender)
         samples = self._uow.hole_samples
-        await samples.lock_tee(course_id, hole, *tee)
+        await samples.lock_hole(course_id, hole)
+        # Con el hoyo ya bloqueado, y tras lo que se mira sin la BD (la muestra,
+        # la ventana del jugador): el mapa de OSM aprobado ya lo trae (17 oct)
+        if _mapped(await self._uow.hole_maps.find_by_golf_course_id(course_id), hole):
+            logger.debug(
+                "Hole sample not stored (course %s, hole %s): mapped hole", course_id, hole
+            )
+            return False
+        # Con su línea guardada por el admin, el hoyo ya no recoge (BE #575)
+        if await self._uow.saved_holes.get(course_id, hole) is not None:
+            logger.debug("Hole sample not stored (course %s, hole %s): saved hole", course_id, hole)
+            return False
         if await samples.exists(sample.id):
             logger.debug(
                 "Hole sample not stored (course %s, hole %s): repeated id", course_id, hole
             )
             return False
-        if await samples.count_for_tee(course_id, hole, *tee) >= MAX_SAMPLES_PER_HOLE:
+        # Una solo green por hoyo, la única que se lee: tres a mitad de hoyo
+        # dejarían el hoyo lleno sin que nadie pudiera completarlo (17 oct)
+        if sample.is_green_only and await samples.has_green_only(course_id, hole):
             logger.debug(
-                "Hole sample not stored (course %s, hole %s): tee already has its samples",
+                "Hole sample not stored (course %s, hole %s): hole already has its green",
                 course_id,
                 hole,
             )
             return False
-        # Si el mismo id entra a la vez por otra barra, gana una y la otra no cuenta
+        if await samples.count_for_hole(course_id, hole) >= MAX_SAMPLES_PER_HOLE:
+            logger.debug(
+                "Hole sample not stored (course %s, hole %s): hole already has its samples",
+                course_id,
+                hole,
+            )
+            return False
+        # Si el mismo id entra a la vez por otro hoyo, gana uno y el otro no cuenta
         return await samples.add(sample)
 
 
+def _sample_dto(sample: HoleSample) -> HoleSampleDTO:
+    """Una muestra completa (con salida); las solo green van por `first_green`."""
+    if sample.tee is None:
+        raise ValueError("A green-only sample is not a full sample")
+    return line_dto(sample.tee, sample.bends, sample.green_center)
+
+
 class ListHoleSamplesUseCase:
-    """De cada hoyo del 1 al 18: sus barras con muestra, la primera de cada una y si recoge."""
+    """
+    De cada hoyo del 1 al 18: su primera muestra completa, el green de la primera
+    solo green y si recoge; y sus barras con muestra completa (móviles de antes).
+    """
 
     def __init__(self, uow: GolfCourseUnitOfWorkInterface) -> None:
         self._uow = uow
@@ -207,34 +235,54 @@ class ListHoleSamplesUseCase:
         """
         course_id = GolfCourseId(request.golf_course_id)
         async with self._uow:
-            if not _visible(await self._uow.golf_courses.find_by_id(course_id)):
+            if not visible(await self._uow.golf_courses.find_by_id(course_id)):
                 raise GolfCourseNotFoundError(request.golf_course_id)
             samples = await self._uow.hole_samples.list_by_course(course_id)
+            hole_map = await self._uow.hole_maps.find_by_golf_course_id(course_id)
+            saved = {
+                h.hole_number: h for h in await self._uow.saved_holes.list_by_course(course_id)
+            }
 
-        # Ya vienen por hoyo y en orden de llegada: la primera vez que sale una
-        # barra es su primera muestra, y así quedan ordenadas por ella
-        by_hole: dict[int, dict[tuple, list[HoleSample]]] = {}
+        # Ya vienen por hoyo y en orden de llegada
+        by_hole: dict[int, list[HoleSample]] = {}
         for sample in samples:
-            tees = by_hole.setdefault(sample.hole_number, {})
-            tees.setdefault((sample.tee_color, sample.tee_gender), []).append(sample)
+            by_hole.setdefault(sample.hole_number, []).append(sample)
 
-        holes = [
-            HoleSampleStatusDTO(
-                hole_number=number,
-                tees=[
-                    TeeSamplesDTO(
-                        tee_color=tee_color,
-                        tee_gender=tee_gender,
-                        first_sample=HoleSampleDTO(
-                            tee=_dto(tee_samples[0].tee),
-                            bends=[_dto(bend) for bend in tee_samples[0].bends],
-                            green_center=_dto(tee_samples[0].green_center),
-                        ),
-                        collecting=len(tee_samples) < MAX_SAMPLES_PER_HOLE,
-                    )
-                    for (tee_color, tee_gender), tee_samples in by_hole.get(number, {}).items()
-                ],
+        holes = []
+        for number in range(MIN_HOLE_NUMBER, MAX_HOLE_NUMBER + 1):
+            hole_samples = by_hole.get(number, [])
+            complete = [x for x in hole_samples if not x.is_green_only]
+            loose = [x for x in hole_samples if x.is_green_only]
+            saved_hole = saved.get(number)
+            collecting = (
+                len(hole_samples) < MAX_SAMPLES_PER_HOLE
+                and saved_hole is None
+                and not _mapped(hole_map, number)
             )
-            for number in range(MIN_HOLE_NUMBER, MAX_HOLE_NUMBER + 1)
-        ]
+            # La primera vez que sale una barra es su primera muestra completa
+            tees: dict[tuple, HoleSample] = {}
+            for sample in complete:
+                tees.setdefault((sample.tee_color, sample.tee_gender), sample)
+            holes.append(
+                HoleSampleStatusDTO(
+                    hole_number=number,
+                    saved_line=(
+                        line_dto(saved_hole.tee, saved_hole.bends, saved_hole.green_center)
+                        if saved_hole
+                        else None
+                    ),
+                    first_sample=_sample_dto(complete[0]) if complete else None,
+                    first_green=point_dto(loose[0].green_center) if loose else None,
+                    collecting=collecting,
+                    tees=[
+                        TeeSamplesDTO(
+                            tee_color=tee_color,
+                            tee_gender=tee_gender,
+                            first_sample=_sample_dto(first),
+                            collecting=collecting,
+                        )
+                        for (tee_color, tee_gender), first in tees.items()
+                    ],
+                )
+            )
         return ListHoleSamplesResponseDTO(holes=holes)

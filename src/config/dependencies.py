@@ -296,6 +296,10 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
+from src.modules.golf_course.application.use_cases.hole_review_use_cases import (
+    GetHoleReviewUseCase,
+    ListHoleReviewsUseCase,
+)
 from src.modules.golf_course.application.use_cases.hole_sample_use_cases import (
     ListHoleSamplesUseCase,
     SubmitHoleSampleUseCase,
@@ -314,6 +318,11 @@ from src.modules.golf_course.application.use_cases.reject_update_golf_course_use
 )
 from src.modules.golf_course.application.use_cases.request_golf_course_use_case import (
     RequestGolfCourseUseCase,
+)
+from src.modules.golf_course.application.use_cases.saved_hole_use_cases import (
+    DeleteHoleSampleUseCase,
+    ReopenHoleUseCase,
+    SaveHoleLineUseCase,
 )
 from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
     UpdateGolfCourseUseCase,
@@ -3075,6 +3084,41 @@ def get_list_hole_samples_use_case(
 ) -> ListHoleSamplesUseCase:
     """Proveedor del caso de uso ListHoleSamplesUseCase."""
     return ListHoleSamplesUseCase(uow)
+
+
+def get_save_hole_line_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> SaveHoleLineUseCase:
+    """Proveedor del caso de uso SaveHoleLineUseCase (BE #575)."""
+    return SaveHoleLineUseCase(uow)
+
+
+def get_reopen_hole_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ReopenHoleUseCase:
+    """Proveedor del caso de uso ReopenHoleUseCase (BE #575)."""
+    return ReopenHoleUseCase(uow)
+
+
+def get_list_hole_reviews_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ListHoleReviewsUseCase:
+    """Proveedor del caso de uso ListHoleReviewsUseCase (BE #575)."""
+    return ListHoleReviewsUseCase(uow)
+
+
+def get_hole_review_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetHoleReviewUseCase:
+    """Proveedor del caso de uso GetHoleReviewUseCase (BE #575)."""
+    return GetHoleReviewUseCase(uow)
+
+
+def get_delete_hole_sample_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> DeleteHoleSampleUseCase:
+    """Proveedor del caso de uso DeleteHoleSampleUseCase (BE #575)."""
+    return DeleteHoleSampleUseCase(uow)
 
 
 # ============================================================================

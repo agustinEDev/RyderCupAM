@@ -28,6 +28,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.barra_del_jugador import (
     barra_del_jugador,
+    barra_sin_golpes,
     lo_que_le_falta,
 )
 from src.modules.competition.domain.value_objects.jugador_de_partida import (
@@ -52,7 +53,6 @@ from src.shared.domain.services.playing_handicap_calculator import (
     TeeRating,
 )
 from src.shared.domain.services.stroke_allocation import allocate_by_hole
-from src.shared.domain.services.tee_lookup import tee_key_for
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.play_mode import PlayMode
 
@@ -241,15 +241,12 @@ class JugadoresDeLaPartida:
     @staticmethod
     def _sin_golpes(user_id, inscripcion, genero, contexto: StrokeContext) -> JugadorDePartida:
         """SCRATCH: todos juegan con 0, y las barras no hace falta que estén valoradas."""
-        barra = barra_del_jugador(inscripcion.tee_color, genero, contexto.tee_ratings)
-        tee_gender = barra.tee_gender
         # Unas barras sin valorar no dan golpes, pero su tarjeta sí cuenta: su
         # género se busca también entre las que la traen (P12)
-        con_tarjeta = tee_key_for(
-            contexto.pars_by_tee, barra.tee_color.value, genero.value if genero else None
+        barra = barra_sin_golpes(
+            inscripcion.tee_color, genero, contexto.tee_ratings, contexto.pars_by_tee
         )
-        if tee_gender is None and con_tarjeta is not None and con_tarjeta[1] is not None:
-            tee_gender = genero
+        tee_gender = barra.tee_gender
         return JugadorDePartida(
             user_id=user_id,
             handicap=inscripcion.fixed_handicap,

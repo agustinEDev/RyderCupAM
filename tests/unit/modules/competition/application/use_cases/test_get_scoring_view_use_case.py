@@ -99,13 +99,13 @@ def user_repo():
     return repo
 
 
-async def _setup(uow, course: GolfCourse | None):
+async def _setup(uow, course: GolfCourse | None, yellow_gender: Gender | None = Gender.MALE):
     """Un partido de dos jugadores, uno por barra, listo para pedir la vista."""
     yellow = MatchPlayer.create(
         user_id=UserId.generate(),
         playing_handicap=10,
         tee_color=TeeColor.YELLOW,
-        tee_gender=Gender.MALE,
+        tee_gender=yellow_gender,
         strokes_received=[],
     )
     red = MatchPlayer.create(
@@ -160,6 +160,43 @@ class TestGolfCourseOfTheRound:
         view = await uc.execute(str(match.id))
 
         assert view.round_info.golf_course_id == ronda.golf_course_id.value
+
+
+class TestTeeGenderPerPlayer:
+    """
+    Cada jugador dice el sexo de su barra, como la vista de stroke play: con el
+    color, el mapa de hoyos envía las muestras por barra (RyderCupWeb #880).
+    """
+
+    @pytest.mark.asyncio
+    async def test_cada_jugador_lleva_el_sexo_de_su_barra(self, uow, user_repo):
+        """
+        GIVEN: Un partido con un jugador en amarillas de hombre y otra en rojas de mujer
+        WHEN: Se pide la vista de anotar
+        THEN: Cada uno lleva el sexo de su barra
+        """
+        match, yellow, red, gc_repo = await _setup(uow, _course_two_tees())
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        generos = {p.user_id: p.tee_gender for p in view.players}
+        assert generos[str(yellow.user_id)] == "MALE"
+        assert generos[str(red.user_id)] == "FEMALE"
+
+    @pytest.mark.asyncio
+    async def test_una_barra_sin_sexo_va_en_null(self, uow, user_repo):
+        """
+        GIVEN: Un jugador que sale de una barra sin sexo
+        WHEN: Se pide la vista de anotar
+        THEN: Su tee_gender es null
+        """
+        match, yellow, _, gc_repo = await _setup(uow, _course_two_tees(), yellow_gender=None)
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert next(p for p in view.players if p.user_id == str(yellow.user_id)).tee_gender is None
 
 
 class TestHoleCardPerPlayer:

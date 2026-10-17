@@ -2,7 +2,7 @@
 SQLAlchemy Unit of Work - Golf Course Module Infrastructure Layer.
 
 Implementación asíncrona del Unit of Work para el módulo de campos de golf.
-Coordina transacciones entre 4 repositorios: golf_courses, hole_maps, hole_samples y
+Coordina transacciones entre 5 repositorios: golf_courses, hole_maps, hole_samples, saved_holes y
 countries.
 """
 
@@ -18,6 +18,9 @@ from src.modules.golf_course.domain.repositories.hole_map_repository import IHol
 from src.modules.golf_course.domain.repositories.hole_sample_repository import (
     IHoleSampleRepository,
 )
+from src.modules.golf_course.domain.repositories.saved_hole_repository import (
+    ISavedHoleRepository,
+)
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
 )
@@ -26,6 +29,9 @@ from src.modules.golf_course.infrastructure.persistence.repositories.hole_map_re
 )
 from src.modules.golf_course.infrastructure.persistence.repositories.hole_sample_repository import (
     HoleSampleRepository,
+)
+from src.modules.golf_course.infrastructure.persistence.repositories.saved_hole_repository import (
+    SavedHoleRepository,
 )
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -68,10 +74,11 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
             session: Sesión asíncrona de SQLAlchemy compartida por todos los repositorios
         """
         self._session = session
-        # Inicializar los 4 repositorios con la misma sesión (transacción compartida)
+        # Inicializar los 5 repositorios con la misma sesión (transacción compartida)
         self._golf_courses = GolfCourseRepository(session)
         self._hole_maps = HoleMapRepository(session)
         self._hole_samples = HoleSampleRepository(session)
+        self._saved_holes = SavedHoleRepository(session)
         self._countries = SQLAlchemyCountryRepository(session)
 
     @property
@@ -93,6 +100,11 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     def hole_samples(self) -> IHoleSampleRepository:
         """Repositorio de muestras anónimas de hoyo (BE #532)."""
         return self._hole_samples
+
+    @property
+    def saved_holes(self) -> ISavedHoleRepository:
+        """Repositorio de las líneas guardadas de los hoyos (BE #575)."""
+        return self._saved_holes
 
     @property
     def countries(self) -> CountryRepositoryInterface:
