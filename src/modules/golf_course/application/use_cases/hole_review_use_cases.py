@@ -6,8 +6,9 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
   al guardarlo el admin, desaparece (Agustín, 17 oct); al reabrirlo, si conserva
   muestras, vuelve. `saved` sigue en la respuesta (siempre false) para no
   romper el contrato.
-- Un campo (de los que ven los jugadores): su ubicación y sus 18 hoyos, cada uno con su línea guardada, TODAS sus muestras
-  (con su id, para borrar las malas, y su barra) y los metros de cada barra en
+- Un campo (de los que ven los jugadores): su ubicación y sus 18 hoyos, cada
+  uno con su línea del mapa de OSM aprobado (si la hay), su línea guardada,
+  TODAS sus muestras (con su id, para borrar las malas, y su barra) y los metros de cada barra en
   ese hoyo, para compararlos con lo que mide la línea.
 
 Las muestras siguen siendo anónimas: no se guarda de quién son. Que quien llama
@@ -25,6 +26,7 @@ from src.modules.golf_course.application.dtos.hole_review_dtos import (
     HoleReviewSummaryDTO,
     ListHoleReviewsRequestDTO,
     ListHoleReviewsResponseDTO,
+    OsmLineDTO,
     TeeMetresDTO,
 )
 from src.modules.golf_course.application.exceptions import GolfCourseNotFoundError
@@ -34,6 +36,7 @@ from src.modules.golf_course.application.use_cases.hole_points import (
     point_dto,
     visible,
 )
+from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
@@ -141,6 +144,17 @@ def _tees(cards: list[tuple[Tee, dict[int, Hole]]], number: int) -> list[TeeMetr
     ]
 
 
+def _osm_line(hole_map: CourseHoleMap | None, number: int) -> OsmLineDTO | None:
+    """La línea del hoyo en el mapa de OSM aprobado, entera, y su green si lo trae."""
+    mapped = hole_map.hole(number) if hole_map else None
+    if mapped is None:
+        return None
+    return OsmLineDTO(
+        points=[point_dto(p) for p in mapped.play_line],
+        green_center=None if mapped.needs_green else point_dto(mapped.green.center),
+    )
+
+
 class GetHoleReviewUseCase:
     """Los 18 hoyos de un campo, para revisarlos."""
 
@@ -162,6 +176,9 @@ class GetHoleReviewUseCase:
             saved = {
                 h.hole_number: h for h in await self._uow.saved_holes.list_by_course(course_id)
             }
+            hole_map = await self._uow.hole_maps.find_by_golf_course_id(course_id)
+        # Solo el mapa aprobado: es el que ven los jugadores (17 oct)
+        approved = hole_map if hole_map is not None and hole_map.is_approved else None
         by_hole: dict[int, list[HoleSample]] = {}
         for sample in samples:
             by_hole.setdefault(sample.hole_number, []).append(sample)
@@ -173,6 +190,7 @@ class GetHoleReviewUseCase:
                 HoleReviewHoleDTO(
                     hole_number=number,
                     saved_line=line_dto(line.tee, line.bends, line.green_center) if line else None,
+                    osm_line=_osm_line(approved, number),
                     samples=[_sample_dto(x) for x in by_hole.get(number, [])],
                     tees=_tees(cards, number),
                 )

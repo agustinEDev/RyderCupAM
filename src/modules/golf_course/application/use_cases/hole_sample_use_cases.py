@@ -52,7 +52,6 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.golf_course.domain.value_objects.hole_map_status import HoleMapStatus
 from src.modules.golf_course.domain.value_objects.mapped_hole import (
     MAX_HOLE_NUMBER,
     MIN_HOLE_NUMBER,
@@ -67,7 +66,7 @@ def _mapped(hole_map: CourseHoleMap | None, hole: int) -> bool:
     recoge muestras (Agustín, 17 oct). Un hoyo que el mapa no trae, o sin green,
     se completa con ellas.
     """
-    if hole_map is None or hole_map.status is not HoleMapStatus.APPROVED:
+    if hole_map is None or not hole_map.is_approved:
         return False
     mapped = hole_map.hole(hole)
     # Un hoyo del mapa siempre trae línea (al menos dos puntos); falta el green o no

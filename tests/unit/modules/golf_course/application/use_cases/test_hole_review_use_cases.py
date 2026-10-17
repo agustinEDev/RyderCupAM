@@ -15,11 +15,12 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 | A2   | un campo                                         | sus 18 hoyos: la línea guardada, TODAS sus muestras (id, barra, puntos, día) y los metros de cada barra |
 | A2   | una muestra solo green                           | sale con `tee: null`                              |
 | A2   | un campo que no existe, o que no ven los jugadores | GolfCourseNotFoundError                          |
+| T10  | la línea de OSM aprobada de cada hoyo            | sus puntos y su green (o null); nada con el mapa pendiente o rechazado |
 | A3   | la ubicación del campo                           | viene, para que el admin marque un hoyo sin nada (17 oct); sin ella, null |
 | A1   | por nombre                                       | sin mayúsculas ni acentos                          |
 """
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -33,6 +34,7 @@ from src.modules.golf_course.application.use_cases.hole_review_use_cases import 
     GetHoleReviewUseCase,
     ListHoleReviewsUseCase,
 )
+from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
@@ -41,6 +43,9 @@ from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
+from src.modules.golf_course.domain.value_objects.green_position import GreenPosition
+from src.modules.golf_course.domain.value_objects.mapped_hole import MappedHole
+from src.modules.golf_course.domain.value_objects.position_source import PositionSource
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
@@ -362,3 +367,109 @@ async def test_a2_a_course_players_cannot_see_is_not_found():
         await GetHoleReviewUseCase(uow).execute(
             GetHoleReviewRequestDTO(golf_course_id=str(pendiente.id))
         )
+
+
+def _osm_map(course, approved=True, rejected=False):
+    """El hoyo 1 con línea (con un vértice en medio) y green; el 2, sin green."""
+    hole_map = CourseHoleMap.create(
+        golf_course_id=course.id,
+        holes=[
+            MappedHole(
+                number=1,
+                play_line=(SALIDA, CODO, GREEN),
+                line_source=PositionSource.OSM,
+                green=GreenPosition(
+                    front=GREEN, center=GREEN, back=GREEN, source=PositionSource.OSM
+                ),
+            ),
+            MappedHole(number=2, play_line=(SALIDA, GREEN), line_source=PositionSource.OSM),
+        ],
+        osm_reference="way/1",
+        imported_at=datetime(2026, 10, 15, 9, 0),
+    )
+    if rejected:
+        hole_map.reject(reviewer_id=UserId.generate())
+    elif approved:
+        hole_map.approve(reviewer_id=UserId.generate())
+    return hole_map
+
+
+async def test_get_review_with_an_approved_osm_map_returns_each_hole_osm_line():
+    """
+    GIVEN: un campo con su mapa de OSM aprobado (T10)
+    WHEN: el admin pide su revisión
+    THEN: cada hoyo del mapa trae su línea entera y su green; uno sin green, null; los demás, nada
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    uno, dos = review.holes[:2]
+    assert [(p.latitude, p.longitude) for p in uno.osm_line.points] == [
+        (SALIDA.latitude, SALIDA.longitude),
+        (CODO.latitude, CODO.longitude),
+        (GREEN.latitude, GREEN.longitude),
+    ]
+    assert (uno.osm_line.green_center.latitude, uno.osm_line.green_center.longitude) == (
+        GREEN.latitude,
+        GREEN.longitude,
+    )
+    assert len(dos.osm_line.points) == 2
+    assert dos.osm_line.green_center is None
+    assert all(h.osm_line is None for h in review.holes[2:])
+
+
+async def test_get_review_with_a_pending_osm_map_returns_no_osm_line():
+    """
+    GIVEN: un campo con su mapa de OSM pendiente (T10)
+    WHEN: el admin pide su revisión
+    THEN: ningún hoyo trae línea de OSM: los jugadores no la ven
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con, approved=False))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    assert all(h.osm_line is None for h in review.holes)
+
+
+async def test_get_review_with_a_rejected_osm_map_returns_no_osm_line():
+    """
+    GIVEN: un campo con su mapa de OSM rechazado (T10)
+    WHEN: el admin pide su revisión
+    THEN: ningún hoyo trae línea de OSM
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con, rejected=True))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    assert all(h.osm_line is None for h in review.holes)
+
+
+async def test_get_review_of_a_hole_with_osm_line_saved_line_and_samples_returns_all_three():
+    """
+    GIVEN: el hoyo 2 del mapa aprobado (sin green), con muestras y con línea guardada (T10)
+    WHEN: el admin pide la revisión
+    THEN: trae las tres cosas, cada una por su lado
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con))
+    await uow.hole_samples.add(_sample(con, hole=2))
+    await uow.saved_holes.save(_saved(con, 2))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    dos = review.holes[1]
+    assert (len(dos.osm_line.points), dos.osm_line.green_center) == (2, None)
+    assert dos.saved_line is not None
+    assert len(dos.samples) == 1
