@@ -68,13 +68,12 @@ class ListHoleReviewsUseCase:
                 saved_holes.setdefault(line.golf_course_id, set()).add(line.hole_number)
             # Pendiente: con muestras (el recuento solo trae hoyos con alguna) y
             # sin línea guardada
-            pending = {
-                course_id: sorted(
-                    hole for hole in holes if hole not in saved_holes.get(course_id, set())
-                )
-                for course_id, holes in samples.items()
-            }
-            course_ids = [course_id for course_id, holes in pending.items() if holes]
+            pending: dict[GolfCourseId, list[int]] = {}
+            for course_id, holes in samples.items():
+                kept = saved_holes.get(course_id, set())
+                if left := sorted(hole for hole in holes if hole not in kept):
+                    pending[course_id] = left
+            course_ids = list(pending)
             # Solo los nombres, en una consulta: no cada campo con sus salidas
             names = await self._uow.golf_courses.find_names_by_ids(course_ids)
         courses = []

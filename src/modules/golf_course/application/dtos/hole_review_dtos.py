@@ -17,15 +17,19 @@ class HoleReviewCountDTO(BaseModel):
     samples: int
     # Desde el 17 oct un hoyo guardado no está pendiente: siempre false. Se
     # queda para no romper el contrato del frontend en producción
-    saved: bool
+    saved: bool = Field(
+        deprecated=True, description="Siempre false: un hoyo guardado ya no está pendiente"
+    )
 
 
 class HoleReviewSummaryDTO(BaseModel):
-    """Un campo con hoyos por revisar, en la lista del admin."""
+    """Un campo con hoyos pendientes, en la lista del admin."""
 
     golf_course_id: str
     name: str
-    holes: list[HoleReviewCountDTO] = Field(description="Solo los hoyos con muestras o línea")
+    holes: list[HoleReviewCountDTO] = Field(
+        description="Solo los hoyos pendientes (con muestras y sin línea guardada), de menor a mayor"
+    )
 
 
 class ListHoleReviewsRequestDTO(BaseModel):

@@ -220,7 +220,9 @@ async def test_r3_saving_removes_a_hole_from_the_list_and_reopening_brings_it_ba
 ):
     """Por la API y contra Postgres: guardar lo quita; reabrir con muestras lo devuelve (17 oct)."""
     course_id, admin, _, player = await _scenario(client, "r3")
-    await _as(client, player).post(f"{_samples(course_id)}/1", json=_new(BODY))
+    assert (
+        await _as(client, player).post(f"{_samples(course_id)}/1", json=_new(BODY))
+    ).status_code == 204
     c = _as(client, admin)
 
     def holes(response):
@@ -232,9 +234,9 @@ async def test_r3_saving_removes_a_hole_from_the_list_and_reopening_brings_it_ba
         ]
 
     assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == [1]
-    await c.put(_line(course_id, 1), json=LINEA)
+    assert (await c.put(_line(course_id, 1), json=LINEA)).status_code in (200, 204)
     assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == []
-    await c.delete(_line(course_id, 1))
+    assert (await c.delete(_line(course_id, 1))).status_code in (200, 204)
     assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == [1]
 
 

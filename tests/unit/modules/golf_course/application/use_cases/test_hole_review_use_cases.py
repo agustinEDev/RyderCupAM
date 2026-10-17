@@ -5,6 +5,7 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 |------|--------------------------------------------------|---------------------------------------------------|
 | A1   | la lista                                         | los campos con hoyos PENDIENTES (con muestras y sin línea guardada), con su nombre; por hoyo, cuántas muestras |
 | A1   | un campo sin nada                                | no sale                                            |
+| P1   | un hoyo con muestras y sin línea guardada        | sale                                               |
 | P2   | un hoyo guardado, tenga las muestras que tenga   | no sale (Agustín, 17 oct: al guardarlo desaparece) |
 | P3   | un campo con todos sus hoyos guardados           | no sale                                            |
 | P4   | un hoyo reabierto que conserva muestras          | vuelve a salir                                     |
@@ -143,7 +144,7 @@ async def test_a1_the_list_has_the_courses_with_pending_holes():
 
     assert (course.golf_course_id, course.name) == (str(con.id), "Valderrama")
     # P1/P2: el 7 está guardado y sin muestras: no sale
-    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [
+    assert [(h.hole_number, h.samples, h.model_dump()["saved"]) for h in course.holes] == [
         (1, 2, False),
         (5, 1, False),
     ]
@@ -252,7 +253,9 @@ async def test_p2_a_saved_hole_with_samples_is_not_pending():
 
     (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
-    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [(2, 1, False)]
+    assert [(h.hole_number, h.samples, h.model_dump()["saved"]) for h in course.holes] == [
+        (2, 1, False)
+    ]
 
 
 async def test_p3_a_course_with_every_hole_saved_is_not_listed():
