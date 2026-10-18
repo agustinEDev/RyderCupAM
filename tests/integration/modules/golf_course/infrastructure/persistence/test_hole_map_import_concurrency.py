@@ -141,11 +141,12 @@ async def test_for_update_read_sees_an_approval_made_in_another_session(db_sessi
 
 
 @pytest.mark.asyncio
-async def test_map_approved_while_asking_osm_is_not_overwritten(db_session, escenario):
+async def test_map_approved_while_asking_osm_is_reimported(db_session, escenario):
     """
     GIVEN: Un mapa pendiente y un admin que lo aprueba mientras se espera a OSM
     WHEN: Termina la importación con --apply
-    THEN: «Ya aprobado», y en la BD sigue aprobado con su hoyo 9
+    THEN: Se reimporta sobre lo que hay entonces (I10): en la BD, aprobado, con
+          los hoyos de OSM y sin revisor
     """
     course, admin = escenario
     retenido = []
@@ -169,15 +170,19 @@ async def test_map_approved_while_asking_osm_is_not_overwritten(db_session, esce
         ImportHoleMapRequestDTO(golf_course_id=str(course.id), apply=True)
     )
 
-    assert result.status is ImportHoleMapStatus.SKIPPED_APPROVED
+    assert result.status is ImportHoleMapStatus.REIMPORTED
     row = (
         await db_session.execute(
-            text("SELECT status, holes FROM golf_course_hole_maps WHERE golf_course_id = :id"),
+            text(
+                "SELECT status, holes, reviewed_by FROM golf_course_hole_maps"
+                " WHERE golf_course_id = :id"
+            ),
             {"id": course.id.value},
         )
     ).one()
     assert row.status == "APPROVED"
-    assert [hole["number"] for hole in row.holes] == [9]
+    assert [hole["number"] for hole in row.holes] == list(range(1, 11))
+    assert row.reviewed_by is None
 
 
 @pytest.mark.asyncio

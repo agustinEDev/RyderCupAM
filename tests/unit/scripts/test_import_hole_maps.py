@@ -160,14 +160,14 @@ async def test_s4_summary_counts_statuses_and_discarded_holes():
         {
             "a": _resultado(ImportHoleMapStatus.CREATED, 18, {"PAR_MISMATCH": 1}),
             "b": _resultado(ImportHoleMapStatus.CREATED, 16, {"PAR_MISMATCH": 2, "AMBIGUOUS": 1}),
-            "c": _resultado(ImportHoleMapStatus.SKIPPED_APPROVED),
+            "c": _resultado(ImportHoleMapStatus.REIMPORTED, 0),
             "d": _resultado(ImportHoleMapStatus.NO_OUTLINE),
         }
     )
 
     summary = await run(list("abcd"), importador, apply=True, pause=0, sleep=_sin_espera)
 
-    assert summary.statuses == {"CREATED": 2, "SKIPPED_APPROVED": 1, "NO_OUTLINE": 1}
+    assert summary.statuses == {"CREATED": 2, "REIMPORTED": 1, "NO_OUTLINE": 1}
     assert summary.holes_imported == 34
     assert summary.discarded == {"PAR_MISMATCH": 3, "AMBIGUOUS": 1}
     texto = report(summary, apply=True)
@@ -220,9 +220,9 @@ def test_s1_malformed_course_id_is_a_usage_error():
 @pytest.mark.asyncio
 async def test_s3_no_pause_after_a_course_that_did_not_ask_osm():
     """
-    GIVEN: Un campo ya aprobado (no pregunta a OSM), uno sin coordenadas y otro
+    GIVEN: Un campo sin coordenadas (no pregunta a OSM) y dos que sí
     WHEN: Se hace la pasada
-    THEN: Tras los que no preguntaron a OSM no se espera
+    THEN: Tras el que no preguntó a OSM no se espera; tras el último, tampoco
     """
     esperas = []
 
@@ -231,14 +231,13 @@ async def test_s3_no_pause_after_a_course_that_did_not_ask_osm():
 
     importador = Importador(
         {
-            "a": _resultado(ImportHoleMapStatus.SKIPPED_APPROVED),
             "b": _resultado(ImportHoleMapStatus.NO_COORDINATES),
             "c": _resultado(ImportHoleMapStatus.CREATED, 18),
             "d": _resultado(ImportHoleMapStatus.CREATED, 18),
         }
     )
 
-    await run(list("abcd"), importador, apply=False, pause=5.0, sleep=sleep)
+    await run(list("bcd"), importador, apply=False, pause=5.0, sleep=sleep)
 
     assert esperas == [5.0]
 

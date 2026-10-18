@@ -11,19 +11,25 @@ from src.shared.domain.value_objects.gender import Gender
 
 
 class HoleReviewCountDTO(BaseModel):
-    """Un hoyo por revisar: cuántas muestras tiene y si ya está guardado."""
+    """Un hoyo pendiente: cuántas muestras tiene."""
 
     hole_number: int
     samples: int
-    saved: bool
+    # Desde el 17 oct un hoyo guardado no está pendiente: siempre false. Se
+    # queda para no romper el contrato del frontend en producción
+    saved: bool = Field(
+        deprecated=True, description="Siempre false: un hoyo guardado ya no está pendiente"
+    )
 
 
 class HoleReviewSummaryDTO(BaseModel):
-    """Un campo con hoyos por revisar, en la lista del admin."""
+    """Un campo con hoyos pendientes, en la lista del admin."""
 
     golf_course_id: str
     name: str
-    holes: list[HoleReviewCountDTO] = Field(description="Solo los hoyos con muestras o línea")
+    holes: list[HoleReviewCountDTO] = Field(
+        description="Solo los hoyos pendientes (con muestras y sin línea guardada), de menor a mayor"
+    )
 
 
 class ListHoleReviewsRequestDTO(BaseModel):
@@ -67,11 +73,21 @@ class TeeMetresDTO(BaseModel):
     meters: int | None
 
 
+class OsmLineDTO(BaseModel):
+    """La línea de un hoyo en el mapa de OSM aprobado, tal cual: el admin la ve y parte de ella."""
+
+    points: list[PointDTO] = Field(description="De la salida al green, con todos sus vértices")
+    green_center: PointDTO | None = Field(description="null si el mapa no trae el green")
+
+
 class HoleReviewHoleDTO(BaseModel):
     """Un hoyo para revisar: la línea guardada, todas sus muestras y los metros de cada barra."""
 
     hole_number: int
     saved_line: HoleSampleDTO | None
+    osm_line: OsmLineDTO | None = Field(
+        description="La del mapa de OSM aprobado; null sin mapa aprobado o sin el hoyo",
+    )
     samples: list[AdminHoleSampleDTO] = Field(description="En orden de llegada")
     tees: list[TeeMetresDTO]
 
@@ -81,4 +97,8 @@ class HoleReviewDTO(BaseModel):
 
     golf_course_id: str
     name: str
+    location: PointDTO | None = Field(
+        default=None,
+        description="La ubicación del campo, para marcar un hoyo sin nada; null si no la tiene",
+    )
     holes: list[HoleReviewHoleDTO]

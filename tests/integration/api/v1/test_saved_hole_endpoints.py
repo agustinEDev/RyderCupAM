@@ -17,7 +17,8 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from tests.integration.api.v1.test_hole_map_endpoints import _as, _scenario
+from tests.conftest import approve_golf_course, create_authenticated_user, create_golf_course
+from tests.integration.api.v1.test_hole_map_endpoints import _as, _make_admin, _save_map, _scenario
 from tests.integration.api.v1.test_hole_sample_endpoints import (
     BODY,
     CODO,
@@ -194,11 +195,12 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
 
     assert lista.status_code == 200
     (curso,) = [x for x in lista.json()["courses"] if x["golf_course_id"] == course_id]
-    assert curso["holes"] == [
-        {"hole_number": 1, "samples": 1, "saved": False},
-        {"hole_number": 2, "samples": 0, "saved": True},
-    ]
+    # El 2 está guardado: ya no está pendiente (17 oct). `saved` sigue, en false
+    assert curso["holes"] == [{"hole_number": 1, "samples": 1, "saved": False}]
     assert campo.status_code == 200
+    # La ubicación del campo, para marcar un hoyo sin nada (17 oct): el de la
+    # prueba no tiene coordenadas, y viene null (el caso con ellas, en unitarios)
+    assert campo.json()["location"] is None
     uno, dos = campo.json()["holes"][:2]
     assert [s["id"] for s in uno["samples"]] == [sample["id"]]
     assert (uno["samples"][0]["tee_color"], uno["samples"][0]["tee_gender"]) == ("YELLOW", "MALE")
@@ -213,7 +215,108 @@ async def test_r1_the_list_and_a_course_to_review(client: AsyncClient):
         "received_on",
     }
     assert dos["saved_line"] == LINEA
+    # Sin mapa de OSM aprobado, ningún hoyo trae su línea (T10, 17 oct)
+    assert all(h["osm_line"] is None for h in campo.json()["holes"])
     assert set(dos["saved_line"]) == {"tee", "bends", "green_center"}
+
+
+@pytest.mark.asyncio
+async def test_r3_saving_removes_a_hole_from_the_list_and_reopening_brings_it_back(
+    client: AsyncClient,
+):
+    """Por la API y contra Postgres: guardar lo quita; reabrir con muestras lo devuelve (17 oct)."""
+    course_id, admin, _, player = await _scenario(client, "r3")
+    assert (
+        await _as(client, player).post(f"{_samples(course_id)}/1", json=_new(BODY))
+    ).status_code == 204
+    c = _as(client, admin)
+
+    def holes(response):
+        return [
+            h["hole_number"]
+            for x in response.json()["courses"]
+            if x["golf_course_id"] == course_id
+            for h in x["holes"]
+        ]
+
+    assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == [1]
+    assert (await c.put(_line(course_id, 1), json=LINEA)).status_code in (200, 204)
+    assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == []
+    assert (await c.delete(_line(course_id, 1))).status_code in (200, 204)
+    assert holes(await c.get("/api/v1/golf-courses/admin/hole-reviews")) == [1]
+
+
+@pytest.mark.asyncio
+async def test_r4_a_course_with_coordinates_brings_its_location(client: AsyncClient):
+    """
+    GIVEN: un campo aprobado con coordenadas
+    WHEN: el admin pide su revisión
+    THEN: viene su ubicación, como punto
+    """
+    creator = await create_authenticated_user(
+        client, "creator-r4@test.com", "P@ssw0rd123!", "Creator", "Map"
+    )
+    course = await create_golf_course(
+        client,
+        creator["cookies"],
+        {
+            "name": "Campo con coordenadas r4",
+            "country_code": "ES",
+            "course_type": "STANDARD_18",
+            "location": {"latitude": 36.28, "longitude": -5.33},
+            "tees": [
+                {
+                    "identifier": "Amarillo",
+                    "color": "YELLOW",
+                    "tee_gender": "MALE",
+                    "course_rating": 70.2,
+                    "slope_rating": 128,
+                    "par": 72,
+                }
+            ],
+            "holes": [{"hole_number": i, "par": 4, "stroke_index": i} for i in range(1, 19)],
+        },
+    )
+    admin = await create_authenticated_user(
+        client, "admin-r4@test.com", "AdminPass123!", "Admin", "Map"
+    )
+    await _make_admin("admin-r4@test.com")
+    await approve_golf_course(client, admin["cookies"], course["id"])
+
+    campo = await _as(client, admin).get(f"/api/v1/golf-courses/admin/{course['id']}/hole-reviews")
+
+    assert campo.status_code == 200
+    assert campo.json()["location"] == {"latitude": 36.28, "longitude": -5.33}
+
+
+@pytest.mark.asyncio
+async def test_r5_an_approved_osm_map_brings_each_hole_line(client: AsyncClient):
+    """
+    GIVEN: un campo con su mapa de OSM aprobado, guardado en Postgres (T10)
+    WHEN: el admin pide su revisión
+    THEN: el hoyo 1 trae su línea y su green; el 2, su línea sin green; el 3, nada
+    """
+    course_id, admin, admin_email, _ = await _scenario(client, "r5")
+    await _save_map(course_id, approved_by_email=admin_email)
+
+    campo = await _as(client, admin).get(f"/api/v1/golf-courses/admin/{course_id}/hole-reviews")
+
+    uno, dos = campo.json()["holes"][:2]
+    assert uno["osm_line"] == {
+        "points": [
+            {"latitude": 36.28, "longitude": -5.33},
+            {"latitude": 36.29, "longitude": -5.332},
+        ],
+        "green_center": {"latitude": 36.29, "longitude": -5.332},
+    }
+    assert dos["osm_line"] == {
+        "points": [
+            {"latitude": 36.291, "longitude": -5.332},
+            {"latitude": 36.295, "longitude": -5.335},
+        ],
+        "green_center": None,
+    }
+    assert all(h["osm_line"] is None for h in campo.json()["holes"][2:])
 
 
 @pytest.mark.asyncio

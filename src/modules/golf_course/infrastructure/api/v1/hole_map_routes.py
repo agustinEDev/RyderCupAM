@@ -470,7 +470,10 @@ async def list_hole_reviews(
     current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
     use_case: Annotated[ListHoleReviewsUseCase, Depends(get_list_hole_reviews_use_case)],
 ):
-    """Los campos con hoyos por revisar: por hoyo, cuántas muestras tiene y si está guardado."""
+    """
+    Los campos con hoyos pendientes (con muestras y sin línea guardada): por hoyo,
+    de menor a mayor, cuántas muestras tiene. `saved` es siempre false.
+    """
     if not current_user.is_admin:
         return _forbidden()
     return await use_case.execute(ListHoleReviewsRequestDTO())
@@ -491,8 +494,9 @@ async def get_hole_review(
     use_case: Annotated[GetHoleReviewUseCase, Depends(get_hole_review_use_case)],
 ):
     """
-    Los 18 hoyos del campo para revisarlos: la línea guardada, todas las muestras
-    (con su id y su barra, nunca de quién son) y los metros de cada barra.
+    Los 18 hoyos del campo para revisarlos: la ubicación del campo y, por hoyo,
+    la línea guardada, la del mapa de OSM aprobado, todas las muestras (con su id
+    y su barra, nunca de quién son) y los metros de cada barra.
     """
     if not current_user.is_admin:
         return _forbidden()

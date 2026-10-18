@@ -3,15 +3,24 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 
 | Caso | Qué                                              | Resultado                                         |
 |------|--------------------------------------------------|---------------------------------------------------|
-| A1   | la lista                                         | los campos con muestras o líneas, con su nombre; por hoyo, cuántas muestras y si está guardado |
+| A1   | la lista                                         | los campos con hoyos PENDIENTES (con muestras y sin línea guardada), con su nombre; por hoyo, cuántas muestras |
 | A1   | un campo sin nada                                | no sale                                            |
+| P1   | un hoyo con muestras y sin línea guardada        | sale                                               |
+| P2   | un hoyo guardado, tenga las muestras que tenga   | no sale (Agustín, 17 oct: al guardarlo desaparece) |
+| P3   | un campo con todos sus hoyos guardados           | no sale                                            |
+| P4   | un hoyo reabierto que conserva muestras          | vuelve a salir                                     |
+| P5   | un hoyo reabierto sin muestras                   | no sale: no hay nada que revisar                   |
+| P6   | los hoyos                                        | de menor a mayor                                   |
+| P7   | `saved`                                          | sigue en la respuesta, siempre `false`             |
 | A2   | un campo                                         | sus 18 hoyos: la línea guardada, TODAS sus muestras (id, barra, puntos, día) y los metros de cada barra |
 | A2   | una muestra solo green                           | sale con `tee: null`                              |
 | A2   | un campo que no existe, o que no ven los jugadores | GolfCourseNotFoundError                          |
+| T10  | la línea de OSM aprobada de cada hoyo            | sus puntos y su green (o null); nada con el mapa pendiente o rechazado |
+| A3   | la ubicación del campo                           | viene, para que el admin marque un hoyo sin nada (17 oct); sin ella, null |
 | A1   | por nombre                                       | sin mayúsculas ni acentos                          |
 """
 
-from datetime import date
+from datetime import date, datetime
 from uuid import uuid4
 
 import pytest
@@ -25,13 +34,18 @@ from src.modules.golf_course.application.use_cases.hole_review_use_cases import 
     GetHoleReviewUseCase,
     ListHoleReviewsUseCase,
 )
+from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
 from src.modules.golf_course.domain.entities.saved_hole import SavedHole
 from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.geo_point import GeoPoint
+from src.modules.golf_course.domain.value_objects.green_position import GreenPosition
+from src.modules.golf_course.domain.value_objects.mapped_hole import MappedHole
+from src.modules.golf_course.domain.value_objects.position_source import PositionSource
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
@@ -47,7 +61,7 @@ CODO = GeoPoint(latitude=36.2815, longitude=-5.331)
 GREEN = GeoPoint(latitude=36.2827, longitude=-5.33)
 
 
-def _course(name="Valderrama"):
+def _course(name="Valderrama", location=None):
     amarillas = [Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350 + i) for i in range(18)]
     rojas = [Hole(number=i + 1, par=4, stroke_index=i + 1, meters=300 + i) for i in range(18)]
     course = GolfCourse.create(
@@ -74,6 +88,7 @@ def _course(name="Valderrama"):
             ),
         ],
         holes=amarillas,
+        location=location,
     )
     course.approve()
     return course
@@ -101,7 +116,19 @@ async def _setup():
     return uow, con, sin
 
 
-async def test_a1_the_list_has_the_courses_with_samples_or_lines():
+def _saved(course, hole):
+    return SavedHole.create(
+        golf_course_id=course.id,
+        hole_number=hole,
+        tee=SALIDA,
+        bends=(),
+        green_center=GREEN,
+        saved_by=UserId.generate(),
+        course_location=None,
+    )
+
+
+async def test_a1_the_list_has_the_courses_with_pending_holes():
     uow, con, _ = await _setup()
     for sample in (
         _sample(con),
@@ -124,10 +151,10 @@ async def test_a1_the_list_has_the_courses_with_samples_or_lines():
     (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
     assert (course.golf_course_id, course.name) == (str(con.id), "Valderrama")
-    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [
+    # P1/P2: el 7 está guardado y sin muestras: no sale
+    assert [(h.hole_number, h.samples, h.model_dump()["saved"]) for h in course.holes] == [
         (1, 2, False),
         (5, 1, False),
-        (7, 0, True),
     ]
 
 
@@ -169,6 +196,40 @@ async def test_a2_a_course_with_every_sample_its_line_and_the_metres_of_each_tee
     ]
     assert review.holes[1].tees[0].meters == 351
     assert review.holes[1].samples == []
+
+
+async def test_get_review_with_coordinates_returns_the_course_location():
+    """
+    GIVEN: un campo con coordenadas (A3)
+    WHEN: el admin pide su revisión
+    THEN: viene su ubicación, para marcar un hoyo sin nada
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    con = _course(location=CourseLocation(latitude=36.28, longitude=-5.33))
+    await uow.golf_courses.save(con)
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    assert (review.location.latitude, review.location.longitude) == (36.28, -5.33)
+
+
+async def test_get_review_without_coordinates_returns_a_null_location():
+    """
+    GIVEN: un campo sin coordenadas (A3)
+    WHEN: el admin pide su revisión
+    THEN: la ubicación viene null
+    """
+    uow = InMemoryGolfCourseUnitOfWork()
+    sin = _course("Sin ubicación")
+    await uow.golf_courses.save(sin)
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(sin.id))
+    )
+
+    assert review.location is None
 
 
 async def test_a2_the_saved_line_comes_too():
@@ -226,24 +287,60 @@ async def test_a1_by_name_without_case_or_accents():
     assert [c.name for c in courses] == ["Ávila Golf", "el Saler", "Zahara"]
 
 
-async def test_a1_a_hole_with_samples_and_a_saved_line():
+async def test_p2_a_saved_hole_with_samples_is_not_pending():
     uow, con, _ = await _setup()
     await uow.hole_samples.add(_sample(con))
-    await uow.saved_holes.save(
-        SavedHole.create(
-            golf_course_id=con.id,
-            hole_number=1,
-            tee=SALIDA,
-            bends=(),
-            green_center=GREEN,
-            saved_by=UserId.generate(),
-            course_location=None,
-        )
-    )
+    await uow.hole_samples.add(_sample(con, hole=2))
+    await uow.saved_holes.save(_saved(con, 1))
 
     (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
 
-    assert [(h.hole_number, h.samples, h.saved) for h in course.holes] == [(1, 1, True)]
+    assert [(h.hole_number, h.samples, h.model_dump()["saved"]) for h in course.holes] == [
+        (2, 1, False)
+    ]
+
+
+async def test_p3_a_course_with_every_hole_saved_is_not_listed():
+    uow, con, _ = await _setup()
+    for hole in (1, 2):
+        await uow.hole_samples.add(_sample(con, hole=hole))
+        await uow.saved_holes.save(_saved(con, hole))
+
+    assert (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses == []
+
+
+async def test_p4_a_reopened_hole_with_samples_is_pending_again():
+    uow, con, _ = await _setup()
+    await uow.hole_samples.add(_sample(con))
+    await uow.saved_holes.save(_saved(con, 1))
+    await uow.saved_holes.delete(con.id, 1)
+
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [(h.hole_number, h.samples) for h in course.holes] == [(1, 1)]
+
+
+async def test_p5_a_reopened_hole_without_samples_is_not_listed():
+    """El 3 se reabre sin muestras: no vuelve; el 4, con una, sí."""
+    uow, con, _ = await _setup()
+    await uow.hole_samples.add(_sample(con, hole=4))
+    for hole in (3, 4):
+        await uow.saved_holes.save(_saved(con, hole))
+        await uow.saved_holes.delete(con.id, hole)
+
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [h.hole_number for h in course.holes] == [4]
+
+
+async def test_p6_the_holes_go_from_lowest_to_highest():
+    uow, con, _ = await _setup()
+    for hole in (12, 3, 9):
+        await uow.hole_samples.add(_sample(con, hole=hole))
+
+    (course,) = (await ListHoleReviewsUseCase(uow).execute(ListHoleReviewsRequestDTO())).courses
+
+    assert [h.hole_number for h in course.holes] == [3, 9, 12]
 
 
 async def test_a2_a_course_players_cannot_see_is_not_found():
@@ -270,3 +367,109 @@ async def test_a2_a_course_players_cannot_see_is_not_found():
         await GetHoleReviewUseCase(uow).execute(
             GetHoleReviewRequestDTO(golf_course_id=str(pendiente.id))
         )
+
+
+def _osm_map(course, approved=True, rejected=False):
+    """El hoyo 1 con línea (con un vértice en medio) y green; el 2, sin green."""
+    hole_map = CourseHoleMap.create(
+        golf_course_id=course.id,
+        holes=[
+            MappedHole(
+                number=1,
+                play_line=(SALIDA, CODO, GREEN),
+                line_source=PositionSource.OSM,
+                green=GreenPosition(
+                    front=GREEN, center=GREEN, back=GREEN, source=PositionSource.OSM
+                ),
+            ),
+            MappedHole(number=2, play_line=(SALIDA, GREEN), line_source=PositionSource.OSM),
+        ],
+        osm_reference="way/1",
+        imported_at=datetime(2026, 10, 15, 9, 0),
+    )
+    if rejected:
+        hole_map.reject(reviewer_id=UserId.generate())
+    elif approved:
+        hole_map.approve(reviewer_id=UserId.generate())
+    return hole_map
+
+
+async def test_get_review_with_an_approved_osm_map_returns_each_hole_osm_line():
+    """
+    GIVEN: un campo con su mapa de OSM aprobado (T10)
+    WHEN: el admin pide su revisión
+    THEN: cada hoyo del mapa trae su línea entera y su green; uno sin green, null; los demás, nada
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    uno, dos = review.holes[:2]
+    assert [(p.latitude, p.longitude) for p in uno.osm_line.points] == [
+        (SALIDA.latitude, SALIDA.longitude),
+        (CODO.latitude, CODO.longitude),
+        (GREEN.latitude, GREEN.longitude),
+    ]
+    assert (uno.osm_line.green_center.latitude, uno.osm_line.green_center.longitude) == (
+        GREEN.latitude,
+        GREEN.longitude,
+    )
+    assert len(dos.osm_line.points) == 2
+    assert dos.osm_line.green_center is None
+    assert all(h.osm_line is None for h in review.holes[2:])
+
+
+async def test_get_review_with_a_pending_osm_map_returns_no_osm_line():
+    """
+    GIVEN: un campo con su mapa de OSM pendiente (T10)
+    WHEN: el admin pide su revisión
+    THEN: ningún hoyo trae línea de OSM: los jugadores no la ven
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con, approved=False))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    assert all(h.osm_line is None for h in review.holes)
+
+
+async def test_get_review_with_a_rejected_osm_map_returns_no_osm_line():
+    """
+    GIVEN: un campo con su mapa de OSM rechazado (T10)
+    WHEN: el admin pide su revisión
+    THEN: ningún hoyo trae línea de OSM
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con, rejected=True))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    assert all(h.osm_line is None for h in review.holes)
+
+
+async def test_get_review_of_a_hole_with_osm_line_saved_line_and_samples_returns_all_three():
+    """
+    GIVEN: el hoyo 2 del mapa aprobado (sin green), con muestras y con línea guardada (T10)
+    WHEN: el admin pide la revisión
+    THEN: trae las tres cosas, cada una por su lado
+    """
+    uow, con, _ = await _setup()
+    await uow.hole_maps.save(_osm_map(con))
+    await uow.hole_samples.add(_sample(con, hole=2))
+    await uow.saved_holes.save(_saved(con, 2))
+
+    review = await GetHoleReviewUseCase(uow).execute(
+        GetHoleReviewRequestDTO(golf_course_id=str(con.id))
+    )
+
+    dos = review.holes[1]
+    assert (len(dos.osm_line.points), dos.osm_line.green_center) == (2, None)
+    assert dos.saved_line is not None
+    assert len(dos.samples) == 1

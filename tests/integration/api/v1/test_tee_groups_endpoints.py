@@ -36,20 +36,6 @@ from tests.conftest import (
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture(autouse=True)
-def _sin_la_rfeg_de_verdad():
-    """Los hándicaps son los manuales: la RFEG real limita a 429 en cuanto se le pregunta mucho."""
-    from main import app
-    from src.config.dependencies import get_handicap_service
-    from src.modules.user.infrastructure.external.mock_handicap_service import (
-        MockHandicapService,
-    )
-
-    app.dependency_overrides[get_handicap_service] = lambda: MockHandicapService(default=None)
-    yield
-    app.dependency_overrides.pop(get_handicap_service, None)
-
-
 EN_MADRID = {"latitude": 40.4168, "longitude": -3.7038}
 
 
