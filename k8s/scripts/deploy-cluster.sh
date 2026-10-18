@@ -111,9 +111,13 @@ fi
 
 if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
     print_warning "Cluster '${CLUSTER_NAME}' ya existe"
-    read -p "¿Quieres eliminarlo y crear uno nuevo? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Borrarlo se lleva la BD: hay que escribir su nombre en una terminal, y un
+    # `echo y |` (como se lanzan los otros scripts) no puede contestar que sí
+    RESPUESTA=""
+    if [ -t 0 ]; then
+        read -r -p "Escribe ${CLUSTER_NAME} para BORRARLO y crear uno nuevo (BD incluida); Enter para usar el que hay: " RESPUESTA
+    fi
+    if [ "$RESPUESTA" = "$CLUSTER_NAME" ]; then
         print_step "Eliminando cluster existente..."
         kind delete cluster --name ${CLUSTER_NAME}
 
