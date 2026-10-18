@@ -109,7 +109,8 @@ class ListHoleReviewsUseCase:
                             hole_number=hole,
                             samples=counted.get(hole, 0),
                             reports=reported.get(hole, 0),
-                            saved=False,
+                            # Pendiente por un reporte, un hoyo guardado sí lo dice (entrega 7)
+                            saved=hole in saved_holes.get(course_id, set()),
                         )
                         for hole in pending[course_id]
                     ],

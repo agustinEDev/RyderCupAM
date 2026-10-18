@@ -20,7 +20,8 @@ class HoleReviewCountDTO(BaseModel):
     # Desde el 17 oct un hoyo guardado no está pendiente: siempre false. Se
     # queda para no romper el contrato del frontend en producción
     saved: bool = Field(
-        deprecated=True, description="Siempre false: un hoyo guardado ya no está pendiente"
+        deprecated=True,
+        description="Si el hoyo tiene línea guardada: solo pasa cuando está pendiente por reportes",
     )
 
 

@@ -584,6 +584,9 @@ async def test_l1_l3_pending_holes_say_their_reports():
     [campo] = await _list(uow)
 
     assert [(h.hole_number, h.samples, h.reports) for h in campo.holes] == [(1, 1, 1), (4, 1, 0)]
+    # `saved` dice la verdad: el 1 tiene línea guardada, aunque esté pendiente
+    # por su reporte (/code-review, 18 oct)
+    assert [h.model_dump()["saved"] for h in campo.holes] == [True, False]
 
 
 async def test_l2_a_hole_with_only_reports_is_pending():

@@ -156,9 +156,8 @@ class SubmitHoleReportUseCase:
         course_id, hole = report.golf_course_id, report.hole_number
         reports = self._uow.hole_reports
         await reports.lock_hole(course_id, hole)
-        if not await self._has_line(course_id, hole):
-            logger.debug("Hole report not stored (course %s, hole %s): no line", course_id, hole)
-            return False
+        # Lo barato primero (un reenvío, un hoyo lleno); si el hoyo tiene línea,
+        # después: carga el mapa del campo (/code-review, 18 oct)
         if await reports.exists(report.id):
             logger.debug(
                 "Hole report not stored (course %s, hole %s): repeated id", course_id, hole
@@ -170,6 +169,9 @@ class SubmitHoleReportUseCase:
                 course_id,
                 hole,
             )
+            return False
+        if not await self._has_line(course_id, hole):
+            logger.debug("Hole report not stored (course %s, hole %s): no line", course_id, hole)
             return False
         return await reports.add(report)
 
