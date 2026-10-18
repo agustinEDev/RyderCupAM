@@ -1,9 +1,10 @@
 """
 Caso de uso: importar de OpenStreetMap el mapa de hoyos de un campo (BE #532).
 
-Solo campos aprobados con coordenadas. Lo importado queda pendiente de que un
-admin lo revise, y un mapa que ya aprobó nunca se pisa: ni se pregunta a OSM.
-En seco (sin `apply`) calcula y dice qué haría, sin guardar nada.
+Solo campos aprobados con coordenadas. Lo importado entra aprobado y reimportar
+sustituye el mapa, esté como esté (Agustín, 17-18 oct): lo que corrige el admin
+va en la línea guardada de cada hoyo, aparte, y prevalece sobre OSM. En seco
+(sin `apply`) calcula y dice qué haría, sin guardar nada.
 """
 
 from dataclasses import dataclass
@@ -55,8 +56,8 @@ class ImportHoleMapFromOsmUseCase:
 
         Tres pasos, para no tener una transacción abierta mientras se espera a
         OSM (puede tardar minutos): leer el campo, preguntar a OSM y, al
-        guardar, volver a leer el mapa, por si mientras tanto un admin lo aprobó
-        u otra pasada lo creó.
+        guardar, volver a leer el mapa, por si mientras tanto otra pasada lo creó
+        (o un admin lo revisó): se reimporta, no se crea otro.
 
         Raises:
             ValueError: si el campo no existe o no está aprobado
@@ -83,8 +84,6 @@ class ImportHoleMapFromOsmUseCase:
             if latitude is None or longitude is None:
                 return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.NO_COORDINATES)
             existing = await self._uow.hole_maps.find_by_golf_course_id(course_id)
-            if existing is not None and existing.is_approved:
-                return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.SKIPPED_APPROVED)
             return _Plan(
                 course_id=course_id,
                 latitude=latitude,
@@ -120,15 +119,13 @@ class ImportHoleMapFromOsmUseCase:
     async def _save(
         self, course_id: GolfCourseId, candidate: OsmHoleMapCandidate
     ) -> ImportHoleMapResponseDTO:
-        """Vuelve a leer el mapa y lo crea o reimporta, salvo que ya esté aprobado."""
+        """Vuelve a leer el mapa y lo crea o lo reimporta."""
         async with self._uow:
-            # Lo último de la BD y bloqueado: un admin pudo aprobarlo mientras OSM respondía
+            # Lo último de la BD y bloqueado: otra pasada pudo crearlo mientras OSM respondía
             current = await self._uow.hole_maps.find_by_golf_course_id_for_update(course_id)
-            if current is not None and current.is_approved:
-                return ImportHoleMapResponseDTO(status=ImportHoleMapStatus.SKIPPED_APPROVED)
             now = datetime.now(UTC).replace(tzinfo=None)
             if current is None:
-                current = CourseHoleMap.create(
+                current = CourseHoleMap.create_approved(
                     golf_course_id=course_id,
                     holes=candidate.holes,
                     osm_reference=candidate.osm_reference,

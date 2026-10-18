@@ -2,8 +2,9 @@
 Tests del caso de uso que importa de OpenStreetMap el mapa de hoyos de un campo (BE #532).
 
 La fuente de OSM es falsa: aquí se prueba lo que decide el caso de uso (qué
-campos se importan, crear o reimportar, no pisar un mapa aprobado, ir en seco),
-no el emparejado, que tiene sus propios tests.
+campos se importan, crear o reimportar, ir en seco), no el emparejado, que tiene
+sus propios tests. Desde el 18 oct lo de OSM entra aprobado y reimportar lo
+sustituye siempre (I1-I10); lo que corrige el admin va aparte y no se toca (I5).
 """
 
 from datetime import datetime
@@ -27,6 +28,7 @@ from src.modules.golf_course.application.use_cases.import_hole_map_from_osm_use_
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
+from src.modules.golf_course.domain.entities.saved_hole import SavedHole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_location import CourseLocation
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
@@ -186,16 +188,16 @@ async def test_u2_not_approved_course_is_rejected():
 
 
 # ============================================================================
-# U3-U5 — Crear, reimportar, no pisar lo aprobado
+# U3-U5 — Crear y reimportar: entra aprobado (I1-I4)
 # ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_u3_creates_a_pending_map():
+async def test_u3_creates_an_approved_map():
     """
     GIVEN: Un campo sin mapa y un candidato de OSM con diez hoyos
     WHEN: Se importa
-    THEN: Se crea el mapa pendiente de revisión, con su referencia y sus hoyos
+    THEN: Se crea el mapa ya aprobado (I1), con su referencia y sus hoyos
     """
     uow, course, _, use_case = await _setup()
 
@@ -204,7 +206,8 @@ async def test_u3_creates_a_pending_map():
     assert result.status is ImportHoleMapStatus.CREATED
     saved = await uow.hole_maps.find_by_golf_course_id(course.id)
     assert saved is not None
-    assert saved.status is HoleMapStatus.PENDING_REVIEW
+    assert saved.status is HoleMapStatus.APPROVED
+    assert saved.reviewed_by is None
     assert saved.osm_reference == "way/237391513"
     assert [h.number for h in saved.holes] == list(range(1, 11))
     assert uow.committed is True
@@ -248,7 +251,7 @@ async def test_u4_pending_or_rejected_map_is_reimported(rejected):
     """
     GIVEN: Un campo con mapa pendiente o rechazado
     WHEN: Se importa
-    THEN: Se reimporta: los hoyos nuevos y pendiente de revisión
+    THEN: Se reimporta: los hoyos nuevos y aprobado (I2, I3)
     """
     course = _course()
     existing = _existing(course.id)
@@ -262,26 +265,63 @@ async def test_u4_pending_or_rejected_map_is_reimported(rejected):
     saved = await uow.hole_maps.find_by_golf_course_id(course.id)
     assert saved is existing
     assert [h.number for h in saved.holes] == list(range(1, 11))
-    assert saved.status is HoleMapStatus.PENDING_REVIEW
+    assert saved.status is HoleMapStatus.APPROVED
 
 
 @pytest.mark.asyncio
-async def test_u5_approved_map_is_skipped_without_asking_osm():
+async def test_u5_approved_map_is_reimported_and_stays_approved():
     """
     GIVEN: Un campo con el mapa ya aprobado
     WHEN: Se importa
-    THEN: Se salta («ya aprobado»), sin pedir nada a OSM ni tocar el mapa
+    THEN: Se pregunta a OSM y se sustituye: los hoyos nuevos, la fecha nueva (la
+          versión que ven los móviles) y sigue aprobado (I4, I8)
     """
     course = _course()
     existing = _existing(course.id)
     existing.approve(reviewer_id=UserId.generate())
-    _, _, fuente, use_case = await _setup(course=course, existing_map=existing)
+    antes = existing.imported_at
+    uow, _, fuente, use_case = await _setup(course=course, existing_map=existing)
 
     result = await use_case.execute(_request(course))
 
-    assert result.status is ImportHoleMapStatus.SKIPPED_APPROVED
-    assert fuente.llamadas == []
-    assert [h.number for h in existing.holes] == [9]
+    assert result.status is ImportHoleMapStatus.REIMPORTED
+    assert len(fuente.llamadas) == 1
+    saved = await uow.hole_maps.find_by_golf_course_id(course.id)
+    assert saved is existing
+    assert [h.number for h in saved.holes] == list(range(1, 11))
+    assert saved.status is HoleMapStatus.APPROVED
+    assert saved.imported_at > antes
+    assert uow.committed is True
+
+
+@pytest.mark.asyncio
+async def test_u5_the_admins_saved_line_is_not_touched():
+    """
+    GIVEN: Un mapa aprobado y la línea que el admin guardó de su hoyo 3
+    WHEN: Se reimporta
+    THEN: La línea del admin sigue tal cual: es la que ven los jugadores (I5)
+    """
+    course = _course()
+    existing = _existing(course.id)
+    existing.approve(reviewer_id=UserId.generate())
+    uow, _, _, use_case = await _setup(course=course, existing_map=existing)
+    del_admin = SavedHole.create(
+        golf_course_id=course.id,
+        hole_number=3,
+        tee=GeoPoint(latitude=36.2858, longitude=-5.3247),
+        bends=[],
+        green_center=GeoPoint(latitude=36.2885, longitude=-5.3247),
+        saved_by=UserId.generate(),
+        course_location=GeoPoint(latitude=36.2858, longitude=-5.3247),
+    )
+    await uow.saved_holes.save(del_admin)
+
+    await use_case.execute(_request(course))
+
+    assert await uow.saved_holes.list_by_course(course.id) == [del_admin]
+    guardada = await uow.saved_holes.get(course.id, 3)
+    assert guardada.tee == del_admin.tee
+    assert guardada.green_center == del_admin.green_center
 
 
 # ============================================================================
@@ -399,21 +439,26 @@ async def test_s2_dry_run_creates_nothing():
 
 
 @pytest.mark.asyncio
-async def test_s2_dry_run_does_not_touch_an_existing_map():
+@pytest.mark.parametrize("estado", ["rechazado", "aprobado"])
+async def test_s2_dry_run_does_not_touch_an_existing_map(estado):
     """
-    GIVEN: Un mapa rechazado
+    GIVEN: Un mapa rechazado o aprobado
     WHEN: Se importa en seco
-    THEN: Dice que lo reimportaría, pero el mapa sigue igual y rechazado
+    THEN: Dice que lo reimportaría (I7), pero el mapa sigue igual y como estaba
     """
     course = _course()
     existing = _existing(course.id)
-    existing.reject(reviewer_id=UserId.generate())
+    if estado == "rechazado":
+        existing.reject(reviewer_id=UserId.generate())
+    else:
+        existing.approve(reviewer_id=UserId.generate())
+    como_estaba = existing.status
     _, _, _, use_case = await _setup(course=course, existing_map=existing)
 
     result = await use_case.execute(_request(course, apply=False))
 
     assert result.status is ImportHoleMapStatus.REIMPORTED
-    assert existing.status is HoleMapStatus.REJECTED
+    assert existing.status is como_estaba
     assert [h.number for h in existing.holes] == [9]
 
 
@@ -451,11 +496,11 @@ class UoWQueCuenta(InMemoryGolfCourseUnitOfWork):
 
 
 @pytest.mark.asyncio
-async def test_u9_map_approved_while_asking_osm_is_not_overwritten():
+async def test_u9_map_approved_while_asking_osm_is_reimported_too():
     """
     GIVEN: Un mapa pendiente que un admin aprueba mientras se espera a OSM
     WHEN: Termina la importación
-    THEN: «Ya aprobado» y el mapa sigue aprobado con sus hoyos
+    THEN: Se relee y se reimporta igual: hoyos nuevos y aprobado (I10)
     """
     course = _course()
     existing = _existing(course.id)
@@ -465,9 +510,9 @@ async def test_u9_map_approved_while_asking_osm_is_not_overwritten():
 
     result = await use_case.execute(_request(course))
 
-    assert result.status is ImportHoleMapStatus.SKIPPED_APPROVED
+    assert result.status is ImportHoleMapStatus.REIMPORTED
     assert existing.status is HoleMapStatus.APPROVED
-    assert [h.number for h in existing.holes] == [9]
+    assert [h.number for h in existing.holes] == list(range(1, 11))
 
 
 @pytest.mark.asyncio
@@ -555,6 +600,36 @@ async def test_u9_a_map_with_less_than_half_the_holes_is_not_saved(hoyos, fisico
     assert result.status is status
     guardado = await uow.hole_maps.find_by_golf_course_id(course.id)
     assert (guardado is not None) is (status is ImportHoleMapStatus.CREATED)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "osm",
+    [None, OsmHoleMapCandidate(osm_reference="way/9", holes=(), discarded={}), "pocos"],
+    ids=["sin contorno", "sin hoyos válidos", "menos de la mitad"],
+)
+async def test_u9_an_approved_map_stays_whole_when_osm_brings_nothing_usable(osm):
+    """
+    GIVEN: Un mapa aprobado y una reimportación en la que OSM no trae nada que valga
+    WHEN: Se importa
+    THEN: El mapa sigue entero y aprobado: un fallo de OSM no le quita el mapa a nadie
+    """
+    course = _course()
+    existing = _existing(course.id)
+    existing.approve(reviewer_id=UserId.generate())
+    resultado = (
+        OsmHoleMapCandidate(osm_reference="way/9", holes=(_hole(1), _hole(2)), discarded={})
+        if osm == "pocos"
+        else osm
+    )
+    _, _, _, use_case = await _setup(
+        course=course, existing_map=existing, fuente=FuenteFalsa(resultado)
+    )
+
+    await use_case.execute(_request(course))
+
+    assert existing.status is HoleMapStatus.APPROVED
+    assert [h.number for h in existing.holes] == [9]
 
 
 @pytest.mark.asyncio
