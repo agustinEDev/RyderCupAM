@@ -284,6 +284,21 @@ echo ""
 echo -e "${BOLD}Docker Image:${NC} ${DOCKER_IMAGE}:${VERSION}"
 echo -e "${BOLD}Deployment:${NC}   ${DEPLOYMENT_NAME}"
 echo -e "${BOLD}Container:${NC}    ${CONTAINER_NAME}"
+# De qué rama sale la imagen: se construye desde el árbol de trabajo, esté en la
+# rama que esté (el 14 oct se desplegó otra rama sin darnos cuenta)
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../RyderCupWeb" && pwd)"
+RAMA="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)"
+echo -e "${BOLD}Rama:${NC}         $(basename "$REPO_DIR") en ${BOLD}${RAMA}${NC} ($(git -C "$REPO_DIR" log -1 --format='%h %s' | cut -c1-60))"
+if [ "$RAMA" != "develop" ]; then
+    print_warning "NO es develop: la imagen saldrá de la rama $RAMA"
+fi
+if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
+    print_warning "Hay cambios sin commit en $(basename "$REPO_DIR"): entran en la imagen"
+fi
+DETRAS="$(git -C "$REPO_DIR" rev-list --count HEAD..origin/develop 2>/dev/null || echo 0)"
+if [ "$DETRAS" != "0" ]; then
+    print_warning "Va $DETRAS commits por detrás de origin/develop (según el último fetch)"
+fi
 echo ""
 
 # Confirmar antes de proceder
