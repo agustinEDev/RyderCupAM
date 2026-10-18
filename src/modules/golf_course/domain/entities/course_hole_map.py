@@ -98,9 +98,7 @@ class CourseHoleMap:
         imported_at: datetime,
     ) -> "CourseHoleMap":
         """Crea un mapa pendiente de revisión (el flujo de antes del 18 oct)."""
-        return cls._new(
-            golf_course_id, holes, osm_reference, imported_at, HoleMapStatus.PENDING_REVIEW
-        )
+        return cls._new(golf_course_id, holes, osm_reference, imported_at, approved=False)
 
     @classmethod
     def create_approved(
@@ -114,11 +112,7 @@ class CourseHoleMap:
         Crea el mapa de una importación, ya aprobado y sin revisor: la fecha de
         la aprobación es la de la importación (la BD la exige a todo lo no pendiente).
         """
-        hole_map = cls._new(
-            golf_course_id, holes, osm_reference, imported_at, HoleMapStatus.APPROVED
-        )
-        hole_map._reviewed_at = hole_map._imported_at
-        return hole_map
+        return cls._new(golf_course_id, holes, osm_reference, imported_at, approved=True)
 
     @classmethod
     def _new(
@@ -127,7 +121,8 @@ class CourseHoleMap:
         holes: Iterable[MappedHole],
         osm_reference: str,
         imported_at: datetime,
-        status: HoleMapStatus,
+        *,
+        approved: bool,
     ) -> "CourseHoleMap":
         now = _now()
         return cls(
@@ -135,9 +130,9 @@ class CourseHoleMap:
             holes=holes,
             osm_reference=osm_reference,
             imported_at=imported_at,
-            status=status,
+            status=HoleMapStatus.APPROVED if approved else HoleMapStatus.PENDING_REVIEW,
             reviewed_by=None,
-            reviewed_at=None,
+            reviewed_at=_naive_utc(imported_at) if approved else None,
             rejection_reason=None,
             created_at=now,
             updated_at=now,
