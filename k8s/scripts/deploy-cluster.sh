@@ -97,6 +97,35 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 K8S_DIR="$PROJECT_ROOT/k8s"
 KIND_CONFIG="$K8S_DIR/kind-config.yaml"
 
+# Antes de nada (también antes de ofrecer borrar el clúster): de qué ramas
+# saldrán las dos imágenes
+# Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
+FRONTEND_CANDIDATE="$PROJECT_ROOT/../RyderCupWeb"
+BACKEND_DIR="$PROJECT_ROOT"
+
+if [ -d "$FRONTEND_CANDIDATE" ]; then
+    FRONTEND_DIR="$(cd "$FRONTEND_CANDIDATE" && pwd)"
+else
+    print_error "No se encontró el directorio del frontend: $FRONTEND_CANDIDATE"
+    exit 1
+fi
+
+# Verificar que existen los Dockerfiles
+if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
+    print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
+    exit 1
+fi
+
+if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
+    print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
+    exit 1
+fi
+
+# De qué ramas salen las dos imágenes
+source "$(dirname "${BASH_SOURCE[0]}")/rama-de-la-imagen.sh"
+mostrar_rama_de "$BACKEND_DIR"
+mostrar_rama_de "$FRONTEND_DIR"
+
 # ==========================================
 # PASO 2: Crear cluster Kind (si no existe)
 # ==========================================
@@ -204,33 +233,6 @@ echo ""
 # PASO 8: Construir imágenes Docker
 # ==========================================
 print_step "Construyendo imágenes Docker con el código actual..."
-
-# Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
-FRONTEND_CANDIDATE="$PROJECT_ROOT/../RyderCupWeb"
-BACKEND_DIR="$PROJECT_ROOT"
-
-if [ -d "$FRONTEND_CANDIDATE" ]; then
-    FRONTEND_DIR="$(cd "$FRONTEND_CANDIDATE" && pwd)"
-else
-    print_error "No se encontró el directorio del frontend: $FRONTEND_CANDIDATE"
-    exit 1
-fi
-
-# Verificar que existen los Dockerfiles
-if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
-    print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
-    exit 1
-fi
-
-if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
-    print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
-    exit 1
-fi
-
-# De qué ramas salen las dos imágenes
-source "$(dirname "${BASH_SOURCE[0]}")/rama-de-la-imagen.sh"
-mostrar_rama_de "$BACKEND_DIR"
-mostrar_rama_de "$FRONTEND_DIR"
 
 # Construir imagen del Backend
 print_step "Construyendo imagen del Backend (FastAPI)..."
