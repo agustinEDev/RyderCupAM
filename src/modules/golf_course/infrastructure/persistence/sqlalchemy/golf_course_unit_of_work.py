@@ -2,8 +2,8 @@
 SQLAlchemy Unit of Work - Golf Course Module Infrastructure Layer.
 
 Implementación asíncrona del Unit of Work para el módulo de campos de golf.
-Coordina transacciones entre 5 repositorios: golf_courses, hole_maps, hole_samples, saved_holes y
-countries.
+Coordina transacciones entre 6 repositorios: golf_courses, hole_maps, hole_samples,
+hole_reports, saved_holes y countries.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.repositories.hole_map_repository import IHoleMapRepository
+from src.modules.golf_course.domain.repositories.hole_report_repository import (
+    IHoleReportRepository,
+)
 from src.modules.golf_course.domain.repositories.hole_sample_repository import (
     IHoleSampleRepository,
 )
@@ -26,6 +29,9 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
 )
 from src.modules.golf_course.infrastructure.persistence.repositories.hole_map_repository import (
     HoleMapRepository,
+)
+from src.modules.golf_course.infrastructure.persistence.repositories.hole_report_repository import (
+    HoleReportRepository,
 )
 from src.modules.golf_course.infrastructure.persistence.repositories.hole_sample_repository import (
     HoleSampleRepository,
@@ -74,11 +80,12 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
             session: Sesión asíncrona de SQLAlchemy compartida por todos los repositorios
         """
         self._session = session
-        # Inicializar los 5 repositorios con la misma sesión (transacción compartida)
+        # Inicializar los 6 repositorios con la misma sesión (transacción compartida)
         self._golf_courses = GolfCourseRepository(session)
         self._hole_maps = HoleMapRepository(session)
         self._hole_samples = HoleSampleRepository(session)
         self._saved_holes = SavedHoleRepository(session)
+        self._hole_reports = HoleReportRepository(session)
         self._countries = SQLAlchemyCountryRepository(session)
 
     @property
@@ -105,6 +112,11 @@ class SQLAlchemyGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     def saved_holes(self) -> ISavedHoleRepository:
         """Repositorio de las líneas guardadas de los hoyos (BE #575)."""
         return self._saved_holes
+
+    @property
+    def hole_reports(self) -> IHoleReportRepository:
+        """Repositorio de los reportes de hoyo de los jugadores (entrega 7)."""
+        return self._hole_reports
 
     @property
     def countries(self) -> CountryRepositoryInterface:

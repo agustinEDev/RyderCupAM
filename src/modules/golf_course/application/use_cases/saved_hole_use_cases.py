@@ -3,7 +3,8 @@ Casos de uso del admin con las líneas de los hoyos (BE #575, 17 oct 2026).
 
 Una referencia por hoyo (Agustín, 17 oct): el admin, a partir de las muestras,
 guarda la línea de cada hoyo (la que ven todos los jugadores, y con ella el hoyo
-deja de recoger muestras), la puede volver a guardar encima o reabrir el hoyo
+deja de recoger muestras y se cierran sus reportes, entrega 7), la puede volver
+a guardar encima o reabrir el hoyo
 (se quita, y vuelve a recoger), y puede borrar una muestra mala (deja libre su
 hueco). Que quien llama es admin lo mira la ruta.
 """
@@ -94,6 +95,10 @@ class SaveHoleLineUseCase:
             # no se guarda detrás de la línea
             await self._uow.hole_samples.lock_hole(course_id, request.hole_number)
             await self._uow.saved_holes.save(hole)
+            # La línea guardada responde a los reportes del hoyo: se cierran todos
+            # (R9). Con el hoyo bloqueado, uno que llegue a la vez no se queda abierto
+            await self._uow.hole_reports.lock_hole(course_id, request.hole_number)
+            await self._uow.hole_reports.delete_for_hole(course_id, request.hole_number)
         return saved_line_dto(hole)
 
 

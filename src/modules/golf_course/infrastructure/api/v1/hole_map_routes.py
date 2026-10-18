@@ -7,9 +7,11 @@ Endpoints del mapa de hoyos de un recorrido (BE #532).
 - PUT  /golf-courses/admin/{id}/hole-map/approve|reject  revisar la versión vista (admin)
 - POST /golf-courses/{id}/hole-map/samples/{hole}        mandar una muestra anónima de un hoyo
 - GET  /golf-courses/{id}/hole-map/samples               primera muestra de cada hoyo
+- POST /golf-courses/{id}/hole-map/reports/{hole}        reportar un hoyo mal (entrega 7)
 - PUT  /golf-courses/admin/{id}/hole-lines/{hole}        guardar la línea del hoyo (admin)
 - DELETE /golf-courses/admin/{id}/hole-lines/{hole}      reabrir el hoyo (admin)
 - DELETE /golf-courses/admin/{id}/hole-samples/{sample}  borrar una muestra mala (admin)
+- DELETE /golf-courses/admin/{id}/hole-reports/{report}  descartar un reporte (admin)
 - GET  /golf-courses/admin/hole-reviews                  campos con hoyos por revisar (admin)
 - GET  /golf-courses/admin/{id}/hole-reviews             los 18 hoyos de un campo para revisar (admin)
 
@@ -28,6 +30,7 @@ from src.config.dependencies import (
     get_approved_hole_map_use_case,
     get_current_user,
     get_delete_hole_sample_use_case,
+    get_discard_hole_report_use_case,
     get_hole_map_for_review_use_case,
     get_hole_review_use_case,
     get_list_hole_reviews_use_case,
@@ -36,6 +39,7 @@ from src.config.dependencies import (
     get_reject_hole_map_use_case,
     get_reopen_hole_use_case,
     get_save_hole_line_use_case,
+    get_submit_hole_report_use_case,
     get_submit_hole_sample_use_case,
 )
 from src.config.rate_limit import get_hole_sample_rate_limit_key, limiter
@@ -48,6 +52,11 @@ from src.modules.golf_course.application.dtos.hole_map_dtos import (
     PendingHoleMapDTO,
     RejectHoleMapBodyDTO,
     ReviewHoleMapRequestDTO,
+)
+from src.modules.golf_course.application.dtos.hole_report_dtos import (
+    DiscardHoleReportRequestDTO,
+    HoleReportBodyDTO,
+    SubmitHoleReportRequestDTO,
 )
 from src.modules.golf_course.application.dtos.hole_review_dtos import (
     GetHoleReviewRequestDTO,
@@ -73,6 +82,7 @@ from src.modules.golf_course.application.exceptions import (
     HoleMapChangedError,
     HoleMapNotFoundError,
     HoleNotInCourseError,
+    HoleReportNotFoundError,
     HoleSampleNotFoundError,
     InvalidHoleLineError,
 )
@@ -82,6 +92,10 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     GetHoleMapForReviewUseCase,
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
+)
+from src.modules.golf_course.application.use_cases.hole_report_use_cases import (
+    DiscardHoleReportUseCase,
+    SubmitHoleReportUseCase,
 )
 from src.modules.golf_course.application.use_cases.hole_review_use_cases import (
     GetHoleReviewUseCase,
@@ -314,6 +328,58 @@ async def submit_hole_sample(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post(
+    "/{golf_course_id}/hole-map/reports/{hole_number}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    responses={
+        404: {"description": "GOLF_COURSE_NOT_FOUND"},
+        422: {"description": "HOLE_NOT_IN_COURSE, or a malformed body"},
+    },
+)
+# Como las muestras: por usuario, con una clave que en el log no dice quién
+@limiter.limit("60/minute", key_func=get_hole_sample_rate_limit_key)
+async def submit_hole_report(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    golf_course_id: UUID,
+    hole_number: int,
+    body: HoleReportBodyDTO,
+    current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
+    use_case: Annotated[SubmitHoleReportUseCase, Depends(get_submit_hole_report_use_case)],
+):
+    """
+    Reporta un hoyo mal (entrega 7): su id (lo genera el móvil), el motivo
+    (WRONG_HOLE, WRONG_LINE o HOLE_CHANGED) y la línea que propone el jugador:
+    salida, hasta dos codos y centro del green. Responde 204 tanto si se guarda
+    como si no (el hoyo no tiene línea, ya tiene sus tres reportes, el id ya
+    llegó, ya reportaste ese hoyo hace menos de 10 minutos, o la línea no vale).
+    No se guarda quién lo manda; Sentry tampoco recibe al usuario en esta ruta.
+    Los jugadores siguen viendo la línea de siempre.
+    """
+    try:
+        await use_case.execute(
+            SubmitHoleReportRequestDTO(
+                id=body.id,
+                golf_course_id=str(golf_course_id),
+                hole_number=hole_number,
+                user_id=str(current_user.id),
+                reason=body.reason,
+                tee=body.tee,
+                bends=body.bends,
+                green_center=body.green_center,
+            )
+        )
+    except GolfCourseNotFoundError:
+        return _course_not_found()
+    except HoleNotInCourseError:
+        return _error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "HOLE_NOT_IN_COURSE",
+            "This course has no such hole",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get(
     "/{golf_course_id}/hole-map/samples",
     response_model=list[HoleSampleStatusDTO],
@@ -457,6 +523,35 @@ async def delete_hole_sample(
         return _course_not_found()
     except HoleSampleNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "HOLE_SAMPLE_NOT_FOUND", "Hole sample not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/admin/{golf_course_id}/hole-reports/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["admin"],
+    responses={
+        403: {"description": "ADMIN_REQUIRED"},
+        404: {"description": "GOLF_COURSE_NOT_FOUND or HOLE_REPORT_NOT_FOUND"},
+    },
+)
+async def discard_hole_report(
+    golf_course_id: UUID,
+    report_id: UUID,
+    current_user: Annotated[UserResponseDTO, Depends(get_current_user)],
+    use_case: Annotated[DiscardHoleReportUseCase, Depends(get_discard_hole_report_use_case)],
+):
+    """Descarta un reporte de un hoyo (entrega 7). Guardar la línea del hoyo cierra todos."""
+    if not current_user.is_admin:
+        return _forbidden()
+    try:
+        await use_case.execute(
+            DiscardHoleReportRequestDTO(golf_course_id=str(golf_course_id), report_id=report_id)
+        )
+    except GolfCourseNotFoundError:
+        return _course_not_found()
+    except HoleReportNotFoundError:
+        return _error(status.HTTP_404_NOT_FOUND, "HOLE_REPORT_NOT_FOUND", "Hole report not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

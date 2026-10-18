@@ -469,6 +469,10 @@ def start_golf_course_mappers():
 
     start_hole_map_mappers()
 
-    # Las muestras anónimas de hoyo y las líneas guardadas no mapean entidad:
-    # basta con que sus tablas entren en el metadata
-    from . import hole_sample_mapper, saved_hole_mapper  # noqa: F401, PLC0415 - Circular import
+    # Las muestras anónimas de hoyo, los reportes y las líneas guardadas no
+    # mapean entidad: basta con que sus tablas entren en el metadata
+    from . import (  # noqa: F401, PLC0415 - Circular import
+        hole_report_mapper,
+        hole_sample_mapper,
+        saved_hole_mapper,
+    )
