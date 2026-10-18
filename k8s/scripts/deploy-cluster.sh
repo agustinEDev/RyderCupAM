@@ -25,7 +25,7 @@ set -e  # Salir si algún comando falla
 
 # Con la caché de Docker por defecto (se invalida sola si cambian el código o las
 # dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
-case "${NO_CACHE:-}" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+case "$(echo "${NO_CACHE:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
 
 # Colores para output
 RED='\033[0;31m'
@@ -115,7 +115,9 @@ if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
     # `echo y |` (como se lanzan los otros scripts) no puede contestar que sí
     RESPUESTA=""
     if [ -t 0 ]; then
-        read -r -p "Escribe ${CLUSTER_NAME} para BORRARLO y crear uno nuevo (BD incluida); Enter para usar el que hay: " RESPUESTA
+        read -r -p "Escribe ${CLUSTER_NAME} para BORRARLO y crear uno nuevo (BD incluida); Enter para usar el que hay: " RESPUESTA || true
+    else
+        print_warning "Sin terminal no se ofrece borrar el clúster: para recrearlo, lánzalo desde una terminal"
     fi
     if [ "$RESPUESTA" = "$CLUSTER_NAME" ]; then
         print_step "Eliminando cluster existente..."
@@ -224,6 +226,11 @@ if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
     print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
     exit 1
 fi
+
+# De qué ramas salen las dos imágenes
+source "$(dirname "${BASH_SOURCE[0]}")/rama-de-la-imagen.sh"
+mostrar_rama_de "$BACKEND_DIR"
+mostrar_rama_de "$FRONTEND_DIR"
 
 # Construir imagen del Backend
 print_step "Construyendo imagen del Backend (FastAPI)..."

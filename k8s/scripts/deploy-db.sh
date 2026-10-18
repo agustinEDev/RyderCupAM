@@ -12,7 +12,7 @@ set -e  # Exit on error
 
 # Con la caché de Docker por defecto (se invalida sola si cambian el código o las
 # dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
-case "${NO_CACHE:-}" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+case "$(echo "${NO_CACHE:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
 
 # Colors for output
 RED='\033[0;31m'

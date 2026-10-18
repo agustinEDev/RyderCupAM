@@ -13,7 +13,7 @@ set -e  # Exit on error
 
 # Con la caché de Docker por defecto (se invalida sola si cambian el código o las
 # dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
-case "${NO_CACHE:-}" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+case "$(echo "${NO_CACHE:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
 
 # Colores para output
 RED='\033[0;31m'
@@ -284,21 +284,9 @@ echo ""
 echo -e "${BOLD}Docker Image:${NC} ${DOCKER_IMAGE}:${VERSION}"
 echo -e "${BOLD}Deployment:${NC}   ${DEPLOYMENT_NAME}"
 echo -e "${BOLD}Container:${NC}    ${CONTAINER_NAME}"
-# De qué rama sale la imagen: se construye desde el árbol de trabajo, esté en la
-# rama que esté (el 14 oct se desplegó otra rama sin darnos cuenta)
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../RyderCupWeb" && pwd)"
-RAMA="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)"
-echo -e "${BOLD}Rama:${NC}         $(basename "$REPO_DIR") en ${BOLD}${RAMA}${NC} ($(git -C "$REPO_DIR" log -1 --format='%h %s' | cut -c1-60))"
-if [ "$RAMA" != "develop" ]; then
-    print_warning "NO es develop: la imagen saldrá de la rama $RAMA"
-fi
-if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
-    print_warning "Hay cambios sin commit en $(basename "$REPO_DIR"): entran en la imagen"
-fi
-DETRAS="$(git -C "$REPO_DIR" rev-list --count HEAD..origin/develop 2>/dev/null || echo 0)"
-if [ "$DETRAS" != "0" ]; then
-    print_warning "Va $DETRAS commits por detrás de origin/develop (según el último fetch)"
-fi
+# De qué rama sale la imagen
+source "$(dirname "${BASH_SOURCE[0]}")/rama-de-la-imagen.sh"
+mostrar_rama_de "$(dirname "${BASH_SOURCE[0]}")/../../../RyderCupWeb"
 echo ""
 
 # Confirmar antes de proceder
