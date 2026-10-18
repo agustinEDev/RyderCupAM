@@ -20,8 +20,12 @@ from src.config.rate_limit import (
     limiter,
 )
 
-# Rutas con sesión que cuentan por usuario sin decir quién en el log (BE #532)
-ANONYMOUS_USER_KEYS = {"submit_hole_sample": get_hole_sample_rate_limit_key}
+# Rutas con sesión que cuentan por usuario sin decir quién en el log (BE #532 y,
+# desde la entrega 7, el reporte de un hoyo)
+ANONYMOUS_USER_KEYS = {
+    "submit_hole_sample": get_hole_sample_rate_limit_key,
+    "submit_hole_report": get_hole_sample_rate_limit_key,
+}
 
 
 def _routes(routes) -> Iterator[APIRoute]:

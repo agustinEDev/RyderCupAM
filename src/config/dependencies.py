@@ -296,6 +296,10 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
+from src.modules.golf_course.application.use_cases.hole_report_use_cases import (
+    DiscardHoleReportUseCase,
+    SubmitHoleReportUseCase,
+)
 from src.modules.golf_course.application.use_cases.hole_review_use_cases import (
     GetHoleReviewUseCase,
     ListHoleReviewsUseCase,
@@ -3077,6 +3081,31 @@ def get_submit_hole_sample_use_case(
 ) -> SubmitHoleSampleUseCase:
     """Proveedor del caso de uso SubmitHoleSampleUseCase."""
     return SubmitHoleSampleUseCase(uow, recent_senders)
+
+
+# Otra ventana, aparte de la de las muestras: reportar un hoyo no gasta el hueco
+# de su muestra, ni al revés (entrega 7)
+_recent_hole_report_senders = InMemoryRecentHoleSampleSenders()
+
+
+def get_recent_hole_report_senders() -> IRecentHoleSampleSenders:
+    """Proveedor de quién reportó hace poco un hoyo (singleton del proceso)."""
+    return _recent_hole_report_senders
+
+
+def get_submit_hole_report_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    recent_senders: IRecentHoleSampleSenders = Depends(get_recent_hole_report_senders),
+) -> SubmitHoleReportUseCase:
+    """Proveedor del caso de uso SubmitHoleReportUseCase (entrega 7)."""
+    return SubmitHoleReportUseCase(uow, recent_senders)
+
+
+def get_discard_hole_report_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> DiscardHoleReportUseCase:
+    """Proveedor del caso de uso DiscardHoleReportUseCase (entrega 7)."""
+    return DiscardHoleReportUseCase(uow)
 
 
 def get_list_hole_samples_use_case(

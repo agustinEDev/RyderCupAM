@@ -21,5 +21,9 @@ class HoleSampleNotFoundError(Exception):
     """La muestra no existe en ese campo (BE #575)."""
 
 
+class HoleReportNotFoundError(Exception):
+    """El reporte no existe en ese campo (entrega 7)."""
+
+
 class InvalidHoleLineError(Exception):
     """La línea que el admin quiere guardar no vale: codos, distancias o puntos (BE #575)."""

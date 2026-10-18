@@ -41,9 +41,11 @@ from src.shared.infrastructure.security.cookie_handler import read_access_token
 
 logger = logging.getLogger(__name__)
 
-# POST /golf-courses/{id}/hole-map/samples/{hole} y GET .../samples (con o sin
-# barra final, que FastAPI redirige)
-_ANONYMOUS_PATH = re.compile(r"^/api/v1/golf-courses/[^/]+/hole-map/samples(/[^/]*)?/?$")
+# POST /golf-courses/{id}/hole-map/samples/{hole}, GET .../samples y POST
+# .../reports/{hole} (entrega 7), con o sin barra final, que FastAPI redirige
+_ANONYMOUS_PATH = re.compile(
+    r"^/api/v1/golf-courses/[^/]+/hole-map/(samples(/[^/]*)?|reports/[^/]+)/?$"
+)
 
 
 def is_anonymous_path(path: str) -> bool:

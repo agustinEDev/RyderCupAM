@@ -11,7 +11,7 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 | P4   | un hoyo reabierto que conserva muestras          | vuelve a salir                                     |
 | P5   | un hoyo reabierto sin muestras                   | no sale: no hay nada que revisar                   |
 | P6   | los hoyos                                        | de menor a mayor                                   |
-| P7   | `saved`                                          | sigue en la respuesta, siempre `false`             |
+| P7   | `saved`                                          | sigue en la respuesta; sin reportes, siempre `false` |
 | A2   | un campo                                         | sus 18 hoyos: la línea guardada, TODAS sus muestras (id, barra, puntos, día) y los metros de cada barra |
 | A2   | una muestra solo green                           | sale con `tee: null`                              |
 | A2   | un campo que no existe, o que no ven los jugadores | GolfCourseNotFoundError                          |

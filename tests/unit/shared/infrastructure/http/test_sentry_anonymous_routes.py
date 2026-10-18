@@ -9,6 +9,7 @@ reales de la app y lo impide.
 | Caso                                 | Resultado                                  |
 |--------------------------------------|--------------------------------------------|
 | Las rutas de muestras de la app      | Hay dos (POST y GET), y las dos son anónimas |
+| La de reportar un hoyo (entrega 7)   | POST, anónima                               |
 | Otras rutas del mapa de hoyos        | No son anónimas                             |
 """
 
@@ -19,7 +20,8 @@ from fastapi.routing import APIRoute
 from main import app
 from src.shared.infrastructure.http.sentry_middleware import is_anonymous_path
 
-SAMPLE_ENDPOINTS = {"submit_hole_sample", "list_hole_samples"}
+# Desde la entrega 7 (18 oct), también el reporte de un hoyo: tampoco se guarda quién
+SAMPLE_ENDPOINTS = {"submit_hole_sample", "list_hole_samples", "submit_hole_report"}
 
 
 def _routes(routes, prefix: str = "") -> Iterator[tuple[str, APIRoute]]:
@@ -45,11 +47,11 @@ def test_every_samples_route_is_anonymous_for_sentry():
     """
     GIVEN: Las rutas de la app que atienden las muestras (por su función, no por su ruta)
     WHEN: Se pasa cada ruta por `is_anonymous_path`
-    THEN: Son dos, POST y GET, y las dos son anónimas
+    THEN: Son tres (las dos de muestras y la del reporte) y todas son anónimas
     """
     routes = _sample_routes()
 
-    assert sorted(m for _, route in routes for m in route.methods) == ["GET", "POST"]
+    assert sorted(m for _, route in routes for m in route.methods) == ["GET", "POST", "POST"]
     assert all(path.startswith("/api/v1/") for path, _ in routes)
     assert [path for path, _ in routes if not is_anonymous_path(path)] == []
 
