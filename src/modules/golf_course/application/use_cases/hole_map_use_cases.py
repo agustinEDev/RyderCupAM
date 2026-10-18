@@ -1,9 +1,10 @@
 """
 Casos de uso del mapa de hoyos: verlo y revisarlo (BE #532).
 
-El jugador solo ve un mapa aprobado. El admin ve cualquiera y aprueba o rechaza
-la VERSIÓN que tiene delante (su fecha de importación): si mientras la miraba se
-reimportó, la revisión no vale y tiene que volver a mirarlo.
+El jugador solo ve un mapa aprobado. Desde el 18 oct lo importado entra ya
+aprobado; la revisión del admin queda para los pendientes de antes. Aprueba o
+rechaza la VERSIÓN que tiene delante (su fecha de importación): si mientras la
+miraba se reimportó, la revisión no vale y tiene que volver a mirarlo.
 """
 
 from src.modules.golf_course.application.dtos.hole_map_dtos import (

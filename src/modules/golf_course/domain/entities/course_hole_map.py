@@ -112,12 +112,12 @@ class CourseHoleMap:
     ) -> "CourseHoleMap":
         """
         Crea el mapa de una importación, ya aprobado y sin revisor: la fecha de
-        la aprobación es la de ahora (la BD la exige a todo lo no pendiente).
+        la aprobación es la de la importación (la BD la exige a todo lo no pendiente).
         """
         hole_map = cls._new(
             golf_course_id, holes, osm_reference, imported_at, HoleMapStatus.APPROVED
         )
-        hole_map._reviewed_at = hole_map._created_at
+        hole_map._reviewed_at = hole_map._imported_at
         return hole_map
 
     @classmethod
@@ -208,12 +208,11 @@ class CourseHoleMap:
         self._holes = new_holes
         self._osm_reference = new_reference
         self._imported_at = _naive_utc(imported_at)
-        now = _now()
         self._status = HoleMapStatus.APPROVED
         self._reviewed_by = None
-        self._reviewed_at = now
+        self._reviewed_at = self._imported_at
         self._rejection_reason = None
-        self._updated_at = now
+        self._updated_at = _now()
 
     def hole(self, number: int) -> MappedHole | None:
         """El hoyo con ese número, o None si el mapa no lo tiene."""

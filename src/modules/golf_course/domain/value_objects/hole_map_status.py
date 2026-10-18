@@ -1,10 +1,11 @@
 """
 HoleMapStatus Value Object - Estado de revisión del mapa de un recorrido.
 
-Workflow (BE #532):
-- PENDING_REVIEW: importado, nadie lo ha mirado; no se enseña a los jugadores
-- APPROVED: un admin lo dio por bueno
-- REJECTED: un admin lo descartó; una reimportación lo devuelve a pendiente
+Workflow (BE #532; desde el 18 oct lo importado entra aprobado):
+- APPROVED: lo ven los jugadores; lo importado de OSM nace así, sin revisor, y
+  reimportar lo deja así
+- PENDING_REVIEW: importado antes del 18 oct, nadie lo ha mirado; no se enseña
+- REJECTED: un admin lo descartó; una reimportación lo deja aprobado
 """
 
 from enum import StrEnum

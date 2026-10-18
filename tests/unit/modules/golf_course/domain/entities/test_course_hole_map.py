@@ -295,7 +295,7 @@ def test_i1_imported_map_is_approved_with_no_reviewer():
     assert hole_map.osm_reference == "relation/12345"
     assert hole_map.imported_at == IMPORTADO
     assert hole_map.reviewed_by is None
-    assert hole_map.reviewed_at is not None
+    assert hole_map.reviewed_at == IMPORTADO
     assert hole_map.rejection_reason is None
 
 
@@ -329,7 +329,7 @@ def test_i2_reimport_over_pending_replaces_holes_and_approves():
     assert hole_map.imported_at == REIMPORTADO
     assert hole_map.status is HoleMapStatus.APPROVED
     assert hole_map.reviewed_by is None
-    assert hole_map.reviewed_at is not None
+    assert hole_map.reviewed_at == REIMPORTADO
 
 
 def test_i3_reimport_over_rejected_approves_it():
@@ -346,7 +346,7 @@ def test_i3_reimport_over_rejected_approves_it():
     assert hole_map.status is HoleMapStatus.APPROVED
     assert [hole.number for hole in hole_map.holes] == [2]
     assert hole_map.reviewed_by is None
-    assert hole_map.reviewed_at is not None
+    assert hole_map.reviewed_at == REIMPORTADO
     assert hole_map.rejection_reason is None
 
 
@@ -367,7 +367,7 @@ def test_i4_reimport_over_approved_replaces_it_and_stays_approved():
     assert hole_map.imported_at == REIMPORTADO
     assert hole_map.status is HoleMapStatus.APPROVED
     assert hole_map.reviewed_by is None
-    assert hole_map.reviewed_at is not None
+    assert hole_map.reviewed_at == REIMPORTADO
 
 
 def test_i6_a_hole_osm_no_longer_brings_disappears():

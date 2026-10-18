@@ -603,6 +603,36 @@ async def test_u9_a_map_with_less_than_half_the_holes_is_not_saved(hoyos, fisico
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "osm",
+    [None, OsmHoleMapCandidate(osm_reference="way/9", holes=(), discarded={}), "pocos"],
+    ids=["sin contorno", "sin hoyos válidos", "menos de la mitad"],
+)
+async def test_u9_an_approved_map_stays_whole_when_osm_brings_nothing_usable(osm):
+    """
+    GIVEN: Un mapa aprobado y una reimportación en la que OSM no trae nada que valga
+    WHEN: Se importa
+    THEN: El mapa sigue entero y aprobado: un fallo de OSM no le quita el mapa a nadie
+    """
+    course = _course()
+    existing = _existing(course.id)
+    existing.approve(reviewer_id=UserId.generate())
+    resultado = (
+        OsmHoleMapCandidate(osm_reference="way/9", holes=(_hole(1), _hole(2)), discarded={})
+        if osm == "pocos"
+        else osm
+    )
+    _, _, _, use_case = await _setup(
+        course=course, existing_map=existing, fuente=FuenteFalsa(resultado)
+    )
+
+    await use_case.execute(_request(course))
+
+    assert existing.status is HoleMapStatus.APPROVED
+    assert [h.number for h in existing.holes] == [9]
+
+
+@pytest.mark.asyncio
 async def test_u9_too_few_holes_leaves_an_existing_map_alone():
     """
     GIVEN: Un mapa pendiente y una reimportación con muy pocos hoyos
