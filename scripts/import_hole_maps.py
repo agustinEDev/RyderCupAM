@@ -4,8 +4,8 @@ Importa de OpenStreetMap el mapa de hoyos de los campos (BE #532).
 
 Recorre los campos aprobados con coordenadas de un país, o uno solo, y para cada
 uno llama al caso de uso que busca su contorno en OSM, valida los hoyos contra
-nuestra tarjeta y crea o reimporta el mapa, pendiente de que un admin lo revise.
-Un mapa ya aprobado no se toca.
+nuestra tarjeta y crea o reimporta el mapa, ya aprobado. Reimportar sustituye el
+mapa, esté como esté; las líneas que guardó el admin van aparte y no se tocan.
 
 Sin --apply hace una pasada en seco: calcula y resume, pero no guarda nada.
 Los datos de OSM van bajo licencia ODbL.
@@ -74,7 +74,7 @@ from src.shared.domain.value_objects.country_code import CountryCode
 DEFAULT_PAUSE_S = 5.0
 ERROR = "ERROR"
 # Resultados a los que se llega sin preguntar a OSM: tras ellos no hace falta pausa
-NO_OSM_CALL = frozenset({ImportHoleMapStatus.SKIPPED_APPROVED, ImportHoleMapStatus.NO_COORDINATES})
+NO_OSM_CALL = frozenset({ImportHoleMapStatus.NO_COORDINATES})
 # Lo que deja (o dejaría, en seco) un mapa guardado: solo esos hoyos cuentan
 SAVED = frozenset({ImportHoleMapStatus.CREATED, ImportHoleMapStatus.REIMPORTED})
 # Tantos «OSM no disponible» seguidos = Overpass caído o limitándonos: se para

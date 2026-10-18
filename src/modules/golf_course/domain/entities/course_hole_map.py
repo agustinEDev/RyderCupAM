@@ -2,12 +2,15 @@
 CourseHoleMap Aggregate Root - El mapa de los hoyos de un recorrido (BE #532).
 
 Un recorrido tiene como mucho un mapa, identificado por el propio campo. Nace de
-una importación de OpenStreetMap y no se enseña a los jugadores hasta que un
-admin lo aprueba entero; un hoyo mal se corrige después, no bloquea el resto.
+una importación de OpenStreetMap ya aprobado (Agustín, 17 oct: «si hay algo mal,
+ya lo reportarán») y reimportar lo sustituye, esté como esté (18 oct). Lo que
+corrige el admin va en la línea guardada del hoyo (`SavedHole`), aparte, y
+prevalece sobre OSM.
 
 Workflow:
-    PENDING_REVIEW → APPROVED (reimportar ya no lo toca)
-    PENDING_REVIEW → REJECTED → (reimportar) → PENDING_REVIEW
+    (importar) → APPROVED → (reimportar) → APPROVED
+    Los pendientes de antes del 18 oct: PENDING_REVIEW → APPROVED | REJECTED, y
+    reimportar los deja aprobados
 """
 
 import re
@@ -55,8 +58,8 @@ class CourseHoleMap:
       hoyos que faltan se tratan en el front como sin mapear).
     - La referencia OSM es `way/<id>` o `relation/<id>`.
     - Solo se revisa (aprobar o rechazar) un mapa pendiente.
-    - Reimportar sustituye los hoyos de un mapa pendiente o rechazado (este vuelve
-      a pendiente), pero nunca los de uno aprobado: ya lo miró un admin.
+    - Lo importado entra aprobado, sin nadie que lo revisara; reimportar sustituye
+      los hoyos esté como esté el mapa, y lo deja aprobado y sin revisor.
     - El motivo de rechazo es opcional y de 500 caracteres como mucho.
     - La fecha de importación se guarda en UTC y sin zona, como el resto del módulo.
     """
@@ -94,14 +97,45 @@ class CourseHoleMap:
         osm_reference: str,
         imported_at: datetime,
     ) -> "CourseHoleMap":
-        """Crea el mapa de una importación, pendiente de revisión."""
+        """Crea un mapa pendiente de revisión (el flujo de antes del 18 oct)."""
+        return cls._new(
+            golf_course_id, holes, osm_reference, imported_at, HoleMapStatus.PENDING_REVIEW
+        )
+
+    @classmethod
+    def create_approved(
+        cls,
+        golf_course_id: GolfCourseId,
+        holes: Iterable[MappedHole],
+        osm_reference: str,
+        imported_at: datetime,
+    ) -> "CourseHoleMap":
+        """
+        Crea el mapa de una importación, ya aprobado y sin revisor: la fecha de
+        la aprobación es la de ahora (la BD la exige a todo lo no pendiente).
+        """
+        hole_map = cls._new(
+            golf_course_id, holes, osm_reference, imported_at, HoleMapStatus.APPROVED
+        )
+        hole_map._reviewed_at = hole_map._created_at
+        return hole_map
+
+    @classmethod
+    def _new(
+        cls,
+        golf_course_id: GolfCourseId,
+        holes: Iterable[MappedHole],
+        osm_reference: str,
+        imported_at: datetime,
+        status: HoleMapStatus,
+    ) -> "CourseHoleMap":
         now = _now()
         return cls(
             golf_course_id=golf_course_id,
             holes=holes,
             osm_reference=osm_reference,
             imported_at=imported_at,
-            status=HoleMapStatus.PENDING_REVIEW,
+            status=status,
             reviewed_by=None,
             reviewed_at=None,
             rejection_reason=None,
@@ -168,19 +202,18 @@ class CourseHoleMap:
     def reimport(
         self, holes: Iterable[MappedHole], osm_reference: str, imported_at: datetime
     ) -> None:
-        """Sustituye lo importado; un mapa rechazado vuelve a estar pendiente."""
-        if self._status is HoleMapStatus.APPROVED:
-            raise ValueError("An approved hole map cannot be replaced by a new import")
+        """Sustituye lo importado, esté como esté el mapa, y lo deja aprobado sin revisor."""
         new_holes = self._validated_holes(holes)
         new_reference = self._validated_osm_reference(osm_reference)
         self._holes = new_holes
         self._osm_reference = new_reference
         self._imported_at = _naive_utc(imported_at)
-        self._status = HoleMapStatus.PENDING_REVIEW
+        now = _now()
+        self._status = HoleMapStatus.APPROVED
         self._reviewed_by = None
-        self._reviewed_at = None
+        self._reviewed_at = now
         self._rejection_reason = None
-        self._updated_at = _now()
+        self._updated_at = now
 
     def hole(self, number: int) -> MappedHole | None:
         """El hoyo con ese número, o None si el mapa no lo tiene."""

@@ -326,11 +326,11 @@ async def test_r6_deleting_the_reviewer_keeps_the_review(db_session, creator_id)
 
 
 @pytest.mark.asyncio
-async def test_r7_reimporting_a_rejected_map_clears_the_review(db_session, creator_id):
+async def test_r7_reimporting_a_rejected_map_approves_it(db_session, creator_id):
     """
     GIVEN: Un mapa rechazado y guardado
     WHEN: Se lee, se reimporta y se guarda
-    THEN: Vuelve a pendiente en la BD, sin revisor, fecha ni motivo
+    THEN: Queda aprobado en la BD, sin revisor ni motivo y con la fecha de ahora (I3)
     """
     course_id = await _saved_course(db_session, creator_id)
     repository = HoleMapRepository(db_session)
@@ -345,10 +345,62 @@ async def test_r7_reimporting_a_rejected_map_clears_the_review(db_session, creat
     found = await _reload(db_session, course_id)
 
     assert found is not None
-    assert found.status is HoleMapStatus.PENDING_REVIEW
+    assert found.status is HoleMapStatus.APPROVED
     assert found.reviewed_by is None
-    assert found.reviewed_at is None
+    assert found.reviewed_at is not None
     assert found.rejection_reason is None
+    assert len(found.holes) == 1
+
+
+@pytest.mark.asyncio
+async def test_r7_an_imported_map_is_saved_approved_with_no_reviewer(db_session, creator_id):
+    """
+    GIVEN: El mapa de una importación (aprobado, sin revisor)
+    WHEN: Se guarda y se lee
+    THEN: Cabe en la BD tal cual: aprobado, sin revisor y con fecha de aprobación (I1)
+    """
+    course_id = await _saved_course(db_session, creator_id)
+    repository = HoleMapRepository(db_session)
+    pendiente = _map(course_id)
+    hole_map = CourseHoleMap.create_approved(
+        golf_course_id=course_id,
+        holes=pendiente.holes,
+        osm_reference="way/8",
+        imported_at=IMPORTADO,
+    )
+
+    await repository.save(hole_map)
+    found = await _reload(db_session, course_id)
+
+    assert found is not None
+    assert found.status is HoleMapStatus.APPROVED
+    assert found.reviewed_by is None
+    assert found.reviewed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_r7_reimporting_an_approved_map_keeps_it_approved(db_session, creator_id):
+    """
+    GIVEN: Un mapa aprobado por un admin y guardado
+    WHEN: Se lee, se reimporta con un hoyo y se guarda
+    THEN: En la BD, el hoyo nuevo y aprobado, ya sin revisor (I4)
+    """
+    course_id = await _saved_course(db_session, creator_id)
+    repository = HoleMapRepository(db_session)
+    hole_map = _map(course_id)
+    hole_map.approve(reviewer_id=creator_id)
+    await repository.save(hole_map)
+    loaded = await _reload(db_session, course_id)
+    assert loaded is not None
+
+    loaded.reimport(holes=hole_map.holes[:1], osm_reference="way/8", imported_at=IMPORTADO)
+    await repository.save(loaded)
+    found = await _reload(db_session, course_id)
+
+    assert found is not None
+    assert found.status is HoleMapStatus.APPROVED
+    assert found.reviewed_by is None
+    assert found.osm_reference == "way/8"
     assert len(found.holes) == 1
 
 
