@@ -6,7 +6,8 @@ Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
   y sin línea guardada, o con reportes abiertos aunque tenga línea guardada o de
   OSM (entrega 7, 18 oct): al guardarlo el admin, desaparece (Agustín, 17 oct)
   y se cierran sus reportes; al reabrirlo, si conserva muestras, vuelve.
-  `saved` sigue en la respuesta (siempre false) para no romper el contrato.
+  `saved` dice si el hoyo tiene línea guardada: solo es true en uno pendiente
+  por sus reportes.
 - Un campo (de los que ven los jugadores): su ubicación y sus 18 hoyos, cada
   uno con su línea del mapa de OSM aprobado (si la hay), su línea guardada,
   TODAS sus muestras (con su id, para borrar las malas, y su barra), sus
