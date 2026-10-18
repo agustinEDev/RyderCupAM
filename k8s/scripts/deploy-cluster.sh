@@ -23,6 +23,10 @@ fi
 
 set -e  # Salir si algún comando falla
 
+# Con la caché de Docker por defecto (se invalida sola si cambian el código o las
+# dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
+case "${NO_CACHE:-}" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+
 # Colores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -219,12 +223,12 @@ fi
 
 # Construir imagen del Backend
 print_step "Construyendo imagen del Backend (FastAPI)..."
-docker build --no-cache -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
+docker build $NO_CACHE_FLAG -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
 print_success "Imagen del backend construida"
 
 # Construir imagen del Frontend
 print_step "Construyendo imagen del Frontend (React + Vite)..."
-docker build --no-cache -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
+docker build $NO_CACHE_FLAG -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
 print_success "Imagen del frontend construida"
 
 # Pre-pull PostgreSQL image si no existe localmente
