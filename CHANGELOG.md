@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.31.0] - 2026-10-18
+
+**Los mapas de OSM entran aprobados y el admin revisa por hoyo.** Lo que se
+importa de OpenStreetMap ya no espera a un admin: entra aprobado, y reimportar
+lo sustituye esté como esté (las líneas que guarda el admin van aparte y
+prevalecen). La revisión de hoyos lista solo los pendientes, dice dónde está
+el campo y trae la línea de OSM de cada hoyo. Va con el frontend **2.45.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: aditivo.** `saved` sigue en la lista de hoyos por revisar
+  (siempre false, marcado `deprecated`); `location` y `osm_line` son campos
+  nuevos. Orden de siempre: backend, `/health`, frontend.
+- **Importar OSM en PRO**: con este backend, `scripts/import_hole_maps.py
+  --apply` deja los mapas ya aprobados y visibles para los jugadores.
+
+### Added
+
+- **`location`** del campo en `GET /golf-courses/admin/{id}/hole-reviews`
+  (`{latitude, longitude}` o null), para encuadrar un hoyo sin muestras (#587).
+- **`osm_line`** de cada hoyo en la misma lectura: la línea del mapa de OSM
+  aprobado, con todos sus vértices y su green (o null) (#588).
+
+### Changed
+
+- **Lo importado de OSM entra aprobado**, sin revisor y con la fecha de la
+  importación como fecha de aprobación. **Reimportar sustituye el mapa** esté
+  pendiente, rechazado o aprobado, y lo deja aprobado: entran hoyos nuevos y
+  correcciones, y un hoyo que OSM ya no trae desaparece. Si OSM no trae nada
+  que valga, el mapa aprobado se queda entero. Desaparece el estado
+  `SKIPPED_APPROVED` del importador (#590).
+- **`GET /golf-courses/admin/hole-reviews` lista solo los hoyos pendientes**:
+  con muestras y sin línea guardada; un hoyo guardado sale de la lista y uno
+  reabierto con muestras vuelve. Hoyos de menor a mayor (#586).
+- `CourseHoleMap.is_approved` sustituye cuatro copias de la misma
+  comprobación (#588).
+
+### Fixed
+
+- **Los tests de integración llamaban a la RFEG de verdad**: el cliente de
+  test trae el servicio de hándicap falso por defecto. Un 500 de la RFEG tumbó
+  el CI de `develop` el 17 oct (#589, cierra #533).
+
 ## [2.30.0] - 2026-10-17
 
 **Una línea de referencia por hoyo.** El admin guarda una línea por hoyo
