@@ -246,3 +246,5 @@ class TestCambiarElCampoDeUnaSesion:
             r for d in releida.json()["days"] for r in d["rounds"] if r["id"] == sesion["id"]
         )
         assert cambiada["golf_course_id"] == otro["id"]
+        # Con su nombre, para «Mis Próximos Partidos» (BE #532, 16 oct)
+        assert cambiada["golf_course_name"] == otro["name"]

@@ -4,7 +4,8 @@ Match Entity - Partido de una sesión.
 Representa un partido individual dentro de una sesión de competición.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from src.modules.competition.domain.value_objects.marker_assignment import (
@@ -15,6 +16,7 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 
@@ -321,7 +323,56 @@ class Match:
         self._decided_result = result
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def completar_genero_de_las_barras(
+        self, genero_de: Callable[[MatchPlayer], Gender | None]
+    ) -> int:
+        """
+        Pone el género de su barra a quien lo tiene vacío (RyderCupWeb #880).
+
+        Las Ryder SCRATCH guardaban a todos sin él: veían la tarjeta de
+        referencia en vez de la de su barra, y el mapa del hoyo no sabía de qué
+        barra era cada muestra. Se rellena sin regenerar el partido: no cambia
+        nada más (color, golpes, resultados), y quien ya lo tiene se queda con
+        el suyo, así que repetirlo no hace nada. Un partido terminado no se
+        toca: se jugó con esa tarjeta (Agustín, 16 oct).
+
+        Args:
+            genero_de: El género que da su barra a ese jugador, o None si no tiene
+
+        Returns:
+            Cuántos jugadores se han completado
+        """
+        if self.is_finished():
+            return 0
+        cambiados = 0
+
+        def completar(jugador: MatchPlayer) -> MatchPlayer:
+            nonlocal cambiados
+            if jugador.tee_gender is not None:
+                return jugador
+            genero = genero_de(jugador)
+            if genero is None:
+                return jugador
+            cambiados += 1
+            return replace(jugador, tee_gender=genero)
+
+        self._team_a_players = tuple(completar(p) for p in self._team_a_players)
+        self._team_b_players = tuple(completar(p) for p in self._team_b_players)
+        if cambiados:
+            self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        return cambiados
+
     # ==================== Query Methods ====================
+
+    def jugadores_por_completar(self, genero_de: Callable[[MatchPlayer], Gender | None]) -> int:
+        """Cuántos completaría `completar_genero_de_las_barras`, sin tocar nada."""
+        if self.is_finished():
+            return 0
+        return sum(
+            1
+            for p in (*self._team_a_players, *self._team_b_players)
+            if p.tee_gender is None and genero_de(p) is not None
+        )
 
     def is_finished(self) -> bool:
         """Retorna True si el partido ha terminado."""

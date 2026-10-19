@@ -180,6 +180,7 @@ async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = Tr
         "competition_id": comp_id,
         "match_id": match_id,
         "round_id": round_id,
+        "golf_course_id": gc_id,
     }
 
 
@@ -221,10 +222,18 @@ class TestGetScoringView:
         assert response.status_code == 200
         data = response.json()
         assert data["match_id"] == ctx["match_id"]
+        # El campo de la ronda, para pedir su mapa de hoyos (BE #532)
+        assert data["round_info"]["golf_course_id"] == ctx["golf_course_id"]
+        # Y su país (el de prueba es de España): el mapa solo tiene imagen ahí (19 oct)
+        assert data["round_info"]["golf_course_country_code"] == "ES"
         assert data["match_status"] == "IN_PROGRESS"
         assert data["match_format"] == "SINGLES"
         assert data["is_decided"] is False
         assert len(data["players"]) == 2
+        # El sexo de la barra de cada jugador, para las muestras del mapa (#880)
+        # También en SCRATCH, que es esta competición de prueba: hombres en una
+        # barra de hombre
+        assert [p["tee_gender"] for p in data["players"]] == ["MALE", "MALE"]
         assert len(data["holes"]) == 18
         assert len(data["scores"]) == 18
         assert len(data["marker_assignments"]) > 0

@@ -21,9 +21,8 @@ import pytest
 from httpx import AsyncClient
 
 from tests.conftest import set_auth_cookies
-from tests.integration.api.v1.test_tee_groups_endpoints import (  # noqa: F401
+from tests.integration.api.v1.test_tee_groups_endpoints import (
     _generar,
-    _sin_la_rfeg_de_verdad,
     _stableford as _stableford_con_el_reloj,
     _usuario,
 )
@@ -209,6 +208,90 @@ async def test_the_view(client: AsyncClient):
     assert vista.status_code == 200, vista.text
     assert len(vista.json()["players"]) == 4
     assert no_existe.status_code == 404, no_existe.text
+    # El campo de su franja, para pedir su mapa de hoyos (BE #532)
+    assert vista.json()["golf_course_id"] == await _campo_de_la_franja(vista.json()["round_id"])
+    # Y su nombre, bajo el título de la anotación (BE #532, 16 oct)
+    assert vista.json()["golf_course_name"] == await _nombre_del_campo(
+        vista.json()["golf_course_id"]
+    )
+    # Y su país (el de prueba es de España): el mapa solo tiene imagen ahí (19 oct)
+    assert vista.json()["golf_course_country_code"] == "ES"
+    # Sin metros en las barras del campo de prueba, el campo viaja en null
+    hoyos = [h for p in vista.json()["players"] for h in p["holes"]]
+    assert len(hoyos) == 4 * 18
+    assert all("meters" in h and h["meters"] is None for h in hoyos)
+
+
+async def test_the_view_carries_the_meters_of_each_tee(client: AsyncClient):
+    # Los metros de cada hoyo desde su barra, para el mapa (BE #532, 16 oct)
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+    set_auth_cookies(client, por_id[yo]["cookies"])
+    vista = await client.get(f"/api/v1/competitions/groups/{partida['id']}/scoring-view")
+    await _poner_metros(vista.json()["golf_course_id"])
+
+    vista = await client.get(f"/api/v1/competitions/groups/{partida['id']}/scoring-view")
+
+    assert vista.status_code == 200, vista.text
+    for jugador in vista.json()["players"]:
+        assert [h["meters"] for h in jugador["holes"]] == [300 + n for n in range(1, 19)]
+
+
+async def _poner_metros(golf_course_id: str) -> None:
+    """300 + el número del hoyo, en cada barra del campo."""
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.dependencies import get_db_session
+
+    async for session in app.dependency_overrides[get_db_session]():
+        try:
+            await session.execute(
+                text(
+                    "UPDATE golf_course_tee_holes SET meters = 300 + hole_number WHERE tee_id IN "
+                    "(SELECT id FROM golf_course_tees WHERE golf_course_id = :id)"
+                ),
+                {"id": golf_course_id},
+            )
+            await session.commit()
+            return
+        finally:
+            await session.close()
+    raise AssertionError("sin sesión de BD")
+
+
+async def _nombre_del_campo(golf_course_id: str) -> str:
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.dependencies import get_db_session
+
+    async for session in app.dependency_overrides[get_db_session]():
+        try:
+            fila = await session.execute(
+                text("SELECT name FROM golf_courses WHERE id = :id"), {"id": golf_course_id}
+            )
+            return fila.scalar_one()
+        finally:
+            await session.close()
+    raise AssertionError("sin sesión de BD")
+
+
+async def _campo_de_la_franja(round_id: str) -> str:
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.dependencies import get_db_session
+
+    async for session in app.dependency_overrides[get_db_session]():
+        try:
+            fila = await session.execute(
+                text("SELECT golf_course_id FROM rounds WHERE id = :id"), {"id": round_id}
+            )
+            return str(fila.scalar_one())
+        finally:
+            await session.close()
+    raise AssertionError("sin sesión de BD")
 
 
 # | Entregar / retirarse                        | Respuesta                                  |

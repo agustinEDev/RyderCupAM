@@ -36,20 +36,6 @@ from tests.conftest import (
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture(autouse=True)
-def _sin_la_rfeg_de_verdad():
-    """Los hándicaps son los manuales: la RFEG real limita a 429 en cuanto se le pregunta mucho."""
-    from main import app
-    from src.config.dependencies import get_handicap_service
-    from src.modules.user.infrastructure.external.mock_handicap_service import (
-        MockHandicapService,
-    )
-
-    app.dependency_overrides[get_handicap_service] = lambda: MockHandicapService(default=None)
-    yield
-    app.dependency_overrides.pop(get_handicap_service, None)
-
-
 EN_MADRID = {"latitude": 40.4168, "longitude": -3.7038}
 
 
@@ -479,6 +465,14 @@ async def test_my_groups(client: AsyncClient):
         "09:00",
     )
     assert otros[0]["user"]["id"] in {p["user_id"] for p in mia["group"]["players"]}
+    # El campo de la franja, para «Mis Próximos Partidos» (BE #532, 16 oct)
+    from tests.integration.api.v1.test_tee_group_scoring_endpoints import (
+        _campo_de_la_franja,
+        _nombre_del_campo,
+    )
+
+    assert mia["golf_course_id"] == await _campo_de_la_franja(franja)
+    assert mia["golf_course_name"] == await _nombre_del_campo(mia["golf_course_id"])
     assert ningunas.json() == {"groups": []}
 
 

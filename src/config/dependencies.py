@@ -274,6 +274,9 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_u
 from src.modules.competition.infrastructure.services.competition_timezone_from_course import (
     CompetitionTimezoneFromCourse,
 )
+from src.modules.golf_course.application.ports.recent_hole_sample_senders import (
+    IRecentHoleSampleSenders,
+)
 from src.modules.golf_course.application.use_cases.approve_golf_course_use_case import (
     ApproveGolfCourseUseCase,
 )
@@ -293,6 +296,18 @@ from src.modules.golf_course.application.use_cases.hole_map_use_cases import (
     ListPendingHoleMapsUseCase,
     RejectHoleMapUseCase,
 )
+from src.modules.golf_course.application.use_cases.hole_report_use_cases import (
+    DiscardHoleReportUseCase,
+    SubmitHoleReportUseCase,
+)
+from src.modules.golf_course.application.use_cases.hole_review_use_cases import (
+    GetHoleReviewUseCase,
+    ListHoleReviewsUseCase,
+)
+from src.modules.golf_course.application.use_cases.hole_sample_use_cases import (
+    ListHoleSamplesUseCase,
+    SubmitHoleSampleUseCase,
+)
 from src.modules.golf_course.application.use_cases.list_approved_golf_courses_use_case import (
     ListApprovedGolfCoursesUseCase,
 )
@@ -308,6 +323,11 @@ from src.modules.golf_course.application.use_cases.reject_update_golf_course_use
 from src.modules.golf_course.application.use_cases.request_golf_course_use_case import (
     RequestGolfCourseUseCase,
 )
+from src.modules.golf_course.application.use_cases.saved_hole_use_cases import (
+    DeleteHoleSampleUseCase,
+    ReopenHoleUseCase,
+    SaveHoleLineUseCase,
+)
 from src.modules.golf_course.application.use_cases.update_golf_course_use_case import (
     UpdateGolfCourseUseCase,
 )
@@ -316,6 +336,9 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
     SQLAlchemyGolfCourseUnitOfWork,
+)
+from src.modules.golf_course.infrastructure.services.in_memory_recent_hole_sample_senders import (
+    InMemoryRecentHoleSampleSenders,
 )
 from src.modules.golf_course.infrastructure.services.tzfpy_timezone_resolver import (
     TzfpyTimezoneResolver,
@@ -2051,6 +2074,7 @@ def get_ver_anotacion_de_partida_use_case(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
+        golf_courses=gc_uow.golf_courses,
     )
 
 
@@ -2150,10 +2174,13 @@ def get_ver_partidas_use_case(
 
 def get_mis_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> MisPartidasUseCase:
-    """Mis partidas en una competición (#251)."""
-    return MisPartidasUseCase(uow=uow, user_repository=user_uow.users)
+    """Mis partidas en una competición (#251), con el nombre de su campo (BE #532)."""
+    return MisPartidasUseCase(
+        uow=uow, user_repository=user_uow.users, golf_courses=gc_uow.golf_courses
+    )
 
 
 def get_esperar_use_case(
@@ -3036,6 +3063,91 @@ def get_reject_hole_map_use_case(
 ) -> RejectHoleMapUseCase:
     """Proveedor del caso de uso RejectHoleMapUseCase."""
     return RejectHoleMapUseCase(uow)
+
+
+# Una sola para todo el proceso: la ventana de 10 minutos por jugador tiene que
+# verse entre peticiones. Vive solo en memoria (BE #532, 16 oct 2026)
+_recent_hole_sample_senders = InMemoryRecentHoleSampleSenders()
+
+
+def get_recent_hole_sample_senders() -> IRecentHoleSampleSenders:
+    """Proveedor de quién aportó hace poco una muestra de hoyo (singleton del proceso)."""
+    return _recent_hole_sample_senders
+
+
+def get_submit_hole_sample_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    recent_senders: IRecentHoleSampleSenders = Depends(get_recent_hole_sample_senders),
+) -> SubmitHoleSampleUseCase:
+    """Proveedor del caso de uso SubmitHoleSampleUseCase."""
+    return SubmitHoleSampleUseCase(uow, recent_senders)
+
+
+# Otra ventana, aparte de la de las muestras: reportar un hoyo no gasta el hueco
+# de su muestra, ni al revés (entrega 7)
+_recent_hole_report_senders = InMemoryRecentHoleSampleSenders()
+
+
+def get_recent_hole_report_senders() -> IRecentHoleSampleSenders:
+    """Proveedor de quién reportó hace poco un hoyo (singleton del proceso)."""
+    return _recent_hole_report_senders
+
+
+def get_submit_hole_report_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    recent_senders: IRecentHoleSampleSenders = Depends(get_recent_hole_report_senders),
+) -> SubmitHoleReportUseCase:
+    """Proveedor del caso de uso SubmitHoleReportUseCase (entrega 7)."""
+    return SubmitHoleReportUseCase(uow, recent_senders)
+
+
+def get_discard_hole_report_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> DiscardHoleReportUseCase:
+    """Proveedor del caso de uso DiscardHoleReportUseCase (entrega 7)."""
+    return DiscardHoleReportUseCase(uow)
+
+
+def get_list_hole_samples_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ListHoleSamplesUseCase:
+    """Proveedor del caso de uso ListHoleSamplesUseCase."""
+    return ListHoleSamplesUseCase(uow)
+
+
+def get_save_hole_line_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> SaveHoleLineUseCase:
+    """Proveedor del caso de uso SaveHoleLineUseCase (BE #575)."""
+    return SaveHoleLineUseCase(uow)
+
+
+def get_reopen_hole_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ReopenHoleUseCase:
+    """Proveedor del caso de uso ReopenHoleUseCase (BE #575)."""
+    return ReopenHoleUseCase(uow)
+
+
+def get_list_hole_reviews_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> ListHoleReviewsUseCase:
+    """Proveedor del caso de uso ListHoleReviewsUseCase (BE #575)."""
+    return ListHoleReviewsUseCase(uow)
+
+
+def get_hole_review_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetHoleReviewUseCase:
+    """Proveedor del caso de uso GetHoleReviewUseCase (BE #575)."""
+    return GetHoleReviewUseCase(uow)
+
+
+def get_delete_hole_sample_use_case(
+    uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> DeleteHoleSampleUseCase:
+    """Proveedor del caso de uso DeleteHoleSampleUseCase (BE #575)."""
+    return DeleteHoleSampleUseCase(uow)
 
 
 # ============================================================================

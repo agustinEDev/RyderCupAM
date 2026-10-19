@@ -107,22 +107,46 @@ async def test_quien_no_esta_inscrito_no_puede_jugar():
         )
 
 
-async def test_en_scratch_no_hace_falta_campo_ni_usuarios():
+async def test_en_scratch_sin_campo_juegan_igual_sin_genero():
     uow = InMemoryUnitOfWork()
     a, b = UserId.generate(), UserId.generate()
     for u in (a, b):
         await _inscrito(uow, u)
     campo, usuarios = MagicMock(), MagicMock()
-    campo.find_by_id = AsyncMock()
-    usuarios.find_by_ids = AsyncMock()
+    campo.find_by_id = AsyncMock(return_value=None)
+    usuarios.find_by_ids = AsyncMock(return_value=[_usuario(a, 10.0), _usuario(b, 4.0)])
 
     lado_a, _ = await JugadoresDelPartido(campo, usuarios).construir(
         uow, _sesion(), _scratch(), [a], [b]
     )
 
     assert len(lado_a[0].strokes_received) == 0
-    campo.find_by_id.assert_not_awaited()
-    usuarios.find_by_ids.assert_not_awaited()
+    assert lado_a[0].tee_gender is None
+
+
+async def test_en_scratch_cada_uno_guarda_el_genero_de_su_barra():
+    """
+    GIVEN: Una Ryder SCRATCH en un campo con amarillas de hombre
+    WHEN: Se construyen los jugadores de un partido (reasignación)
+    THEN: Juegan sin golpes y con su barra con género (RyderCupWeb #880)
+    """
+    uow = InMemoryUnitOfWork()
+    a, b = UserId.generate(), UserId.generate()
+    for u in (a, b):
+        await _inscrito(uow, u)
+    usuarios = MagicMock()
+    usuarios.find_by_ids = AsyncMock(return_value=[_usuario(a, 10.0), _usuario(b, 4.0)])
+
+    lado_a, lado_b = await JugadoresDelPartido(_campo_con_amarillas(), usuarios).construir(
+        uow, _sesion(), _scratch(), [a], [b]
+    )
+
+    for jugador in (*lado_a, *lado_b):
+        assert (jugador.tee_color, jugador.tee_gender) == (TeeColor.YELLOW, Gender.MALE)
+        assert jugador.playing_handicap == 0
+        assert len(jugador.strokes_received) == 0
+        # Del perfil solo se lee el género: el hándicap no cuenta en SCRATCH
+        assert jugador.player_handicap == Decimal("0")
 
 
 def _con_handicap():

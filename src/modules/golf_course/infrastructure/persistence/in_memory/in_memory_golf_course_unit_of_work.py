@@ -7,6 +7,15 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.repositories.hole_map_repository import IHoleMapRepository
+from src.modules.golf_course.domain.repositories.hole_report_repository import (
+    IHoleReportRepository,
+)
+from src.modules.golf_course.domain.repositories.hole_sample_repository import (
+    IHoleSampleRepository,
+)
+from src.modules.golf_course.domain.repositories.saved_hole_repository import (
+    ISavedHoleRepository,
+)
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
@@ -16,6 +25,9 @@ from src.shared.infrastructure.persistence.in_memory.in_memory_country_repositor
 
 from .in_memory_golf_course_repository import InMemoryGolfCourseRepository
 from .in_memory_hole_map_repository import InMemoryHoleMapRepository
+from .in_memory_hole_report_repository import InMemoryHoleReportRepository
+from .in_memory_hole_sample_repository import InMemoryHoleSampleRepository
+from .in_memory_saved_hole_repository import InMemorySavedHoleRepository
 
 
 class InMemoryGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
@@ -25,12 +37,16 @@ class InMemoryGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     Proporciona acceso a repositorios in-memory de:
     - Campos de golf
     - Mapas de hoyos
+    - Muestras anónimas de hoyo
     - Países (shared)
     """
 
     def __init__(self):
         self._golf_courses = InMemoryGolfCourseRepository()
         self._hole_maps = InMemoryHoleMapRepository()
+        self._hole_samples = InMemoryHoleSampleRepository()
+        self._saved_holes = InMemorySavedHoleRepository()
+        self._hole_reports = InMemoryHoleReportRepository()
         self._countries = InMemoryCountryRepository()
         self.committed = False
 
@@ -43,6 +59,21 @@ class InMemoryGolfCourseUnitOfWork(GolfCourseUnitOfWorkInterface):
     def hole_maps(self) -> IHoleMapRepository:
         """Acceso al repositorio de mapas de hoyos."""
         return self._hole_maps
+
+    @property
+    def hole_samples(self) -> IHoleSampleRepository:
+        """Acceso al repositorio de muestras de hoyo."""
+        return self._hole_samples
+
+    @property
+    def saved_holes(self) -> ISavedHoleRepository:
+        """Acceso a las líneas guardadas de los hoyos."""
+        return self._saved_holes
+
+    @property
+    def hole_reports(self) -> IHoleReportRepository:
+        """Acceso a los reportes de hoyo."""
+        return self._hole_reports
 
     @property
     def countries(self) -> CountryRepositoryInterface:

@@ -14,6 +14,9 @@ from src.shared.domain.repositories.unit_of_work_interface import UnitOfWorkInte
 
 from .golf_course_repository import IGolfCourseRepository
 from .hole_map_repository import IHoleMapRepository
+from .hole_report_repository import IHoleReportRepository
+from .hole_sample_repository import IHoleSampleRepository
+from .saved_hole_repository import ISavedHoleRepository
 
 
 class GolfCourseUnitOfWorkInterface(UnitOfWorkInterface):
@@ -69,5 +72,38 @@ class GolfCourseUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             IHoleMapRepository: Repositorio de mapas transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def hole_samples(self) -> IHoleSampleRepository:
+        """
+        Acceso al repositorio de muestras anónimas de hoyo (BE #532).
+
+        Returns:
+            IHoleSampleRepository: Repositorio de muestras transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def hole_reports(self) -> IHoleReportRepository:
+        """
+        Acceso a los reportes de hoyo de los jugadores (entrega 7, 18 oct 2026).
+
+        Returns:
+            IHoleReportRepository: Repositorio de reportes transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def saved_holes(self) -> ISavedHoleRepository:
+        """
+        Acceso a las líneas que el admin guarda de cada hoyo (BE #575).
+
+        Returns:
+            ISavedHoleRepository: Repositorio de líneas guardadas transaccional
         """
         pass

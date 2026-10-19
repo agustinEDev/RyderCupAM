@@ -5,6 +5,242 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.33.0] - 2026-10-19
+
+**El país del campo en las anotaciones.** La imagen del mapa del hoyo solo
+cubre España, así que el frontend esconde el botón «Mapa» en los campos de
+otros países y para eso necesita saber dónde está el campo. Va con el frontend
+**2.47.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: aditivo.** Orden de siempre: backend, `/health`, frontend.
+
+### Added
+
+- **`golf_course_country_code`** (ISO 3166-1 alfa-2, o null si el campo no
+  está) en la anotación de la Ryder (`round_info`) y en la de una partida de
+  stroke play. El campo ya se cargaba allí: no hay consulta de más (#598).
+
+## [2.32.0] - 2026-10-19
+
+**Los jugadores reportan un hoyo mal.** Desde el mapa del hoyo, un jugador
+avisa de que el hoyo está mal, con un motivo y la línea que propone; como las
+muestras, sin quién lo mandó. El admin ve los reportes en la revisión del hoyo,
+los descarta o guarda la línea, que los cierra. Va con el frontend **2.46.0**.
+
+**Notas de despliegue.**
+
+- **Una migración** (`c5f7a9b1d3e5`): crea la tabla `golf_course_hole_reports`,
+  vacía y sin columna de usuario. Sin variables ni dependencias nuevas.
+- **Contrato: aditivo.** Orden de siempre: backend, `/health`, frontend.
+
+### Added
+
+- **`POST /golf-courses/{id}/hole-map/reports/{hole}`**: un reporte con
+  `{id, reason, tee, bends, green_center}` y motivo `WRONG_HOLE`, `WRONG_LINE`
+  o `HOLE_CHANGED`. Responde siempre 204 (404 sin campo, 422 con un hoyo que no
+  existe) y solo se guarda si el campo se ve, la línea vale (40–750 m, a menos
+  de 3 km), el hoyo tiene línea, el id es nuevo, el hoyo tiene menos de tres
+  reportes y el jugador no lo reportó en los últimos 10 minutos. No guarda
+  usuario y Sentry no recibe usuario en esta ruta (#594).
+- **`DELETE /golf-courses/admin/{id}/hole-reports/{report_id}`**: el admin
+  descarta un reporte (#594).
+- **`reports`** en la lista de hoyos por revisar y **`reports[]`** en la
+  revisión de un hoyo (#594).
+
+### Changed
+
+- **Un hoyo con reportes está pendiente aunque tenga la línea guardada**, y
+  `saved` (deprecated) dice la verdad para esos hoyos. **Guardar la línea de un
+  hoyo borra sus reportes** (#594).
+- **Scripts del Kind**: construyen con la caché de Docker (`NO_CACHE=1` para
+  rehacer sin ella), muestran de qué rama sale la imagen antes de preguntar, y
+  borrar el clúster pide escribir su nombre (#593).
+
+### Security
+
+- **`k8s/` fuera de las imágenes** (`.dockerignore`): la imagen de la API,
+  también la de Render, llevaba los secretos locales del Kind y las copias de
+  su base de datos (#593).
+
+## [2.31.0] - 2026-10-18
+
+**Los mapas de OSM entran aprobados y el admin revisa por hoyo.** Lo que se
+importa de OpenStreetMap ya no espera a un admin: entra aprobado, y reimportar
+lo sustituye esté como esté (las líneas que guarda el admin van aparte y
+prevalecen). La revisión de hoyos lista solo los pendientes, dice dónde está
+el campo y trae la línea de OSM de cada hoyo. Va con el frontend **2.45.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: aditivo.** `saved` sigue en la lista de hoyos por revisar
+  (siempre false, marcado `deprecated`); `location` y `osm_line` son campos
+  nuevos. Orden de siempre: backend, `/health`, frontend.
+- **Importar OSM en PRO**: con este backend, `scripts/import_hole_maps.py
+  --apply` deja los mapas ya aprobados y visibles para los jugadores.
+
+### Added
+
+- **`location`** del campo en `GET /golf-courses/admin/{id}/hole-reviews`
+  (`{latitude, longitude}` o null), para encuadrar un hoyo sin muestras (#587).
+- **`osm_line`** de cada hoyo en la misma lectura: la línea del mapa de OSM
+  aprobado, con todos sus vértices y su green (o null) (#588).
+
+### Changed
+
+- **Lo importado de OSM entra aprobado**, sin revisor y con la fecha de la
+  importación como fecha de aprobación. **Reimportar sustituye el mapa** esté
+  pendiente, rechazado o aprobado, y lo deja aprobado: entran hoyos nuevos y
+  correcciones, y un hoyo que OSM ya no trae desaparece. Si OSM no trae nada
+  que valga, el mapa aprobado se queda entero. Desaparece el estado
+  `SKIPPED_APPROVED` del importador (#590).
+- **`GET /golf-courses/admin/hole-reviews` lista solo los hoyos pendientes**:
+  con muestras y sin línea guardada; un hoyo guardado sale de la lista y uno
+  reabierto con muestras vuelve. Hoyos de menor a mayor (#586).
+- `CourseHoleMap.is_approved` sustituye cuatro copias de la misma
+  comprobación (#588).
+
+### Fixed
+
+- **Los tests de integración llamaban a la RFEG de verdad**: el cliente de
+  test trae el servicio de hándicap falso por defecto. Un 500 de la RFEG tumbó
+  el CI de `develop` el 17 oct (#589, cierra #533).
+
+## [2.30.0] - 2026-10-17
+
+**Una línea de referencia por hoyo.** El admin guarda una línea por hoyo
+(salida, hasta dos codos y green) y la revisa desde «Hoyos por revisar» con
+todas las muestras que han llegado; los jugadores la ven antes que nada. Las
+muestras pasan a ser 3 por hoyo de cualquier barra, pueden traer solo el green,
+y los hoyos que OpenStreetMap trae con línea y green ya no recogen. Además, la
+Ryder dice el género de la barra de cada jugador (también en SCRATCH). Va con el
+frontend **2.44.0**.
+
+**Notas de despliegue.**
+
+- **2 migraciones** (`5206fa18886b` → `a3d5f7b9c1e2` → `b4e6a8c0d2f3`): las
+  columnas de la salida de `golf_course_hole_samples` admiten NULL (con un
+  check que prohíbe media salida o codos sin salida), y se crea
+  `golf_course_saved_holes` (vacía). SQL plano, modo offline comprobado.
+- **Sin variables nuevas ni dependencias nuevas.**
+- **Contrato: aditivo.** El frontend 2.43.0 sigue leyendo `tees` sin cambios;
+  puede seguir enviando muestras que ahora se descartan (204, en silencio).
+  Orden de siempre: backend, `/health`, frontend.
+- **Script a pasar en PRO**: `scripts/completar_genero_de_las_barras.py`
+  rellena el género de la barra en los partidos SCRATCH ya generados que no
+  han acabado. Primero con `--dry-run`.
+
+### Added
+
+- **Muestras solo de green**: quien abre el mapa a mitad de hoyo marca solo el
+  green; el siguiente en la salida completa el hoyo con él. Como mucho una por
+  hoyo (#581).
+- **Línea guardada por el admin** por campo y hoyo, con la misma regla que una
+  muestra completa; guardarla otra vez la sustituye (#582):
+  - `PUT /golf-courses/admin/{id}/hole-lines/{hole}` la guarda;
+  - `DELETE /golf-courses/admin/{id}/hole-lines/{hole}` reabre el hoyo;
+  - `DELETE /golf-courses/admin/{id}/hole-samples/{sample_id}` borra una
+    muestra mala y libera su hueco.
+- **Lectura del admin** para revisar hoyos (#583):
+  - `GET /golf-courses/admin/hole-reviews`: los campos con hoyos que revisar
+    (con muestras o línea guardada), ordenados por nombre;
+  - `GET /golf-courses/admin/{id}/hole-reviews`: por hoyo, su línea guardada,
+    todas las muestras (id, barra, puntos y día, nunca quién) y la tarjeta de
+    cada barra.
+- **`tee_gender`** de cada jugador en la vista de anotación de la Ryder, para
+  que el mapa envíe las muestras por barra también allí (#579).
+- **`scripts/completar_genero_de_las_barras.py`**: rellena solo el género de
+  los partidos SCRATCH ya generados, en rondas programadas o en juego; con
+  `--dry-run` y una transacción por ronda (#580).
+
+### Changed
+
+- **3 muestras por hoyo** de cualquier barra (antes por barra), con el bloqueo,
+  la cuenta y la ventana de 10 minutos por hoyo. La lectura da por hoyo la
+  primera muestra completa, el green suelto y si recoge (#581).
+- **Los hoyos con línea y green de OSM aprobado, o con línea guardada, no
+  recogen muestras** (#581, #582).
+- La lectura de muestras trae `saved_line`, la línea del admin (#582).
+
+### Fixed
+
+- **Ryder SCRATCH**: al generar (y al reasignar) los partidos no se leía el
+  campo ni el género, y cada jugador quedaba con una barra sin género: veía la
+  tarjeta de referencia y sus muestras se descartaban. La regla vive ahora en
+  el dominio (`barra_sin_golpes`) y la usa también stroke play (#579).
+
+## [2.29.0] - 2026-10-16
+
+**Mapa de hoyos.** Llega el modelo de mapa de hoyos con su revisión por el
+admin y el importador desde OpenStreetMap, las vistas de anotación traen el
+campo (su id, su nombre y, en stroke play, los metros de cada hoyo desde la
+barra de cada jugador) y los jugadores aportan **muestras anónimas** de la
+salida, los codos y el green de cada hoyo, por barra, para que el admin dibuje
+la línea buena. Va con el frontend **2.43.0**.
+
+**Notas de despliegue.**
+
+- **3 migraciones** (`f2b4d6e8a0c1` → `1f5431235064` → `7c2e9a4b1d30` →
+  `5206fa18886b`): crean `golf_course_hole_maps` (vacía) y
+  `golf_course_hole_samples` (vacía); la tabla intermedia de marcas por jugador
+  se crea y se borra en la misma subida (nunca llegó a producción). SQL plano,
+  generación en modo offline comprobada.
+- **Dependencias nuevas**: `shapely`, `numpy` y `geojson-pydantic` (#567, #569).
+- **Sin variables nuevas.**
+- **Contrato: aditivo para el frontend en producción.** La etiqueta
+  `api-breaking` de #576 es contra `develop`: quita `PUT .../hole-map/marks/{hole}`
+  y `GET .../marks/mine`, que nunca se publicaron. El frontend 2.42.0 no los usa.
+  Orden de siempre: backend, `/health`, frontend.
+- **Los mapas no se importan solos**: `scripts/import_hole_maps.py` corre en
+  seco por defecto; con `--apply` deja mapas pendientes de que el admin los
+  apruebe. Mientras no haya ninguno aprobado, la app trata cada campo como sin
+  mapa.
+
+### Added
+
+- **Modelo de mapa de hoyos** por campo: por hoyo, la línea de juego y el green
+  (delante, centro, fondo y contorno), con estado de revisión (`PENDING`,
+  `APPROVED`, `REJECTED`, `TOO_FEW_HOLES`), su versión opaca y el origen de cada
+  posición (#564).
+- **Importador desde OpenStreetMap** (`scripts/import_hole_maps.py`), por país
+  o por campo, en seco por defecto: casa el contorno del campo, sus hoyos (contra
+  la tarjeta) y sus greens; un mapa aprobado no se toca, y el que cubre menos de
+  la mitad de los hoyos no se guarda. Fuente Overpass o un extracto local de
+  Geofabrik con `--osm-file` (#567, #571).
+- **Endpoints del mapa**: `GET /golf-courses/{id}/hole-map` (el aprobado, en
+  GeoJSON, con atribución ODbL cuando hace falta) y la revisión del admin:
+  pendientes, ver cualquiera y aprobar o rechazar con la versión vista
+  (`HOLE_MAP_CHANGED`, `HOLE_MAP_NOT_PENDING`) (#569).
+- **El campo en las vistas de anotación**: `golf_course_id` en la Ryder y en la
+  partida de stroke play (#570); su nombre en el calendario, en «mis partidas» y
+  en la vista de la partida (#573); y los **metros de cada hoyo** desde la barra
+  de cada jugador en la vista de la partida, con `hole_card_for` como la Ryder
+  (#574).
+- **Muestras anónimas de cada hoyo, por barra** (#576):
+  - `POST /golf-courses/{id}/hole-map/samples/{hole}` con `{id, tee_color,
+    tee_gender, tee, bends, green_center}`, siempre `204`; se guardan las tres
+    primeras **válidas** de cada campo, hoyo y barra (resuelta con la del campo),
+    sin guardar quién las manda;
+  - idempotente por el `id` que pone el móvil; como mucho una aceptada por
+    jugador, hoyo y barra cada 10 minutos (en memoria);
+  - solo el día de llegada y un orden aparte; sin usuario en Sentry ni en la
+    clave del límite de peticiones;
+  - `GET /golf-courses/{id}/hole-map/samples`: los 18 hoyos, con la primera
+    muestra de cada barra y si aún recoge, sin recuentos ni autores.
+
+### Changed
+
+- Las marcas por jugador de los hoyos (#572), que nunca salieron a producción,
+  se sustituyen por las muestras anónimas (#576).
+
+### Fixed
+
+- El `env.py` de Alembic arranca todos los mappers desde un solo sitio: una
+  tabla nueva ya no queda fuera de la autogeneración (#566).
+
 ## [2.28.0] - 2026-10-15
 
 **Partida rápida en una sola petición, tarjetas de «Mis competiciones» y lo que

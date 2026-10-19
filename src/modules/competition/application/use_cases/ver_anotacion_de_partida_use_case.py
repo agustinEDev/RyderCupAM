@@ -35,6 +35,10 @@ from src.modules.competition.domain.value_objects.jugador_de_partida import (
 )
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
+)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -49,10 +53,13 @@ class VerAnotacionDePartidaUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
+        golf_courses: IGolfCourseRepository | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
+        # El nombre del campo bajo el título y los metros de cada hoyo (BE #532)
+        self._campos = golf_courses
 
     async def execute(self, group_id: UUID, quien: UserId) -> TeeGroupScoringViewDTO:
         """
@@ -84,13 +91,27 @@ class VerAnotacionDePartidaUseCase:
             nombres = await PlayerNames.de_la_competicion(
                 quienes, partida.competition_id, self._usuarios, self._uow
             )
+            # Su nombre, bajo el título, y los metros de cada hoyo desde la barra
+            # de cada uno (BE #532, 16 oct): una sola lectura del campo
+            campo = await self._campos.find_by_id(franja.golf_course_id) if self._campos else None
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
         jugaron = partida.quienes_jugaron(golpes)
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}
         marca = partida.marcadores.get(quien)
+        # Una vez por barra: quienes salen de la misma comparten tarjeta
+        por_barra: dict[tuple, dict[int, int | None]] = {}
+        metros = {
+            foto.user_id: por_barra.setdefault(
+                (foto.tee_color, foto.tee_gender), _metros(campo, foto)
+            )
+            for foto in partida.jugadores
+        }
         return TeeGroupScoringViewDTO(
             group_id=partida.id.value,
             round_id=partida.round_id.value,
+            golf_course_id=franja.golf_course_id.value,
+            golf_course_name=campo.name if campo else None,
+            golf_course_country_code=campo.country_code.value if campo else None,
             number=partida.numero,
             tee_time=franja.hoja_de_salidas.hora_de(partida.numero).strftime("%H:%M"),
             status=partida.estado.value,
@@ -99,10 +120,27 @@ class VerAnotacionDePartidaUseCase:
             picked_up_allowed=competicion.tournament_type == TournamentType.STABLEFORD,
             i_mark_user_id=marca.value if marca else None,
             players=[
-                _jugador(partida, foto, de_quien, nombres, marcado_por, jugaron)
+                _jugador(
+                    partida, foto, de_quien, nombres, marcado_por, jugaron, metros[foto.user_id]
+                )
                 for foto in partida.jugadores
             ],
         )
+
+
+def _metros(campo: GolfCourse | None, foto: JugadorDePartida) -> dict[int, int | None]:
+    """
+    Los metros de cada hoyo desde la barra del jugador, con `hole_card_for`,
+    como la Ryder: con sus reservas (la barra sin género de ese color, y la
+    tarjeta del campo). Un campo dado de alta a mano con una sola tarjeta la
+    copia a todas sus barras, así que todas llevan esos metros (aceptado por
+    Agustín, 16 oct). Sin campo, ninguno.
+    """
+    if campo is None:
+        return {}
+    return {
+        hoyo.number: hoyo.meters for hoyo in campo.hole_card_for(foto.tee_color, foto.tee_gender)
+    }
 
 
 def _jugador(
@@ -112,6 +150,7 @@ def _jugador(
     nombres: dict[UserId, str],
     marcado_por: dict[UserId, UserId],
     jugaron: set[UserId],
+    metros: dict[int, int | None],
 ) -> TeeGroupScoringPlayerDTO:
     suyos = {hoyo: de_quien.get((foto.user_id, hoyo)) for hoyo in range(1, HOYOS + 1)}
     validados = {h: g.golpes_validados for h, g in suyos.items() if g is not None and g.validado}
@@ -129,7 +168,9 @@ def _jugador(
         marked_by_user_id=le_marca.value if le_marca else None,
         brought_in=foto.user_id in partida.traidos,
         played=foto.user_id in jugaron,
-        holes=[_hoyo(foto, hoyo, golpe, nombres) for hoyo, golpe in suyos.items()],
+        holes=[
+            _hoyo(foto, hoyo, golpe, nombres, metros.get(hoyo)) for hoyo, golpe in suyos.items()
+        ],
         totals=TeeGroupTotalsDTO(
             thru=tarjeta.tras,
             points=tarjeta.puntos,
@@ -148,11 +189,13 @@ def _hoyo(
     hoyo: int,
     golpe: GolpeDePartida | None,
     nombres: dict[UserId, str],
+    metros: int | None,
 ) -> TeeGroupHoleDTO:
     por = golpe.marcador_por if golpe else None
     return TeeGroupHoleDTO(
         hole=hoyo,
         par=foto.par_por_hoyo[hoyo - 1],
+        meters=metros,
         strokes_received=foto.golpes_por_hoyo[hoyo - 1],
         own_score=golpe.propio if golpe else None,
         own_submitted=golpe.propio_enviado if golpe else False,

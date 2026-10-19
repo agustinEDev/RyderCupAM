@@ -40,6 +40,11 @@ class RoundInfoDTO(BaseModel):
     date: str
     session_type: str
     golf_course_name: str
+    golf_course_id: UUID = Field(..., description="Campo de la ronda: para pedir su mapa de hoyos")
+    golf_course_country_code: str | None = Field(
+        default=None,
+        description="País del campo (ISO 3166-1 alfa-2): el mapa solo tiene imagen en España; null si no está",
+    )
 
 
 class MarkerAssignmentResponseDTO(BaseModel):
@@ -60,6 +65,13 @@ class ScoringPlayerDTO(BaseModel):
     user_name: str
     team: str
     tee_color: str
+    tee_gender: str | None = Field(
+        None,
+        description=(
+            "Sexo de la barra del jugador (MALE/FEMALE), null en una barra sin sexo: "
+            "con el color, el mapa de hoyos envía las muestras por barra."
+        ),
+    )
     playing_handicap: int
     strokes_received: list[int]
     # El par, el índice y los metros son de la barra de cada jugador, no del

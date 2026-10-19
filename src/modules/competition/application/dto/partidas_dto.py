@@ -132,6 +132,10 @@ class MyTeeGroupDTO(BaseModel):
     round_id: UUID
     round_date: date
     session_type: str
+    golf_course_id: UUID = Field(..., description="Campo de la franja")
+    golf_course_name: str | None = Field(
+        default=None, description="Su nombre, para «Mis Próximos Partidos»; null si no está"
+    )
     group: TeeGroupDTO
 
 
@@ -146,6 +150,13 @@ class TeeGroupHoleDTO(BaseModel):
 
     hole: int
     par: int
+    meters: int | None = Field(
+        None,
+        description=(
+            "Metros del hoyo desde la barra del jugador, para el mapa del hoyo; "
+            "null si la barra no los trae o el campo no está."
+        ),
+    )
     strokes_received: int = Field(..., description="Con signo: un plus los da.")
     own_score: int | None
     own_submitted: bool
@@ -209,6 +220,14 @@ class TeeGroupScoringViewDTO(BaseModel):
 
     group_id: UUID
     round_id: UUID
+    golf_course_id: UUID = Field(..., description="Campo de la franja: para pedir su mapa de hoyos")
+    golf_course_name: str | None = Field(
+        default=None, description="Su nombre, bajo el título de la anotación; null si no está"
+    )
+    golf_course_country_code: str | None = Field(
+        default=None,
+        description="País del campo (ISO 3166-1 alfa-2): el mapa solo tiene imagen en España; null si no está",
+    )
     number: int
     tee_time: str
     status: str

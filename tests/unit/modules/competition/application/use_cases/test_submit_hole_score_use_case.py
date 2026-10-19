@@ -26,6 +26,7 @@ from src.modules.competition.domain.value_objects.validation_status import Valid
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -58,6 +59,8 @@ def _setup_match(
     mock_round.competition_id = MagicMock()
     mock_round.round_date = None
     mock_round.session_type = MagicMock(value="MORNING")
+    # Un id de verdad: la vista de anotar lo devuelve como UUID (BE #532)
+    mock_round.golf_course_id = GolfCourseId.generate()
 
     match = Match.create(
         round_id=round_id,

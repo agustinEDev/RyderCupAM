@@ -97,6 +97,8 @@ class GetScoringViewUseCase:
                 date=str(round_entity.round_date) if round_entity.round_date else "",
                 session_type=round_entity.session_type.value if round_entity.session_type else "",
                 golf_course_name=golf_course_name,
+                golf_course_id=round_entity.golf_course_id.value,
+                golf_course_country_code=golf_course.country_code.value if golf_course else None,
             )
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
@@ -182,6 +184,7 @@ class GetScoringViewUseCase:
                 user_name=user_names.get(p.user_id, ""),
                 team=match.get_player_team(p.user_id) or "",
                 tee_color=p.tee_color.value,
+                tee_gender=p.tee_gender.value if p.tee_gender else None,
                 playing_handicap=p.playing_handicap,
                 strokes_received=list(p.strokes_received),
                 hole_card=(

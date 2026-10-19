@@ -158,6 +158,19 @@ def test_m5_approve_pending_map():
     assert hole_map.rejection_reason is None
 
 
+def test_is_approved_only_when_approved():
+    """
+    GIVEN: Un mapa pendiente, uno aprobado y uno rechazado
+    WHEN: Se pregunta si está aprobado (lo que ven los jugadores, 17 oct)
+    THEN: Solo el aprobado
+    """
+    pendiente, aprobado, rechazado = _map(), _map(), _map()
+    aprobado.approve(reviewer_id=UserId.generate())
+    rechazado.reject(reviewer_id=UserId.generate())
+
+    assert [m.is_approved for m in (pendiente, aprobado, rechazado)] == [False, True, False]
+
+
 def test_m6_reject_pending_map_with_reason():
     """
     GIVEN: Un mapa pendiente
@@ -245,11 +258,67 @@ def test_m7_reviewed_map_cannot_be_reviewed_again(first, second):
 # ============================================================================
 
 
-def test_m8_reimport_over_pending_replaces_holes():
+# Agustín, 17-18 oct: lo de OSM entra aprobado («si hay algo mal, ya lo
+# reportarán») y reimportar lo sustituye, esté como esté. Lo que corrija el admin
+# va en la línea guardada del hoyo (SavedHole), aparte, y prevalece sobre OSM.
+#
+# | Caso | Situación                       | Qué pasa                                                   |
+# |------|---------------------------------|------------------------------------------------------------|
+# | I1   | importar un campo sin mapa      | el mapa nace aprobado, sin nadie como «aprobado por»       |
+#                                     (con fecha de aprobación: la de la importación)
+# | I2   | reimportar sobre uno pendiente  | se sustituye y queda aprobado                              |
+# | I3   | reimportar sobre uno rechazado  | se sustituye y queda aprobado, sin rastro del rechazo      |
+# | I4   | reimportar sobre uno aprobado   | se sustituye y sigue aprobado, ya sin «aprobado por»       |
+# | I6   | un hoyo que OSM ya no trae      | desaparece del mapa                                        |
+
+
+def test_i1_imported_map_is_approved_with_no_reviewer():
     """
-    GIVEN: Un mapa pendiente
+    GIVEN: Los hoyos emparejados desde OSM
+    WHEN: Se crea el mapa de una importación
+    THEN: Nace aprobado, sin nadie que lo revisara, con sus hoyos, referencia y fecha
+    """
+    course_id = GolfCourseId.generate()
+    holes = [_hole(n) for n in range(1, 19)]
+
+    hole_map = CourseHoleMap.create_approved(
+        golf_course_id=course_id,
+        holes=holes,
+        osm_reference="relation/12345",
+        imported_at=IMPORTADO,
+    )
+
+    assert hole_map.golf_course_id == course_id
+    assert hole_map.status is HoleMapStatus.APPROVED
+    assert hole_map.is_approved
+    assert hole_map.holes == tuple(holes)
+    assert hole_map.osm_reference == "relation/12345"
+    assert hole_map.imported_at == IMPORTADO
+    assert hole_map.reviewed_by is None
+    assert hole_map.reviewed_at == IMPORTADO
+    assert hole_map.rejection_reason is None
+
+
+def test_i1_create_approved_validates_like_create():
+    """
+    GIVEN: Hoyos repetidos
+    WHEN: Se crea el mapa aprobado
+    THEN: Se rechaza
+    """
+    with pytest.raises(ValueError, match="duplicate"):
+        CourseHoleMap.create_approved(
+            golf_course_id=GolfCourseId.generate(),
+            holes=[_hole(1), _hole(1)],
+            osm_reference="way/1",
+            imported_at=IMPORTADO,
+        )
+
+
+def test_i2_reimport_over_pending_replaces_holes_and_approves():
+    """
+    GIVEN: Un mapa pendiente (de antes de que lo de OSM entrara aprobado)
     WHEN: Se reimporta
-    THEN: Se sustituyen los hoyos, la referencia y la fecha, y sigue pendiente
+    THEN: Se sustituyen los hoyos, la referencia y la fecha, y queda aprobado
     """
     hole_map = _map()
 
@@ -258,52 +327,81 @@ def test_m8_reimport_over_pending_replaces_holes():
     assert [hole.number for hole in hole_map.holes] == [1]
     assert hole_map.osm_reference == "relation/99"
     assert hole_map.imported_at == REIMPORTADO
-    assert hole_map.status is HoleMapStatus.PENDING_REVIEW
+    assert hole_map.status is HoleMapStatus.APPROVED
+    assert hole_map.reviewed_by is None
+    assert hole_map.reviewed_at == REIMPORTADO
 
 
-def test_m8_reimport_over_rejected_goes_back_to_pending():
+def test_i3_reimport_over_rejected_approves_it():
     """
     GIVEN: Un mapa rechazado
     WHEN: Se reimporta
-    THEN: Se sustituyen los hoyos y vuelve a pendiente, sin rastro de la revisión anterior
+    THEN: Se sustituyen los hoyos y queda aprobado, sin rastro del rechazo
     """
     hole_map = _map()
     hole_map.reject(reviewer_id=UserId.generate(), reason="Hoyos de otro recorrido")
 
     hole_map.reimport(holes=[_hole(2)], osm_reference="way/5", imported_at=REIMPORTADO)
 
-    assert hole_map.status is HoleMapStatus.PENDING_REVIEW
+    assert hole_map.status is HoleMapStatus.APPROVED
     assert [hole.number for hole in hole_map.holes] == [2]
     assert hole_map.reviewed_by is None
-    assert hole_map.reviewed_at is None
+    assert hole_map.reviewed_at == REIMPORTADO
     assert hole_map.rejection_reason is None
 
 
-def test_m8_reimport_over_approved_is_rejected():
+def test_i4_reimport_over_approved_replaces_it_and_stays_approved():
     """
-    GIVEN: Un mapa aprobado
-    WHEN: Se intenta reimportar
-    THEN: Se rechaza y el mapa revisado no cambia
+    GIVEN: Un mapa aprobado por un admin
+    WHEN: Se reimporta
+    THEN: Se sustituyen los hoyos, la referencia y la fecha; sigue aprobado, y ya
+          nadie figura como quien lo revisó (lo nuevo no lo miró nadie)
     """
     hole_map = _map()
     hole_map.approve(reviewer_id=UserId.generate())
-    holes = hole_map.holes
 
-    with pytest.raises(ValueError, match="approved"):
-        hole_map.reimport(holes=[_hole(1)], osm_reference="way/5", imported_at=REIMPORTADO)
+    hole_map.reimport(holes=[_hole(1), _hole(4)], osm_reference="way/5", imported_at=REIMPORTADO)
 
-    assert hole_map.holes == holes
-    assert hole_map.osm_reference == "way/237391513"
+    assert [hole.number for hole in hole_map.holes] == [1, 4]
+    assert hole_map.osm_reference == "way/5"
+    assert hole_map.imported_at == REIMPORTADO
     assert hole_map.status is HoleMapStatus.APPROVED
+    assert hole_map.reviewed_by is None
+    assert hole_map.reviewed_at == REIMPORTADO
+
+
+def test_i6_a_hole_osm_no_longer_brings_disappears():
+    """
+    GIVEN: Un mapa aprobado con los hoyos 1 a 18
+    WHEN: Se reimporta y OSM ya no trae el 7
+    THEN: El 7 desaparece del mapa
+    """
+    hole_map = CourseHoleMap.create_approved(
+        golf_course_id=GolfCourseId.generate(),
+        holes=[_hole(n) for n in range(1, 19)],
+        osm_reference="way/1",
+        imported_at=IMPORTADO,
+    )
+
+    hole_map.reimport(
+        holes=[_hole(n) for n in range(1, 19) if n != 7],
+        osm_reference="way/1",
+        imported_at=REIMPORTADO,
+    )
+
+    assert hole_map.hole(7) is None
+    assert len(hole_map.holes) == 17
 
 
 def test_m8b_reimport_validates_like_create():
     """
-    GIVEN: Un mapa pendiente
+    GIVEN: Un mapa aprobado
     WHEN: Se reimporta con hoyos repetidos
-    THEN: Se rechaza y el mapa no cambia
+    THEN: Se rechaza y el mapa no cambia, ni deja de estar aprobado por quien lo aprobó
     """
     hole_map = _map()
+    admin = UserId.generate()
+    hole_map.approve(reviewer_id=admin)
     holes = hole_map.holes
 
     with pytest.raises(ValueError, match="duplicate"):
@@ -314,13 +412,14 @@ def test_m8b_reimport_validates_like_create():
     assert hole_map.holes == holes
     assert hole_map.osm_reference == "way/237391513"
     assert hole_map.imported_at == IMPORTADO
+    assert hole_map.reviewed_by == admin
 
 
 def test_m8c_reimport_with_bad_reference_changes_nothing():
     """
     GIVEN: Un mapa rechazado
     WHEN: Se reimporta con hoyos válidos pero una referencia OSM inválida
-    THEN: Se rechaza y no queda nada a medias: ni hoyos nuevos ni vuelta a pendiente
+    THEN: Se rechaza y no queda nada a medias: ni hoyos nuevos ni aprobado
     """
     hole_map = _map()
     hole_map.reject(reviewer_id=UserId.generate(), reason="Otro recorrido")

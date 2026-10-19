@@ -10,10 +10,12 @@ class ImportHoleMapStatus(StrEnum):
 
     CREATED = "CREATED"
     REIMPORTED = "REIMPORTED"
-    SKIPPED_APPROVED = "SKIPPED_APPROVED"  # el mapa ya lo aprobó un admin
     NO_COORDINATES = "NO_COORDINATES"
     NO_OUTLINE = "NO_OUTLINE"  # OSM no tiene el contorno del campo cerca
     NO_VALID_HOLES = "NO_VALID_HOLES"
+    # Menos de la mitad de los hoyos del campo: casi siempre un recorrido pequeño
+    # que comparte contorno con el grande y se queda con algún hoyo suyo
+    TOO_FEW_HOLES = "TOO_FEW_HOLES"
     OSM_UNAVAILABLE = "OSM_UNAVAILABLE"
 
 

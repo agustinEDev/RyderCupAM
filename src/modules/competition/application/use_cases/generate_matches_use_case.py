@@ -546,13 +546,15 @@ class GenerateMatchesUseCase:
                 "Asocie un campo de golf aprobado a la competición."
             )
 
-        if golf_course and not is_scratch:
+        # También en SCRATCH: sin golpes, pero cada uno guarda el género de su
+        # barra, y con él su tarjeta y las muestras del mapa (RyderCupWeb #880)
+        if golf_course:
             context = course_context_for(golf_course)
             tee_ratings = context.tee_ratings
             holes_by_stroke_index = context.holes_by_stroke_index
             holes_by_tee = context.holes_by_tee
 
-        if not is_scratch:
+        if golf_course or not is_scratch:
             all_player_ids = list(team_assignment.team_a_player_ids) + list(
                 team_assignment.team_b_player_ids
             )
@@ -565,9 +567,10 @@ class GenerateMatchesUseCase:
                     has_custom_handicap = (
                         enrollment is not None and enrollment.has_custom_handicap()
                     )
-                    if not has_custom_handicap and refrescar_handicap_rfeg:
+                    if not is_scratch and not has_custom_handicap and refrescar_handicap_rfeg:
                         await self._refresco_rfeg.si_toca(user)
-                    if user.handicap is not None:
+                    # En SCRATCH solo el género: el hándicap no cuenta
+                    if not is_scratch and user.handicap is not None:
                         user_handicap_map[str(pid.value)] = Decimal(str(user.handicap.value))
                     user_gender_map[str(pid.value)] = user.gender
 
