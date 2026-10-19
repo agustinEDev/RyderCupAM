@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.33.0] - 2026-10-19
+
+**El país del campo en las anotaciones.** La imagen del mapa del hoyo solo
+cubre España, así que el frontend esconde el botón «Mapa» en los campos de
+otros países y para eso necesita saber dónde está el campo. Va con el frontend
+**2.47.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: aditivo.** Orden de siempre: backend, `/health`, frontend.
+
+### Added
+
+- **`golf_course_country_code`** (ISO 3166-1 alfa-2, o null si el campo no
+  está) en la anotación de la Ryder (`round_info`) y en la de una partida de
+  stroke play. El campo ya se cargaba allí: no hay consulta de más (#598).
+
 ## [2.32.0] - 2026-10-19
 
 **Los jugadores reportan un hoyo mal.** Desde el mapa del hoyo, un jugador

@@ -43,7 +43,7 @@ def _card(pars: list[int], meters: int) -> list[Hole]:
     return [Hole(number=i + 1, par=pars[i], stroke_index=i + 1, meters=meters) for i in range(18)]
 
 
-def _course_two_tees() -> GolfCourse:
+def _course_two_tees(country: str = "ES") -> GolfCourse:
     """
     Amarillas y rojas con tarjetas distintas.
 
@@ -54,7 +54,7 @@ def _course_two_tees() -> GolfCourse:
     red_pars[0] = 5
     return GolfCourse.create(
         name="Test Course",
-        country_code=CountryCode("ES"),
+        country_code=CountryCode(country),
         course_type=CourseType.STANDARD_18,
         creator_id=UserId.generate(),
         tees=[
@@ -160,6 +160,35 @@ class TestGolfCourseOfTheRound:
         view = await uc.execute(str(match.id))
 
         assert view.round_info.golf_course_id == ronda.golf_course_id.value
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("pais", ["ES", "PT"])
+    async def test_b1_la_ronda_dice_el_pais_de_su_campo(self, uow, user_repo, pais):
+        """
+        GIVEN: Un partido cuya ronda se juega en un campo de España o de Portugal
+        WHEN: Se pide la vista de anotar
+        THEN: La ronda lleva el país del campo: el mapa solo tiene imagen en España (19 oct)
+        """
+        match, _, _, gc_repo = await _setup(uow, _course_two_tees(pais))
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.round_info.golf_course_country_code == pais
+
+    @pytest.mark.asyncio
+    async def test_b1_sin_campo_el_pais_va_en_null(self, uow, user_repo):
+        """
+        GIVEN: Un partido cuyo campo ya no está
+        WHEN: Se pide la vista de anotar
+        THEN: El país va a null, sin error
+        """
+        match, _, _, gc_repo = await _setup(uow, None)
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.round_info.golf_course_country_code is None
 
 
 class TestTeeGenderPerPlayer:

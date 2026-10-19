@@ -41,6 +41,10 @@ class RoundInfoDTO(BaseModel):
     session_type: str
     golf_course_name: str
     golf_course_id: UUID = Field(..., description="Campo de la ronda: para pedir su mapa de hoyos")
+    golf_course_country_code: str | None = Field(
+        default=None,
+        description="País del campo (ISO 3166-1 alfa-2): el mapa solo tiene imagen en España; null si no está",
+    )
 
 
 class MarkerAssignmentResponseDTO(BaseModel):

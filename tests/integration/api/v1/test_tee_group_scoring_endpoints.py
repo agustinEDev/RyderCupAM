@@ -214,6 +214,8 @@ async def test_the_view(client: AsyncClient):
     assert vista.json()["golf_course_name"] == await _nombre_del_campo(
         vista.json()["golf_course_id"]
     )
+    # Y su país (el de prueba es de España): el mapa solo tiene imagen ahí (19 oct)
+    assert vista.json()["golf_course_country_code"] == "ES"
     # Sin metros en las barras del campo de prueba, el campo viaja en null
     hoyos = [h for p in vista.json()["players"] for h in p["holes"]]
     assert len(hoyos) == 4 * 18

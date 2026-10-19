@@ -246,7 +246,7 @@ def _con(escenario, campos):
     )
 
 
-def _campo(metros_por_barra, nombre="Golf de Meis - Par 72"):
+def _campo(metros_por_barra, nombre="Golf de Meis - Par 72", pais="ES"):
     """
     Un campo de verdad. `metros_por_barra`: {(color, género): metros de los 18}.
     Una barra con None no trae tarjeta propia (el campo le copia la primera).
@@ -263,7 +263,7 @@ def _campo(metros_por_barra, nombre="Golf de Meis - Par 72"):
 
     return GolfCourse.create(
         name=nombre,
-        country_code=CountryCode("ES"),
+        country_code=CountryCode(pais),
         course_type=CourseType.STANDARD_18,
         creator_id=UserId.generate(),
         tees=[
@@ -324,6 +324,38 @@ async def test_the_course_name_is_null_if_the_course_is_not_found():
 
     assert sin_campo.golf_course_name is None
     assert sin_repositorio.golf_course_name is None
+
+
+@pytest.mark.parametrize("pais", ["ES", "PT"])
+async def test_b2_the_view_carries_the_course_country(pais):
+    """
+    GIVEN: Una partida de stroke play en un campo de España o de Portugal
+    WHEN: Se pide la anotación
+    THEN: Lleva el país del campo: el mapa solo tiene imagen en España (19 oct)
+    """
+    from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+
+    escenario, partida = await _partida()
+    campos = _Campos(_campo({(TeeColor.YELLOW, None): [300] * 18}, pais=pais))
+
+    vista = await _con(escenario, campos).execute(partida.id.value, partida.user_ids[0])
+
+    assert vista.golf_course_country_code == pais
+
+
+async def test_b2_the_course_country_is_null_if_the_course_is_not_found():
+    """
+    GIVEN: Un campo que ya no está (o sin repositorio de campos)
+    WHEN: Se pide la anotación
+    THEN: El país va a null, sin error
+    """
+    escenario, partida = await _partida()
+
+    sin_campo = await _con(escenario, _Campos(None)).execute(partida.id.value, partida.user_ids[0])
+    sin_repositorio = await _ver(escenario).execute(partida.id.value, partida.user_ids[0])
+
+    assert sin_campo.golf_course_country_code is None
+    assert sin_repositorio.golf_course_country_code is None
 
 
 # Los metros de cada hoyo desde SU barra, para el recuadro del mapa (BE #532, 16 oct)
