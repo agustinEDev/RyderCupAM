@@ -224,6 +224,8 @@ class TestGetScoringView:
         assert data["match_id"] == ctx["match_id"]
         # El campo de la ronda, para pedir su mapa de hoyos (BE #532)
         assert data["round_info"]["golf_course_id"] == ctx["golf_course_id"]
+        # Y su país (el de prueba es de España): el mapa solo tiene imagen ahí (19 oct)
+        assert data["round_info"]["golf_course_country_code"] == "ES"
         assert data["match_status"] == "IN_PROGRESS"
         assert data["match_format"] == "SINGLES"
         assert data["is_decided"] is False

@@ -111,6 +111,7 @@ class VerAnotacionDePartidaUseCase:
             round_id=partida.round_id.value,
             golf_course_id=franja.golf_course_id.value,
             golf_course_name=campo.name if campo else None,
+            golf_course_country_code=campo.country_code.value if campo else None,
             number=partida.numero,
             tee_time=franja.hoja_de_salidas.hora_de(partida.numero).strftime("%H:%M"),
             status=partida.estado.value,
