@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from src.modules.golf_course.application.dtos.hole_sample_dtos import HoleSampleDTO, PointDTO
+from src.modules.golf_course.domain.entities.hole_report import HoleReportReason
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.shared.domain.value_objects.gender import Gender
 
@@ -15,10 +16,12 @@ class HoleReviewCountDTO(BaseModel):
 
     hole_number: int
     samples: int
+    reports: int = Field(default=0, description="Cuántos reportes abiertos tiene (entrega 7)")
     # Desde el 17 oct un hoyo guardado no está pendiente: siempre false. Se
     # queda para no romper el contrato del frontend en producción
     saved: bool = Field(
-        deprecated=True, description="Siempre false: un hoyo guardado ya no está pendiente"
+        deprecated=True,
+        description="Si el hoyo tiene línea guardada: solo pasa cuando está pendiente por reportes",
     )
 
 
@@ -63,6 +66,20 @@ class AdminHoleSampleDTO(BaseModel):
     received_on: date
 
 
+class AdminHoleReportDTO(BaseModel):
+    """
+    Un reporte, para el admin: su id (para descartarlo), el motivo, la línea que
+    propone el jugador y el día. Nunca de quién es: no se guarda.
+    """
+
+    id: UUID
+    reason: HoleReportReason
+    tee: PointDTO
+    bends: list[PointDTO]
+    green_center: PointDTO
+    received_on: date
+
+
 class TeeMetresDTO(BaseModel):
     """Lo que dice la tarjeta de una barra en ese hoyo, para comparar con la línea."""
 
@@ -89,6 +106,9 @@ class HoleReviewHoleDTO(BaseModel):
         description="La del mapa de OSM aprobado; null sin mapa aprobado o sin el hoyo",
     )
     samples: list[AdminHoleSampleDTO] = Field(description="En orden de llegada")
+    reports: list[AdminHoleReportDTO] = Field(
+        description="Los reportes abiertos del hoyo, en orden de llegada (entrega 7)"
+    )
     tees: list[TeeMetresDTO]
 
 

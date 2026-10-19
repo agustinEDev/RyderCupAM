@@ -2,13 +2,16 @@
 Lo que lee el admin para revisar los hoyos (BE #575, 17 oct 2026).
 
 - La lista: los campos con hoyos PENDIENTES, por nombre, y de cada hoyo, de menor
-  a mayor, cuántas muestras tiene. Pendiente es con muestras y sin línea guardada:
-  al guardarlo el admin, desaparece (Agustín, 17 oct); al reabrirlo, si conserva
-  muestras, vuelve. `saved` sigue en la respuesta (siempre false) para no
-  romper el contrato.
+  a mayor, cuántas muestras y cuántos reportes tiene. Pendiente es con muestras
+  y sin línea guardada, o con reportes abiertos aunque tenga línea guardada o de
+  OSM (entrega 7, 18 oct): al guardarlo el admin, desaparece (Agustín, 17 oct)
+  y se cierran sus reportes; al reabrirlo, si conserva muestras, vuelve.
+  `saved` dice si el hoyo tiene línea guardada: solo es true en uno pendiente
+  por sus reportes.
 - Un campo (de los que ven los jugadores): su ubicación y sus 18 hoyos, cada
   uno con su línea del mapa de OSM aprobado (si la hay), su línea guardada,
-  TODAS sus muestras (con su id, para borrar las malas, y su barra) y los metros de cada barra en
+  TODAS sus muestras (con su id, para borrar las malas, y su barra), sus
+  reportes abiertos (con su id, para descartarlos) y los metros de cada barra en
   ese hoyo, para compararlos con lo que mide la línea.
 
 Las muestras siguen siendo anónimas: no se guarda de quién son. Que quien llama
@@ -18,6 +21,7 @@ es admin lo mira la ruta.
 import unicodedata
 
 from src.modules.golf_course.application.dtos.hole_review_dtos import (
+    AdminHoleReportDTO,
     AdminHoleSampleDTO,
     GetHoleReviewRequestDTO,
     HoleReviewCountDTO,
@@ -39,6 +43,7 @@ from src.modules.golf_course.application.use_cases.hole_points import (
 from src.modules.golf_course.domain.entities.course_hole_map import CourseHoleMap
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
+from src.modules.golf_course.domain.entities.hole_report import HoleReport
 from src.modules.golf_course.domain.entities.hole_sample import HoleSample
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
@@ -67,19 +72,24 @@ class ListHoleReviewsUseCase:
     async def execute(self, request: ListHoleReviewsRequestDTO) -> ListHoleReviewsResponseDTO:
         async with self._uow:
             counts = await self._uow.hole_samples.count_by_hole()
+            report_counts = await self._uow.hole_reports.count_by_hole()
             saved = await self._uow.saved_holes.list_all()
             samples: dict[GolfCourseId, dict[int, int]] = {}
             for course_id, hole, n in counts:
                 samples.setdefault(course_id, {})[hole] = n
+            reports: dict[GolfCourseId, dict[int, int]] = {}
+            for course_id, hole, n in report_counts:
+                reports.setdefault(course_id, {})[hole] = n
             saved_holes: dict[GolfCourseId, set[int]] = {}
             for line in saved:
                 saved_holes.setdefault(line.golf_course_id, set()).add(line.hole_number)
             # Pendiente: con muestras (el recuento solo trae hoyos con alguna) y
-            # sin línea guardada
+            # sin línea guardada, o con algún reporte abierto (entrega 7)
             pending: dict[GolfCourseId, list[int]] = {}
-            for course_id, holes in samples.items():
+            for course_id in samples.keys() | reports.keys():
                 kept = saved_holes.get(course_id, set())
-                if left := sorted(hole for hole in holes if hole not in kept):
+                with_samples = {h for h in samples.get(course_id, {}) if h not in kept}
+                if left := sorted(with_samples | set(reports.get(course_id, {}))):
                     pending[course_id] = left
             course_ids = list(pending)
             # Solo los nombres, en una consulta: no cada campo con sus salidas
@@ -89,13 +99,20 @@ class ListHoleReviewsUseCase:
             name = names.get(str(course_id))
             if name is None:
                 continue
-            counted = samples[course_id]
+            counted = samples.get(course_id, {})
+            reported = reports.get(course_id, {})
             courses.append(
                 HoleReviewSummaryDTO(
                     golf_course_id=str(course_id),
                     name=name,
                     holes=[
-                        HoleReviewCountDTO(hole_number=hole, samples=counted[hole], saved=False)
+                        HoleReviewCountDTO(
+                            hole_number=hole,
+                            samples=counted.get(hole, 0),
+                            reports=reported.get(hole, 0),
+                            # Pendiente por un reporte, un hoyo guardado sí lo dice (entrega 7)
+                            saved=hole in saved_holes.get(course_id, set()),
+                        )
                         for hole in pending[course_id]
                     ],
                 )
@@ -113,6 +130,17 @@ def _sample_dto(sample: HoleSample) -> AdminHoleSampleDTO:
         bends=[point_dto(bend) for bend in sample.bends],
         green_center=point_dto(sample.green_center),
         received_on=sample.received_on,
+    )
+
+
+def _report_dto(report: HoleReport) -> AdminHoleReportDTO:
+    return AdminHoleReportDTO(
+        id=report.id,
+        reason=report.reason,
+        tee=point_dto(report.tee),
+        bends=[point_dto(bend) for bend in report.bends],
+        green_center=point_dto(report.green_center),
+        received_on=report.received_on,
     )
 
 
@@ -173,6 +201,7 @@ class GetHoleReviewUseCase:
             if not visible(course):
                 raise GolfCourseNotFoundError(request.golf_course_id)
             samples = await self._uow.hole_samples.list_by_course(course_id)
+            reports = await self._uow.hole_reports.list_by_course(course_id)
             saved = {
                 h.hole_number: h for h in await self._uow.saved_holes.list_by_course(course_id)
             }
@@ -182,6 +211,9 @@ class GetHoleReviewUseCase:
         by_hole: dict[int, list[HoleSample]] = {}
         for sample in samples:
             by_hole.setdefault(sample.hole_number, []).append(sample)
+        reports_by_hole: dict[int, list[HoleReport]] = {}
+        for report in reports:
+            reports_by_hole.setdefault(report.hole_number, []).append(report)
         cards = _cards(course)
         holes = []
         for number in range(MIN_HOLE_NUMBER, MAX_HOLE_NUMBER + 1):
@@ -192,6 +224,7 @@ class GetHoleReviewUseCase:
                     saved_line=line_dto(line.tee, line.bends, line.green_center) if line else None,
                     osm_line=_osm_line(approved, number),
                     samples=[_sample_dto(x) for x in by_hole.get(number, [])],
+                    reports=[_report_dto(r) for r in reports_by_hole.get(number, [])],
                     tees=_tees(cards, number),
                 )
             )

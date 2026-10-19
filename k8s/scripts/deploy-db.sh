@@ -10,6 +10,10 @@
 
 set -e  # Exit on error
 
+# Con la caché de Docker por defecto (se invalida sola si cambian el código o las
+# dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
+case "$(echo "${NO_CACHE:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -111,7 +115,7 @@ build_and_load_api_image() {
     fi
 
     # Build
-    if docker build --no-cache -f "$PROJECT_ROOT/docker/Dockerfile" -t "${API_DOCKER_IMAGE}:latest" "$PROJECT_ROOT"; then
+    if docker build $NO_CACHE_FLAG -f "$PROJECT_ROOT/docker/Dockerfile" -t "${API_DOCKER_IMAGE}:latest" "$PROJECT_ROOT"; then
         print_success "API image built successfully"
     else
         print_error "Failed to build API image"

@@ -11,6 +11,10 @@
 
 set -e  # Exit on error
 
+# Con la caché de Docker por defecto (se invalida sola si cambian el código o las
+# dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
+case "$(echo "${NO_CACHE:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+
 # Colores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -134,7 +138,7 @@ build_docker_image() {
     print_info "Directorio: $FRONTEND_DIR"
 
     # Construir la imagen
-    if docker build --no-cache -t "$tag" "$FRONTEND_DIR"; then
+    if docker build $NO_CACHE_FLAG -t "$tag" "$FRONTEND_DIR"; then
         print_success "Imagen construida exitosamente: $tag"
     else
         print_error "Error al construir la imagen Docker"
@@ -280,6 +284,9 @@ echo ""
 echo -e "${BOLD}Docker Image:${NC} ${DOCKER_IMAGE}:${VERSION}"
 echo -e "${BOLD}Deployment:${NC}   ${DEPLOYMENT_NAME}"
 echo -e "${BOLD}Container:${NC}    ${CONTAINER_NAME}"
+# De qué rama sale la imagen
+source "$(dirname "${BASH_SOURCE[0]}")/rama-de-la-imagen.sh"
+mostrar_rama_de "$(dirname "${BASH_SOURCE[0]}")/../../../RyderCupWeb"
 echo ""
 
 # Confirmar antes de proceder

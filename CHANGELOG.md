@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.32.0] - 2026-10-19
+
+**Los jugadores reportan un hoyo mal.** Desde el mapa del hoyo, un jugador
+avisa de que el hoyo está mal, con un motivo y la línea que propone; como las
+muestras, sin quién lo mandó. El admin ve los reportes en la revisión del hoyo,
+los descarta o guarda la línea, que los cierra. Va con el frontend **2.46.0**.
+
+**Notas de despliegue.**
+
+- **Una migración** (`c5f7a9b1d3e5`): crea la tabla `golf_course_hole_reports`,
+  vacía y sin columna de usuario. Sin variables ni dependencias nuevas.
+- **Contrato: aditivo.** Orden de siempre: backend, `/health`, frontend.
+
+### Added
+
+- **`POST /golf-courses/{id}/hole-map/reports/{hole}`**: un reporte con
+  `{id, reason, tee, bends, green_center}` y motivo `WRONG_HOLE`, `WRONG_LINE`
+  o `HOLE_CHANGED`. Responde siempre 204 (404 sin campo, 422 con un hoyo que no
+  existe) y solo se guarda si el campo se ve, la línea vale (40–750 m, a menos
+  de 3 km), el hoyo tiene línea, el id es nuevo, el hoyo tiene menos de tres
+  reportes y el jugador no lo reportó en los últimos 10 minutos. No guarda
+  usuario y Sentry no recibe usuario en esta ruta (#594).
+- **`DELETE /golf-courses/admin/{id}/hole-reports/{report_id}`**: el admin
+  descarta un reporte (#594).
+- **`reports`** en la lista de hoyos por revisar y **`reports[]`** en la
+  revisión de un hoyo (#594).
+
+### Changed
+
+- **Un hoyo con reportes está pendiente aunque tenga la línea guardada**, y
+  `saved` (deprecated) dice la verdad para esos hoyos. **Guardar la línea de un
+  hoyo borra sus reportes** (#594).
+- **Scripts del Kind**: construyen con la caché de Docker (`NO_CACHE=1` para
+  rehacer sin ella), muestran de qué rama sale la imagen antes de preguntar, y
+  borrar el clúster pide escribir su nombre (#593).
+
+### Security
+
+- **`k8s/` fuera de las imágenes** (`.dockerignore`): la imagen de la API,
+  también la de Render, llevaba los secretos locales del Kind y las copias de
+  su base de datos (#593).
+
 ## [2.31.0] - 2026-10-18
 
 **Los mapas de OSM entran aprobados y el admin revisa por hoyo.** Lo que se

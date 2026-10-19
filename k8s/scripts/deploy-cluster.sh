@@ -23,6 +23,10 @@ fi
 
 set -e  # Salir si algún comando falla
 
+# Con la caché de Docker por defecto (se invalida sola si cambian el código o las
+# dependencias); NO_CACHE=1 construye desde cero. Sin caché llenaba el disco del Mac.
+case "$(echo "${NO_CACHE:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes) NO_CACHE_FLAG="--no-cache --pull" ;; *) NO_CACHE_FLAG="" ;; esac
+
 # Colores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -93,6 +97,35 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 K8S_DIR="$PROJECT_ROOT/k8s"
 KIND_CONFIG="$K8S_DIR/kind-config.yaml"
 
+# Antes de nada (también antes de ofrecer borrar el clúster): de qué ramas
+# saldrán las dos imágenes
+# Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
+FRONTEND_CANDIDATE="$PROJECT_ROOT/../RyderCupWeb"
+BACKEND_DIR="$PROJECT_ROOT"
+
+if [ -d "$FRONTEND_CANDIDATE" ]; then
+    FRONTEND_DIR="$(cd "$FRONTEND_CANDIDATE" && pwd)"
+else
+    print_error "No se encontró el directorio del frontend: $FRONTEND_CANDIDATE"
+    exit 1
+fi
+
+# Verificar que existen los Dockerfiles
+if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
+    print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
+    exit 1
+fi
+
+if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
+    print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
+    exit 1
+fi
+
+# De qué ramas salen las dos imágenes
+source "$(dirname "${BASH_SOURCE[0]}")/rama-de-la-imagen.sh"
+mostrar_rama_de "$BACKEND_DIR"
+mostrar_rama_de "$FRONTEND_DIR"
+
 # ==========================================
 # PASO 2: Crear cluster Kind (si no existe)
 # ==========================================
@@ -107,9 +140,15 @@ fi
 
 if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
     print_warning "Cluster '${CLUSTER_NAME}' ya existe"
-    read -p "¿Quieres eliminarlo y crear uno nuevo? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Borrarlo se lleva la BD: hay que escribir su nombre en una terminal, y un
+    # `echo y |` (como se lanzan los otros scripts) no puede contestar que sí
+    RESPUESTA=""
+    if [ -t 0 ]; then
+        read -r -p "Escribe ${CLUSTER_NAME} para BORRARLO y crear uno nuevo (BD incluida); Enter para usar el que hay: " RESPUESTA || true
+    else
+        print_warning "Sin terminal no se ofrece borrar el clúster: para recrearlo, lánzalo desde una terminal"
+    fi
+    if [ "$RESPUESTA" = "$CLUSTER_NAME" ]; then
         print_step "Eliminando cluster existente..."
         kind delete cluster --name ${CLUSTER_NAME}
 
@@ -195,36 +234,14 @@ echo ""
 # ==========================================
 print_step "Construyendo imágenes Docker con el código actual..."
 
-# Directorio del frontend (asumiendo estructura: RyderCupAm/ y RyderCupWeb/)
-FRONTEND_CANDIDATE="$PROJECT_ROOT/../RyderCupWeb"
-BACKEND_DIR="$PROJECT_ROOT"
-
-if [ -d "$FRONTEND_CANDIDATE" ]; then
-    FRONTEND_DIR="$(cd "$FRONTEND_CANDIDATE" && pwd)"
-else
-    print_error "No se encontró el directorio del frontend: $FRONTEND_CANDIDATE"
-    exit 1
-fi
-
-# Verificar que existen los Dockerfiles
-if [ ! -f "$BACKEND_DIR/docker/Dockerfile" ]; then
-    print_error "No se encontró Dockerfile en: $BACKEND_DIR/docker/"
-    exit 1
-fi
-
-if [ ! -f "$FRONTEND_DIR/Dockerfile" ]; then
-    print_error "No se encontró Dockerfile en: $FRONTEND_DIR"
-    exit 1
-fi
-
 # Construir imagen del Backend
 print_step "Construyendo imagen del Backend (FastAPI)..."
-docker build --no-cache -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
+docker build $NO_CACHE_FLAG -f "$BACKEND_DIR/docker/Dockerfile" -t agustinedev/rydercupam-api:latest "$BACKEND_DIR"
 print_success "Imagen del backend construida"
 
 # Construir imagen del Frontend
 print_step "Construyendo imagen del Frontend (React + Vite)..."
-docker build --no-cache -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
+docker build $NO_CACHE_FLAG -t agustinedev/rydercupam-web:latest "$FRONTEND_DIR"
 print_success "Imagen del frontend construida"
 
 # Pre-pull PostgreSQL image si no existe localmente
