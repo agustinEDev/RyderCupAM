@@ -98,6 +98,7 @@ class GetScoringViewUseCase:
                 session_type=round_entity.session_type.value if round_entity.session_type else "",
                 golf_course_name=golf_course_name,
                 golf_course_id=round_entity.golf_course_id.value,
+                golf_course_country_code=golf_course.country_code.value if golf_course else None,
             )
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
