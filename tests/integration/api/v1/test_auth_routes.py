@@ -24,6 +24,7 @@ class TestAuthRoutes:
             "password": "V@l1dP@ss123!",
             "first_name": "Integration",
             "last_name": "Test",
+            "accept_terms": True,
         }
 
         # Act
@@ -46,6 +47,7 @@ class TestAuthRoutes:
             "password": "V@l1dP@ss123!",
             "first_name": "Conflict",
             "last_name": "Test",
+            "accept_terms": True,
         }
         first_response = await client.post("/api/v1/auth/register", json=user_data)
         assert first_response.status_code == status.HTTP_201_CREATED
@@ -82,6 +84,7 @@ class TestAuthRoutes:
                 "password": password,
                 "first_name": "Policy",
                 "last_name": "Test",
+                "accept_terms": True,
             },
         )
 
@@ -147,6 +150,7 @@ class TestAuthRoutes:
                 "password": "Password123!",
                 "first_name": "Policy",
                 "last_name": "Test",
+                "accept_terms": True,
             },
         )
 
@@ -218,6 +222,7 @@ class TestAuthRoutes:
             "password": "V@l1dP@ss123!",
             "first_name": "Verify",
             "last_name": "Success",
+            "accept_terms": True,
         }
         register_response = await client.post("/api/v1/auth/register", json=user_data)
         assert register_response.status_code == status.HTTP_201_CREATED
@@ -290,6 +295,7 @@ class TestAuthRoutes:
             "password": "V@l1dP@ss123!",
             "first_name": "Already",
             "last_name": "Verified",
+            "accept_terms": True,
         }
         register_response = await client.post("/api/v1/auth/register", json=user_data)
         assert register_response.status_code == status.HTTP_201_CREATED
@@ -323,6 +329,7 @@ class TestAuthRoutes:
             "password": "V@l1dP@ss123!",
             "first_name": "Resend",
             "last_name": "Success",
+            "accept_terms": True,
         }
         register_response = await client.post("/api/v1/auth/register", json=user_data)
         assert register_response.status_code == status.HTTP_201_CREATED
@@ -380,6 +387,7 @@ class TestAuthRoutes:
             "password": "V@l1dP@ss123!",
             "first_name": "Verified",
             "last_name": "Resend",
+            "accept_terms": True,
         }
         register_response = await client.post("/api/v1/auth/register", json=user_data)
         assert register_response.status_code == status.HTTP_201_CREATED

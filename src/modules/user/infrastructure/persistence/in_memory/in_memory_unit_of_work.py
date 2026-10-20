@@ -4,6 +4,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.terms_acceptance_repository_interface import (
+    TermsAcceptanceRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_avatar_upload_repository_interface import (
     UserAvatarUploadRepositoryInterface,
 )
@@ -24,6 +27,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_password_hi
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_refresh_token_repository import (
     InMemoryRefreshTokenRepository,
+)
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_terms_acceptance_repository import (
+    InMemoryTermsAcceptanceRepository,
 )
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_user_avatar_upload_repository import (
     InMemoryUserAvatarUploadRepository,
@@ -51,6 +57,7 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
         self._user_devices = InMemoryUserDeviceRepository()
         self._oauth_accounts = InMemoryUserOAuthAccountRepository()
         self._avatar_uploads = InMemoryUserAvatarUploadRepository()
+        self._terms_acceptances = InMemoryTermsAcceptanceRepository()
         self.committed = False
 
     @property
@@ -82,6 +89,11 @@ class InMemoryUnitOfWork(UserUnitOfWorkInterface):
     def avatar_uploads(self) -> UserAvatarUploadRepositoryInterface:
         """Propiedad para acceder al repositorio de fotos de avatar subidas."""
         return self._avatar_uploads
+
+    @property
+    def terms_acceptances(self) -> TermsAcceptanceRepositoryInterface:
+        """Propiedad para acceder al historial de aceptaciones de los Términos."""
+        return self._terms_acceptances
 
     async def __aenter__(self):
         self.committed = False

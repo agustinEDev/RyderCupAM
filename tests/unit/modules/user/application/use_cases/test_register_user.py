@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -42,8 +42,9 @@ class TestRegisterUserUseCase:
         y el email no existe previamente.
         """
         # Arrange
-        use_case = RegisterUserUseCase(uow, country_repository)
+        use_case = RegisterUserUseCase(uow, country_repository, security_audit=MagicMock())
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -74,8 +75,9 @@ class TestRegisterUserUseCase:
         registrar un usuario con un email que ya existe.
         """
         # Arrange: Primero, creamos un usuario existente
-        use_case = RegisterUserUseCase(uow, country_repository)
+        use_case = RegisterUserUseCase(uow, country_repository, security_audit=MagicMock())
         existing_user_request = RegisterUserRequestDTO(
+            accept_terms=True,
             email="existing.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Existing",
@@ -85,6 +87,7 @@ class TestRegisterUserUseCase:
 
         # Ahora, intentamos registrar otro usuario con el MISMO email
         new_request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="existing.user@example.com",
             password="An0th3rV@l1dP@ss!",
             first_name="Another",
@@ -109,9 +112,12 @@ class TestRegisterUserUseCase:
 
         # Servicio que siempre devuelve None (usuario no encontrado en RFEG)
         handicap_service = MockHandicapService(default=None)
-        use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
+        use_case = RegisterUserUseCase(
+            uow, country_repository, handicap_service, security_audit=MagicMock()
+        )
 
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -139,9 +145,12 @@ class TestRegisterUserUseCase:
 
         # Servicio que devuelve un hándicap para este usuario
         handicap_service = MockHandicapService(handicaps={"Test User": 3.5})
-        use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
+        use_case = RegisterUserUseCase(
+            uow, country_repository, handicap_service, security_audit=MagicMock()
+        )
 
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -170,9 +179,12 @@ class TestRegisterUserUseCase:
 
         # Servicio que devuelve None
         handicap_service = MockHandicapService(default=None)
-        use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
+        use_case = RegisterUserUseCase(
+            uow, country_repository, handicap_service, security_audit=MagicMock()
+        )
 
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -196,8 +208,11 @@ class TestRegisterUserUseCase:
         mock_handicap_service = AsyncMock()
         mock_handicap_service.search_handicap.return_value = 15.4  # Handicap encontrado
 
-        use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
+        use_case = RegisterUserUseCase(
+            uow, country_repository, mock_handicap_service, security_audit=MagicMock()
+        )
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="spanish.player@example.com",
             password="V@l1dP@ss123!",
             first_name="Carlos",
@@ -228,8 +243,11 @@ class TestRegisterUserUseCase:
         mock_handicap_service = AsyncMock()
         mock_handicap_service.search_handicap.return_value = 10.0  # No debería usarse
 
-        use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
+        use_case = RegisterUserUseCase(
+            uow, country_repository, mock_handicap_service, security_audit=MagicMock()
+        )
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="french.player@example.com",
             password="V@l1dP@ss123!",
             first_name="Pierre",
@@ -259,8 +277,11 @@ class TestRegisterUserUseCase:
         # Arrange
         mock_handicap_service = AsyncMock()
 
-        use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
+        use_case = RegisterUserUseCase(
+            uow, country_repository, mock_handicap_service, security_audit=MagicMock()
+        )
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="no.country@example.com",
             password="V@l1dP@ss123!",
             first_name="John",

@@ -32,6 +32,17 @@ class UserValidationError(UserDomainError):
     pass
 
 
+class TermsAcceptanceRequiredError(UserDomainError):
+    """
+    Se intenta dar de alta a alguien que no ha aceptado los Términos.
+
+    La API ya lo impide (422), pero el caso de uso no se fía de que el request
+    llegue validado: sin consentimiento explícito no hay alta.
+    """
+
+    pass
+
+
 class UserNotFoundError(UserDomainError):
     """
     Excepción lanzada cuando no se puede encontrar un usuario.

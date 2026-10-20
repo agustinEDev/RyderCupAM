@@ -92,6 +92,7 @@ class TestRegisterRateLimiting:
                 "first_name": "Spam",
                 "last_name": "User",
                 "country_code": "ES",
+                "accept_terms": True,
             }
             response = await client.post("/api/v1/auth/register", json=register_data)
             # Puede ser 201 (éxito) o 400 (email ya existe), pero no 429
@@ -107,6 +108,7 @@ class TestRegisterRateLimiting:
             "first_name": "Spam",
             "last_name": "User",
             "country_code": "ES",
+            "accept_terms": True,
         }
         response = await client.post("/api/v1/auth/register", json=register_data)
         assert response.status_code == 429, (

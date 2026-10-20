@@ -37,6 +37,10 @@ from src.config.refresco_de_handicaps import (  # noqa: E402
 )
 from src.config.sentry_config import init_sentry  # noqa: E402
 from src.config.settings import settings  # noqa: E402
+from src.config.terms_guard import (  # noqa: E402
+    TermsNotAcceptedError,
+    terms_not_accepted_handler,
+)
 from src.config.version import (  # noqa: E402
     APP_VERSION,
     get_deployed_branch,
@@ -211,6 +215,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 
 # Errores de dominio de competición con su 400 (un Stableford sin equipos, #251)
 register_competition_exception_handlers(app)
+
+# Términos de uso sin aceptar (B6): 403 con error_code TERMS_NOT_ACCEPTED
+app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)
 
 # ================================
 # MIDDLEWARE STACK

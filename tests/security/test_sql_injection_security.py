@@ -50,6 +50,7 @@ class TestSQLInjectionLoginEndpoint:
             "password": "ValidPassword123!",
             "first_name": "Victim",
             "last_name": "User",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_data)
 
@@ -88,6 +89,7 @@ class TestSQLInjectionRegisterEndpoint:
             "password": "ValidPassword123!",
             "first_name": malicious_name,
             "last_name": "User",
+            "accept_terms": True,
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -170,6 +172,7 @@ class TestORMProtection:
             "password": "Segura-Prueba123!",  # válida: que solo falle el correo
             "first_name": "Test",
             "last_name": "User",
+            "accept_terms": True,
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)

@@ -44,6 +44,7 @@ async def create_and_login_user(
                 **({"gender": gender} if gender is not None else {}),
                 "first_name": first_name,
                 "last_name": last_name,
+                "accept_terms": True,
             },
         )
 
