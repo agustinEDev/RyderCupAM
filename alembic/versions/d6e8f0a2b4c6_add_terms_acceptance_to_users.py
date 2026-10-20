@@ -23,6 +23,11 @@ depends_on = None
 
 def upgrade() -> None:
     """Añade las dos columnas, nulas, sin rellenar a nadie."""
+    # Si una transacción larga (el vigilante de hándicaps) tuviera `users`
+    # bloqueada, mejor fallar a los 5 s que dejar la app esperando detrás del
+    # ALTER/CREATE TRIGGER: el contenedor no arranca y Render sigue con la versión
+    # anterior. SET LOCAL: solo vale dentro de esta transacción.
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.add_column(
         "users",
         sa.Column(

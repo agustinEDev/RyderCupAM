@@ -59,7 +59,7 @@ class TermsAcceptanceIdDecorator(TypeDecorator):
 
 # Historial que sobrevive al borrado de la cuenta (TERMS_ACCEPTANCE_RETENTION_YEARS):
 # ON DELETE SET NULL, con el email guardado en la fila y user_deleted_at, que
-# rellena el caso de uso del borrado. Una versión, una fila por usuario: el
+# rellena el trigger BEFORE DELETE ON users (abajo). Una versión, una fila por usuario: el
 # UNIQUE es defensa en profundidad (tras borrar, user_id es NULL y los NULL no
 # chocan entre sí)
 terms_acceptances_table = Table(
@@ -81,7 +81,7 @@ terms_acceptances_table = Table(
     UniqueConstraint("user_id", "terms_version", name="uq_terms_acceptances_user_version"),
 )
 
-Index("ix_terms_acceptances_user_id", terms_acceptances_table.c.user_id)
+# Sin índice propio por user_id: el UNIQUE (user_id, terms_version) ya lo cubre.
 Index("ix_terms_acceptances_user_deleted_at", terms_acceptances_table.c.user_deleted_at)
 
 # Al borrar un usuario, por el camino que sea (el admin, un script, un DELETE a
