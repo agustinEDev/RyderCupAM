@@ -7,9 +7,13 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
-from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
+from src.modules.user.domain.errors.user_errors import (
+    TermsAcceptanceRequiredError,
+    UserAlreadyExistsError,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -22,6 +26,7 @@ from src.shared.domain.repositories.country_repository_interface import (
 )
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
@@ -61,7 +66,16 @@ class RegisterUserUseCase:
 
         Raises:
             UserAlreadyExistsError: Si el correo electrónico ya está en uso.
+            TermsAcceptanceRequiredError: Si no trae accept_terms exactamente True.
         """
+        # Sin consentimiento explícito no hay alta. La API ya da 422, pero el
+        # caso de uso no se fía de que el request llegue validado (p. ej. uno
+        # construido con model_construct): solo vale el booleano True
+        if getattr(request, "accept_terms", None) is not True:
+            raise TermsAcceptanceRequiredError(
+                "Para registrarse hay que aceptar los Términos de uso vigentes."
+            )
+
         async with self._uow:
             # 1. Validar que el email no existe
             email_vo = Email(request.email)
@@ -87,9 +101,20 @@ class RegisterUserUseCase:
                 gender=gender,
             )
 
-            # 2.1 Los Términos: el DTO solo deja pasar accept_terms=true, y se
-            # guarda la versión vigente con la fecha de ahora
-            new_user.accept_terms(current_terms_version())
+            # 2.1 Los Términos: se guarda la versión vigente con la fecha de
+            # ahora, y la aceptación va al historial con la IP y el navegador
+            terms_version = current_terms_version()
+            new_user.accept_terms(terms_version)
+            accepted_at = new_user.terms_accepted_at
+            if accepted_at is None:  # accept_terms acaba de ponerla
+                raise RuntimeError("accept_terms no dejó fecha de aceptación")
+            terms_acceptance = TermsAcceptance.record(
+                user_id=new_user.id,
+                terms_version=terms_version,
+                accepted_at=accepted_at,
+                ip_address=request.ip_address,
+                user_agent=request.user_agent,
+            )
 
             # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)
             handicap_value = None
@@ -121,10 +146,21 @@ class RegisterUserUseCase:
             # 2.8 Generar token de verificación de email
             verification_token = new_user.generate_verification_token()
 
-            # 3. Guardar el usuario en el repositorio
+            # 3. Guardar el usuario en el repositorio, y después su aceptación
+            # (la fila apunta al usuario: tiene que existir antes)
             await self._uow.users.save(new_user)
+            await self._uow.flush()
+            await self._uow.terms_acceptances.save(terms_acceptance)
 
             # El context manager (__aexit__) hace commit automático y publica eventos
+
+        # 3.5 Auditoría de seguridad: la aceptación de los Términos
+        get_security_logger().log_terms_accepted(
+            user_id=str(new_user.id.value),
+            ip_address=request.ip_address or "unknown",
+            user_agent=request.user_agent or "unknown",
+            terms_version=terms_acceptance.terms_version,
+        )
 
         # 4. Enviar email de verificación
         if self._email_service:

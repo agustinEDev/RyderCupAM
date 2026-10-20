@@ -8,7 +8,7 @@ B7: al cambiar la vigente, hay que volver a aceptar.
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
@@ -16,10 +16,15 @@ from pydantic import ValidationError
 from src.modules.user.application.dto.device_dto import RegisterDeviceResponseDTO
 from src.modules.user.application.dto.oauth_dto import GoogleLoginRequestDTO
 from src.modules.user.application.dto.user_dto import (
+    AcceptTermsRequestDTO,
     RegisterUserRequestDTO,
     UserResponseDTO,
 )
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
+from src.modules.user.application.use_cases import (
+    accept_terms_use_case,
+    register_user_use_case,
+)
 from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.get_current_user_use_case import (
     GetCurrentUserUseCase,
@@ -27,9 +32,14 @@ from src.modules.user.application.use_cases.get_current_user_use_case import (
 from src.modules.user.application.use_cases.google_login_use_case import GoogleLoginUseCase
 from src.modules.user.application.use_cases.register_user_use_case import RegisterUserUseCase
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.errors.user_errors import UserNotFoundError
+from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.errors.user_errors import (
+    TermsAcceptanceRequiredError,
+    UserNotFoundError,
+)
 from src.modules.user.domain.services import terms_of_service
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -42,6 +52,29 @@ _REGISTRO = {
     "first_name": "Ana",
     "last_name": "Lopez",
 }
+
+
+IP = "203.0.113.7"
+NAVEGADOR = "Mozilla/5.0 (iPhone) Safari"
+
+
+@pytest.fixture
+def auditoria(monkeypatch) -> MagicMock:
+    """El log de auditoría de seguridad, sustituido en los dos casos de uso."""
+    logger = MagicMock()
+    monkeypatch.setattr(accept_terms_use_case, "get_security_logger", lambda: logger)
+    monkeypatch.setattr(register_user_use_case, "get_security_logger", lambda: logger)
+    return logger
+
+
+def _countries() -> AsyncMock:
+    countries = AsyncMock()
+    countries.exists.return_value = True
+    return countries
+
+
+def _aceptar(user: User) -> AcceptTermsRequestDTO:
+    return AcceptTermsRequestDTO(user_id=str(user.id.value), ip_address=IP, user_agent=NAVEGADOR)
 
 
 async def _guardado(uow: InMemoryUnitOfWork, user: User) -> User:
@@ -94,18 +127,16 @@ class TestRegistroDTO:
 
 @pytest.mark.asyncio
 class TestRegistro:
-    async def test_register_stores_current_version_and_utc_date(self):
+    async def test_register_stores_current_version_and_utc_date(self, auditoria):
         """
         Given: Un registro por formulario con accept_terms true (B1)
         When: Se ejecuta el caso de uso
         Then: El usuario guardado tiene la versión vigente y la fecha de ahora (UTC)
         """
         uow = InMemoryUnitOfWork()
-        countries = AsyncMock()
-        countries.exists.return_value = True
         antes = datetime.now(UTC)
 
-        respuesta = await RegisterUserUseCase(uow, countries).execute(
+        respuesta = await RegisterUserUseCase(uow, _countries()).execute(
             RegisterUserRequestDTO(**_REGISTRO, accept_terms=True)
         )
 
@@ -115,6 +146,67 @@ class TestRegistro:
         assert guardado.terms_accepted_at is not None
         assert guardado.terms_accepted_at >= antes
         assert respuesta.terms_accepted is True
+
+    async def test_register_records_one_acceptance_with_ip_and_browser(self, auditoria):
+        """
+        Given: Un registro con accept_terms true, desde una IP y un navegador
+        When: Se ejecuta el caso de uso
+        Then: Una fila en el historial con la versión, la fecha del usuario, la IP
+            y el navegador, y la aceptación en el log de auditoría
+        """
+        uow = InMemoryUnitOfWork()
+
+        respuesta = await RegisterUserUseCase(uow, _countries()).execute(
+            RegisterUserRequestDTO(
+                **_REGISTRO, accept_terms=True, ip_address=IP, user_agent=NAVEGADOR
+            )
+        )
+
+        user_id = UserId(respuesta.id)
+        guardado = await uow.users.find_by_id(user_id)
+        filas = await uow.terms_acceptances.find_by_user_id(user_id)
+        assert len(filas) == 1
+        assert filas[0].terms_version == terms_of_service.current_terms_version()
+        assert filas[0].accepted_at == guardado.terms_accepted_at
+        assert filas[0].ip_address == IP
+        assert filas[0].user_agent == NAVEGADOR
+        auditoria.log_terms_accepted.assert_called_once_with(
+            user_id=str(respuesta.id),
+            ip_address=IP,
+            user_agent=NAVEGADOR,
+            terms_version=terms_of_service.current_terms_version(),
+        )
+
+    @pytest.mark.parametrize("valor", [False, None, "true", 1])
+    async def test_register_without_consent_is_refused_by_the_use_case(self, valor, auditoria):
+        """
+        Given: Un request de registro que se saltó la validación HTTP
+            (construido sin validar) y no trae accept_terms true
+        When: Se ejecuta el caso de uso
+        Then: TermsAcceptanceRequiredError, y ni usuario, ni fila, ni auditoría
+        """
+        uow = InMemoryUnitOfWork()
+        request = RegisterUserRequestDTO.model_construct(**_REGISTRO, accept_terms=valor)
+
+        with pytest.raises(TermsAcceptanceRequiredError):
+            await RegisterUserUseCase(uow, _countries()).execute(request)
+
+        assert await uow.users.find_by_email(Email(_REGISTRO["email"])) is None
+        auditoria.log_terms_accepted.assert_not_called()
+
+    async def test_register_without_the_field_is_refused_by_the_use_case(self, auditoria):
+        """
+        Given: Un request construido sin el campo accept_terms
+        When: Se ejecuta el caso de uso
+        Then: TermsAcceptanceRequiredError y no se crea nadie
+        """
+        uow = InMemoryUnitOfWork()
+        request = RegisterUserRequestDTO.model_construct(**_REGISTRO)
+
+        with pytest.raises(TermsAcceptanceRequiredError):
+            await RegisterUserUseCase(uow, _countries()).execute(request)
+
+        assert await uow.users.find_by_email(Email(_REGISTRO["email"])) is None
 
 
 @pytest.mark.asyncio
@@ -228,7 +320,7 @@ class TestUsuarioDTO:
 
 @pytest.mark.asyncio
 class TestAceptarTerminos:
-    async def test_accept_terms_stores_current_version(self):
+    async def test_accept_terms_stores_current_version(self, auditoria):
         """
         Given: Un usuario sin aceptación (B5)
         When: Acepta
@@ -237,7 +329,7 @@ class TestAceptarTerminos:
         uow = InMemoryUnitOfWork()
         user = await _guardado(uow, _usuario())
 
-        respuesta = await AcceptTermsUseCase(uow).execute(str(user.id.value))
+        respuesta = await AcceptTermsUseCase(uow).execute(_aceptar(user))
 
         guardado = await uow.users.find_by_id(user.id)
         assert guardado is not None
@@ -246,7 +338,46 @@ class TestAceptarTerminos:
         assert respuesta.terms_accepted is True
         assert respuesta.email == "ana@example.com"
 
-    async def test_accept_terms_twice_keeps_the_first_date(self):
+    async def test_accept_terms_records_the_acceptance_and_audits_it(self, auditoria):
+        """
+        Given: Un usuario sin aceptación
+        When: Acepta desde una IP y un navegador
+        Then: Una fila en el historial con todo, y la aceptación en el log de auditoría
+        """
+        uow = InMemoryUnitOfWork()
+        user = await _guardado(uow, _usuario())
+
+        await AcceptTermsUseCase(uow).execute(_aceptar(user))
+
+        filas = await uow.terms_acceptances.find_by_user_id(user.id)
+        assert len(filas) == 1
+        assert filas[0].terms_version == terms_of_service.current_terms_version()
+        assert filas[0].accepted_at == user.terms_accepted_at
+        assert (filas[0].ip_address, filas[0].user_agent) == (IP, NAVEGADOR)
+        auditoria.log_terms_accepted.assert_called_once_with(
+            user_id=str(user.id.value),
+            ip_address=IP,
+            user_agent=NAVEGADOR,
+            terms_version=terms_of_service.current_terms_version(),
+        )
+
+    async def test_accept_terms_without_ip_or_browser_audits_as_unknown(self, auditoria):
+        """
+        Given: Un usuario sin aceptación y una petición sin IP ni navegador válidos
+        When: Acepta
+        Then: La fila los guarda como None y la auditoría como "unknown", como el logout
+        """
+        uow = InMemoryUnitOfWork()
+        user = await _guardado(uow, _usuario())
+
+        await AcceptTermsUseCase(uow).execute(AcceptTermsRequestDTO(user_id=str(user.id.value)))
+
+        fila = (await uow.terms_acceptances.find_by_user_id(user.id))[0]
+        assert (fila.ip_address, fila.user_agent) == (None, None)
+        llamada = auditoria.log_terms_accepted.call_args.kwargs
+        assert (llamada["ip_address"], llamada["user_agent"]) == ("unknown", "unknown")
+
+    async def test_accept_terms_twice_keeps_the_first_date(self, auditoria):
         """
         Given: Un usuario que ya aceptó la vigente (B5)
         When: Acepta otra vez
@@ -255,31 +386,103 @@ class TestAceptarTerminos:
         uow = InMemoryUnitOfWork()
         user = await _guardado(uow, _usuario())
         use_case = AcceptTermsUseCase(uow)
-        await use_case.execute(str(user.id.value))
+        await use_case.execute(_aceptar(user))
         primera = (await uow.users.find_by_id(user.id)).terms_accepted_at
 
-        respuesta = await use_case.execute(str(user.id.value))
+        respuesta = await use_case.execute(_aceptar(user))
 
         assert (await uow.users.find_by_id(user.id)).terms_accepted_at == primera
         assert respuesta.terms_accepted is True
 
-    async def test_accept_terms_after_version_change_stores_the_new_one(self, monkeypatch):
+    async def test_accepting_the_same_version_neither_locks_writes_nor_records(self, auditoria):
         """
-        Given: Un usuario que aceptó la versión anterior (B7)
-        When: Cambia la vigente y vuelve a aceptar
-        Then: Queda guardada la nueva
+        Given: Un usuario que ya tiene aceptada la versión vigente
+        When: Vuelve a aceptar
+        Then: Ni SELECT ... FOR UPDATE, ni escritura, ni fila nueva, ni auditoría
+        """
+        uow = InMemoryUnitOfWork()
+        user = _usuario()
+        user.accept_terms(terms_of_service.current_terms_version())
+        await _guardado(uow, user)
+        bloqueo = AsyncMock(wraps=uow.users.find_by_id_for_update)
+        guardar = AsyncMock(wraps=uow.users.save)
+        uow.users.find_by_id_for_update = bloqueo
+        uow.users.save = guardar
+
+        respuesta = await AcceptTermsUseCase(uow).execute(_aceptar(user))
+
+        assert respuesta.terms_accepted is True
+        bloqueo.assert_not_called()
+        guardar.assert_not_called()
+        assert await uow.terms_acceptances.find_by_user_id(user.id) == []
+        auditoria.log_terms_accepted.assert_not_called()
+
+    async def test_accepting_locks_the_user_when_it_has_to_write(self, auditoria):
+        """
+        Given: Un usuario sin aceptación
+        When: Acepta
+        Then: Lo relee con bloqueo antes de escribir
         """
         uow = InMemoryUnitOfWork()
         user = await _guardado(uow, _usuario())
-        await AcceptTermsUseCase(uow).execute(str(user.id.value))
+        bloqueo = AsyncMock(wraps=uow.users.find_by_id_for_update)
+        uow.users.find_by_id_for_update = bloqueo
+
+        await AcceptTermsUseCase(uow).execute(_aceptar(user))
+
+        bloqueo.assert_awaited_once_with(user.id)
+
+    async def test_accept_terms_lost_race_records_nothing(self, auditoria):
+        """
+        Given: Un usuario que se leyó sin aceptar, pero otra petición aceptó
+            mientras esta esperaba el bloqueo
+        When: La relectura con bloqueo ya lo trae aceptado
+        Then: No escribe, ni añade fila, ni audita, y responde que está aceptado
+        """
+        uow = InMemoryUnitOfWork()
+        aceptado = _usuario()
+        aceptado.accept_terms(terms_of_service.current_terms_version())
+        await _guardado(uow, aceptado)
+        sin_aceptar = User(
+            id=aceptado.id,
+            email=aceptado.email,
+            password=aceptado.password,
+            first_name=aceptado.first_name,
+            last_name=aceptado.last_name,
+        )
+        uow.users.find_by_id = AsyncMock(return_value=sin_aceptar)
+        guardar = AsyncMock(wraps=uow.users.save)
+        uow.users.save = guardar
+
+        respuesta = await AcceptTermsUseCase(uow).execute(_aceptar(aceptado))
+
+        assert respuesta.terms_accepted is True
+        guardar.assert_not_called()
+        assert await uow.terms_acceptances.find_by_user_id(aceptado.id) == []
+        auditoria.log_terms_accepted.assert_not_called()
+
+    async def test_accept_terms_after_version_change_records_a_new_row(
+        self, monkeypatch, auditoria
+    ):
+        """
+        Given: Un usuario que aceptó la versión anterior (B7)
+        When: Cambia la vigente y vuelve a aceptar
+        Then: Queda guardada la nueva, con otra fila; la de la anterior se conserva
+        """
+        uow = InMemoryUnitOfWork()
+        user = await _guardado(uow, _usuario())
+        anterior = terms_of_service.current_terms_version()
+        await AcceptTermsUseCase(uow).execute(_aceptar(user))
         monkeypatch.setattr(terms_of_service, "CURRENT_TERMS_VERSION", "2099-01-01")
 
-        respuesta = await AcceptTermsUseCase(uow).execute(str(user.id.value))
+        respuesta = await AcceptTermsUseCase(uow).execute(_aceptar(user))
 
         assert (await uow.users.find_by_id(user.id)).terms_version == "2099-01-01"
         assert respuesta.terms_accepted is True
+        filas = await uow.terms_acceptances.find_by_user_id(user.id)
+        assert [fila.terms_version for fila in filas] == [anterior, "2099-01-01"]
 
-    async def test_accept_terms_unknown_user_raises(self):
+    async def test_accept_terms_unknown_user_raises(self, auditoria):
         """
         Given: Un id que no es de nadie
         When: Se intenta aceptar
@@ -287,20 +490,37 @@ class TestAceptarTerminos:
         """
         with pytest.raises(UserNotFoundError):
             await AcceptTermsUseCase(InMemoryUnitOfWork()).execute(
-                "550e8400-e29b-41d4-a716-446655440000"
+                AcceptTermsRequestDTO(user_id="550e8400-e29b-41d4-a716-446655440000")
             )
 
-    async def test_accept_terms_response_matches_current_user(self):
+
+@pytest.mark.asyncio
+class TestRespuestaCompartida:
+    @pytest.mark.parametrize("ya_aceptado", [False, True])
+    async def test_accept_terms_response_matches_current_user(self, ya_aceptado, auditoria):
         """
-        Given: Un usuario
-        When: Acepta
-        Then: La respuesta es la misma que la de current-user (con sus proveedores)
+        Given: Un usuario con Google vinculado, haya aceptado ya o no
+        When: Acepta, y se pide current-user
+        Then: Las dos respuestas son iguales, proveedores incluidos
         """
         uow = InMemoryUnitOfWork()
-        user = await _guardado(uow, _usuario())
-        respuesta = await AcceptTermsUseCase(uow).execute(str(user.id.value))
+        user = _usuario()
+        if ya_aceptado:
+            user.accept_terms(terms_of_service.current_terms_version())
+        await _guardado(uow, user)
+        async with uow:
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-1",
+                    provider_email="ana@example.com",
+                )
+            )
 
+        respuesta = await AcceptTermsUseCase(uow).execute(_aceptar(user))
         actual = await GetCurrentUserUseCase(uow).execute(str(user.id.value))
 
         assert actual is not None
+        assert respuesta.auth_providers == ["google"]
         assert respuesta.model_dump() == actual.model_dump()

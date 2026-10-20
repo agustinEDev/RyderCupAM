@@ -347,3 +347,131 @@ class TestGoogleConUsuarioExistente:
 
         assert respuesta.status_code == 200
         assert await _terminos_en_bd(email) == antes
+
+
+async def _historial(email: str) -> list[tuple]:
+    """Las filas de terms_acceptances de ese usuario, de la más antigua a la más reciente."""
+    return await _sql(
+        "SELECT a.terms_version, a.accepted_at, a.ip_address, a.user_agent "
+        "FROM terms_acceptances a JOIN users u ON u.id = a.user_id "
+        "WHERE u.email = :email ORDER BY a.accepted_at",
+        {"email": email},
+    )
+
+
+class TestHistorial:
+    async def test_register_records_one_acceptance_with_the_request_identity(
+        self, authenticated_client
+    ):
+        """
+        Given: Un registro con accept_terms true desde un navegador (fixture authenticated_client)
+        When: Se mira el historial
+        Then: Una fila con la versión vigente, la misma fecha que el usuario, el
+            navegador de la petición y la IP que la API saca de la petición (la
+            misma que guarda para el dispositivo del login)
+        """
+        client, datos = authenticated_client
+        email = datos["credentials"]["email"]
+
+        filas = await _historial(email)
+        dispositivos = (await client.get("/api/v1/users/me/devices")).json()["devices"]
+
+        assert len(filas) == 1
+        version, aceptado_en, ip, navegador = filas[0]
+        assert version == terms_of_service.current_terms_version()
+        assert aceptado_en == (await _terminos_en_bd(email))[0]
+        assert navegador == client.headers["User-Agent"]
+        assert ip is not None
+        assert ip == dispositivos[0]["ip_address"]
+
+    async def test_accepting_the_same_version_adds_no_row(self, client: AsyncClient):
+        """
+        Given: Un usuario que aceptó al registrarse
+        When: Vuelve a aceptar la misma versión
+        Then: 200 y el historial sigue con una sola fila
+        """
+        email = "mismo@example.com"
+        datos = await create_authenticated_user(client, email, PASSWORD, "Ana", "Lopez")
+        set_auth_cookies(client, datos["cookies"])
+
+        respuesta = await client.post(ACCEPT)
+
+        assert respuesta.status_code == 200
+        assert len(await _historial(email)) == 1
+
+    async def test_new_version_adds_a_row_and_keeps_the_old_one(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """
+        Given: Un usuario que aceptó la versión vigente al registrarse
+        When: Cambia la versión y acepta la nueva
+        Then: Dos filas: la anterior intacta y la nueva
+        """
+        email = "historial@example.com"
+        datos = await create_authenticated_user(client, email, PASSWORD, "Ana", "Lopez")
+        set_auth_cookies(client, datos["cookies"])
+        anterior = await _historial(email)
+        monkeypatch.setattr(terms_of_service, "CURRENT_TERMS_VERSION", "2099-01-01")
+
+        assert (await client.post(ACCEPT)).status_code == 200
+
+        filas = await _historial(email)
+        assert len(filas) == 2
+        assert filas[0] == anterior[0]
+        assert filas[1][0] == "2099-01-01"
+        assert filas[1][1] == (await _terminos_en_bd(email))[0]
+
+    async def test_accept_terms_records_the_request_identity(self, authenticated_client):
+        """
+        Given: Un usuario con sesión y los Términos pendientes
+        When: Acepta desde su navegador
+        Then: La fila nueva lleva el navegador de la petición y la IP que la API
+            saca de ella (la misma que la de su dispositivo)
+        """
+        client, datos = authenticated_client
+        email = datos["credentials"]["email"]
+        await _sql(
+            "UPDATE users SET terms_accepted_at = NULL, terms_version = NULL WHERE email = :email",
+            {"email": email},
+        )
+        dispositivos = (await client.get("/api/v1/users/me/devices")).json()["devices"]
+
+        assert (await client.post(ACCEPT)).status_code == 200
+
+        filas = await _historial(email)
+        assert len(filas) == 2
+        _, _, ip, navegador = filas[1]
+        assert navegador == client.headers["User-Agent"]
+        assert ip is not None
+        assert ip == dispositivos[0]["ip_address"]
+
+
+class TestDispositivosSinAceptar:
+    async def test_devices_can_be_listed_and_revoked_with_terms_pending(self, authenticated_client):
+        """
+        Given: Un usuario con sesión y los Términos pendientes
+        When: Lista sus dispositivos y revoca uno
+        Then: 200 las dos (cerrar una sesión robada no espera a aceptar), y el
+            resto de /users/me/... sigue bloqueado con 403 TERMS_NOT_ACCEPTED
+        """
+        client, datos = authenticated_client
+        await _sql(
+            "UPDATE users SET terms_accepted_at = NULL, terms_version = NULL WHERE email = :email",
+            {"email": datos["credentials"]["email"]},
+        )
+
+        bloqueadas = [
+            await client.get("/api/v1/users/me/stats"),
+            await client.get("/api/v1/users/me/avatar/uploads"),
+            await client.delete("/api/v1/users/me/avatar"),
+            await client.get("/api/v1/users/me/matches"),
+        ]
+        lista = await client.get("/api/v1/users/me/devices")
+        dispositivo = lista.json()["devices"][0]["id"]
+        revocar = await client.delete(f"/api/v1/users/me/devices/{dispositivo}")
+
+        for respuesta in bloqueadas:
+            assert respuesta.status_code == 403
+            assert respuesta.json()["error_code"] == "TERMS_NOT_ACCEPTED"
+        assert lista.status_code == 200
+        assert revocar.status_code == 200

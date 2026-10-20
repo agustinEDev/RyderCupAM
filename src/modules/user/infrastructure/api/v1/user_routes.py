@@ -25,6 +25,7 @@ from src.modules.user.application.dto.player_stats_dto import (
     ScoringBreakdownResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import (
+    AcceptTermsRequestDTO,
     FindUserRequestDTO,
     FindUserResponseDTO,
     SearchUsersResponseDTO,
@@ -165,12 +166,22 @@ async def find_user(
     tags=["Users"],
 )
 async def accept_terms(
+    request: Request,
     use_case: AcceptTermsUseCase = Depends(get_accept_terms_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """Acepta los Términos vigentes en nombre del usuario autenticado."""
+    # La IP y el navegador van al historial de aceptaciones: los mismos
+    # helpers que el login y el logout (IP de confianza tras el proxy, ADR-038)
+    accept_request = AcceptTermsRequestDTO(
+        user_id=str(current_user.id),
+        ip_address=get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        ),
+        user_agent=get_user_agent(request),
+    )
     try:
-        return await use_case.execute(str(current_user.id))
+        return await use_case.execute(accept_request)
     except UserNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

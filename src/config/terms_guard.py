@@ -18,18 +18,18 @@ versión se le pide, acepte y pueda cerrar sesión. Completar el perfil NO está
 exento: el frontend acepta primero y luego guarda el perfil.
 """
 
+import re
+
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
-from starlette.routing import get_route_path
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 
 TERMS_NOT_ACCEPTED = "TERMS_NOT_ACCEPTED"
 
-# (método, ruta completa) exentos. Una lista explícita y cerrada: añadir una
-# es una decisión, y tests/unit/config/test_terms_guard.py la fija. Se compara
-# con la ruta CONCRETA de la petición (no con la plantilla: la de un router
-# incluido llega sin su prefijo), así que una exenta no puede llevar parámetros
+# (método, plantilla COMPLETA de la ruta) exentos. Una lista explícita y
+# cerrada: añadir una es una decisión, y tests/unit/config/test_terms_guard.py
+# la fija y comprueba que cada una existe y que no alcanza a ninguna otra ruta
 TERMS_EXEMPT_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         # Quién soy y qué versión se me pide: pinta la pantalla de aceptación
@@ -38,7 +38,26 @@ TERMS_EXEMPT_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/v1/users/me/accept-terms"),
         # Salir sin aceptar
         ("POST", "/api/v1/auth/logout"),
+        # Ver y cerrar sus sesiones sin aceptar antes: quien sospecha que le
+        # han robado una tiene que poder cerrarla ya (decisión de Agustín)
+        ("GET", "/api/v1/users/me/devices"),
+        ("DELETE", "/api/v1/users/me/devices/{device_id}"),
     }
+)
+
+# Un parámetro de ruta ocupa UN segmento, igual que en el router de FastAPI
+# (el convertidor por defecto es `[^/]+`)
+_PARAMETRO = re.compile(r"\{[^{}/]+\}")
+
+
+def _patron(plantilla: str) -> re.Pattern[str]:
+    """La plantilla como expresión regular anclada: cada parámetro, un segmento."""
+    partes = _PARAMETRO.split(plantilla)
+    return re.compile("[^/]+".join(re.escape(parte) for parte in partes))
+
+
+_EXEMPT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (method, _patron(plantilla)) for method, plantilla in sorted(TERMS_EXEMPT_ROUTES)
 )
 
 
@@ -51,29 +70,44 @@ class TermsNotAcceptedError(Exception):
         super().__init__(message)
 
 
-def is_exempt_from_terms(method: str, route_path: str | None) -> bool:
+def _normalize(path: str) -> str:
+    """Sin barras finales (la raíz se queda en "/")."""
+    return path.rstrip("/") or "/"
+
+
+def is_exempt_from_terms(method: str, path: str) -> bool:
     """
-    Si esa ruta se puede usar sin tener aceptados los Términos.
+    Si esa petición se puede hacer sin tener aceptados los Términos.
 
     Args:
         method: Método HTTP de la petición
-        route_path: Ruta completa de la petición (p. ej. `/api/v1/auth/current-user`),
-            o None si FastAPI no resolvió ninguna ruta, que nunca está exenta
+        path: Ruta concreta de la petición (p. ej. `/api/v1/users/me/devices/<id>`)
 
     Returns:
-        True solo si el par (método, ruta) está en la lista de exentas
+        True solo si el método coincide y la ruta, normalizada, encaja ENTERA
+        con la plantilla de una exenta (fullmatch: nada de prefijos abiertos)
     """
-    if route_path is None:
-        return False
-    return (method.upper(), route_path) in TERMS_EXEMPT_ROUTES
+    method = method.upper()
+    path = _normalize(path)
+    return any(
+        method == exempt_method and pattern.fullmatch(path)
+        for exempt_method, pattern in _EXEMPT_PATTERNS
+    )
 
 
 def require_current_terms(request: Request, user: UserResponseDTO) -> None:
     """
     Deja pasar si el usuario tiene aceptada la versión vigente, o si la ruta está exenta.
 
+    Se decide con API pública de Starlette: `request.method` y
+    `request.url.path`. Esa ruta es la completa de la petición, con el prefijo
+    del router, y es la misma con la que el router la casó porque la app se
+    sirve sin `root_path` (uvicorn arranca sin `--root-path`, ver
+    entrypoint.sh): si algún día se montara bajo un prefijo, las plantillas de
+    TERMS_EXEMPT_ROUTES tendrían que llevarlo.
+
     Args:
-        request: La petición, con la ruta ya resuelta por FastAPI
+        request: La petición
         user: El usuario autenticado
 
     Raises:
@@ -81,10 +115,7 @@ def require_current_terms(request: Request, user: UserResponseDTO) -> None:
     """
     if user.terms_accepted:
         return
-    # La ruta con la que FastAPI casó la petición (sin root_path), solo si
-    # resolvió una
-    route_path = get_route_path(request.scope) if request.scope.get("route") else None
-    if is_exempt_from_terms(request.method, route_path):
+    if is_exempt_from_terms(request.method, request.url.path):
         return
     raise TermsNotAcceptedError()
 

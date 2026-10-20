@@ -86,7 +86,10 @@ from src.modules.user.application.use_cases.validate_reset_token_use_case import
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
-from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
+from src.modules.user.domain.errors.user_errors import (
+    TermsAcceptanceRequiredError,
+    UserAlreadyExistsError,
+)
 from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
@@ -168,16 +171,28 @@ def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
 )
 @limiter.limit(REGISTER_LIMIT, key_func=get_client_identifier)  # Anti-spam, por red
 async def register_user(
-    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    request: Request,
     register_data: RegisterUserRequestDTO,
     use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ):
     """
     Endpoint para registrar un nuevo usuario.
     """
+    # La IP y el navegador van al historial de aceptaciones de los Términos.
+    # Los pone la API, nunca el cliente (como en el login)
+    register_data.ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
+    register_data.user_agent = get_user_agent(request)
     try:
         user_response = await use_case.execute(register_data)
         return user_response
+    except TermsAcceptanceRequiredError as e:
+        # La validación del DTO ya da 422; esto es por si llegara sin validar
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(e),
+        ) from e
     except UserAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

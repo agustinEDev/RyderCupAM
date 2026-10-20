@@ -1,0 +1,120 @@
+"""
+El historial de aceptaciones de los Términos (decisión de Agustín, 20 oct 2026).
+
+Cada aceptación real deja una fila con la versión, cuándo, desde qué IP y con
+qué navegador. Las columnas del usuario son solo el estado actual.
+"""
+
+from datetime import UTC, datetime, timedelta, timezone
+
+import pytest
+
+from src.modules.user.domain.entities.terms_acceptance import (
+    IP_ADDRESS_MAX_LENGTH,
+    USER_AGENT_MAX_LENGTH,
+    TermsAcceptance,
+)
+from src.modules.user.domain.value_objects.terms_acceptance_id import TermsAcceptanceId
+from src.modules.user.domain.value_objects.user_id import UserId
+
+AHORA = datetime(2026, 10, 20, 9, 30, tzinfo=UTC)
+
+
+def _registro(**cambios) -> TermsAcceptance:
+    datos = {
+        "user_id": UserId.generate(),
+        "terms_version": "2026-10-20",
+        "accepted_at": AHORA,
+        "ip_address": "203.0.113.7",
+        "user_agent": "Mozilla/5.0 (iPhone) Safari",
+    }
+    datos.update(cambios)
+    return TermsAcceptance.record(**datos)
+
+
+class TestRegistrar:
+    def test_record_keeps_every_field(self):
+        """
+        Given: Una aceptación con versión, fecha, IP y navegador
+        When: Se registra
+        Then: Tiene un id nuevo y guarda todo tal cual
+        """
+        user_id = UserId.generate()
+
+        fila = _registro(user_id=user_id)
+
+        assert isinstance(fila.id, TermsAcceptanceId)
+        assert fila.user_id == user_id
+        assert fila.terms_version == "2026-10-20"
+        assert fila.accepted_at == AHORA
+        assert fila.ip_address == "203.0.113.7"
+        assert fila.user_agent == "Mozilla/5.0 (iPhone) Safari"
+
+    def test_two_records_have_different_ids(self):
+        """
+        Given: Dos aceptaciones
+        When: Se registran
+        Then: Cada una tiene su id
+        """
+        assert _registro().id != _registro().id
+
+    def test_record_without_ip_or_user_agent(self):
+        """
+        Given: Una aceptación sin IP ni navegador conocidos
+        When: Se registra
+        Then: Se guardan como None
+        """
+        fila = _registro(ip_address=None, user_agent=None)
+
+        assert fila.ip_address is None
+        assert fila.user_agent is None
+
+    def test_long_user_agent_is_cut_to_the_column(self):
+        """
+        Given: Un navegador más largo que la columna
+        When: Se registra
+        Then: Se recorta a USER_AGENT_MAX_LENGTH
+        """
+        fila = _registro(user_agent="x" * (USER_AGENT_MAX_LENGTH + 50))
+
+        assert fila.user_agent == "x" * USER_AGENT_MAX_LENGTH
+
+    def test_ip_longer_than_the_column_is_dropped(self):
+        """
+        Given: Una "IP" más larga que cualquier IPv6
+        When: Se registra
+        Then: No se guarda (None): recortarla daría una IP falsa
+        """
+        fila = _registro(ip_address="1" * (IP_ADDRESS_MAX_LENGTH + 1))
+
+        assert fila.ip_address is None
+
+    def test_naive_date_is_rejected(self):
+        """
+        Given: Una fecha sin zona horaria
+        When: Se registra
+        Then: ValueError: el historial va en UTC
+        """
+        with pytest.raises(ValueError):
+            _registro(accepted_at=datetime(2026, 10, 20, 9, 30))
+
+    @pytest.mark.parametrize("version", ["", "  ", "x" * 21])
+    def test_invalid_version_is_rejected(self, version):
+        """
+        Given: Una versión vacía o más larga que la columna
+        When: Se registra
+        Then: ValueError
+        """
+        with pytest.raises(ValueError):
+            _registro(terms_version=version)
+
+    def test_non_utc_date_is_rejected(self):
+        """
+        Given: Una fecha con zona pero no UTC
+        When: Se registra
+        Then: ValueError: todo el historial en UTC
+        """
+        madrid = timezone(timedelta(hours=2))
+
+        with pytest.raises(ValueError):
+            _registro(accepted_at=datetime(2026, 10, 20, 11, 30, tzinfo=madrid))

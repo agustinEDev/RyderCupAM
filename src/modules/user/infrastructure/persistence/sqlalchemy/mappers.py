@@ -287,6 +287,9 @@ def start_mappers():
     from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (  # noqa: PLC0415
         start_mappers as start_refresh_token_mappers,
     )
+    from src.modules.user.infrastructure.persistence.sqlalchemy.terms_acceptance_mapper import (  # noqa: PLC0415
+        start_mappers as start_terms_acceptance_mappers,
+    )
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_avatar_upload_mapper import (  # noqa: PLC0415
         start_mappers as start_user_avatar_upload_mappers,
     )
@@ -302,3 +305,4 @@ def start_mappers():
     start_user_device_mappers()
     start_oauth_account_mappers()
     start_user_avatar_upload_mappers()
+    start_terms_acceptance_mappers()

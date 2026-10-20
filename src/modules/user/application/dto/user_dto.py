@@ -82,6 +82,11 @@ class RegisterUserRequestDTO(BaseModel):
         ),
     )
 
+    # Contexto de seguridad: lo pone la capa de API, no el cliente (como en el
+    # login). Va al historial de aceptaciones de los Términos
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+
     @field_validator("first_name", "last_name")
     @classmethod
     def sanitize_and_validate_name(cls, v: str) -> str:
@@ -93,6 +98,24 @@ class RegisterUserRequestDTO(BaseModel):
 
         # Validar formato de nombre (sin números ni caracteres especiales)
         return NameValidator.validate(sanitized)
+
+
+# ======================================================================================
+# DTO para el Caso de Uso: Aceptar los Términos
+# ======================================================================================
+
+
+class AcceptTermsRequestDTO(BaseModel):
+    """
+    Entrada del caso de uso de aceptar los Términos vigentes.
+
+    La rellena la capa de API: el usuario sale de la sesión, y la IP y el
+    navegador de la petición (los mismos helpers que el login y el logout).
+    """
+
+    user_id: str = Field(..., description="ID del usuario autenticado.")
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 # ======================================================================================

@@ -3,9 +3,12 @@ La guarda de los Términos (B6) y su lista de rutas exentas.
 
 Quien tiene sesión pero no tiene aceptada la versión vigente recibe un 403
 `TERMS_NOT_ACCEPTED` en toda ruta con sesión, salvo las pocas que necesita para
-ver quién es, aceptar o salir. La guarda vive en `get_current_user`, así que
-una ruta nueva queda protegida sin hacer nada; lo que hay que mantener es la
-lista de exentas, y estos tests la fijan.
+ver quién es, aceptar, salir y gestionar sus dispositivos. La guarda vive en
+`get_current_user`, así que una ruta nueva queda protegida sin hacer nada; lo
+que hay que mantener es la lista de exentas, y estos tests la fijan.
+
+La decisión se toma con API pública: el método y la ruta concreta de la
+petición (`request.url.path`) contra las plantillas completas de las exentas.
 """
 
 import json
@@ -26,20 +29,40 @@ from src.config.terms_guard import (
     terms_not_accepted_handler,
 )
 
+DISPOSITIVO = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
 EXENTAS = {
     ("GET", "/api/v1/auth/current-user"),
     ("POST", "/api/v1/auth/logout"),
     ("POST", "/api/v1/users/me/accept-terms"),
+    ("GET", "/api/v1/users/me/devices"),
+    ("DELETE", "/api/v1/users/me/devices/{device_id}"),
 }
 
+# Cada exenta con una petición concreta que le corresponde
+CONCRETAS = [
+    ("GET", "/api/v1/auth/current-user"),
+    ("POST", "/api/v1/auth/logout"),
+    ("POST", "/api/v1/users/me/accept-terms"),
+    ("GET", "/api/v1/users/me/devices"),
+    ("DELETE", f"/api/v1/users/me/devices/{DISPOSITIVO}"),
+]
 
-def _request(method: str, path: str | None) -> Request:
-    """Una petición ya resuelta por FastAPI; con path None, sin ruta resuelta."""
-    scope = {"type": "http", "method": method, "path": path or "/", "headers": []}
-    if path is not None:
-        # Como la pone FastAPI en un router incluido: la plantilla SIN el prefijo
-        scope["route"] = SimpleNamespace(path=path.rsplit("/", 1)[-1])
-    return Request(scope)
+
+def _request(method: str, path: str, root_path: str = "") -> Request:
+    """Una petición con esa ruta, como la recibe la app (sin root_path en este montaje)."""
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "root_path": root_path,
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+        }
+    )
 
 
 def _usuario(aceptado: bool) -> SimpleNamespace:
@@ -83,13 +106,11 @@ class TestListaDeExentas:
 
     def test_every_exempt_route_exists_and_requires_session(self):
         """
-        Given: Las rutas de la app que exigen sesión
+        Given: Las rutas de la app que exigen sesión, con su plantilla completa
         When: Se busca cada exenta entre ellas
         Then: Están todas: una exenta que ya no existe (o se renombró) no exime nada
         """
-        con_sesion = _rutas_con_sesion()
-
-        assert con_sesion >= EXENTAS
+        assert _rutas_con_sesion() >= EXENTAS
 
     def test_there_are_session_routes_that_are_not_exempt(self):
         """
@@ -99,16 +120,41 @@ class TestListaDeExentas:
         """
         assert len(_rutas_con_sesion() - EXENTAS) > 50
 
+    def test_no_other_session_route_matches_an_exemption(self):
+        """
+        Given: Cada ruta con sesión no exenta, con sus parámetros rellenos
+        When: Se pregunta si está exenta
+        Then: Ninguna lo está: ningún patrón de exención alcanza a otra ruta
+        """
+        colan = [
+            (method, path)
+            for method, path in _rutas_con_sesion() - EXENTAS
+            if is_exempt_from_terms(
+                method, path.replace("{", "").replace("}", "").replace(":path", "")
+            )
+        ]
+
+        assert colan == []
+
 
 class TestEsExenta:
-    @pytest.mark.parametrize(("method", "path"), sorted(EXENTAS))
-    def test_exempt_route_is_exempt(self, method, path):
+    @pytest.mark.parametrize(("method", "path"), CONCRETAS)
+    def test_exempt_request_is_exempt(self, method, path):
         """
-        Given: Una ruta exenta con su método
+        Given: Una petición concreta a una ruta exenta, con su método
         When: Se pregunta
         Then: Está exenta
         """
         assert is_exempt_from_terms(method, path) is True
+
+    @pytest.mark.parametrize(("method", "path"), CONCRETAS)
+    def test_trailing_slash_is_normalized(self, method, path):
+        """
+        Given: La misma petición con una barra final
+        When: Se pregunta
+        Then: Sigue exenta (se normaliza la ruta)
+        """
+        assert is_exempt_from_terms(method, path + "/") is True
 
     @pytest.mark.parametrize(
         ("method", "path"),
@@ -116,19 +162,36 @@ class TestEsExenta:
             ("POST", "/api/v1/auth/current-user"),
             ("GET", "/api/v1/users/me/accept-terms"),
             ("GET", "/api/v1/auth/logout"),
+            ("DELETE", "/api/v1/users/me/devices"),
+            ("GET", f"/api/v1/users/me/devices/{DISPOSITIVO}"),
+            ("POST", f"/api/v1/users/me/devices/{DISPOSITIVO}"),
+            ("DELETE", f"/api/v1/users/me/devices/{DISPOSITIVO}/extra"),
+            ("DELETE", "/api/v1/users/me/devices/"),
+            ("DELETE", "/api/v1/users/me/devicesX/abc"),
+            ("DELETE", f"/x/api/v1/users/me/devices/{DISPOSITIVO}"),
+            ("GET", "/api/v1/users/me/devices/../stats"),
             ("PATCH", "/api/v1/users/profile"),
             ("GET", "/api/v1/users/me/stats"),
-            ("GET", "/api/v1/auth/current-user/"),
-            ("GET", None),
+            ("DELETE", "/api/v1/users/me/avatar"),
+            ("GET", "/api/v1/auth/current-user-x"),
+            ("GET", "/"),
         ],
     )
     def test_other_route_or_method_is_not_exempt(self, method, path):
         """
-        Given: Otra ruta, la misma con otro método, o sin ruta resuelta
+        Given: Otra ruta, la misma con otro método, o una que solo empieza igual
         When: Se pregunta
-        Then: No está exenta (ante la duda, se protege)
+        Then: No está exenta: el patrón va anclado a un único segmento
         """
         assert is_exempt_from_terms(method, path) is False
+
+    def test_method_is_case_insensitive(self):
+        """
+        Given: El método en minúsculas
+        When: Se pregunta
+        Then: Cuenta igual
+        """
+        assert is_exempt_from_terms("get", "/api/v1/auth/current-user") is True
 
 
 class TestGuarda:
@@ -141,14 +204,25 @@ class TestGuarda:
         with pytest.raises(TermsNotAcceptedError):
             require_current_terms(_request("GET", "/api/v1/users/me/stats"), _usuario(False))
 
-    @pytest.mark.parametrize(("method", "path"), sorted(EXENTAS))
+    @pytest.mark.parametrize(("method", "path"), CONCRETAS)
     def test_user_without_acceptance_passes_on_exempt_route(self, method, path):
         """
         Given: Un usuario sin la versión vigente aceptada
-        When: Llama a una ruta exenta
+        When: Llama a una ruta exenta con su método
         Then: Pasa
         """
         require_current_terms(_request(method, path), _usuario(False))
+
+    @pytest.mark.parametrize(("method", "path"), CONCRETAS)
+    def test_user_without_acceptance_is_refused_with_another_method(self, method, path):
+        """
+        Given: Un usuario sin la versión vigente aceptada
+        When: Llama a la ruta de una exenta con otro método
+        Then: Se le rechaza
+        """
+        otro = "PUT"
+        with pytest.raises(TermsNotAcceptedError):
+            require_current_terms(_request(otro, path), _usuario(False))
 
     def test_user_with_acceptance_passes_everywhere(self):
         """
@@ -157,15 +231,6 @@ class TestGuarda:
         Then: Pasa
         """
         require_current_terms(_request("PATCH", "/api/v1/users/profile"), _usuario(True))
-
-    def test_user_without_acceptance_and_no_route_is_refused(self):
-        """
-        Given: Una petición sin ruta resuelta
-        When: Pasa por la guarda
-        Then: Se rechaza
-        """
-        with pytest.raises(TermsNotAcceptedError):
-            require_current_terms(_request("GET", None), _usuario(False))
 
 
 class TestRespuesta:
