@@ -244,6 +244,9 @@ class GolfCourseResponseDTO(BaseModel):
     # Sin este campo, Pydantic descartaba en silencio la procedencia que el
     # mapper sí le pasaba, y la API no la enviaba.
     provenance: ProvenanceDTO = Field(..., description="De dónde salen los datos del campo")
+    physical_holes: int | None = Field(
+        None, description="Hoyos del campo sobre el terreno (9 o 18); null si no consta"
+    )
 
     class Config:
         from_attributes = True

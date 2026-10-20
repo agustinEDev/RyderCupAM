@@ -24,7 +24,9 @@ from src.shared.domain.value_objects.gender import Gender
 IMPORTED_AT = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
 
 
-def _course(provenance: CourseProvenance | None = None) -> GolfCourse:
+def _course(
+    provenance: CourseProvenance | None = None, physical_holes: int | None = None
+) -> GolfCourse:
     return GolfCourse.create(
         name="Valderrama",
         country_code=CountryCode("ES"),
@@ -41,6 +43,7 @@ def _course(provenance: CourseProvenance | None = None) -> GolfCourse:
         ],
         holes=[Hole(number=i + 1, par=4, stroke_index=i + 1, meters=350) for i in range(18)],
         provenance=provenance,
+        physical_holes=physical_holes,
     )
 
 
@@ -103,3 +106,19 @@ def test_l5_the_detail_carries_the_provenance_too():
 
     assert payload["provenance"]["source"] == "RFEG"
     assert payload["provenance"]["external_id"] == "915-1"
+
+
+def test_l6_the_detail_carries_the_physical_holes_too():
+    """
+    L6: la ficha también lleva `physical_holes` (9 o 18 hoyos reales).
+
+    Mismo fallo que la procedencia: el mapper lo pasaba, el DTO no lo declaraba y
+    Pydantic lo descartaba.
+    """
+    nine = GolfCourseMapper.to_response_dto(_course(physical_holes=9)).model_dump(mode="json")
+    unknown = GolfCourseMapper.to_response_dto(_course()).model_dump(mode="json")
+
+    assert nine["physical_holes"] == 9
+    # Un campo antiguo, del que no consta, viaja como null: el cliente distingue
+    # «no se sabe» de un valor.
+    assert unknown["physical_holes"] is None
