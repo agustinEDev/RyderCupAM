@@ -77,8 +77,8 @@ def test_l3_a_course_imported_from_the_rfeg_says_so():
     assert summary.provenance.imported_at == IMPORTED_AT
 
 
-def test_l3_the_provenance_is_serialised_in_the_list_json():
-    """L3: en el JSON del listado sale `provenance.source` como texto."""
+def test_l3b_the_provenance_is_serialised_in_the_list_json():
+    """L3b: en el JSON del listado sale `provenance.source` como texto."""
     course = _course(
         CourseProvenance(source=CourseSource.RFEG, external_id="915-1", imported_at=IMPORTED_AT)
     )
