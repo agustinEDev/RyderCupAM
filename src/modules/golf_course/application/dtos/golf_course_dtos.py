@@ -241,6 +241,12 @@ class GolfCourseResponseDTO(BaseModel):
         False, description="TRUE si este campo tiene un clone pendiente de aprobación"
     )
     location: LocationDTO | None = Field(None, description="Ubicación del campo, si se conoce")
+    # Sin este campo, Pydantic descartaba en silencio la procedencia que el
+    # mapper sí le pasaba, y la API no la enviaba.
+    provenance: ProvenanceDTO = Field(..., description="De dónde salen los datos del campo")
+    physical_holes: int | None = Field(
+        None, description="Hoyos del campo sobre el terreno (9 o 18); null si no consta"
+    )
 
     class Config:
         from_attributes = True
@@ -281,6 +287,9 @@ class GolfCourseSummaryDTO(BaseModel):
         False, description="TRUE si este campo tiene un clone pendiente de aprobación"
     )
     location: LocationDTO | None = Field(None, description="Ubicación del campo, si se conoce")
+    # La procedencia viaja también en los listados: el frontend cita la fuente
+    # de los datos (la RFEG) al elegir un campo, no solo en su ficha.
+    provenance: ProvenanceDTO = Field(..., description="De dónde salen los datos del campo")
     distance_km: float | None = Field(
         None, description="Distancia a la posición consultada, si se pidió por cercanía"
     )
