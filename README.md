@@ -695,7 +695,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## 📄 License
 
-This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file for details.
+Copyright (c) 2025-2026 Agustín Estévez Domínguez. **All rights reserved.** The source code is published for viewing only; no licence is granted to use, copy, modify or distribute it without the author's written permission. See [LICENSE](LICENSE).
 
 ---
 
@@ -724,7 +724,3 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 
 
 </div>
-
-## 📄 License
-
-Copyright (c) 2025-2026 Agustín Estévez Domínguez. **All rights reserved.** The source code is published for viewing only; no licence is granted to use, copy, modify or distribute it without the author's written permission. See [LICENSE](LICENSE).
