@@ -7,8 +7,10 @@ ver quién es, aceptar, salir y gestionar sus dispositivos. La guarda vive en
 `get_current_user`, así que una ruta nueva queda protegida sin hacer nada; lo
 que hay que mantener es la lista de exentas, y estos tests la fijan.
 
-La decisión se toma con API pública: el método y la ruta concreta de la
-petición (`request.url.path`) contra las plantillas completas de las exentas.
+La decisión se toma con API pública: el método y la ruta ASGI de la petición
+(`request.scope["path"]`, la misma con la que casa el router; no
+`request.url.path`, que se corta en un `?` o `#` codificados) contra las
+plantillas completas de las exentas.
 """
 
 import json
