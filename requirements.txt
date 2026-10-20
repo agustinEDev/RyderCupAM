@@ -145,7 +145,7 @@ python-multipart==0.0.32
 
 # Pillow - Procesado de imágenes (validar formato, recortar a cuadrado, redimensionar,
 # comprimir a JPEG) antes de guardar la foto de avatar subida por el usuario en BD
-Pillow==12.3.0
+Pillow==13.0.0
 
 # pillow-heif - Lector de HEIC/HEIF para Pillow, que no lo trae. Es el formato en
 # el que un iPhone guarda TODAS las fotos de su fototeca, así que sin esto la
