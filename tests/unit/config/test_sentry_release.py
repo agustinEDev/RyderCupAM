@@ -26,12 +26,16 @@ def _release_con_la_que_se_inicia(monkeypatch: pytest.MonkeyPatch) -> str:
 
 
 class TestReleaseDeSentry:
-    def test_s1_la_release_es_la_version_que_expone_health(
+    async def test_s1_la_release_es_la_version_que_expone_health(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        assert _release_con_la_que_se_inicia(monkeypatch) == (
-            f"rydercup-backend@{version.APP_VERSION}"
-        )
+        # Contra lo que responde `/health`, no contra la constante: si `/health`
+        # cambiara de fuente, Sentry y `/health` se separarían sin avisar
+        import main
+
+        salud = await main.health()
+
+        assert _release_con_la_que_se_inicia(monkeypatch) == f"rydercup-backend@{salud.version}"
 
     def test_s1_la_release_sigue_a_la_fuente_unica_al_cambiar_la_version(
         self, monkeypatch: pytest.MonkeyPatch

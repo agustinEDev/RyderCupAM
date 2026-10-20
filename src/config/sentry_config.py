@@ -115,6 +115,7 @@ def init_sentry() -> None:
     )
 
     # Inicializar Sentry SDK
+    release = build_release()
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT,
@@ -133,7 +134,7 @@ def init_sentry() -> None:
         # Hook para filtrar/modificar eventos
         before_send=before_send,
         # Metadata
-        release=build_release(),  # Misma versión que expone /health
+        release=release,  # Misma versión que expone /health
         # Request data (incluir en eventos)
         send_default_pii=False,  # NO enviar PII automáticamente (GDPR compliance)
         # SECURITY: send_default_pii=False NO cubre las variables locales de cada frame
@@ -149,6 +150,7 @@ def init_sentry() -> None:
 
     logger.info(
         f"✅ Sentry initialized - "
+        f"release={release}, "
         f"env={settings.SENTRY_ENVIRONMENT}, "
         f"traces={settings.SENTRY_TRACES_SAMPLE_RATE:.0%}, "
         f"profiles={settings.SENTRY_PROFILES_SAMPLE_RATE:.0%}"
