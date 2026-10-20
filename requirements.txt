@@ -5,7 +5,7 @@
 # FastAPI - Framework web moderno para crear APIs REST
 # Características: validación automática, documentación auto-generada, type hints
 # Actualizado a 0.136.3 (compatible con starlette 1.x)
-fastapi==0.141.1
+fastapi==0.143.3
 
 # starlette - ASGI framework (dependencia transitiva de fastapi)
 # Pinado explícitamente a 1.3.1 para resolver:
@@ -25,7 +25,7 @@ uvicorn[standard]==0.54.0
 
 # python-dotenv - Utilidad para cargar variables de entorno desde un fichero .env
 # Actualizado a 1.2.2 para resolver CVE-2026-28684 (Symlink Attack)
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 
 
 # ================================
@@ -34,7 +34,7 @@ python-dotenv==1.2.3
 
 # SQLAlchemy - El ORM (Object-Relational Mapper) más potente de Python
 # Permite interactuar con la base de datos usando objetos Python en lugar de SQL
-sqlalchemy==2.1.1
+sqlalchemy==2.1.4
 
 # psycopg2-binary - Adaptador (driver) para conectar SQLAlchemy con PostgreSQL
 # Es la librería puente entre nuestra aplicación y la base de datos
@@ -66,7 +66,7 @@ bcrypt==5.0.0
 # (pyasn1, ecdsa). Soporte completo para HS256, RS256, etc.
 # Actualizado a 2.13.0 para resolver:
 # - PYSEC-2026-175, -176, -177, -178, -179 (Improper Verification of Cryptographic Signature)
-PyJWT==2.15.0
+PyJWT==2.15.1
 
 # slowapi - Rate limiting para FastAPI
 # Protege contra brute force, DoS y abuso de API limitando peticiones por IP
@@ -83,7 +83,7 @@ secure==2.0.1
 # Captura automáticamente excepciones, errores y métricas de rendimiento
 # Integraciones: FastAPI, SQLAlchemy, Redis
 # Cumple con OWASP Top 10: A09 (Logging & Monitoring)
-sentry-sdk[fastapi]==2.70.0
+sentry-sdk[fastapi]==2.72.0
 
 # jinja2 - Motor de plantillas (dependencia de RUNTIME, no opcional)
 # NO se usa directamente en el código, y por eso parece prescindible: no lo es.
@@ -108,7 +108,7 @@ urllib3==2.8.0
 # - CVE-2026-69247 (fixed in 50.0.0)
 # - CVE-2026-69248 (fixed in 49.0.0)
 # - CVE-2026-69249 (fixed in 49.0.0)
-cryptography==50.0.1
+cryptography==50.0.2
 
 # setuptools - Build system y package installer
 # Nadie lo declara como dependencia en producción: los paquetes que lo piden lo hacen desde
@@ -151,7 +151,7 @@ Pillow==12.3.0
 # el que un iPhone guarda TODAS las fotos de su fototeca, así que sin esto la
 # única forma de poner un avatar desde un iPhone era hacer una foto nueva: la
 # cámara del navegador entrega JPEG y la fototeca entrega HEIC (BE #232)
-pillow-heif==1.8.0
+pillow-heif==1.8.1
 
 
 # ================================
@@ -185,7 +185,7 @@ tzdata==2026.4
 # no basta: España tiene dos husos, y también EEUU, Chile o Australia. Lleva las
 # fronteras de husos del mundo en 3 MB y sin dependencias; la alternativa
 # habitual, `timezonefinder`, arrastra numpy
-tzfpy==2.1.0
+tzfpy==2.1.1
 
 # shapely - Geometría (polígonos, líneas, distancias) para el mapa de hoyos (BE #532)
 # Empareja un campo con OpenStreetMap: qué contorno es el nuestro, qué hoyos caen
