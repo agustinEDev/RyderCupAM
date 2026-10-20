@@ -292,7 +292,11 @@ async def test_o6_sends_its_own_user_agent():
 
     await _client().fetch_area(LAT, LON)
 
-    assert "RyderCupFriends" in route.calls[0].request.headers["user-agent"]
+    agente = route.calls[0].request.headers["user-agent"]
+    # «RCF» sin el nombre comercial (20 oct 2026), con un contacto como pide Overpass
+    assert agente.startswith("RCF/")
+    assert "RyderCup" not in agente
+    assert "agustin.estevez.dominguez@gmail.com" in agente
 
 
 # ============================================================================

@@ -586,3 +586,49 @@ class TestRFEGHandicapServiceBuscadorNuevo:
         # Act & Assert
         with pytest.raises(HandicapServiceUnavailableError):
             await RFEGHandicapService().search_handicap("Agustín Estévez Domínguez")
+
+
+class TestRFEGHandicapServiceCabeceras:
+    """
+    La consulta a la RFEG se presenta como lo que es: esta aplicación.
+
+    Antes imitaba un Safari que llegaba desde `rfegolf.es` (Origin y Referer). No
+    hacía falta —medido el 20 oct 2026, su buscador responde igual sin esas
+    cabeceras— y hacerse pasar por su propia web empeora la posición legal ante
+    la federación (auditoría legal del 20 oct 2026).
+    """
+
+    @staticmethod
+    async def _cabeceras_enviadas(mock_client_class):
+        cliente = cliente_que_devuelve(respuesta_api())
+        mock_client_class.return_value = cliente
+        await RFEGHandicapService().search_handicap("Agustín Estévez")
+        return cliente.get.await_args.kwargs["headers"]
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_no_dice_venir_de_la_web_de_la_rfeg(self, mock_client_class):
+        """R1: sin cabecera Origin."""
+        cabeceras = await self._cabeceras_enviadas(mock_client_class)
+        assert "Origin" not in cabeceras
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_no_dice_que_la_pagina_anterior_es_la_rfeg(self, mock_client_class):
+        """R2: sin cabecera Referer."""
+        cabeceras = await self._cabeceras_enviadas(mock_client_class)
+        assert "Referer" not in cabeceras
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_se_identifica_como_la_aplicacion_y_no_como_un_navegador(self, mock_client_class):
+        """R3: el User-Agent dice RCF, sin el nombre comercial, y no imita a un navegador."""
+        cabeceras = await self._cabeceras_enviadas(mock_client_class)
+        agente = cabeceras["User-Agent"]
+        assert agente.startswith("RCF/")
+        assert "RyderCup" not in agente
+        assert "Safari" not in agente
+        assert "Mozilla" not in agente
+
+    @patch("src.modules.user.infrastructure.external.rfeg_handicap_service.httpx.AsyncClient")
+    async def test_sigue_pidiendo_la_respuesta_en_json(self, mock_client_class):
+        """R4: lo que ya funcionaba se queda igual."""
+        cabeceras = await self._cabeceras_enviadas(mock_client_class)
+        assert cabeceras["Accept"] == "application/json"
