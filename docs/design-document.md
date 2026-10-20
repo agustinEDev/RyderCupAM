@@ -8,7 +8,7 @@
 
 Amateur golf tournament system in Ryder Cup format.
 
-**Stack**: Python 3.11-3.12, FastAPI, PostgreSQL, Clean Architecture + DDD
+**Stack**: Python 3.12 and 3.14, FastAPI, PostgreSQL, Clean Architecture + DDD
 
 **Infrastructure**: Docker, Kubernetes (Kind), GitHub Actions
 
@@ -368,7 +368,7 @@ API → UseCase → HandicapService.search(name) → RFEG
 **Competition Module**: 554 tests (domain + application + infrastructure + API)
 **Performance**: ~30s (parallelized with pytest-xdist)
 
-**CI/CD**: Tests run automatically on GitHub Actions (Python 3.11, 3.12)
+**CI/CD**: Tests run automatically on GitHub Actions (Python 3.12, 3.14)
 
 > ADR: [003](architecture/decisions/ADR-003-testing-strategy.md)
 
@@ -423,18 +423,17 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Platform**: GitHub Actions
 
-**Jobs (7 parallel)**:
-1. Preparation (Python 3.11/3.12 setup + cache)
-2. Unit Tests (matrix Python 3.11, 3.12)
-3. Integration Tests (PostgreSQL service container)
-4. Security Scan (Gitleaks)
-5. Code Quality (Ruff)
-6. Type Checking (Mypy)
-7. Database Migrations (Alembic validation)
+**Main job categories** (the workflow defines more jobs, and the test suites expand into one job per Python version):
+1. Unit Tests (matrix Python 3.12, 3.14)
+2. Integration and Security Tests (PostgreSQL service container, Python 3.12 and 3.14)
+3. Security Checks (Bandit, pip-audit, Gitleaks; Python 3.14)
+4. Code Quality (Ruff)
+5. Type Checking (Mypy)
+6. Database Migrations (Alembic validation)
 
 **Execution Time**: ~3 minutes
 **Trigger**: Push, Pull Request
-**Matrix**: Python 3.11, 3.12
+**Matrix**: Python 3.12, 3.14
 
 **Configurations**:
 - Mypy: Pragmatic configuration for SQLAlchemy imperative mapping

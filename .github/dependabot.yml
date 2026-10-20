@@ -75,10 +75,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    # El FROM va fijado por digest (python:3.12-slim@sha256:…): Dependabot propone
-    # cada semana el digest nuevo de 3.12-slim, que es como entran los parches del
-    # SO. También propondrá saltos de Python (3.12 → 3.13…), que son una decisión:
-    # la matriz del CI prueba 3.11 y 3.12, así que ampliarla va en esa PR.
+    # El FROM va fijado por digest (python:3.x-slim@sha256:…): Dependabot propone
+    # cada semana el digest nuevo, que es como entran los parches del SO. También
+    # propondrá saltos de Python (3.14 → 3.15…), que son una decisión: antes de
+    # mergearlos, la versión nueva tiene que estar en la matriz obligatoria del CI.
 
   # Acciones de GitHub usadas en los workflows
   - package-ecosystem: "github-actions"

@@ -9,7 +9,7 @@
 # - autoflake (remover imports sin usar)
 
 # Versión mínima de Python que soporta el proyecto
-target-version = "py311"  # La MÍNIMA soportada: el CI prueba 3.11 y 3.12. Con py312, ruff proponía sintaxis (PEP 695) que no existe en 3.11
+target-version = "py311"  # Sintaxis compatible con 3.11 a propósito (el CI prueba 3.12 y 3.14). Con py312, ruff propondría sintaxis PEP 695 y abriría hallazgos nuevos
 
 # Longitud máxima de línea (PEP 8 recomienda 79, pero 100 es más práctico)
 line-length = 100
