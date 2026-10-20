@@ -1,9 +1,9 @@
 """
 Tests de la lectura del volcado de campos federados.
 
-Incluyen una pasada sobre el fichero real que viaja en el repositorio: es la
-comprobación que avisaría si alguien lo sustituye por otro que el importador no
-sabe leer.
+Incluyen una pasada sobre el fichero real, que vive fuera de git (se salta si no
+está): es la comprobación que avisaría si alguien lo sustituye por otro que el
+importador no sabe leer.
 """
 
 import gzip
@@ -16,6 +16,7 @@ from src.modules.golf_course.infrastructure.importers.rfeg_dataset import (
     DEFAULT_DATASET_PATH,
     RfegDatasetError,
     clubs_with_courses,
+    dataset_path,
     load_dataset,
 )
 from src.modules.golf_course.infrastructure.importers.rfeg_mapper import map_club
@@ -60,7 +61,7 @@ def test_reads_a_plain_json_dataset(tmp_path):
 
 def test_reads_a_compressed_dataset(tmp_path):
     """
-    GIVEN: Un volcado comprimido, como el que viaja en el repositorio
+    GIVEN: Un volcado comprimido, como el real
     WHEN: Se lee
     THEN: Se carga
     """
@@ -173,9 +174,13 @@ def test_a_club_without_identity_is_rejected(tmp_path):
 # ============================================================================
 
 
-def test_the_bundled_dataset_maps_completely():
+@pytest.mark.skipif(
+    not dataset_path().exists(),
+    reason="El volcado de la RFEG no está en este equipo (vive fuera de git; RFEG_DATASET_PATH)",
+)
+def test_the_real_dataset_maps_completely():
     """
-    GIVEN: El volcado que viaja en el repositorio
+    GIVEN: El volcado real (RFEG_DATASET_PATH o data/)
     WHEN: Se traducen todos sus clubes
     THEN: Salen 802 recorridos con 4.304 salidas y 77.472 hoyos, y ninguno falla
 
@@ -184,7 +189,7 @@ def test_the_bundled_dataset_maps_completely():
     totales de salidas y hoyos son los que anuncia el CHANGELOG: contar solo
     recorridos no detectaría un volcado que llegara con las tarjetas a medias.
     """
-    dataset = load_dataset(DEFAULT_DATASET_PATH)
+    dataset = load_dataset(dataset_path())
     clubs = clubs_with_courses(dataset)
 
     mapped = [course for club in clubs for course in map_club(club, IMPORTED_AT)]
@@ -196,3 +201,50 @@ def test_the_bundled_dataset_maps_completely():
     assert all(course.physical_holes in (9, 18) for course in mapped)
     assert len(tees) == 4304
     assert sum(len(tee.holes) for tee in tees) == 77472
+
+
+# --- Dónde vive el volcado (20 oct 2026) -------------------------------------
+# El volcado vive fuera de git y se señala con RFEG_DATASET_PATH; sin ella, se
+# busca donde siempre (data/, ignorado por git).
+
+
+def test_without_the_variable_the_default_is_the_usual_place(monkeypatch):
+    """D1: sin RFEG_DATASET_PATH, la ruta es data/rfeg_dataset.json.gz del repo."""
+    monkeypatch.delenv("RFEG_DATASET_PATH", raising=False)
+
+    assert dataset_path() == DEFAULT_DATASET_PATH
+    assert DEFAULT_DATASET_PATH.parts[-2:] == ("data", "rfeg_dataset.json.gz")
+
+
+def test_the_variable_points_to_the_dataset(tmp_path, monkeypatch):
+    """D2: con RFEG_DATASET_PATH, load_dataset() sin argumentos lee esa ruta."""
+    path = write_dataset(tmp_path, MINIMAL_DATASET, compress=True)
+    monkeypatch.setenv("RFEG_DATASET_PATH", str(path))
+
+    assert dataset_path() == path
+    assert load_dataset() == MINIMAL_DATASET
+
+
+def test_a_variable_pointing_nowhere_fails_clearly(tmp_path, monkeypatch):
+    """D3: si la variable apunta a un fichero que no existe, el error dice cuál."""
+    missing = tmp_path / "en-ningun-sitio.json.gz"
+    monkeypatch.setenv("RFEG_DATASET_PATH", str(missing))
+
+    with pytest.raises(RfegDatasetError, match="en-ningun-sitio"):
+        load_dataset()
+
+
+def test_an_explicit_path_wins_over_the_variable(tmp_path, monkeypatch):
+    """D4: la ruta que se pasa (o --dataset del script) manda sobre la variable."""
+    explicit = write_dataset(tmp_path, MINIMAL_DATASET)
+    monkeypatch.setenv("RFEG_DATASET_PATH", str(tmp_path / "otra.json"))
+
+    assert load_dataset(explicit) == MINIMAL_DATASET
+
+
+def test_the_variable_accepts_a_path_from_the_home_folder(tmp_path, monkeypatch):
+    """D7: `~` se expande aunque la variable llegue literal (un .env o Docker)."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("RFEG_DATASET_PATH", "~/rfeg_dataset.json.gz")
+
+    assert dataset_path() == tmp_path / "rfeg_dataset.json.gz"

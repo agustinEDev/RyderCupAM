@@ -5,8 +5,7 @@ Federación Española de Golf, y qué mirar antes de aplicarlo en producción.
 
 ## Lo que hace
 
-`scripts/import_golf_courses.py` lee el volcado que viaja en el repositorio
-(`data/rfeg_dataset.json.gz`) y da de alta cada recorrido **llamando a los casos
+`scripts/import_golf_courses.py` lee el volcado de la federación y da de alta cada recorrido **llamando a los casos
 de uso**, no escribiendo en las tablas. Así los 802 campos pasan por las mismas
 invariantes que un alta hecha desde la aplicación: un dato imposible se rechaza
 en vez de quedarse guardado.
@@ -102,12 +101,19 @@ porque ninguna basta sola:
 
 ## Actualizar el volcado
 
+El volcado no forma parte del repositorio: se guarda fuera de git, en
+`~/Documents/rcf-datos-privados/rfeg_dataset.json.gz`. El importador lo busca,
+por este orden, en `--dataset`, en la variable `RFEG_DATASET_PATH` y en
+`data/rfeg_dataset.json.gz`, carpeta que git y la imagen Docker ignoran. El test
+que recorre el volcado real se salta cuando no lo encuentra (en el CI).
+
 El extractor vive en un proyecto aparte (`rfeg-courses-import`). Para cargar una
 extracción nueva:
 
 ```bash
-gzip -c ruta/al/rfeg_dataset.json > data/rfeg_dataset.json.gz
-python scripts/import_golf_courses.py            # pasada en seco
+gzip -c ruta/al/rfeg_dataset.json > ~/Documents/rcf-datos-privados/rfeg_dataset.json.gz
+RFEG_DATASET_PATH=~/Documents/rcf-datos-privados/rfeg_dataset.json.gz \
+  python scripts/import_golf_courses.py          # pasada en seco
 ```
 
 El importador rechaza un fichero que no parezca una extracción de la RFEG antes

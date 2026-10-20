@@ -64,3 +64,6 @@ STITCH_PROMPT.md
 # El clúster local (Kind): manifiestos, secretos locales y volcados de la BD.
 # La app no lo usa y no debe ir dentro de ninguna imagen
 k8s/
+
+# Datos de importación locales: no entran en la imagen
+data/rfeg_dataset*

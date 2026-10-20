@@ -22,8 +22,9 @@ import httpx
 from src.modules.golf_course.application.ports.osm_hole_map_source import OsmUnavailableError
 
 DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-# Overpass pide que cada cliente se identifique
-USER_AGENT = "RyderCupFriends/1.0 (+https://www.rydercupfriends.com)"
+# Overpass pide que cada cliente se identifique con un contacto. «RCF», sin el
+# nombre comercial (20 oct 2026, mientras se elige uno nuevo).
+USER_AGENT = "RCF/1.0 (agustin.estevez.dominguez@gmail.com)"
 SEARCH_RADIUS_M = 2500
 QUERY_TIMEOUT_S = 60
 # 429: límite de uso; 502/503/504: la pasarela de Overpass cargada, muy habitual
