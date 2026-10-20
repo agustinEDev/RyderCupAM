@@ -17,7 +17,6 @@ from src.modules.competition.application.use_cases.submit_scorecard_use_case imp
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.services.scoring_service import ScoringService
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
@@ -26,6 +25,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 )
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 def _make_player(user_id=None):

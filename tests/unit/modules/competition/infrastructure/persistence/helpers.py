@@ -6,7 +6,6 @@ from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -17,6 +16,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 def create_round(

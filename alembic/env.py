@@ -23,32 +23,37 @@ from logging.config import fileConfig  # noqa: E402
 from alembic import context  # noqa: E402
 from sqlalchemy import engine_from_config, pool  # noqa: E402
 
-# Importar TODOS los mappers para que Alembic detecte todas las tablas
-# IMPORTANTE: Importar los mappers (no solo metadata) para registrar las tablas
+# Alembic necesita conocer TODAS las tablas; con solo una parte, autogenerate
+# propondría borrar las demás (#565). Se arrancan todos los mappers con la lista
+# de la aplicación: algunas tablas solo se registran al arrancar su grupo (las de
+# usuario, la de mapas de hoyos), no basta con importar. Son idempotentes, y si
+# uno falla la app tampoco arrancaría. Un test lo comprueba contra las
+# migraciones (test_schema_parity)
 from src.shared.infrastructure.persistence.sqlalchemy.base import metadata  # noqa: E402
-from src.shared.infrastructure.persistence.sqlalchemy import (  # noqa: E402
-    country_mappers,
-)
-from src.modules.user.infrastructure.persistence.sqlalchemy import (  # noqa: E402
-    mappers as user_mappers,
-)
-from src.modules.competition.infrastructure.persistence.sqlalchemy import (  # noqa: E402
-    mappers as competition_mappers,
-)
+from src.config.mappers import start_all_mappers  # noqa: E402
+
+start_all_mappers()
 
 # Constantes para drivers de PostgreSQL
 ASYNCPG_DRIVER = "postgresql+asyncpg"
 PSYCOPG2_DRIVER = "postgresql+psycopg2"
+SIN_DRIVER = "postgresql://"
 
-# Iniciar todos los mappers para registrar las tablas en el metadata
-# IMPORTANTE: Proteger contra re-inicialización en tests (pytest ya los inicializa)
-try:
-    country_mappers.start_mappers()
-    user_mappers.start_mappers()
-    competition_mappers.start_mappers()
-except Exception:
-    # Mappers ya inicializados (probablemente en tests), ignorar
-    pass
+
+def _url_con_driver_sincrono(url: str) -> str:
+    """
+    Alembic necesita un driver síncrono: psycopg2, el que está instalado.
+
+    Se fija también cuando la URL no dice ninguno: desde SQLAlchemy 2.1, un
+    `postgresql://` a secas usa psycopg (v3), que no está instalado, y la
+    DATABASE_URL de Render es así. La v2.23.0 no arrancó por eso (1 oct 2026).
+    """
+    if url.startswith(ASYNCPG_DRIVER):
+        return url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER, 1)
+    if url.startswith(SIN_DRIVER):
+        return url.replace(SIN_DRIVER, f"{PSYCOPG2_DRIVER}://", 1)
+    return url
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -77,9 +82,8 @@ def run_migrations_offline() -> None:
     if not url:
         url = config.get_main_option("sqlalchemy.url")
 
-    # Alembic necesita un driver síncrono. Reemplazamos asyncpg con psycopg2.
-    if url and ASYNCPG_DRIVER in url:
-        url = url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER)
+    if url:
+        url = _url_con_driver_sincrono(url)
 
     context.configure(
         url=url,
@@ -98,9 +102,7 @@ def run_migrations_online() -> None:
     if not db_url:
         raise ValueError("La variable de entorno DATABASE_URL no está configurada")
 
-    # Alembic necesita un driver síncrono. Reemplazamos asyncpg con psycopg2.
-    if ASYNCPG_DRIVER in db_url:
-        db_url = db_url.replace(ASYNCPG_DRIVER, PSYCOPG2_DRIVER)
+    db_url = _url_con_driver_sincrono(db_url)
 
     config.set_main_option("sqlalchemy.url", db_url)
 

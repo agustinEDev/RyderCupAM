@@ -1,10 +1,14 @@
 """In-Memory Competition Repository para testing."""
 
+from collections.abc import Sequence
 from datetime import date
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
+)
+from src.modules.competition.domain.value_objects.campo_de_la_competicion import (
+    CampoDeLaCompeticion,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import (
@@ -23,6 +27,17 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
 
     def __init__(self):
         self._competitions: dict[CompetitionId, Competition] = {}
+        # En memoria no hay campos de verdad: los tests los ponen con su nombre
+        self._campos: dict[CompetitionId, list[CampoDeLaCompeticion]] = {}
+
+    def con_campos(self, competition_id: CompetitionId, campos: list[CampoDeLaCompeticion]) -> None:
+        """Para los tests: los campos que tiene una competición, en su orden."""
+        self._campos[competition_id] = list(campos)
+
+    async def campos_de(
+        self, competition_ids: Sequence[CompetitionId]
+    ) -> dict[CompetitionId, list[CampoDeLaCompeticion]]:
+        return {i: list(self._campos[i]) for i in competition_ids if self._campos.get(i)}
 
     async def add(self, competition: Competition) -> None:
         """Agrega una nueva competición."""
@@ -75,10 +90,15 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
             )
         ]
 
-    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
+    async def exists_with_name(
+        self,
+        name: CompetitionName,
+        creator_id: UserId,
+        except_id: CompetitionId | None = None,
+    ) -> bool:
         """Verifica si existe una competición con un nombre específico para un creador."""
         return any(
-            comp.name == name and comp.creator_id == creator_id
+            comp.name.clave == name.clave and comp.creator_id == creator_id and comp.id != except_id
             for comp in self._competitions.values()
         )
 
@@ -87,9 +107,9 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
         if competition_id in self._competitions:
             del self._competitions[competition_id]
 
-    async def find_all(self) -> list[Competition]:
-        """Retorna todas las competiciones."""
-        return list(self._competitions.values())
+    async def find_all(self, limit: int = 100, offset: int = 0) -> list[Competition]:
+        """Retorna las competiciones, paginadas como el repositorio de verdad."""
+        return list(self._competitions.values())[offset : offset + limit]
 
     async def count_all(self) -> int:
         """Cuenta el total de competiciones en el sistema."""

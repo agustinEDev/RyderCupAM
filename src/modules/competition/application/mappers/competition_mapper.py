@@ -4,14 +4,25 @@ import logging
 
 from src.modules.competition.application.dto.competition_dto import (
     CaptaincyResponseDTO,
+    CompetitionCourseSummaryDTO,
     CompetitionResponseDTO,
     CountryResponseDTO,
     CreatorDTO,
+    NextSessionDTO,
+    StrokePlaySettingsResponseDTO,
+)
+from src.modules.competition.application.services.resumen_de_la_competicion import (
+    ResumenDeLaCompeticion,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.campo_de_la_competicion import (
+    CampoDeLaCompeticion,
+)
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -37,6 +48,7 @@ class CompetitionDTOMapper:
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface | None = None,
         is_admin: bool = False,
+        campos: list[CampoDeLaCompeticion] | None = None,
     ) -> CompetitionResponseDTO:
         """
         Convierte una entidad Competition a CompetitionResponseDTO.
@@ -49,6 +61,9 @@ class CompetitionDTOMapper:
 
         pending_enrollments_count solo se calcula y expone para el creador
         de la competición o para administradores (is_admin=True).
+
+        `campos`: los de esta competición si ya se leyeron (un listado los lee
+        todos de una vez con `to_response_dtos`); si no, se leen aquí.
         """
         is_creator = competition.creator_id == current_user_id
 
@@ -97,6 +112,13 @@ class CompetitionDTOMapper:
                 competition.creator_id, user_uow
             )
 
+        # La tarjeta de «Mis competiciones» (FE #846)
+        if campos is None:
+            campos = (await uow.competitions.campos_de([competition.id])).get(competition.id, [])
+        juega = user_enrollment_status == EnrollmentStatus.APPROVED.value
+        resumen = await ResumenDeLaCompeticion.de(competition, current_user_id, juega, uow)
+        proxima = resumen.proxima
+
         # Construir DTO
         return CompetitionResponseDTO(
             id=competition.id.value,
@@ -127,42 +149,99 @@ class CompetitionDTOMapper:
             play_mode=competition.play_mode.value,
             # Config
             max_players=competition.max_players,
-            team_assignment=(
-                competition.team_assignment.value
-                if hasattr(competition.team_assignment, "value")
-                else competition.team_assignment
-            ),
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.setup_mode),
-            team_a_captain_id=(
-                competition.team_a_captain_id.value if competition.team_a_captain_id else None
-            ),
-            team_b_captain_id=(
-                competition.team_b_captain_id.value if competition.team_b_captain_id else None
-            ),
-            team_a_vice_captain_id=(
-                competition.team_a_vice_captain_id.value
-                if competition.team_a_vice_captain_id
-                else None
-            ),
-            team_b_vice_captain_id=(
-                competition.team_b_vice_captain_id.value
-                if competition.team_b_vice_captain_id
-                else None
-            ),
-            # Teams
-            team_1_name=competition.team_1_name,
-            team_2_name=competition.team_2_name,
+            # Tipo de torneo y lo de la Ryder (vacío si no lo es)
+            **CompetitionDTOMapper.tournament_fields(competition),
             # Campos calculados
             is_creator=is_creator,
             enrolled_count=enrolled_count,
             pending_enrollments_count=pending_enrollments_count,
             user_enrollment_status=user_enrollment_status,
+            golf_courses=[
+                CompetitionCourseSummaryDTO(
+                    id=c.golf_course_id.value, name=c.nombre, country_code=c.country_code.value
+                )
+                for c in campos
+            ],
+            playing_days=resumen.jornadas,
+            my_next_session=(
+                NextSessionDTO(
+                    date=proxima.fecha,
+                    session_type=proxima.sesion.value,
+                    tee_time=proxima.hora.strftime("%H:%M") if proxima.hora else None,
+                )
+                if proxima
+                else None
+            ),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,
+        )
+
+    @staticmethod
+    async def to_response_dtos(
+        competitions: list[Competition],
+        current_user_id: UserId,
+        uow: CompetitionUnitOfWorkInterface,
+        user_uow: UserUnitOfWorkInterface | None = None,
+        is_admin: bool = False,
+    ) -> list[CompetitionResponseDTO]:
+        """Un listado: los campos de todas en una sola lectura (FE #846)."""
+        campos = await uow.competitions.campos_de([c.id for c in competitions])
+        return [
+            await CompetitionDTOMapper.to_response_dto(
+                c, current_user_id, uow, user_uow, is_admin=is_admin, campos=campos.get(c.id, [])
+            )
+            for c in competitions
+        ]
+
+    @staticmethod
+    def tournament_fields(competition: Competition) -> dict:
+        """
+        El tipo de torneo, su modalidad y lo que es solo de la Ryder Cup (#251).
+
+        Un solo sitio para las respuestas que lo llevan (la ficha, la de crear y
+        la de editar), que antes lo construían a mano leyendo la pieza de la
+        Ryder como si siempre existiera. En un Stableford o un Medal no existe:
+        sus campos van vacíos.
+        """
+        ryder_cup = competition.ryder_cup
+
+        def valor(user_id: UserId | None):
+            return user_id.value if user_id else None
+
+        return {
+            "tournament_type": str(competition.tournament_type),
+            "modality": str(competition.modality),
+            "team_1_name": ryder_cup.team_1_name if ryder_cup else None,
+            "team_2_name": ryder_cup.team_2_name if ryder_cup else None,
+            "team_assignment": ryder_cup.team_assignment.value if ryder_cup else None,
+            "setup_mode": str(ryder_cup.setup_mode) if ryder_cup else None,
+            "team_a_captain_id": valor(ryder_cup.team_a_captain_id) if ryder_cup else None,
+            "team_b_captain_id": valor(ryder_cup.team_b_captain_id) if ryder_cup else None,
+            "team_a_vice_captain_id": (
+                valor(ryder_cup.team_a_vice_captain_id) if ryder_cup else None
+            ),
+            "team_b_vice_captain_id": (
+                valor(ryder_cup.team_b_vice_captain_id) if ryder_cup else None
+            ),
+            "stroke_play": (
+                CompetitionDTOMapper.to_stroke_play_dto(competition.stroke_play)
+                if competition.stroke_play
+                else None
+            ),
+        }
+
+    @staticmethod
+    def to_stroke_play_dto(ajustes: StrokePlaySetup) -> StrokePlaySettingsResponseDTO:
+        """Los ajustes del stroke play de una competición (#251)."""
+        return StrokePlaySettingsResponseDTO(
+            category_limits=list(ajustes.category_limits),
+            max_matchdays_per_player=ajustes.max_matchdays_per_player,
+            overall_standing=ajustes.overall_standing,
+            category_count=ajustes.category_count,
         )
 
     @staticmethod
@@ -173,12 +252,13 @@ class CompetitionDTOMapper:
             """El UUID del jugador, o None si el puesto está vacío."""
             return user_id.value if user_id else None
 
+        ryder_cup = competition.require_ryder_cup()
         return CaptaincyResponseDTO(
             id=competition.id.value,
-            team_a_captain_id=valor(competition.team_a_captain_id),
-            team_b_captain_id=valor(competition.team_b_captain_id),
-            team_a_vice_captain_id=valor(competition.team_a_vice_captain_id),
-            team_b_vice_captain_id=valor(competition.team_b_vice_captain_id),
+            team_a_captain_id=valor(ryder_cup.team_a_captain_id),
+            team_b_captain_id=valor(ryder_cup.team_b_captain_id),
+            team_a_vice_captain_id=valor(ryder_cup.team_a_vice_captain_id),
+            team_b_vice_captain_id=valor(ryder_cup.team_b_vice_captain_id),
         )
 
     @staticmethod

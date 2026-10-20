@@ -151,17 +151,16 @@ User → API (reset request) → Generate token → Send email → User clicks l
 | **Denial of Service**: API flooding (10000 requests/sec) | 🔴 HIGH | SlowAPI rate limiting (global 100/min, endpoint-specific limits) | ✅ Mitigated |
 | **Denial of Service**: Slow loris attacks | ⚠️ MEDIUM | Uvicorn timeout configuration, reverse proxy (nginx) | ✅ Mitigated |
 | **Denial of Service**: Database connection exhaustion | ⚠️ MEDIUM | SQLAlchemy pool limits, async operations | ✅ Mitigated |
-| **Elevation of Privilege**: Bypass rate limits | 🟢 LOW | Rate limits applied before authentication (IP-based) | ✅ Mitigated |
+| **Elevation of Privilege**: Bypass rate limits | 🟢 LOW | No client-written header chooses a bucket (ADR-038): session routes key on the verified user, anonymous routes on the network, login also on the email (#273) | ✅ Mitigated |
 
 ### Rate Limits by Endpoint
 
-| Endpoint | Limit | Reason |
-|----------|-------|--------|
-| `POST /auth/login` | 5/min | Prevent brute force |
-| `POST /auth/register` | 3/hour | Prevent spam accounts |
-| `POST /handicaps/update` | 5/hour | RFEG scraping rate limit |
-| `POST /competitions` | 10/hour | Prevent spam competitions |
-| **Global** | 100/min | General DoS protection |
+The full table, with who is counted for each limit, lives in [API.md, Rate Limits per Endpoint](../API.md#rate-limits-per-endpoint). In short (#273):
+
+- Routes with a session count **per user**, taken from the verified access token.
+- Anonymous routes count **per network**, which in production is one bucket for the whole app until the real client IP arrives (#466).
+- Login: 5/min per email (before the lookup), 30 failed/min per network, 60/min ceiling. Forgot-password and resend-verification: 3/hour per email.
+- Routes without a decorator have **no** limit: the 100/min default is not applied (#467).
 
 ---
 

@@ -2,7 +2,6 @@
 
 from decimal import Decimal
 
-from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -18,9 +17,7 @@ from src.modules.quick_match.application.exceptions import (
     QuickMatchNotFoundError,
 )
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
-from src.modules.quick_match.application.services.stroke_context_builder import (
-    StrokeContextBuilder,
-)
+from src.modules.quick_match.application.services.course_context import course_context_for
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -40,6 +37,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 
 TOTAL_HOLES = 18
 
@@ -51,7 +49,7 @@ class GetQuickMatchUseCase:
         self,
         uow: QuickMatchUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
-        scoring_service: ScoringService,
+        scoring_service: MatchPlayScoring,
         coverage_service: ScoringCoverageService,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         stroke_allocation_service: StrokeAllocationService | None = None,
@@ -155,13 +153,13 @@ class GetQuickMatchUseCase:
                 for p in quick_match.participants
             }
 
-        context = StrokeContextBuilder.build(golf_course)
+        context = course_context_for(golf_course)
         return self._stroke_allocation_service.allocate(
             participants=quick_match.participants,
             handicaps=self._resolve_handicaps(quick_match, users_by_id),
             tee_ratings=context.tee_ratings,
             holes_by_stroke_index=context.holes_by_stroke_index,
-            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
+            holes_by_stroke_index_by_tee=context.holes_by_tee,
             match_format=quick_match.match_format,
             allowance_percentage=quick_match.get_effective_allowance(),
             play_mode=quick_match.play_mode,
@@ -172,18 +170,14 @@ class GetQuickMatchUseCase:
         """
         Handicap Index efectivo de cada participante.
 
-        Misma precedencia que el mapper de presentacion: el override manual del
-        creador gana al del perfil, y un invitado solo tiene el manual.
+        La decide el participante (`effective_handicap`), igual que en el mapper
+        de presentación: el fijado al empezar (BE #514) o, en partidas de antes,
+        el manual del invitado, el personalizado o el del perfil.
         """
         handicaps: dict[ParticipantId, Decimal | None] = {}
         for p in quick_match.participants:
-            if p.is_guest:
-                raw = p.handicap
-            elif p.custom_handicap is not None:
-                raw = p.custom_handicap
-            else:
-                user = users_by_id.get(p.user_id)
-                raw = user.handicap.value if user and user.handicap else None
+            user = users_by_id.get(p.user_id) if p.user_id else None
+            raw = p.effective_handicap(user.handicap.value if user and user.handicap else None)
             handicaps[p.participant_id] = None if raw is None else Decimal(str(raw))
         return handicaps
 
@@ -284,7 +278,7 @@ class GetQuickMatchUseCase:
         Score neto del hoyo, o None si el jugador recogio la bola.
 
         La raya se propaga tal cual en vez de convertirse en un numero: asi
-        `ScoringService.calculate_hole_winner` la ve como bando sin bola y le
+        `MatchPlayScoring.calculate_hole_winner` la ve como bando sin bola y le
         da el hoyo al rival, que es la regla de match play. Ese servicio ya
         trabaja con `list[int | None]` porque competicion lo necesitaba, asi
         que aqui no hay nada que anadirle.

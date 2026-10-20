@@ -17,6 +17,7 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidCredentialsError,
     UserNotFoundError,
 )
+from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -97,6 +98,49 @@ class TestUpdateSecurityUseCase:
         # Verificar que el password no cambió
         updated_user = await uow.users.find_by_id(UserId(user_id))
         assert updated_user.verify_password("V@l1dP@ss123!")
+
+    async def test_reusing_a_recent_password_carries_its_code(self, uow, existing_user):
+        """
+        Given un usuario que ya ha cambiado dos veces su contraseña
+        When intenta volver a una de las recientes
+        Then InvalidPasswordError con código PASSWORD_REUSED (BE #519): el cliente
+        lo reconocía buscando un texto en inglés
+        """
+        use_case = UpdateSecurityUseCase(uow)
+        user_id = str(existing_user.id.value)
+        await use_case.execute(
+            user_id,
+            UpdateSecurityRequestDTO(
+                current_password="V@l1dP@ss123!",
+                new_email=None,
+                new_password="N3wS3cur3P@ss!",
+                confirm_password="N3wS3cur3P@ss!",
+            ),
+        )
+
+        # El historial guarda la NUEVA de cada cambio: dos cambios y volver a la primera
+        await use_case.execute(
+            user_id,
+            UpdateSecurityRequestDTO(
+                current_password="N3wS3cur3P@ss!",
+                new_email=None,
+                new_password="0tr4S3gur4P@ss!",
+                confirm_password="0tr4S3gur4P@ss!",
+            ),
+        )
+
+        with pytest.raises(InvalidPasswordError) as error:
+            await use_case.execute(
+                user_id,
+                UpdateSecurityRequestDTO(
+                    current_password="0tr4S3gur4P@ss!",
+                    new_email=None,
+                    new_password="N3wS3cur3P@ss!",
+                    confirm_password="N3wS3cur3P@ss!",
+                ),
+            )
+
+        assert error.value.error_code == "PASSWORD_REUSED"
 
     async def test_update_password_only(self, uow, existing_user):
         """Debe actualizar solo el password cuando se proporciona."""

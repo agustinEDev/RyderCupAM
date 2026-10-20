@@ -4,17 +4,20 @@ Match Entity - Partido de una sesión.
 Representa un partido individual dentro de una sesión de competición.
 """
 
+from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class Match:
@@ -109,6 +112,28 @@ class Match:
         if match_number < 1:
             raise ValueError(f"match_number must be >= 1, got {match_number}")
 
+        handicap_diff, strokes_given_to_team = cls._ventaja(team_a_players, team_b_players)
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        return cls(
+            id=MatchId.generate(),
+            round_id=round_id,
+            match_number=match_number,
+            team_a_players=tuple(team_a_players),
+            team_b_players=tuple(team_b_players),
+            status=MatchStatus.SCHEDULED,
+            handicap_strokes_given=handicap_diff,
+            strokes_given_to_team=strokes_given_to_team,
+            result=None,
+            created_at=now,
+            updated_at=now,
+        )
+
+    @staticmethod
+    def _ventaja(
+        team_a_players: Sequence[MatchPlayer], team_b_players: Sequence[MatchPlayer]
+    ) -> tuple[int, str]:
+        """Golpes de ventaja y a qué equipo se dan ("" si a ninguno)."""
         # Golpes de ventaja: se cuentan los que de verdad se reparten en la
         # vuelta, no se suman los playing_handicap.
         #
@@ -132,26 +157,10 @@ class Match:
 
         handicap_diff = abs(team_a_handicap - team_b_handicap)
         if team_a_handicap > team_b_handicap:
-            strokes_given_to_team = "A"
-        elif team_b_handicap > team_a_handicap:
-            strokes_given_to_team = "B"
-        else:
-            strokes_given_to_team = ""
-
-        now = datetime.now(UTC).replace(tzinfo=None)
-        return cls(
-            id=MatchId.generate(),
-            round_id=round_id,
-            match_number=match_number,
-            team_a_players=tuple(team_a_players),
-            team_b_players=tuple(team_b_players),
-            status=MatchStatus.SCHEDULED,
-            handicap_strokes_given=handicap_diff,
-            strokes_given_to_team=strokes_given_to_team,
-            result=None,
-            created_at=now,
-            updated_at=now,
-        )
+            return handicap_diff, "A"
+        if team_b_handicap > team_a_handicap:
+            return handicap_diff, "B"
+        return handicap_diff, ""
 
     @classmethod
     def reconstruct(
@@ -314,7 +323,56 @@ class Match:
         self._decided_result = result
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def completar_genero_de_las_barras(
+        self, genero_de: Callable[[MatchPlayer], Gender | None]
+    ) -> int:
+        """
+        Pone el género de su barra a quien lo tiene vacío (RyderCupWeb #880).
+
+        Las Ryder SCRATCH guardaban a todos sin él: veían la tarjeta de
+        referencia en vez de la de su barra, y el mapa del hoyo no sabía de qué
+        barra era cada muestra. Se rellena sin regenerar el partido: no cambia
+        nada más (color, golpes, resultados), y quien ya lo tiene se queda con
+        el suyo, así que repetirlo no hace nada. Un partido terminado no se
+        toca: se jugó con esa tarjeta (Agustín, 16 oct).
+
+        Args:
+            genero_de: El género que da su barra a ese jugador, o None si no tiene
+
+        Returns:
+            Cuántos jugadores se han completado
+        """
+        if self.is_finished():
+            return 0
+        cambiados = 0
+
+        def completar(jugador: MatchPlayer) -> MatchPlayer:
+            nonlocal cambiados
+            if jugador.tee_gender is not None:
+                return jugador
+            genero = genero_de(jugador)
+            if genero is None:
+                return jugador
+            cambiados += 1
+            return replace(jugador, tee_gender=genero)
+
+        self._team_a_players = tuple(completar(p) for p in self._team_a_players)
+        self._team_b_players = tuple(completar(p) for p in self._team_b_players)
+        if cambiados:
+            self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+        return cambiados
+
     # ==================== Query Methods ====================
+
+    def jugadores_por_completar(self, genero_de: Callable[[MatchPlayer], Gender | None]) -> int:
+        """Cuántos completaría `completar_genero_de_las_barras`, sin tocar nada."""
+        if self.is_finished():
+            return 0
+        return sum(
+            1
+            for p in (*self._team_a_players, *self._team_b_players)
+            if p.tee_gender is None and genero_de(p) is not None
+        )
 
     def is_finished(self) -> bool:
         """Retorna True si el partido ha terminado."""
@@ -378,6 +436,26 @@ class Match:
             if p.user_id == user_id:
                 return p
         return None
+
+    def may_mark(self, scorer_id: UserId, marked_id: UserId) -> bool:
+        """
+        Si `scorer_id` puede apuntarle los golpes a `marked_id` como marcador (BE #520).
+
+        Solo al jugador que le asignó el sorteo de marcadores. Así nadie se
+        marca a sí mismo —con eso uno validaba su propio hoyo, o pisaba lo que le
+        había apuntado su marcador de verdad—: `MarkerAssignment` ya prohíbe que
+        alguien se tenga asignado. Un partido sin asignaciones (datos viejos) se
+        queda con la regla de fondo del sorteo, el marcador es siempre del
+        equipo contrario, que deja fuera a uno mismo y al compañero.
+        """
+        if self._marker_assignments:
+            return any(
+                assignment.scorer_user_id == scorer_id and assignment.marks_user_id == marked_id
+                for assignment in self._marker_assignments
+            )
+        scorer_team = self.get_player_team(scorer_id)
+        marked_team = self.get_player_team(marked_id)
+        return scorer_team is not None and marked_team is not None and scorer_team != marked_team
 
     def get_all_player_ids(self) -> list[UserId]:
         """Retorna los IDs de todos los jugadores del partido."""

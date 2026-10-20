@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.quick_match.application.dto.quick_match_dto import AddParticipantRequestDTO
 from src.modules.quick_match.application.exceptions import (
     FriendUserNotFoundError,
@@ -18,6 +17,7 @@ from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.quick_match.conftest import (
     create_accepted_friendship,
     create_golf_course,
@@ -89,6 +89,33 @@ class TestAddFriendToQuickMatchUseCase:
                     quick_match_id=qm.id.value,
                     requester_id=other_participant.id.value,
                     friend_user_id=friend.id.value,
+                )
+            )
+
+    async def test_non_creator_with_an_invalid_tee_still_gets_not_creator(
+        self, qm_uow, golf_course_uow, social_uow, user_uow
+    ):
+        """
+        Given a non-creator who picks a tee the course does not have
+        When they try to add a friend
+        Then it is the usual 403, not a tee error: the tee check runs before
+        the lock (`/code-review`) but only for the creator
+        """
+        creator = await create_user(user_uow, "creator3b@test.com")
+        other_participant = await create_user(user_uow, "other3b@test.com")
+        friend = await create_user(user_uow, "friend3b@test.com")
+        await create_accepted_friendship(social_uow, other_participant.id, friend.id)
+        qm = await _create_pending_match(qm_uow, golf_course_uow, creator)
+
+        use_case = AddFriendToQuickMatchUseCase(qm_uow, social_uow, user_uow, golf_course_uow)
+        with pytest.raises(NotQuickMatchCreatorError):
+            await use_case.execute(
+                AddParticipantRequestDTO(
+                    quick_match_id=qm.id.value,
+                    requester_id=other_participant.id.value,
+                    friend_user_id=friend.id.value,
+                    tee_color="RED",
+                    tee_gender="FEMALE",
                 )
             )
 

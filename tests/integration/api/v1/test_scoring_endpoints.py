@@ -180,7 +180,27 @@ async def setup_match_in_progress(client: AsyncClient, *, start_match: bool = Tr
         "competition_id": comp_id,
         "match_id": match_id,
         "round_id": round_id,
+        "golf_course_id": gc_id,
     }
+
+
+class TestTarjetaDeLaRyder:
+    """FE #846: la próxima salida de un jugador de la Ryder, con los partidos de la BD."""
+
+    @pytest.mark.asyncio
+    async def test_a_player_with_a_match_in_play_has_its_session_without_time(
+        self, client: AsyncClient
+    ):
+        datos = await setup_match_in_progress(client)
+        set_auth_cookies(client, datos["player_a"]["cookies"])
+
+        ficha = await client.get(f"/api/v1/competitions/{datos['competition_id']}")
+
+        assert ficha.status_code == 200, ficha.text
+        salida = ficha.json()["my_next_session"]
+        assert salida["session_type"] == "MORNING"
+        assert salida["tee_time"] is None
+        assert ficha.json()["playing_days"] is None
 
 
 # ======================================================================================
@@ -202,10 +222,18 @@ class TestGetScoringView:
         assert response.status_code == 200
         data = response.json()
         assert data["match_id"] == ctx["match_id"]
+        # El campo de la ronda, para pedir su mapa de hoyos (BE #532)
+        assert data["round_info"]["golf_course_id"] == ctx["golf_course_id"]
+        # Y su país (el de prueba es de España): el mapa solo tiene imagen ahí (19 oct)
+        assert data["round_info"]["golf_course_country_code"] == "ES"
         assert data["match_status"] == "IN_PROGRESS"
         assert data["match_format"] == "SINGLES"
         assert data["is_decided"] is False
         assert len(data["players"]) == 2
+        # El sexo de la barra de cada jugador, para las muestras del mapa (#880)
+        # También en SCRATCH, que es esta competición de prueba: hombres en una
+        # barra de hombre
+        assert [p["tee_gender"] for p in data["players"]] == ["MALE", "MALE"]
         assert len(data["holes"]) == 18
         assert len(data["scores"]) == 18
         assert len(data["marker_assignments"]) > 0
@@ -275,6 +303,34 @@ class TestSubmitHoleScore:
         assert b_score["marker_submitted"] is True
         # Player B hasn't submitted their own score yet
         assert b_score["own_submitted"] is False
+
+    @pytest.mark.asyncio
+    async def test_marking_yourself_is_a_403_with_its_code_and_saves_nothing(
+        self, client: AsyncClient
+    ):
+        """
+        Given un singles en juego con los marcadores sorteados
+        When el jugador A se pone a sí mismo como marcado
+        Then 403 con `error_code` NOT_YOUR_MARKED_PLAYER en la raíz y su hoyo sin tocar
+
+        BE #520: antes entraba, y su hoyo quedaba validado por él mismo.
+        """
+        ctx = await setup_match_in_progress(client)
+        player_a_id = ctx["player_a"]["user"]["id"]
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 3, "marked_player_id": player_a_id, "marked_score": 3},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error_code"] == "NOT_YOUR_MARKED_PLAYER"
+        view = await client.get(f"/api/v1/competitions/matches/{ctx['match_id']}/scoring-view")
+        hole_1 = next(s for s in view.json()["scores"] if s["hole_number"] == 1)
+        a_score = next(ps for ps in hole_1["player_scores"] if ps["user_id"] == player_a_id)
+        assert a_score["own_score"] is None
+        assert a_score["marker_score"] is None
 
     @pytest.mark.asyncio
     async def test_submit_own_score_only_leaves_the_marked_player_untouched(

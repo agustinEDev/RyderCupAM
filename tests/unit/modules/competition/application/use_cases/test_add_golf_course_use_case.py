@@ -24,8 +24,6 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -46,6 +44,8 @@ from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio
 pytestmark = pytest.mark.asyncio

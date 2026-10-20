@@ -10,12 +10,19 @@ import uuid
 from typing import Any
 
 import sqlalchemy.types
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Table
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    inspect,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import CHAR
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
@@ -29,9 +36,11 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from src.shared.infrastructure.persistence.sqlalchemy.base import mapper_registry, metadata
 
 # ============================================================================
@@ -221,7 +230,9 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
         "custom_handicap": number | null,       # solo registrados (override, opcional)
         "team": "A" | "B" | null,
         "tee_color": "YELLOW" | ... | null,
-        "tee_gender": "MALE" | "FEMALE" | null
+        "tee_gender": "MALE" | "FEMALE" | null,
+        "starting_handicap": number | null,     # índice fijado al empezar (BE #514)
+        "handicap_frozen": bool                 # ausente en partidas de antes = sin fijar
     }
     """
 
@@ -229,6 +240,7 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
     cache_ok = True
 
     def process_bind_param(self, value: list | None, dialect: Any) -> list | None:
+        """Participantes a JSONB, con el índice fijado al empezar."""
         if value is None:
             return None
         return [
@@ -242,11 +254,14 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                 "team": p.team,
                 "tee_color": p.tee_color.value if p.tee_color else None,
                 "tee_gender": p.tee_gender.value if p.tee_gender else None,
+                "starting_handicap": p.starting_handicap,
+                "handicap_frozen": p.handicap_frozen,
             }
             for p in value
         ]
 
     def process_result_value(self, value: list | None, dialect: Any) -> list | None:
+        """JSONB a participantes; sin las claves del fijado, la partida es de antes y no está fijada."""
         if value is None:
             return None
         participants = []
@@ -262,6 +277,8 @@ class QuickMatchParticipantsJsonType(sqlalchemy.types.TypeDecorator[list]):
                     team=p.get("team"),
                     tee_color=(TeeColor(p["tee_color"]) if p.get("tee_color") else None),
                     tee_gender=Gender(p["tee_gender"]) if p.get("tee_gender") else None,
+                    starting_handicap=p.get("starting_handicap"),
+                    handicap_frozen=bool(p.get("handicap_frozen", False)),
                 )
             )
         return participants
@@ -363,7 +380,7 @@ def start_quick_match_mappers() -> None:
 
     Es idempotente: puede llamarse multiples veces sin efectos adversos.
     """
-    if not any(mapper.class_ is QuickMatch for mapper in mapper_registry.mappers):
+    if inspect(QuickMatch, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             QuickMatch,
             quick_matches_table,
@@ -388,7 +405,7 @@ def start_quick_match_mappers() -> None:
             },
         )
 
-    if not any(mapper.class_ is QuickMatchHoleScore for mapper in mapper_registry.mappers):
+    if inspect(QuickMatchHoleScore, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             QuickMatchHoleScore,
             quick_match_hole_scores_table,

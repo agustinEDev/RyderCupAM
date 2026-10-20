@@ -26,6 +26,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
     event,
+    inspect,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -136,14 +137,18 @@ golf_courses_table = Table(
     Column("country_code", CountryCodeType, ForeignKey("countries.code"), nullable=False),
     Column(
         "course_type",
-        SQLEnum(CourseType, name="course_type_enum", create_type=False),
+        SQLEnum(CourseType, name="course_type_enum"),
+        # Sin create_type=False (30 sep 2026): con SQLAlchemy 2.0 el Enum genérico lo
+        # ignoraba y metadata.create_all de los tests creaba el tipo; 2.1 lo respeta y
+        # los tests fallaban con 'type course_type_enum does not exist'. En producción
+        # los tipos los crea Alembic y la app nunca llama a create_all: no cambia nada.
         nullable=False,
         comment="Tipo de campo (STANDARD_18, etc.)",
     ),
     Column("creator_id", UserIdType, ForeignKey("users.id"), nullable=False),
     Column(
         "approval_status",
-        SQLEnum(ApprovalStatus, name="approval_status_enum", create_type=False),
+        SQLEnum(ApprovalStatus, name="approval_status_enum"),
         nullable=False,
         default=ApprovalStatus.PENDING_APPROVAL,
         comment="Estado de aprobación (PENDING_APPROVAL, APPROVED, REJECTED)",
@@ -189,7 +194,7 @@ golf_courses_table = Table(
     # importado sin comparar nombres, que se rompe en cuanto alguien renombra.
     Column(
         "source",
-        SQLEnum(CourseSource, name="course_source_enum", create_type=False),
+        SQLEnum(CourseSource, name="course_source_enum"),
         nullable=False,
         server_default=CourseSource.MANUAL.value,
         comment="Origen de los datos (MANUAL, RFEG, ...)",
@@ -274,7 +279,7 @@ golf_course_tees_table = Table(
     ),
     Column(
         "color",
-        SQLEnum(TeeColor, name="tee_color_enum", create_type=False),
+        SQLEnum(TeeColor, name="tee_color_enum"),
         nullable=False,
         server_default=TeeColor.OTHER.value,
         comment="Color de las barras. Independiente de la categoría",
@@ -371,7 +376,7 @@ def start_golf_course_mappers():
     - Hole value object → golf_course_holes table
     """
     # Mapear Hole (value object collection) — cuelga de la salida
-    if Hole not in mapper_registry.mappers:
+    if inspect(Hole, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Hole,
             golf_course_tee_holes_table,
@@ -382,7 +387,7 @@ def start_golf_course_mappers():
         )
 
     # Mapear Tee (value object collection)
-    if Tee not in mapper_registry.mappers:
+    if inspect(Tee, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Tee,
             golf_course_tees_table,
@@ -399,7 +404,7 @@ def start_golf_course_mappers():
         )
 
     # Mapear GolfCourse (aggregate root)
-    if GolfCourse not in mapper_registry.mappers:
+    if inspect(GolfCourse, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             GolfCourse,
             golf_courses_table,
@@ -457,3 +462,17 @@ def start_golf_course_mappers():
             # evento de carga las relaciones eager aún no están garantizadas.
             if not hasattr(target, "_holes"):
                 target._holes = []
+
+    # El mapa de hoyos del recorrido (BE #532) vive en su propio módulo; se
+    # importa aquí dentro porque ese módulo importa los TypeDecorators de este
+    from .hole_map_mapper import start_hole_map_mappers  # noqa: PLC0415 - Circular import
+
+    start_hole_map_mappers()
+
+    # Las muestras anónimas de hoyo, los reportes y las líneas guardadas no
+    # mapean entidad: basta con que sus tablas entren en el metadata
+    from . import (  # noqa: F401, PLC0415 - Circular import
+        hole_report_mapper,
+        hole_sample_mapper,
+        saved_hole_mapper,
+    )

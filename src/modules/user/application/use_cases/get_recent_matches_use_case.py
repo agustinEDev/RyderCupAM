@@ -9,15 +9,14 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.scoring_service import ScoringService
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.quick_match.application.services.stroke_context_builder import (
-    StrokeContextBuilder,
+from src.modules.quick_match.application.services.course_context import (
+    course_context_for,
+    own_playing_handicap,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
@@ -25,11 +24,6 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 )
 from src.modules.quick_match.domain.services.hole_completion_service import (
     hole_is_complete,
-)
-from src.modules.quick_match.domain.services.stableford_calculator import (
-    NET_DOUBLE_BOGEY_OVER_PAR,
-    HoleSetup,
-    StablefordCalculator,
 )
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
@@ -39,16 +33,27 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.application.dto.player_stats_dto import (
     RecentMatchDTO,
     RecentMatchesResponseDTO,
+)
+from src.modules.user.application.services.tournament_round import (
+    is_scratch,
+    tournament_personal_handicap,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
+from src.shared.domain.services.stroke_play_scoring import (
+    NET_DOUBLE_BOGEY_OVER_PAR,
+    HoleSetup,
+    StrokePlayScoring,
+)
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 DEFAULT_LIMIT = 10
 
@@ -83,6 +88,8 @@ class _CompetitionMatchRaw:
     # La tarjeta del jugador, para poder dar sus golpes y sus puntos: el
     # partido guarda quién ganó, no cómo jugó cada uno
     hole_scores: list
+    # Una competición scratch: la vuelta propia va sin golpes (BE #517)
+    scratch: bool = False
 
 
 class GetRecentMatchesUseCase:
@@ -105,16 +112,16 @@ class GetRecentMatchesUseCase:
         competition_uow: CompetitionUnitOfWorkInterface,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
-        stableford_calculator: StablefordCalculator | None = None,
-        scoring_service: ScoringService | None = None,
+        stroke_play_scoring: StrokePlayScoring | None = None,
+        scoring_service: MatchPlayScoring | None = None,
         stroke_allocation_service: StrokeAllocationService | None = None,
     ):
         self._user_uow = user_uow
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
-        self._calculator = stableford_calculator or StablefordCalculator()
-        self._scoring_service = scoring_service or ScoringService()
+        self._calculator = stroke_play_scoring or StrokePlayScoring()
+        self._scoring_service = scoring_service or MatchPlayScoring()
         self._stroke_allocation_service = stroke_allocation_service or StrokeAllocationService()
 
     async def execute(
@@ -205,6 +212,7 @@ class GetRecentMatchesUseCase:
         raws: list[_CompetitionMatchRaw] = []
         rounds_cache: dict = {}
         competition_names: dict = {}
+        scratch_competitions: set = set()
 
         async with self._competition_uow:
             matches = await self._competition_uow.matches.find_completed_for_player(
@@ -227,12 +235,15 @@ class GetRecentMatchesUseCase:
                     competition_names[round_.competition_id] = (
                         competition.name.value if competition else None
                     )
+                    if is_scratch(competition):
+                        scratch_competitions.add(round_.competition_id)
 
                 raws.append(
                     _CompetitionMatchRaw(
                         match=match,
                         round_=round_,
                         tournament_name=competition_names[round_.competition_id],
+                        scratch=round_.competition_id in scratch_competitions,
                         hole_scores=await self._competition_uow.hole_scores.find_by_match_and_player(
                             match.id, user_id
                         ),
@@ -383,7 +394,19 @@ class GetRecentMatchesUseCase:
             if own_player is not None
             else course.reference_card
         )
-        total_strokes, holes_played, points = self._scorecard_totals(raw, hole_card)
+        # Los puntos de su vuelta propia, como en partida rápida: con su índice
+        # (el que guardó el partido, o el del perfil) en su barra al 100 %, no
+        # con la diferencia con el rival que reparte el partido (BE #517)
+        user = users_by_id.get(user_id)
+        playing_handicap = tournament_personal_handicap(
+            course,
+            own_player,
+            user.handicap.value if user and user.handicap else None,
+            scratch=raw.scratch,
+        )
+        total_strokes, holes_played, points = self._scorecard_totals(
+            raw, hole_card, playing_handicap
+        )
         # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
         # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
         # Los golpes del bando sí se enseñan, y son los mismos para los dos
@@ -431,16 +454,15 @@ class GetRecentMatchesUseCase:
         if course is None:
             return {}
 
-        context = StrokeContextBuilder.build(course)
+        context = course_context_for(course)
         handicaps = {}
         for participant in raw.match.participants:
-            if participant.is_guest:
-                value = participant.handicap
-            elif participant.custom_handicap is not None:
-                value = participant.custom_handicap
-            else:
-                user = users_by_id.get(participant.user_id)
-                value = user.handicap.value if user and user.handicap else None
+            # Lo decide el participante: el fijado al empezar (BE #514) o, en
+            # partidas de antes, el manual, el personalizado o el del perfil
+            user = users_by_id.get(participant.user_id) if participant.user_id else None
+            value = participant.effective_handicap(
+                user.handicap.value if user and user.handicap else None
+            )
             handicaps[participant.participant_id] = None if value is None else Decimal(str(value))
 
         return self._stroke_allocation_service.allocate(
@@ -448,7 +470,7 @@ class GetRecentMatchesUseCase:
             handicaps=handicaps,
             tee_ratings=context.tee_ratings,
             holes_by_stroke_index=context.holes_by_stroke_index,
-            holes_by_stroke_index_by_tee=context.holes_by_stroke_index_by_tee,
+            holes_by_stroke_index_by_tee=context.holes_by_tee,
             match_format=raw.match.match_format,
             allowance_percentage=raw.match.get_effective_allowance(),
             play_mode=raw.match.play_mode,
@@ -545,7 +567,7 @@ class GetRecentMatchesUseCase:
 
         Normalmente hay una sola: el frontend guarda la bola a nombre del primer
         jugador del bando, la anote quien la anote. Si llegan dos se toma la
-        MENOR, que es la que usa `ScoringService._best_ball` para adjudicar el
+        MENOR, que es la que usa `MatchPlayScoring._best_ball` para adjudicar el
         hoyo: contar aquí una y adjudicar con la otra dejaría la partida con
         unos golpes que no explican su resultado. Lo que nunca se hace es
         sumarlas, porque comparten bola y eso doblaría la vuelta.
@@ -582,7 +604,7 @@ class GetRecentMatchesUseCase:
             if not anotaciones:
                 continue
 
-            # El menor de los números, que es lo que hace `ScoringService._best_ball`
+            # El menor de los números, que es lo que hace `MatchPlayScoring._best_ball`
             # al decidir el hoyo. Normalmente solo hay uno —la bola se guarda a
             # nombre del primero del bando—, pero si llegan dos que no coinciden,
             # contar aquí uno y adjudicar el hoyo con el otro dejaría la misma
@@ -646,27 +668,32 @@ class GetRecentMatchesUseCase:
             HoleSetup(hole.number, hole.par, hole.stroke_index)
             for hole in course.hole_card_for(raw.participant.tee_color, raw.participant.tee_gender)
         ]
-        # En una partida scratch nadie recibe golpes, tampoco para los puntos
-        # Stableford ni el resultado contra el par: sin esto, una vuelta jugada a
-        # bruto se apuntaba como si le hubieran dado golpes.
-        handicap = (
-            self._effective_handicap(raw.participant, profile_handicap)
-            if raw.match.uses_handicap()
-            else None
+        # El hándicap de juego de su vuelta propia, con su barra como en la
+        # partida: con el índice tal cual el panel daba 28 puntos a una vuelta
+        # de 32 (BE #513). En una partida scratch sale 0, sin golpes
+        playing_handicap = own_playing_handicap(
+            raw.match,
+            raw.participant,
+            raw.participant.effective_handicap(profile_handicap),
+            course,
         )
+        # Sin barra ni allowance: ya van dentro del hándicap de juego, y el
+        # calculador sin `tee_rating` reparte la cifra que recibe tal cual
         return self._calculator.compute_participant_totals(
-            handicap=handicap,
+            handicap=playing_handicap,
             holes=holes,
             scores_by_hole=scores_by_hole,
-            allowance_percentage=raw.match.get_effective_allowance(),
         )
 
-    def _scorecard_totals(self, raw: _CompetitionMatchRaw, hole_card: list) -> tuple:
+    def _scorecard_totals(
+        self, raw: _CompetitionMatchRaw, hole_card: list, playing_handicap: int | None
+    ) -> tuple:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
 
-        Los golpes recibidos ya vienen resueltos por hoyo desde que se generó el
-        partido, así que no hay que repartirlos otra vez. Se usa `own_score` y
+        Los puntos con los golpes de su vuelta propia sobre el índice de su
+        barra, no con los guardados en el hoyo, que son los del partido (BE
+        #517). Se usa `own_score` y
         no `net_score` porque este último solo existe cuando el marcador validó
         el hoyo, y una tarjeta legítima sin validar cerrar se quedaría sin
         cifras que enseñar.
@@ -675,6 +702,8 @@ class GetRecentMatchesUseCase:
             return None, None, None
 
         pars = {hole.number: hole.par for hole in hole_card}
+        stroke_index = {hole.number: hole.stroke_index for hole in hole_card}
+        basis = None if playing_handicap is None else Decimal(playing_handicap)
         scored = [
             hole_score
             for hole_score in raw.hole_scores
@@ -688,7 +717,7 @@ class GetRecentMatchesUseCase:
             self._calculator.hole_points(
                 hole_score.own_score,
                 pars[hole_score.hole_number],
-                hole_score.strokes_received,
+                self._calculator.allocate_strokes(basis, stroke_index[hole_score.hole_number]),
             )
             for hole_score in scored
         )
@@ -757,12 +786,3 @@ class GetRecentMatchesUseCase:
         if participant.is_guest:
             return f"{participant.first_name} {participant.last_name}"
         return cls._user_name(participant.user_id, users_by_id)
-
-    @staticmethod
-    def _effective_handicap(
-        participant: QuickMatchParticipant, profile_handicap: float | None
-    ) -> float | None:
-        """Override manual del creador si lo hay, y si no el hándicap del perfil."""
-        if participant.custom_handicap is not None:
-            return participant.custom_handicap
-        return profile_handicap

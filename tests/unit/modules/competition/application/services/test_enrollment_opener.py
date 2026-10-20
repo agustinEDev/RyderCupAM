@@ -12,11 +12,11 @@ from src.modules.competition.domain.value_objects.competition_name import Compet
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 MADRID = "Europe/Madrid"
 

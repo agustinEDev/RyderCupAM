@@ -12,6 +12,7 @@ from src.modules.competition.application.dto.competition_dto import (
     UpdateCompetitionResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -26,10 +27,13 @@ from src.modules.competition.domain.value_objects.competition_name import (
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
+from src.modules.golf_course.domain.repositories.golf_course_repository import (
+    IGolfCourseRepository,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # En el orden del día, para nombrarlas como se juegan
 _ORDEN_DE_FRANJA = {SessionType.MORNING: 0, SessionType.AFTERNOON: 1, SessionType.EVENING: 2}
@@ -75,16 +79,33 @@ class UpdateCompetitionUseCase:
     5. Persistir cambios
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, location_builder: LocationBuilder):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        location_builder: LocationBuilder,
+        golf_course_repository: IGolfCourseRepository,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
             location_builder: Domain Service para construir Location
+            golf_course_repository: Campos de golf (otro módulo): al cambiar la
+                ubicación, la entidad necesita el país de los suyos
         """
         self._uow = uow
         self._location_builder = location_builder
+        self._golf_course_repo = golf_course_repository
+
+    async def _paises_de_los_campos(self, competition) -> list:
+        """El país de cada campo de golf de la competición."""
+        paises = []
+        for asociacion in competition.golf_courses:
+            campo = await self._golf_course_repo.find_by_id(asociacion.golf_course_id)
+            if campo is not None:
+                paises.append(campo.country_code)
+        return paises
 
     @staticmethod
     def _campos_de_localizacion(request: UpdateCompetitionRequestDTO) -> set[str]:
@@ -194,7 +215,9 @@ class UpdateCompetitionUseCase:
         """
         async with self._uow:
             # 1. Buscar la competición
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # Bloqueada: mover las fechas no puede cruzarse con un cambio de las
+            # jornadas por jugador (#251)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(
                     f"No existe competición con ID {competition_id.value}"
@@ -236,7 +259,21 @@ class UpdateCompetitionUseCase:
                     )
 
             # 4. Construir los Value Objects y obtener valores opcionales
-            name = CompetitionName(request.name) if request.name else None
+            # El mismo de antes no se revalida: uno guardado con las reglas antiguas
+            # no impide editar el resto (la app manda siempre el nombre, revisor)
+            # Con los espacios ya normalizados: «A » sigue siendo «A» (CodeRabbit)
+            mismo = (
+                request.name is not None
+                and " ".join(request.name.split()) == competition.name.value
+            )
+            name = CompetitionName(request.name) if request.name and not mismo else None
+            # Renombrar a un nombre que ya tiene es repetirlo, sin mirar mayúsculas (#540)
+            if name is not None and await self._uow.competitions.exists_with_name(
+                name, competition.creator_id, except_id=competition.id
+            ):
+                raise CompetitionAlreadyExistsError(
+                    f"Ya existe una competición con el nombre '{name}'"
+                )
 
             dates = None
             if request.start_date and request.end_date:
@@ -255,8 +292,12 @@ class UpdateCompetitionUseCase:
             # cliente que serializa el formulario entero con sus huecos.
             location = self._campos_de_localizacion(request)
             nueva_location = None
+            paises_de_los_campos = None
             if location:
                 nueva_location = await self._construir_location(request, competition)
+                # Los campos son otro agregado: sus países los trae el caso de uso
+                # y la entidad decide si la ubicación nueva los deja fuera
+                paises_de_los_campos = await self._paises_de_los_campos(competition)
 
             play_mode = PlayMode(request.play_mode) if request.play_mode else None
 
@@ -276,6 +317,7 @@ class UpdateCompetitionUseCase:
                 name=name,
                 dates=dates,
                 location=nueva_location,
+                golf_course_countries=paises_de_los_campos,
                 play_mode=play_mode,
                 max_players=request.max_players,
                 team_assignment=team_assignment,

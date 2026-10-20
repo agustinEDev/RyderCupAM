@@ -24,13 +24,13 @@ from src.modules.competition.domain.value_objects.competition_name import Compet
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = pytest.mark.asyncio
 
@@ -159,6 +159,31 @@ class TestAssignTeamsUseCase:
         assert len(response.team_b_player_ids) == 2
         assert response.mode == "AUTOMATIC"
         assert response.competition_id == competition.id.value
+
+    async def test_assigns_every_approved_player_past_one_hundred(
+        self,
+        uow: InMemoryUnitOfWork,
+        creator_id: UserId,
+        user_repo: AsyncMock,
+    ):
+        """
+        Given 150 aprobados (BE #314)
+        When se reparten los equipos automáticamente
+        Then los 150 quedan en un equipo: con el límite oculto de 100, los demás se
+        quedaban sin equipo
+        """
+        competition = await self._create_closed_competition(uow, creator_id)
+        for i in range(150):
+            await self._add_approved_enrollment(
+                uow, competition, custom_handicap=Decimal(str(i % 30))
+            )
+
+        response = await AssignTeamsUseCase(uow=uow, user_repository=user_repo).execute(
+            AssignTeamsRequestDTO(competition_id=competition.id.value, mode="AUTOMATIC"),
+            creator_id,
+        )
+
+        assert len(response.team_a_player_ids) + len(response.team_b_player_ids) == 150
 
     async def test_should_assign_teams_manually(
         self,

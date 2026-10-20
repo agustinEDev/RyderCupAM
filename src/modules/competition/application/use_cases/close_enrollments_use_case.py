@@ -13,6 +13,14 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
+    LanzadorDeActualizaciones,
+)
+from src.modules.competition.application.services.actualizaciones_de_handicaps import (
+    ActualizacionesDeHandicaps,
+)
+from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
+from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
 )
@@ -20,6 +28,10 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.user.domain.repositories.user_repository_interface import (
+    UserRepositoryInterface,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -44,7 +56,12 @@ class CloseEnrollmentsUseCase:
     6. Commit de la transacción
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface | None = None,
+        lanzador: LanzadorDeActualizaciones | None = None,
+    ):
         """
         Constructor.
 
@@ -52,6 +69,10 @@ class CloseEnrollmentsUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # Para el hándicap de cada inscrito en un stroke play (#251)
+        self._users = user_repository
+        # El refresco con la RFEG en segundo plano; sin él, no hay (fuera de producción)
+        self._actualizaciones = ActualizacionesDeHandicaps(uow, lanzador)
 
     async def execute(
         self, request: CloseEnrollmentsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -70,6 +91,8 @@ class CloseEnrollmentsUseCase:
             CompetitionNotFoundError: Si la competición no existe
             NotCompetitionCreatorError: Si el usuario no es el creador
             CompetitionStateError: Si la transición de estado no es válida
+            PlayersWithoutHandicapError: Si en un stroke play falta el de alguien
+                (no se cierra)
         """
         async with self._uow:
             # 1. Buscar la competición
@@ -90,14 +113,42 @@ class CloseEnrollmentsUseCase:
             # 3. Contar inscripciones aprobadas
             total_enrollments = await self._uow.enrollments.count_approved(competition_id)
 
-            # 4. Cerrar inscripciones (la entidad valida la transición)
+            # 4. En un Stableford o un Medal se fija el hándicap de cada uno, el de
+            #    todo el torneo (7 oct 2026, como la RFEG), y si falta alguno no se
+            #    cierra. Solo al cerrar DESDE ABIERTA: este mismo paso devuelve a
+            #    cerrada una competición en juego, y ahí no se puede volver a fijar
+            #    nada a mitad de torneo. Y antes de cerrar: si no se puede, lo que
+            #    hay que decir es el estado
+            if (
+                competition.stroke_play is not None
+                and competition.status is CompetitionStatus.ACTIVE
+            ):
+                # Antes, que cada aprobado tenga su franja (8 oct 2026)
+                await FranjasAlCerrar(self._uow, self._usuarios()).comprobar(competition)
+                await self._handicaps().fijar(competition)
+
+            # 4b. Cerrar inscripciones (la entidad valida la transición)
+            desde_abierta = competition.status is CompetitionStatus.ACTIVE
             competition.close_enrollments(total_enrollments=total_enrollments)
+
+            # 4c. Al cerrar desde ABIERTA se pregunta a la RFEG por todos, en segundo
+            #     plano: una actualización nueva, y la anterior a medias se corta (#251)
+            actualizacion = None
+            if desde_abierta:
+                actualizacion = await self._actualizaciones.al_cerrar(competition.id)
 
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
+            # 5b. Las listas de espera solo funcionan con las inscripciones abiertas (#251)
+            if desde_abierta:
+                await self._uow.esperas.vaciar(competition.id)
+
             # 6. Las invitaciones pendientes se quedan sin plaza (#710)
             await sin_plaza_para_las_pendientes(self._uow, competition_id)
+
+        # 7. Ya guardada, se lanza: la respuesta no espera a la RFEG
+        self._actualizaciones.lanzar(actualizacion)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(
@@ -106,3 +157,11 @@ class CloseEnrollmentsUseCase:
             total_enrollments=total_enrollments,
             closed_at=competition.updated_at,
         )
+
+    def _usuarios(self) -> UserRepositoryInterface:
+        if self._users is None:
+            raise RuntimeError("Hace falta el repositorio de usuarios para un stroke play")
+        return self._users
+
+    def _handicaps(self) -> HandicapsAlCerrar:
+        return HandicapsAlCerrar(self._uow, self._usuarios())

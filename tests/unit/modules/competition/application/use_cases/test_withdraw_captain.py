@@ -60,7 +60,7 @@ async def _capitanes(uow, competition_id):
     """Los dos capitanes tal como quedaron guardados."""
     async with uow:
         competicion = await uow.competitions.find_by_id(competition_id)
-    return competicion.team_a_captain_id, competicion.team_b_captain_id
+    return competicion.ryder_cup.team_a_captain_id, competicion.ryder_cup.team_b_captain_id
 
 
 async def test_si_se_retira_la_capitana_a_su_puesto_queda_libre():

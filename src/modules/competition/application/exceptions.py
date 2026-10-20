@@ -1,6 +1,10 @@
 """Excepciones compartidas de la capa de aplicación del módulo Competition."""
 
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
 
 
 class CompetitionNotFoundError(Exception):
@@ -35,6 +39,57 @@ class CompetitionNotClosedError(Exception):
 
 class AgendaNotEditableError(Exception):
     """La competición ya terminó o se canceló: su agenda no se toca (BE #365)."""
+
+    pass
+
+
+class FranjaInvalidaError(Exception):
+    """Una franja de stroke play (o una sesión de Ryder) que no puede ser así (#251)."""
+
+    pass
+
+
+class FranjaEnElPasadoError(FranjaInvalidaError):
+    """Su primera salida ya ha pasado: no admitiría partidas (QA del 11 oct 2026)."""
+
+    pass
+
+
+class ActualizacionNoPermitidaError(Exception):
+    """Fuera de la ventana para actualizar los hándicaps a mano (#251)."""
+
+    def __init__(self, mensaje: str | None, codigo: "CodigoDeVentana | None" = None):
+        super().__init__(mensaje)
+        # Para que el cliente lo diga en su idioma (#541)
+        self.codigo = codigo
+
+
+class ActualizacionEnCursoError(Exception):
+    """Ya hay una actualización de hándicaps en marcha (#251)."""
+
+    pass
+
+
+class RefrescoDesactivadoError(Exception):
+    """La actualización con la RFEG no está encendida en este entorno (#251)."""
+
+    pass
+
+
+class PlazaEnFranjaError(Exception):
+    """No se puede coger o soltar esa plaza en la franja (#251), con el motivo."""
+
+    pass
+
+
+class PartidasError(Exception):
+    """Las partidas de esa franja no se pueden generar o cambiar (#251), con el motivo."""
+
+    pass
+
+
+class PartidaNotFoundError(Exception):
+    """No existe esa partida (#251)."""
 
     pass
 
@@ -97,6 +152,24 @@ class NotMatchPlayerError(Exception):
     """El usuario no es un jugador del partido."""
 
     pass
+
+
+class NotYourMarkedPlayerError(Exception):
+    """
+    El jugador marcado no es el que le toca marcar a quien anota (BE #520).
+
+    Cada uno marca solo al jugador que le asignó el sorteo de marcadores. Sin
+    esta comprobación uno podía marcarse a sí mismo y dejar su hoyo validado, o
+    pisar lo que le había apuntado su marcador de verdad.
+    """
+
+    error_code = "NOT_YOUR_MARKED_PLAYER"
+    # El texto para el jugador, fijo: la ruta no devuelve el de la excepción
+    # (CodeQL, exposición de información de una excepción)
+    message = "Solo puedes apuntar los golpes del jugador que te toca marcar"
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.message)
 
 
 class ScorecardNotReadyError(Exception):
@@ -185,3 +258,9 @@ class CompetitionFullError(Exception):
     traducir llegaba como un 500 sin cabeceras de CORS, y el navegador lo veía
     como un fallo de red.
     """
+
+
+class CompetitionAlreadyExistsError(Exception):
+    """Ya existe una competición del mismo organizador con ese nombre (sin mayúsculas, #540)."""
+
+    pass

@@ -23,8 +23,9 @@ class BlockedPlayerDTO(BaseModel):
     missing: str = Field(
         ...,
         description=(
-            "Lo que le falta: GENDER (su género), TEE_COLOR (su color en el campo) o "
-            "ENROLLMENT (la inscripción aprobada)."
+            "Lo que le falta: GENDER (su género), TEE_COLOR (su color en el campo), "
+            "ENROLLMENT (la inscripción aprobada) o HANDICAP (su hándicap, en un "
+            "Stableford o un Medal)."
         ),
     )
     tee_color: str | None = Field(

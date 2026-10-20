@@ -27,6 +27,7 @@ from src.modules.social.application.dto.activity_sharing_dto import (
 )
 from src.modules.social.application.dto.friendship_dto import (
     FriendshipResponseDTO,
+    PaginatedFriendResponseDTO,
     PaginatedFriendshipResponseDTO,
     RespondFriendRequestRequestDTO,
     SendFriendRequestRequestDTO,
@@ -190,7 +191,7 @@ async def block_user(
 
 @router.get(
     "/friends/me",
-    response_model=PaginatedFriendshipResponseDTO,
+    response_model=PaginatedFriendResponseDTO,
     summary="List my friends",
     description="List accepted friends of the authenticated user.",
 )

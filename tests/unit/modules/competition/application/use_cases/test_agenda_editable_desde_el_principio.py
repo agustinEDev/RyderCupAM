@@ -63,7 +63,6 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.schedule_config_mode import (
@@ -81,8 +80,19 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = pytest.mark.asyncio
+
+
+class _SinCampos:
+    """Repositorio de campos sin ninguno: estas competiciones no tienen campos."""
+
+    async def find_by_id(self, _golf_course_id):
+        return None
+
+
+_SIN_CAMPOS = _SinCampos()
 
 
 async def _montar(estado="ACTIVE", con_equipos=False, apertura_programada=False):
@@ -311,9 +321,9 @@ class TestEditarLaCompeticionConAgenda:
         )
         from src.modules.competition.domain.services.location_builder import LocationBuilder
 
-        return await UpdateCompetitionUseCase(uow, LocationBuilder(uow.countries)).execute(
-            competicion.id, UpdateCompetitionRequestDTO(**cambios), organizador
-        )
+        return await UpdateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), _SIN_CAMPOS
+        ).execute(competicion.id, UpdateCompetitionRequestDTO(**cambios), organizador)
 
     async def test_e1_el_nombre_se_cambia_aunque_haya_agenda(self):
         uow, competicion, organizador, campo = await _montar("ACTIVE")
@@ -323,7 +333,7 @@ class TestEditarLaCompeticionConAgenda:
 
         async with uow:
             guardada = await uow.competitions.find_by_id(competicion.id)
-        assert str(guardada.name) == "Ryder De Los Amigos"
+        assert str(guardada.name) == "Ryder de los amigos"
 
     async def test_e2_mover_las_fechas_con_las_sesiones_dentro_se_puede(self):
         uow, competicion, organizador, campo = await _montar("ACTIVE")

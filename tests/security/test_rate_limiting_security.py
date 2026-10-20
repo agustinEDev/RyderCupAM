@@ -75,16 +75,16 @@ class TestLoginRateLimiting:
 
 @pytest.mark.asyncio
 class TestRegisterRateLimiting:
-    """Tests de rate limiting en endpoint de registro (3/hora)."""
+    """Tests de rate limiting en endpoint de registro (30/hora por red, #273)."""
 
-    async def test_register_rate_limit_blocks_after_3_attempts(self, client: AsyncClient):
+    async def test_register_rate_limit_blocks_after_30_attempts(self, client: AsyncClient):
         """
-        Given: El endpoint /register tiene límite de 3 registros por hora
-        When: Se intentan 4 registros consecutivos
-        Then: El 4to intento debe ser bloqueado con 429
+        Given: El endpoint /register tiene límite de 30 registros por hora y red
+        When: Se intentan 31 registros consecutivos
+        Then: El 31.º intento debe ser bloqueado con 429
         """
-        # Realizar 3 intentos (dentro del límite)
-        for i in range(3):
+        # Realizar 30 intentos (dentro del límite)
+        for i in range(30):
             register_data = {
                 "email": f"spam{i}@example.com",
                 "password": "ValidPassword123!",
@@ -99,9 +99,9 @@ class TestRegisterRateLimiting:
                 f"Intento {i + 1} no debe ser bloqueado por rate limit"
             )
 
-        # El 4to intento debe ser bloqueado
+        # El 31.º intento debe ser bloqueado
         register_data = {
-            "email": "spam3@example.com",
+            "email": "spam30@example.com",
             "password": "ValidPassword123!",
             "password_confirmation": "ValidPassword123!",
             "first_name": "Spam",
@@ -110,7 +110,7 @@ class TestRegisterRateLimiting:
         }
         response = await client.post("/api/v1/auth/register", json=register_data)
         assert response.status_code == 429, (
-            "El 4to intento debe ser bloqueado con 429 Too Many Requests"
+            "El 31.º intento debe ser bloqueado con 429 Too Many Requests"
         )
 
 

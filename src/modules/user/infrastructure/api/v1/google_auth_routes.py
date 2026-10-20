@@ -18,7 +18,7 @@ from src.config.dependencies import (
     get_link_google_account_use_case,
     get_unlink_google_account_use_case,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import GOOGLE_LOGIN_LIMIT, get_client_identifier, limiter
 from src.config.settings import settings
 from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginRequestDTO,
@@ -73,7 +73,7 @@ def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
     description="Autentica o registra un usuario usando Google OAuth. Público.",
     tags=["Authentication"],
 )
-@limiter.limit("5/minute")
+@limiter.limit(GOOGLE_LOGIN_LIMIT, key_func=get_client_identifier)
 async def google_login(
     request: Request,
     response: Response,

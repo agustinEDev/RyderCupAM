@@ -21,13 +21,13 @@ from src.modules.competition.domain.entities.competition import CompetitionState
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
 
 # Marcar todos los tests de este fichero para que se ejecuten con asyncio

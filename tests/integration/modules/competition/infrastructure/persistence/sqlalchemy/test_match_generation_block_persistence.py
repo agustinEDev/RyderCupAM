@@ -15,7 +15,6 @@ from datetime import datetime
 import pytest
 
 from src.modules.competition.domain.entities.envelope import Envelope
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MISSING_GENDER,
     MISSING_TEE_COLOR,
@@ -30,6 +29,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_u
 from src.modules.competition.infrastructure.persistence.sqlalchemy.round_repository import (
     SQLAlchemyRoundRepository,
 )
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 # `jugadores` y `ronda` vienen del conftest de este directorio: son los mismos
 # que usa el repositorio de sobres

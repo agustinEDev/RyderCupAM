@@ -1,6 +1,7 @@
 """Match Repository Interface - Domain Layer."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -54,6 +55,13 @@ class MatchRepositoryInterface(ABC):
     @abstractmethod
     async def find_by_round(self, round_id: RoundId) -> list[Match]:
         """Busca todos los partidos de una ronda."""
+        pass
+
+    @abstractmethod
+    async def find_by_rounds_for_player(
+        self, round_ids: Sequence[RoundId], user_id: UserId
+    ) -> list[Match]:
+        """Los partidos de un jugador en varias rondas, en una sola lectura (FE #846)."""
         pass
 
     @abstractmethod

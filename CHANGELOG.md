@@ -5,6 +5,756 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.34.0] - 2026-10-20
+
+Una release sin nada nuevo para el usuario: pone al día las dependencias que
+Dependabot tenía pendientes. No cambia el contrato de la API (`oasdiff` corrió
+en cada PR y ninguna llevó la etiqueta `api-breaking`). Va con el frontend
+**2.48.0**, que también solo actualiza dependencias.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: sin cambios.** Orden de siempre: backend, `/health`, frontend.
+- Probada en el Kind con una batería en navegador (sesión y refresco del token,
+  avatar HEIC, mapas, competiciones, anotación, clasificaciones, partida rápida,
+  idiomas y todos los GET del OpenAPI): sin 5xx ni avisos en los logs.
+- Tras desplegar, **iniciar sesión** con una cuenta existente (PyJWT y
+  cryptography) y **comprobar en Sentry** que siguen llegando eventos
+  (sentry-sdk).
+
+### Changed
+
+- **Dependencias al día** (#491, #492, #493, #494, #555, #568, #597):
+  fastapi 0.141.1 → 0.143.3, SQLAlchemy 2.1.1 → 2.1.4, PyJWT 2.15.0 → 2.15.1,
+  cryptography 50.0.1 → 50.0.2, sentry-sdk 2.70.0 → 2.72.0, python-dotenv
+  1.2.3 → 1.2.4, pillow-heif 1.8.0 → 1.8.1 y tzfpy 2.1.0 → 2.1.1. En
+  desarrollo: mypy 2.3.1 → 2.4.0 (lo exige `sqlalchemy[mypy]` 2.1.4), ruff
+  0.16.9 → 0.17.1, cyclonedx-bom ≥ 7.5.0, msgpack y zipp. Las zonas horarias que
+  calcula tzfpy 2.1.1 coinciden con las guardadas en los 803 campos con
+  coordenadas.
+
+## [2.33.0] - 2026-10-19
+
+**El país del campo en las anotaciones.** La imagen del mapa del hoyo solo
+cubre España, así que el frontend esconde el botón «Mapa» en los campos de
+otros países y para eso necesita saber dónde está el campo. Va con el frontend
+**2.47.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: aditivo.** Orden de siempre: backend, `/health`, frontend.
+
+### Added
+
+- **`golf_course_country_code`** (ISO 3166-1 alfa-2, o null si el campo no
+  está) en la anotación de la Ryder (`round_info`) y en la de una partida de
+  stroke play. El campo ya se cargaba allí: no hay consulta de más (#598).
+
+## [2.32.0] - 2026-10-19
+
+**Los jugadores reportan un hoyo mal.** Desde el mapa del hoyo, un jugador
+avisa de que el hoyo está mal, con un motivo y la línea que propone; como las
+muestras, sin quién lo mandó. El admin ve los reportes en la revisión del hoyo,
+los descarta o guarda la línea, que los cierra. Va con el frontend **2.46.0**.
+
+**Notas de despliegue.**
+
+- **Una migración** (`c5f7a9b1d3e5`): crea la tabla `golf_course_hole_reports`,
+  vacía y sin columna de usuario. Sin variables ni dependencias nuevas.
+- **Contrato: aditivo.** Orden de siempre: backend, `/health`, frontend.
+
+### Added
+
+- **`POST /golf-courses/{id}/hole-map/reports/{hole}`**: un reporte con
+  `{id, reason, tee, bends, green_center}` y motivo `WRONG_HOLE`, `WRONG_LINE`
+  o `HOLE_CHANGED`. Responde siempre 204 (404 sin campo, 422 con un hoyo que no
+  existe) y solo se guarda si el campo se ve, la línea vale (40–750 m, a menos
+  de 3 km), el hoyo tiene línea, el id es nuevo, el hoyo tiene menos de tres
+  reportes y el jugador no lo reportó en los últimos 10 minutos. No guarda
+  usuario y Sentry no recibe usuario en esta ruta (#594).
+- **`DELETE /golf-courses/admin/{id}/hole-reports/{report_id}`**: el admin
+  descarta un reporte (#594).
+- **`reports`** en la lista de hoyos por revisar y **`reports[]`** en la
+  revisión de un hoyo (#594).
+
+### Changed
+
+- **Un hoyo con reportes está pendiente aunque tenga la línea guardada**, y
+  `saved` (deprecated) dice la verdad para esos hoyos. **Guardar la línea de un
+  hoyo borra sus reportes** (#594).
+- **Scripts del Kind**: construyen con la caché de Docker (`NO_CACHE=1` para
+  rehacer sin ella), muestran de qué rama sale la imagen antes de preguntar, y
+  borrar el clúster pide escribir su nombre (#593).
+
+### Security
+
+- **`k8s/` fuera de las imágenes** (`.dockerignore`): la imagen de la API,
+  también la de Render, llevaba los secretos locales del Kind y las copias de
+  su base de datos (#593).
+
+## [2.31.0] - 2026-10-18
+
+**Los mapas de OSM entran aprobados y el admin revisa por hoyo.** Lo que se
+importa de OpenStreetMap ya no espera a un admin: entra aprobado, y reimportar
+lo sustituye esté como esté (las líneas que guarda el admin van aparte y
+prevalecen). La revisión de hoyos lista solo los pendientes, dice dónde está
+el campo y trae la línea de OSM de cada hoyo. Va con el frontend **2.45.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: aditivo.** `saved` sigue en la lista de hoyos por revisar
+  (siempre false, marcado `deprecated`); `location` y `osm_line` son campos
+  nuevos. Orden de siempre: backend, `/health`, frontend.
+- **Importar OSM en PRO**: con este backend, `scripts/import_hole_maps.py
+  --apply` deja los mapas ya aprobados y visibles para los jugadores.
+
+### Added
+
+- **`location`** del campo en `GET /golf-courses/admin/{id}/hole-reviews`
+  (`{latitude, longitude}` o null), para encuadrar un hoyo sin muestras (#587).
+- **`osm_line`** de cada hoyo en la misma lectura: la línea del mapa de OSM
+  aprobado, con todos sus vértices y su green (o null) (#588).
+
+### Changed
+
+- **Lo importado de OSM entra aprobado**, sin revisor y con la fecha de la
+  importación como fecha de aprobación. **Reimportar sustituye el mapa** esté
+  pendiente, rechazado o aprobado, y lo deja aprobado: entran hoyos nuevos y
+  correcciones, y un hoyo que OSM ya no trae desaparece. Si OSM no trae nada
+  que valga, el mapa aprobado se queda entero. Desaparece el estado
+  `SKIPPED_APPROVED` del importador (#590).
+- **`GET /golf-courses/admin/hole-reviews` lista solo los hoyos pendientes**:
+  con muestras y sin línea guardada; un hoyo guardado sale de la lista y uno
+  reabierto con muestras vuelve. Hoyos de menor a mayor (#586).
+- `CourseHoleMap.is_approved` sustituye cuatro copias de la misma
+  comprobación (#588).
+
+### Fixed
+
+- **Los tests de integración llamaban a la RFEG de verdad**: el cliente de
+  test trae el servicio de hándicap falso por defecto. Un 500 de la RFEG tumbó
+  el CI de `develop` el 17 oct (#589, cierra #533).
+
+## [2.30.0] - 2026-10-17
+
+**Una línea de referencia por hoyo.** El admin guarda una línea por hoyo
+(salida, hasta dos codos y green) y la revisa desde «Hoyos por revisar» con
+todas las muestras que han llegado; los jugadores la ven antes que nada. Las
+muestras pasan a ser 3 por hoyo de cualquier barra, pueden traer solo el green,
+y los hoyos que OpenStreetMap trae con línea y green ya no recogen. Además, la
+Ryder dice el género de la barra de cada jugador (también en SCRATCH). Va con el
+frontend **2.44.0**.
+
+**Notas de despliegue.**
+
+- **2 migraciones** (`5206fa18886b` → `a3d5f7b9c1e2` → `b4e6a8c0d2f3`): las
+  columnas de la salida de `golf_course_hole_samples` admiten NULL (con un
+  check que prohíbe media salida o codos sin salida), y se crea
+  `golf_course_saved_holes` (vacía). SQL plano, modo offline comprobado.
+- **Sin variables nuevas ni dependencias nuevas.**
+- **Contrato: aditivo.** El frontend 2.43.0 sigue leyendo `tees` sin cambios;
+  puede seguir enviando muestras que ahora se descartan (204, en silencio).
+  Orden de siempre: backend, `/health`, frontend.
+- **Script a pasar en PRO**: `scripts/completar_genero_de_las_barras.py`
+  rellena el género de la barra en los partidos SCRATCH ya generados que no
+  han acabado. Primero con `--dry-run`.
+
+### Added
+
+- **Muestras solo de green**: quien abre el mapa a mitad de hoyo marca solo el
+  green; el siguiente en la salida completa el hoyo con él. Como mucho una por
+  hoyo (#581).
+- **Línea guardada por el admin** por campo y hoyo, con la misma regla que una
+  muestra completa; guardarla otra vez la sustituye (#582):
+  - `PUT /golf-courses/admin/{id}/hole-lines/{hole}` la guarda;
+  - `DELETE /golf-courses/admin/{id}/hole-lines/{hole}` reabre el hoyo;
+  - `DELETE /golf-courses/admin/{id}/hole-samples/{sample_id}` borra una
+    muestra mala y libera su hueco.
+- **Lectura del admin** para revisar hoyos (#583):
+  - `GET /golf-courses/admin/hole-reviews`: los campos con hoyos que revisar
+    (con muestras o línea guardada), ordenados por nombre;
+  - `GET /golf-courses/admin/{id}/hole-reviews`: por hoyo, su línea guardada,
+    todas las muestras (id, barra, puntos y día, nunca quién) y la tarjeta de
+    cada barra.
+- **`tee_gender`** de cada jugador en la vista de anotación de la Ryder, para
+  que el mapa envíe las muestras por barra también allí (#579).
+- **`scripts/completar_genero_de_las_barras.py`**: rellena solo el género de
+  los partidos SCRATCH ya generados, en rondas programadas o en juego; con
+  `--dry-run` y una transacción por ronda (#580).
+
+### Changed
+
+- **3 muestras por hoyo** de cualquier barra (antes por barra), con el bloqueo,
+  la cuenta y la ventana de 10 minutos por hoyo. La lectura da por hoyo la
+  primera muestra completa, el green suelto y si recoge (#581).
+- **Los hoyos con línea y green de OSM aprobado, o con línea guardada, no
+  recogen muestras** (#581, #582).
+- La lectura de muestras trae `saved_line`, la línea del admin (#582).
+
+### Fixed
+
+- **Ryder SCRATCH**: al generar (y al reasignar) los partidos no se leía el
+  campo ni el género, y cada jugador quedaba con una barra sin género: veía la
+  tarjeta de referencia y sus muestras se descartaban. La regla vive ahora en
+  el dominio (`barra_sin_golpes`) y la usa también stroke play (#579).
+
+## [2.29.0] - 2026-10-16
+
+**Mapa de hoyos.** Llega el modelo de mapa de hoyos con su revisión por el
+admin y el importador desde OpenStreetMap, las vistas de anotación traen el
+campo (su id, su nombre y, en stroke play, los metros de cada hoyo desde la
+barra de cada jugador) y los jugadores aportan **muestras anónimas** de la
+salida, los codos y el green de cada hoyo, por barra, para que el admin dibuje
+la línea buena. Va con el frontend **2.43.0**.
+
+**Notas de despliegue.**
+
+- **3 migraciones** (`f2b4d6e8a0c1` → `1f5431235064` → `7c2e9a4b1d30` →
+  `5206fa18886b`): crean `golf_course_hole_maps` (vacía) y
+  `golf_course_hole_samples` (vacía); la tabla intermedia de marcas por jugador
+  se crea y se borra en la misma subida (nunca llegó a producción). SQL plano,
+  generación en modo offline comprobada.
+- **Dependencias nuevas**: `shapely`, `numpy` y `geojson-pydantic` (#567, #569).
+- **Sin variables nuevas.**
+- **Contrato: aditivo para el frontend en producción.** La etiqueta
+  `api-breaking` de #576 es contra `develop`: quita `PUT .../hole-map/marks/{hole}`
+  y `GET .../marks/mine`, que nunca se publicaron. El frontend 2.42.0 no los usa.
+  Orden de siempre: backend, `/health`, frontend.
+- **Los mapas no se importan solos**: `scripts/import_hole_maps.py` corre en
+  seco por defecto; con `--apply` deja mapas pendientes de que el admin los
+  apruebe. Mientras no haya ninguno aprobado, la app trata cada campo como sin
+  mapa.
+
+### Added
+
+- **Modelo de mapa de hoyos** por campo: por hoyo, la línea de juego y el green
+  (delante, centro, fondo y contorno), con estado de revisión (`PENDING`,
+  `APPROVED`, `REJECTED`, `TOO_FEW_HOLES`), su versión opaca y el origen de cada
+  posición (#564).
+- **Importador desde OpenStreetMap** (`scripts/import_hole_maps.py`), por país
+  o por campo, en seco por defecto: casa el contorno del campo, sus hoyos (contra
+  la tarjeta) y sus greens; un mapa aprobado no se toca, y el que cubre menos de
+  la mitad de los hoyos no se guarda. Fuente Overpass o un extracto local de
+  Geofabrik con `--osm-file` (#567, #571).
+- **Endpoints del mapa**: `GET /golf-courses/{id}/hole-map` (el aprobado, en
+  GeoJSON, con atribución ODbL cuando hace falta) y la revisión del admin:
+  pendientes, ver cualquiera y aprobar o rechazar con la versión vista
+  (`HOLE_MAP_CHANGED`, `HOLE_MAP_NOT_PENDING`) (#569).
+- **El campo en las vistas de anotación**: `golf_course_id` en la Ryder y en la
+  partida de stroke play (#570); su nombre en el calendario, en «mis partidas» y
+  en la vista de la partida (#573); y los **metros de cada hoyo** desde la barra
+  de cada jugador en la vista de la partida, con `hole_card_for` como la Ryder
+  (#574).
+- **Muestras anónimas de cada hoyo, por barra** (#576):
+  - `POST /golf-courses/{id}/hole-map/samples/{hole}` con `{id, tee_color,
+    tee_gender, tee, bends, green_center}`, siempre `204`; se guardan las tres
+    primeras **válidas** de cada campo, hoyo y barra (resuelta con la del campo),
+    sin guardar quién las manda;
+  - idempotente por el `id` que pone el móvil; como mucho una aceptada por
+    jugador, hoyo y barra cada 10 minutos (en memoria);
+  - solo el día de llegada y un orden aparte; sin usuario en Sentry ni en la
+    clave del límite de peticiones;
+  - `GET /golf-courses/{id}/hole-map/samples`: los 18 hoyos, con la primera
+    muestra de cada barra y si aún recoge, sin recuentos ni autores.
+
+### Changed
+
+- Las marcas por jugador de los hoyos (#572), que nunca salieron a producción,
+  se sustituyen por las muestras anónimas (#576).
+
+### Fixed
+
+- El `env.py` de Alembic arranca todos los mappers desde un solo sitio: una
+  tabla nueva ya no queda fuera de la autogeneración (#566).
+
+## [2.28.0] - 2026-10-15
+
+**Partida rápida en una sola petición, tarjetas de «Mis competiciones» y lo que
+quedaba de la API de stroke play.** La partida rápida se crea e inicia de una
+vez (el asistente guarda un borrador local y ya no deja partidas «Pendiente» a
+medias), el organizador gana acciones sobre las tarjetas de una partida y puede
+mover las partidas que aún no han salido, y las competiciones traen sus campos,
+sus jornadas y mi próxima sesión. Va con el frontend **2.42.0**.
+
+**Notas de despliegue.**
+
+- **1 migración** (`d5f7a9b1c3e6` → `f2b4d6e8a0c1`): añade
+  `tee_group_players.played BOOLEAN NOT NULL DEFAULT false` y la enciende con
+  los golpes que ya metieron los propios jugadores. SQL plano, generación en
+  modo offline comprobada.
+- **Sin variables nuevas.**
+- **Contrato: un cambio incompatible** (#556, etiqueta `api-breaking`):
+  `match_format` pasa a admitir nulo en `RoundResponseDTO`, solo en las franjas
+  de un Stableford o un Medal. El frontend 2.41.0 no lo espera: **desplegar el
+  backend y el frontend 2.42.0 seguidos.** Todo lo demás es aditivo.
+
+### Added
+
+- **`POST /api/v1/quick-matches/start`**: crea e inicia una partida rápida en
+  una sola escritura, con el id generado por el cliente; los reintentos con el
+  mismo id devuelven la partida existente (200) y uno ajeno da 409. Mismas reglas
+  que el flujo paso a paso, comprobaciones compartidas en `roster_checks`
+  (#559, RyderCupWeb#848).
+- **Acciones del organizador sobre las tarjetas**: retirar a un jugador
+  (`POST /groups/{id}/players/{uid}/retire`) y borrar lo anotado en un hoyo
+  (`DELETE /groups/{id}/players/{uid}/holes/{hole}`); marca de «ha jugado» por
+  jugador, y la vista de anotación la trae (#553).
+- **Mover las partidas que aún no han salido** con la franja ya empezada:
+  cambiar jugadores, reordenar y cambiar marcadores; `groups[].can_change` y
+  `can_add_group` en la vista de la franja (#557, #544).
+- **Las competiciones traen** `golf_courses`, `playing_days` y
+  `my_next_session`, y cada fila de clasificación su `tee_gender`
+  (#558, RyderCupWeb#846 y #856).
+- Crear un Stableford o un Medal acepta `organizer_plays`: un organizador que no
+  juega no queda inscrito (#556, #552).
+- La ventana de actualización de hándicaps y sus errores traen `reason_code` y
+  `error_code: HANDICAP_UPDATE_NOT_ALLOWED`, para traducirlos (#556, #541).
+
+### Changed
+
+- **El nombre de la competición se guarda como se escribe** (sin `title()`), con
+  limpieza de caracteres invisibles y etiquetas HTML; los repetidos se comparan
+  sin distinguir mayúsculas (#556, #540).
+- La agenda abre la franja de un stroke play a su primera salida, en la hora del
+  campo, con `match_format` nulo (#556, #541).
+- Cerrar una franja: tarjeta completa → entregada; quien no jugó → no
+  presentado; el resto → retirado (#553).
+
+### Fixed
+
+- Reabrir una tarjeta ya abierta (dos organizadores a la vez) da 409
+  `SCORECARD_ALREADY_OPEN` sin tocar nada (#553, #545).
+- No se puede dar por no presentado a quien ha jugado: 409 `PLAYER_HAS_STROKES`
+  (#553, #550).
+- `editable` en la vista de partidas solo es cierto para el organizador o un
+  administrador (#556, #551).
+- Un nombre de competición no válido da 400 en vez de 500 (#556).
+
+## [2.27.0] - 2026-10-12
+
+**Torneos Stableford y Medal** (stroke play individual, #251): ajustes de
+categorías, franjas de salida con plazas y lista de espera, hándicap fijado al
+cerrar inscripciones y actualizado desde la RFEG, partidas, anotación por
+partidas con marcador y clasificaciones. Además, arreglos de la Ryder, de la
+partida rápida, de las estadísticas y de la política de contraseñas. Va con el
+frontend **2.41.0**.
+
+**Notas de despliegue.**
+
+- **14 migraciones**, una sola cadena (`a7d3e9f2c4b1` → `d5f7a9b1c3e6`). Solo
+  añaden tablas y columnas; las columnas nuevas de tablas existentes admiten nulo
+  o tienen valor por defecto. Generación en modo offline comprobada.
+- **Sin variables nuevas.** Las actualizaciones de hándicap programadas corren
+  con `HANDICAP_REFRESH_ENABLED=true`, ya puesta en Render.
+- **Contrato:** todo aditivo. `max_players` sube de 100 a 200 (se relaja una
+  cota de la petición) y los errores de contraseña llevan `error_code`. Un
+  jugador que manda golpes para alguien que no es su marcado recibe ahora un 403
+  (`NOT_YOUR_MARKED_PLAYER`); el frontend siempre manda el suyo.
+- Orden: este primero, `/health`, y después el frontend 2.41.0. Probado en el
+  Kind con cinco pasadas de QA (navegador a 360 px y API) y en un iPhone real.
+
+### Added
+
+- **Ajustes de stroke play** (#501, #536): categorías por hándicap con límites a
+  mano o **N categorías iguales** que se reparten al cerrar inscripciones, regla
+  de los seis jugadores, jornadas por jugador y clasificación general acumulada
+  o a mejor tarjeta.
+- **Hándicap de stroke play** (#500, #506, #507, #509, #510): obligatorio para
+  inscribirse y fijado al cerrar inscripciones; se actualiza desde la RFEG al
+  cerrar, con el botón del organizador y con una actualización programada (un
+  vigilante dentro de la API, con bloqueo de Postgres). Una sola regla para el
+  hándicap con el que juega cada uno en una competición.
+- **Franjas de salida** (#508, #511, #512): por día y sesión, con su hoja de
+  salidas (primera y última salida, intervalo, jugadores por partida) y el cupo
+  que sale de ella; los inscritos cogen plaza, y si está llena, lista de espera.
+- **Partidas de cada franja** (#534): el organizador las genera (altos o bajos
+  primero), mueve jugadores (con intercambio), reordena y cambia marcadores
+  hasta la primera salida.
+- **Anotación y clasificaciones** (#535, #542): cada jugador anota su golpe y el
+  de quien marca; el hoyo se valida cuando coinciden. Entregar, retirarse; el
+  organizador corrige, reabre, marca no presentados, valida lo anotado y cierra
+  la franja. Clasificación de la franja, General (por categoría) y Scratch, con
+  NR, NP y «R» del retirado.
+- **Marcador que se va** (#539): al retirarse o no presentarse alguien, los
+  marcadores se reasignan en círculo; antes de salir, quien se queda solo recibe
+  compañero de la siguiente partida, con aviso.
+- La vista de anotación dice el género de la barra de cada jugador (#546).
+- Los errores de contraseña llevan un `error_code` estable para traducirlos en
+  el cliente (#524).
+- Inscripciones sin límite oculto al leerlas y cupo máximo de 200 jugadores
+  (#530).
+
+### Fixed
+
+- **Solo el marcador asignado puede anotar a un jugador** en la Ryder (#521):
+  antes uno podía validarse su propio hoyo. Reasignar jugadores ahora sortea los
+  marcadores como al generar.
+- **La partida rápida congela el hándicap de cada jugador al empezar** (#522):
+  un cambio del índice ya no movía golpes, puntos ni estadísticas de partidas
+  pasadas.
+- Las vueltas de torneo se miden en las estadísticas y el historial como vuelta
+  propia (#525): un 93 ya no sale -3 en una partida rápida y +21 en un torneo.
+- La lista de contraseñas comunes se compara en minúsculas (#523), y un reset
+  con un token desconocido da su error en lugar de «email debe ser válido»
+  (#524, #528).
+- Hora de apertura de la anotación con el desfase del campo (#537).
+- Se rechaza una franja cuya primera salida ya pasó o cuyas salidas caen en el
+  hueco del cambio de hora (#538, #543).
+- Los no presentados liberan su sitio en la partida, no se mueven y reabrirlos
+  con la partida llena da `GROUP_FULL` (#543).
+- Al cerrar la franja, quien tiene golpes anotados aunque ninguno validado queda
+  retirado, no no presentado (#547).
+
+## [2.26.1] - 2026-10-08
+
+Hotfix: los puntos del panel y de las estadísticas cuadran con la partida, y una
+contraseña fuera de la política deja de dar «Error interno del servidor». Va con
+el frontend **2.40.1**.
+
+**Notas de despliegue.** Sin migraciones ni variables nuevas. Sin cambios de
+contrato: un 500 pasa a ser un 400 y cambian cifras ya calculadas (puntos del
+historial, media neta y desglose de estadísticas). El frontend 2.40.0 sigue
+funcionando con este backend, así que el orden no es crítico; aun así, este
+primero, `/health`, y después el frontend. Probado en local a 360 px contra la BD
+del Kind (API de la rama en `:8001`, Vite con el proxy hacia ella): registro,
+reset y perfil, y una partida Stableford con la tarjeta real del 8 oct.
+
+### Fixed
+
+- **Los puntos del panel no cuadraban con la partida** (#513). «Últimas
+  partidas», la media neta (`scoring_avg`) y el desglose por hoyos de las
+  estadísticas repartían los golpes con el índice tal cual, sin la pendiente ni
+  el rating de la barra: una vuelta de 32 puntos salía con 28 en el panel. Ahora
+  sacan el hándicap de juego de `StrokeAllocationService`, como la partida, y al
+  **100 %**: es la vuelta propia, la misma regla que «Tu vuelta» (18 ago). El
+  diferencial WHS no cambia.
+- **Una contraseña fuera de la política daba un 500.** `InvalidPasswordError` no
+  era un `ValueError` y los endpoints de registro, reset y cambio desde el perfil
+  no la capturaban. Ahora es un 400 con el motivo. Bastaba una contraseña sin
+  símbolo, que el frontend 2.40.0 dejaba enviar.
+
+## [2.26.0] - 2026-10-06
+
+El cupo de jugadores se respeta en los tres caminos para entrar en una
+competición, y el organizador puede retirar una invitación. Va con el frontend
+**2.40.0**.
+
+**Notas de despliegue.** Sin migraciones: el estado nuevo `CANCELLED` cabe en la
+columna de siempre (`String(20)` sin CHECK). Los cambios de contrato son
+aditivos (un endpoint nuevo, un valor nuevo de estado, un 409 al invitar sin
+plazas, dos campos en el 429 del freno por hora) y `oasdiff` no marcó ninguna PR
+como `api-breaking`. El frontend de producción no puede retirar invitaciones, así
+que no verá ninguna `CANCELLED` hasta desplegar el suyo: la ventana es inocua. Orden de siempre: este primero,
+`/health`, y después el frontend. Probado en bloque en el Kind el 5 y el 6 oct,
+con usuarios desechables (organizador y jugadores) y peticiones simultáneas para
+las carreras de retirar contra aceptar y de la última plaza.
+
+### Added
+
+- **El organizador puede retirar una invitación pendiente** (#488, #359).
+  `POST /api/v1/invitations/{id}/cancel` → 204 y la invitación pasa a
+  `CANCELLED`, un estado final distinto de `DECLINED`. Pueden hacerlo el creador
+  de la competición, quien la envió o un admin; los demás reciben 403, una
+  invitación que no existe 404 y una ya contestada 409 (una caducada sin marcar
+  se guarda como `EXPIRED`). Al invitado no se le avisa.
+
+### Changed
+
+- **Solo se invita con plazas libres** (#488, #359). Plazas libres = cupo menos
+  inscripciones aprobadas; las invitaciones pendientes no ocupan plaza. Sin
+  plazas, invitar por id o por email responde 409 con
+  `error_code: COMPETITION_FULL` y un mensaje fijo, que la pantalla traduce.
+- **Al ocuparse la última plaza, las invitaciones pendientes pasan a
+  `NO_ROOM`** (#488), el estado que ya se usaba al cerrar inscripciones («Sin
+  plaza» en la app). Vale para los tres caminos que ocupan plaza: aceptar una
+  invitación, aprobar una solicitud e inscribir directamente. El motivo dice
+  ahora «Esta invitación se quedó sin plaza», sin dar por hecho que se cerrara
+  la inscripción (#496).
+- **El freno de invitaciones por hora dice qué es** (#496). Su 429 lleva
+  `error_code: INVITATION_RATE_LIMIT` y el `limit` que se aplica (el cupo de la
+  competición, con un techo de 100), con un texto fijo en vez del de la
+  excepción, que llevaba el id de la competición. Y se comprueba después de las
+  plazas: una competición llena con el freno agotado dice que está llena, no
+  «espera».
+
+### Fixed
+
+- **La inscripción directa respeta el cupo** (#487, #325): creaba la inscripción
+  aprobada sin mirar `max_players`. Ahora responde 400 con la competición llena,
+  como al aprobar una solicitud. Ninguna pantalla la usa hoy, pero el endpoint
+  está publicado.
+- **Retirar y aceptar a la vez ya no deja a un jugador inscrito con la
+  invitación retirada** (#488). Retirar, aceptar y rechazar bloquean la
+  competición y después la invitación antes de decidir, siempre en ese orden.
+  Enviar una invitación también bloquea la competición, pero ese bloqueo se
+  suelta antes de guardarla (#497, pendiente): una invitación enviada justo
+  cuando se ocupa la última plaza todavía puede quedar pendiente en una
+  competición llena, y al aceptarla se quedaría sin plaza.
+
+## [2.25.0] - 2026-10-04
+
+El tipo de torneo (Stableford y Medal junto a la Ryder Cup, #251), un solo reparto
+de golpes por hoyo para todos los módulos (#165) con el hándicap plus contando
+como negativo en match play, y los campos de golf que se gestionan solo desde la
+ficha. Va con el frontend **2.39.0**.
+
+**Notas de despliegue.** Una migración, `a7d3e9f2c4b1`, que se aplica sola al
+arrancar el contenedor: añade `competitions.tournament_type` (las competiciones
+existentes quedan como `RYDER_CUP`) y deja que las columnas de equipos admitan
+vacío. La #480 lleva la etiqueta `api-breaking` de `oasdiff`, pero lo que marca
+(campos de equipos que pueden faltar, el esquema de `setup_mode`) solo afecta a
+los Stableford y Medal, que el frontend de producción no puede crear: la ventana
+hasta desplegar el frontend es inocua. Orden de siempre: este primero, `/health`,
+y después el frontend. Probado en bloque en el Kind el 3 y el 4 oct, con sesiones
+de jugador y de admin.
+
+### Added
+
+- **Tipo de torneo** (#480, #251). La competición guarda `tournament_type`:
+  `RYDER_CUP`, `STABLEFORD` o `MEDAL`, y la modalidad (`MATCH_PLAY` /
+  `STROKE_PLAY`) se deriva de él. Lo de la Ryder (equipos, modo de montaje,
+  reparto, capitanes) vive en su pieza y un Stableford o un Medal no la tiene:
+  pedírsela responde 400 con el motivo («Un Stableford no tiene equipos»).
+  Crear sin tipo sigue siendo la Ryder de siempre.
+
+### Changed
+
+- **Un solo reparto de golpes por hoyo** (#476). Competición, partida rápida y
+  estadísticas usan el mismo reparto y el mismo contexto del campo. Cambios
+  visibles: la partida rápida reintenta con el par del campo y no se cae con una
+  tarjeta mal formada; las estadísticas encuentran la barra aunque no tenga
+  género; con salidas repetidas manda la última, para la valoración y la tarjeta.
+- **Editar una competición admite 10 guardados por minuto**, no por hora (#482).
+  Un organizador que monta su torneo agotaba el límite retocando fechas, cupo y
+  países. Crear y borrar siguen en 10 por hora.
+
+### Fixed
+
+- **El hándicap plus cuenta como negativo en match play** (#479, #165): en el
+  calculador, la partida rápida, el partido y el reparto de golpes, sin
+  recortarlo a 0. También un hándicap bajo en un campo con valoración muy por
+  debajo del par sale negativo. Las competiciones existentes no se recalculan.
+- **Reasignar jugadores usa el reparto del formato** (#478, cierra #477), el
+  mismo que generar los partidos, y exige los jugadores que pide el formato por
+  lado y sin repetidos (400).
+- **Cambiar la ubicación no puede dejar campos fuera de los países de la
+  competición** (#481): responde 400 con «Quita antes desde la ficha los campos
+  de ES…». Los campos se gestionan solo desde la ficha.
+- **La clasificación de un Stableford o un Medal dice que llega con sus rondas**
+  (#483). Respondía «Un Stableford no tiene equipos»; ahora lo comprueba antes de
+  leer rondas y partidos y el 400 dice «La clasificación de un Stableford llega
+  con sus rondas: todavía no se puede consultar».
+
+## [2.24.0] - 2026-10-02
+
+Seguridad del hándicap, límites de peticiones que dejan entrar a un club entero
+a la vez, y tres refactors que preparan el stroke play (#251) y el reparto de
+golpes según el reglamento (#165). Va con el frontend **2.38.3**, que solo cambia
+Sentry.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato (el check
+`oasdiff` de cada PR lo confirmó). Orden de siempre: este primero. En Render no
+hay variables nuevas. Probado en bloque en el Kind el 2 oct, con una sesión de
+admin y otra de jugador.
+
+### Security
+
+- **Solo el propio jugador o un admin cambian un hándicap** (#465, #341). Las
+  rutas `/handicaps/update` y `/handicaps/update-manual` aceptaban cualquier
+  `user_id` y solo comprobaban que hubiera sesión: cualquier jugador podía
+  ponerle a otro el hándicap que quisiera, y con él los golpes que recibe en una
+  competición. Ahora responden 403 ante un id ajeno, antes de buscarlo, así que
+  un id inexistente tampoco da 404 y no delata qué ids existen.
+  `/handicaps/update-multiple` (consultas a la RFEG en lote) pasa a ser solo de
+  admin; ninguna pantalla la usa.
+
+### Changed
+
+- **Los límites de peticiones cuentan por usuario y el login, por email**
+  (#468, #273). En producción todas las peticiones llegan con la IP del proxy de
+  Render (ADR-038), así que cada límite era uno solo para toda la app: cinco
+  logins por minuto y tres altas por hora para todo el mundo.
+  - Las rutas con sesión cuentan por usuario, sacado del access token con la
+    firma verificada: un token inventado no elige contador.
+  - Las rutas anónimas siguen por red, declarada en cada una; un test recorre
+    todas las rutas de la app y lo exige.
+  - Login: 5 por minuto y email, contados antes de buscar al usuario (el 429 no
+    delata si el email existe), 30 fallos por minuto y red (los aciertos de un
+    club entrando a la vez no cuentan) y un techo de 60 por minuto.
+  - forgot-password y resend-verification: 3 por hora y email.
+  - Topes anónimos para un club: alta 30/hora, Google 30/min, reset 20/hora,
+    validar token 30/hora, contacto 10/hora.
+  - `refresh-mine` tiene su propio límite de 10/hora por usuario, y el 5/hora de
+    `/handicaps/update` pasa a ser por usuario (lo que quedaba de #341).
+
+  Los contadores siguen en la memoria del proceso: correcto con el único proceso
+  que corre hoy Render. Redis queda pendiente en #273 para cuando haya más
+  procesos o instancias. La IP real del cliente, con un secreto de Cloudflare, es
+  #466.
+
+### Refactored
+
+Sin cambio de comportamiento; el arnés de paridad con el frontend, regenerado
+tras cada uno, reproduce los 13 escenarios guardados.
+
+- **Lo que es solo de la Ryder Cup, en su propia pieza** (#471, #251). Equipos,
+  modo de montaje, reparto, capitanes y subcapitanes viven en `RyderCupSetup`,
+  inmutable y guardada en las mismas columnas: un Stableford no la arrastrará.
+- **El hándicap en una sola pieza compartida** (#472, #165). `MatchFormat`, el
+  calculador WHS, `TeeRating`, el redondeo, los porcentajes permitidos y la
+  búsqueda de la barra por color y género (siete copias) viven en `shared`.
+  Fuera tres métodos muertos del calculador.
+- **Las reglas de puntuación, compartidas, y la partida rápida desacoplada de
+  la competición** (#473, #165). `PlayMode`, `ScoringFormat` (con su 95 %),
+  `StrokePlayScoring` (antes `StablefordCalculator`), el diferencial WHS y las
+  reglas del match play (`MatchPlayScoring`, de la que hereda el
+  `ScoringService` de la Ryder) viven en `shared`. Partida rápida y competición
+  ya no se importan nada entre sí, y tres contratos de `lint-imports` lo
+  impiden en el CI.
+
+## [2.23.3] - 2026-10-01
+
+Una corrección en la validación del enlace de restablecer la contraseña y el CI
+de Trivy ordenado. Va con el frontend **2.38.2**, sin cambios de contrato.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato: la ruta ya
+prometía responder siempre 200 con `valid`. Orden de siempre, este primero.
+
+### Fixed
+
+- **Un token de restablecer la contraseña con una longitud imposible responde
+  «inválido» en vez de un 500** (#453, #462). `GET /auth/validate-reset-token/{token}`
+  construía su DTO (32-100 caracteres) dentro de la ruta, y un enlace recortado
+  al copiarlo daba un error 500 y un evento en Sentry (visto en producción el
+  1 oct). Ahora responde `valid: false` con el mismo mensaje que un token
+  desconocido, así que la longitud no delata nada. Los errores de base de datos
+  siguen llegando a Sentry.
+
+### Changed
+
+- **Trivy sube sus resultados con una categoría fija, `trivy-image`** (#461). La
+  categoría salía del nombre del job y de la matriz, y cambió dos veces en dos
+  días al reorganizar el CI: GitHub avisaba de configuraciones abandonadas. Las
+  viejas se han borrado en `develop`; las de `main`, después de esta release.
+
+## [2.23.2] - 2026-10-01
+
+Sin cambios en la API ni en el código de la aplicación: es el CI que nace de la
+2.23.0, que no arrancó en Render con todas las comprobaciones en verde.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato. Nada que vigilar
+en Render más allá de lo de siempre (`/health` con la versión).
+
+### Changed
+
+- **El CI arranca la imagen como lo hace Render** (#456). Con su `entrypoint.sh`
+  real, `alembic upgrade head` contra un Postgres de verdad con una
+  `DATABASE_URL` sin driver, el entorno de producción y un DSN de Sentry, y
+  espera a que `/health` responda con la versión. Antes el CI validaba las
+  migraciones en offline y arrancaba la app saltándose el entrypoint, con URLs
+  `+asyncpg`: el camino que cayó en la 2.23.0 no lo recorría nadie. Probado en
+  rojo con la imagen 2.23.0, que falla con el mismo error que dio Render.
+- **La imagen se comprueba en tres cajas del gráfico** (#457): «🐳 Docker
+  build», «🚀 Deploy like Render» y «🔍 Trivy», en paralelo y obligatorias.
+- **Cada comprobación explica qué hace y qué ha encontrado** en la página de
+  resumen de la ejecución (#458), con cifras reales de cada herramienta (tests y
+  cobertura, hallazgos de ruff, mypy, Semgrep y Bandit, vulnerabilidades,
+  commits firmados, segundos hasta `/health`, CRITICAL y HIGH de Trivy). El
+  «📊 Summary» final es un índice de una fila por comprobación, con el mismo
+  criterio de aprobado que antes.
+
+## [2.23.1] - 2026-10-01
+
+La 2.23.0 no llegó a arrancar en Render: `alembic upgrade head`, que corre en el
+arranque del contenedor, caía con `No module named 'psycopg'` y Render mantuvo
+la 2.22.0. Producción no se cayó.
+
+**Notas de despliegue.** Sin migraciones ni cambios de contrato. Lleva todo lo de
+la 2.23.0; sus notas siguen valiendo.
+
+### Fixed
+
+- **Las migraciones vuelven a usar psycopg2 con la URL de Render** (hotfix).
+  SQLAlchemy 2.1 cambió el driver por defecto de `postgresql://` de psycopg2 a
+  psycopg (v3), que no está instalado, y la `DATABASE_URL` de Render no lleva
+  driver. `alembic/env.py` solo traducía `+asyncpg` a `+psycopg2`; ahora fija
+  psycopg2 también cuando la URL no dice ninguno, en una sola función para los
+  modos offline y online. Ni el CI ni el Kind lo vieron porque sus URLs llevan
+  `+asyncpg`; un test nuevo ejecuta `alembic upgrade head` con los tres tipos
+  de URL contra un puerto cerrado y exige el error de conexión de psycopg2.
+
+## [2.23.0] - 2026-10-01
+
+Una release sin nada nuevo para el usuario: pone al día las dependencias, tres
+de ellas con cambios de comportamiento que había que absorber en el código,
+cierra tres vulnerabilidades de `urllib3` y deja un CI mucho más estricto. No
+cambia el contrato de la API: `oasdiff` corrió en cada PR y ninguna llevó la
+etiqueta `api-breaking`.
+
+**Notas de despliegue.** Sin migraciones. Al no cambiar el contrato, el orden no
+importa para la compatibilidad, pero se sigue el de siempre: el backend primero y
+el frontend 2.38.0 justo después. **`sentry-sdk` salta de la 2.19 a la 2.70 y el
+Kind no ve nada que dependa de Sentry** (así se rompió la v2.18.0): tras
+desplegar, comprobar en Sentry que siguen llegando errores y transacciones. Por
+**bcrypt 5**, iniciar sesión con una cuenta existente nada más desplegar.
+
+### Changed
+
+- **Dependencias al día** (#406, #416, #436, #450). Los saltos grandes:
+  fastapi 0.136.3 → 0.141.1, starlette 1.3.1 → 1.7.0, uvicorn 0.30.0 → 0.54.0,
+  SQLAlchemy 2.0.31 → 2.1.1, alembic 1.13.2 → 1.20.0, asyncpg 0.29 → 0.31,
+  sentry-sdk 2.19.2 → 2.70.0 y httpx 0.27 → 0.28.1, más parches menores, sin
+  cambios incompatibles en el OpenAPI. De uvicorn, el único valor por defecto que toca el
+  ADR-038 es que `FORWARDED_ALLOW_IPS` confía también en `::1`; el proxy de
+  Render no entra por loopback, así que la IP del cliente se trata igual. De
+  alembic, el SQL offline de todas las migraciones sale idéntico byte a byte, y
+  `alembic.ini` gana `path_separator` antes de que el modo antiguo desaparezca
+  (#451).
+
+- **La imagen base de Docker, fijada por digest** (#421). `python:3.12-slim`
+  era una etiqueta móvil: una build con caché podía salir sin los últimos
+  parches del sistema. Ahora cada cambio llega como PR de Dependabot, con Trivy.
+
+- **Todo el backend formateado con ruff** (#433, #437). Sin cambio de
+  comportamiento: el AST es idéntico salvo la sangría de un docstring.
+
+- **El CI, mucho más estricto** (#394, #395, #396, #415, #418, #419, #420, #422,
+  #434, #435, #438, #439, #443, #445, #446). Ruff, `ruff format` y mypy bloquean
+  con versión fija; `lint-imports` y `oasdiff` en cada PR. Snyk se retira y lo
+  sustituyen Dependency Review (con licencias por lista de permitidas),
+  `pip-audit`, Trivy, CodeQL y una revisión semanal de Snyk. Los controles de
+  seguridad bloquean de verdad: `pip-audit` ante cualquier vulnerabilidad con
+  arreglo, Gitleaks, y Trivy ante un CRITICAL con arreglo. Pipeline en dos
+  columnas, Python 3.13 y 3.14 a prueba sin bloquear, y Dependabot por grupos
+  (las actualizaciones de seguridad, juntas).
+
+### Fixed
+
+- **Contraseñas de más de 72 bytes con bcrypt 5** (#440). bcrypt solo usa los
+  72 primeros bytes; la 4 cortaba en silencio y la 5 lanza un error. Sin el
+  arreglo, registrarse con una contraseña de más de 72 bytes daba un 500 y
+  `verify()` fallaba para siempre: esa cuenta no volvía a entrar. Ahora se corta
+  a 72 bytes al cifrar y al verificar, como hacía la 4, y los hashes existentes
+  siguen verificando.
+
+- **Las mismas cabeceras de seguridad con secure 2** (#441). La 2 quitó la API
+  que usaba el middleware y sus valores por defecto habrían cambiado la política.
+  Se fijan a mano las mismas seis cabeceras de antes, y el `Cache-Control` que
+  pone una ruta (los avatares) se respeta.
+
+- **SQLAlchemy 2.1 y los enums de los campos** (#442). Se quita
+  `create_type=False` de los cuatro enums, porque la 2.1 lo respeta y las tablas
+  ya no se podían crear en los tests. En producción los tipos los crea Alembic.
+
+### Security
+
+- **urllib3 2.7 → 2.8** (#444). Corrige CVE-2026-97687, CVE-2026-97688 y
+  CVE-2026-97689 (TLS de proxies HTTPS ignorado, lectura sin límite de un
+  chunk y bucle infinito con Deflate).
+
 ## [2.22.0] - 2026-09-26
 
 El resto del rediseño de las competiciones: el modo de configuración, los

@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime
 
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
 )
@@ -16,14 +16,9 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-
-# Porcentajes de allowance permitidos (50-100 en incrementos de 5)
-ALLOWED_PERCENTAGES = frozenset(range(50, 101, 5))  # {50, 55, 60, ..., 95, 100}
-
-# Allowances por defecto según WHS (Ryder Cup = Match Play)
-SINGLES_ALLOWANCE: int = 100  # Match Play
-FOURBALL_ALLOWANCE: int = 90
-FOURSOMES_ALLOWANCE: int = 50  # Se aplica a la DIFERENCIA entre equipos
+from src.shared.domain.services.playing_handicap_calculator import ALLOWED_ALLOWANCE_PERCENTAGES
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.scoring_format import STROKE_PLAY_INDIVIDUAL_ALLOWANCE
 
 
 class Round:
@@ -57,6 +52,7 @@ class Round:
         created_at: datetime,
         updated_at: datetime,
         match_generation_block: MatchGenerationBlock | None = None,
+        hoja_de_salidas: HojaDeSalidas | None = None,
     ):
         """Constructor privado (usar factory methods)."""
         self._id = id
@@ -71,6 +67,8 @@ class Round:
         self._created_at = created_at
         self._updated_at = updated_at
         self._match_generation_block = match_generation_block
+        # Solo en las franjas de un stroke play (#251)
+        self._hoja_de_salidas = hoja_de_salidas
 
     @classmethod
     def create(
@@ -104,9 +102,12 @@ class Round:
             ValueError: Si allowance_percentage fuera del rango válido
         """
         # Validar allowance_percentage si se proporciona (50-100 en incrementos de 5)
-        if allowance_percentage is not None and allowance_percentage not in ALLOWED_PERCENTAGES:
+        if (
+            allowance_percentage is not None
+            and allowance_percentage not in ALLOWED_ALLOWANCE_PERCENTAGES
+        ):
             raise ValueError(
-                f"allowance_percentage must be one of {sorted(ALLOWED_PERCENTAGES)}, "
+                f"allowance_percentage must be one of {sorted(ALLOWED_ALLOWANCE_PERCENTAGES)}, "
                 f"got {allowance_percentage}"
             )
 
@@ -149,6 +150,7 @@ class Round:
         created_at: datetime,
         updated_at: datetime,
         match_generation_block: MatchGenerationBlock | None = None,
+        hoja_de_salidas: HojaDeSalidas | None = None,
     ) -> "Round":
         """Reconstruye desde BD (sin validaciones)."""
         return cls(
@@ -164,9 +166,53 @@ class Round:
             created_at=created_at,
             updated_at=updated_at,
             match_generation_block=match_generation_block,
+            hoja_de_salidas=hoja_de_salidas,
+        )
+
+    @classmethod
+    def create_franja(
+        cls,
+        competition_id: CompetitionId,
+        golf_course_id: GolfCourseId,
+        round_date: date,
+        session_type: SessionType,
+        hoja_de_salidas: HojaDeSalidas,
+    ) -> "Round":
+        """
+        Una franja de un Stableford o un Medal (#251): la sesión con su hoja de salidas.
+
+        Individual y al 95 %, el allowance del stroke play individual: aquí no
+        se elige formato ni modo de hándicap.
+        """
+        now = datetime.now(UTC).replace(tzinfo=None)
+        return cls(
+            id=RoundId.generate(),
+            competition_id=competition_id,
+            golf_course_id=golf_course_id,
+            round_date=round_date,
+            session_type=session_type,
+            match_format=MatchFormat.SINGLES,
+            status=RoundStatus.PENDING_TEAMS,
+            handicap_mode=None,
+            allowance_percentage=STROKE_PLAY_INDIVIDUAL_ALLOWANCE,
+            created_at=now,
+            updated_at=now,
+            hoja_de_salidas=hoja_de_salidas,
         )
 
     # ==================== Business Methods ====================
+
+    def cambiar_hoja_de_salidas(self, hoja: HojaDeSalidas) -> None:
+        """
+        Cambia la hoja de salidas de una franja.
+
+        Raises:
+            ValueError: Si es una sesión de Ryder, que no tiene
+        """
+        if self._hoja_de_salidas is None:
+            raise ValueError("Solo una franja de stroke play tiene hoja de salidas.")
+        self._hoja_de_salidas = hoja
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     def mark_teams_assigned(self) -> None:
         """
@@ -339,9 +385,9 @@ class Round:
         if clear_allowance:
             self._allowance_percentage = None
         elif allowance_percentage is not None:
-            if allowance_percentage not in ALLOWED_PERCENTAGES:
+            if allowance_percentage not in ALLOWED_ALLOWANCE_PERCENTAGES:
                 raise ValueError(
-                    f"allowance_percentage must be one of {sorted(ALLOWED_PERCENTAGES)}, "
+                    f"allowance_percentage must be one of {sorted(ALLOWED_ALLOWANCE_PERCENTAGES)}, "
                     f"got {allowance_percentage}"
                 )
             self._allowance_percentage = allowance_percentage
@@ -383,13 +429,7 @@ class Round:
         if self._allowance_percentage is not None:
             return self._allowance_percentage
 
-        if self._match_format == MatchFormat.SINGLES:
-            return SINGLES_ALLOWANCE
-
-        if self._match_format == MatchFormat.FOURBALL:
-            return FOURBALL_ALLOWANCE
-
-        return FOURSOMES_ALLOWANCE
+        return self._match_format.default_allowance
 
     # ==================== Properties ====================
 
@@ -438,6 +478,11 @@ class Round:
     def match_generation_block(self) -> MatchGenerationBlock | None:
         """Por que esta sesion no tiene partidos, si se intento y no se pudo."""
         return self._match_generation_block
+
+    @property
+    def hoja_de_salidas(self) -> HojaDeSalidas | None:
+        """Primera y última salida, intervalo y jugadores por partida; solo en una franja."""
+        return self._hoja_de_salidas
 
     @property
     def allowance_percentage(self) -> int | None:

@@ -1,7 +1,9 @@
 """Caso de Uso: Obtener Schedule de la competición."""
 
 from collections import defaultdict
+from datetime import datetime
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from src.modules.competition.application.dto.match_generation_block_dto import block_to_dto
 from src.modules.competition.application.dto.round_match_dto import (
@@ -12,6 +14,7 @@ from src.modules.competition.application.dto.round_match_dto import (
     RoundResponseDTO,
     ScheduleDayDTO,
     TeamAssignmentResponseDTO,
+    TeeSheetResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
@@ -22,13 +25,16 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 if TYPE_CHECKING:
@@ -92,6 +98,9 @@ class GetScheduleUseCase:
 
             # 2. Obtener todas las rondas
             rounds = await self._uow.rounds.find_by_competition(competition_id)
+            # Quién tiene plaza en cada franja de un stroke play (#251)
+            plazas = await self._uow.plazas.de_la_competicion(competition_id)
+            esperas = await self._uow.esperas.de_la_competicion(competition_id)
             await self._abre_los_sobres_que_tocan(competition, rounds)
 
             # 3. Obtener partidos para cada ronda
@@ -118,7 +127,9 @@ class GetScheduleUseCase:
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
+        # (y su nombre, para «Mis Próximos Partidos», BE #532)
         zonas_por_campo: dict = {}
+        nombres_por_campo: dict[GolfCourseId, str | None] = {}
         if self._gc_repo:
             for round_entity, _ in rounds_with_matches:
                 if round_entity.golf_course_id in zonas_por_campo:
@@ -126,6 +137,9 @@ class GetScheduleUseCase:
                 golf_course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
                 zonas_por_campo[round_entity.golf_course_id] = (
                     golf_course.timezone if golf_course else None
+                )
+                nombres_por_campo[round_entity.golf_course_id] = (
+                    golf_course.name if golf_course else None
                 )
 
         # 6. Agrupar rondas por día
@@ -156,20 +170,27 @@ class GetScheduleUseCase:
                 id=round_entity.id.value,
                 competition_id=round_entity.competition_id.value,
                 golf_course_id=round_entity.golf_course_id.value,
+                golf_course_name=nombres_por_campo.get(round_entity.golf_course_id),
                 round_date=round_entity.round_date,
                 session_type=round_entity.session_type.value,
-                match_format=round_entity.match_format.value,
+                # Una franja de stroke play no tiene formato de partido (#541)
+                match_format=None
+                if round_entity.hoja_de_salidas
+                else round_entity.match_format.value,
                 status=round_entity.status.value,
                 handicap_mode=round_entity.handicap_mode.value
                 if round_entity.handicap_mode
                 else None,
                 allowance_percentage=round_entity.allowance_percentage,
                 effective_allowance=round_entity.get_effective_allowance(),
+                tee_sheet=_hoja(
+                    round_entity.hoja_de_salidas,
+                    [p.user_id.value for p in plazas if p.round_id == round_entity.id],
+                    [e.user_id.value for e in esperas if e.round_id == round_entity.id],
+                ),
                 matches=match_dtos,
-                scoring_opens_at=ScoringOpeningService.opens_at(
-                    round_entity.round_date,
-                    round_entity.session_type,
-                    zonas_por_campo.get(round_entity.golf_course_id),
+                scoring_opens_at=_abre(
+                    round_entity, zonas_por_campo.get(round_entity.golf_course_id)
                 ),
                 match_generation_block=block_to_dto(round_entity.match_generation_block),
                 resting_player_ids=[
@@ -208,6 +229,12 @@ class GetScheduleUseCase:
             total_rounds=len(rounds),
             total_matches=total_matches,
             team_assignment=ta_dto,
+            # Lo que caben en todas las franjas de un stroke play (#251)
+            tee_sheet_capacity=(
+                sum(r.hoja_de_salidas.cupo for r in rounds if r.hoja_de_salidas is not None)
+                if competition.stroke_play is not None
+                else None
+            ),
         )
 
     async def _abre_los_sobres_que_tocan(self, competition, rounds) -> None:
@@ -218,10 +245,47 @@ class GetScheduleUseCase:
         esperan partidos, porque la agenda la lee mucha más gente que la
         página del sobre: el resto no cuesta ni una consulta.
         """
-        if self._sobres is None or competition.setup_mode != SetupMode.RYDER_CUP:
+        if (
+            self._sobres is None
+            or competition.ryder_cup is None
+            or competition.ryder_cup.setup_mode != SetupMode.RYDER_CUP
+        ):
             return
         for ronda in rounds:
             if ronda.status != RoundStatus.PENDING_MATCHES:
                 continue
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
             await self._sobres.revelar_si_toca(ronda, competition, sobres)
+
+
+def _hoja(
+    hoja: HojaDeSalidas | None, jugadores: list[UUID], esperan: list[UUID]
+) -> TeeSheetResponseDTO | None:
+    """La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251)."""
+    if hoja is None:
+        return None
+    return TeeSheetResponseDTO(
+        first_tee_time=hoja.primera_salida,
+        last_tee_time=hoja.ultima_salida,
+        interval_minutes=hoja.intervalo_minutos,
+        group_size=hoja.jugadores_por_partida,
+        tee_times=hoja.salidas,
+        capacity=hoja.cupo,
+        places_taken=len(jugadores),
+        player_ids=jugadores,
+        waiting_ids=esperan,
+    )
+
+
+def _abre(ronda, zona: str | None) -> datetime | None:
+    """
+    Una franja de stroke play abre a su primera salida, como en su vista de
+    anotar (#551); una sesión de Ryder, a la hora de su sesión (BE #305).
+    """
+    hoja = ronda.hoja_de_salidas
+    if hoja is None:
+        return ScoringOpeningService.opens_at(ronda.round_date, ronda.session_type, zona)
+    campo = zona_del_campo(zona)
+    if campo is None or ronda.round_date is None:
+        return None
+    return datetime.combine(ronda.round_date, hoja.hora_de(1), tzinfo=campo)

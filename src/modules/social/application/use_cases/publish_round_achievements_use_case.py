@@ -40,7 +40,7 @@ MAX_HISTORY_LOOKUP = 200
 
 # Golpes sobre el par con los que se anota un hoyo que no se termino (la raya):
 # doble bogey, el mismo criterio que el `NET_DOUBLE_BOGEY_OVER_PAR` del
-# StablefordCalculator, aqui a bruto porque el detector juzga contra el par
+# StrokePlayScoring, aqui a bruto porque el detector juzga contra el par
 DOUBLE_BOGEY_OVER_PAR = 2
 
 

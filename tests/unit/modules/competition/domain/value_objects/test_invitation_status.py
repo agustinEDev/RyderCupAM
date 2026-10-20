@@ -20,8 +20,17 @@ class TestInvitationStatusValues:
     def test_expired_value(self):
         assert InvitationStatus.EXPIRED == "EXPIRED"
 
-    def test_has_five_states(self):
-        assert len(InvitationStatus) == 5
+    def test_has_six_states(self):
+        # CANCELLED se añadió con la BE #359: la retira quien invita
+        assert len(InvitationStatus) == 6
+
+    def test_cancelled_value(self):
+        assert InvitationStatus.CANCELLED == "CANCELLED"
+
+    def test_cancelled_is_final_and_only_reached_from_pending(self):
+        assert InvitationStatus.CANCELLED.is_final()
+        assert InvitationStatus.PENDING.can_transition_to(InvitationStatus.CANCELLED)
+        assert not InvitationStatus.ACCEPTED.can_transition_to(InvitationStatus.CANCELLED)
 
     def test_no_room_value(self):
         """Rechazada por falta de plazas al cerrar la inscripción (#710, 24 sep)."""

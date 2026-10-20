@@ -20,7 +20,6 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -30,10 +29,12 @@ from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
 from src.modules.golf_course.domain.value_objects.course_type import CourseType
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 PAR_72 = [4, 5, 4, 4, 3, 4, 5, 4, 3, 3, 4, 5, 4, 4, 3, 4, 5, 4]
 
@@ -42,7 +43,7 @@ def _card(pars: list[int], meters: int) -> list[Hole]:
     return [Hole(number=i + 1, par=pars[i], stroke_index=i + 1, meters=meters) for i in range(18)]
 
 
-def _course_two_tees() -> GolfCourse:
+def _course_two_tees(country: str = "ES") -> GolfCourse:
     """
     Amarillas y rojas con tarjetas distintas.
 
@@ -53,7 +54,7 @@ def _course_two_tees() -> GolfCourse:
     red_pars[0] = 5
     return GolfCourse.create(
         name="Test Course",
-        country_code=CountryCode("ES"),
+        country_code=CountryCode(country),
         course_type=CourseType.STANDARD_18,
         creator_id=UserId.generate(),
         tees=[
@@ -98,13 +99,13 @@ def user_repo():
     return repo
 
 
-async def _setup(uow, course: GolfCourse | None):
+async def _setup(uow, course: GolfCourse | None, yellow_gender: Gender | None = Gender.MALE):
     """Un partido de dos jugadores, uno por barra, listo para pedir la vista."""
     yellow = MatchPlayer.create(
         user_id=UserId.generate(),
         playing_handicap=10,
         tee_color=TeeColor.YELLOW,
-        tee_gender=Gender.MALE,
+        tee_gender=yellow_gender,
         strokes_received=[],
     )
     red = MatchPlayer.create(
@@ -123,7 +124,7 @@ async def _setup(uow, course: GolfCourse | None):
     # El de verdad: un MagicMock contesta «sí» a `one_ball_per_side()` y
     # convertiría cualquier partido en un foursomes
     mock_round.match_format = MatchFormat.SINGLES
-    mock_round.golf_course_id = MagicMock()
+    mock_round.golf_course_id = GolfCourseId.generate()
 
     match = Match.create(
         round_id=round_id, match_number=1, team_a_players=[yellow], team_b_players=[red]
@@ -134,13 +135,97 @@ async def _setup(uow, course: GolfCourse | None):
 
     mock_comp = MagicMock()
     mock_comp.id = mock_round.competition_id
-    mock_comp.team_1_name = "Team A"
-    mock_comp.team_2_name = "Team B"
+    mock_comp.ryder_cup.team_1_name = "Team A"
+    mock_comp.ryder_cup.team_2_name = "Team B"
+    mock_comp.require_ryder_cup.return_value = mock_comp.ryder_cup
     uow._competitions._competitions[mock_comp.id] = mock_comp
 
     gc_repo = AsyncMock()
     gc_repo.find_by_id = AsyncMock(return_value=course)
     return match, yellow, red, gc_repo
+
+
+class TestGolfCourseOfTheRound:
+    @pytest.mark.asyncio
+    async def test_g1_la_ronda_dice_su_campo(self, uow, user_repo):
+        """
+        GIVEN: Un partido cuya ronda se juega en un campo
+        WHEN: Se pide la vista de anotar
+        THEN: La ronda lleva el id de su campo (para pedir el mapa de hoyos, BE #532)
+        """
+        match, _, _, gc_repo = await _setup(uow, _course_two_tees())
+        ronda = await uow.rounds.find_by_id(match.round_id)
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.round_info.golf_course_id == ronda.golf_course_id.value
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("pais", ["ES", "PT"])
+    async def test_b1_la_ronda_dice_el_pais_de_su_campo(self, uow, user_repo, pais):
+        """
+        GIVEN: Un partido cuya ronda se juega en un campo de España o de Portugal
+        WHEN: Se pide la vista de anotar
+        THEN: La ronda lleva el país del campo: el mapa solo tiene imagen en España (19 oct)
+        """
+        match, _, _, gc_repo = await _setup(uow, _course_two_tees(pais))
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.round_info.golf_course_country_code == pais
+
+    @pytest.mark.asyncio
+    async def test_b1_sin_campo_el_pais_va_en_null(self, uow, user_repo):
+        """
+        GIVEN: Un partido cuyo campo ya no está
+        WHEN: Se pide la vista de anotar
+        THEN: El país va a null, sin error
+        """
+        match, _, _, gc_repo = await _setup(uow, None)
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert view.round_info.golf_course_country_code is None
+
+
+class TestTeeGenderPerPlayer:
+    """
+    Cada jugador dice el sexo de su barra, como la vista de stroke play: con el
+    color, el mapa de hoyos envía las muestras por barra (RyderCupWeb #880).
+    """
+
+    @pytest.mark.asyncio
+    async def test_cada_jugador_lleva_el_sexo_de_su_barra(self, uow, user_repo):
+        """
+        GIVEN: Un partido con un jugador en amarillas de hombre y otra en rojas de mujer
+        WHEN: Se pide la vista de anotar
+        THEN: Cada uno lleva el sexo de su barra
+        """
+        match, yellow, red, gc_repo = await _setup(uow, _course_two_tees())
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        generos = {p.user_id: p.tee_gender for p in view.players}
+        assert generos[str(yellow.user_id)] == "MALE"
+        assert generos[str(red.user_id)] == "FEMALE"
+
+    @pytest.mark.asyncio
+    async def test_una_barra_sin_sexo_va_en_null(self, uow, user_repo):
+        """
+        GIVEN: Un jugador que sale de una barra sin sexo
+        WHEN: Se pide la vista de anotar
+        THEN: Su tee_gender es null
+        """
+        match, yellow, _, gc_repo = await _setup(uow, _course_two_tees(), yellow_gender=None)
+        uc = GetScoringViewUseCase(uow, user_repo, ScoringService(), gc_repo)
+
+        view = await uc.execute(str(match.id))
+
+        assert next(p for p in view.players if p.user_id == str(yellow.user_id)).tee_gender is None
 
 
 class TestHoleCardPerPlayer:

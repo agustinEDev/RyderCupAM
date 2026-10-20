@@ -6,23 +6,28 @@ Sigue el patron Imperative Mapping establecido en el modulo User.
 """
 
 import uuid
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
     Integer,
     Numeric,
     String,
     Table,
     Text,
     UniqueConstraint,
+    inspect,
+    text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import composite, relationship
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -65,32 +70,31 @@ from src.modules.competition.domain.value_objects.enrollment_status import (
 )
 from src.modules.competition.domain.value_objects.envelope_id import EnvelopeId
 from src.modules.competition.domain.value_objects.handicap_mode import HandicapMode
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.hole_score_id import HoleScoreId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.marker_assignment import MarkerAssignment
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_generation_block import (
     MatchGenerationBlock,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
+from src.modules.competition.domain.value_objects.ryder_cup_setup import RyderCupSetup
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
-from src.modules.competition.domain.value_objects.team_assignment import (
-    TeamAssignment as TeamAssignmentVO,
-)
+from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
 from src.modules.competition.domain.value_objects.team_assignment_id import (
     TeamAssignmentId,
 )
 from src.modules.competition.domain.value_objects.team_assignment_mode import (
     TeamAssignmentMode,
 )
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 
@@ -105,6 +109,8 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # Shared Value Objects
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # Importar registry y metadata centralizados
 from src.shared.infrastructure.persistence.sqlalchemy.base import (
@@ -411,8 +417,10 @@ TeeColorDecorator = _create_enum_decorator(TeeColor)
 PlayModeDecorator = _create_enum_decorator(PlayMode)
 VisibilityDecorator = _create_enum_decorator(Visibility)
 SetupModeDecorator = _create_enum_decorator(SetupMode)
+TournamentTypeDecorator = _create_enum_decorator(TournamentType)
 InvitationStatusDecorator = _create_enum_decorator(InvitationStatus)
 ValidationStatusDecorator = _create_enum_decorator(ValidationStatus)
+GenderDecorator = _create_enum_decorator(Gender)
 
 
 # =============================================================================
@@ -591,6 +599,39 @@ class MatchGenerationBlockJsonType(TypeDecorator):
         return MatchGenerationBlock.from_dict(value) if value else None
 
 
+class HojaDeSalidasJsonType(TypeDecorator):
+    """
+    TypeDecorator para la hoja de salidas de una franja de stroke play (#251).
+
+    Una columna opcional: NULL en las sesiones de la Ryder. Las horas, en «HH:MM».
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: HojaDeSalidas | None, dialect) -> dict | None:
+        """La hoja a JSON, con las horas en «HH:MM»."""
+        if value is None:
+            return None
+        return {
+            "first_tee_time": value.primera_salida.strftime("%H:%M"),
+            "last_tee_time": value.ultima_salida.strftime("%H:%M"),
+            "interval_minutes": value.intervalo_minutos,
+            "group_size": value.jugadores_por_partida,
+        }
+
+    def process_result_value(self, value: dict | None, dialect) -> HojaDeSalidas | None:
+        """El JSON a la hoja; NULL en las sesiones de la Ryder."""
+        if not value:
+            return None
+        return HojaDeSalidas(
+            primera_salida=time.fromisoformat(value["first_tee_time"]),
+            ultima_salida=time.fromisoformat(value["last_tee_time"]),
+            intervalo_minutos=value["interval_minutes"],
+            jugadores_por_partida=value["group_size"],
+        )
+
+
 class MarkerAssignmentsJsonType(TypeDecorator):
     """
     TypeDecorator para serializar tuple[MarkerAssignment, ...] a/desde JSONB.
@@ -665,7 +706,7 @@ class CompetitionNameComposite:
 
     def __init__(self, name: str):
         if name:
-            self.value = CompetitionName(name)
+            self.value = CompetitionName.guardado(name)
         else:
             self.value = None
 
@@ -832,11 +873,13 @@ competitions_table = Table(
         ForeignKey(COUNTRIES_CODE_FK, ondelete="RESTRICT"),
         nullable=True,
     ),
-    Column("team_1_name", String(100), nullable=False),
-    Column("team_2_name", String(100), nullable=False),
+    # Lo de la Ryder Cup admite vacío: un Stableford o un Medal no tiene
+    # equipos, ni modo de montaje, ni reparto (RyderCupAM#251)
+    Column("team_1_name", String(100), nullable=True),
+    Column("team_2_name", String(100), nullable=True),
     Column("play_mode", PlayModeDecorator, nullable=False),
     Column("max_players", Integer, nullable=False, default=DEFAULT_MAX_PLAYERS),
-    Column("team_assignment", TeamAssignmentModeDecorator, nullable=False, default="MANUAL"),
+    Column("team_assignment", TeamAssignmentModeDecorator, nullable=True),
     Column("status", String(20), nullable=False, default="DRAFT"),
     Column("max_playing_handicap", Integer, nullable=True),
     # Hora LOCAL del campo donde se juega, sin huso a proposito: «las nueve» son
@@ -846,7 +889,15 @@ competitions_table = Table(
     # el torneo de alguien sin querer no tiene vuelta atras (BE #318)
     Column("visibility", VisibilityDecorator, nullable=False, server_default="PRIVATE"),
     # Estilo RyderCup por defecto: es lo que son todas hoy (FE #695)
-    Column("setup_mode", SetupModeDecorator, nullable=False, server_default="RYDER_CUP"),
+    Column("setup_mode", SetupModeDecorator, nullable=True),
+    # Qué torneo es: de él sale la modalidad. Las de antes, todas Ryder Cup
+    Column("tournament_type", TournamentTypeDecorator, nullable=False, server_default="RYDER_CUP"),
+    # Lo que es solo del stroke play (6 oct 2026); vacío en una Ryder Cup
+    Column("stroke_category_limits", ARRAY(Numeric(precision=4, scale=1)), nullable=True),
+    Column("stroke_max_matchdays_per_player", Integer, nullable=True),
+    Column("stroke_overall_standing", String(20), nullable=True),
+    # Categorías iguales pedidas (10 oct 2026); vacía, límites a mano
+    Column("stroke_category_count", Integer, nullable=True),
     # Uno por equipo, y la baja de un usuario solo libera su puesto (BE #320)
     Column(
         "team_a_captain_id",
@@ -902,6 +953,9 @@ enrollments_table = Table(
     Column("custom_handicap", Numeric(precision=4, scale=1), nullable=True),
     Column("tee_color", TeeColorDecorator, nullable=True),
     Column("use_real_name", Boolean, nullable=False, server_default="true"),
+    # El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)
+    Column("fixed_handicap", Numeric(precision=4, scale=1), nullable=True),
+    Column("fixed_category", Integer, nullable=True),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -962,6 +1016,8 @@ rounds_table = Table(
     Column("updated_at", DateTime, nullable=False),
     # Por que no se pudieron generar sus partidos al abrir los sobres (BE #361)
     Column("match_generation_block", MatchGenerationBlockJsonType, nullable=True),
+    # La hoja de salidas de una franja de stroke play; NULL en la Ryder (#251)
+    Column("tee_sheet", HojaDeSalidasJsonType, nullable=True),
 )
 
 
@@ -1170,6 +1226,236 @@ hole_scores_table = Table(
 )
 
 
+# Las actualizaciones de hándicaps con la RFEG de cada competición (#251).
+# Sin entidad mapeada: las escribe y las lee su repositorio
+handicap_updates_table = Table(
+    "handicap_updates",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("origin", String(30), nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+    Column("resumed_at", DateTime(timezone=True), nullable=True),
+)
+
+# La plaza de cada jugador en cada franja de stroke play (#251). Sin entidad
+# mapeada: la escribe y la lee su repositorio
+tee_window_places_table = Table(
+    "tee_window_places",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "round_id", RoundIdDecorator, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # Asignada por la lista de espera, y vista en «Requiere tu atención»
+    Column("from_waiting_list_at", DateTime(timezone=True), nullable=True),
+    Column("acknowledged_at", DateTime(timezone=True), nullable=True),
+    UniqueConstraint("round_id", "user_id", name="uq_tee_window_places_round_user"),
+    # «Requiere tu atención»: solo las asignadas por la lista y sin ver
+    Index(
+        "ix_tee_window_places_pending_ack",
+        "user_id",
+        postgresql_where=text("from_waiting_list_at IS NOT NULL AND acknowledged_at IS NULL"),
+    ),
+)
+
+# La lista de espera de cada franja de stroke play (#251): el orden, el de llegada
+tee_window_waits_table = Table(
+    "tee_window_waits",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "round_id", RoundIdDecorator, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("user_id", UserIdDecorator, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("round_id", "user_id", name="uq_tee_window_waits_round_user"),
+)
+
+# La actualización que deja programada el organizador: una por competición (#251)
+handicap_update_schedules_table = Table(
+    "handicap_update_schedules",
+    metadata,
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("run_at", DateTime(timezone=True), nullable=False, index=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# Lo que contestó la RFEG por cada jugador en cada actualización, con los intentos
+handicap_refreshes_table = Table(
+    "handicap_refreshes",
+    metadata,
+    Column(
+        "update_id",
+        CHAR(36),
+        ForeignKey("handicap_updates.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("result", String(30), nullable=False),
+    Column("attempts", Integer, nullable=False),
+    Column("refreshed_at", DateTime(timezone=True), nullable=False),
+)
+
+# Las partidas de una franja de stroke play (#251, PR 4). La hora no se guarda:
+# sale de la hoja de salidas por el número. Los únicos se comprueban al final de
+# la transacción: un intercambio o un reordenado repite a medias un jugador o un
+# número, y solo completo es válido.
+tee_groups_table = Table(
+    "tee_groups",
+    metadata,
+    Column("id", CHAR(36), primary_key=True),
+    Column(
+        "competition_id",
+        CompetitionIdDecorator,
+        ForeignKey("competitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column(
+        "round_id", RoundIdDecorator, ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("number", Integer, nullable=False),
+    Column("status", String(20), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("number >= 1", name="ck_tee_groups_number_positive"),
+    UniqueConstraint(
+        "round_id",
+        "number",
+        name="uq_tee_groups_round_number",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+    # Para que cada jugador lleve la franja de su partida (uno por franja)
+    UniqueConstraint("id", "round_id", name="uq_tee_groups_id_round"),
+)
+
+# Cada jugador de una partida, con la foto que se sacó al generar (D14). Un
+# usuario que juega no se puede borrar (RESTRICT): lo jugado no desaparece.
+tee_group_players_table = Table(
+    "tee_group_players",
+    metadata,
+    Column("group_id", CHAR(36), primary_key=True),
+    Column("round_id", RoundIdDecorator, nullable=False),
+    Column(
+        "user_id",
+        UserIdDecorator,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        primary_key=True,
+        index=True,
+    ),
+    Column("position", Integer, nullable=False),
+    Column("handicap_index", Numeric(precision=4, scale=1), nullable=False),
+    Column("playing_handicap", Integer, nullable=False),
+    Column("tee_color", TeeColorDecorator, nullable=False),
+    Column("tee_gender", GenderDecorator, nullable=True),
+    Column("strokes_by_hole", JSONB, nullable=False),
+    # El par de cada hoyo desde sus barras (PR 5, P12)
+    Column("pars_by_hole", JSONB, nullable=False),
+    # Su tarjeta: JUGANDO, ENTREGADA, RETIRADO o NO_PRESENTADO (PR 5, P3, P6)
+    Column("card_status", String(20), nullable=False),
+    Column(
+        "marks_user_id", UserIdDecorator, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    ),
+    # Vino de otra partida a acompañar al que se quedó solo (QA del 11 oct 2026)
+    Column("brought_in", Boolean, nullable=False, server_default="false"),
+    # «Ha jugado»: anotó algo desde su pantalla; no se apaga (13 oct 2026)
+    Column("played", Boolean, nullable=False, server_default="false"),
+    ForeignKeyConstraint(
+        ["group_id", "round_id"],
+        ["tee_groups.id", "tee_groups.round_id"],
+        name="fk_tee_group_players_group",
+        ondelete="CASCADE",
+    ),
+    UniqueConstraint(
+        "round_id",
+        "user_id",
+        name="uq_tee_group_players_round_user",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+    UniqueConstraint(
+        "group_id",
+        "position",
+        name="uq_tee_group_players_group_position",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+)
+
+# Los golpes de cada jugador de una partida (#251, PR 5): un hoyo por fila, con
+# su lado, el del marcador y quién metió cada uno. Sin id propio: la cola sin
+# conexión del móvil los identifica por partida, jugador y hoyo. La clave ajena a
+# su jugador se mira al final de la transacción: el repo de partidas reescribe
+# sus jugadores al guardar, y una partida con golpes no se puede borrar.
+tee_group_hole_scores_table = Table(
+    "tee_group_hole_scores",
+    metadata,
+    Column("group_id", CHAR(36), primary_key=True),
+    Column("user_id", UserIdDecorator, primary_key=True),
+    Column("hole_number", Integer, primary_key=True),
+    Column("round_id", RoundIdDecorator, nullable=False, index=True),
+    Column("competition_id", CompetitionIdDecorator, nullable=False, index=True),
+    Column("own_score", Integer, nullable=True),
+    Column("own_submitted", Boolean, nullable=False),
+    Column("own_by", UserIdDecorator, nullable=True),
+    Column("marker_score", Integer, nullable=True),
+    Column("marker_submitted", Boolean, nullable=False),
+    Column("marker_by", UserIdDecorator, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("hole_number BETWEEN 1 AND 18", name="ck_tee_group_hole_scores_hole"),
+    CheckConstraint(
+        "own_score IS NULL OR own_score BETWEEN 1 AND 15", name="ck_tee_group_hole_scores_own"
+    ),
+    CheckConstraint(
+        "marker_score IS NULL OR marker_score BETWEEN 1 AND 15",
+        name="ck_tee_group_hole_scores_marker",
+    ),
+    ForeignKeyConstraint(
+        ["group_id", "user_id"],
+        ["tee_group_players.group_id", "tee_group_players.user_id"],
+        name="fk_tee_group_hole_scores_player",
+        deferrable=True,
+        initially="DEFERRED",
+    ),
+)
+
 # =============================================================================
 # START MAPPERS - Funcion de inicializacion
 # =============================================================================
@@ -1192,7 +1478,7 @@ def start_competition_mappers():
     - HoleScore entity -> hole_scores table
     """
     # Mapear Competition
-    if Competition not in mapper_registry.mappers:
+    if inspect(Competition, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Competition,
             competitions_table,
@@ -1200,23 +1486,57 @@ def start_competition_mappers():
                 # ID and scalar fields → private attrs
                 "_id": competitions_table.c.id,
                 "_creator_id": competitions_table.c.creator_id,
-                "_team_1_name": competitions_table.c.team_1_name,
-                "_team_2_name": competitions_table.c.team_2_name,
                 "_play_mode": competitions_table.c.play_mode,
                 "_max_players": competitions_table.c.max_players,
                 "_max_playing_handicap": competitions_table.c.max_playing_handicap,
                 "_enrollment_opens_days_before": competitions_table.c.enrollment_opens_days_before,
                 "_visibility": competitions_table.c.visibility,
-                "_setup_mode": competitions_table.c.setup_mode,
-                "_team_a_captain_id": competitions_table.c.team_a_captain_id,
-                "_team_b_captain_id": competitions_table.c.team_b_captain_id,
-                "_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
-                "_team_b_vice_captain_id": competitions_table.c.team_b_vice_captain_id,
+                "_tournament_type": competitions_table.c.tournament_type,
+                # Lo que es solo de la Ryder Cup, en su pieza (RyderCupAM#251). Es
+                # inmutable: SQLAlchemy no ve un cambio hecho dentro de un composite,
+                # asi que la entidad la sustituye entera en cada cambio
+                "_rc_team_1_name": competitions_table.c.team_1_name,
+                "_rc_team_2_name": competitions_table.c.team_2_name,
+                "_rc_setup_mode": competitions_table.c.setup_mode,
+                "_rc_team_assignment": competitions_table.c.team_assignment,
+                "_rc_team_a_captain_id": competitions_table.c.team_a_captain_id,
+                "_rc_team_b_captain_id": competitions_table.c.team_b_captain_id,
+                "_rc_team_a_vice_captain_id": competitions_table.c.team_a_vice_captain_id,
+                "_rc_team_b_vice_captain_id": competitions_table.c.team_b_vice_captain_id,
+                "_ryder_cup": composite(
+                    RyderCupSetup.from_columns,
+                    "_rc_team_1_name",
+                    "_rc_team_2_name",
+                    "_rc_setup_mode",
+                    "_rc_team_assignment",
+                    "_rc_team_a_captain_id",
+                    "_rc_team_b_captain_id",
+                    "_rc_team_a_vice_captain_id",
+                    "_rc_team_b_vice_captain_id",
+                ),
+                # Y lo que es solo del stroke play, en la suya (6 oct 2026). Igual de
+                # inmutable, por lo mismo
+                "_sp_category_limits": competitions_table.c.stroke_category_limits,
+                "_sp_max_matchdays_per_player": (
+                    competitions_table.c.stroke_max_matchdays_per_player
+                ),
+                "_sp_overall_standing": competitions_table.c.stroke_overall_standing,
+                "_sp_category_count": competitions_table.c.stroke_category_count,
+                "_stroke_play": composite(
+                    StrokePlaySetup.from_columns,
+                    "_sp_category_limits",
+                    "_sp_max_matchdays_per_player",
+                    "_sp_overall_standing",
+                    "_sp_category_count",
+                ),
                 "_created_at": competitions_table.c.created_at,
                 "_updated_at": competitions_table.c.updated_at,
                 # Composite VOs → private attrs
                 "_name_value": competitions_table.c.name,
-                "_name": composite(lambda n: CompetitionName(n) if n else None, "_name_value"),
+                # Tal cual está guardado: no se revalida al leer (#540)
+                "_name": composite(
+                    lambda n: CompetitionName.guardado(n) if n else None, "_name_value"
+                ),
                 "_start_date": competitions_table.c.start_date,
                 "_end_date": competitions_table.c.end_date,
                 "_dates": composite(
@@ -1246,11 +1566,6 @@ def start_competition_mappers():
                     lambda s: CompetitionStatus(s) if s else CompetitionStatus.DRAFT,
                     "_status_value",
                 ),
-                "_team_assignment_value": competitions_table.c.team_assignment,
-                "_team_assignment": composite(
-                    lambda t: TeamAssignmentVO(t) if t else TeamAssignmentVO.MANUAL,
-                    "_team_assignment_value",
-                ),
                 # Relationships
                 "_golf_courses": relationship(
                     CompetitionGolfCourse,
@@ -1262,7 +1577,7 @@ def start_competition_mappers():
         )
 
     # Mapear Enrollment
-    if Enrollment not in mapper_registry.mappers:
+    if inspect(Enrollment, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Enrollment,
             enrollments_table,
@@ -1275,6 +1590,8 @@ def start_competition_mappers():
                 "_custom_handicap": enrollments_table.c.custom_handicap,
                 "_tee_color": enrollments_table.c.tee_color,
                 "_use_real_name": enrollments_table.c.use_real_name,
+                "_fixed_handicap": enrollments_table.c.fixed_handicap,
+                "_fixed_category": enrollments_table.c.fixed_category,
                 "_created_at": enrollments_table.c.created_at,
                 "_updated_at": enrollments_table.c.updated_at,
                 # Composite VOs → private attrs
@@ -1284,7 +1601,7 @@ def start_competition_mappers():
         )
 
     # Mapear CompetitionGolfCourse (Association Entity)
-    if CompetitionGolfCourse not in mapper_registry.mappers:
+    if inspect(CompetitionGolfCourse, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             CompetitionGolfCourse,
             competition_golf_courses_table,
@@ -1303,7 +1620,7 @@ def start_competition_mappers():
         )
 
     # Mapear Round
-    if Round not in mapper_registry.mappers:
+    if inspect(Round, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Round,
             rounds_table,
@@ -1321,11 +1638,12 @@ def start_competition_mappers():
                 "_created_at": rounds_table.c.created_at,
                 "_updated_at": rounds_table.c.updated_at,
                 "_match_generation_block": rounds_table.c.match_generation_block,
+                "_hoja_de_salidas": rounds_table.c.tee_sheet,
             },
         )
 
     # Mapear Match
-    if Match not in mapper_registry.mappers:
+    if inspect(Match, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Match,
             matches_table,
@@ -1349,7 +1667,7 @@ def start_competition_mappers():
         )
 
     # Mapear TeamAssignment (Entity)
-    if TeamAssignmentEntity not in mapper_registry.mappers:
+    if inspect(TeamAssignmentEntity, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             TeamAssignmentEntity,
             team_assignments_table,
@@ -1364,7 +1682,7 @@ def start_competition_mappers():
         )
 
     # Mapear Draft (FE #653)
-    if Draft not in mapper_registry.mappers:
+    if inspect(Draft, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Draft,
             drafts_table,
@@ -1383,7 +1701,7 @@ def start_competition_mappers():
         )
 
     # Mapear Envelope (FE #655)
-    if Envelope not in mapper_registry.mappers:
+    if inspect(Envelope, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Envelope,
             envelopes_table,
@@ -1403,7 +1721,7 @@ def start_competition_mappers():
         )
 
     # Mapear Invitation
-    if Invitation not in mapper_registry.mappers:
+    if inspect(Invitation, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             Invitation,
             invitations_table,
@@ -1423,7 +1741,7 @@ def start_competition_mappers():
         )
 
     # Mapear HoleScore
-    if HoleScore not in mapper_registry.mappers:
+    if inspect(HoleScore, raiseerr=False) is None:
         mapper_registry.map_imperatively(
             HoleScore,
             hole_scores_table,

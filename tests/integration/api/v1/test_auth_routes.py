@@ -57,6 +57,103 @@ class TestAuthRoutes:
         assert second_response.status_code == status.HTTP_409_CONFLICT
         assert "ya está registrado" in second_response.json()["detail"]
 
+    @pytest.mark.parametrize(
+        ("password", "motivo"),
+        [
+            # 12+ caracteres, así que Pydantic la deja pasar: la rechaza el VO
+            ("Abcdefghijk1", "carácter especial"),
+            (" Abcdefghi1!", "espacios"),
+            ("abcdefghij1!", "mayúscula"),
+        ],
+    )
+    async def test_register_with_a_password_that_breaks_the_policy_is_a_400(
+        self, client: AsyncClient, password: str, motivo: str
+    ):
+        """
+        Una contraseña fuera de la política es un 400 con el motivo, no un 500.
+
+        `InvalidPasswordError` no era un `ValueError`, el router no la capturaba y
+        el usuario veía «Error interno del servidor» en un toast.
+        """
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"policy.{motivo.replace(' ', '')}@example.com",
+                "password": password,
+                "first_name": "Policy",
+                "last_name": "Test",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert motivo in response.json()["detail"]
+
+    async def test_reset_with_a_password_without_symbol_carries_its_code_and_keeps_the_token(
+        self, client: AsyncClient
+    ):
+        """
+        Given un token de reseteo válido
+        When se manda una contraseña sin símbolo
+        Then 400 con `error_code` PASSWORD_NO_SYMBOL (BE #519) y el token sigue valiendo
+        """
+        email = "reset.policy@example.com"
+        await create_authenticated_user(client, email, "V@l1dP@ss123!", "Reset", "Policy")
+        await client.post("/api/v1/auth/forgot-password", json={"email": email})
+        token = (await get_user_by_email(client, email)).password_reset_token
+
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": token, "new_password": "Abcdefghijk1"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error_code"] == "PASSWORD_NO_SYMBOL"
+        sigue = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+        assert sigue.json()["valid"] is True
+
+    async def test_reset_with_an_unknown_token_carries_its_code(self, client: AsyncClient):
+        """
+        Given un token que no existe
+        When se intenta resetear
+        Then 400 con `error_code` RESET_TOKEN_INVALID: el cliente no puede reconocerlo
+        por el texto, que va en español («inválido», no «invalid»)
+        """
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "t" * 43, "new_password": "V@l1dP@ss123!"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error_code"] == "RESET_TOKEN_INVALID"
+
+    async def test_register_with_a_common_password_carries_its_code(
+        self, client: AsyncClient, monkeypatch
+    ):
+        """
+        Given una contraseña de la lista de comunes que cumple todo lo demás
+        When se registra
+        Then 400 con `error_code` PASSWORD_TOO_COMMON en la raíz (BE #519), para traducirlo
+
+        La lista negra se simula: aquí se prueba el código, no la lista (BE #518).
+        """
+        monkeypatch.setattr(
+            "src.modules.user.domain.value_objects.password.is_common_password",
+            lambda candidate: candidate == "Password123!",
+        )
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "policy.common@example.com",
+                "password": "Password123!",
+                "first_name": "Policy",
+                "last_name": "Test",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["error_code"] == "PASSWORD_TOO_COMMON"
+        assert response.json()["detail"]
+
     async def test_logout_user_successfully(self, client: AsyncClient):
         """
         Verifica que un usuario autenticado puede hacer logout correctamente.
@@ -350,3 +447,37 @@ class TestAuthRoutes:
         assert "8 characters" not in response_data["detail"]
         assert "min_length" not in response_data["detail"]
         assert "password" not in response_data["detail"].lower()
+
+
+class TestValidateResetTokenMalformed:
+    """
+    BE #453: un token con una longitud imposible daba 500 y un evento de error
+    en Sentry, porque la ruta construye el DTO (32-100 caracteres) dentro del
+    manejador. La ruta promete responder siempre 200 con valid=True/False, y un
+    token mal formado no es más que un token inválido.
+
+        #   token                      | respuesta
+        ----|---------------------------|-------------------------------------
+        M1  15 caracteres (corto)      | 200, valid=False, el mensaje de siempre
+        M2  101 caracteres (largo)     | 200, valid=False, el mensaje de siempre
+        M3  48 caracteres desconocido  | 200, valid=False (lo que ya hacía)
+    """
+
+    MENSAJE_INVALIDO = "Token de reseteo inválido o expirado. Solicita un nuevo enlace."
+
+    @pytest.mark.parametrize(
+        "token",
+        ["token-falso-123", "a" * 101, "b" * 48],
+        ids=["M1-corto", "M2-largo", "M3-desconocido"],
+    )
+    async def test_a_malformed_token_is_just_invalid(self, client: AsyncClient, token: str):
+        """
+        GIVEN: Un token de reseteo que no existe, con cualquier longitud
+        WHEN: Se valida con GET /api/v1/auth/validate-reset-token/{token}
+        THEN: 200 con valid=False y el mismo mensaje que cualquier token
+              inválido: la longitud no revela nada distinto
+        """
+        response = await client.get(f"/api/v1/auth/validate-reset-token/{token}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"valid": False, "message": self.MENSAJE_INVALIDO}

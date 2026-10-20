@@ -340,6 +340,23 @@ class EnrollmentResponseDTO(BaseModel):
     team_id: str | None = Field(None, description="ID del equipo asignado (si aplica).")
     custom_handicap: Decimal | None = Field(None, description="Hándicap personalizado (si aplica).")
     tee_color: str | None = Field(None, description="Color de barras elegido por el jugador.")
+    fixed_handicap: Decimal | None = Field(
+        None,
+        description=(
+            "Stableford o Medal: el hándicap de todo el torneo, fijado al cerrar las "
+            "inscripciones (el personalizado o el del perfil, #251). Vacío mientras "
+            "están abiertas y en una Ryder Cup."
+        ),
+    )
+    category: int | None = Field(
+        None,
+        description=(
+            "Stableford o Medal: su categoría (1, 2, 3…), del hándicap fijado y los "
+            "límites. Una categoría con menos de 6 jugadores se une a la contigua de "
+            "hándicap más bajo (la 1.ª a la 2.ª), y luego se numeran de nuevo. Vacía "
+            "mientras las inscripciones están abiertas y en una Ryder Cup."
+        ),
+    )
     use_real_name: bool = Field(
         True,
         description="Si esta competición muestra el nombre legal del jugador en vez de su alias.",

@@ -7,28 +7,24 @@ from decimal import Decimal
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
-from src.modules.competition.domain.services.score_differential_calculator import (
-    PlayedRound,
-    ScoreDifferentialCalculator,
-)
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
+from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.quick_match.application.services.course_context import own_playing_handicap
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
-)
-from src.modules.quick_match.domain.services.stableford_calculator import (
-    NET_DOUBLE_BOGEY_OVER_PAR,
-    HoleSetup,
-    StablefordCalculator,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
 from src.modules.user.application.dto.player_stats_dto import (
     PlayerStatsResponseDTO,
     ScoringBreakdownResponseDTO,
+)
+from src.modules.user.application.services.tournament_round import (
+    is_scratch,
+    tournament_index,
+    tournament_personal_handicap,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -39,7 +35,18 @@ from src.modules.user.domain.services.scoring_breakdown_calculator import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import HALF_ROUND_HOLES, countable_holes
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.services.score_differential_calculator import (
+    PlayedRound,
+    ScoreDifferentialCalculator,
+)
+from src.shared.domain.services.stroke_play_scoring import (
+    NET_DOUBLE_BOGEY_OVER_PAR,
+    HoleSetup,
+    StrokePlayScoring,
+)
 from src.shared.domain.value_objects.hole_outcome import HoleOutcome
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único
@@ -107,14 +114,14 @@ class GetPlayerStatsUseCase:
         competition_uow: CompetitionUnitOfWorkInterface,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
-        stableford_calculator: StablefordCalculator | None = None,
+        stroke_play_scoring: StrokePlayScoring | None = None,
         differential_calculator: ScoreDifferentialCalculator | None = None,
     ):
         self._user_uow = user_uow
         self._competition_uow = competition_uow
         self._quick_match_uow = quick_match_uow
         self._golf_course_uow = golf_course_uow
-        self._calculator = stableford_calculator or StablefordCalculator()
+        self._calculator = stroke_play_scoring or StrokePlayScoring()
         self._differentials = differential_calculator or ScoreDifferentialCalculator()
         self._breakdown = ScoringBreakdownCalculator()
 
@@ -191,6 +198,7 @@ class GetPlayerStatsUseCase:
                 user_id, limit=MAX_ROUNDS_AGGREGATED
             )
             rounds_by_match = await self._rounds_by_match(competition_matches)
+            scratch_competitions = await self._scratch_competitions(rounds_by_match)
             if golf_course_id is not None:
                 competition_matches = [
                     match
@@ -205,7 +213,12 @@ class GetPlayerStatsUseCase:
             }
 
         competition_rounds = await self._collect_competition_rounds(
-            user_id, competition_matches, rounds_by_match, scorecards, handicap
+            user_id,
+            competition_matches,
+            rounds_by_match,
+            scorecards,
+            handicap,
+            scratch_competitions,
         )
 
         # Las dos fuentes llegan ordenadas por su cuenta; el registro del WHS es
@@ -326,19 +339,24 @@ class GetPlayerStatsUseCase:
                 holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
                 # Son DOS hándicaps distintos y no se pueden compartir:
                 #
-                # - La media de la casa usa el hándicap con el que se jugó, y en
-                #   una partida scratch no hubo ninguno.
-                # - El diferencial WHS de más abajo usa siempre el efectivo,
-                #   scratch o no: ahí el hándicap solo sirve para el tope de
-                #   doble bogey neto del Adjusted Gross Score, que es parte de
-                #   la fórmula WHS y no depende de cómo se jugara la partida.
-                effective_handicap = self._effective_handicap(participant, profile_handicap)
-                scoring_handicap = effective_handicap if match.uses_handicap() else None
+                # - La media de la casa usa el de la vuelta propia: el hándicap
+                #   de juego de su barra al 100 %, como «Tu vuelta» (BE #513).
+                #   NO el allowance de la partida: con él el panel y la partida
+                #   volvían a separarse. En una partida scratch sale 0.
+                # - El diferencial WHS de más abajo usa siempre el índice
+                #   efectivo, scratch o no: ahí el hándicap solo sirve para el
+                #   tope de doble bogey neto del Adjusted Gross Score, que es
+                #   parte de la fórmula WHS y no depende de cómo se jugara.
+                effective_handicap = participant.effective_handicap(profile_handicap)
+                # Ya lleva dentro la barra y el 100 %: por eso al calculador no
+                # se le pasa ni barra ni allowance
+                playing_handicap = own_playing_handicap(
+                    match, participant, effective_handicap, course
+                )
                 totals = self._calculator.compute_participant_totals(
-                    handicap=scoring_handicap,
+                    handicap=playing_handicap,
                     holes=holes,
                     scores_by_hole=scores_by_hole,
-                    allowance_percentage=match.get_effective_allowance(),
                     # La media junta partidas rápidas y torneo: si solo una de
                     # las dos topara los hoyos malos, no serían comparables
                     cap_at_net_double_bogey=True,
@@ -360,8 +378,7 @@ class GetPlayerStatsUseCase:
                         holes=self._quick_match_hole_outcomes(
                             holes=holes,
                             scores_by_hole=scores_by_hole,
-                            handicap=scoring_handicap,
-                            allowance_percentage=match.get_effective_allowance(),
+                            playing_handicap=playing_handicap,
                         ),
                         golf_course_id=str(course.id) if course is not None else None,
                         golf_course_name=str(course.name) if course is not None else None,
@@ -377,6 +394,7 @@ class GetPlayerStatsUseCase:
         rounds_by_match: dict,
         scorecards: dict,
         profile_handicap: float | None,
+        scratch_competitions: set,
     ) -> list[_ComputableRound]:
         """
         Vueltas de torneo computables del jugador.
@@ -390,9 +408,12 @@ class GetPlayerStatsUseCase:
 
         Se usa `own_score`, no el `net_score` de la entidad: ese solo se calcula
         cuando el marcador ha validado el hoyo, así que media tarjeta legítima
-        se quedaría fuera por no haberse cerrado la validación cruzada. Los
-        golpes recibidos ya vienen resueltos por hoyo desde que se generó el
-        partido, sin repartirlos aquí otra vez.
+        se quedaría fuera por no haberse cerrado la validación cruzada.
+
+        Los golpes son los de la vuelta propia, no los del partido (BE #517):
+        en match play el partido reparte la DIFERENCIA con el rival, y el de
+        menos hándicap entraba a bruto en la misma media en la que sus partidas
+        rápidas entran con su hándicap de juego al 100 %.
         """
         results: list[_ComputableRound] = []
         courses: dict = {}
@@ -416,7 +437,13 @@ class GetPlayerStatsUseCase:
                 hole_scores = scorecards.get(match.id, [])
                 player = self._find_match_player(match, user_id)
                 hole_card = self._hole_card(course, player)
-                outcomes = self._competition_hole_outcomes(hole_scores, hole_card)
+                playing_handicap = tournament_personal_handicap(
+                    course,
+                    player,
+                    profile_handicap,
+                    scratch=round_.competition_id in scratch_competitions,
+                )
+                outcomes = self._competition_hole_outcomes(hole_scores, hole_card, playing_handicap)
                 if outcomes is None:
                     continue
                 to_par = self._to_eighteen(
@@ -474,9 +501,9 @@ class GetPlayerStatsUseCase:
         La vuelta convertida en materia prima para el diferencial, o None.
 
         El Adjusted Gross Score se recalcula con el Course Handicap en lugar de
-        reaprovechar el de la media: son dos topes distintos a propósito. La
-        media es una métrica de la casa y usa el hándicap con el que se jugó la
-        partida; el diferencial pretende ser WHS y el WHS ignora el allowance.
+        reaprovechar el de la media. La media es una métrica de la casa y usa el
+        hándicap de juego de la vuelta propia (BE #513); el diferencial pretende
+        ser WHS, que parte siempre del índice y de la barra y no del allowance.
         """
         tee_rating = self._tee_rating(course, tee_color, tee_gender)
         if tee_rating is None:
@@ -508,54 +535,17 @@ class GetPlayerStatsUseCase:
         """
         Ratings del tee que se jugó, o None si no se puede saber.
 
-        El tee se identifica por categoría y género, que es su clave única en el
-        campo: los tees no tienen id propio. El par no vive en el tee, sale de
-        sumar los hoyos.
+        Los resuelve la misma pieza que reparte los golpes (BE #165): misma
+        reserva a la barra sin género, misma barra cuando hay dos repetidas y
+        el mismo par (el de la barra, o el del campo si el suyo no cabe en el
+        WHS). Antes había aquí una copia que buscaba la barra exacta, y una
+        vuelta desde una barra sin género se quedaba sin diferencial.
 
         Un tee cuyos ratings no entran en los límites del WHS devuelve None en
-        lugar de propagar el error: el catálogo de campos admite un rango de
-        Course Rating más ancho que el que el sistema acepta para calcular, y
-        una estadística no es motivo para tumbar la respuesta entera.
+        lugar de propagar el error: una estadística no es motivo para tumbar la
+        respuesta entera.
         """
-        if tee_color is None:
-            return None
-
-        tee = next(
-            (
-                candidate
-                for candidate in course.tees
-                if candidate.color == tee_color and candidate.gender == tee_gender
-            ),
-            None,
-        )
-        if tee is None:
-            return None
-
-        course_rating = Decimal(str(tee.course_rating))
-        course_par = sum(hole.par for hole in course.reference_card)
-        try:
-            return TeeRating(
-                course_rating=course_rating,
-                slope_rating=tee.slope_rating,
-                # El par es el de la barra: entra en el Course Handicap como
-                # (CR - Par), así que con la tarjeta de referencia el jugador de
-                # otra barra sale con una base de golpes que no es la suya, y
-                # con ella el tope de doble bogey neto y el diferencial.
-                par=tee.par_total if tee.holes else course_par,
-            )
-        except (ValueError, TypeError):
-            # Una barra con el par fuera del rango WHS es un dato suelto del
-            # importador, no una vuelta que no se jugó: se valora contra el par
-            # del campo en vez de perder la vuelta y con ella el diferencial.
-            # Mismo criterio que `TeeContextBuilder._rating_for`.
-            try:
-                return TeeRating(
-                    course_rating=course_rating,
-                    slope_rating=tee.slope_rating,
-                    par=course_par,
-                )
-            except (ValueError, TypeError):
-                return None
+        return StrokeContextBuilder.build(course).rating_for(tee_color, tee_gender)
 
     # ==================== Lectura de tarjetas ====================
 
@@ -600,13 +590,22 @@ class GetPlayerStatsUseCase:
             by_match[match.id] = rounds[match.round_id]
         return by_match
 
+    async def _scratch_competitions(self, rounds_by_match: dict) -> set:
+        """Las competiciones scratch de esas rondas: ahí la vuelta propia va sin golpes."""
+        scratch = set()
+        for competition_id in {r.competition_id for r in rounds_by_match.values() if r}:
+            competition = await self._competition_uow.competitions.find_by_id(competition_id)
+            if is_scratch(competition):
+                scratch.add(competition_id)
+        return scratch
+
     @staticmethod
     def _match_course(match, rounds_by_match: dict) -> GolfCourseId | None:
         round_ = rounds_by_match.get(match.id)
         return round_.golf_course_id if round_ is not None else None
 
     def _competition_hole_outcomes(
-        self, hole_scores: list, hole_card: list
+        self, hole_scores: list, hole_card: list, playing_handicap: int | None
     ) -> list[HoleOutcome] | None:
         """
         Los hoyos de una tarjeta de competición, o None si no forman vuelta.
@@ -615,10 +614,11 @@ class GetPlayerStatsUseCase:
         de aquí— para que el desglose (BE #168) no mida sobre otros hoyos ni con
         otro tope que el titular del panel.
 
-        Los golpes recibidos vienen del propio hoyo guardado, no se recalculan:
-        en competición el reparto se resolvió al anotar y es lo que el jugador
-        vio.
+        Los golpes son los de su hándicap de juego personal sobre el índice de
+        dificultad de su barra, no los guardados en el hoyo: esos son los del
+        partido, la diferencia con el rival (BE #517).
         """
+        strokes_basis = None if playing_handicap is None else Decimal(playing_handicap)
         scored = {
             hole_score.hole_number: hole_score
             for hole_score in hole_scores
@@ -631,17 +631,16 @@ class GetPlayerStatsUseCase:
         outcomes = []
         for hole in played:
             hole_score = scored[hole.number]
+            strokes_received = self._calculator.allocate_strokes(strokes_basis, hole.stroke_index)
             if hole_score.own_score is None:
                 # La raya: se anota `par + 2` de bruto —un total de golpes no
                 # puede depender del reparto— y doble bogey NETO en lo computable
                 gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR
-                computable = self._calculator.net_double_bogey(
-                    hole.par, hole_score.strokes_received
-                )
+                computable = self._calculator.net_double_bogey(hole.par, strokes_received)
             else:
                 gross = hole_score.own_score
                 computable = self._calculator.adjusted_gross(
-                    hole_score.own_score, hole.par, hole_score.strokes_received
+                    hole_score.own_score, hole.par, strokes_received
                 )
             outcomes.append(
                 HoleOutcome(
@@ -649,7 +648,7 @@ class GetPlayerStatsUseCase:
                     par=hole.par,
                     gross=gross,
                     adjusted_gross=computable,
-                    strokes_received=hole_score.strokes_received,
+                    strokes_received=strokes_received,
                 )
             )
 
@@ -659,15 +658,15 @@ class GetPlayerStatsUseCase:
         self,
         holes: list,
         scores_by_hole: dict,
-        handicap: float | None,
-        allowance_percentage: int,
+        playing_handicap: int | None,
     ) -> list[HoleOutcome]:
         """
         Los hoyos de una partida rápida, con el mismo tope que la media.
 
         Aquí los golpes recibidos SÍ se calculan, porque en partida rápida el
-        reparto no se guarda hoyo a hoyo: sale del hándicap, del índice de
-        dificultad y del allowance, exactamente como al puntuar.
+        reparto no se guarda hoyo a hoyo: sale del hándicap de juego (con su
+        barra ya dentro) y del índice de dificultad, exactamente
+        como al puntuar.
 
         Se usa el calculador por sus métodos públicos y no se toca: su reparto
         vive en el arnés de paridad con el frontend, y cambiarlo obliga a
@@ -677,7 +676,7 @@ class GetPlayerStatsUseCase:
         bogey neto, que es lo que el WHS manda anotar en un hoyo sin terminar.
         Un hoyo que nadie tocó no está en `scores_by_hole` y no entra.
         """
-        strokes_basis = self._calculator.resolve_strokes_basis(handicap, None, allowance_percentage)
+        strokes_basis = None if playing_handicap is None else Decimal(playing_handicap)
 
         outcomes = []
         for hole in holes:
@@ -737,31 +736,10 @@ class GetPlayerStatsUseCase:
         return match.find_player(user_id)
 
     @staticmethod
-    def _effective_handicap(participant, profile_handicap: float | None) -> float | None:
-        """
-        Hándicap con el que jugó, por orden: el override manual que puso el
-        creador, y si no el del perfil.
-
-        Un participante registrado lleva `handicap` a None a propósito: el suyo
-        vive en su perfil, no copiado en la partida. Solo los invitados, que no
-        tienen cuenta, lo traen dentro.
-        """
-        if participant.custom_handicap is not None:
-            return participant.custom_handicap
-        return profile_handicap
-
-    @staticmethod
     def _match_player_handicap(player, profile_handicap: float | None) -> float | None:
-        """
-        Hándicap del jugador en ese partido de torneo.
-
-        `MatchPlayer.player_handicap` es una foto del hándicap en el momento de
-        generar el partido, que es exactamente lo que el WHS quiere para medir
-        una vuelta antigua. Cuando falta, no queda más que el del perfil.
-        """
-        if player is not None and player.player_handicap is not None:
-            return float(player.player_handicap)
-        return profile_handicap
+        """El índice con el que jugó el partido de torneo: ver `tournament_index`."""
+        index = tournament_index(player, profile_handicap)
+        return None if index is None else float(index)
 
     # ==================== Agregación ====================
 

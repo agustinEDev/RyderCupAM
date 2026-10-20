@@ -18,6 +18,10 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
+from src.modules.competition.application.services.handicaps_de_la_competicion import (
+    HandicapsDeLaCompeticion,
+    para_jugar_la_ryder,
+)
 from src.modules.competition.application.services.team_roster import TeamRoster
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
@@ -164,8 +168,10 @@ class EnvelopeDesk:
         cuerpo dejaria entregar el sobre del rival. Quien capitanea que lo
         decide la entidad, que es donde vive esa regla.
         """
+        # Los sobres son de la Ryder: un torneo sin equipos no los tiene (#251)
+        ryder_cup = competition.require_ryder_cup()
         for team in ("A", "B"):
-            if competition.is_captain_of(team, user_id):
+            if ryder_cup.is_captain_of(team, user_id):
                 return team
         return None
 
@@ -224,24 +230,9 @@ class EnvelopeDesk:
                 competition.id, EnrollmentStatus.APPROVED
             )
         }
-        con_handicap = []
-        for uid in jugadores:
-            inscripcion = inscripciones.get(uid)
-            if inscripcion is None:
-                continue
-            if inscripcion.custom_handicap is not None:
-                con_handicap.append((uid, inscripcion.custom_handicap))
-                continue
-            user = await self._user_repo.find_by_id(uid)
-            con_handicap.append(
-                (
-                    uid,
-                    Decimal(str(user.handicap.value))
-                    if user and user.handicap is not None
-                    else Decimal("0"),
-                )
-            )
-        return con_handicap
+        de_los_jugadores = [inscripciones[uid] for uid in jugadores if uid in inscripciones]
+        handicaps = await HandicapsDeLaCompeticion.de(de_los_jugadores, self._user_repo)
+        return [(e.user_id, para_jugar_la_ryder(handicaps[e.user_id])) for e in de_los_jugadores]
 
     @staticmethod
     def comprobar_que_la_sesion_admite_sobres(ronda: Round) -> None:

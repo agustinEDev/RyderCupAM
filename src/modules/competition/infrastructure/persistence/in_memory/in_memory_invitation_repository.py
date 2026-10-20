@@ -28,6 +28,10 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
     async def find_by_id(self, invitation_id: InvitationId) -> Invitation | None:
         return self._invitations.get(invitation_id)
 
+    async def find_by_id_for_update(self, invitation_id: InvitationId) -> Invitation | None:
+        # En memoria no hay transacciones que bloquear
+        return self._invitations.get(invitation_id)
+
     async def find_by_competition(
         self,
         competition_id: CompetitionId,

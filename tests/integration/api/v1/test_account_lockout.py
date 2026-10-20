@@ -12,6 +12,23 @@ Tests the complete flow:
 import pytest
 from httpx import AsyncClient
 
+from src.config.rate_limit import limiter
+
+
+@pytest.fixture(autouse=True)
+def without_rate_limits():
+    """
+    Estos tests prueban el bloqueo de cuenta (ADR-027), no el rate limit.
+
+    Desde RyderCupAM#273 el login cuenta 5 intentos por minuto y email, desde
+    cualquier red, así que rotar X-Test-Client-ID ya no basta para llegar a los 10
+    fallos que bloquean la cuenta. El rate limit se prueba en test_rate_limit_identity.
+    """
+    previous = limiter.enabled
+    limiter.enabled = False
+    yield
+    limiter.enabled = previous
+
 
 @pytest.mark.asyncio
 async def test_account_locks_after_max_failed_attempts(client: AsyncClient):

@@ -19,11 +19,9 @@ calcular y el torneo **no se abre solo**. No se adivina: abrir a deshora anuncia
 una cosa y hace otra.
 """
 
-import logging
 from datetime import UTC, date, datetime, time, timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-logger = logging.getLogger(__name__)
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 
 
 class EnrollmentOpeningService:
@@ -48,13 +46,10 @@ class EnrollmentOpeningService:
         if start_date is None or days_before is None or timezone is None:
             return None
 
-        try:
-            zone = ZoneInfo(timezone)
-        except (ZoneInfoNotFoundError, ValueError, TypeError):
-            # Una zona que no existe no puede tumbar la LECTURA: esto se llama
-            # al pintar la pantalla de la competicion. Sin hora, el torneo no se
-            # abre solo, que es justo lo que se quiere cuando no se sabe cuando
-            logger.warning("Zona horaria desconocida al calcular la apertura: %s", timezone)
+        # Una zona que no existe no puede tumbar la LECTURA: sin hora, no se
+        # abre solo, que es justo lo que se quiere cuando no se sabe cuándo
+        zone = zona_del_campo(timezone)
+        if zone is None:
             return None
 
         dia = start_date - timedelta(days=days_before)

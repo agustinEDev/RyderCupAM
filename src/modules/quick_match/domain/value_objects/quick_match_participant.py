@@ -49,8 +49,14 @@ class QuickMatchParticipant:
     tee_color: TeeColor | None = None
     tee_gender: Gender | None = None
     custom_handicap: float | None = None
+    # El índice con el que juega, fijado al empezar la partida (BE #514). Va con
+    # su propia marca porque «empezó sin hándicap» (None) es un valor fijado y
+    # distinto de «partida de antes de fijarse», que sigue mirando el perfil
+    starting_handicap: float | None = None
+    handicap_frozen: bool = False
 
     def __post_init__(self):
+        """Valida equipo, variante (registrado o invitado), rangos de hándicap y barra."""
         if self.team is not None and self.team not in VALID_TEAMS:
             raise ValueError(f"team debe ser 'A', 'B' o None, recibido: {self.team!r}")
 
@@ -74,12 +80,47 @@ class QuickMatchParticipant:
         ):
             raise ValueError(f"custom_handicap debe estar entre {MIN_HANDICAP} y {MAX_HANDICAP}.")
 
+        self._validate_starting_handicap()
         if self.tee_gender is not None and self.tee_color is None:
             raise ValueError("tee_gender requiere tee_color (un genero solo no identifica un tee).")
+
+    def _validate_starting_handicap(self) -> None:
+        """El índice fijado (BE #514): el mismo rango que los demás, y solo si está fijado."""
+        if self.starting_handicap is None:
+            return
+        if not self.handicap_frozen:
+            raise ValueError("starting_handicap solo existe en un participante fijado.")
+        if not (MIN_HANDICAP <= self.starting_handicap <= MAX_HANDICAP):
+            raise ValueError(f"starting_handicap debe estar entre {MIN_HANDICAP} y {MAX_HANDICAP}.")
 
     @property
     def is_guest(self) -> bool:
         return self.user_id is None
+
+    def effective_handicap(self, profile_handicap: float | None) -> float | None:
+        """
+        El Handicap Index con el que juega esta partida.
+
+        El fijado al empezar si lo hay (BE #514): así un cambio posterior del
+        perfil no mueve los golpes ni los puntos de una partida ya jugada. Si no
+        —partidas empezadas antes de fijarse—, lo de siempre: el manual del
+        invitado, el personalizado que puso el creador o el del perfil de hoy.
+        """
+        if self.handicap_frozen:
+            return self.starting_handicap
+        if self.is_guest:
+            return self.handicap
+        if self.custom_handicap is not None:
+            return self.custom_handicap
+        return profile_handicap
+
+    def frozen_with(self, profile_handicap: float | None) -> "QuickMatchParticipant":
+        """Copia con el índice de ahora fijado para el resto de la partida."""
+        return replace(
+            self,
+            starting_handicap=self.effective_handicap(profile_handicap),
+            handicap_frozen=True,
+        )
 
     def with_handicap(self, handicap: float | None) -> "QuickMatchParticipant":
         """

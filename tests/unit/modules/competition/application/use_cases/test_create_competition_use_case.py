@@ -88,8 +88,8 @@ class TestCreateCompetitionUseCase:
         competitions = await uow.competitions.find_all()
         assert len(competitions) == 1
         assert competitions[0].name.value == "Ryder Cup 2025"
-        assert competitions[0].team_1_name == "Europa"
-        assert competitions[0].team_2_name == "USA"
+        assert competitions[0].ryder_cup.team_1_name == "Europa"
+        assert competitions[0].ryder_cup.team_2_name == "USA"
 
     async def test_should_create_competition_with_adjacent_countries(
         self, uow: InMemoryUnitOfWork, creator_id: UserId

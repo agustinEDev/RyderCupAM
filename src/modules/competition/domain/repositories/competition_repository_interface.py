@@ -6,11 +6,13 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import date
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..entities.competition import Competition
+from ..value_objects.campo_de_la_competicion import CampoDeLaCompeticion
 from ..value_objects.competition_id import CompetitionId
 from ..value_objects.competition_name import CompetitionName
 from ..value_objects.competition_status import CompetitionStatus
@@ -174,21 +176,41 @@ class CompetitionRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
+    async def exists_with_name(
+        self,
+        name: CompetitionName,
+        creator_id: UserId,
+        except_id: CompetitionId | None = None,
+    ) -> bool:
         """
         Verifica si existe una competición con el nombre especificado para un creador.
 
-        Útil para: Prevenir duplicados por creador (mismo creador, mismo nombre).
+        Útil para: Prevenir duplicados por creador (mismo creador, mismo nombre),
+        sin distinguir mayúsculas (#540).
 
         Args:
             name: El nombre de la competición
             creator_id: El ID del usuario creador
+            except_id: La que se renombra, que no cuenta como repetida
 
         Returns:
             bool: True si existe, False si no existe
 
         Raises:
             RepositoryError: Si ocurre un error de consulta
+        """
+        pass
+
+    @abstractmethod
+    async def campos_de(
+        self, competition_ids: Sequence[CompetitionId]
+    ) -> dict[CompetitionId, list[CampoDeLaCompeticion]]:
+        """
+        Los campos de varias competiciones, con su nombre, en una sola lectura
+        (FE #846): para el listado, sin cargar cada agregado entero.
+
+        Returns:
+            Por competición, sus campos en su orden; sin campos, no aparece
         """
         pass
 

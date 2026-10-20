@@ -2,7 +2,9 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 
 from src.config.csrf_config import generate_csrf_token
 from src.config.dependencies import (
@@ -19,7 +21,21 @@ from src.config.dependencies import (
     get_verify_email_use_case,
     security,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import (
+    EMAIL_SENDING_LIMIT,
+    EMAIL_SENDING_PER_EMAIL_LIMIT,
+    LOGIN_ATTEMPTS_LIMIT,
+    LOGIN_ATTEMPTS_PER_EMAIL_LIMIT,
+    REGISTER_LIMIT,
+    RESET_PASSWORD_LIMIT,
+    VALIDATE_RESET_TOKEN_LIMIT,
+    count_or_refuse,
+    email_rate_limit_key,
+    get_client_identifier,
+    limiter,
+    record_failed_login,
+    refuse_if_failed_logins_exhausted,
+)
 from src.config.settings import settings
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
@@ -72,6 +88,9 @@ from src.modules.user.application.use_cases.verify_email_use_case import (
 )
 from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
+from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
+from src.modules.user.domain.value_objects.password import InvalidPasswordError
+from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -81,9 +100,9 @@ from src.shared.infrastructure.security.cookie_handler import (
     delete_csrf_cookie,
     delete_device_id_cookie,
     delete_refresh_token_cookie,
-    get_cookie_name,
     get_device_id_cookie_name,
     get_refresh_cookie_name,
+    read_access_token,
     set_auth_cookie,
     set_csrf_cookie,
     set_device_id_cookie,
@@ -147,7 +166,7 @@ def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
     description="Crea un nuevo usuario en el sistema con email, contraseña, nombre, apellidos y opcionalmente código de país (ISO 3166-1 alpha-2).",
     tags=["Authentication"],
 )
-@limiter.limit("3/hour")  # Anti-spam: máximo 3 registros por hora desde la misma IP
+@limiter.limit(REGISTER_LIMIT, key_func=get_client_identifier)  # Anti-spam, por red
 async def register_user(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     register_data: RegisterUserRequestDTO,
@@ -164,6 +183,9 @@ async def register_user(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         ) from e
+    except InvalidPasswordError as e:
+        # Con el código de la regla, para traducirlo (BE #519)
+        return coded_bad_request(e)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -179,7 +201,9 @@ async def register_user(
     description="Autentica un usuario y devuelve access + refresh tokens (httpOnly cookies + response body).",
     tags=["Authentication"],
 )
-@limiter.limit("5/minute")  # Anti brute-force: máximo 5 intentos de login por minuto
+@limiter.limit(
+    LOGIN_ATTEMPTS_LIMIT, key_func=get_client_identifier
+)  # Techo por red; el email y los fallos van dentro
 async def login_user(
     request: Request,
     response: Response,
@@ -242,15 +266,25 @@ async def login_user(
         request.cookies.get(device_id_cookie_name)
     )
 
+    # Rate limit (#273): antes de buscar al usuario, para que el 429 llegue igual
+    # exista el email o no. La red solo cuenta los fallos: los aciertos de un club
+    # entrando a la vez no cierran el login
+    refuse_if_failed_logins_exhausted(request)
+    count_or_refuse(
+        LOGIN_ATTEMPTS_PER_EMAIL_LIMIT, "login-email", email_rate_limit_key(login_data.email)
+    )
+
     try:
         login_response = await use_case.execute(login_data)
     except AccountLockedException as e:
+        record_failed_login(request)
         # Account Lockout (v1.13.0): Cuenta bloqueada por intentos fallidos
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
         ) from e
     except AccountDeactivatedException as e:
+        record_failed_login(request)
         # Admin Panel (v2.4.0): Cuenta desactivada por un administrador
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -258,6 +292,7 @@ async def login_user(
         ) from e
 
     if not login_response:
+        record_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -318,7 +353,7 @@ async def logout_user(
     logout_request: LogoutRequestDTO,
     response: Response,
     current_user: UserResponseDTO = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),  # noqa: ARG001 - declara el esquema Bearer en OpenAPI
     use_case: LogoutUserUseCase = Depends(get_logout_user_use_case),
 ):
     """
@@ -365,13 +400,8 @@ async def logout_user(
     """
     user_id = str(current_user.id)
 
-    # Obtener token: prioridad cookie, luego header (mismo orden que get_current_user)
-    token = None
-    cookie_name = get_cookie_name()
-    token = request.cookies.get(cookie_name)
-
-    if not token and credentials:
-        token = credentials.credentials
+    # Obtener token: prioridad cookie, luego header (la regla de get_current_user)
+    token = read_access_token(request)
 
     if not token:
         raise HTTPException(
@@ -631,7 +661,7 @@ async def verify_email(
     description="Genera un nuevo token de verificación y reenvía el email al usuario.",
     tags=["Authentication"],
 )
-@limiter.limit("3/hour")  # Anti-spam de emails: máximo 3 reenvíos por hora
+@limiter.limit(EMAIL_SENDING_LIMIT, key_func=get_client_identifier)  # Por red; el email va dentro
 async def resend_verification_email(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     resend_data: ResendVerificationEmailRequestDTO,
@@ -659,6 +689,13 @@ async def resend_verification_email(
         Por razones de seguridad, este endpoint siempre retorna éxito,
         independientemente de si el email existe o está verificado.
     """
+    # Rate limit por email (#273), desde cualquier red y exista o no el email
+    count_or_refuse(
+        EMAIL_SENDING_PER_EMAIL_LIMIT,
+        "resend-verification-email",
+        email_rate_limit_key(resend_data.email),
+    )
+
     # Log intento de reenvío (parcialmente ofuscado para proteger privacidad)
     email_preview = f"{resend_data.email[:3]}***@{resend_data.email.split('@')[1] if '@' in resend_data.email else '***'}"
     logger.info(f"Verification email resend requested for: {email_preview}")
@@ -722,7 +759,7 @@ async def resend_verification_email(
     """,
     tags=["Authentication"],
 )
-@limiter.limit("3/hour")  # 3 intentos por hora por IP/email
+@limiter.limit(EMAIL_SENDING_LIMIT, key_func=get_client_identifier)  # Por red; el email va dentro
 async def forgot_password(
     request: Request,
     reset_data: RequestPasswordResetRequestDTO,
@@ -744,6 +781,13 @@ async def forgot_password(
         - Mensaje genérico previene enumeración de usuarios
         - Timing attack prevention con delay artificial
     """
+    # Rate limit por email (#273), desde cualquier red y exista o no el email
+    count_or_refuse(
+        EMAIL_SENDING_PER_EMAIL_LIMIT,
+        "forgot-password-email",
+        email_rate_limit_key(reset_data.email),
+    )
+
     # Extraer contexto de seguridad
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
     ip_address = get_trusted_client_ip(
@@ -792,12 +836,12 @@ async def forgot_password(
     """,
     tags=["Authentication"],
 )
-@limiter.limit("3/hour")  # 3 intentos por hora por IP
+@limiter.limit(RESET_PASSWORD_LIMIT, key_func=get_client_identifier)  # Por red
 async def reset_password(
     request: Request,
     reset_data: ResetPasswordRequestDTO,
     use_case: ResetPasswordUseCase = Depends(get_reset_password_use_case),
-) -> ResetPasswordResponseDTO:
+) -> ResetPasswordResponseDTO | JSONResponse:
     """
     Completa el reseteo de contraseña usando el token del email.
 
@@ -832,6 +876,10 @@ async def reset_password(
         # Ejecutar use case (maneja toda la lógica)
         response = await use_case.execute(reset_data)
         return response
+    except (InvalidPasswordError, InvalidResetTokenError) as e:
+        # Con su código, para traducirlo (BE #519), y al log como los demás fallos
+        logger.warning(f"Password reset failed: {e!s}")
+        return coded_bad_request(e)
     except ValueError as e:
         # Token inválido/expirado o password inválido
         logger.warning(f"Password reset failed: {e!s}")
@@ -865,7 +913,7 @@ async def reset_password(
     """,
     tags=["Authentication"],
 )
-@limiter.limit("10/hour")  # 10 intentos por hora por IP
+@limiter.limit(VALIDATE_RESET_TOKEN_LIMIT, key_func=get_client_identifier)  # Por red
 async def validate_reset_token(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     token: str,
@@ -885,8 +933,16 @@ async def validate_reset_token(
         - SIEMPRE retorna 200 OK (nunca 404)
         - NO incluye email del usuario por seguridad
     """
-    # Crear request DTO
-    request_dto = ValidateResetTokenRequestDTO(token=token)
+    # Un token con una longitud imposible es un token inválido más: la ruta
+    # promete 200 con valid=False, no un 500 (BE #453). Mismo mensaje que el
+    # caso de uso, para que la longitud no revele nada distinto
+    try:
+        request_dto = ValidateResetTokenRequestDTO(token=token)
+    except ValidationError:
+        return ValidateResetTokenResponseDTO(
+            valid=False,
+            message="Token de reseteo inválido o expirado. Solicita un nuevo enlace.",
+        )
 
     # Ejecutar use case
     response = await use_case.execute(request_dto)

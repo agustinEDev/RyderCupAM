@@ -1,5 +1,6 @@
 """
-Al cerrar la inscripción, las invitaciones pendientes se quedan sin plaza (#710).
+Al cerrar la inscripción, o al llenarse, las invitaciones pendientes se quedan
+sin plaza (#710, BE #359).
 
 Decidido el 24 sep: aceptar una pendiente con el draft hecho descuadraba los
 partidos. La inscripción se cierra por dos caminos —cerrarla a mano y nombrar a
@@ -25,3 +26,21 @@ async def sin_plaza_para_las_pendientes(
         if invitacion.is_pending():
             invitacion.reject_for_no_room()
         await uow.invitations.update(invitacion)
+
+
+async def al_ocupar_una_plaza(
+    uow: CompetitionUnitOfWorkInterface,
+    competition_id: CompetitionId,
+    aprobadas_antes: int,
+    max_players: int,
+) -> None:
+    """Si esa plaza era la última, las pendientes se quedan sin plaza ya (BE #359).
+
+    Quien llega tarde se entera en el momento, no al aceptar. Una sola regla para
+    todos los caminos que ocupan una plaza —aceptar una invitación, aprobar una
+    solicitud, inscribir directamente—: con una copia en cada uno, aprobar se
+    quedó sin ella. La carrera entre dos que ocupan a la vez la resuelve la fila
+    bloqueada de la competición: entra el primero.
+    """
+    if aprobadas_antes + 1 >= max_players:
+        await sin_plaza_para_las_pendientes(uow, competition_id)

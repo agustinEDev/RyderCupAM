@@ -1,34 +1,29 @@
 """Caso de Uso: Crear una Partida Rapida."""
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.approval_status import ApprovalStatus
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import (
     CreateQuickMatchRequestDTO,
     QuickMatchResponseDTO,
 )
-from src.modules.quick_match.application.exceptions import (
-    GolfCourseNotApprovedError,
-    GolfCourseNotFoundError,
-    InvalidTeeSelectionError,
-)
 from src.modules.quick_match.application.mappers.quick_match_mapper import QuickMatchDTOMapper
+from src.modules.quick_match.application.services.roster_checks import check_course_and_tees
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 
 class CreateQuickMatchUseCase:
@@ -53,20 +48,9 @@ class CreateQuickMatchUseCase:
             Gender(request.creator_tee_gender) if request.creator_tee_gender else None
         )
 
-        async with self._golf_course_uow:
-            golf_course = await self._golf_course_uow.golf_courses.find_by_id(golf_course_id)
-            if not golf_course:
-                raise GolfCourseNotFoundError(f"Golf course not found: {request.golf_course_id}")
-            if golf_course.approval_status != ApprovalStatus.APPROVED:
-                raise GolfCourseNotApprovedError(
-                    f"Golf course '{golf_course.name}' is not approved."
-                )
-            if creator_tee_color is not None and not golf_course.has_tee(
-                creator_tee_color, creator_tee_gender
-            ):
-                raise InvalidTeeSelectionError(
-                    f"{creator_tee_color.value} is not a valid tee for this golf course."
-                )
+        await check_course_and_tees(
+            self._golf_course_uow, golf_course_id, [(creator_tee_color, creator_tee_gender)]
+        )
 
         quick_match = QuickMatch.create(
             id=QuickMatchId.generate(),

@@ -4,11 +4,12 @@ Competition Repository - SQLAlchemy Implementation.
 Implementación concreta del repositorio de competiciones usando SQLAlchemy async.
 """
 
+from collections.abc import Sequence
 from datetime import date
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import class_mapper, selectinload
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.competition_golf_course import (
@@ -17,12 +18,18 @@ from src.modules.competition.domain.entities.competition_golf_course import (
 from src.modules.competition.domain.repositories.competition_repository_interface import (
     CompetitionRepositoryInterface,
 )
+from src.modules.competition.domain.value_objects.campo_de_la_competicion import (
+    CampoDeLaCompeticion,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import (
     CompetitionName,
 )
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+    competition_golf_courses_table,
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -146,6 +153,36 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .options(selectinload(GolfCourse._tees)),
         )
 
+    async def campos_de(
+        self, competition_ids: Sequence[CompetitionId]
+    ) -> dict[CompetitionId, list[CampoDeLaCompeticion]]:
+        """Una consulta para todas, solo con las columnas: sin hidratar los campos
+        (sus salidas y sus hoyos se cargan con ellos)."""
+        if not competition_ids:
+            return {}
+        enlaces = competition_golf_courses_table
+        # La tabla del campo, sacada de su mapeo: sin importar la infraestructura
+        # de otro módulo. Sus columnas convierten a los VOs como las entidades
+        campos_t = class_mapper(GolfCourse).local_table
+        stmt = (
+            select(
+                enlaces.c.competition_id,
+                campos_t.c.id,
+                campos_t.c.name,
+                campos_t.c.country_code,
+            )
+            .join(campos_t, campos_t.c.id == enlaces.c.golf_course_id)
+            .where(enlaces.c.competition_id.in_(list(competition_ids)))
+            .order_by(enlaces.c.competition_id, enlaces.c.display_order)
+        )
+        result = await self._session.execute(stmt)
+        campos: dict[CompetitionId, list[CampoDeLaCompeticion]] = {}
+        for competition_id, golf_course_id, nombre, pais in result.all():
+            campos.setdefault(competition_id, []).append(
+                CampoDeLaCompeticion(golf_course_id, nombre, pais)
+            )
+        return campos
+
     async def find_by_creator(
         self, creator_id: UserId, limit: int = 100, offset: int = 0
     ) -> list[Competition]:
@@ -238,7 +275,12 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
-    async def exists_with_name(self, name: CompetitionName, creator_id: UserId) -> bool:
+    async def exists_with_name(
+        self,
+        name: CompetitionName,
+        creator_id: UserId,
+        except_id: CompetitionId | None = None,
+    ) -> bool:
         """
         Verifica si existe una competición con el nombre especificado para un creador.
 
@@ -259,11 +301,15 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .select_from(Competition)
             .where(
                 and_(
-                    Competition._name_value == str(name),
+                    # Sin distinguir mayúsculas: el nombre se guarda tal cual (#540).
+                    # Las dos minúsculas las hace Postgres: no depende de su ctype
+                    func.lower(Competition._name_value) == func.lower(name.value),
                     Competition._creator_id == creator_id,
                 )
             )
         )
+        if except_id is not None:
+            statement = statement.where(Competition._id != except_id)
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
 

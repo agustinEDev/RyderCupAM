@@ -14,7 +14,11 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
-class GenderRequiredError(Exception):
+class PerfilIncompletoError(Exception):
+    """Al perfil de quien entra en una competición le falta algo que hace falta para jugar."""
+
+
+class GenderRequiredError(PerfilIncompletoError):
     """Quien se apunta no tiene el género en su perfil."""
 
 

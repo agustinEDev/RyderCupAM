@@ -27,10 +27,8 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
@@ -55,6 +53,8 @@ from src.modules.golf_course.infrastructure.persistence.repositories.golf_course
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 pytestmark = [pytest.mark.integration]
 

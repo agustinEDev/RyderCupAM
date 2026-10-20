@@ -4,9 +4,6 @@ from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.domain.services.scoring_service import ScoringService
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.application.dto.quick_match_dto import (
@@ -34,9 +31,12 @@ from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMat
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
-from src.modules.quick_match.domain.value_objects.scoring_format import ScoringFormat
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from tests.unit.modules.quick_match.conftest import (
     create_golf_course,
     create_user,
@@ -67,7 +67,7 @@ class TestGetQuickMatchUseCase:
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
         use_case = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
 
@@ -87,14 +87,14 @@ class TestGetQuickMatchUseCase:
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
         use_case = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         with pytest.raises(NotQuickMatchParticipantError):
             await use_case.execute(str(qm.id.value), str(UserId(uuid4()).value))
 
     async def test_not_found_raises(self, qm_uow, user_uow, golf_course_uow):
         use_case = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         with pytest.raises(QuickMatchNotFoundError):
             await use_case.execute(str(uuid4()), str(uuid4()))
@@ -127,7 +127,7 @@ class TestGetQuickMatchUseCase:
         )
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -172,7 +172,7 @@ class TestGetQuickMatchUseCase:
         )
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -213,7 +213,7 @@ class TestGetQuickMatchUseCase:
         )
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -229,7 +229,7 @@ class TestGetQuickMatchUseCase:
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -263,7 +263,7 @@ class TestGetQuickMatchUseCase:
         )
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -341,7 +341,7 @@ class TestStandingAppliesHandicap:
         await self._score_hole(qm_uow, qm, creator, other, hole=1, creator_score=5, other_score=5)
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -364,7 +364,7 @@ class TestStandingAppliesHandicap:
         await self._score_hole(qm_uow, qm, creator, other, hole=1, creator_score=5, other_score=5)
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -372,6 +372,37 @@ class TestStandingAppliesHandicap:
         assert detail.standing.leading_team is None
         assert detail.play_mode == "SCRATCH"
         assert all(ps.strokes_by_hole == {} for ps in detail.participant_strokes)
+
+    async def test_un_cambio_del_perfil_no_mueve_una_partida_ya_empezada(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        """
+        BE #514: el detalle juega con el índice fijado al empezar, no con el de hoy.
+
+        Fijados 5 y 20, el de 20 baja después a 5 en su perfil: la partida sigue
+        dándole los golpes de 20 y enseñando 20.
+        """
+        creator = await create_user(user_uow, unique_email("frozen-a"), handicap=5.0)
+        other = await create_user(user_uow, unique_email("frozen-b"), handicap=20.0)
+        qm = await self._match_on_real_course(
+            qm_uow, golf_course_uow, creator, other, PlayMode.HANDICAP
+        )
+        async with qm_uow:
+            guardada = await qm_uow.quick_matches.find_by_id(qm.id)
+            guardada.freeze_handicaps({creator.id: 5.0, other.id: 20.0})
+            await qm_uow.quick_matches.update(guardada)
+        other.update_handicap(5.0)
+        async with user_uow:
+            await user_uow.users.save(other)
+
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+
+        other_dto = next(p for p in detail.participants if p.user_id == other.id.value)
+        assert other_dto.handicap == 20.0
+        by_participant = {ps.participant_id: ps for ps in detail.participant_strokes}
+        assert by_participant[other.id.value].strokes_by_hole
 
     async def test_detail_exposes_the_strokes_used_to_decide_the_holes(
         self, qm_uow, user_uow, golf_course_uow
@@ -384,7 +415,7 @@ class TestStandingAppliesHandicap:
         )
 
         get_uc = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await get_uc.execute(str(qm.id.value), str(creator.id.value))
 
@@ -462,7 +493,7 @@ class TestFoursomesScoresOneBallPerSide:
         await _score(qm_uow, qm, creator.id, rival_a.id, 1, 5)
 
         detail = await GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         ).execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.standing is not None
@@ -484,7 +515,7 @@ class TestFoursomesScoresOneBallPerSide:
         await _score(qm_uow, qm, creator.id, rival_b.id, 1, 6)
 
         detail = await GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         ).execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.standing is not None
@@ -501,7 +532,7 @@ class TestFoursomesScoresOneBallPerSide:
         await _score(qm_uow, qm, creator.id, creator.id, 1, 4)
 
         detail = await GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         ).execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.standing is None
@@ -519,7 +550,7 @@ class TestFoursomesScoresOneBallPerSide:
         await _score(qm_uow, qm, creator.id, rival_b.id, 1, 6)
 
         detail = await GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         ).execute(str(qm.id.value), str(creator.id.value))
 
         assert detail.standing is None
@@ -542,7 +573,7 @@ class TestQuickMatchShowsTheAlias:
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
         use_case = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
 
@@ -559,7 +590,7 @@ class TestQuickMatchShowsTheAlias:
         qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
 
         use_case = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
 
@@ -586,7 +617,7 @@ class TestQuickMatchShowsTheAlias:
             await qm_uow.quick_matches.add(qm)
 
         use_case = GetQuickMatchUseCase(
-            qm_uow, user_uow, ScoringService(), ScoringCoverageService(), golf_course_uow
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
         )
         detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
 

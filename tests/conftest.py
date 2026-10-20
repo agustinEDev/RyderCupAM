@@ -36,31 +36,10 @@ from main import app as fastapi_app
 from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
 )
-from src.config.dependencies import get_db_session
-from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
-    start_mappers as start_competition_mappers,
-)
-from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapper import (
-    start_golf_course_mappers,
-)
-from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (
-    start_quick_match_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
-    start_activity_event_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.friendship_mapper import (
-    start_social_mappers,
-)
-from src.modules.social.infrastructure.persistence.mappers.profile_photo_mapper import (
-    start_profile_photo_mappers,
-)
+from src.config.dependencies import get_db_session, get_handicap_service
+from src.config.mappers import start_all_mappers
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
-    start_mappers,
-)
-from src.shared.infrastructure.persistence.sqlalchemy.country_mappers import (
-    start_mappers as start_country_mappers,
 )
 
 # Usamos la URL de la app como base, pero la sobreescribimos si es necesario
@@ -140,14 +119,7 @@ def pytest_configure(config):
             f"\n🧪 Iniciando tests del Ryder Cup Manager - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
         print("🚀 Inicializando mappers de SQLAlchemy...")
-        start_mappers()  # User module
-        start_country_mappers()  # Shared domain (Country)
-        start_competition_mappers()  # Competition module
-        start_golf_course_mappers()  # Golf Course module
-        start_social_mappers()  # Social module
-        start_activity_event_mappers()  # Activity feed (depends on User)
-        start_profile_photo_mappers()  # Profile photo gallery (depends on User)
-        start_quick_match_mappers()  # QuickMatch module
+        start_all_mappers()  # Los mismos que la aplicación y Alembic (#565)
         # Marcamos que los mappers ya fueron iniciados para evitar reinicialización
         config.mappers_initialized = True
 
@@ -158,18 +130,8 @@ def pytest_configure(config):
 
     # Fallback por si un worker arranca sin que el maestro haya terminado
     else:
-        try:
-            start_mappers()
-            start_country_mappers()
-            start_competition_mappers()
-            start_golf_course_mappers()
-            start_social_mappers()
-            start_activity_event_mappers()
-            start_profile_photo_mappers()
-            start_quick_match_mappers()
-        except Exception:
-            # Es probable que falle si otro proceso ya lo hizo, lo ignoramos.
-            pass
+        # Son idempotentes: un fallo aquí es un error de mapeo de verdad (#565)
+        start_all_mappers()
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -222,6 +184,25 @@ async def unit_client() -> AsyncGenerator[AsyncClient, None]:
 # ======================================================================================
 
 
+def _sin_la_rfeg_de_verdad() -> None:
+    """
+    La RFEG de la app de prueba es el mock, salvo que el test ya ponga el suyo.
+
+    La real falla al azar (429 si se le pregunta mucho, 500 a ratos), y la consultan
+    el registro de un jugador de España, generar los partidos y poner el hándicap
+    con `/handicaps/update`; el último lo convierte en un 503 que tumba el test (CI
+    de develop del 17 oct 2026). Con `setdefault`, los tests que ponen su propio mock
+    antes de pedir el cliente lo conservan.
+    """
+    from src.modules.user.infrastructure.external.mock_handicap_service import (
+        MockHandicapService,
+    )
+
+    fastapi_app.dependency_overrides.setdefault(
+        get_handicap_service, lambda: MockHandicapService(default=None)
+    )
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """
@@ -267,6 +248,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+    _sin_la_rfeg_de_verdad()
 
     # Publicada para los tests que necesitan comprobar que algo se PERSISTIO:
     # cualquier ruta que lea la competicion puede abrirla ella misma, asi que un
@@ -341,6 +323,7 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+    _sin_la_rfeg_de_verdad()
 
     test_client_id = f"test-module-{uuid.uuid4()}"
 
@@ -662,6 +645,22 @@ def mock_external_services():
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):
         yield mock_email
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    """
+    Cada test empieza con los contadores del rate limit a cero.
+
+    Los contadores por red los separa el X-Test-Client-ID único de cada test, pero
+    los de email (login, forgot-password) y los de usuario no (RyderCupAM#273): dos
+    tests con el mismo email se pisarían dentro del mismo minuto.
+    """
+    from src.config.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 # ======================================================================================
@@ -1064,7 +1063,8 @@ async def create_admin_user(
 async def add_one_session(client: AsyncClient, cookies: dict, competition: dict) -> dict:
     """Una sesión en la competición: sin ninguna no se puede iniciar (#710, 25 sep).
 
-    Un campo aprobado, añadido a la competición, y una sesión el día de inicio.
+    Un campo aprobado, añadido a la competición, y una sesión el día de inicio
+    (en un stroke play, una franja de 9:00 a 11:00).
     Devuelve la sesión creada.
     """
     admin = await create_admin_user(
@@ -1078,14 +1078,51 @@ async def add_one_session(client: AsyncClient, cookies: dict, competition: dict)
         json={"golf_course_id": campo["id"]},
     )
     assert anadido.status_code == 201, anadido.text
-    sesion = await client.post(
-        f"/api/v1/competitions/{competition['id']}/rounds",
-        json={
-            "golf_course_id": campo["id"],
-            "round_date": competition["start_date"],
-            "session_type": "MORNING",
-            "match_format": "SINGLES",
-        },
-    )
+    datos = {
+        "golf_course_id": campo["id"],
+        "round_date": competition["start_date"],
+        "session_type": "MORNING",
+    }
+    # En un Stableford o un Medal, una franja con su hoja de salidas (#251)
+    if competition.get("tournament_type", "RYDER_CUP") != "RYDER_CUP":
+        datos["tee_sheet"] = {
+            "first_tee_time": "09:00",
+            "last_tee_time": "11:00",
+            "interval_minutes": 10,
+            "group_size": 4,
+        }
+    else:
+        datos["match_format"] = "SINGLES"
+    sesion = await client.post(f"/api/v1/competitions/{competition['id']}/rounds", json=datos)
     assert sesion.status_code == 201, sesion.text
     return sesion.json()
+
+
+async def plaza_para_todos(client: AsyncClient, cookies: dict, competition: dict) -> None:
+    """Coloca, como organizador, a cada aprobado sin franja en la primera franja (#251).
+
+    Sin franja no se cierran las inscripciones de un Stableford o un Medal. Si la
+    competición no tiene franjas, añade una con `add_one_session`. En una Ryder, nada.
+    """
+    if competition.get("tournament_type", "RYDER_CUP") == "RYDER_CUP":
+        return
+    set_auth_cookies(client, cookies)
+    calendario = (await client.get(f"/api/v1/competitions/{competition['id']}/schedule")).json()
+    franjas = [r for d in calendario.get("days", []) for r in d["rounds"] if r.get("tee_sheet")]
+    if not franjas:
+        await add_one_session(client, cookies, competition)
+        set_auth_cookies(client, cookies)
+        calendario = (await client.get(f"/api/v1/competitions/{competition['id']}/schedule")).json()
+        franjas = [r for d in calendario["days"] for r in d["rounds"] if r.get("tee_sheet")]
+    con_plaza = {u for f in franjas for u in f["tee_sheet"]["player_ids"]}
+    inscritos = (
+        await client.get(f"/api/v1/competitions/{competition['id']}/enrollments?status=APPROVED")
+    ).json()
+    for inscrito in inscritos:
+        if inscrito["user_id"] in con_plaza:
+            continue
+        respuesta = await client.post(
+            f"/api/v1/competitions/rounds/{franjas[0]['id']}/places",
+            json={"user_id": inscrito["user_id"]},
+        )
+        assert respuesta.status_code == 201, respuesta.text

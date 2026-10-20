@@ -5,7 +5,7 @@ Encapsula la regla de negocio de cómo se distribuyen los formatos de partido
 (Singles, Fourball, Foursomes) a lo largo de las sesiones de una competición.
 """
 
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 
 class ScheduleFormatService:

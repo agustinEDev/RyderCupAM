@@ -12,7 +12,7 @@ from src.config.dependencies import get_handicap_service
 from src.modules.user.infrastructure.external.mock_handicap_service import (
     MockHandicapService,
 )
-from tests.conftest import create_authenticated_user
+from tests.conftest import create_admin_user, create_authenticated_user
 
 
 @pytest.mark.integration
@@ -65,12 +65,13 @@ class TestHandicapEndpoints:
 
     @pytest.mark.asyncio
     async def test_update_handicap_endpoint_user_not_found(self, client: AsyncClient):
-        """Test: Actualizar hándicap de usuario inexistente devuelve 404."""
-        # Arrange - Crear usuario autenticado primero
+        """Test: Un admin que actualiza un usuario inexistente recibe 404.
 
-        auth_data = await create_authenticated_user(
-            client, "auth@test.com", "P@ssw0rd123!", "Auth", "User"
-        )
+        Un jugador recibiría 403 sin llegar a buscarlo (#341).
+        """
+        # Arrange - Un admin: el 404 solo se le da a él (#341)
+
+        auth_data = await create_admin_user(client, "auth@test.com", "P@ssw0rd123!", "Auth", "User")
         token = auth_data["token"]
 
         non_existent_id = "123e4567-e89b-12d3-a456-426614174000"
@@ -91,8 +92,8 @@ class TestHandicapEndpoints:
         """Test: Endpoint de actualización múltiple funciona correctamente."""
         # Arrange - Crear varios usuarios mediante el endpoint de registro
 
-        # Crear usuario autenticado para hacer la petición
-        auth_data = await create_authenticated_user(
+        # La actualización masiva es solo del admin (#341)
+        auth_data = await create_admin_user(
             client, "admin@test.com", "P@ssw0rd123!", "Admin", "User"
         )
         token = auth_data["token"]
@@ -143,9 +144,9 @@ class TestHandicapEndpoints:
     @pytest.mark.asyncio
     async def test_update_multiple_handicaps_empty_list(self, client: AsyncClient):
         """Test: Actualizar lista vacía devuelve estadísticas correctas."""
-        # Arrange - Crear usuario autenticado
+        # Arrange - Crear un admin: la actualización masiva es solo suya (#341)
 
-        auth_data = await create_authenticated_user(
+        auth_data = await create_admin_user(
             client, "empty@test.com", "P@ssw0rd123!", "Empty", "Test"
         )
         token = auth_data["token"]
@@ -232,6 +233,209 @@ class TestHandicapEndpoints:
 
         # Assert
         assert response.status_code == 422  # Validation error
+
+
+@pytest.mark.integration
+class TestHandicapEndpointsAuthorization:
+    """
+    Quién puede cambiar el hándicap de quién (RyderCupAM#341).
+
+    Un jugador solo toca el suyo; el admin, el de cualquiera. Comprobar el permiso
+    antes que la existencia del usuario evita que un 404 delate qué ids existen.
+    """
+
+    def setup_method(self):
+        mock_handicap_service = MockHandicapService(
+            handicaps={"Rafael Nadal Parera": 8.5, "Carlos Alcaraz Garfia": 12.0},
+            default=None,
+        )
+        app.dependency_overrides[get_handicap_service] = lambda: mock_handicap_service
+
+    def teardown_method(self):
+        app.dependency_overrides.clear()
+
+    @staticmethod
+    def _as(client: AsyncClient, data: dict) -> dict:
+        """
+        Cabecera de quien hace la petición.
+
+        get_current_user prefiere la cookie a la cabecera, y el client se queda la del
+        último que inició sesión: sin vaciarla, todas las peticiones irían como él.
+        """
+        client.cookies.clear()
+        return {"Authorization": f"Bearer {data['token']}"}
+
+    async def _handicap_of(self, client: AsyncClient, data: dict) -> float | None:
+        response = await client.get("/api/v1/auth/current-user", headers=self._as(client, data))
+        assert response.status_code == 200
+        return response.json()["handicap"]
+
+    @pytest.mark.asyncio
+    async def test_update_manual_on_own_user_succeeds(self, client: AsyncClient):
+        """
+        Given: Un jugador con sesión
+        When: Cambia a mano su propio hándicap
+        Then: 200 y el hándicap queda cambiado
+        """
+        me = await create_authenticated_user(
+            client, "self@test.com", "P@ssw0rd123!", "Self", "Player"
+        )
+
+        response = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": me["user"]["id"], "handicap": 14.2},
+            headers=self._as(client, me),
+        )
+
+        assert response.status_code == 200
+        assert abs(await self._handicap_of(client, me) - 14.2) < 0.01
+
+    @pytest.mark.asyncio
+    async def test_update_manual_on_another_user_is_forbidden(self, client: AsyncClient):
+        """
+        Given: Dos jugadores sin privilegios
+        When: Uno cambia a mano el hándicap del otro
+        Then: 403 y el hándicap del otro no cambia
+        """
+        victim = await create_authenticated_user(
+            client, "victim@test.com", "P@ssw0rd123!", "Victim", "Player"
+        )
+        before = await self._handicap_of(client, victim)
+        attacker = await create_authenticated_user(
+            client, "attacker@test.com", "P@ssw0rd123!", "Attacker", "Player"
+        )
+
+        response = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": victim["user"]["id"], "handicap": 36.0},
+            headers=self._as(client, attacker),
+        )
+
+        assert response.status_code == 403
+        assert await self._handicap_of(client, victim) == before
+
+    @pytest.mark.asyncio
+    async def test_update_manual_on_unknown_id_is_forbidden_not_not_found(
+        self, client: AsyncClient
+    ):
+        """
+        Given: Un jugador sin privilegios
+        When: Cambia a mano el hándicap de un id que no existe
+        Then: 403, no 404: la respuesta no dice si el id existe
+        """
+        me = await create_authenticated_user(
+            client, "probe@test.com", "P@ssw0rd123!", "Probe", "Player"
+        )
+
+        response = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": str(uuid.uuid4()), "handicap": 10.0},
+            headers=self._as(client, me),
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_update_manual_by_admin_on_another_user_succeeds(self, client: AsyncClient):
+        """
+        Given: Un admin y un jugador
+        When: El admin cambia a mano el hándicap del jugador
+        Then: 200 y el hándicap del jugador queda cambiado
+        """
+        player = await create_authenticated_user(
+            client, "managed@test.com", "P@ssw0rd123!", "Managed", "Player"
+        )
+        admin = await create_admin_user(client, "boss@test.com", "P@ssw0rd123!", "Boss", "Admin")
+
+        response = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": player["user"]["id"], "handicap": 22.4},
+            headers=self._as(client, admin),
+        )
+
+        assert response.status_code == 200
+        assert abs(await self._handicap_of(client, player) - 22.4) < 0.01
+
+    @pytest.mark.asyncio
+    async def test_update_manual_by_admin_on_unknown_id_is_not_found(self, client: AsyncClient):
+        """
+        Given: Un admin
+        When: Cambia a mano el hándicap de un id que no existe
+        Then: 404
+        """
+        admin = await create_admin_user(client, "boss2@test.com", "P@ssw0rd123!", "Boss", "Admin")
+
+        response = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": str(uuid.uuid4()), "handicap": 10.0},
+            headers=self._as(client, admin),
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_from_rfeg_on_another_user_is_forbidden(self, client: AsyncClient):
+        """
+        Given: Dos jugadores sin privilegios
+        When: Uno pide a la RFEG el hándicap del otro, con manual_handicap de respaldo
+        Then: 403 y el hándicap del otro no cambia
+        """
+        victim = await create_authenticated_user(
+            client, "rafa.victim@test.com", "P@ssw0rd123!", "Rafael", "Nadal Parera"
+        )
+        before = await self._handicap_of(client, victim)
+        attacker = await create_authenticated_user(
+            client, "rfeg.attacker@test.com", "P@ssw0rd123!", "Attacker", "Player"
+        )
+
+        response = await client.post(
+            "/api/v1/handicaps/update",
+            json={"user_id": victim["user"]["id"], "manual_handicap": 36.0},
+            headers=self._as(client, attacker),
+        )
+
+        assert response.status_code == 403
+        assert await self._handicap_of(client, victim) == before
+
+    @pytest.mark.asyncio
+    async def test_update_from_rfeg_by_admin_on_another_user_succeeds(self, client: AsyncClient):
+        """
+        Given: Un admin y un jugador que la RFEG conoce
+        When: El admin pide a la RFEG el hándicap del jugador
+        Then: 200 con el hándicap de la RFEG
+        """
+        player = await create_authenticated_user(
+            client, "rafa.admin@test.com", "P@ssw0rd123!", "Rafael", "Nadal Parera"
+        )
+        admin = await create_admin_user(client, "boss3@test.com", "P@ssw0rd123!", "Boss", "Admin")
+
+        response = await client.post(
+            "/api/v1/handicaps/update",
+            json={"user_id": player["user"]["id"]},
+            headers=self._as(client, admin),
+        )
+
+        assert response.status_code == 200
+        assert abs(response.json()["handicap"] - 8.5) < 0.01
+
+    @pytest.mark.asyncio
+    async def test_update_multiple_by_player_is_forbidden(self, client: AsyncClient):
+        """
+        Given: Un jugador sin privilegios
+        When: Pide la actualización masiva, aunque sea solo sobre sí mismo
+        Then: 403
+        """
+        me = await create_authenticated_user(
+            client, "rafa.bulk@test.com", "P@ssw0rd123!", "Rafael", "Nadal Parera"
+        )
+
+        response = await client.post(
+            "/api/v1/handicaps/update-multiple",
+            json={"user_ids": [me["user"]["id"]]},
+            headers=self._as(client, me),
+        )
+
+        assert response.status_code == 403
 
 
 @pytest.mark.integration

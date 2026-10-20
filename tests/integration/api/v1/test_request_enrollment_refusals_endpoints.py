@@ -27,7 +27,6 @@ from src.modules.competition.domain.value_objects.competition_status import (
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
@@ -37,6 +36,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_re
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.conftest import _URL_DE_LA_BD_DE_TEST
 from tests.integration.api.v1.helpers.auth_helper import create_and_login_user
 

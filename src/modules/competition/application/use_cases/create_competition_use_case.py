@@ -8,8 +8,15 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
 )
+from src.modules.competition.application.exceptions import CompetitionAlreadyExistsError
+from src.modules.competition.application.mappers.competition_mapper import CompetitionDTOMapper
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
-from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
+from src.modules.competition.domain.entities.competition import (
+    RYDER_SIN_STROKE_PLAY,
+    Competition,
+    TournamentTypeError,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -22,18 +29,12 @@ from src.modules.competition.domain.value_objects.competition_name import (
 )
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-class CompetitionAlreadyExistsError(Exception):
-    """Excepción lanzada cuando ya existe una competición con el mismo nombre."""
-
-    pass
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 
 class CreateCompetitionUseCase:
@@ -105,7 +106,7 @@ class CreateCompetitionUseCase:
             existing = await self._uow.competitions.exists_with_name(name_vo, creator_id)
             if existing:
                 raise CompetitionAlreadyExistsError(
-                    f"Ya existe una competición con el nombre '{request.name}'"
+                    f"Ya existe una competición con el nombre '{name_vo}'"
                 )
 
             # 4. Construir Location usando Domain Service (valida países y adyacencias)
@@ -121,8 +122,10 @@ class CreateCompetitionUseCase:
             # 6. Construir DateRange
             date_range = DateRange(start_date=request.start_date, end_date=request.end_date)
 
-            # 7. Construir TeamAssignment desde string
-            team_assignment_vo = TeamAssignment(request.team_assignment)
+            # 7. Construir TeamAssignment desde string (solo llega en una Ryder)
+            team_assignment_vo = (
+                TeamAssignment(request.team_assignment) if request.team_assignment else None
+            )
 
             # 8. Crear la entidad Competition usando factory method
             competition = Competition.create(
@@ -140,6 +143,9 @@ class CreateCompetitionUseCase:
                 enrollment_opens_days_before=request.enrollment_opens_days_before,
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
+                tournament_type=request.tournament_type,
+                # Solo de un Stableford o un Medal; a una Ryder se le rechaza
+                **self._ajustes_de_stroke_play(request),
             )
 
             # 9. Sin apertura programada, nace con las inscripciones ABIERTAS
@@ -157,9 +163,16 @@ class CreateCompetitionUseCase:
             # 10. Persistir la competición
             await self._uow.competitions.add(competition)
 
-            # 11. Auto-enroll del creador como jugador APPROVED. Juega, así que
-            # su género hace falta como el de cualquier inscrito (#710)
+            # 11. Auto-enroll del creador como jugador APPROVED, salvo que en un
+            # stroke play diga que no juega (#552). Juega, así que su género hace
+            # falta como el de cualquier inscrito (#710)
+            if competition.stroke_play is not None and not request.organizer_plays:
+                return self._respuesta(competition)
             await exigir_genero(self._user_repo, creator_id, es_quien_se_apunta=True, al_crear=True)
+            # Y en un Stableford o un Medal, su hándicap: de él sale su categoría (#251)
+            await exigir_handicap(
+                self._user_repo, competition, creator_id, es_quien_se_apunta=True, al_crear=True
+            )
             creator_enrollment = Enrollment.direct_enroll(
                 id=EnrollmentId.generate(),
                 competition_id=competition.id,
@@ -168,6 +181,26 @@ class CreateCompetitionUseCase:
             await self._uow.enrollments.add(creator_enrollment)
 
         # 12. Retornar DTO de respuesta
+        return self._respuesta(competition)
+
+    @staticmethod
+    def _ajustes_de_stroke_play(request: CreateCompetitionRequestDTO) -> dict:
+        """Lo que llega de stroke play, tal cual: la pieza pone los valores por defecto."""
+        if request.stroke_play is None:
+            return {}
+        # Mandar `stroke_play`, aunque venga vacío, ya es pedir algo que una Ryder no tiene
+        if request.tournament_type.has_teams:
+            raise TournamentTypeError(RYDER_SIN_STROKE_PLAY)
+        return {
+            "category_limits": request.stroke_play.category_limits,
+            "max_matchdays_per_player": request.stroke_play.max_matchdays_per_player,
+            "overall_standing": request.stroke_play.overall_standing,
+            "category_count": request.stroke_play.category_count,
+        }
+
+    @staticmethod
+    def _respuesta(competition: Competition) -> CreateCompetitionResponseDTO:
+        """La competición recién creada, para la respuesta."""
         return CreateCompetitionResponseDTO(
             id=competition.id.value,
             creator_id=competition.creator_id.value,
@@ -190,16 +223,13 @@ class CreateCompetitionUseCase:
             location=str(competition.location),
             # Play Mode
             play_mode=competition.play_mode.value,
-            # Nombres de equipos
-            team_1_name=competition.team_1_name,
-            team_2_name=competition.team_2_name,
             # Config
             max_players=competition.max_players,
-            team_assignment=competition.team_assignment.value,
             max_playing_handicap=competition.max_playing_handicap,
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
-            setup_mode=str(competition.setup_mode),
+            # Tipo de torneo y lo de la Ryder (vacío si no lo es)
+            **CompetitionDTOMapper.tournament_fields(competition),
             # Timestamps
             created_at=competition.created_at,
             updated_at=competition.updated_at,

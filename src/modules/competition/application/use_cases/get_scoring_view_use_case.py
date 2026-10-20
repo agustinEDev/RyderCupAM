@@ -97,6 +97,8 @@ class GetScoringViewUseCase:
                 date=str(round_entity.round_date) if round_entity.round_date else "",
                 session_type=round_entity.session_type.value if round_entity.session_type else "",
                 golf_course_name=golf_course_name,
+                golf_course_id=round_entity.golf_course_id.value,
+                golf_course_country_code=golf_course.country_code.value if golf_course else None,
             )
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
@@ -117,12 +119,11 @@ class GetScoringViewUseCase:
                 decided_result = DecidedResultDTO(**match.decided_result)
             else:
                 decided_result = None
-            team_a_name = (
-                competition.team_1_name if hasattr(competition, "team_1_name") else "Team A"
-            )
-            team_b_name = (
-                competition.team_2_name if hasattr(competition, "team_2_name") else "Team B"
-            )
+            # Hoy son enfrentamientos entre dos equipos: un torneo de stroke
+            # play tendrá los suyos (#251)
+            ryder_cup = competition.require_ryder_cup()
+            team_a_name = ryder_cup.team_1_name
+            team_b_name = ryder_cup.team_2_name
 
             return ScoringViewResponseDTO(
                 match_id=str(match.id),
@@ -183,6 +184,7 @@ class GetScoringViewUseCase:
                 user_name=user_names.get(p.user_id, ""),
                 team=match.get_player_team(p.user_id) or "",
                 tee_color=p.tee_color.value,
+                tee_gender=p.tee_gender.value if p.tee_gender else None,
                 playing_handicap=p.playing_handicap,
                 strokes_received=list(p.strokes_received),
                 hole_card=(

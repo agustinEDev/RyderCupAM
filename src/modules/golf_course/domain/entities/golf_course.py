@@ -1074,9 +1074,9 @@ class GolfCourse:
         builders reparten los golpes, que indexan por `(color, género)`.
         Mientras un campo pueda tener dos salidas OTHER del mismo género (#190)
         no hay forma de distinguirlas aquí, y se coge **la última**, que es la
-        que resuelve el reparto: `TeeContextBuilder` y `StrokeContextBuilder`
-        van indexando por `(color, género)` dentro de un bucle, así que una
-        salida repetida sobrescribe a la anterior. Coger aquí la primera hacía
+        que resuelve el reparto: `StrokeContextBuilder` va indexando por
+        `(color, género)` dentro de un bucle, así que una salida repetida
+        sobrescribe a la anterior. Coger aquí la primera hacía
         que a ese jugador se le repartieran los golpes con una barra y se le
         puntuara con otra, que es la fractura que esta resolución existe para
         cerrar.
@@ -1125,7 +1125,7 @@ class GolfCourse:
 
         # La barra existe pero no trae tarjeta: antes que la del campo va la de
         # la salida sin género de ese color, que es de donde el reparto saca el
-        # orden de dificultad (`TeeContext.holes_for`). Hoy no se llega aquí
+        # orden de dificultad (`StrokeContext.holes_for`). Hoy no se llega aquí
         # —`_sync_holes_and_tees` copia la tarjeta del campo a toda salida que
         # no traiga la suya—, así que esto es una red por si esa copia deja de
         # hacerse, no un camino vivo. Se busca con el mismo

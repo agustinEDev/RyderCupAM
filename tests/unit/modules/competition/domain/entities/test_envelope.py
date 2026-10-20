@@ -30,9 +30,9 @@ from src.modules.competition.domain.entities.envelope import (
     TeamNotFullyEnteredError,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 ANA, BEA, CARLA, DANI = (UserId.generate() for _ in range(4))
 EQUIPO = [ANA, BEA, CARLA, DANI]

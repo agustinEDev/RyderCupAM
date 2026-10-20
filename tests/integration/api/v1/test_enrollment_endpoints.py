@@ -10,8 +10,11 @@ from datetime import date, timedelta
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.conftest import (
+    _URL_DE_LA_BD_DE_TEST,
     activate_competition,
     add_one_session,
     create_admin_user,
@@ -132,6 +135,47 @@ class TestDirectEnrollPlayer:
         assert data["status"] == "APPROVED"
 
     @pytest.mark.asyncio
+    async def test_direct_enroll_full_competition_returns_400(self, client: AsyncClient):
+        """Con el cupo lleno no se inscribe a nadie más: 400, como al aprobar (BE #325)."""
+        creator = await create_authenticated_user(
+            client, "creator325@test.com", "P@ssw0rd123!", "Creator", "Cupo"
+        )
+        jugadores = [
+            await create_authenticated_user(
+                client, f"player325-{i}@test.com", "P@ssw0rd123!", "Player", f"Cupo{'abc'[i]}"
+            )
+            for i in range(3)
+        ]
+        start = date.today() + timedelta(days=30)
+        comp = await create_competition(
+            client,
+            creator["cookies"],
+            {
+                "name": f"Cupo {uuid.uuid4().hex[:8]}",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "HANDICAP",
+                # El organizador ya ocupa una al crearla: quedan dos
+                "max_players": 3,
+                "team_assignment": "MANUAL",
+                "visibility": "PUBLIC",
+            },
+        )
+        await activate_competition(client, creator["cookies"], comp["id"])
+
+        respuestas = [
+            await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments/direct",
+                json={"competition_id": comp["id"], "user_id": jugador["user"]["id"]},
+                cookies=creator["cookies"],
+            )
+            for jugador in jugadores
+        ]
+
+        assert [r.status_code for r in respuestas] == [201, 201, 400]
+
+    @pytest.mark.asyncio
     async def test_direct_enroll_not_creator_returns_403(self, client: AsyncClient):
         """No creador intentando inscribir directamente retorna 403."""
         creator = await create_authenticated_user(
@@ -228,6 +272,94 @@ class TestListEnrollments:
 
         assert response.status_code == 200
         assert len(response.json()) == 3  # Creator auto-enrolled + 2 players
+
+
+async def _sembrar_inscritos(competition_id: str, estados: dict[str, int]) -> None:
+    """Crea en la BD de la API un usuario y su inscripción por cada plaza pedida.
+
+    Directo en la base de datos: registrar más de cien jugadores por la API
+    costaría minutos, y aquí solo importa que existan las filas.
+    """
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            for estado, cuantos in estados.items():
+                for n in range(cuantos):
+                    user_id = str(uuid.uuid4())
+                    await conn.execute(
+                        text(
+                            "INSERT INTO users (id, first_name, last_name, email, password, "
+                            "created_at, updated_at, email_verified, failed_login_attempts, "
+                            "is_admin) VALUES (:id, :fn, :ln, :email, 'x', now(), now(), "
+                            "false, 0, false)"
+                        ),
+                        {
+                            "id": user_id,
+                            "fn": f"Jugador{n}",
+                            "ln": estado.title(),
+                            "email": f"sembrado-{user_id}@test.com",
+                        },
+                    )
+                    await conn.execute(
+                        text(
+                            "INSERT INTO enrollments (id, competition_id, user_id, status, "
+                            "created_at, updated_at) VALUES (:id, :c, :u, :s, now(), now())"
+                        ),
+                        {"id": str(uuid.uuid4()), "c": competition_id, "u": user_id, "s": estado},
+                    )
+    finally:
+        await engine.dispose()
+
+
+class TestListEnrollmentsBeyondOneHundred:
+    """BE #314: el listado ya no se corta en 100 filas."""
+
+    @pytest.mark.asyncio
+    async def test_list_returns_every_enrollment_with_its_user(self, client: AsyncClient):
+        """
+        Given 110 aprobados y 15 rechazados, además del creador
+        When se listan sin filtro
+        Then llegan los 126, cada uno con los datos de su usuario
+        """
+        creator = await create_authenticated_user(
+            client, "cien@test.com", "P@ssw0rd123!", "Creator", "Cien"
+        )
+        comp = await create_competition(client, creator["cookies"])
+        await _sembrar_inscritos(comp["id"], {"APPROVED": 110, "REJECTED": 15})
+
+        response = await client.get(
+            f"/api/v1/competitions/{comp['id']}/enrollments", cookies=creator["cookies"]
+        )
+
+        assert response.status_code == 200, response.text
+        filas = response.json()
+        assert len(filas) == 126
+        assert all(f["user"] and f["user"]["id"] == f["user_id"] for f in filas)
+
+    @pytest.mark.asyncio
+    async def test_status_filter_returns_more_than_one_hundred_and_only_that_status(
+        self, client: AsyncClient
+    ):
+        """
+        Given 110 aprobados y 15 rechazados, además del creador (aprobado)
+        When se filtra por APPROVED
+        Then llegan los 111 aprobados y ningún rechazado
+        """
+        creator = await create_authenticated_user(
+            client, "cienfiltro@test.com", "P@ssw0rd123!", "Creator", "Filtro"
+        )
+        comp = await create_competition(client, creator["cookies"])
+        await _sembrar_inscritos(comp["id"], {"APPROVED": 110, "REJECTED": 15})
+
+        response = await client.get(
+            f"/api/v1/competitions/{comp['id']}/enrollments?status=APPROVED",
+            cookies=creator["cookies"],
+        )
+
+        assert response.status_code == 200, response.text
+        filas = response.json()
+        assert len(filas) == 111
+        assert {f["status"] for f in filas} == {"APPROVED"}
 
 
 class TestApproveRejectEnrollment:

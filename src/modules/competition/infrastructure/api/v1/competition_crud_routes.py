@@ -12,9 +12,12 @@ from src.config.dependencies import (
     get_current_user,
     get_delete_competition_use_case,
     get_get_competition_use_case,
+    get_handicap_update_status_use_case,
     get_list_competitions_use_case,
     get_uow,
     get_update_competition_use_case,
+    get_update_stroke_play_settings_use_case,
+    get_ventana_de_actualizacion_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.competition_dto import (
@@ -22,9 +25,12 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
     DeleteCompetitionRequestDTO,
+    StrokePlaySettingsDTO,
+    StrokePlaySettingsResponseDTO,
     UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.exceptions import (
+    CompetitionAlreadyExistsError,
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
@@ -34,9 +40,11 @@ from src.modules.competition.application.mappers.competition_mapper import (
 from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
-from src.modules.competition.application.services.genero_obligatorio import GenderRequiredError
+from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
+from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
+    VentanaDeActualizacionUseCase,
+)
 from src.modules.competition.application.use_cases.create_competition_use_case import (
-    CompetitionAlreadyExistsError,
     CreateCompetitionUseCase,
 )
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
@@ -46,6 +54,9 @@ from src.modules.competition.application.use_cases.delete_competition_use_case i
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.get_handicap_update_status_use_case import (
+    GetHandicapUpdateStatusUseCase,
+)
 from src.modules.competition.application.use_cases.list_competitions_use_case import (
     ListCompetitionsUseCase,
 )
@@ -54,6 +65,10 @@ from src.modules.competition.application.use_cases.update_competition_use_case i
     DatesLeaveSessionsOutError,
     UpdateCompetitionUseCase,
 )
+from src.modules.competition.application.use_cases.update_stroke_play_settings_use_case import (
+    UpdateStrokePlaySettingsUseCase,
+)
+from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -215,13 +230,9 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
 
     Assumes caller manages the uow/user_uow transaction context.
     """
-    result = []
-    for competition in competitions:
-        dto = await CompetitionDTOMapper.to_response_dto(
-            competition, current_user_id, uow, user_uow, is_admin=is_admin
-        )
-        result.append(dto)
-    return result
+    return await CompetitionDTOMapper.to_response_dtos(
+        competitions, current_user_id, uow, user_uow, is_admin=is_admin
+    )
 
 
 async def _get_all_competitions(
@@ -308,9 +319,12 @@ async def create_competition(
                 team_assignment=enriched_dto.team_assignment,
                 enrollment_opens_days_before=competition.enrollment_opens_days_before,
                 visibility=str(competition.visibility),
-                setup_mode=str(competition.setup_mode),
-                team_1_name=competition.team_1_name,
-                team_2_name=competition.team_2_name,
+                setup_mode=enriched_dto.setup_mode,
+                team_1_name=enriched_dto.team_1_name,
+                team_2_name=enriched_dto.team_2_name,
+                tournament_type=enriched_dto.tournament_type,
+                modality=enriched_dto.modality,
+                stroke_play=enriched_dto.stroke_play,
                 is_creator=True,
                 enrolled_count=0,
                 created_at=enriched_dto.created_at,
@@ -323,7 +337,7 @@ async def create_competition(
         InvalidCountryError,
         InvalidCountryCodeError,
         InvalidLocationError,
-        GenderRequiredError,
+        PerfilIncompletoError,
     ) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
@@ -419,6 +433,8 @@ async def get_competition(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     get_competition_uc: GetCompetitionUseCase = Depends(get_get_competition_use_case),
     delete_uc: DeleteCompetitionUseCase = Depends(get_delete_competition_use_case),
+    handicaps_uc: GetHandicapUpdateStatusUseCase = Depends(get_handicap_update_status_use_case),
+    ventana_uc: VentanaDeActualizacionUseCase = Depends(get_ventana_de_actualizacion_use_case),
 ):
     """Endpoint para obtener el detalle de una competición."""
     try:
@@ -462,6 +478,15 @@ async def get_competition(
         # que nació, y así unos equipos salidos del draft se contaban como
         # repartidos a mano
         dto.actual_team_assignment = await get_competition_uc.reparto_real(competition_vo_id)
+        # Solo para quien organiza: cómo va la actualización de hándicaps (#251).
+        # A los demás ni se les pregunta: es la ficha, la que más se pide
+        if dto.is_creator or current_user.is_admin:
+            dto.handicap_update = await handicaps_uc.execute(
+                competition_vo_id, current_user_id, is_admin=current_user.is_admin
+            )
+            dto.handicap_update_window = await ventana_uc.execute(
+                competition_vo_id, current_user_id, is_admin=current_user.is_admin
+            )
         return dto
 
     except ValueError as e:
@@ -476,7 +501,9 @@ async def get_competition(
     description="Actualiza una competición mientras las inscripciones siguen abiertas (DRAFT o ACTIVE). Creador o administrador.",
     tags=["Competitions"],
 )
-@limiter.limit("10/hour")
+# Por minuto, como el resto de modificaciones: quien monta su torneo retoca
+# mucho, y cada rechazo de la API también cuenta (Agustín, 4 oct 2026)
+@limiter.limit("10/minute")
 async def update_competition(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,
@@ -514,6 +541,8 @@ async def update_competition(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except CompetitionAlreadyExistsError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     # Los tres errores de país se nombran uno a uno porque NINGUNO hereda de
     # ValueError, y todos llegan hasta aquí desde que el PUT acepta `countries`:
     # el país que no existe o no es adyacente (InvalidCountryError), el código de
@@ -585,4 +614,40 @@ async def delete_competition(
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (CompetitionNotDeletableError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.patch(
+    "/{competition_id}/stroke-play",
+    response_model=StrokePlaySettingsResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Cambiar los ajustes del stroke play",
+    description=(
+        "Categorías, jornadas por jugador y regla de la general de un Stableford o un "
+        "Medal (#251). Lo que no llega no se toca; una lista de límites vacía quita las "
+        "categorías. Solo el creador o un admin, y hasta que la competición empieza "
+        "(DRAFT, ACTIVE o CLOSED). En una Ryder Cup es un 400."
+    ),
+)
+@limiter.limit("10/minute")
+async def update_stroke_play_settings(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    competition_id: UUID,
+    ajustes: StrokePlaySettingsDTO,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: UpdateStrokePlaySettingsUseCase = Depends(get_update_stroke_play_settings_use_case),
+):
+    """Cambia los ajustes del stroke play de una competición."""
+    try:
+        return await use_case.execute(
+            competition_id,
+            ajustes,
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except CompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotCompetitionCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (CompetitionStateError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

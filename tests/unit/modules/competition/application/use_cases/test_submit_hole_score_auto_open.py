@@ -34,6 +34,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    NotYourMarkedPlayerError,
     ScoringNotOpenYetError,
 )
 from src.modules.competition.application.services.match_opener import MatchOpener
@@ -48,10 +49,8 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
@@ -67,6 +66,8 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 # La ronda es del 20 de septiembre de 2026; la sesion de mañana abre a las 06:00
 # de Madrid, que son las 04:00 UTC
@@ -315,6 +316,24 @@ class TestSeAbreSola:
 
 
 class TestNoSeAbre:
+    @pytest.mark.asyncio
+    async def test_un_marcado_que_no_le_toca_a_su_hora_no_abre_nada(
+        self, uow, user_repo, scoring_service, campos
+    ):
+        """
+        BE #520: ya es la hora, así que un golpe bueno abriría el partido. Uno
+        que se marca a sí mismo se rechaza antes y no abre ni guarda nada.
+        """
+        _c, _r, match, a, _b = await _monta(uow)
+
+        uc = _caso_de_uso(uow, user_repo, scoring_service, JUSTO, campos)
+        with pytest.raises(NotYourMarkedPlayerError):
+            await uc.execute(str(match.id), 1, _body(a), a.user_id)
+
+        async with uow:
+            assert (await uow.matches.find_by_id(match.id)).status == MatchStatus.SCHEDULED
+            assert await uow.hole_scores.find_by_match(match.id) == []
+
     @pytest.mark.asyncio
     async def test_2_antes_de_la_hora_se_rechaza_y_no_abre_nada(
         self, uow, user_repo, scoring_service, campos

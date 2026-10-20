@@ -21,9 +21,6 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from src.modules.competition.domain.services.playing_handicap_calculator import TeeRating
-from src.modules.competition.domain.value_objects.match_format import MatchFormat
-from src.modules.competition.domain.value_objects.play_mode import PlayMode
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
@@ -32,7 +29,10 @@ from src.modules.quick_match.domain.value_objects.participant_id import Particip
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
+from src.shared.domain.services.playing_handicap_calculator import TeeRating
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 
 OUTPUT = (
     Path(__file__).resolve().parent.parent.parent
@@ -138,7 +138,8 @@ def run(
                 for (color, gender), rating in tees.items()
             ],
             "teeCards": {
-                f"{color}|{gender or ''}": order for (color, gender), order in (by_tee or {}).items()
+                f"{color}|{gender or ''}": order
+                for (color, gender), order in (by_tee or {}).items()
             },
             "participants": [
                 {
@@ -154,8 +155,7 @@ def run(
                 str(pid.value): {
                     "playingHandicap": strokes.playing_handicap,
                     "strokesByHole": {
-                        str(hole): count
-                        for hole, count in sorted(strokes.strokes_by_hole.items())
+                        str(hole): count for hole, count in sorted(strokes.strokes_by_hole.items())
                     },
                 }
                 for pid, strokes in result.items()
@@ -248,9 +248,79 @@ def main() -> None:
         100,
         handicap,
         tees={
-            ("ORANGE", "MALE"): TeeRating(
-                course_rating=Decimal("54.9"), slope_rating=91, par=58
-            )
+            ("ORANGE", "MALE"): TeeRating(course_rating=Decimal("54.9"), slope_rating=91, par=58)
+        },
+        pars=SHORT_PAR,
+        stroke_index=SHORT_STROKE_INDEX,
+    )
+    # El plus cuenta como negativo en match play (BE #165, decidido el 2 oct
+    # 2026). Hasta entonces los dos lados recortaban cada hándicap a 0 antes de
+    # restar, así que la paridad no veía la regla: ningún escenario la tocaba.
+    run(
+        "singles plus contra 10",
+        [guest("pa", -2.0, yellow, male), guest("pb", 10.0, yellow, male)],
+        MatchFormat.SINGLES,
+        100,
+        handicap,
+    )
+    run(
+        "fourball con plus 90%",
+        [
+            guest("pc", -2.0, yellow, male, "A"),
+            guest("pd", 10.0, yellow, male, "A"),
+            guest("pe", 14.0, yellow, male, "B"),
+            guest("pf", 6.0, yellow, male, "B"),
+        ],
+        MatchFormat.FOURBALL,
+        90,
+        handicap,
+    )
+    run(
+        "foursomes con plus 50%",
+        [
+            guest("pg", -2.0, yellow, male, "A"),
+            guest("ph", 10.0, yellow, male, "A"),
+            guest("pi", 6.0, yellow, male, "B"),
+            guest("pj", 8.0, yellow, male, "B"),
+        ],
+        MatchFormat.FOURSOMES,
+        50,
+        handicap,
+    )
+    run(
+        "singles plus sin barra",
+        [guest("pk", -2.0, yellow, male), guest("pl", 10.0, yellow, male)],
+        MatchFormat.SINGLES,
+        100,
+        handicap,
+        tees={},
+    )
+    run(
+        "fourball con plus sin barra",
+        [
+            guest("po", -2.0, yellow, male, "A"),
+            guest("pp", 10.0, yellow, male, "A"),
+            guest("pq", 14.0, yellow, male, "B"),
+            guest("pr", 6.0, yellow, male, "B"),
+        ],
+        MatchFormat.FOURBALL,
+        100,
+        handicap,
+        tees={},
+    )
+    # Un hándicap bajo en un campo con el rating muy por debajo del par también
+    # sale negativo: no hace falta ser plus
+    run(
+        "campo corto handicap bajo",
+        [
+            guest("pm", 1.0, TeeColor.ORANGE, male),
+            guest("pn", 10.0, TeeColor.ORANGE, male),
+        ],
+        MatchFormat.SINGLES,
+        100,
+        handicap,
+        tees={
+            ("ORANGE", "MALE"): TeeRating(course_rating=Decimal("54.9"), slope_rating=91, par=58)
         },
         pars=SHORT_PAR,
         stroke_index=SHORT_STROKE_INDEX,

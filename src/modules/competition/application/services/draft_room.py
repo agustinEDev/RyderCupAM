@@ -127,9 +127,13 @@ class DraftRoom:
         enrollments = await self._uow.enrollments.find_by_competition_and_status(
             competition.id, EnrollmentStatus.APPROVED
         )
+        ryder_cup = competition.require_ryder_cup()
         capitanes = [
             uid
-            for uid in (competition.team_a_captain_id, competition.team_b_captain_id)
+            for uid in (
+                ryder_cup.team_a_captain_id,
+                ryder_cup.team_b_captain_id,
+            )
             if uid is not None
         ]
         return await DraftRoster.de_los_inscritos(enrollments, self._user_repo, capitanes)

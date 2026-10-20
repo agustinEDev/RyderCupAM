@@ -592,7 +592,7 @@ class TestUpdateCompetition:
 
     @pytest.mark.asyncio
     async def test_update_competition_rejects_a_cap_above_the_limit(self, client: AsyncClient):
-        """Un cupo por encima de 100 debe dar 422, no un 200 silencioso."""
+        """Un cupo por encima de 200 debe dar 422, no un 200 silencioso (BE #314)."""
         user = await create_authenticated_user(
             client, "capmax@test.com", "P@ssw0rd123!", "Cap", "Max"
         )
@@ -601,7 +601,7 @@ class TestUpdateCompetition:
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
-            json={"number_of_players": 101},
+            json={"number_of_players": 201},
             cookies=user["cookies"],
         )
 
@@ -609,7 +609,7 @@ class TestUpdateCompetition:
 
     @pytest.mark.asyncio
     async def test_update_competition_accepts_the_maximum_cap(self, client: AsyncClient):
-        """100 jugadores: el cupo máximo debe entrar."""
+        """200 jugadores: el cupo máximo debe entrar (BE #314)."""
         user = await create_authenticated_user(
             client, "capmaximo@test.com", "P@ssw0rd123!", "Cap", "Maximo"
         )
@@ -618,14 +618,14 @@ class TestUpdateCompetition:
 
         response = await client.put(
             f"/api/v1/competitions/{comp['id']}",
-            json={"number_of_players": 100},
+            json={"number_of_players": 200},
             cookies=user["cookies"],
         )
 
         assert response.status_code == 200
 
         despues = await client.get(f"/api/v1/competitions/{comp['id']}", cookies=user["cookies"])
-        assert despues.json()["max_players"] == 100
+        assert despues.json()["max_players"] == 200
 
     @pytest.mark.asyncio
     async def test_update_competition_applies_the_countries_sent_by_the_client(
@@ -1353,6 +1353,154 @@ class TestEdgeCases:
         )
 
         assert response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_the_name_keeps_its_capitals_and_repeats_ignore_them(self, client: AsyncClient):
+        """#540: «RCG El Prat» se guarda tal cual; «rcg  el prat» es el mismo nombre."""
+        user = await create_authenticated_user(
+            client, "capitals540@test.com", "P@ssw0rd123!", "Cap", "Itals"
+        )
+        start = date.today() + timedelta(days=30)
+        comp_data = {
+            "name": "RCG El Prat",
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=3)).isoformat(),
+            "main_country": "ES",
+            "play_mode": "SCRATCH",
+            "max_players": 24,
+            "team_assignment": "MANUAL",
+        }
+
+        creada = await client.post("/api/v1/competitions", json=comp_data, cookies=user["cookies"])
+        repetida = await client.post(
+            "/api/v1/competitions",
+            json={**comp_data, "name": "rcg  el prat"},
+            cookies=user["cookies"],
+        )
+
+        assert creada.status_code == 201, creada.text
+        assert creada.json()["name"] == "RCG El Prat"
+        assert repetida.status_code == 409, repetida.text
+
+    @pytest.mark.asyncio
+    async def test_a_name_left_too_short_after_cleaning_is_a_400(self, client: AsyncClient):
+        """#540 (revisor): «<b></b>» pasaba el DTO y daba un 500."""
+        user = await create_authenticated_user(
+            client, "shortname540@test.com", "P@ssw0rd123!", "Short", "Name"
+        )
+        start = date.today() + timedelta(days=30)
+
+        respuesta = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "<b>ab</b>",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 400, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_renaming_to_a_name_it_already_has_is_a_409(self, client: AsyncClient):
+        """#540: «copa x» repite «Copa X» del mismo organizador."""
+        user = await create_authenticated_user(
+            client, "rename540@test.com", "P@ssw0rd123!", "Re", "Name"
+        )
+        start = date.today() + timedelta(days=30)
+        base = {
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=1)).isoformat(),
+            "main_country": "ES",
+            "play_mode": "SCRATCH",
+        }
+        await client.post(
+            "/api/v1/competitions", json={**base, "name": "Copa X"}, cookies=user["cookies"]
+        )
+        otra = await client.post(
+            "/api/v1/competitions", json={**base, "name": "Otra copa"}, cookies=user["cookies"]
+        )
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{otra.json()['id']}",
+            json={"name": "copa x"},
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 409, respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_an_old_short_name_resent_as_it_is_can_still_be_edited(self, client: AsyncClient):
+        """#540 (revisor): «A», guardado con las reglas de antes, no impide editar."""
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        from tests.conftest import _URL_DE_LA_BD_DE_TEST
+
+        user = await create_authenticated_user(
+            client, "oldname540@test.com", "P@ssw0rd123!", "Old", "Name"
+        )
+        start = date.today() + timedelta(days=30)
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Nombre largo",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+            },
+            cookies=user["cookies"],
+        )
+        # En la base de datos de la API, como si viniera de antes
+        engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("UPDATE competitions SET name = 'A' WHERE id = :id"),
+                    {"id": creada.json()["id"]},
+                )
+        finally:
+            await engine.dispose()
+
+        respuesta = await client.put(
+            f"/api/v1/competitions/{creada.json()['id']}",
+            json={"name": "A", "max_players": 30},
+            cookies=user["cookies"],
+        )
+
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["name"] == "A"
+
+    @pytest.mark.asyncio
+    async def test_in_a_ryder_the_organiser_always_plays(self, client: AsyncClient):
+        """#552: `organizer_plays` solo vale en stroke play."""
+        user = await create_authenticated_user(
+            client, "ryderplays552@test.com", "P@ssw0rd123!", "Ry", "Der"
+        )
+        start = date.today() + timedelta(days=30)
+
+        creada = await client.post(
+            "/api/v1/competitions",
+            json={
+                "name": "Ryder 552",
+                "start_date": start.isoformat(),
+                "end_date": (start + timedelta(days=1)).isoformat(),
+                "main_country": "ES",
+                "play_mode": "SCRATCH",
+                "organizer_plays": False,
+            },
+            cookies=user["cookies"],
+        )
+        inscritos = await client.get(
+            f"/api/v1/competitions/{creada.json()['id']}/enrollments", cookies=user["cookies"]
+        )
+
+        assert creada.status_code == 201, creada.text
+        assert user["user"]["id"] in {i["user_id"] for i in inscritos.json()}
 
     @pytest.mark.asyncio
     async def test_update_while_enrollment_is_open_succeeds(self, client: AsyncClient):
