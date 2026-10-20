@@ -144,7 +144,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 | Category | Technologies |
 |----------|-------------|
-| **Language** | Python 3.11+ |
+| **Language** | Python 3.12+ |
 | **Framework** | FastAPI 0.125.0 |
 | **Database** | PostgreSQL 15+ |
 | **ORM** | SQLAlchemy 2.0 (Imperative Mapping) |
@@ -367,7 +367,7 @@ See [SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) for complete d
 | Job | Description | Duration |
 |-----|-------------|----------|
 | **preparation** | Python setup (3.11, 3.12) + pip cache | ~30s |
-| **unit_tests** | Unit tests (matrix: Python 3.11, 3.12) | ~45s |
+| **unit_tests** | Unit tests (matrix: Python 3.12, 3.14) | ~45s |
 | **integration_tests** | Integration tests with PostgreSQL service | ~60s |
 | **security_checks** | Safety + pip-audit (dependency CVE scan) | ~25s |
 | **linting** | Ruff linting (fast Rust-based linter) | ~20s |
