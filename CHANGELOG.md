@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.36.0] - 2026-10-20
+
+**Aceptación de los Términos y cambios legales.** Tras la auditoría legal del
+20 oct: el backend sabe qué versión de los Términos está vigente y quién la
+aceptó y cuándo, y nadie usa la aplicación sin aceptarla. **Todos los usuarios
+existentes tendrán que aceptarla al entrar.** Va con el frontend **2.49.0**.
+
+**Notas de despliegue.**
+
+- **Cambio incompatible**: `accept_terms` pasa a ser obligatorio en
+  `POST /auth/register` (PR #617, etiqueta `api-breaking`). **Orden al revés
+  de lo habitual: primero el frontend 2.49.0 y el backend justo después**, sin
+  partidas en juego (el frontend nuevo funciona con el backend 2.35.0; el
+  backend nuevo hace que la aplicación vieja descarte golpes de su cola).
+- **Migraciones** `d6e8f0a2b4c6` y `e7f9a1b3c5d7` (columnas en `users`, tabla
+  `terms_acceptances`, trigger `BEFORE DELETE ON users`), con
+  `lock_timeout = 5s`. Hacer `pg_dump` antes.
+- **No usar el rollback de Render**: la imagen anterior no conoce estas
+  migraciones y no arrancaría. Vuelta atrás: hotfix hacia delante, o
+  `alembic downgrade c5f7a9b1d3e5` (borra el historial de aceptaciones) y
+  desplegar la imagen anterior.
+- Sin variables nuevas. `GITHUB_ISSUES_REPO` debe apuntar al repo privado
+  `agustinEDev/rcf-contacto` (dashboard de Render).
+- En cada release, ejecutar `scripts/purge_terms_acceptances.py`.
+
+### Added
+
+- **Aceptación de los Términos** (#617): `accept_terms` obligatorio en el
+  registro (422 sin él); `POST /api/v1/users/me/accept-terms` (CSRF,
+  idempotente); `terms_accepted` y `terms_version_required` en el usuario;
+  403 `TERMS_NOT_ACCEPTED` en toda ruta con sesión salvo current-user,
+  accept-terms, logout y la gestión de dispositivos (`GET` y `DELETE
+  /users/me/devices`). Versión vigente `2026-10-20`, constante del dominio.
+- **Historial de aceptaciones** (`terms_acceptances`): versión, fecha, email,
+  IP y navegador de cada aceptación; se conserva 3 años tras borrar la cuenta
+  (FK `SET NULL` + trigger) y `scripts/purge_terms_acceptances.py` lo purga.
+  Evento de auditoría `TERMS ACCEPTED`.
+- **Procedencia de los campos** en la ficha y en los listados (`provenance`),
+  y `physical_holes` en la ficha: el DTO no los declaraba y Pydantic los
+  descartaba (#615).
+
+### Changed
+
+- La consulta de hándicap a la RFEG se identifica como `RCF/1.0`, sin imitar
+  su web; el cliente de Overpass, como `RCF/1.0` con contacto (#612).
+- El importador de campos lee el volcado de `--dataset`, `RFEG_DATASET_PATH`
+  o `data/`; el volcado ya no forma parte del repositorio (#612).
+- Licencia: todos los derechos reservados (#614, #616).
+
 ## [2.35.0] - 2026-10-20
 
 **El backend pasa a Python 3.14.** Sin nada nuevo para el usuario: cambia el
