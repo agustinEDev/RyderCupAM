@@ -355,7 +355,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.14'  # el Python de la imagen de producción (#423)
+          python-version: '3.14'  # la versión a la que pasa la imagen de producción (#423)
 
       - name: Restore pip cache
         uses: actions/cache@v6
@@ -924,7 +924,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.14'  # el Python de la imagen de producción (#423)
+          python-version: '3.14'  # la versión a la que pasa la imagen de producción (#423)
 
       - name: Restore pip cache
         uses: actions/cache@v6
