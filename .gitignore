@@ -85,3 +85,5 @@ docker/.env
 
 # K8s database backups
 k8s/backups/*.sql
+# Datos de importación locales, fuera de git (el importador lee RFEG_DATASET_PATH o data/).
+/data/rfeg_dataset*

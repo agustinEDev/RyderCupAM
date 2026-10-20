@@ -56,6 +56,7 @@ class TestHttpOnlyCookies:
         """
         # Given: Registrar usuario
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -111,6 +112,7 @@ class TestHttpOnlyCookies:
         """
         # Given: Registrar y hacer login (obtener cookie)
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -156,6 +158,7 @@ class TestHttpOnlyCookies:
         """
         # Given: Registrar y hacer login (obtener cookie)
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -207,6 +210,7 @@ class TestHttpOnlyCookies:
         """
         # Given: Registrar usuario (genera token de verificación)
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -258,6 +262,7 @@ class TestHttpOnlyCookies:
         """
         # Given: Registrar y hacer login (obtener cookie)
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],

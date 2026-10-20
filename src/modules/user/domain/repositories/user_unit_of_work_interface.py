@@ -15,6 +15,9 @@ from ..repositories.password_history_repository_interface import (
 from ..repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from ..repositories.terms_acceptance_repository_interface import (
+    TermsAcceptanceRepositoryInterface,
+)
 from ..repositories.user_avatar_upload_repository_interface import (
     UserAvatarUploadRepositoryInterface,
 )
@@ -128,6 +131,17 @@ class UserUnitOfWorkInterface(UnitOfWorkInterface):
 
         Returns:
             UserDeviceRepositoryInterface: Repositorio de user devices transaccional
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def terms_acceptances(self) -> TermsAcceptanceRepositoryInterface:
+        """
+        Historial de aceptaciones de los Términos, en la misma transacción.
+
+        Cada aceptación real añade una fila junto al cambio del usuario, así que
+        las dos cosas se confirman o se deshacen juntas.
         """
         pass
 

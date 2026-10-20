@@ -59,6 +59,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Registrar y hacer login (obtener refresh token)
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -198,6 +199,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Registrar y hacer login
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -241,6 +243,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Registrar y hacer login
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -285,6 +288,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Registrar y hacer login
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],
@@ -341,6 +345,7 @@ class TestRefreshTokenEndpoint:
         """
         # Given: Registrar y hacer login
         register_payload = RegisterUserRequestDTO(
+            accept_terms=True,
             email=test_user_data["email"],
             password=test_user_data["password"],
             first_name=test_user_data["first_name"],

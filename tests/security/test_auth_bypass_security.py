@@ -307,6 +307,7 @@ class TestPasswordResetSecurity:
                 "password": "ValidPassword123!",
                 "first_name": "Test",
                 "last_name": "User",
+                "accept_terms": True,
             },
         )
 

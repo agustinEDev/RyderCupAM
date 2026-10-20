@@ -63,6 +63,9 @@ class AdminDeleteUserUseCase:
         if reasons:
             raise UserHasActivityException(reasons)
 
+        # El historial de aceptaciones de los Términos sobrevive al borrado:
+        # lo desvincula y lo fecha la propia base de datos (FK SET NULL y
+        # trigger BEFORE DELETE ON users), sea cual sea el camino del borrado
         async with self._user_uow:
             await self._user_uow.users.delete_by_id(user_id)
 

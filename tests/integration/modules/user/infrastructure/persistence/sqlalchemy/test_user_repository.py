@@ -1,5 +1,7 @@
 import pytest
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
@@ -56,6 +58,44 @@ async def test_find_by_id_for_update_locks_and_returns_the_row(db_session):
     assert retrieved_user is not None
     assert retrieved_user.id == user.id
     assert retrieved_user.email.value == "marta.test@example.com"
+
+
+async def test_find_by_id_for_update_rereads_a_user_already_in_the_session(db_session):
+    """
+    Given: Un usuario ya cargado en la sesión (como lo deja get_current_user) y
+        otra transacción que acepta los Términos y confirma
+    When: Se vuelve a pedir con find_by_id_for_update en la primera sesión
+    Then: Devuelve lo que hay en la BD, no la copia vieja de la sesión: si no,
+        dos aceptaciones simultáneas se pisarían la fecha
+    """
+    user = User.create(
+        first_name="Lucia",
+        last_name="Perez",
+        email_str="lucia.test@example.com",
+        plain_password="ValidPassword123!",
+    )
+    repository = SQLAlchemyUserRepository(db_session)
+    await repository.save(user)
+    await db_session.commit()
+    cargado = await repository.find_by_id(user.id)
+    assert cargado is not None
+    assert cargado.terms_version is None
+
+    async with AsyncSession(db_session.bind) as otra:
+        await otra.execute(
+            text(
+                "UPDATE users SET terms_version = '2026-10-20', "
+                "terms_accepted_at = now() WHERE id = :id"
+            ),
+            {"id": str(user.id.value)},
+        )
+        await otra.commit()
+
+    bloqueado = await repository.find_by_id_for_update(user.id)
+
+    assert bloqueado is not None
+    assert bloqueado.terms_version == "2026-10-20"
+    assert bloqueado.terms_accepted_at is not None
 
 
 async def test_search_by_partial_name_excludes_deactivated_accounts(db_session):

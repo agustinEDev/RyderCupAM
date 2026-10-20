@@ -130,6 +130,11 @@ class GolfCourseMapper:
                 if not golf_course.location.is_empty
                 else None
             ),
+            provenance=ProvenanceDTO(
+                source=golf_course.provenance.source,
+                external_id=golf_course.provenance.external_id,
+                imported_at=golf_course.provenance.imported_at,
+            ),
             distance_km=distance_km,
         )
 

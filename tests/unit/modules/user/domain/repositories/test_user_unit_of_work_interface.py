@@ -16,6 +16,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.terms_acceptance_repository_interface import (
+    TermsAcceptanceRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_avatar_upload_repository_interface import (
     UserAvatarUploadRepositoryInterface,
 )
@@ -52,6 +55,16 @@ class TestUserUnitOfWorkInterface:
     def test_user_unit_of_work_has_users_property(self):
         """Verifica que la interfaz define la propiedad users."""
         assert hasattr(UserUnitOfWorkInterface, "users")
+
+    def test_terms_acceptances_is_an_abstract_property(self):
+        """
+        Given: El contrato del UoW de usuarios
+        When: Se mira el historial de aceptaciones de los Términos
+        Then: Es una propiedad abstracta que todo UoW debe dar
+        """
+        propiedad = UserUnitOfWorkInterface.terms_acceptances
+        assert isinstance(propiedad, property)
+        assert "terms_acceptances" in UserUnitOfWorkInterface.__abstractmethods__
 
     def test_users_property_signature(self):
         """Verifica la signatura de la propiedad users."""
@@ -96,6 +109,10 @@ class TestUserUnitOfWorkInterface:
             @property
             def avatar_uploads(self):
                 return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
+
+            @property
+            def terms_acceptances(self):
+                return AsyncMock(spec=TermsAcceptanceRepositoryInterface)
 
             async def __aenter__(self):
                 self._active = True
@@ -218,6 +235,10 @@ class TestUserUnitOfWorkContractCompliance:
             def avatar_uploads(self):
                 return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
 
+            @property
+            def terms_acceptances(self):
+                return AsyncMock(spec=TermsAcceptanceRepositoryInterface)
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -301,6 +322,10 @@ class TestUserUnitOfWorkContractCompliance:
             def avatar_uploads(self):
                 return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
 
+            @property
+            def terms_acceptances(self):
+                return AsyncMock(spec=TermsAcceptanceRepositoryInterface)
+
             async def __aenter__(self):
                 self._active = True
                 return self
@@ -375,6 +400,10 @@ class TestUserUnitOfWorkIntegration:
             @property
             def avatar_uploads(self):
                 return AsyncMock(spec=UserAvatarUploadRepositoryInterface)
+
+            @property
+            def terms_acceptances(self):
+                return AsyncMock(spec=TermsAcceptanceRepositoryInterface)
 
             async def __aenter__(self):
                 return self

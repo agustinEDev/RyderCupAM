@@ -103,12 +103,14 @@ class TestHandicapEndpoints:
             "password": "P@ssw0rd123!",
             "first_name": "Rafael",
             "last_name": "Nadal Parera",
+            "accept_terms": True,
         }
         user2_data = {
             "email": "carlos.multiple@test.com",
             "password": "P@ssw0rd123!",
             "first_name": "Carlos",
             "last_name": "Alcaraz Garfia",
+            "accept_terms": True,
         }
 
         response1 = await client.post("/api/v1/auth/register", json=user1_data)
@@ -480,6 +482,7 @@ class TestRefreshMineEndpoint:
                 "first_name": "Rafael",
                 "last_name": "Nadal Parera",
                 "country_code": "ES",
+                "accept_terms": True,
             },
             headers={"X-Test-Client-ID": f"register-{uuid.uuid4()}"},
         )

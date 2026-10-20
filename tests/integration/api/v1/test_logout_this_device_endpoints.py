@@ -50,7 +50,13 @@ async def test_salir_en_el_ordenador_no_echa_del_movil(client: AsyncClient):
     email = f"sesiones_{uuid4().hex[:8]}@example.com"
     alta = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": CLAVE, "first_name": "Ana", "last_name": "Golf"},
+        json={
+            "email": email,
+            "password": CLAVE,
+            "first_name": "Ana",
+            "last_name": "Golf",
+            "accept_terms": True,
+        },
     )
     assert alta.status_code == 201, alta.text
     ordenador = await _entra(client, email, ORDENADOR)
@@ -74,7 +80,13 @@ async def test_veinticuatro_horas_sin_usar_la_sesion_caduca(client: AsyncClient)
     email = f"inactiva_{uuid4().hex[:8]}@example.com"
     alta = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": CLAVE, "first_name": "Ana", "last_name": "Golf"},
+        json={
+            "email": email,
+            "password": CLAVE,
+            "first_name": "Ana",
+            "last_name": "Golf",
+            "accept_terms": True,
+        },
     )
     assert alta.status_code == 201, alta.text
     movil = await _entra(client, email, MOVIL)
@@ -103,7 +115,13 @@ async def test_volver_a_entrar_no_resucita_un_token_viejo(client: AsyncClient):
     email = f"resucita_{uuid4().hex[:8]}@example.com"
     alta = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": CLAVE, "first_name": "Ana", "last_name": "Golf"},
+        json={
+            "email": email,
+            "password": CLAVE,
+            "first_name": "Ana",
+            "last_name": "Golf",
+            "accept_terms": True,
+        },
     )
     assert alta.status_code == 201, alta.text
     viejo = await _entra(client, email, MOVIL)

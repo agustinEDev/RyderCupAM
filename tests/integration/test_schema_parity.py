@@ -337,3 +337,43 @@ class TestSchemaParity:
             "así que aceptan datos distintos en tests y en producción:\n"
             f"{_format(mismatches)}"
         )
+
+
+def test_migrated_schema_stamps_terms_acceptances_when_a_user_is_deleted(migrated_schema):
+    """
+    Given: El esquema de las migraciones, un usuario y su aceptación de los Términos
+    When: Se borra el usuario con un DELETE directo, sin pasar por la app
+    Then: La fila sobrevive, sin usuario y con user_deleted_at relleno (trigger
+        BEFORE DELETE ON users + FK ON DELETE SET NULL), para que la purga de
+        los 3 años la encuentre
+    """
+    user_id = str(uuid.uuid4())
+    with migrated_schema.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users (id, first_name, last_name, email, created_at, updated_at, "
+                "email_verified, failed_login_attempts, is_admin) "
+                "VALUES (:id, 'Ana', 'Lopez', 'trigger@example.com', now(), now(), false, 0, false)"
+            ),
+            {"id": user_id},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO terms_acceptances (id, user_id, user_email, terms_version, accepted_at) "
+                "VALUES (:id, :user_id, 'trigger@example.com', '2026-10-20', now())"
+            ),
+            {"id": str(uuid.uuid4()), "user_id": user_id},
+        )
+    with migrated_schema.begin() as conn:
+        conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+    with migrated_schema.connect() as conn:
+        fila = conn.execute(
+            text(
+                "SELECT user_id, user_email, user_deleted_at FROM terms_acceptances "
+                "WHERE user_email = 'trigger@example.com'"
+            )
+        ).one()
+
+    assert fila[0] is None
+    assert fila[1] == "trigger@example.com"
+    assert fila[2] is not None
