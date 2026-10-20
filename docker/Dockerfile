@@ -7,13 +7,14 @@
 # ==========================================
 
 # 1. Imagen base: Python ligera
-# Actualizado a 3.12-slim para resolver CVE-2026-42496 (CRITICAL) y CVE-2026-42497, CVE-2026-9538 (HIGH)
-# en paquetes del OS base de la imagen debian 3.11-slim
+# 3.14-slim desde la v2.35.0 (20 oct 2026, Dependabot #423): el CI exige 3.12 y 3.14
+# (#603). Antes, 3.12-slim para resolver CVE-2026-42496 (CRITICAL) y CVE-2026-42497,
+# CVE-2026-9538 (HIGH) en paquetes del OS base de la imagen debian 3.11-slim
 # Fijada por digest (28 sep 2026): con la etiqueta flotante, un build con caché podía
 # reutilizar una capa vieja de la imagen y quedarse sin los parches de Debian, y
 # Dependabot no tenía nada que proponer. Ahora cada build usa exactamente esta
 # imagen, y Dependabot (ecosistema docker) abre una PR semanal cuando cambia el
-# digest de 3.12-slim, con su CI y su Trivy. Digest del índice multiplataforma:
+# digest de la imagen, con su CI y su Trivy. Digest del índice multiplataforma:
 # vale para Render (amd64) y para el Kind en un Mac (arm64).
 FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
 
