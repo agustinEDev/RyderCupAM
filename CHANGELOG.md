@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.34.0] - 2026-10-20
+
+Una release sin nada nuevo para el usuario: pone al día las dependencias que
+Dependabot tenía pendientes. No cambia el contrato de la API (`oasdiff` corrió
+en cada PR y ninguna llevó la etiqueta `api-breaking`). Va con el frontend
+**2.48.0**, que también solo actualiza dependencias.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin dependencias nuevas.
+- **Contrato: sin cambios.** Orden de siempre: backend, `/health`, frontend.
+- Probada en el Kind con una batería en navegador (sesión y refresco del token,
+  avatar HEIC, mapas, competiciones, anotación, clasificaciones, partida rápida,
+  idiomas y todos los GET del OpenAPI): sin 5xx ni avisos en los logs.
+- Tras desplegar, **iniciar sesión** con una cuenta existente (PyJWT y
+  cryptography) y **comprobar en Sentry** que siguen llegando eventos
+  (sentry-sdk).
+
+### Changed
+
+- **Dependencias al día** (#491, #492, #493, #494, #555, #568, #597):
+  fastapi 0.141.1 → 0.143.3, SQLAlchemy 2.1.1 → 2.1.4, PyJWT 2.15.0 → 2.15.1,
+  cryptography 50.0.1 → 50.0.2, sentry-sdk 2.70.0 → 2.72.0, python-dotenv
+  1.2.3 → 1.2.4, pillow-heif 1.8.0 → 1.8.1 y tzfpy 2.1.0 → 2.1.1. En
+  desarrollo: mypy 2.3.1 → 2.4.0 (lo exige `sqlalchemy[mypy]` 2.1.4), ruff
+  0.16.9 → 0.17.1, cyclonedx-bom ≥ 7.5.0, msgpack y zipp. Las zonas horarias que
+  calcula tzfpy 2.1.1 coinciden con las guardadas en los 803 campos con
+  coordenadas.
+
 ## [2.33.0] - 2026-10-19
 
 **El país del campo en las anotaciones.** La imagen del mapa del hoyo solo
