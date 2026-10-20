@@ -423,10 +423,10 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Platform**: GitHub Actions
 
-**Jobs (6 parallel)**:
+**Main job categories** (the workflow defines more jobs, and the test suites expand into one job per Python version):
 1. Unit Tests (matrix Python 3.12, 3.14)
-2. Integration Tests (PostgreSQL service container)
-3. Security Scan (Gitleaks)
+2. Integration and Security Tests (PostgreSQL service container, Python 3.12 and 3.14)
+3. Security Checks (Bandit, pip-audit, Gitleaks; Python 3.14)
 4. Code Quality (Ruff)
 5. Type Checking (Mypy)
 6. Database Migrations (Alembic validation)

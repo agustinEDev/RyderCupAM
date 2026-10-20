@@ -367,8 +367,9 @@ See [SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) for complete d
 | Job | Description | Duration |
 |-----|-------------|----------|
 | **unit_tests** | Unit tests (matrix: Python 3.12, 3.14) | ~45s |
-| **integration_tests** | Integration tests with PostgreSQL service | ~60s |
-| **security_checks** | Bandit + pip-audit + Gitleaks | ~25s |
+| **integration_tests** | Integration tests with PostgreSQL service (Python 3.12, 3.14) | ~60s |
+| **security_tests** | CSRF, XSS, SQL injection, auth bypass and rate limiting tests (Python 3.12, 3.14) | ~60s |
+| **security_checks** | Bandit + pip-audit + Gitleaks (Python 3.14) | ~25s |
 | **linting** | Ruff linting (fast Rust-based linter) | ~20s |
 | **type_checking** | Mypy static type analysis | ~30s |
 | **build** | Docker build + Alembic validation | ~50s |
