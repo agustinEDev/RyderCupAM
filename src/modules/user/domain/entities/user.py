@@ -292,12 +292,16 @@ class User:
 
     @property
     def terms_accepted_at(self) -> datetime | None:
-        """Cuándo aceptó por última vez los Términos (UTC), o None si nunca."""
+        """
+        Cuándo aceptó la versión de `terms_version` (UTC), o None si nunca.
+
+        Es la primera aceptación de esa versión: aceptarla otra vez no la cambia.
+        """
         return self._terms_accepted_at
 
     @property
     def terms_version(self) -> str | None:
-        """La versión de los Términos que aceptó por última vez, o None si nunca."""
+        """La versión más reciente de los Términos que ha aceptado, o None si nunca."""
         return self._terms_version
 
     @property

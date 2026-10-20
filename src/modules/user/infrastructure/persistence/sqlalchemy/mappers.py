@@ -203,7 +203,8 @@ users_table = Table(
         ),
         nullable=True,
     ),
-    # Términos de uso: cuándo y qué versión aceptó por última vez. Nulos =
+    # Términos de uso: la versión más reciente que aceptó y cuándo aceptó ESA
+    # versión por primera vez (aceptarla otra vez no cambia la fecha). Nulos =
     # nunca los ha aceptado (los usuarios anteriores a esto y las altas con
     # Google), y entonces no puede usar la app hasta aceptar
     Column("terms_accepted_at", DateTime(timezone=True), nullable=True),

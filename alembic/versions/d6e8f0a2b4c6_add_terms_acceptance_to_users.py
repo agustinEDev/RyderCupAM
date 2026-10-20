@@ -29,7 +29,10 @@ def upgrade() -> None:
             "terms_accepted_at",
             sa.DateTime(timezone=True),
             nullable=True,
-            comment="Cuándo aceptó por última vez los Términos de uso (UTC). NULL = nunca",
+            comment=(
+                "Cuándo aceptó la versión de terms_version (UTC): la primera vez, "
+                "aceptarla otra vez no la cambia. NULL = nunca"
+            ),
         ),
     )
     op.add_column(
@@ -38,7 +41,7 @@ def upgrade() -> None:
             "terms_version",
             sa.String(20),
             nullable=True,
-            comment="Versión de los Términos que aceptó por última vez. NULL = nunca",
+            comment="La versión más reciente de los Términos que ha aceptado. NULL = nunca",
         ),
     )
 

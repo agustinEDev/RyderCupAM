@@ -34,8 +34,14 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         Serializa transacciones concurrentes sobre el mismo usuario (p.ej. subidas
         de avatar simultáneas) para que operaciones read-modify-write como podar
         el historial FIFO no se pisen entre sí.
+
+        `populate_existing`: si el usuario ya estaba en la sesión (lo carga
+        get_current_user en la misma petición), sin él SQLAlchemy devolvería
+        esa copia vieja aunque el SELECT ... FOR UPDATE haya leído la fila
+        actual, y quien esperaba el bloqueo escribiría sobre datos ya
+        cambiados por la otra transacción.
         """
-        return await self._session.get(User, user_id, with_for_update=True)
+        return await self._session.get(User, user_id, with_for_update=True, populate_existing=True)
 
     async def find_by_ids(self, user_ids: list[UserId]) -> list[User]:
         """Busca múltiples usuarios por sus IDs en una sola consulta."""

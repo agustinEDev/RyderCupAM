@@ -6,7 +6,7 @@ release, igual que el texto de los Términos que publica el frontend.
 
 CAMBIARLA OBLIGA A TODOS A ACEPTAR DE NUEVO. Quien tenga aceptada otra versión
 recibe un 403 `TERMS_NOT_ACCEPTED` en cualquier ruta con sesión (salvo las
-exentas de `src/config/dependencies.py`) hasta que acepte la nueva con
+exentas de `src/config/terms_guard.py`) hasta que acepte la nueva con
 `POST /api/v1/users/me/accept-terms`. Se cambia a la vez que el texto, en la
 misma release que el frontend.
 

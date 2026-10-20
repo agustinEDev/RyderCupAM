@@ -288,3 +288,62 @@ class TestCambioDeVersion:
         assert (await client.post(ACCEPT)).status_code == 200
         assert (await client.get(PROTEGIDA)).status_code == 200
         assert (await _terminos_en_bd(email))[1] == "2099-01-01"
+
+
+def _google(email: str, google_id: str = "google-existente"):
+    google = AsyncMock()
+    google.exchange_code_for_user_info.return_value = GoogleUserInfo(
+        google_user_id=google_id,
+        email=email,
+        first_name="Ana",
+        last_name="Lopez",
+        email_verified=True,
+        picture_url=None,
+    )
+    app.dependency_overrides[get_google_oauth_service] = lambda: google
+    return google
+
+
+class TestGoogleConUsuarioExistente:
+    async def test_google_login_of_an_existing_user_keeps_its_acceptance(self, client: AsyncClient):
+        """
+        Given: Un usuario que aceptó los Términos al registrarse
+        When: Entra con Google con el mismo email (se vincula solo) y vuelve a
+            entrar con la cuenta de Google ya vinculada
+        Then: Su aceptación en BD no cambia, y la respuesta dice que aceptó
+        """
+        email = "existente@example.com"
+        await create_authenticated_user(client, email, PASSWORD, "Ana", "Lopez")
+        antes = await _terminos_en_bd(email)
+        assert antes[1] == terms_of_service.current_terms_version()
+        _google(email)
+
+        vincula = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+        client.cookies.clear()
+        vinculada = await client.post("/api/v1/auth/google", json={"authorization_code": "c2"})
+
+        assert vincula.status_code == 200
+        assert vincula.json()["is_new_user"] is False
+        assert vincula.json()["user"]["terms_accepted"] is True
+        assert vinculada.status_code == 200
+        assert vinculada.json()["user"]["terms_accepted"] is True
+        assert await _terminos_en_bd(email) == antes
+
+    async def test_linking_google_from_the_profile_keeps_the_acceptance(self, client: AsyncClient):
+        """
+        Given: Un usuario que aceptó los Términos, con sesión
+        When: Vincula Google desde su perfil
+        Then: 200 y su aceptación en BD no cambia
+        """
+        email = "vincula@example.com"
+        datos = await create_authenticated_user(client, email, PASSWORD, "Ana", "Lopez")
+        antes = await _terminos_en_bd(email)
+        set_auth_cookies(client, datos["cookies"])
+        _google(email, google_id="google-perfil")
+
+        respuesta = await client.post(
+            "/api/v1/auth/google/link", json={"authorization_code": "code"}
+        )
+
+        assert respuesta.status_code == 200
+        assert await _terminos_en_bd(email) == antes
