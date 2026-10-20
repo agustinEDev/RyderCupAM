@@ -8,7 +8,7 @@
 
 Amateur golf tournament system in Ryder Cup format.
 
-**Stack**: Python 3.12-3.14, FastAPI, PostgreSQL, Clean Architecture + DDD
+**Stack**: Python 3.12 and 3.14, FastAPI, PostgreSQL, Clean Architecture + DDD
 
 **Infrastructure**: Docker, Kubernetes (Kind), GitHub Actions
 

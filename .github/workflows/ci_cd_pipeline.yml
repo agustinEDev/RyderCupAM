@@ -76,8 +76,8 @@ jobs:
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 15
-    # 3.14 es la versión de la imagen de producción (Dependabot #423) y 3.12 la del
-    # entorno local: las dos bloquean. Para probar una versión futura sin bloquear,
+    # 3.14 es la versión a la que pasa la imagen de producción (Dependabot #423) y
+    # 3.12 la del entorno local: las dos bloquean. Para probar una versión futura sin bloquear,
     # se añade en `include` con `experimental: true` (sale en rojo, no impide mergear).
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
@@ -151,8 +151,8 @@ jobs:
   # Incluye: API, Database, Use Cases
 
   integration_tests:
-    # 3.14 (la imagen de producción, Dependabot #423) y 3.12 (el entorno local),
-    # las dos obligatorias y sobre la misma base de datos de servicio.
+    # 3.14 (a la que pasa la imagen de producción, Dependabot #423) y 3.12 (el
+    # entorno local), las dos obligatorias y sobre la misma base de datos de servicio.
     name: 🗄️ Integration ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
     # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
@@ -247,8 +247,8 @@ jobs:
   # OWASP Coverage: A01-A09
 
   security_tests:
-    # 3.14 (la imagen de producción, Dependabot #423) y 3.12 (el entorno local),
-    # las dos obligatorias y sobre la misma base de datos de servicio.
+    # 3.14 (a la que pasa la imagen de producción, Dependabot #423) y 3.12 (el
+    # entorno local), las dos obligatorias y sobre la misma base de datos de servicio.
     name: 🔐 Security tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
     # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
