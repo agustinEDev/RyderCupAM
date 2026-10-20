@@ -22,6 +22,7 @@ from ..events.user_logged_out_event import UserLoggedOutEvent
 from ..events.user_password_changed_event import UserPasswordChangedEvent
 from ..events.user_profile_updated_event import UserProfileUpdatedEvent
 from ..events.user_registered_event import UserRegisteredEvent
+from ..services import terms_of_service
 from ..value_objects.avatar_source import AvatarSource
 from ..value_objects.email import Email
 from ..value_objects.handicap import Handicap
@@ -135,6 +136,8 @@ class User:
         avatar_source: AvatarSource = AvatarSource.NONE,
         avatar_preset_id: int | None = None,
         active_avatar_upload_id: UserAvatarUploadId | None = None,
+        terms_accepted_at: datetime | None = None,
+        terms_version: str | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
         # Asignación de atributos privados (encapsulación)
@@ -163,6 +166,8 @@ class User:
         self._avatar_source = avatar_source
         self._avatar_preset_id = avatar_preset_id
         self._active_avatar_upload_id = active_avatar_upload_id
+        self._terms_accepted_at = terms_accepted_at
+        self._terms_version = terms_version
         self._domain_events = domain_events or []
 
     # ===========================================
@@ -284,6 +289,56 @@ class User:
     @property
     def active_avatar_upload_id(self) -> UserAvatarUploadId | None:
         return self._active_avatar_upload_id
+
+    @property
+    def terms_accepted_at(self) -> datetime | None:
+        """Cuándo aceptó por última vez los Términos (UTC), o None si nunca."""
+        return self._terms_accepted_at
+
+    @property
+    def terms_version(self) -> str | None:
+        """La versión de los Términos que aceptó por última vez, o None si nunca."""
+        return self._terms_version
+
+    @property
+    def terms_version_required(self) -> str:
+        """La versión vigente: la que tiene que tener aceptada para usar la app."""
+        return terms_of_service.current_terms_version()
+
+    @property
+    def terms_accepted(self) -> bool:
+        """
+        Si tiene aceptada la versión VIGENTE de los Términos.
+
+        Haber aceptado una anterior no basta: al cambiar la versión vigente,
+        todos vuelven a aceptar.
+        """
+        return self._terms_version == terms_of_service.current_terms_version()
+
+    def accept_terms(self, version: str) -> bool:
+        """
+        Deja constancia de que acepta esa versión de los Términos, con la hora de ahora (UTC).
+
+        Idempotente: si ya tenía aceptada esa misma versión no cambia nada, ni
+        la fecha, para que la fecha guardada sea la de la primera aceptación.
+
+        Args:
+            version: La versión aceptada (la vigente, la decide quien llama)
+
+        Returns:
+            True si ha cambiado algo; False si ya la tenía aceptada
+
+        Raises:
+            ValueError: Si la versión está vacía o no cabe en la columna
+        """
+        if not version.strip() or len(version) > terms_of_service.TERMS_VERSION_MAX_LENGTH:
+            raise ValueError(f"Versión de los Términos no válida: {version!r}")
+        if self._terms_version == version:
+            return False
+        self._terms_version = version
+        self._terms_accepted_at = datetime.now(UTC)
+        self._updated_at = datetime.now()
+        return True
 
     def set_preset_avatar(self, preset_id: int) -> None:
         """

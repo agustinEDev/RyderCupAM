@@ -14,6 +14,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.services.terms_of_service import current_terms_version
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
 from src.shared.domain.repositories.country_repository_interface import (
@@ -85,6 +86,10 @@ class RegisterUserUseCase:
                 country_code_str=request.country_code,
                 gender=gender,
             )
+
+            # 2.1 Los Términos: el DTO solo deja pasar accept_terms=true, y se
+            # guarda la versión vigente con la fecha de ahora
+            new_user.accept_terms(current_terms_version())
 
             # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)
             handicap_value = None

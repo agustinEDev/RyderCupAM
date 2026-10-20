@@ -69,6 +69,7 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
         **valid_user_credentials,
         "first_name": "CSRF",
         "last_name": "Test",
+        "accept_terms": True,
     }
     register_response = await client.post("/api/v1/auth/register", json=user_data)
     assert register_response.status_code in [
@@ -301,6 +302,7 @@ async def test_login_generates_csrf_token(client: AsyncClient, valid_user_creden
         **valid_user_credentials,
         "first_name": "CSRF",
         "last_name": "Test",
+        "accept_terms": True,
     }
     await client.post("/api/v1/auth/register", json=user_data)
 
@@ -425,3 +427,49 @@ async def test_post_request_with_csrf_header_but_no_cookie_fails(
     # Debe fallar por falta de cookie CSRF
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert "CSRF" in response.json().get("detail", "")
+
+
+# ======================================================================================
+# Tests: Aceptar los Términos (B5) es una escritura más, con su CSRF
+# ======================================================================================
+
+
+@pytest.mark.asyncio
+async def test_accept_terms_without_csrf_token_fails(csrf_authenticated_client):
+    """
+    Given: Un usuario autenticado
+    When: Acepta los Términos SIN token CSRF
+    Then: 403 CSRF_VALIDATION_FAILED: la ruta no está exenta de CSRF
+    """
+    client, tokens = csrf_authenticated_client
+
+    response = await client.post(
+        "/api/v1/users/me/accept-terms",
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json().get("error_code") == "CSRF_VALIDATION_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_accept_terms_with_valid_csrf_token_succeeds(csrf_authenticated_client):
+    """
+    Given: Un usuario autenticado
+    When: Acepta los Términos con el token CSRF correcto
+    Then: 200 y consta como aceptado
+    """
+    client, tokens = csrf_authenticated_client
+    csrf_token = tokens["csrf_token"]
+
+    response = await client.post(
+        "/api/v1/users/me/accept-terms",
+        headers={
+            "Authorization": f"Bearer {tokens['access_token']}",
+            CSRF_HEADER_NAME: csrf_token,
+        },
+        cookies={CSRF_COOKIE_NAME: csrf_token},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["terms_accepted"] is True

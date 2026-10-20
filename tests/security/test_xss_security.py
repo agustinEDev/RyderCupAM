@@ -35,6 +35,7 @@ class TestXSSInUserFields:
                 "password": "ValidPassword123!",
                 "first_name": payload,
                 "last_name": "SafeLastName",
+                "accept_terms": True,
             }
 
             response = await client.post("/api/v1/auth/register", json=register_data)
@@ -72,6 +73,7 @@ class TestXSSInUserFields:
             "password": "ValidPassword123!",
             "first_name": "Test",
             "last_name": "User",
+            "accept_terms": True,
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -175,6 +177,7 @@ class TestXSSStoredAttacks:
             "password": "ValidPassword123!",
             "first_name": xss_payload,
             "last_name": "User",
+            "accept_terms": True,
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -217,6 +220,7 @@ class TestHTMLSanitization:
             "password": "ValidPassword123!",
             "first_name": html_input,
             "last_name": "User",
+            "accept_terms": True,
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)
@@ -244,6 +248,7 @@ class TestHTMLSanitization:
             "password": "ValidPassword123!",
             "first_name": javascript_payload,
             "last_name": "User",
+            "accept_terms": True,
         }
 
         response = await client.post("/api/v1/auth/register", json=register_data)

@@ -19,6 +19,7 @@ class TestSecurityAuditTrail:
             "password": "AuditT3st123!",
             "first_name": "Audit",
             "last_name": "Test",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_data)
 
@@ -63,6 +64,7 @@ class TestSecurityAuditTrail:
             "password": "LogoutT3st123!",
             "first_name": "Logout",
             "last_name": "Audit",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_data)
 
@@ -98,6 +100,7 @@ class TestSecurityAuditTrail:
             "password": "RefreshT3st123!",
             "first_name": "Refresh",
             "last_name": "Test",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_data)
 

@@ -44,6 +44,7 @@ class TestRegisterUserUseCase:
         # Arrange
         use_case = RegisterUserUseCase(uow, country_repository)
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -76,6 +77,7 @@ class TestRegisterUserUseCase:
         # Arrange: Primero, creamos un usuario existente
         use_case = RegisterUserUseCase(uow, country_repository)
         existing_user_request = RegisterUserRequestDTO(
+            accept_terms=True,
             email="existing.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Existing",
@@ -85,6 +87,7 @@ class TestRegisterUserUseCase:
 
         # Ahora, intentamos registrar otro usuario con el MISMO email
         new_request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="existing.user@example.com",
             password="An0th3rV@l1dP@ss!",
             first_name="Another",
@@ -112,6 +115,7 @@ class TestRegisterUserUseCase:
         use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -142,6 +146,7 @@ class TestRegisterUserUseCase:
         use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -173,6 +178,7 @@ class TestRegisterUserUseCase:
         use_case = RegisterUserUseCase(uow, country_repository, handicap_service)
 
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="test.user@example.com",
             password="V@l1dP@ss123!",
             first_name="Test",
@@ -198,6 +204,7 @@ class TestRegisterUserUseCase:
 
         use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="spanish.player@example.com",
             password="V@l1dP@ss123!",
             first_name="Carlos",
@@ -230,6 +237,7 @@ class TestRegisterUserUseCase:
 
         use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="french.player@example.com",
             password="V@l1dP@ss123!",
             first_name="Pierre",
@@ -261,6 +269,7 @@ class TestRegisterUserUseCase:
 
         use_case = RegisterUserUseCase(uow, country_repository, mock_handicap_service)
         request_dto = RegisterUserRequestDTO(
+            accept_terms=True,
             email="no.country@example.com",
             password="V@l1dP@ss123!",
             first_name="John",

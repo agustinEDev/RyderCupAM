@@ -1,8 +1,10 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from src.modules.user.domain.services.terms_of_service import current_terms_version
 from src.shared.application.validation import (
     AliasValidator,
     FieldLimits,
@@ -69,6 +71,15 @@ class RegisterUserRequestDTO(BaseModel):
         None,
         pattern="^(MALE|FEMALE)$",
         description="Género del usuario (MALE/FEMALE). Opcional. Usado para resolución automática de tees.",
+    )
+    # Obligatorio y solo `true`: sin aceptar los Términos no hay alta. Se
+    # guarda la versión vigente con la fecha (ver terms_of_service)
+    accept_terms: Literal[True] = Field(
+        ...,
+        description=(
+            "Acepta los Términos de uso vigentes. Obligatorio y solo `true`: "
+            "sin él, o con `false`, el registro responde 422."
+        ),
     )
 
     @field_validator("first_name", "last_name")
@@ -263,6 +274,20 @@ class UserResponseDTO(BaseModel):
             "Si los logros del usuario se publican en el feed de sus amigos. "
             "Se cambia con PUT /social/activity-sharing."
         ),
+    )
+    # Términos de uso: si tiene aceptada la versión VIGENTE y cuál es. Sin
+    # aceptarla, toda ruta con sesión salvo las exentas responde 403
+    # TERMS_NOT_ACCEPTED; se acepta con POST /users/me/accept-terms
+    terms_accepted: bool = Field(
+        default=False,
+        description=(
+            "True si el usuario tiene aceptada la versión vigente de los Términos. "
+            "False si no los ha aceptado nunca o aceptó una versión anterior."
+        ),
+    )
+    terms_version_required: str = Field(
+        default_factory=current_terms_version,
+        description="Versión vigente de los Términos, la que hay que tener aceptada.",
     )
 
     # Configuración de Pydantic actualizada para V2

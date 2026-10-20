@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
+    get_accept_terms_use_case,
     get_competition_uow,
     get_current_user,
     get_find_user_use_case,
@@ -34,6 +35,7 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
     UserRolesResponseDTO,
 )
+from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.get_player_stats_use_case import (
     GetPlayerStatsUseCase,
@@ -145,6 +147,33 @@ async def find_user(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
+@router.post(
+    "/me/accept-terms",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Aceptar los Términos de uso vigentes",
+    description=(
+        "Guarda que el usuario autenticado acepta la versión vigente de los Términos, "
+        "con la fecha. Idempotente: si ya la tenía aceptada no cambia nada, tampoco la "
+        "fecha. Devuelve el usuario como current-user. Sin aceptarla, toda ruta con "
+        "sesión salvo current-user, esta y logout responde 403 TERMS_NOT_ACCEPTED."
+    ),
+    tags=["Users"],
+)
+async def accept_terms(
+    use_case: AcceptTermsUseCase = Depends(get_accept_terms_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),
+):
+    """Acepta los Términos vigentes en nombre del usuario autenticado."""
+    try:
+        return await use_case.execute(str(current_user.id))
+    except UserNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
 
