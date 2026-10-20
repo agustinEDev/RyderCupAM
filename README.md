@@ -5,7 +5,7 @@
 <div align="center">
 
 [![Version](https://img.shields.io/badge/version-2.0.18-blue?style=for-the-badge&logo=semver)](.)
-[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
+[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](.)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.125.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](.)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql&logoColor=white)](.)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-0096C7?style=for-the-badge&logo=kubernetes&logoColor=white)](k8s/README.md)
@@ -144,7 +144,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 | Category | Technologies |
 |----------|-------------|
-| **Language** | Python 3.11+ |
+| **Language** | Python 3.12+ |
 | **Framework** | FastAPI 0.125.0 |
 | **Database** | PostgreSQL 15+ |
 | **ORM** | SQLAlchemy 2.0 (Imperative Mapping) |
@@ -366,10 +366,10 @@ See [SECURITY_IMPLEMENTATION.md](docs/SECURITY_IMPLEMENTATION.md) for complete d
 
 | Job | Description | Duration |
 |-----|-------------|----------|
-| **preparation** | Python setup (3.11, 3.12) + pip cache | ~30s |
-| **unit_tests** | Unit tests (matrix: Python 3.11, 3.12) | ~45s |
-| **integration_tests** | Integration tests with PostgreSQL service | ~60s |
-| **security_checks** | Safety + pip-audit (dependency CVE scan) | ~25s |
+| **unit_tests** | Unit tests (matrix: Python 3.12, 3.14) | ~45s |
+| **integration_tests** | Integration tests with PostgreSQL service (Python 3.12, 3.14) | ~60s |
+| **security_tests** | CSRF, XSS, SQL injection, auth bypass and rate limiting tests (Python 3.12, 3.14) | ~60s |
+| **security_checks** | Bandit + pip-audit + Gitleaks (Python 3.14) | ~25s |
 | **linting** | Ruff linting (fast Rust-based linter) | ~20s |
 | **type_checking** | Mypy static type analysis | ~30s |
 | **build** | Docker build + Alembic validation | ~50s |

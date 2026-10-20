@@ -5,7 +5,7 @@
 # Ejecuta tests, security checks, linting y type checking en paralelo
 #
 # Jobs (todos en paralelo; el resumen espera al resto):
-# 1. Unit Tests - 662 tests (Python 3.11 + 3.12)
+# 1. Unit Tests - 662 tests (Python 3.12 + 3.14)
 # 2. Integration Tests - 72 tests (con PostgreSQL)
 # 3. Security Tests - 45+ tests (CSRF, XSS, SQLi, Auth Bypass)
 # 4. Security Checks - Bandit, pip-audit, Gitleaks
@@ -61,7 +61,7 @@ jobs:
   # JOB 2: UNIT TESTS
   # ================================
   # Ejecuta 662+ tests unitarios (sin base de datos)
-  # Matriz: Python 3.11 + 3.12
+  # Matriz: Python 3.12 + 3.14
   # Coverage: XML + HTML reports
 
   unit_tests:
@@ -76,20 +76,15 @@ jobs:
     needs: [linting, type_checking, architecture, api_contract, owasp_semgrep, security_checks, dependency_review, gpg_verification]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     timeout-minutes: 15
-    # 3.13 y 3.14 se prueban sin bloquear (30 sep 2026): antes de pasar la imagen
-    # de producción a una versión nueva (Dependabot #423 propone 3.14) hay que
-    # saber si el código y las dependencias funcionan. Si falla sale en rojo, pero no impide mergear; los
-    # checks obligatorios siguen siendo 3.11 y 3.12.
+    # 3.14 es la versión a la que pasa la imagen de producción (Dependabot #423) y
+    # 3.12 la del entorno local: las dos bloquean. Para probar una versión futura sin bloquear,
+    # se añade en `include` con `experimental: true` (sale en rojo, no impide mergear).
     continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12']
-        include:
-          - python-version: '3.13'
-            experimental: true
-          - python-version: '3.14'
-            experimental: true
+        python-version: ['3.12', '3.14']
+        experimental: [false]
 
     steps:
       - name: Checkout Code
@@ -157,9 +152,8 @@ jobs:
   # Incluye: API, Database, Use Cases
 
   integration_tests:
-    # 3.12 conserva el nombre exacto (es el que miran los checks obligatorios);
-    # 3.14 se prueba sin bloquear, en la misma base de datos de servicio, antes
-    # de pasar la imagen de producción a esa versión (Dependabot #423).
+    # 3.14 (a la que pasa la imagen de producción, Dependabot #423) y 3.12 (el
+    # entorno local), las dos obligatorias y sobre la misma base de datos de servicio.
     name: 🗄️ Integration ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
     # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
@@ -174,10 +168,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12']
-        include:
-          - python-version: '3.14'
-            experimental: true
+        python-version: ['3.12', '3.14']
+        experimental: [false]
     timeout-minutes: 20
 
     services:
@@ -257,9 +249,8 @@ jobs:
   # OWASP Coverage: A01-A09
 
   security_tests:
-    # 3.12 conserva el nombre exacto (es el que miran los checks obligatorios);
-    # 3.14 se prueba sin bloquear, en la misma base de datos de servicio, antes
-    # de pasar la imagen de producción a esa versión (Dependabot #423).
+    # 3.14 (a la que pasa la imagen de producción, Dependabot #423) y 3.12 (el
+    # entorno local), las dos obligatorias y sobre la misma base de datos de servicio.
     name: 🔐 Security tests ${{ matrix.python-version }}${{ matrix.experimental && ' exp' || '' }}
     runs-on: ubuntu-24.04
     # Columna 2 del gráfico: espera a la de análisis estático (30 sep 2026). Si algo
@@ -274,10 +265,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12']
-        include:
-          - python-version: '3.14'
-            experimental: true
+        python-version: ['3.12', '3.14']
+        experimental: [false]
     timeout-minutes: 15
 
     services:
@@ -369,13 +358,13 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'  # la versión a la que pasa la imagen de producción (#423)
 
       - name: Restore pip cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          key: ${{ runner.os }}-pip-py314-${{ hashFiles('requirements*.txt') }}
 
       - name: Install Dependencies
         run: |
@@ -938,13 +927,13 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'  # la versión a la que pasa la imagen de producción (#423)
 
       - name: Restore pip cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          key: ${{ runner.os }}-pip-py314-${{ hashFiles('requirements*.txt') }}
 
       - name: Install Dependencies
         run: |
@@ -1511,9 +1500,9 @@ jobs:
             echo "| 🔒 Security Checks | Bandit, pip-audit (vulnerable dependencies) and Gitleaks (secrets) | $(estado "$SECURITY_CHECKS") |"
             echo "| 🔎 Dependency Review | Vulnerabilities and licenses of the dependencies a PR changes (PRs only) | $(estado "$DEPENDENCY_REVIEW") |"
             echo "| 🔏 Signed commits | Every new commit has a valid GPG signature | $(estado "$GPG_VERIFY") |"
-            echo "| 🧪 Unit tests (3.11, 3.12; 3.13/3.14 experimental) | Domain and use-case tests, with coverage | $(estado "$UNIT_TESTS") |"
-            echo "| 🗄️ Integration tests (3.12; 3.14 experimental) | API and repositories against a real PostgreSQL | $(estado "$INTEGRATION_TESTS") |"
-            echo "| 🔐 Security tests (3.12; 3.14 experimental) | CSRF, XSS, SQL injection, auth bypass and rate limiting | $(estado "$SECURITY_TESTS") |"
+            echo "| 🧪 Unit tests (3.12, 3.14) | Domain and use-case tests, with coverage | $(estado "$UNIT_TESTS") |"
+            echo "| 🗄️ Integration tests (3.12, 3.14) | API and repositories against a real PostgreSQL | $(estado "$INTEGRATION_TESTS") |"
+            echo "| 🔐 Security tests (3.12, 3.14) | CSRF, XSS, SQL injection, auth bypass and rate limiting | $(estado "$SECURITY_TESTS") |"
             echo "| 🐳 Image: Docker build, Deploy like Render, Trivy | Builds the image, starts it like Render and scans it for vulnerabilities | $(estado "$BUILD") |"
             echo "| 📦 SBOM | CycloneDX bill of materials (main, develop, release/*; informational, never blocks) | $(estado "$SBOM_GEN") |"
             echo ""

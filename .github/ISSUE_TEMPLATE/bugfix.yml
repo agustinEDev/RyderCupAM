@@ -34,7 +34,7 @@ body:
     id: environment
     attributes:
       label: Entorno
-      placeholder: "Python 3.11 / Docker local / develop branch..."
+      placeholder: "Python 3.12 / Docker local / develop branch..."
     validations:
       required: false
   - type: dropdown
