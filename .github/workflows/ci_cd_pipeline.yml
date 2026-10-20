@@ -355,13 +355,13 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'  # el Python de la imagen de producción (#423)
 
       - name: Restore pip cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          key: ${{ runner.os }}-pip-py314-${{ hashFiles('requirements*.txt') }}
 
       - name: Install Dependencies
         run: |
@@ -924,13 +924,13 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'  # el Python de la imagen de producción (#423)
 
       - name: Restore pip cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          key: ${{ runner.os }}-pip-py314-${{ hashFiles('requirements*.txt') }}
 
       - name: Install Dependencies
         run: |
