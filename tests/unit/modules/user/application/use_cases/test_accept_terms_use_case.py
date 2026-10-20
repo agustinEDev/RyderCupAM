@@ -170,6 +170,7 @@ class TestRegistro:
         assert filas[0].accepted_at == guardado.terms_accepted_at
         assert filas[0].ip_address == IP
         assert filas[0].user_agent == NAVEGADOR
+        assert filas[0].user_email == _REGISTRO["email"]
         auditoria.log_terms_accepted.assert_called_once_with(
             user_id=str(respuesta.id),
             ip_address=IP,
@@ -354,6 +355,7 @@ class TestAceptarTerminos:
         assert filas[0].terms_version == terms_of_service.current_terms_version()
         assert filas[0].accepted_at == user.terms_accepted_at
         assert (filas[0].ip_address, filas[0].user_agent) == (IP, NAVEGADOR)
+        assert filas[0].user_email == "ana@example.com"
         auditoria.log_terms_accepted.assert_called_once_with(
             user_id=str(user.id.value),
             ip_address=IP,
@@ -482,6 +484,31 @@ class TestAceptarTerminos:
         filas = await uow.terms_acceptances.find_by_user_id(user.id)
         assert [fila.terms_version for fila in filas] == [anterior, "2099-01-01"]
 
+    async def test_reaccepting_a_version_already_in_the_history_adds_no_row(
+        self, monkeypatch, auditoria
+    ):
+        """
+        Given: Un usuario que aceptó la versión A y luego la B, y el backend vuelve
+            a la A (se revierte la constante)
+        When: Acepta la A otra vez
+        Then: Su estado vuelve a la A, pero no se añade otra fila de la A: la
+            prueba ya está, y la base de datos no admite dos (UNIQUE)
+        """
+        uow = InMemoryUnitOfWork()
+        user = await _guardado(uow, _usuario())
+        version_a = terms_of_service.current_terms_version()
+        await AcceptTermsUseCase(uow).execute(_aceptar(user))
+        monkeypatch.setattr(terms_of_service, "CURRENT_TERMS_VERSION", "2099-01-01")
+        await AcceptTermsUseCase(uow).execute(_aceptar(user))
+        monkeypatch.setattr(terms_of_service, "CURRENT_TERMS_VERSION", version_a)
+
+        respuesta = await AcceptTermsUseCase(uow).execute(_aceptar(user))
+
+        assert respuesta.terms_accepted is True
+        assert (await uow.users.find_by_id(user.id)).terms_version == version_a
+        filas = await uow.terms_acceptances.find_by_user_id(user.id)
+        assert [fila.terms_version for fila in filas] == [version_a, "2099-01-01"]
+
     async def test_accept_terms_unknown_user_raises(self, auditoria):
         """
         Given: Un id que no es de nadie
@@ -524,3 +551,37 @@ class TestRespuestaCompartida:
         assert actual is not None
         assert respuesta.auth_providers == ["google"]
         assert respuesta.model_dump() == actual.model_dump()
+
+
+@pytest.mark.asyncio
+class TestAuditoriaSoloTrasConfirmar:
+    async def test_register_does_not_audit_when_the_commit_fails(self, auditoria):
+        """
+        Given: Un registro válido cuya transacción falla al confirmar
+        When: Se ejecuta el caso de uso
+        Then: Sale el error y no queda ninguna aceptación en el log de auditoría
+        """
+        uow = InMemoryUnitOfWork()
+        uow.commit = AsyncMock(side_effect=RuntimeError("commit roto"))
+
+        with pytest.raises(RuntimeError):
+            await RegisterUserUseCase(uow, _countries()).execute(
+                RegisterUserRequestDTO(**_REGISTRO, accept_terms=True)
+            )
+
+        auditoria.log_terms_accepted.assert_not_called()
+
+    async def test_accept_terms_does_not_audit_when_the_commit_fails(self, auditoria):
+        """
+        Given: Un usuario sin aceptación y una transacción que falla al confirmar
+        When: Acepta
+        Then: Sale el error y no queda ninguna aceptación en el log de auditoría
+        """
+        uow = InMemoryUnitOfWork()
+        user = await _guardado(uow, _usuario())
+        uow.commit = AsyncMock(side_effect=RuntimeError("commit roto"))
+
+        with pytest.raises(RuntimeError):
+            await AcceptTermsUseCase(uow).execute(_aceptar(user))
+
+        auditoria.log_terms_accepted.assert_not_called()

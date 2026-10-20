@@ -13,6 +13,8 @@ misma release que el frontend.
 Formato: la fecha de publicación del texto, `AAAA-MM-DD`.
 """
 
+from datetime import datetime, timedelta
+
 # Largo de la columna `users.terms_version`
 TERMS_VERSION_MAX_LENGTH = 20
 
@@ -28,3 +30,33 @@ def current_terms_version() -> str:
     versión nueva.
     """
     return CURRENT_TERMS_VERSION
+
+
+# Conservación del historial de aceptaciones tras el BORRADO de la cuenta
+# (decisión de Agustín, 20 oct 2026): la fila sobrevive al usuario, como
+# prueba de que aceptó, durante este número de años naturales contados desde
+# el borrado, y después la purga la elimina (scripts/purge_terms_acceptances.py).
+# Mientras la cuenta existe, el historial se conserva entero.
+TERMS_ACCEPTANCE_RETENTION_YEARS = 3
+
+
+def terms_acceptance_purge_cutoff(now: datetime) -> datetime:
+    """
+    Antes de este instante, una cuenta borrada ya cumplió su plazo de conservación.
+
+    Son TERMS_ACCEPTANCE_RETENTION_YEARS años naturales antes de `now`; un 29
+    de febrero cae en el 28 si el año de destino no es bisiesto.
+
+    Args:
+        now: Ahora, en UTC
+
+    Raises:
+        ValueError: Si `now` no va en UTC
+    """
+    if now.utcoffset() != timedelta(0):
+        raise ValueError("now debe ir en UTC, con zona horaria")
+    year = now.year - TERMS_ACCEPTANCE_RETENTION_YEARS
+    try:
+        return now.replace(year=year)
+    except ValueError:
+        return now.replace(year=year, day=28)

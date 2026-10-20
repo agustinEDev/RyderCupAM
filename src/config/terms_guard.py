@@ -99,12 +99,14 @@ def require_current_terms(request: Request, user: UserResponseDTO) -> None:
     """
     Deja pasar si el usuario tiene aceptada la versión vigente, o si la ruta está exenta.
 
-    Se decide con API pública de Starlette: `request.method` y
-    `request.url.path`. Esa ruta es la completa de la petición, con el prefijo
-    del router, y es la misma con la que el router la casó porque la app se
-    sirve sin `root_path` (uvicorn arranca sin `--root-path`, ver
-    entrypoint.sh): si algún día se montara bajo un prefijo, las plantillas de
-    TERMS_EXEMPT_ROUTES tendrían que llevarlo.
+    Se decide con `request.method` y `request.scope["path"]`: la ruta de la
+    especificación ASGI, ya decodificada, que es exactamente la cadena con la
+    que el router de Starlette casa la petición (la app se sirve sin
+    `root_path`: uvicorn arranca sin `--root-path`, ver entrypoint.sh; si algún
+    día se montara bajo un prefijo, las plantillas de TERMS_EXEMPT_ROUTES
+    tendrían que llevarlo). NO `request.url.path`: Starlette rehace la URL con
+    la ruta decodificada y la corta en un `%3F` o `%23` codificado, así que
+    `/api/v1/auth/current-user%3Fx` parecería current-user sin serlo.
 
     Args:
         request: La petición
@@ -115,7 +117,7 @@ def require_current_terms(request: Request, user: UserResponseDTO) -> None:
     """
     if user.terms_accepted:
         return
-    if is_exempt_from_terms(request.method, request.url.path):
+    if is_exempt_from_terms(request.method, request.scope["path"]):
         return
     raise TermsNotAcceptedError()
 

@@ -23,6 +23,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import Go
 from src.modules.user.domain.services import terms_of_service
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
+    create_admin_user,
     create_authenticated_user,
     set_auth_cookies,
 )
@@ -53,14 +54,20 @@ async def _terminos_en_bd(email: str) -> tuple | None:
     return tuple(filas[0]) if filas else None
 
 
-async def _sin_aceptar(client: AsyncClient, email: str | None = None) -> tuple[str, dict]:
-    """Un usuario con sesión y SIN los Términos aceptados (como los de antes de la migración)."""
-    email = email or f"sin-terminos-{uuid.uuid4().hex[:8]}@example.com"
-    datos = await create_authenticated_user(client, email, PASSWORD, "Sin", "Terminos")
+async def _como_antes_de_la_migracion(email: str) -> None:
+    """Sin aceptación y sin historial: un usuario anterior a los Términos."""
     await _sql(
         "UPDATE users SET terms_accepted_at = NULL, terms_version = NULL WHERE email = :email",
         {"email": email},
     )
+    await _sql("DELETE FROM terms_acceptances WHERE user_email = :email", {"email": email})
+
+
+async def _sin_aceptar(client: AsyncClient, email: str | None = None) -> tuple[str, dict]:
+    """Un usuario con sesión y SIN los Términos aceptados (como los de antes de la migración)."""
+    email = email or f"sin-terminos-{uuid.uuid4().hex[:8]}@example.com"
+    datos = await create_authenticated_user(client, email, PASSWORD, "Sin", "Terminos")
+    await _como_antes_de_la_migracion(email)
     set_auth_cookies(client, datos["cookies"])
     return email, datos
 
@@ -430,17 +437,14 @@ class TestHistorial:
         """
         client, datos = authenticated_client
         email = datos["credentials"]["email"]
-        await _sql(
-            "UPDATE users SET terms_accepted_at = NULL, terms_version = NULL WHERE email = :email",
-            {"email": email},
-        )
+        await _como_antes_de_la_migracion(email)
         dispositivos = (await client.get("/api/v1/users/me/devices")).json()["devices"]
 
         assert (await client.post(ACCEPT)).status_code == 200
 
         filas = await _historial(email)
-        assert len(filas) == 2
-        _, _, ip, navegador = filas[1]
+        assert len(filas) == 1
+        _, _, ip, navegador = filas[0]
         assert navegador == client.headers["User-Agent"]
         assert ip is not None
         assert ip == dispositivos[0]["ip_address"]
@@ -475,3 +479,33 @@ class TestDispositivosSinAceptar:
             assert respuesta.json()["error_code"] == "TERMS_NOT_ACCEPTED"
         assert lista.status_code == 200
         assert revocar.status_code == 200
+
+
+class TestBorradoDeLaCuenta:
+    async def test_admin_delete_keeps_the_acceptance_as_proof(self, client: AsyncClient):
+        """
+        Given: Un usuario sin actividad que aceptó los Términos al registrarse
+        When: Un admin borra su cuenta
+        Then: La cuenta desaparece pero su fila del historial sigue, sin
+            usuario, con su email, la versión y la fecha de borrado
+        """
+        email = "se-va@example.com"
+        datos = await create_authenticated_user(client, email, PASSWORD, "Se", "Va")
+        admin = await create_admin_user(client, "admin-terms@example.com", PASSWORD, "Ad", "Min")
+        set_auth_cookies(client, admin["cookies"])
+
+        respuesta = await client.delete(f"/api/v1/admin/users/{datos['user']['id']}")
+
+        assert respuesta.status_code in (200, 204)
+        assert await _terminos_en_bd(email) is None
+        filas = await _sql(
+            "SELECT user_id, user_email, terms_version, user_deleted_at "
+            "FROM terms_acceptances WHERE user_email = :email",
+            {"email": email},
+        )
+        assert len(filas) == 1
+        user_id, guardado, version, borrado_en = filas[0]
+        assert user_id is None
+        assert guardado == email
+        assert version == terms_of_service.current_terms_version()
+        assert borrado_en is not None

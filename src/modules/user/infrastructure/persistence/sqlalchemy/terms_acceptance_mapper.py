@@ -6,13 +6,23 @@ Mapeo imperativo entre TermsAcceptance y la tabla terms_acceptances.
 
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Table, inspect
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Table,
+    UniqueConstraint,
+    inspect,
+)
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.terms_acceptance import (
     IP_ADDRESS_MAX_LENGTH,
     USER_AGENT_MAX_LENGTH,
+    USER_EMAIL_MAX_LENGTH,
     TermsAcceptance,
 )
 from src.modules.user.domain.services.terms_of_service import TERMS_VERSION_MAX_LENGTH
@@ -45,8 +55,11 @@ class TermsAcceptanceIdDecorator(TypeDecorator):
         return TermsAcceptanceId(uuid.UUID(value))
 
 
-# Historial de solo inserción. ON DELETE CASCADE, como el resto de lo que
-# cuelga de un usuario: si se borra la cuenta, se va con ella
+# Historial que sobrevive al borrado de la cuenta (TERMS_ACCEPTANCE_RETENTION_YEARS):
+# ON DELETE SET NULL, con el email guardado en la fila y user_deleted_at, que
+# rellena el caso de uso del borrado. Una versión, una fila por usuario: el
+# UNIQUE es defensa en profundidad (tras borrar, user_id es NULL y los NULL no
+# chocan entre sí)
 terms_acceptances_table = Table(
     "terms_acceptances",
     metadata,
@@ -54,16 +67,20 @@ terms_acceptances_table = Table(
     Column(
         "user_id",
         UserIdDecorator,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     ),
+    Column("user_email", String(USER_EMAIL_MAX_LENGTH), nullable=False),
     Column("terms_version", String(TERMS_VERSION_MAX_LENGTH), nullable=False),
     Column("accepted_at", DateTime(timezone=True), nullable=False),
     Column("ip_address", String(IP_ADDRESS_MAX_LENGTH), nullable=True),
     Column("user_agent", String(USER_AGENT_MAX_LENGTH), nullable=True),
+    Column("user_deleted_at", DateTime(timezone=True), nullable=True),
+    UniqueConstraint("user_id", "terms_version", name="uq_terms_acceptances_user_version"),
 )
 
 Index("ix_terms_acceptances_user_id", terms_acceptances_table.c.user_id)
+Index("ix_terms_acceptances_user_deleted_at", terms_acceptances_table.c.user_deleted_at)
 
 
 def start_mappers():
@@ -77,6 +94,8 @@ def start_mappers():
             properties={
                 "_id": terms_acceptances_table.c.id,
                 "_user_id": terms_acceptances_table.c.user_id,
+                "_user_email": terms_acceptances_table.c.user_email,
+                "_user_deleted_at": terms_acceptances_table.c.user_deleted_at,
                 "_terms_version": terms_acceptances_table.c.terms_version,
                 "_accepted_at": terms_acceptances_table.c.accepted_at,
                 "_ip_address": terms_acceptances_table.c.ip_address,

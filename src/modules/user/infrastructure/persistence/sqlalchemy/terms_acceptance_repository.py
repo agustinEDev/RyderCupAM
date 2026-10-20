@@ -1,6 +1,8 @@
 """Historial de aceptaciones de los Términos con SQLAlchemy (async)."""
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
@@ -22,6 +24,15 @@ class SQLAlchemyTermsAcceptanceRepository(TermsAcceptanceRepositoryInterface):
     async def save(self, acceptance: TermsAcceptance) -> None:
         self._session.add(acceptance)
 
+    async def has_accepted(self, user_id: UserId, terms_version: str) -> bool:
+        statement = (
+            select(terms_acceptances_table.c.id)
+            .where(terms_acceptances_table.c.user_id == user_id)
+            .where(terms_acceptances_table.c.terms_version == terms_version)
+            .limit(1)
+        )
+        return (await self._session.execute(statement)).first() is not None
+
     async def find_by_user_id(self, user_id: UserId) -> list[TermsAcceptance]:
         statement = (
             select(TermsAcceptance)
@@ -30,3 +41,23 @@ class SQLAlchemyTermsAcceptanceRepository(TermsAcceptanceRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
+
+    async def detach_deleted_user(self, user_id: UserId, deleted_at: datetime) -> int:
+        # Solo la fecha: user_id lo pone a NULL la base de datos al borrar al
+        # usuario en esta misma transacción (FK ON DELETE SET NULL)
+        result = await self._session.execute(
+            update(terms_acceptances_table)
+            .where(terms_acceptances_table.c.user_id == user_id)
+            .values(user_deleted_at=deleted_at)
+            .execution_options(synchronize_session=False)
+        )
+        return int(result.rowcount or 0)
+
+    async def purge_deleted_before(self, cutoff: datetime) -> int:
+        result = await self._session.execute(
+            delete(terms_acceptances_table)
+            .where(terms_acceptances_table.c.user_deleted_at.is_not(None))
+            .where(terms_acceptances_table.c.user_deleted_at < cutoff)
+            .execution_options(synchronize_session=False)
+        )
+        return int(result.rowcount or 0)

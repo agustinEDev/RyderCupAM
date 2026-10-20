@@ -224,6 +224,29 @@ class TestGuarda:
         with pytest.raises(TermsNotAcceptedError):
             require_current_terms(_request(otro, path), _usuario(False))
 
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            # Lo que llega en scope["path"] para .../current-user%3Fx: decodificado
+            ("GET", "/api/v1/auth/current-user?x"),
+            ("GET", "/api/v1/auth/current-user#x"),
+            ("GET", "/api/v1/users/me/devices#x"),
+            ("GET", "/api/v1/users/me/devices?x"),
+            ("POST", "/api/v1/users/me/accept-terms?/../../stats"),
+            ("POST", "/api/v1/auth/logout#/x"),
+        ],
+    )
+    def test_encoded_question_mark_or_hash_does_not_exempt(self, method, path):
+        """
+        Given: Una petición cuya ruta lleva un %3F o %23 codificado (que ASGI
+            entrega decodificado en scope["path"])
+        When: Pasa por la guarda un usuario sin los Términos aceptados
+        Then: Se le rechaza: la decisión se toma con la misma ruta con la que
+            casa el router, no con la que Starlette rehace cortando en ? o #
+        """
+        with pytest.raises(TermsNotAcceptedError):
+            require_current_terms(_request(method, path), _usuario(False))
+
     def test_user_with_acceptance_passes_everywhere(self):
         """
         Given: Un usuario con la versión vigente aceptada

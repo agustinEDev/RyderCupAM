@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -116,6 +116,27 @@ class AcceptTermsRequestDTO(BaseModel):
     user_id: str = Field(..., description="ID del usuario autenticado.")
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+
+
+class PurgeTermsAcceptancesRequestDTO(BaseModel):
+    """Entrada de la purga del historial de aceptaciones: el «ahora» de referencia."""
+
+    now: datetime = Field(..., description="Instante de referencia, en UTC.")
+
+    @field_validator("now")
+    @classmethod
+    def now_in_utc(cls, value: datetime) -> datetime:
+        """La purga compara contra fechas en UTC: sin zona sería ambiguo."""
+        if value.utcoffset() != timedelta(0):
+            raise ValueError("now debe ir en UTC, con zona horaria")
+        return value
+
+
+class PurgeTermsAcceptancesResponseDTO(BaseModel):
+    """Salida de la purga: cuántas filas se borraron y con qué corte."""
+
+    deleted: int = Field(..., description="Filas borradas.")
+    cutoff: datetime = Field(..., description="Se borran las cuentas borradas antes de esto.")
 
 
 # ======================================================================================

@@ -110,6 +110,7 @@ class RegisterUserUseCase:
                 raise RuntimeError("accept_terms no dejó fecha de aceptación")
             terms_acceptance = TermsAcceptance.record(
                 user_id=new_user.id,
+                user_email=request.email,
                 terms_version=terms_version,
                 accepted_at=accepted_at,
                 ip_address=request.ip_address,

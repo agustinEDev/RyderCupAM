@@ -84,14 +84,20 @@ class AcceptTermsUseCase:
             accepted_at = user.terms_accepted_at
             if accepted_at is None:  # accept_terms acaba de ponerla
                 raise RuntimeError("accept_terms no dejó fecha de aceptación")
+            if user.email is None:  # todo usuario tiene email; solo para el tipo
+                raise RuntimeError("usuario sin email")
             recorded = TermsAcceptance.record(
                 user_id=user_id,
+                user_email=user.email.value,
                 terms_version=current_terms_version(),
                 accepted_at=accepted_at,
                 ip_address=request.ip_address,
                 user_agent=request.user_agent,
             )
             await self._uow.users.save(user)
-            await self._uow.terms_acceptances.save(recorded)
+            # Una fila por versión (UNIQUE en la BD): si ya aceptó esta versión
+            # antes (la constante volvió atrás), la prueba ya está en el historial
+            if not await self._uow.terms_acceptances.has_accepted(user_id, recorded.terms_version):
+                await self._uow.terms_acceptances.save(recorded)
 
         return user, recorded
