@@ -35,7 +35,7 @@ import-linter==2.15
 mypy==2.4.0
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
-sqlalchemy[mypy]>=2.1.4
+sqlalchemy[mypy]>=2.1.5
 
 # ================================
 # SEGURIDAD
@@ -137,4 +137,4 @@ cyclonedx-bom>=7.5.0
 # pip-compile: Genera requirements.lock con hashes SHA256 para verificación de integridad
 # pip-sync: Sincroniza el entorno con el lock file
 # Previene ataques de dependency substitution
-pip-tools>=7.6.1
+pip-tools>=7.6.2
