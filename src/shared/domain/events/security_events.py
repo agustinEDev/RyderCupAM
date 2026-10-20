@@ -172,6 +172,36 @@ class LogoutEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class TermsAcceptedEvent(SecurityAuditEvent):
+    """
+    Evento de aceptación de los Términos de uso.
+
+    Se emite cada vez que un usuario acepta de verdad una versión (en el
+    registro o en POST /users/me/accept-terms); volver a aceptar la que ya
+    tenía no lo emite. Es el rastro de auditoría del consentimiento, junto a
+    la tabla terms_acceptances.
+
+    Atributos:
+        terms_version: La versión aceptada
+    """
+
+    terms_version: str = ""
+
+    def __post_init__(self):
+        """Validación y severidad: aceptar es una acción normal"""
+        super().__post_init__()
+        if not self.terms_version:
+            raise ValueError("terms_version es requerido en TermsAcceptedEvent")
+        object.__setattr__(self, "severity", SecuritySeverity.LOW)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con la versión aceptada"""
+        base = super().to_dict()
+        base.update({"terms_version": self.terms_version})
+        return base
+
+
+@dataclass(frozen=True)
 class RefreshTokenUsedEvent(SecurityAuditEvent):
     """
     Evento de uso de refresh token para renovar access token.

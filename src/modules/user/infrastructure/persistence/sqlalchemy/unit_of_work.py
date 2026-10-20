@@ -6,6 +6,9 @@ from src.modules.user.domain.repositories.password_history_repository_interface 
 from src.modules.user.domain.repositories.refresh_token_repository_interface import (
     RefreshTokenRepositoryInterface,
 )
+from src.modules.user.domain.repositories.terms_acceptance_repository_interface import (
+    TermsAcceptanceRepositoryInterface,
+)
 from src.modules.user.domain.repositories.user_avatar_upload_repository_interface import (
     UserAvatarUploadRepositoryInterface,
 )
@@ -26,6 +29,9 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.password_history_rep
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_repository import (
     SQLAlchemyRefreshTokenRepository,
+)
+from src.modules.user.infrastructure.persistence.sqlalchemy.terms_acceptance_repository import (
+    SQLAlchemyTermsAcceptanceRepository,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_avatar_upload_repository import (
     SQLAlchemyUserAvatarUploadRepository,
@@ -60,6 +66,7 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
         self._user_devices = SQLAlchemyUserDeviceRepository(session)
         self._oauth_accounts = SQLAlchemyUserOAuthAccountRepository(session)
         self._avatar_uploads = SQLAlchemyUserAvatarUploadRepository(session)
+        self._terms_acceptances = SQLAlchemyTermsAcceptanceRepository(session)
 
     @property
     def users(self) -> UserRepositoryInterface:
@@ -84,6 +91,10 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
     @property
     def avatar_uploads(self) -> UserAvatarUploadRepositoryInterface:
         return self._avatar_uploads
+
+    @property
+    def terms_acceptances(self) -> TermsAcceptanceRepositoryInterface:
+        return self._terms_acceptances
 
     async def __aenter__(self):
         return self

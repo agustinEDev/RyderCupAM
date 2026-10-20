@@ -7,13 +7,19 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
-from src.modules.user.domain.errors.user_errors import UserAlreadyExistsError
+from src.modules.user.domain.errors.user_errors import (
+    TermsAcceptanceRequiredError,
+    UserAlreadyExistsError,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
+from src.modules.user.domain.services.terms_of_service import current_terms_version
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
 from src.shared.domain.repositories.country_repository_interface import (
@@ -41,12 +47,15 @@ class RegisterUserUseCase:
         country_repository: CountryRepositoryInterface,
         handicap_service: HandicapService | None = None,
         email_service: IEmailService | None = None,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         self._country_repository = country_repository
         self._handicap_service = handicap_service
         self._email_service = email_service
+        self._security_audit = security_audit
 
     async def execute(self, request: RegisterUserRequestDTO) -> UserResponseDTO:
         """
@@ -60,7 +69,16 @@ class RegisterUserUseCase:
 
         Raises:
             UserAlreadyExistsError: Si el correo electrónico ya está en uso.
+            TermsAcceptanceRequiredError: Si no trae accept_terms exactamente True.
         """
+        # Sin consentimiento explícito no hay alta. La API ya da 422, pero el
+        # caso de uso no se fía de que el request llegue validado (p. ej. uno
+        # construido con model_construct): solo vale el booleano True
+        if getattr(request, "accept_terms", None) is not True:
+            raise TermsAcceptanceRequiredError(
+                "Para registrarse hay que aceptar los Términos de uso vigentes."
+            )
+
         async with self._uow:
             # 1. Validar que el email no existe
             email_vo = Email(request.email)
@@ -84,6 +102,22 @@ class RegisterUserUseCase:
                 last_name=request.last_name,
                 country_code_str=request.country_code,
                 gender=gender,
+            )
+
+            # 2.1 Los Términos: se guarda la versión vigente con la fecha de
+            # ahora, y la aceptación va al historial con la IP y el navegador
+            terms_version = current_terms_version()
+            new_user.accept_terms(terms_version)
+            accepted_at = new_user.terms_accepted_at
+            if accepted_at is None:  # accept_terms acaba de ponerla
+                raise RuntimeError("accept_terms no dejó fecha de aceptación")
+            terms_acceptance = TermsAcceptance.record(
+                user_id=new_user.id,
+                user_email=new_user.email.value,
+                terms_version=terms_version,
+                accepted_at=accepted_at,
+                ip_address=request.ip_address,
+                user_agent=request.user_agent,
             )
 
             # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)
@@ -116,10 +150,21 @@ class RegisterUserUseCase:
             # 2.8 Generar token de verificación de email
             verification_token = new_user.generate_verification_token()
 
-            # 3. Guardar el usuario en el repositorio
+            # 3. Guardar el usuario en el repositorio, y después su aceptación
+            # (la fila apunta al usuario: tiene que existir antes)
             await self._uow.users.save(new_user)
+            await self._uow.flush()
+            await self._uow.terms_acceptances.save(terms_acceptance)
 
             # El context manager (__aexit__) hace commit automático y publica eventos
+
+        # 3.5 Auditoría de seguridad: la aceptación de los Términos
+        self._security_audit.log_terms_accepted(
+            user_id=str(new_user.id.value),
+            ip_address=request.ip_address or "unknown",
+            user_agent=request.user_agent or "unknown",
+            terms_version=terms_acceptance.terms_version,
+        )
 
         # 4. Enviar email de verificación
         if self._email_service:

@@ -127,6 +127,7 @@ class TestSecurityHeaders:
             "password": "TestPassword123!",
             "first_name": "Test",
             "last_name": "User",
+            "accept_terms": True,
         }
         response = await client.post("/api/v1/auth/register", json=payload)
 

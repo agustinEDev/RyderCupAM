@@ -89,6 +89,7 @@ class TestAuthSecurityUserEnumeration:
             "password": "V@l1dP@ss123!",
             "first_name": "Security",
             "last_name": "Test",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=valid_user_data)
 
@@ -144,6 +145,7 @@ class TestAuthSecurityUserEnumeration:
             "password": "V@l1dP@ss123!",
             "first_name": "Verified",
             "last_name": "Security",
+            "accept_terms": True,
         }
         register_response = await client.post("/api/v1/auth/register", json=user_data)
         assert register_response.status_code == status.HTTP_201_CREATED
@@ -189,6 +191,7 @@ class TestAuthSecurityUserEnumeration:
             "password": "V@l1dP@ss123!",
             "first_name": "Timing",
             "last_name": "Test",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=valid_user)
 
@@ -276,6 +279,7 @@ class TestAuthSecurityLogging:
             "password": "V@l1dP@ss123!",
             "first_name": "Logging",
             "last_name": "Test",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=valid_user)
 

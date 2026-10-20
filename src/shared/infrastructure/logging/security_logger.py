@@ -30,6 +30,7 @@ from ...domain.events.security_events import (
     RefreshTokenUsedEvent,
     SecurityAuditEvent,
     SecuritySeverity,
+    TermsAcceptedEvent,
 )
 from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
@@ -227,6 +228,9 @@ class SecurityLogger:
         if isinstance(event, RateLimitExceededEvent):
             return f"⚠️  RATE LIMIT EXCEEDED | {user_info} | Endpoint: {event.endpoint} | Limit: {event.limit_value}"
 
+        if isinstance(event, TermsAcceptedEvent):
+            return f"TERMS ACCEPTED | {user_info} | Version: {event.terms_version}"
+
         if isinstance(event, RefreshTokenUsedEvent):
             return f"🔄 REFRESH TOKEN USED | {user_info} | Token ID: {event.refresh_token_id}"
 
@@ -309,6 +313,30 @@ class SecurityLogger:
             ip_address=ip_address,
             user_agent=user_agent,
             refresh_tokens_revoked=refresh_tokens_revoked,
+        )
+        self.log_security_event(event)
+
+    def log_terms_accepted(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        terms_version: str,
+    ) -> None:
+        """
+        Helper rápido para registrar la aceptación de los Términos.
+
+        Args:
+            user_id: ID del usuario
+            ip_address: IP del cliente
+            user_agent: User-Agent del navegador
+            terms_version: La versión aceptada
+        """
+        event = TermsAcceptedEvent(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            terms_version=terms_version,
         )
         self.log_security_event(event)
 

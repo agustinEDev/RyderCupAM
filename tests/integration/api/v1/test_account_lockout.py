@@ -49,6 +49,7 @@ async def test_account_locks_after_max_failed_attempts(client: AsyncClient):
         "password": "ValidPassword123!",
         "first_name": "Lock",
         "last_name": "Test",
+        "accept_terms": True,
     }
 
     response = await client.post("/api/v1/auth/register", json=register_data)
@@ -101,6 +102,7 @@ async def test_locked_account_cannot_login_even_with_correct_password(
         "password": "CorrectPassword123!",
         "first_name": "Locked",
         "last_name": "User",
+        "accept_terms": True,
     }
 
     response = await client.post("/api/v1/auth/register", json=register_data)
@@ -150,6 +152,7 @@ async def test_successful_login_resets_failed_attempts_counter(client: AsyncClie
         "password": "ValidPassword123!",
         "first_name": "Reset",
         "last_name": "Test",
+        "accept_terms": True,
     }
 
     response = await client.post("/api/v1/auth/register", json=register_data)
@@ -236,6 +239,7 @@ async def test_lockout_persists_across_requests(client: AsyncClient):
         "password": "ValidPassword123!",
         "first_name": "Persist",
         "last_name": "Test",
+        "accept_terms": True,
     }
 
     response = await client.post("/api/v1/auth/register", json=register_data)
@@ -286,6 +290,7 @@ async def test_lockout_error_message_includes_locked_until_timestamp(
         "password": "ValidPassword123!",
         "first_name": "Timestamp",
         "last_name": "Test",
+        "accept_terms": True,
     }
 
     response = await client.post("/api/v1/auth/register", json=register_data)

@@ -5,6 +5,9 @@ Caso de uso para obtener el usuario actual desde un JWT token.
 """
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.services.current_user_response import (
+    build_current_user_response,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -53,11 +56,5 @@ class GetCurrentUserUseCase:
         if not user:
             return None
 
-        # Consultar proveedores OAuth vinculados
-        oauth_accounts = await self._uow.oauth_accounts.find_by_user_id(user_id)
-        auth_providers = [account.provider.value for account in oauth_accounts]
-
-        dto = UserResponseDTO.model_validate(user)
-        dto.auth_providers = auth_providers
-
-        return dto
+        # La misma respuesta que accept-terms: se construye en un solo sitio
+        return await build_current_user_response(self._uow, user)

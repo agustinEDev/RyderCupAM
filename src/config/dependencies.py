@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config.database import async_session_maker
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
 from src.config.settings import settings
+from src.config.terms_guard import require_current_terms
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
@@ -493,7 +494,9 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
     ActivateUploadedAvatarUseCase,
 )
@@ -632,6 +635,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import 
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
     user_devices_table,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
@@ -739,11 +743,17 @@ def get_country_repository(
     return SQLAlchemyCountryRepository(session)
 
 
+def get_security_audit_logger() -> ISecurityAuditLogger:
+    """Proveedor del puerto de auditoría de seguridad (el SecurityLogger compartido)."""
+    return SecurityAuditLogger()
+
+
 def get_register_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     country_repository: CountryRepositoryInterface = Depends(get_country_repository),
     handicap_service: HandicapService = Depends(get_handicap_service),
     email_service: IEmailService = Depends(get_email_service),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> RegisterUserUseCase:
     """
     Proveedor del caso de uso RegisterUserUseCase.
@@ -761,6 +771,7 @@ def get_register_user_use_case(
         country_repository=country_repository,
         handicap_service=handicap_service,
         email_service=email_service,
+        security_audit=security_audit,
     )
 
 
@@ -995,6 +1006,14 @@ def get_list_my_avatar_uploads_use_case(
     return ListMyAvatarUploadsUseCase(uow)
 
 
+def get_accept_terms_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+) -> AcceptTermsUseCase:
+    """Proveedor del caso de uso AcceptTermsUseCase."""
+    return AcceptTermsUseCase(uow, security_audit)
+
+
 def get_remove_avatar_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> RemoveAvatarUseCase:
@@ -1180,6 +1199,12 @@ async def get_current_user(
                 f"Error during device validation for user {user_id_str}: {type(e).__name__}: {e}"
             )
             pass
+
+    # Términos de uso (B6): sin la versión vigente aceptada, 403
+    # TERMS_NOT_ACCEPTED en toda ruta con sesión salvo las exentas
+    # (src/config/terms_guard.py). Va al final: un token inválido o un
+    # dispositivo revocado siguen siendo un 401
+    require_current_terms(request, user)
 
     return user
 
