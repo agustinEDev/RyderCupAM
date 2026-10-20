@@ -143,6 +143,38 @@ class TestGolfCourseLocation:
         )
         assert listed["location"]["latitude"] == 43.29519
 
+    @pytest.mark.asyncio
+    async def test_provenance_reaches_the_json_of_detail_and_list(self, client: AsyncClient):
+        """
+        La procedencia llega al JSON de la ficha y del listado.
+
+        Antes el DTO de la ficha no declaraba `provenance` y Pydantic lo
+        descartaba: la API no lo enviaba en ningún sitio. Un campo pedido por un
+        usuario es MANUAL.
+        """
+        creator = await create_authenticated_user(
+            client, "provenance-detail@test.com", "P@ssw0rd123!", "Creator", "Test"
+        )
+        created = await client.post(
+            "/api/v1/golf-courses/request",
+            json=build_course_payload(DERIO_LOCATION),
+            cookies=creator["cookies"],
+        )
+        course_id = created.json()["id"]
+        admin = await create_admin_user(
+            client, "provenance-admin@test.com", "P@ssw0rd123!", "Admin", "Test"
+        )
+        await approve_golf_course(client, admin["cookies"], course_id)
+
+        detail = await client.get(f"/api/v1/golf-courses/{course_id}", cookies=creator["cookies"])
+        listing = await client.get("/api/v1/golf-courses", cookies=creator["cookies"])
+
+        assert detail.json()["provenance"]["source"] == "MANUAL"
+        listed = next(
+            course for course in listing.json()["golf_courses"] if course["id"] == course_id
+        )
+        assert listed["provenance"] == detail.json()["provenance"]
+
 
 TENERIFE_LOCATION = {
     "latitude": 28.17084,

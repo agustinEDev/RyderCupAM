@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.36.0] - 2026-10-20
+
+**Aceptación de los Términos y cambios legales.** Tras la auditoría legal del
+20 oct: el backend sabe qué versión de los Términos está vigente y quién la
+aceptó y cuándo, y nadie usa la aplicación sin aceptarla. **Todos los usuarios
+existentes tendrán que aceptarla al entrar.** Va con el frontend **2.49.0**.
+
+**Notas de despliegue.**
+
+- **Cambio incompatible**: `accept_terms` pasa a ser obligatorio en
+  `POST /auth/register` (PR #617, etiqueta `api-breaking`). **Orden al revés
+  de lo habitual: primero el frontend 2.49.0 y el backend justo después**, sin
+  partidas en juego (el frontend nuevo funciona con el backend 2.35.0; el
+  backend nuevo hace que la aplicación vieja descarte golpes de su cola).
+- **Migraciones** `d6e8f0a2b4c6` y `e7f9a1b3c5d7` (columnas en `users`, tabla
+  `terms_acceptances`, trigger `BEFORE DELETE ON users`), con
+  `lock_timeout = 5s`. Hacer `pg_dump` antes.
+- **No usar el rollback de Render**: la imagen anterior no conoce estas
+  migraciones y no arrancaría. Vuelta atrás: hotfix hacia delante, o
+  `alembic downgrade c5f7a9b1d3e5` (borra el historial de aceptaciones) y
+  desplegar la imagen anterior.
+- Sin variables nuevas. `GITHUB_ISSUES_REPO` debe apuntar al repo privado
+  `agustinEDev/rcf-contacto` (dashboard de Render).
+- En cada release, ejecutar `scripts/purge_terms_acceptances.py`.
+
+### Added
+
+- **Aceptación de los Términos** (#617): `accept_terms` obligatorio en el
+  registro (422 sin él); `POST /api/v1/users/me/accept-terms` (CSRF,
+  idempotente); `terms_accepted` y `terms_version_required` en el usuario;
+  403 `TERMS_NOT_ACCEPTED` en toda ruta con sesión salvo current-user,
+  accept-terms, logout y la gestión de dispositivos (`GET` y `DELETE
+  /users/me/devices`). Versión vigente `2026-10-20`, constante del dominio.
+- **Historial de aceptaciones** (`terms_acceptances`): versión, fecha, email,
+  IP y navegador de cada aceptación; se conserva 3 años tras borrar la cuenta
+  (FK `SET NULL` + trigger) y `scripts/purge_terms_acceptances.py` lo purga.
+  Evento de auditoría `TERMS ACCEPTED`.
+- **Procedencia de los campos** en la ficha y en los listados (`provenance`),
+  y `physical_holes` en la ficha: el DTO no los declaraba y Pydantic los
+  descartaba (#615).
+
+### Changed
+
+- La consulta de hándicap a la RFEG se identifica como `RCF/1.0`, sin imitar
+  su web; el cliente de Overpass, como `RCF/1.0` con contacto (#612).
+- El importador de campos lee el volcado de `--dataset`, `RFEG_DATASET_PATH`
+  o `data/`; el volcado ya no forma parte del repositorio (#612).
+- Licencia: todos los derechos reservados (#614, #616).
+
 ## [2.35.0] - 2026-10-20
 
 **El backend pasa a Python 3.14.** Sin nada nuevo para el usuario: cambia el
@@ -1595,7 +1644,7 @@ midieron contra producción antes de escribirse.
 
   **El listado ya no devuelve la tarjeta del campo**, solo sus salidas: 802 campos por 18 hoyos eran 14.436 objetos viajando para pintar una lista de nombres. Las salidas sí se quedan, aunque también pesen, porque el panel de administración dibuja una insignia por cada una y el frontend valida sus ratings al construir la entidad, así que recortarlas rompería en vez de degradar. La tarjeta se pide con el campo, en `GET /golf-courses/{id}`.
 
-- **Importador de los campos federados españoles** (issue #107): un comando que carga los **802 recorridos** de la RFEG —4.304 salidas y 77.472 hoyos— dando de alta cada uno **a través de los casos de uso**, no escribiendo en las tablas, para que pasen por las mismas invariantes que un alta hecha a mano. Tarda unos quince segundos. **Sin argumentos hace una pasada en seco** y no toca nada: aplicar hay que pedirlo. El volcado viaja comprimido en el repositorio (0,7 MB frente a 11 MB en crudo), junto al código que lo interpreta, de modo que en git queda qué datos se cargaron y cuándo.
+- **Importador de los campos federados españoles** (issue #107): un comando que carga los **802 recorridos** de la RFEG —4.304 salidas y 77.472 hoyos— dando de alta cada uno **a través de los casos de uso**, no escribiendo en las tablas, para que pasen por las mismas invariantes que un alta hecha a mano. Tarda unos quince segundos. **Sin argumentos hace una pasada en seco** y no toca nada: aplicar hay que pedirlo.
 
   **Reconocer un campo ya importado** se apoya en el id del club en la federación más el nombre del recorrido tal como lo publica la fuente: el `way_id` de la RFEG no vale, porque identifica cada salida y no el recorrido (800 de los 802 tienen un id distinto por barra). Se usa el nombre de origen y no el que mostramos, porque este último depende de nuestras tablas de tildes y cambiarlas convertiría los 802 campos en desconocidos. Cuando la federación renombra un recorrido, se reconoce igualmente por club y forma de la tarjeta, pero **eso no se aplica solo**: se propone y lo confirma una persona, porque duplicar tiene arreglo y sobrescribir el campo equivocado no. Lo mismo con los campos que ya estaban dados de alta a mano. Cualquier caso con más de un candidato se deja como campo nuevo.
 

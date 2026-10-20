@@ -79,6 +79,7 @@ class TestUserRoutes:
             "password": "s3cur3P@ssw0rd!",
             "first_name": "John",
             "last_name": "Smith",
+            "accept_terms": True,
         }
 
         await client.post("/api/v1/auth/register", json=user2_data)

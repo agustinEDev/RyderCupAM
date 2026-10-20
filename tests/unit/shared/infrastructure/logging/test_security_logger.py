@@ -153,3 +153,44 @@ class TestSecurityLoggerEdgeCases:
         log_file = temp_log_dir / "test_security.log"
         content = log_file.read_text()
         assert "Anonymous" in content or "null" in content
+
+
+class TestTermsAccepted:
+    """La aceptación de los Términos queda en el log de auditoría."""
+
+    def test_log_terms_accepted_helper(self, logger, temp_log_dir):
+        """
+        Given: Un usuario que acepta los Términos
+        When: Se registra con el helper
+        Then: El log lleva el usuario, la versión, la IP y el tipo de evento
+        """
+        logger.log_terms_accepted(
+            user_id="user-terms",
+            ip_address="203.0.113.9",
+            user_agent="Firefox/121.0",
+            terms_version="2026-10-20",
+        )
+
+        content = (temp_log_dir / "test_security.log").read_text()
+        assert "TERMS ACCEPTED" in content
+        assert "user-terms" in content
+        assert "2026-10-20" in content
+        assert "TermsAcceptedEvent" in content
+
+    def test_terms_accepted_event_is_low_severity(self):
+        """
+        Given: El evento de aceptación
+        When: Se crea
+        Then: Severidad LOW (acción normal) y su versión en el dict
+        """
+        from src.shared.domain.events.security_events import TermsAcceptedEvent
+
+        event = TermsAcceptedEvent(
+            user_id="u1",
+            ip_address="203.0.113.9",
+            user_agent="Firefox/121.0",
+            terms_version="2026-10-20",
+        )
+
+        assert event.severity == SecuritySeverity.LOW
+        assert event.to_dict()["terms_version"] == "2026-10-20"

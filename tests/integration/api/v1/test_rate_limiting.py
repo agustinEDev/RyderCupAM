@@ -107,6 +107,7 @@ class TestRateLimitingRegister:
                 "password": "TestPassword123!",
                 "first_name": "Test",
                 "last_name": "User",
+                "accept_terms": True,
             }
             for i in range(31)
         ]
@@ -158,6 +159,7 @@ class TestRateLimitingHandicap:
             "password": "TestPassword123!",
             "first_name": "Test",
             "last_name": "User",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_payload)
 
@@ -236,6 +238,7 @@ class TestRateLimitingCompetition:
             "password": "TestPassword123!",
             "first_name": "Test",
             "last_name": "User",
+            "accept_terms": True,
         }
         await client.post("/api/v1/auth/register", json=register_payload)
 

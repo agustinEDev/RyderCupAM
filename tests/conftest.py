@@ -464,6 +464,8 @@ async def authenticated_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
         "first_name": "Test",
         "last_name": "User",
         "gender": "MALE",
+        # Sin aceptar los Términos no hay alta (y sin ellos, 403 en todo)
+        "accept_terms": True,
     }
 
     register_response = await client.post("/api/v1/auth/register", json=user_data)
@@ -517,6 +519,8 @@ async def create_authenticated_user(
         "password": password,
         "first_name": first_name,
         "last_name": last_name,
+        # Sin aceptar los Términos no hay alta (y sin ellos, 403 en todo)
+        "accept_terms": True,
     }
     if gender is not None:
         user_data["gender"] = gender

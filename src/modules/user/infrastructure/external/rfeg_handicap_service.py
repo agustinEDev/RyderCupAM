@@ -51,14 +51,13 @@ class RFEGHandicapService(HandicapService):
     _CENTINELA_ENIE = "\x00"
     _CENTINELA_ENIE_MAYUSCULA = "\x01"
 
+    # La consulta se presenta como lo que es: esta aplicación. Antes imitaba un
+    # Safari llegando desde rfegolf.es (Origin y Referer); su buscador responde
+    # igual sin eso (medido el 20 oct 2026), y hacerse pasar por su web empeora la
+    # posición legal ante la federación. Se identifica como «RCF», sin el nombre
+    # comercial (decisión del 20 oct 2026, mientras se elige uno nuevo).
     HEADERS: ClassVar[dict[str, str]] = {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-            "Version/26.0.1 Safari/605.1.15"
-        ),
-        "Origin": "https://rfegolf.es",
-        "Referer": "https://rfegolf.es/",
+        "User-Agent": "RCF/1.0",
     }
 
     def __init__(self, timeout: int = 10):

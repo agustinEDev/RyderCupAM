@@ -19,6 +19,7 @@ from sqlalchemy.orm import composite
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.services.terms_of_service import TERMS_VERSION_MAX_LENGTH
 from src.modules.user.domain.value_objects.avatar_source import AvatarSource
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.handicap import Handicap
@@ -202,6 +203,12 @@ users_table = Table(
         ),
         nullable=True,
     ),
+    # Términos de uso: la versión más reciente que aceptó y cuándo aceptó ESA
+    # versión por primera vez (aceptarla otra vez no cambia la fecha). Nulos =
+    # nunca los ha aceptado (los usuarios anteriores a esto y las altas con
+    # Google), y entonces no puede usar la app hasta aceptar
+    Column("terms_accepted_at", DateTime(timezone=True), nullable=True),
+    Column("terms_version", String(TERMS_VERSION_MAX_LENGTH), nullable=True),
 )
 
 
@@ -259,6 +266,8 @@ def start_mappers():
                 "_feed_last_seen_at": users_table.c.feed_last_seen_at,
                 "_share_activity": users_table.c.share_activity,
                 "_active_avatar_upload_id": users_table.c.active_avatar_upload_id,
+                "_terms_accepted_at": users_table.c.terms_accepted_at,
+                "_terms_version": users_table.c.terms_version,
                 # Value Objects de una columna (Email, Password) → mapeamos la columna
                 # cruda a un atributo "_value" y componemos el VO real sobre el
                 # atributo privado "_email"/"_password" que respalda la @property
@@ -278,6 +287,9 @@ def start_mappers():
     from src.modules.user.infrastructure.persistence.sqlalchemy.refresh_token_mapper import (  # noqa: PLC0415
         start_mappers as start_refresh_token_mappers,
     )
+    from src.modules.user.infrastructure.persistence.sqlalchemy.terms_acceptance_mapper import (  # noqa: PLC0415
+        start_mappers as start_terms_acceptance_mappers,
+    )
     from src.modules.user.infrastructure.persistence.sqlalchemy.user_avatar_upload_mapper import (  # noqa: PLC0415
         start_mappers as start_user_avatar_upload_mappers,
     )
@@ -293,3 +305,4 @@ def start_mappers():
     start_user_device_mappers()
     start_oauth_account_mappers()
     start_user_avatar_upload_mappers()
+    start_terms_acceptance_mappers()

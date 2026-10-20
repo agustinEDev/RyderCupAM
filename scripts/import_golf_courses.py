@@ -110,7 +110,7 @@ def parse_args() -> argparse.Namespace:
         "--dataset",
         type=Path,
         default=None,
-        help="Ruta a otro volcado. Por defecto, el que viaja en el repositorio",
+        help="Ruta al volcado. Por defecto, RFEG_DATASET_PATH o data/rfeg_dataset.json.gz",
     )
     parser.add_argument(
         "--limit",

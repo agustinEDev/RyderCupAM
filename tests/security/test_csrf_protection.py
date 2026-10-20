@@ -26,8 +26,12 @@ import os
 import pytest
 from fastapi import status
 from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.config.csrf_config import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
+from src.modules.user.domain.services.terms_of_service import current_terms_version
+from tests.conftest import _URL_DE_LA_BD_DE_TEST
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -69,6 +73,7 @@ async def csrf_authenticated_client(client: AsyncClient, valid_user_credentials)
         **valid_user_credentials,
         "first_name": "CSRF",
         "last_name": "Test",
+        "accept_terms": True,
     }
     register_response = await client.post("/api/v1/auth/register", json=user_data)
     assert register_response.status_code in [
@@ -301,6 +306,7 @@ async def test_login_generates_csrf_token(client: AsyncClient, valid_user_creden
         **valid_user_credentials,
         "first_name": "CSRF",
         "last_name": "Test",
+        "accept_terms": True,
     }
     await client.post("/api/v1/auth/register", json=user_data)
 
@@ -425,3 +431,78 @@ async def test_post_request_with_csrf_header_but_no_cookie_fails(
     # Debe fallar por falta de cookie CSRF
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert "CSRF" in response.json().get("detail", "")
+
+
+# ======================================================================================
+# Tests: Aceptar los Términos (B5) es una escritura más, con su CSRF
+# ======================================================================================
+
+
+@pytest.mark.asyncio
+async def test_accept_terms_without_csrf_token_fails(csrf_authenticated_client):
+    """
+    Given: Un usuario autenticado
+    When: Acepta los Términos SIN token CSRF
+    Then: 403 CSRF_VALIDATION_FAILED: la ruta no está exenta de CSRF
+    """
+    client, tokens = csrf_authenticated_client
+
+    response = await client.post(
+        "/api/v1/users/me/accept-terms",
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json().get("error_code") == "CSRF_VALIDATION_FAILED"
+
+
+async def _terminos_en_bd(email: str, *, borrar: bool = False) -> tuple:
+    """Lee (y con borrar=True, antes quita) la aceptación de los Términos en la BD del test."""
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            if borrar:
+                await conn.execute(
+                    text(
+                        "UPDATE users SET terms_accepted_at = NULL, terms_version = NULL "
+                        "WHERE email = :email"
+                    ),
+                    {"email": email},
+                )
+            fila = await conn.execute(
+                text("SELECT terms_accepted_at, terms_version FROM users WHERE email = :email"),
+                {"email": email},
+            )
+            return tuple(fila.one())
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_accept_terms_with_valid_csrf_token_succeeds(
+    csrf_authenticated_client, valid_user_credentials
+):
+    """
+    Given: Un usuario autenticado SIN los Términos aceptados
+    When: Acepta con el token CSRF correcto
+    Then: 200, consta como aceptado y la BD guarda la versión vigente
+    """
+    client, tokens = csrf_authenticated_client
+    csrf_token = tokens["csrf_token"]
+    email = valid_user_credentials["email"]
+    assert await _terminos_en_bd(email, borrar=True) == (None, None)
+
+    response = await client.post(
+        "/api/v1/users/me/accept-terms",
+        headers={
+            "Authorization": f"Bearer {tokens['access_token']}",
+            CSRF_HEADER_NAME: csrf_token,
+        },
+        cookies={CSRF_COOKIE_NAME: csrf_token},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["terms_accepted"] is True
+    aceptado_en, version = await _terminos_en_bd(email)
+    assert version == current_terms_version()
+    assert aceptado_en is not None
