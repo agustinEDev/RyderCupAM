@@ -423,14 +423,13 @@ API → UseCase → HandicapService.search(name) → RFEG
 
 **Platform**: GitHub Actions
 
-**Jobs (7 parallel)**:
-1. Preparation (Python 3.12/3.14 setup + cache)
-2. Unit Tests (matrix Python 3.12, 3.14)
-3. Integration Tests (PostgreSQL service container)
-4. Security Scan (Gitleaks)
-5. Code Quality (Ruff)
-6. Type Checking (Mypy)
-7. Database Migrations (Alembic validation)
+**Jobs (6 parallel)**:
+1. Unit Tests (matrix Python 3.12, 3.14)
+2. Integration Tests (PostgreSQL service container)
+3. Security Scan (Gitleaks)
+4. Code Quality (Ruff)
+5. Type Checking (Mypy)
+6. Database Migrations (Alembic validation)
 
 **Execution Time**: ~3 minutes
 **Trigger**: Push, Pull Request
