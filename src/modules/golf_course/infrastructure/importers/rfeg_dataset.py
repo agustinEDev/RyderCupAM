@@ -1,18 +1,27 @@
 """
-Lectura del volcado de campos federados que viaja con el repositorio.
+Lectura del volcado de campos federados.
 
-El fichero va comprimido (0,7 MB frente a 11 MB en crudo) para que quepa en el
-repositorio junto al código que lo interpreta: así cualquier entorno puede
-reimportar con un comando, y se ve en git qué datos se cargaron y cuándo.
+El volcado se guarda fuera de git y se señala con la variable RFEG_DATASET_PATH;
+sin ella, se busca en data/, que git ignora.
 """
 
 import gzip
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-# El fichero vive fuera del paquete, en data/, porque es un dato y no código.
+# Sitio por defecto: data/ en la raíz del repo (git y Docker ignoran el volcado).
 DEFAULT_DATASET_PATH = Path(__file__).resolve().parents[5] / "data" / "rfeg_dataset.json.gz"
+
+DATASET_PATH_ENV = "RFEG_DATASET_PATH"
+
+
+def dataset_path() -> Path:
+    """La ruta del volcado: RFEG_DATASET_PATH si está definida, si no la de siempre."""
+    configured = os.environ.get(DATASET_PATH_ENV)
+    return Path(configured).expanduser() if configured else DEFAULT_DATASET_PATH
+
 
 EXPECTED_SOURCE_FRAGMENT = "rfegolf"
 
@@ -29,7 +38,7 @@ def load_dataset(path: Path | None = None) -> dict[str, Any]:
     es cómodo apuntar al JSON recién extraído sin comprimirlo antes.
 
     Args:
-        path: Ruta al volcado. Por defecto, el que viaja en el repositorio
+        path: Ruta al volcado. Por defecto, la de RFEG_DATASET_PATH o data/
 
     Returns:
         El volcado completo
@@ -37,20 +46,20 @@ def load_dataset(path: Path | None = None) -> dict[str, Any]:
     Raises:
         RfegDatasetError: Si el fichero no existe o no tiene la forma esperada
     """
-    dataset_path = path or DEFAULT_DATASET_PATH
-    if not dataset_path.exists():
-        raise RfegDatasetError(f"Dataset not found at {dataset_path}")
+    resolved = path or dataset_path()
+    if not resolved.exists():
+        raise RfegDatasetError(f"Dataset not found at {resolved}")
 
     try:
-        if dataset_path.suffix == ".gz":
-            with gzip.open(dataset_path, "rt", encoding="utf-8") as handle:
+        if resolved.suffix == ".gz":
+            with gzip.open(resolved, "rt", encoding="utf-8") as handle:
                 dataset = json.load(handle)
         else:
-            dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+            dataset = json.loads(resolved.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise RfegDatasetError(f"Could not read the dataset at {dataset_path}: {error}") from error
+        raise RfegDatasetError(f"Could not read the dataset at {resolved}: {error}") from error
 
-    _validate(dataset, dataset_path)
+    _validate(dataset, resolved)
     return dataset
 
 
