@@ -178,7 +178,7 @@ requests==2.34.2
 # operativo, que nadie declara aquí: adelgazar la imagen podría llevárselos y
 # entonces fallaría hasta construir una competición. Con este paquete la lleva
 # Python, sin depender del sistema
-tzdata==2026.4
+tzdata==2026.5
 
 # tzfpy - Zona horaria a partir de coordenadas
 # La anotación de un partido abre a una hora LOCAL del campo (BE #305) y el país
