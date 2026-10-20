@@ -280,3 +280,17 @@ class TestRespuesta:
         Then: TermsNotAcceptedError tiene su traducción (sin ella saldría un 500)
         """
         assert app.exception_handlers.get(TermsNotAcceptedError) is terms_not_accepted_handler
+
+
+class TestDocumentacion:
+    def test_accept_terms_openapi_lists_every_exempt_route(self):
+        """
+        Given: La documentación OpenAPI de accept-terms
+        When: Se lee su descripción
+        Then: Cita todas las rutas exentas, sacadas de TERMS_EXEMPT_ROUTES
+            (si se añade una, la documentación la incluye sola)
+        """
+        descripcion = app.openapi()["paths"]["/api/v1/users/me/accept-terms"]["post"]["description"]
+
+        for method, path in TERMS_EXEMPT_ROUTES:
+            assert f"{method} {path}" in descripcion

@@ -7,6 +7,7 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
@@ -26,7 +27,6 @@ from src.shared.domain.repositories.country_repository_interface import (
 )
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
@@ -47,12 +47,15 @@ class RegisterUserUseCase:
         country_repository: CountryRepositoryInterface,
         handicap_service: HandicapService | None = None,
         email_service: IEmailService | None = None,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
         self._country_repository = country_repository
         self._handicap_service = handicap_service
         self._email_service = email_service
+        self._security_audit = security_audit
 
     async def execute(self, request: RegisterUserRequestDTO) -> UserResponseDTO:
         """
@@ -110,7 +113,7 @@ class RegisterUserUseCase:
                 raise RuntimeError("accept_terms no dejó fecha de aceptación")
             terms_acceptance = TermsAcceptance.record(
                 user_id=new_user.id,
-                user_email=request.email,
+                user_email=new_user.email.value,
                 terms_version=terms_version,
                 accepted_at=accepted_at,
                 ip_address=request.ip_address,
@@ -156,7 +159,7 @@ class RegisterUserUseCase:
             # El context manager (__aexit__) hace commit automático y publica eventos
 
         # 3.5 Auditoría de seguridad: la aceptación de los Términos
-        get_security_logger().log_terms_accepted(
+        self._security_audit.log_terms_accepted(
             user_id=str(new_user.id.value),
             ip_address=request.ip_address or "unknown",
             user_agent=request.user_agent or "unknown",

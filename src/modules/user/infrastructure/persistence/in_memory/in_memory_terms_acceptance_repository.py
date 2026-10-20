@@ -31,16 +31,6 @@ class InMemoryTermsAcceptanceRepository(TermsAcceptanceRepositoryInterface):
             row.user_id == user_id and row.terms_version == terms_version for row in self._rows
         )
 
-    async def find_by_user_id(self, user_id: UserId) -> list[TermsAcceptance]:
-        filas = [row for row in self._rows if row.user_id == user_id]
-        return sorted(filas, key=lambda row: row.accepted_at)
-
-    async def detach_deleted_user(self, user_id: UserId, deleted_at: datetime) -> int:
-        filas = [row for row in self._rows if row.user_id == user_id]
-        for row in filas:
-            row.detach_from_deleted_user(deleted_at)
-        return len(filas)
-
     async def purge_deleted_before(self, cutoff: datetime) -> int:
         antes = len(self._rows)
         self._rows = [

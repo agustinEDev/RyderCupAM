@@ -1,10 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from src.modules.user.domain.services.terms_of_service import current_terms_version
+from src.modules.user.domain.services.terms_of_service import (
+    current_terms_version,
+    require_utc,
+)
 from src.shared.application.validation import (
     AliasValidator,
     FieldLimits,
@@ -105,19 +108,6 @@ class RegisterUserRequestDTO(BaseModel):
 # ======================================================================================
 
 
-class AcceptTermsRequestDTO(BaseModel):
-    """
-    Entrada del caso de uso de aceptar los Términos vigentes.
-
-    La rellena la capa de API: el usuario sale de la sesión, y la IP y el
-    navegador de la petición (los mismos helpers que el login y el logout).
-    """
-
-    user_id: str = Field(..., description="ID del usuario autenticado.")
-    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
-    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
-
-
 class PurgeTermsAcceptancesRequestDTO(BaseModel):
     """Entrada de la purga del historial de aceptaciones: el «ahora» de referencia."""
 
@@ -127,9 +117,7 @@ class PurgeTermsAcceptancesRequestDTO(BaseModel):
     @classmethod
     def now_in_utc(cls, value: datetime) -> datetime:
         """La purga compara contra fechas en UTC: sin zona sería ambiguo."""
-        if value.utcoffset() != timedelta(0):
-            raise ValueError("now debe ir en UTC, con zona horaria")
-        return value
+        return require_utc(value, "now")
 
 
 class PurgeTermsAcceptancesResponseDTO(BaseModel):
@@ -1004,3 +992,26 @@ class RefreshOwnHandicapResponseDTO(BaseModel):
         None,
         description="Hándicap vigente tras el refresco, o null si no hay uno guardado.",
     )
+
+
+class AcceptTermsRequestDTO(BaseModel):
+    """
+    Entrada del caso de uso de aceptar los Términos vigentes.
+
+    La rellena la capa de API: el usuario sale de la sesión, y la IP y el
+    navegador de la petición (los mismos helpers que el login y el logout).
+    """
+
+    user_id: str = Field(..., description="ID del usuario autenticado.")
+    current_user: "UserResponseDTO | None" = Field(
+        None,
+        description=(
+            "El usuario de la sesión, tal como lo cargó get_current_user. Si ya "
+            "tiene aceptada la versión vigente, se responde con él sin leer nada más."
+        ),
+    )
+    ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
+
+
+AcceptTermsRequestDTO.model_rebuild()

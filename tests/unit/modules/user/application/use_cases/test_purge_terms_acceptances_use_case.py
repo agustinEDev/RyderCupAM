@@ -14,6 +14,7 @@ from src.modules.user.application.use_cases.purge_terms_acceptances_use_case imp
     PurgeTermsAcceptancesUseCase,
 )
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
+from src.modules.user.domain.value_objects.terms_acceptance_id import TermsAcceptanceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -25,17 +26,15 @@ AHORA = datetime(2029, 10, 20, 12, tzinfo=UTC)
 
 
 def _fila(email: str, borrada: datetime | None = None) -> TermsAcceptance:
-    fila = TermsAcceptance.record(
-        user_id=UserId.generate(),
+    """Una fila tal como la deja la base de datos: si la cuenta se borró, sin usuario y fechada."""
+    return TermsAcceptance(
+        id=TermsAcceptanceId.generate(),
+        user_id=None if borrada is not None else UserId.generate(),
         user_email=email,
         terms_version="2026-10-20",
         accepted_at=datetime(2026, 1, 1, tzinfo=UTC),
-        ip_address=None,
-        user_agent=None,
+        user_deleted_at=borrada,
     )
-    if borrada is not None:
-        fila.detach_from_deleted_user(borrada)
-    return fila
 
 
 async def test_purge_deletes_only_rows_of_accounts_deleted_over_three_years_ago():

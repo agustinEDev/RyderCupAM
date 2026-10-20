@@ -305,11 +305,6 @@ class User:
         return self._terms_version
 
     @property
-    def terms_version_required(self) -> str:
-        """La versión vigente: la que tiene que tener aceptada para usar la app."""
-        return terms_of_service.current_terms_version()
-
-    @property
     def terms_accepted(self) -> bool:
         """
         Si tiene aceptada la versión VIGENTE de los Términos.
@@ -335,8 +330,7 @@ class User:
         Raises:
             ValueError: Si la versión está vacía o no cabe en la columna
         """
-        if not version.strip() or len(version) > terms_of_service.TERMS_VERSION_MAX_LENGTH:
-            raise ValueError(f"Versión de los Términos no válida: {version!r}")
+        terms_of_service.validate_terms_version(version)
         if self._terms_version == version:
             return False
         self._terms_version = version

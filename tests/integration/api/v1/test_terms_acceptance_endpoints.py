@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from main import app
-from src.config.dependencies import get_google_oauth_service
+from src.config.dependencies import get_accept_terms_use_case, get_google_oauth_service
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.modules.user.domain.services import terms_of_service
 from tests.conftest import (
@@ -509,3 +509,35 @@ class TestBorradoDeLaCuenta:
         assert guardado == email
         assert version == terms_of_service.current_terms_version()
         assert borrado_en is not None
+
+
+class TestLaRutaPasaLaSesion:
+    async def test_accept_terms_route_hands_the_session_user_to_the_use_case(
+        self, client: AsyncClient
+    ):
+        """
+        Given: Un usuario con sesión que ya aceptó
+        When: Llama a accept-terms
+        Then: El caso de uso recibe el usuario que cargó get_current_user (así
+            la vuelta rápida no vuelve a leerlo de la base de datos)
+        """
+        recibidos: list = []
+
+        class _Espia:
+            async def execute(self, request):
+                recibidos.append(request)
+                return request.current_user
+
+        datos = await create_authenticated_user(
+            client, "espia@example.com", PASSWORD, "Ana", "Lopez"
+        )
+        set_auth_cookies(client, datos["cookies"])
+        app.dependency_overrides[get_accept_terms_use_case] = _Espia
+
+        respuesta = await client.post(ACCEPT)
+
+        assert respuesta.status_code == 200
+        assert len(recibidos) == 1
+        assert recibidos[0].current_user is not None
+        assert str(recibidos[0].current_user.id) == datos["user"]["id"]
+        assert recibidos[0].current_user.terms_accepted is True

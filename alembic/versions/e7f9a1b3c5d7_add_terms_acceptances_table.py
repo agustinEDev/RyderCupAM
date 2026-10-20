@@ -3,8 +3,8 @@
 Decidido con Agustín el 20 oct 2026: además del estado actual en users
 (terms_version y terms_accepted_at), cada aceptación real deja una fila con la
 versión, cuándo, el email del usuario en ese momento, la IP y el navegador.
-La fila sobrevive al borrado de la cuenta (ON DELETE SET NULL y
-user_deleted_at) durante 3 años, y luego la purga la elimina
+La fila sobrevive al borrado de la cuenta (ON DELETE SET NULL, y un trigger
+BEFORE DELETE ON users que rellena user_deleted_at) durante 3 años, y luego la purga la elimina
 (scripts/purge_terms_acceptances.py). Una fila por usuario y versión.
 Nace vacía: las aceptaciones de antes de esto no tienen historial. Solo SQL
 plano: cabe en el guion del modo offline.
@@ -80,10 +80,33 @@ def upgrade() -> None:
     op.create_index(
         "ix_terms_acceptances_user_deleted_at", "terms_acceptances", ["user_deleted_at"]
     )
+    # Al borrar un usuario por cualquier camino, sus aceptaciones se fechan
+    # (la FK ya las desvincula con SET NULL): así la purga de los 3 años las
+    # encuentra siempre. Copia de terms_acceptance_mapper.py
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION terms_acceptances_mark_user_deleted() RETURNS trigger AS $$
+        BEGIN
+            UPDATE terms_acceptances SET user_deleted_at = now()
+            WHERE user_id = OLD.id AND user_deleted_at IS NULL;
+            RETURN OLD;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_users_mark_terms_acceptances_deleted
+        BEFORE DELETE ON users
+        FOR EACH ROW EXECUTE FUNCTION terms_acceptances_mark_user_deleted()
+        """
+    )
 
 
 def downgrade() -> None:
-    """Borra el historial."""
+    """Borra el trigger, su función y el historial."""
+    op.execute("DROP TRIGGER IF EXISTS trg_users_mark_terms_acceptances_deleted ON users")
+    op.execute("DROP FUNCTION IF EXISTS terms_acceptances_mark_user_deleted()")
     op.drop_index("ix_terms_acceptances_user_deleted_at", table_name="terms_acceptances")
     op.drop_index("ix_terms_acceptances_user_id", table_name="terms_acceptances")
     op.drop_table("terms_acceptances")

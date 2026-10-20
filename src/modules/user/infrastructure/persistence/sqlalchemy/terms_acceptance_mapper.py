@@ -7,6 +7,7 @@ Mapeo imperativo entre TermsAcceptance y la tabla terms_acceptances.
 import uuid
 
 from sqlalchemy import (
+    DDL,
     Column,
     DateTime,
     ForeignKey,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    event,
     inspect,
 )
 from sqlalchemy.exc import NoInspectionAvailable
@@ -81,6 +83,39 @@ terms_acceptances_table = Table(
 
 Index("ix_terms_acceptances_user_id", terms_acceptances_table.c.user_id)
 Index("ix_terms_acceptances_user_deleted_at", terms_acceptances_table.c.user_deleted_at)
+
+# Al borrar un usuario, por el camino que sea (el admin, un script, un DELETE a
+# mano), sus aceptaciones se fechan: sin user_deleted_at, la purga de los 3
+# años no las encontraría nunca. Lo hace la base de datos, como el SET NULL de
+# la FK, para que no dependa de que cada camino de borrado se acuerde. Va en
+# los METADATOS además de en la migración (e7f9a1b3c5d7), porque el esquema de
+# los tests se construye con `metadata.create_all`; las dos copias tienen que
+# coincidir (lo comprueba tests/integration/test_schema_parity.py)
+MARK_USER_DELETED_FUNCTION = """
+CREATE OR REPLACE FUNCTION terms_acceptances_mark_user_deleted() RETURNS trigger AS $$
+BEGIN
+    UPDATE terms_acceptances SET user_deleted_at = now()
+    WHERE user_id = OLD.id AND user_deleted_at IS NULL;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql
+"""
+MARK_USER_DELETED_TRIGGER = """
+CREATE TRIGGER trg_users_mark_terms_acceptances_deleted
+BEFORE DELETE ON users
+FOR EACH ROW EXECUTE FUNCTION terms_acceptances_mark_user_deleted()
+"""
+
+event.listen(
+    terms_acceptances_table,
+    "after_create",
+    DDL(MARK_USER_DELETED_FUNCTION).execute_if(dialect="postgresql"),
+)
+event.listen(
+    terms_acceptances_table,
+    "after_create",
+    DDL(MARK_USER_DELETED_TRIGGER).execute_if(dialect="postgresql"),
+)
 
 
 def start_mappers():

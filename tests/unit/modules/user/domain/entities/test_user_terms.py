@@ -161,15 +161,3 @@ class TestCambioDeVersion:
 
         assert user.terms_accepted is False
         assert user.terms_version == aceptada
-
-    def test_terms_version_required_follows_the_constant(self, monkeypatch):
-        """
-        Given: Cualquier usuario
-        When: Cambia la versión vigente
-        Then: La versión exigida es la nueva
-        """
-        user = _usuario()
-
-        monkeypatch.setattr(terms_of_service, "CURRENT_TERMS_VERSION", "2099-01-01")
-
-        assert user.terms_version_required == "2099-01-01"

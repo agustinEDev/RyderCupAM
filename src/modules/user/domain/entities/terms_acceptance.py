@@ -4,7 +4,7 @@ Terms Acceptance Entity - Domain Layer
 Una fila del historial de aceptaciones de los Términos de uso.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from ..services import terms_of_service
 from ..value_objects.terms_acceptance_id import TermsAcceptanceId
@@ -27,9 +27,10 @@ class TermsAcceptance:
     y con qué navegador aceptó cada versión.
 
     La fila sobrevive al borrado de la cuenta para seguir sirviendo de prueba:
-    guarda el email que tenía al aceptar, deja de apuntar al usuario y anota
-    cuándo se borró. Pasados TERMS_ACCEPTANCE_RETENTION_YEARS desde el
-    borrado, la purga la elimina. Es lo único que se modifica de una fila.
+    guarda el email que tenía al aceptar, y al borrar la cuenta la base de
+    datos la desvincula (FK ON DELETE SET NULL) y anota cuándo (trigger
+    BEFORE DELETE ON users). Pasados TERMS_ACCEPTANCE_RETENTION_YEARS desde el
+    borrado, la purga la elimina.
 
     Minimización: solo email, versión, fecha, IP y navegador; nada del perfil.
     """
@@ -114,16 +115,10 @@ class TermsAcceptance:
         Raises:
             ValueError: Si la versión no es válida o la fecha no lleva zona
         """
-        if (
-            not terms_version.strip()
-            or len(terms_version) > terms_of_service.TERMS_VERSION_MAX_LENGTH
-        ):
-            raise ValueError(f"Versión de los Términos no válida: {terms_version!r}")
+        terms_of_service.validate_terms_version(terms_version)
         if not user_email.strip() or len(user_email) > USER_EMAIL_MAX_LENGTH:
             raise ValueError("user_email no válido para el historial")
-        # Sin zona, utcoffset() es None: también se rechaza
-        if accepted_at.utcoffset() != timedelta(0):
-            raise ValueError("accepted_at debe ir en UTC, con zona horaria")
+        terms_of_service.require_utc(accepted_at, "accepted_at")
         if ip_address is not None and len(ip_address) > IP_ADDRESS_MAX_LENGTH:
             ip_address = None
         if user_agent is not None:
@@ -136,27 +131,6 @@ class TermsAcceptance:
             accepted_at=accepted_at,
             ip_address=ip_address,
             user_agent=user_agent,
-        )
-
-    def detach_from_deleted_user(self, deleted_at: datetime) -> None:
-        """
-        La cuenta se borró: la fila deja de apuntar al usuario y anota cuándo.
-
-        Args:
-            deleted_at: Cuándo se borró, en UTC
-
-        Raises:
-            ValueError: Si la fecha no va en UTC
-        """
-        if deleted_at.utcoffset() != timedelta(0):
-            raise ValueError("deleted_at debe ir en UTC, con zona horaria")
-        self._user_id = None
-        self._user_deleted_at = deleted_at
-
-    def is_purgeable(self, now: datetime) -> bool:
-        """Si la cuenta se borró antes del corte de conservación y la fila ya puede irse."""
-        return self._user_deleted_at is not None and self._user_deleted_at < (
-            terms_of_service.terms_acceptance_purge_cutoff(now)
         )
 
     def __repr__(self) -> str:

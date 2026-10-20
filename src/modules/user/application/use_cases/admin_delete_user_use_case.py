@@ -1,7 +1,5 @@
 """Caso de Uso: Borrado definitivo de una cuenta de usuario (panel de administración)."""
 
-from datetime import UTC, datetime
-
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -65,11 +63,10 @@ class AdminDeleteUserUseCase:
         if reasons:
             raise UserHasActivityException(reasons)
 
+        # El historial de aceptaciones de los Términos sobrevive al borrado:
+        # lo desvincula y lo fecha la propia base de datos (FK SET NULL y
+        # trigger BEFORE DELETE ON users), sea cual sea el camino del borrado
         async with self._user_uow:
-            # La prueba de aceptación de los Términos sobrevive a la cuenta
-            # (TERMS_ACCEPTANCE_RETENTION_YEARS): en la misma transacción, sus
-            # filas dejan de apuntarle y anotan cuándo se borró
-            await self._user_uow.terms_acceptances.detach_deleted_user(user_id, datetime.now(UTC))
             await self._user_uow.users.delete_by_id(user_id)
 
     async def _collect_activity_reasons(self, user_id: UserId) -> list[str]:

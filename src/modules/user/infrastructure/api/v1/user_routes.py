@@ -14,6 +14,7 @@ from src.config.dependencies import (
     get_update_security_use_case,
 )
 from src.config.settings import settings
+from src.config.terms_guard import TERMS_EXEMPT_ROUTES
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -71,6 +72,17 @@ from src.shared.infrastructure.security.authorization import (
 )
 
 router = APIRouter()
+
+# Se genera desde TERMS_EXEMPT_ROUTES para que la documentación no se desactualice
+_ACCEPT_TERMS_DESCRIPTION = (
+    "Guarda que el usuario autenticado acepta la versión vigente de los Términos, "
+    "con la fecha, y deja la aceptación en el historial (IP y navegador). "
+    "Idempotente: si ya la tenía aceptada no cambia nada, tampoco la fecha. "
+    "Devuelve el usuario como current-user. Sin aceptarla, toda ruta con sesión "
+    "responde 403 con error_code TERMS_NOT_ACCEPTED, salvo estas: "
+    + ", ".join(f"{method} {path}" for method, path in sorted(TERMS_EXEMPT_ROUTES))
+    + "."
+)
 
 
 # ============================================================================
@@ -157,12 +169,7 @@ async def find_user(
     response_model=UserResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Aceptar los Términos de uso vigentes",
-    description=(
-        "Guarda que el usuario autenticado acepta la versión vigente de los Términos, "
-        "con la fecha. Idempotente: si ya la tenía aceptada no cambia nada, tampoco la "
-        "fecha. Devuelve el usuario como current-user. Sin aceptarla, toda ruta con "
-        "sesión salvo current-user, esta y logout responde 403 TERMS_NOT_ACCEPTED."
-    ),
+    description=_ACCEPT_TERMS_DESCRIPTION,
     tags=["Users"],
 )
 async def accept_terms(
@@ -175,6 +182,7 @@ async def accept_terms(
     # helpers que el login y el logout (IP de confianza tras el proxy, ADR-038)
     accept_request = AcceptTermsRequestDTO(
         user_id=str(current_user.id),
+        current_user=current_user,
         ip_address=get_trusted_client_ip(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         ),

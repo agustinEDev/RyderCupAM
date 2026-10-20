@@ -229,7 +229,7 @@ class SecurityLogger:
             return f"⚠️  RATE LIMIT EXCEEDED | {user_info} | Endpoint: {event.endpoint} | Limit: {event.limit_value}"
 
         if isinstance(event, TermsAcceptedEvent):
-            return f"📜 TERMS ACCEPTED | {user_info} | Version: {event.terms_version}"
+            return f"TERMS ACCEPTED | {user_info} | Version: {event.terms_version}"
 
         if isinstance(event, RefreshTokenUsedEvent):
             return f"🔄 REFRESH TOKEN USED | {user_info} | Token ID: {event.refresh_token_id}"

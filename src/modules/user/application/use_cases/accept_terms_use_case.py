@@ -5,6 +5,7 @@ El usuario autenticado acepta la versión vigente de los Términos de uso.
 """
 
 from src.modules.user.application.dto.user_dto import AcceptTermsRequestDTO, UserResponseDTO
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.current_user_response import (
     build_current_user_response,
 )
@@ -16,31 +17,33 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.services.terms_of_service import current_terms_version
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class AcceptTermsUseCase:
     """
     Caso de uso: aceptar la versión vigente de los Términos.
 
-    - Si ya la tiene aceptada, devuelve sin bloquear ni escribir nada
-      (idempotente: la fecha sigue siendo la de la primera aceptación).
-    - Si no, relee al usuario con SELECT ... FOR UPDATE, guarda la versión y
-      la fecha, añade una fila al historial (con IP y navegador) y deja la
-      aceptación en el log de auditoría de seguridad.
+    - Si el usuario de la sesión ya la tiene aceptada, se responde con él: ni
+      lecturas, ni bloqueo, ni escritura (idempotente: la fecha sigue siendo
+      la de la primera aceptación).
+    - Si no, se lee una sola vez y con SELECT ... FOR UPDATE, se guarda la
+      versión y la fecha, se añade la fila al historial si no la tenía (una por
+      versión) y, tras confirmar, la aceptación va al log de auditoría.
 
     La respuesta es la de current-user (`build_current_user_response`).
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, security_audit: ISecurityAuditLogger):
         self._uow = uow
+        self._security_audit = security_audit
 
     async def execute(self, request: AcceptTermsRequestDTO) -> UserResponseDTO:
         """
         Acepta los Términos vigentes en nombre de ese usuario.
 
         Args:
-            request: El usuario autenticado y la IP y el navegador de la petición
+            request: El usuario autenticado (y el de la sesión, si se tiene) y
+                la IP y el navegador de la petición
 
         Returns:
             El usuario, ya con los Términos aceptados
@@ -48,25 +51,22 @@ class AcceptTermsUseCase:
         Raises:
             UserNotFoundError: Si no existe
         """
-        user_id = UserId(request.user_id)
-        user = await self._uow.users.find_by_id(user_id)
-        if not user:
-            raise UserNotFoundError(f"User with id {request.user_id} not found")
+        session_user = request.current_user
+        if session_user is not None and session_user.terms_accepted:
+            return session_user
 
-        if user.terms_accepted:
-            return await build_current_user_response(self._uow, user)
-
-        user, recorded = await self._accept(user_id, request)
+        user, recorded = await self._accept(UserId(request.user_id), request)
 
         if recorded is not None:
-            get_security_logger().log_terms_accepted(
+            self._security_audit.log_terms_accepted(
                 user_id=request.user_id,
                 ip_address=request.ip_address or "unknown",
                 user_agent=request.user_agent or "unknown",
                 terms_version=recorded.terms_version,
             )
 
-        return await build_current_user_response(self._uow, user)
+        known_providers = session_user.auth_providers if session_user is not None else None
+        return await build_current_user_response(self._uow, user, known_providers)
 
     async def _accept(
         self, user_id: UserId, request: AcceptTermsRequestDTO
@@ -82,10 +82,8 @@ class AcceptTermsUseCase:
                 return user, None
 
             accepted_at = user.terms_accepted_at
-            if accepted_at is None:  # accept_terms acaba de ponerla
-                raise RuntimeError("accept_terms no dejó fecha de aceptación")
-            if user.email is None:  # todo usuario tiene email; solo para el tipo
-                raise RuntimeError("usuario sin email")
+            if accepted_at is None or user.email is None:  # solo para el tipo
+                raise RuntimeError("usuario sin fecha de aceptación o sin email")
             recorded = TermsAcceptance.record(
                 user_id=user_id,
                 user_email=user.email.value,

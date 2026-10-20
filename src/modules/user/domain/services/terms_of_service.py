@@ -21,6 +21,37 @@ TERMS_VERSION_MAX_LENGTH = 20
 CURRENT_TERMS_VERSION = "2026-10-20"
 
 
+def validate_terms_version(version: str) -> str:
+    """
+    Una versión de los Términos válida: no vacía y que quepa en su columna.
+
+    Raises:
+        ValueError: Si está vacía, en blanco o es más larga que TERMS_VERSION_MAX_LENGTH
+    """
+    if not version.strip() or len(version) > TERMS_VERSION_MAX_LENGTH:
+        raise ValueError(f"Versión de los Términos no válida: {version!r}")
+    return version
+
+
+def require_utc(value: datetime, name: str) -> datetime:
+    """
+    La misma fecha, si va en UTC con zona horaria.
+
+    Sin zona, `utcoffset()` es None y también se rechaza: en el historial de
+    los Términos todo va en UTC.
+
+    Args:
+        value: La fecha
+        name: El nombre del campo, para el mensaje
+
+    Raises:
+        ValueError: Si no lleva zona o no es UTC
+    """
+    if value.utcoffset() != timedelta(0):
+        raise ValueError(f"{name} debe ir en UTC, con zona horaria")
+    return value
+
+
 def current_terms_version() -> str:
     """
     La versión que hay que tener aceptada para usar la aplicación.
@@ -53,8 +84,7 @@ def terms_acceptance_purge_cutoff(now: datetime) -> datetime:
     Raises:
         ValueError: Si `now` no va en UTC
     """
-    if now.utcoffset() != timedelta(0):
-        raise ValueError("now debe ir en UTC, con zona horaria")
+    require_utc(now, "now")
     year = now.year - TERMS_ACCEPTANCE_RETENTION_YEARS
     try:
         return now.replace(year=year)

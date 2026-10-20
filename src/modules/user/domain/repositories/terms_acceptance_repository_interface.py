@@ -12,7 +12,13 @@ from ..value_objects.user_id import UserId
 
 
 class TermsAcceptanceRepositoryInterface(ABC):
-    """Historial de aceptaciones de los Términos: se inserta, se desvincula al borrar la cuenta y se purga."""
+    """
+    Historial de aceptaciones de los Términos: se inserta y se purga.
+
+    Al borrar la cuenta, la base de datos desvincula sus filas (FK ON DELETE
+    SET NULL) y anota cuándo (trigger BEFORE DELETE ON users): no hay método
+    para eso, para que no dependa de que cada camino de borrado se acuerde.
+    """
 
     @abstractmethod
     async def save(self, acceptance: TermsAcceptance) -> None:
@@ -21,21 +27,6 @@ class TermsAcceptanceRepositoryInterface(ABC):
     @abstractmethod
     async def has_accepted(self, user_id: UserId, terms_version: str) -> bool:
         """Si ese usuario ya tiene en el historial una fila de esa versión."""
-
-    @abstractmethod
-    async def find_by_user_id(self, user_id: UserId) -> list[TermsAcceptance]:
-        """Las aceptaciones de un usuario, de la más antigua a la más reciente."""
-
-    @abstractmethod
-    async def detach_deleted_user(self, user_id: UserId, deleted_at: datetime) -> int:
-        """
-        La cuenta se borra: sus filas dejan de apuntarle y anotan cuándo.
-
-        Va en la misma transacción que el borrado del usuario.
-
-        Returns:
-            Cuántas filas se han desvinculado
-        """
 
     @abstractmethod
     async def purge_deleted_before(self, cutoff: datetime) -> int:

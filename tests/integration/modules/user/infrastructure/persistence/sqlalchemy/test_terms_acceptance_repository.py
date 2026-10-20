@@ -83,14 +83,15 @@ async def test_two_versions_of_the_same_user_are_allowed(db_session):
     await repo.save(_fila(user, "2027-01-01"))
     await db_session.commit()
 
-    assert len(await repo.find_by_user_id(user.id)) == 2
+    assert [fila[2] for fila in await _filas(db_session)] == ["2026-10-20", "2027-01-01"]
 
 
-async def test_deleting_the_user_keeps_its_rows_detached(db_session):
+async def test_deleting_the_user_keeps_its_rows_stamped(db_session):
     """
     Given: Un usuario con una aceptación y otro usuario vivo con la suya
-    When: Se desvinculan las filas del primero y se borra su cuenta
-    Then: Su fila sigue con email y fecha de borrado y sin usuario; la del otro, intacta
+    When: Se borra el primero con el repositorio (como el borrado del admin)
+    Then: Su fila sigue, sin usuario, con su email y la fecha de borrado que
+        pone la base de datos; la del otro, intacta
     """
     borrado = await _usuario(db_session, "borrado@example.com")
     vivo = await _usuario(db_session, "vivo@example.com")
@@ -98,24 +99,25 @@ async def test_deleting_the_user_keeps_its_rows_detached(db_session):
     await repo.save(_fila(borrado))
     await repo.save(_fila(vivo))
     await db_session.commit()
-    cuando = datetime(2027, 3, 1, tzinfo=UTC)
+    antes = (await db_session.execute(text("SELECT now()"))).scalar_one()
+    await db_session.commit()
 
-    desvinculadas = await repo.detach_deleted_user(borrado.id, cuando)
     await SQLAlchemyUserRepository(db_session).delete_by_id(borrado.id)
     await db_session.commit()
 
-    assert desvinculadas == 1
     filas = await _filas(db_session)
-    assert filas[0] == (None, "borrado@example.com", "2026-10-20", cuando)
+    assert filas[0][:3] == (None, "borrado@example.com", "2026-10-20")
+    assert filas[0][3] is not None
+    assert filas[0][3] >= antes
     assert filas[1][1:] == ("vivo@example.com", "2026-10-20", None)
     assert filas[1][0] is not None
 
 
-async def test_deleting_a_user_without_detaching_still_keeps_the_rows(db_session):
+async def test_deleting_a_user_with_plain_sql_still_stamps_the_rows(db_session):
     """
     Given: Una aceptación de un usuario
-    When: Se borra la cuenta sin pasar por el caso de uso (ON DELETE SET NULL)
-    Then: La fila no se pierde: queda sin usuario
+    When: Se borra la cuenta con un DELETE directo, sin pasar por la app
+    Then: La fila no se pierde: queda sin usuario y con user_deleted_at relleno
     """
     user = await _usuario(db_session, "directo@example.com")
     await SQLAlchemyTermsAcceptanceRepository(db_session).save(_fila(user))
@@ -125,7 +127,20 @@ async def test_deleting_a_user_without_detaching_still_keeps_the_rows(db_session
     await db_session.commit()
 
     filas = await _filas(db_session)
-    assert filas == [(None, "directo@example.com", "2026-10-20", None)]
+    assert len(filas) == 1
+    assert filas[0][:3] == (None, "directo@example.com", "2026-10-20")
+    assert filas[0][3] is not None
+
+
+async def _borrada_el(db_session, user: User, cuando: datetime) -> None:
+    """Borra la cuenta y fecha su borrado en `cuando` (para simular el paso del tiempo)."""
+    await SQLAlchemyUserRepository(db_session).delete_by_id(user.id)
+    await db_session.commit()
+    await db_session.execute(
+        text("UPDATE terms_acceptances SET user_deleted_at = :cuando WHERE user_email = :email"),
+        {"cuando": cuando, "email": user.email.value},
+    )
+    await db_session.commit()
 
 
 async def test_purge_script_deletes_only_rows_deleted_over_three_years_ago(db_session):
@@ -143,10 +158,9 @@ async def test_purge_script_deletes_only_rows_deleted_over_three_years_ago(db_se
     for user in (vieja, reciente, en_el_corte, viva):
         await repo.save(_fila(user))
     await db_session.commit()
-    await repo.detach_deleted_user(vieja.id, datetime(2026, 10, 1, tzinfo=UTC))
-    await repo.detach_deleted_user(reciente.id, datetime(2028, 10, 20, tzinfo=UTC))
-    await repo.detach_deleted_user(en_el_corte.id, datetime(2026, 10, 20, 12, tzinfo=UTC))
-    await db_session.commit()
+    await _borrada_el(db_session, vieja, datetime(2026, 10, 1, tzinfo=UTC))
+    await _borrada_el(db_session, reciente, datetime(2028, 10, 20, tzinfo=UTC))
+    await _borrada_el(db_session, en_el_corte, datetime(2026, 10, 20, 12, tzinfo=UTC))
 
     respuesta = await purgar(
         lambda: _MismaSesion(db_session), datetime(2029, 10, 20, 12, tzinfo=UTC)

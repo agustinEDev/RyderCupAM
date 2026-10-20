@@ -56,6 +56,7 @@ class TestRegistrar:
         assert fila.user_agent == "Mozilla/5.0 (iPhone) Safari"
         assert fila.user_email == "ana@example.com"
         assert fila.user_deleted_at is None
+        assert fila.user_id == user_id
 
     def test_two_records_have_different_ids(self):
         """
@@ -137,36 +138,6 @@ class TestRegistrar:
             _registro(user_email=email)
 
 
-class TestBorradoDeLaCuenta:
-    def test_detach_from_deleted_user_keeps_the_proof(self):
-        """
-        Given: Una aceptación de un usuario
-        When: Se borra su cuenta
-        Then: La fila deja de apuntar al usuario, guarda cuándo se borró y
-            conserva email, versión, fecha, IP y navegador
-        """
-        fila = _registro()
-        borrado = datetime(2027, 1, 1, tzinfo=UTC)
-
-        fila.detach_from_deleted_user(borrado)
-
-        assert fila.user_id is None
-        assert fila.user_deleted_at == borrado
-        assert fila.user_email == "ana@example.com"
-        assert fila.terms_version == "2026-10-20"
-        assert fila.accepted_at == AHORA
-        assert (fila.ip_address, fila.user_agent) == ("203.0.113.7", "Mozilla/5.0 (iPhone) Safari")
-
-    def test_detach_requires_a_utc_date(self):
-        """
-        Given: Una fecha de borrado sin zona
-        When: Se desvincula
-        Then: ValueError
-        """
-        with pytest.raises(ValueError):
-            _registro().detach_from_deleted_user(datetime(2027, 1, 1))
-
-
 class TestRetencion:
     def test_retention_is_three_years(self):
         """
@@ -199,24 +170,3 @@ class TestRetencion:
         """
         with pytest.raises(ValueError):
             terms_acceptance_purge_cutoff(datetime(2029, 10, 20))
-
-    @pytest.mark.parametrize(
-        ("borrado", "purgable"),
-        [
-            (None, False),
-            (datetime(2026, 10, 19, 23, 59, tzinfo=UTC), True),
-            (datetime(2026, 10, 20, 12, tzinfo=UTC), False),
-            (datetime(2027, 6, 1, tzinfo=UTC), False),
-        ],
-    )
-    def test_is_purgeable_only_after_three_years_from_deletion(self, borrado, purgable):
-        """
-        Given: Una fila de un usuario vivo, o borrado hace más o menos de 3 años
-        When: Se pregunta si se puede purgar el 20 oct 2029 a las 12:00
-        Then: Solo si se borró ANTES del corte (justo en el corte, aún no)
-        """
-        fila = _registro()
-        if borrado is not None:
-            fila.detach_from_deleted_user(borrado)
-
-        assert fila.is_purgeable(datetime(2029, 10, 20, 12, tzinfo=UTC)) is purgable

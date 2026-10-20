@@ -494,6 +494,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
@@ -634,6 +635,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import 
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
     user_devices_table,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
@@ -741,11 +743,17 @@ def get_country_repository(
     return SQLAlchemyCountryRepository(session)
 
 
+def get_security_audit_logger() -> ISecurityAuditLogger:
+    """Proveedor del puerto de auditoría de seguridad (el SecurityLogger compartido)."""
+    return SecurityAuditLogger()
+
+
 def get_register_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     country_repository: CountryRepositoryInterface = Depends(get_country_repository),
     handicap_service: HandicapService = Depends(get_handicap_service),
     email_service: IEmailService = Depends(get_email_service),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> RegisterUserUseCase:
     """
     Proveedor del caso de uso RegisterUserUseCase.
@@ -763,6 +771,7 @@ def get_register_user_use_case(
         country_repository=country_repository,
         handicap_service=handicap_service,
         email_service=email_service,
+        security_audit=security_audit,
     )
 
 
@@ -999,9 +1008,10 @@ def get_list_my_avatar_uploads_use_case(
 
 def get_accept_terms_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AcceptTermsUseCase:
     """Proveedor del caso de uso AcceptTermsUseCase."""
-    return AcceptTermsUseCase(uow)
+    return AcceptTermsUseCase(uow, security_audit)
 
 
 def get_remove_avatar_use_case(
