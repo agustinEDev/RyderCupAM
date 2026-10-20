@@ -25,7 +25,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """Crea el historial, vacío, con su índice por usuario."""
+    """Crea el historial, vacío; el UNIQUE (user_id, terms_version) sirve de índice por usuario."""
+    # Si una transacción larga (el vigilante de hándicaps) tuviera `users`
+    # bloqueada, mejor fallar a los 5 s que dejar la app esperando detrás del
+    # ALTER/CREATE TRIGGER: el contenedor no arranca y Render sigue con la versión
+    # anterior. SET LOCAL: solo vale dentro de esta transacción.
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.create_table(
         "terms_acceptances",
         sa.Column("id", sa.CHAR(36), primary_key=True),
@@ -76,7 +81,6 @@ def upgrade() -> None:
             "user_id", "terms_version", name="uq_terms_acceptances_user_version"
         ),
     )
-    op.create_index("ix_terms_acceptances_user_id", "terms_acceptances", ["user_id"])
     op.create_index(
         "ix_terms_acceptances_user_deleted_at", "terms_acceptances", ["user_deleted_at"]
     )
@@ -108,5 +112,4 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS trg_users_mark_terms_acceptances_deleted ON users")
     op.execute("DROP FUNCTION IF EXISTS terms_acceptances_mark_user_deleted()")
     op.drop_index("ix_terms_acceptances_user_deleted_at", table_name="terms_acceptances")
-    op.drop_index("ix_terms_acceptances_user_id", table_name="terms_acceptances")
     op.drop_table("terms_acceptances")
