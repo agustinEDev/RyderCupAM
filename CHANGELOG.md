@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.35.0] - 2026-10-20
+
+**El backend pasa a Python 3.14.** Sin nada nuevo para el usuario: cambia el
+intérprete de la imagen de producción. Va sola en esta release para poder
+volver atrás revirtiendo una línea si algo falla. El frontend no cambia.
+
+**Notas de despliegue.**
+
+- **Sin migraciones**, sin variables nuevas y sin cambios de contrato.
+- Render construye la imagen con `docker/Dockerfile`: tras desplegar, `/health`
+  debe dar 2.35.0. Si la imagen no arrancara, Render mantiene la 2.34.0.
+- **Memoria**: en el Kind, el pod pasa de 431 a 476 MB (+10 %). Vigilar la
+  memoria del servicio en Render los primeros días.
+- Probada a fondo: suites unitaria (6331), de integración (1008) y de seguridad
+  (45) en 3.14; mypy limpio; la imagen arranca como en Render; pasada en
+  navegador contra el Kind con la API en 3.14 (sesión, fotos HEIC, mapas,
+  competiciones, anotación, partida rápida, concurrencia y todos los GET del
+  OpenAPI), sin 5xx; latencia igual que con 3.12 en un A/B en reposo (+0,8 %).
+
+### Changed
+
+- **Imagen de Docker: Python 3.12 → 3.14** (`python:3.14-slim`, fijada por
+  digest) (#423). Todas las dependencias nativas tienen wheel oficial para 3.14.
+- **CI: 3.12 y 3.14 obligatorios** en las suites unitaria, de integración y de
+  seguridad; 3.11 y 3.13 dejan de ejecutarse. Security Checks (bandit,
+  pip-audit) y el SBOM corren en 3.14 (#603).
+
+### Technical Debt
+
+- `slowapi` 0.1.10 usa `asyncio.iscoroutinefunction`, obsoleta en 3.14 y que
+  desaparece en Python 3.16: hoy solo produce avisos de deprecación. Habrá que
+  actualizarla o sustituirla antes de pasar a 3.16.
+
 ## [2.34.0] - 2026-10-20
 
 Una release sin nada nuevo para el usuario: pone al día las dependencias que
