@@ -1,5 +1,5 @@
 """
-Sentry User Context Middleware (v1.8.0 - Task 10)
+Sentry User Context Middleware
 
 Middleware para capturar contexto de usuario en eventos de Sentry.
 

@@ -1,5 +1,5 @@
 """
-Sentry Configuration Module (v1.8.0 - Task 10)
+Sentry Configuration Module
 
 Configuración centralizada de Sentry para error tracking y performance monitoring.
 
@@ -33,6 +33,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
 
+from src.config import version
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,19 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     return event
 
 
+def build_release() -> str:
+    """
+    Release que se declara a Sentry: `rydercup-backend@<versión>`.
+
+    La versión sale de la misma fuente que `GET /health` (`APP_VERSION`), sin
+    una segunda copia a mano. Se lee al llamar, no al importar, para que siga
+    siempre a esa fuente. Si está vacía, se dice `unknown`: nunca un número
+    inventado.
+    """
+    app_version = version.APP_VERSION.strip()
+    return f"rydercup-backend@{app_version or 'unknown'}"
+
+
 def init_sentry() -> None:
     """
     Inicializa Sentry SDK con configuración para FastAPI.
@@ -101,6 +115,7 @@ def init_sentry() -> None:
     )
 
     # Inicializar Sentry SDK
+    release = build_release()
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT,
@@ -119,7 +134,7 @@ def init_sentry() -> None:
         # Hook para filtrar/modificar eventos
         before_send=before_send,
         # Metadata
-        release="rydercup-backend@1.8.0",  # Versión actual del backend
+        release=release,  # Misma versión que expone /health
         # Request data (incluir en eventos)
         send_default_pii=False,  # NO enviar PII automáticamente (GDPR compliance)
         # SECURITY: send_default_pii=False NO cubre las variables locales de cada frame
@@ -135,6 +150,7 @@ def init_sentry() -> None:
 
     logger.info(
         f"✅ Sentry initialized - "
+        f"release={release}, "
         f"env={settings.SENTRY_ENVIRONMENT}, "
         f"traces={settings.SENTRY_TRACES_SAMPLE_RATE:.0%}, "
         f"profiles={settings.SENTRY_PROFILES_SAMPLE_RATE:.0%}"

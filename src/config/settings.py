@@ -56,7 +56,7 @@ class Settings:
     # - Producción: https://rydercupfriends.com (Render.com)
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-    # Sentry Configuration (v1.8.0 - Task 10)
+    # Sentry Configuration
     # Error tracking y performance monitoring
     # Configuración:
     # - SENTRY_DSN: URL de proyecto Sentry (obligatorio para habilitar Sentry)
