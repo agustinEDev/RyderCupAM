@@ -48,9 +48,22 @@ class TestPerfil:
         assert datos["id"] == luis["user"]["id"]
         assert datos["first_name"] == "Luis"
         assert "stats" in datos
-        # Entre amigos si se ve el correo: una amistad aceptada es un contacto
-        # de verdad, y poder escribirle fuera de la aplicacion es parte de eso
-        assert datos["email"] == luis["user"]["email"]
+        # Ni entre amigos: el correo solo se lo ve uno mismo
+        assert datos["email"] is None
+        assert luis["user"]["email"] not in respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_uno_mismo_ve_su_correo(self, client: AsyncClient):
+        """Given un jugador / When pide su propio perfil / Then le llega su correo."""
+        ana = await create_authenticated_user(
+            client, "perfil_propio@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+
+        set_auth_cookies(client, ana["cookies"])
+        respuesta = await client.get(f"/api/v1/users/{ana['user']['id']}/profile")
+
+        assert respuesta.status_code == 200
+        assert respuesta.json()["email"] == ana["user"]["email"]
 
     @pytest.mark.asyncio
     async def test_un_desconocido_ve_la_ficha_pero_no_lo_privado(self, client: AsyncClient):

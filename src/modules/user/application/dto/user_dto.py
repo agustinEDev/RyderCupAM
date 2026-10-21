@@ -167,7 +167,16 @@ class FindUserResponseDTO(BaseModel):
     """
 
     user_id: UUID = Field(..., description="ID único del usuario encontrado.")
-    email: EmailStr = Field(..., description=EMAIL_DESCRIPTION)
+    # Vacío y no None, y el esquema sigue diciendo `format: email`: un null o
+    # quitar el formato lo marca oasdiff como cambio incompatible
+    email: str = Field(
+        ...,
+        description=(
+            "Email del usuario. Solo si se buscó por ese mismo email o es uno "
+            "mismo; vacío en otro caso (BE #531)"
+        ),
+        json_schema_extra={"format": "email"},
+    )
     full_name: str = Field(..., description="Nombre completo del usuario.")
     display_name: str = Field(
         ...,

@@ -241,11 +241,11 @@ class TestLoQueDeVerdadNoEsta:
                 str(ana.id.value), str(luis.id.value)
             )
 
-    async def test_entre_amigos_si_se_ve_el_correo(self, social_uow, user_uow, stats):
+    async def test_un_amigo_no_ve_el_correo(self, social_uow, user_uow, stats):
         """
-        Given dos amigos / When uno mira el perfil del otro / Then ve su correo:
-        una amistad aceptada es un contacto de verdad, y poder escribirle fuera
-        de la aplicacion es parte de eso.
+        Given dos amigos / When uno mira el perfil del otro / Then el correo
+        llega en None: es dato del otro, y solo se lo ve uno mismo.
+        Lo demas de amigos (handicap, estadisticas) si llega.
         """
         ana = await _create_user(user_uow)
         luis = await _create_user(user_uow)
@@ -255,7 +255,8 @@ class TestLoQueDeVerdadNoEsta:
             str(ana.id.value), str(luis.id.value)
         )
 
-        assert perfil.email == luis.email.value
+        assert perfil.email is None
+        assert perfil.is_friend is True
 
     async def test_un_desconocido_no_ve_el_correo(self, social_uow, user_uow, stats):
         """
