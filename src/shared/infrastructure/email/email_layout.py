@@ -1,7 +1,7 @@
 """
 La plantilla común de los correos (BE #389).
 
-Los cinco correos de la aplicación comparten esta cara: cabecera verde con el
+Todos los correos de la aplicación comparten esta cara: cabecera verde con el
 monograma, un título que dice lo que pasa, un único botón grande y un pie
 común. El español va primero y completo; el inglés, debajo y más corto, con
 su propio botón.
@@ -59,6 +59,14 @@ class Boton:
     enlace: str
 
 
+def _celda(fondo: str, estilo: str = "") -> str:
+    """
+    Los atributos de una celda con color: `bgcolor` y `background` salen del
+    mismo valor. Mail de iOS en modo oscuro quita el fondo puesto solo por CSS.
+    """
+    return f'bgcolor="{fondo}" style="background:{fondo};{estilo}"'
+
+
 def parrafo(*partes: str, pequeno: bool = False) -> Html:
     tamano = "13px" if pequeno else "15px"
     color = APAGADO if pequeno else TEXTO
@@ -78,8 +86,7 @@ def recuadro(titulo: str, *lineas: str) -> Html:
     return Html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="margin:0 0 14px;border-collapse:separate;">'
-        '<tr><td bgcolor="#f0faf3" style="background:#f0faf3;border:1px solid #bbe5c8;border-radius:10px;'
-        'padding:14px 16px;">'
+        f"<tr><td {_celda('#f0faf3', 'border:1px solid #bbe5c8;border-radius:10px;padding:14px 16px;')}>"
         f'<div style="font-family:{_LETRA_TITULO};font-size:17px;font-weight:700;'
         f'line-height:1.3;color:{VERDE_OSCURO};">{_seguro(titulo)}</div>'
         f"{filas}</td></tr></table>"
@@ -90,8 +97,8 @@ def cita(texto: str, autor: str) -> Html:
     """El mensaje personal de quien invita."""
     return Html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" data-cita '
-        'style="margin:0 0 14px;"><tr><td bgcolor="#f6f7f6" style="background:#f6f7f6;border-radius:10px;'
-        'padding:12px 16px;">'
+        'style="margin:0 0 14px;">'
+        f"<tr><td {_celda('#f6f7f6', 'border-radius:10px;padding:12px 16px;')}>"
         f'<div style="font-family:{_LETRA};font-size:14px;font-style:italic;line-height:1.55;'
         f'color:{TEXTO};">«{_seguro(texto)}»</div>'
         f'<div style="font-family:{_LETRA};font-size:12px;color:{APAGADO};margin-top:4px;">'
@@ -103,9 +110,14 @@ def aviso(*partes: str) -> Html:
     """Algo que requiere atención —«¿no has sido tú?»—, en ámbar."""
     return Html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="margin:0 0 14px;"><tr><td bgcolor="#fff7ed" style="background:#fff7ed;border:1px solid #fed7aa;'
-        f"border-radius:10px;padding:12px 16px;font-family:{_LETRA};font-size:14px;"
-        f'line-height:1.55;color:#7c2d12;">{frase(*partes)}</td></tr></table>'
+        'style="margin:0 0 14px;">'
+        "<tr><td "
+        + _celda(
+            "#fff7ed",
+            "border:1px solid #fed7aa;border-radius:10px;padding:12px 16px;"
+            f"font-family:{_LETRA};font-size:14px;line-height:1.55;color:#7c2d12;",
+        )
+        + f">{frase(*partes)}</td></tr></table>"
     )
 
 
@@ -115,6 +127,8 @@ def _boton(boton: Boton, principal: bool) -> str:
     y el enlace solo es texto, con su color también en un <span>. Un <a> con
     fondo propio desaparecía en el modo oscuro de Mail.
     """
+    # El relleno, solo arriba y abajo: el <a> ya ocupa todo el ancho por ser
+    # bloque, y un relleno lateral lo haría más ancho que la celda
     if principal:
         fondo, letra, borde, tamano, relleno = VERDE, "#ffffff", "", "16px", "14px 0"
     else:
@@ -125,17 +139,18 @@ def _boton(boton: Boton, principal: bool) -> str:
             "15px",
             "11px 0",
         )
+    # Outlook de escritorio no respeta el relleno del <a>: mso-padding-alt
+    # se lo da a la celda y el botón conserva su alto
+    celda = _celda(fondo, f"{borde}border-radius:10px;mso-padding-alt:{relleno};")
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="margin:4px 0 14px;"><tr><td align="center">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-        f'<td align="center" bgcolor="{fondo}" style="background:{fondo};{borde}'
-        'border-radius:10px;">'
+        'style="margin:4px 0 14px;"><tr>'
+        f'<td align="center" {celda}>'
         f'<a data-boton href="{_html.escape(boton.enlace, quote=True)}" target="_blank" '
-        f'style="display:inline-block;width:100%;padding:{relleno};font-family:{_LETRA};'
-        f'font-size:{tamano};font-weight:700;color:{letra};text-decoration:none;">'
+        f'style="display:block;padding:{relleno};font-family:{_LETRA};font-size:{tamano};'
+        f'font-weight:700;text-align:center;color:{letra};text-decoration:none;">'
         f'<span style="color:{letra};">{_seguro(boton.texto)}</span></a>'
-        "</td></tr></table></td></tr></table>"
+        "</td></tr></table>"
     )
 
 
@@ -146,7 +161,8 @@ def _respaldo(enlace: str) -> str:
         f'<p style="margin:0 0 6px;font-family:{_LETRA};font-size:12px;line-height:1.5;'
         f'color:{APAGADO};">¿No funciona el botón? Copia este enlace · '
         f"Button not working? Copy this link:<br>"
-        f'<a href="{seguro}" style="color:{VERDE};word-break:break-all;">{seguro}</a></p>'
+        f'<a href="{seguro}" target="_blank" style="color:{VERDE};word-break:break-all;">'
+        f"{seguro}</a></p>"
     )
 
 
@@ -199,15 +215,15 @@ def correo(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light only">
 <meta name="supported-color-schemes" content="light only">
-<style>:root{{color-scheme:light only;supported-color-schemes:light only;}}</style>
+<style>:root{{color-scheme:light only;}}</style>
 <title>{_seguro(titulo)}</title>
 </head>
-<body bgcolor="{FONDO}" style="margin:0;padding:0;background:{FONDO};">
+<body {_celda(FONDO, "margin:0;padding:0;")}>
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{_seguro(resumen)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="{FONDO}" style="background:{FONDO};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" {_celda(FONDO)}>
 <tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;">
-<tr><td bgcolor="{VERDE}" style="background:{VERDE};padding:18px 24px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" {_celda("#ffffff", "max-width:560px;border-radius:12px;overflow:hidden;")}>
+<tr><td {_celda(VERDE, "padding:18px 24px;")}>
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>
 <td style="padding-right:12px;"><img src="{logo}" width="40" alt="RCF" style="display:block;width:40px;height:auto;border:0;"></td>
 <td style="font-family:{_LETRA_TITULO};font-size:17px;font-weight:700;color:#ffffff;"><span style="color:#ffffff;">RyderCupFriends</span></td>
@@ -228,7 +244,7 @@ def correo(
 {_boton(ingles.boton, principal=False)}
 </td></tr></table>
 </td></tr>
-<tr><td bgcolor="#f8faf8" style="background:#f8faf8;border-top:1px solid #eef1ee;padding:18px 24px 22px;font-family:{_LETRA};font-size:12px;line-height:1.5;color:{APAGADO};">
+<tr><td {_celda("#f8faf8", f"border-top:1px solid #eef1ee;padding:18px 24px 22px;font-family:{_LETRA};font-size:12px;line-height:1.5;color:{APAGADO};")}>
 {_seguro(pie)}<br>© {anio} RyderCupFriends
 </td></tr>
 </table>
