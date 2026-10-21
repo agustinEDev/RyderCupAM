@@ -159,8 +159,20 @@ class FeedResponseDTO(BaseModel):
     unseen_count: int = Field(
         default=0,
         description=(
-            "Cuantas entradas **de amigos** se han publicado desde la ultima visita. "
-            "Los logros propios no cuentan: lo que uno acaba de hacer no es novedad "
-            "para uno"
+            "Cuantas entradas de este feed se han publicado desde la ultima visita, "
+            "las propias incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
+            "visita previa cuenta todo. Es el mismo numero que da "
+            "`GET /users/me/feed/unseen-count`"
+        ),
+    )
+
+
+class FeedUnseenCountResponseDTO(BaseModel):
+    """El numero del boton de Actividad, sin cargar el feed."""
+
+    unseen_count: int = Field(
+        description=(
+            "Cuantas entradas del feed se han publicado desde la ultima visita, "
+            "las propias incluidas, con tope de 10. Sin visita previa cuenta todo"
         ),
     )

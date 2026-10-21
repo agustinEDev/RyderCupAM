@@ -7,22 +7,28 @@ Perfiles de jugador y feed de actividad entre amigos (BE #176).
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
     get_current_user,
+    get_feed_unseen_count_use_case,
     get_friends_feed_use_case,
     get_mark_feed_as_seen_use_case,
     get_player_activity_use_case,
     get_player_profile_use_case,
 )
+from src.config.rate_limit import limiter
 from src.modules.social.application.dto.profile_dto import (
     FeedResponseDTO,
+    FeedUnseenCountResponseDTO,
     PlayerProfileResponseDTO,
 )
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
     ProfileNotVisibleError,
+)
+from src.modules.social.application.use_cases.get_feed_unseen_count_use_case import (
+    GetFeedUnseenCountUseCase,
 )
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
@@ -103,10 +109,10 @@ async def get_player_activity(
     response_model=FeedResponseDTO,
     summary="Get my activity feed",
     description=(
-        "What you and your friends have achieved, newest first, paginated by cursor "
-        "rather than page number — the feed grows from the top, so an offset would "
-        "repeat entries. Your own achievements appear in it, but never count towards "
-        "`unseen_count`."
+        "What you and your friends have achieved, newest first by publication time, "
+        "paginated by cursor rather than page number — the feed grows from the top, so "
+        "an offset would repeat entries. `unseen_count` counts what was published since "
+        "your last visit, your own entries included, capped at 10."
     ),
 )
 async def get_my_feed(
@@ -116,6 +122,26 @@ async def get_my_feed(
     cursor: str | None = Query(None, description="From a previous response's next_cursor"),
 ):
     return await use_case.execute(str(current_user.id), limit=limit, cursor=cursor)
+
+
+@router.get(
+    "/users/me/feed/unseen-count",
+    response_model=FeedUnseenCountResponseDTO,
+    summary="Count what is new in my feed",
+    description=(
+        "The number on the Activity button, without loading the feed: entries published "
+        "since your last visit, your own included, capped at 10 (clients show 9+). "
+        "Everything counts if you have never opened the feed. Same number as the "
+        "feed's `unseen_count`."
+    ),
+)
+@limiter.limit("120/minute")  # Por usuario (#273): se pide al abrir la app y al volver
+async def get_my_feed_unseen_count(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetFeedUnseenCountUseCase = Depends(get_feed_unseen_count_use_case),
+) -> FeedUnseenCountResponseDTO:
+    return await use_case.execute(str(current_user.id))
 
 
 @router.put(

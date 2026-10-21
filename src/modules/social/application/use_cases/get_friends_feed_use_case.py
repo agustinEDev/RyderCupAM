@@ -1,7 +1,5 @@
 """Caso de Uso: El feed de actividad de mis amigos."""
 
-from datetime import datetime
-
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -12,16 +10,10 @@ from src.modules.social.application.dto.profile_dto import (
     FeedResponseDTO,
 )
 from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
+from src.modules.social.application.feed_scope import count_unseen, resolve_feed_scope
 from src.modules.social.domain.entities.activity_event import ActivityEvent
-from src.modules.social.domain.repositories.activity_event_repository_interface import (
-    ActivitySlice,
-)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
-)
-from src.modules.social.domain.value_objects.activity_audience import (
-    types_seen_by_author,
-    types_seen_by_friends,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -46,8 +38,8 @@ class GetFriendsFeedUseCase:
     acabas de hacer se lee como si no se hubiera guardado, y ademas deja el feed
     vacio a quien todavia no tiene amigos. Lo propio se incluye sin mirar el
     interruptor de publicacion: ese decide lo que ven los demas, no lo que uno
-    ve de si mismo. El aviso de novedades, en cambio, solo cuenta lo de los
-    amigos — los logros de uno no son noticia para uno.
+    ve de si mismo. El aviso de novedades cuenta tambien lo propio (decision
+    de producto): anuncia todo lo nuevo de Actividad, con tope de 10.
 
     **El feed se lee, no se escribe** (fan-out on read): al pedirlo se consultan
     los eventos de mis amigos. No hay una copia por amigo creada al publicar.
@@ -80,38 +72,16 @@ class GetFriendsFeedUseCase:
         limit = max(1, min(limit, MAX_PAGE_SIZE))
         before, before_id = parse_cursor(cursor)
 
-        # Las unidades de trabajo se abren en serie, nunca una dentro de otra:
-        # comparten sesion por debajo, y el `commit` de la interior cerraria la
-        # transaccion que la exterior todavia esta usando
-        async with self._social_uow:
-            amigos = await self._social_uow.friendships.find_friend_ids(viewer_id)
+        scope = await resolve_feed_scope(self._social_uow, self._user_uow, viewer_id)
 
-        de_amigos, visto_hasta = await self._publicables_y_ultima_visita(viewer_id, amigos)
-
-        # Dos trozos en una sola consulta. Lo mio que veo yo (SELF y BOTH): un
-        # feed donde no sale lo que uno acaba de hacer se lee como si no se
-        # hubiera guardado, y va sin mirar mi `share_activity`, que gobierna lo
-        # que ven los demas. Y lo de mis amigos que ven ellos (FRIENDS y BOTH),
-        # sin lo que publicaron con la publicacion apagada
-        mio = ActivitySlice(user_ids=(viewer_id,), types=types_seen_by_author())
-        suyo = ActivitySlice(
-            user_ids=tuple(de_amigos),
-            types=types_seen_by_friends(),
-            only_visible_to_friends=True,
-        )
-
+        # Los dos trozos en una sola consulta: la pagina y el cursor cuadran
         async with self._social_uow:
             eventos = await self._social_uow.activity_events.find_in(
-                [mio, suyo], limit=limit, before=before, before_id=before_id
+                scope.slices, limit=limit, before=before, before_id=before_id
             )
-            # El aviso cuenta solo lo de los amigos: los logros de uno mismo no
-            # son novedad para uno. Terminar una partida y que el feed anuncie
-            # "3 novedades" que son tuyas seria absurdo
-            no_vistos = (
-                0
-                if visto_hasta is None
-                else await self._social_uow.activity_events.count_in([suyo], since=visto_hasta)
-            )
+        # El mismo recuento que da `GET /users/me/feed/unseen-count`: el numero
+        # del boton y el de la pantalla no pueden discrepar
+        no_vistos = await count_unseen(self._social_uow, scope)
 
         autores = await self._autores(eventos)
         campos = await self._campos(eventos)
@@ -123,40 +93,6 @@ class GetFriendsFeedUseCase:
             next_cursor=build_cursor(eventos, limit),
             unseen_count=no_vistos,
         )
-
-    async def _publicables_y_ultima_visita(
-        self, viewer_id: UserId, amigos: list[UserId]
-    ) -> tuple[list[UserId], datetime | None]:
-        """
-        De mis amigos, los que tienen la publicacion encendida; y cuando mire yo
-        el feed por ultima vez.
-
-        Las dos cosas salen del mismo sitio, asi que se resuelven en una sola
-        apertura en lugar de dos.
-
-        Apagar la publicacion ya retira lo publicado (BE #175), asi que en la
-        practica no deberian quedar eventos suyos. Se filtra igualmente porque
-        la regla es "no aparece en el feed de nadie", y no debe depender de que
-        el borrado de otro caso de uso haya ido bien.
-
-        `feed_last_seen_at` en None significa que nunca lo ha abierto: entonces
-        no hay novedades que contar. Anunciar "247 novedades" a quien entra por
-        primera vez no ayuda a nadie.
-        """
-        if not amigos:
-            return [], None
-
-        publicables = []
-        async with self._user_uow:
-            for amigo in amigos:
-                user = await self._user_uow.users.find_by_id(amigo)
-                if user is not None and user.is_active and user.share_activity:
-                    publicables.append(amigo)
-
-            viewer = await self._user_uow.users.find_by_id(viewer_id)
-            visto_hasta = viewer.feed_last_seen_at if viewer else None
-
-        return publicables, visto_hasta
 
     async def _autores(self, eventos: list[ActivityEvent]) -> dict[str, FeedAuthorDTO]:
         """
