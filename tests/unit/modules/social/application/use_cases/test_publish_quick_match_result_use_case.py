@@ -336,6 +336,40 @@ class TestStableford:
         assert de_ana.payload["best_gross_in_group"] is True
         assert de_eva.payload["best_gross_in_group"] is False
 
+    async def test_6_el_mejor_bruto_solo_entre_tarjetas_completas(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        6. Given Eva con 9 hoyos (36 golpes) y Ana con la vuelta entera en 73 /
+        When se publica / Then el mejor bruto es Ana: una tarjeta a medias no
+        compite en golpes.
+        """
+        ana = await _user(user_uow, "Ana")
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4, h1=5), {h: 4 for h in range(1, 10)}, _tarjeta(5)],
+            otros=[
+                QuickMatchParticipant.for_user(eva.id),
+                QuickMatchParticipant.for_user(luz.id).with_handicap(36),
+            ],
+        )
+
+        await publicar(match)
+
+        de_ana = await _uno_de(social_uow, ana)
+        de_eva = await _uno_de(social_uow, eva)
+        de_luz = await _uno_de(social_uow, luz)
+        assert (de_luz.payload["position"], de_ana.payload["position"]) == (1, 2)
+        assert de_eva.payload["gross_strokes"] == 36
+        assert de_ana.payload["best_gross_in_group"] is True
+        assert de_eva.payload["best_gross_in_group"] is False
+        assert de_luz.payload["best_gross_in_group"] is False
+
 
 class TestMedal:
     async def test_29_medal_lleva_neto_y_bruto(

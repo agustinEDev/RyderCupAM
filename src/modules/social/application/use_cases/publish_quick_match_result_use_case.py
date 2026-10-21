@@ -55,6 +55,8 @@ class _Totales:
     net: int
     par_played: int
     holes_played: int
+    # Si jugo todos los hoyos de su tarjeta
+    complete: bool
 
     @property
     def to_par(self) -> int:
@@ -183,7 +185,12 @@ class PublishQuickMatchResultUseCase:
         valores = [v.to_par if es_medal else v.points for v in vueltas]
         puestos = rank(valores, higher_is_better=not es_medal)
         hay_puesto = len(vueltas) > 1
-        mejor_bruto = min(v.gross for v in vueltas)
+        # El mejor bruto, solo entre tarjetas completas: nueve hoyos siempre
+        # tienen menos golpes que dieciocho. El orden no se toca: el cliente
+        # clasifica las incompletas con todas, por puntos o contra el par de lo
+        # jugado (`StablefordCalculator`), y aqui se le sigue
+        completas = [v.gross for v in vueltas if v.complete]
+        mejor_bruto = min(completas) if completas else None
 
         eventos = []
         for vuelta, puesto in zip(vueltas, puestos, strict=True):
@@ -201,7 +208,10 @@ class PublishQuickMatchResultUseCase:
                 # La etiqueta «mejor bruto del grupo», solo si no gano: quien
                 # gano ya tiene su titular
                 "best_gross_in_group": (
-                    hay_puesto and vuelta.gross == mejor_bruto and puesto.position != 1
+                    hay_puesto
+                    and vuelta.complete
+                    and vuelta.gross == mejor_bruto
+                    and puesto.position != 1
                 ),
             }
             if es_medal:
@@ -223,7 +233,8 @@ class PublishQuickMatchResultUseCase:
             return None
         golpes = lectura.strokes.get(p.participant_id)
         puntos = bruto = neto = par = hoyos = 0
-        for hoyo in lectura.course.hole_card_for(p.tee_color, p.tee_gender):
+        tarjeta = lectura.course.hole_card_for(p.tee_color, p.tee_gender)
+        for hoyo in tarjeta:
             if hoyo.number not in anotados:
                 continue
             recibe = golpes.strokes_on_hole(hoyo.number) if golpes else 0
@@ -239,7 +250,7 @@ class PublishQuickMatchResultUseCase:
             neto += score - recibe
         if hoyos == 0:
             return None
-        return _Totales(p, puntos, bruto, neto, par, hoyos)
+        return _Totales(p, puntos, bruto, neto, par, hoyos, complete=hoyos == len(tarjeta))
 
     # === Match play ===
 
