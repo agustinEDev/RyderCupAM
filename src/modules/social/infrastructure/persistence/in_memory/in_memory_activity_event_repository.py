@@ -53,12 +53,13 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     async def count_in(
         self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
     ) -> int:
+        # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
-            [
-                e
+            {
+                e.card_key
                 for e in self._events
                 if self._entra(e, slices) and (since is None or e.published_at > since)
-            ]
+            }
         )
         return cuenta if cap is None else min(cuenta, cap)
 

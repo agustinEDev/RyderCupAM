@@ -6,13 +6,17 @@ del boton y el de la pantalla tienen que salir de la misma regla, o acabarian
 discrepando en cuanto una de las dos cambiara.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivityEventRepositoryInterface,
     ActivitySlice,
+)
+from src.modules.social.domain.repositories.friendship_repository_interface import (
+    FriendshipRepositoryInterface,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -30,6 +34,10 @@ from src.shared.domain.utc_clock import utc_now
 # Tope del contador de novedades. El cliente pinta «9+», asi que pasado el 10
 # el numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
 UNSEEN_CAP = 10
+
+# Cuantas solicitudes de amistad pendientes se leen para el feed. Nadie tiene
+# tantas sin responder, y el contador no necesita mas que su tope
+MAX_PENDING_REQUESTS = 50
 
 
 @dataclass(frozen=True)
@@ -101,10 +109,28 @@ async def resolve_feed_scope(
     )
 
 
-async def count_unseen(events: ActivityEventRepositoryInterface, scope: FeedScope) -> int:
+async def pending_requests(
+    friendships: FriendshipRepositoryInterface, viewer_id: UserId
+) -> list[Friendship]:
     """
-    Cuanto de lo que veria en el feed se ha publicado desde mi ultima visita,
-    con el tope de `UNSEEN_CAP`.
+    Las solicitudes de amistad que me han hecho y siguen sin respuesta (F23).
+
+    No son eventos: se leen en vivo de las amistades, asi que aceptarla o
+    rechazarla en otro sitio la quita sola (F24), y un bloqueo —que cambia esa
+    misma fila— tambien (F25). Solo las recibidas, nunca las enviadas (F26).
+    """
+    return await friendships.list_pending_received(viewer_id, limit=MAX_PENDING_REQUESTS)
+
+
+async def count_unseen(
+    events: ActivityEventRepositoryInterface,
+    scope: FeedScope,
+    requests: Sequence[Friendship] = (),
+) -> int:
+    """
+    Cuanto de lo que veria en el feed ha llegado desde mi ultima visita, con el
+    tope de `UNSEEN_CAP`: las tarjetas publicadas y las solicitudes de amistad
+    recibidas.
 
     Cuenta **tambien lo propio** (decision de producto, 21 oct 2026): el numero
     anuncia todo lo nuevo de Actividad, y ahi salen tambien los avisos que son
@@ -113,4 +139,10 @@ async def count_unseen(events: ActivityEventRepositoryInterface, scope: FeedScop
     Recibe el repositorio y no la unidad de trabajo para contar dentro de la
     misma que ya tenga abierta quien llama.
     """
-    return await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)
+    tarjetas = await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)
+    solicitudes = sum(
+        1
+        for solicitud in requests
+        if scope.last_seen_at is None or solicitud.created_at > scope.last_seen_at
+    )
+    return min(tarjetas + solicitudes, UNSEEN_CAP)

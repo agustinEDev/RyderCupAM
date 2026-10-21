@@ -4,7 +4,19 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, and_, delete, func, or_, select, tuple_, update
+from sqlalchemy import (
+    ColumnElement,
+    String,
+    and_,
+    case,
+    cast,
+    delete,
+    func,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,7 +96,18 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         if condicion is None:
             return 0
 
-        filas = select(activity_events_table.c.id).where(condicion)
+        # Una fila por tarjeta: los logros de una vuelta de un jugador comparten
+        # tarjeta (`ActivityEvent.card_key`); cada aviso va en la suya
+        tabla = activity_events_table.c
+        logros = sorted(t for t in ActivityEventType if t.is_achievement)
+        tarjeta = case(
+            (
+                tabla.type.in_(logros),
+                func.concat(cast(tabla.user_id, String), ":", tabla.source_match_id),
+            ),
+            else_=cast(tabla.id, String),
+        )
+        filas = select(tarjeta).where(condicion).distinct()
         if since is not None:
             filas = filas.where(activity_events_table.c.published_at > since)
         if cap is not None:

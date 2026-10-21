@@ -110,6 +110,7 @@ class GetPlayerActivityUseCase:
                     published_at=e.published_at,
                     payload=e.payload,
                     source_match_id=e.source_match_id,
+                    group_key=e.card_key,
                 )
                 for e in eventos
             ],

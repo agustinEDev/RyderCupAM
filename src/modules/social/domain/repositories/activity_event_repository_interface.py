@@ -76,8 +76,12 @@ class ActivityEventRepositoryInterface(ABC):
         self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
     ) -> int:
         """
-        Cuantos eventos de esos trozos se publicaron despues de `since` (todos
+        Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
         si es None), sin pasar de `cap`. Alimenta el aviso de novedades.
+
+        Cuenta tarjetas y no filas (`ActivityEvent.card_key`): tres logros de
+        una vuelta se ven como una tarjeta, y el numero tiene que decir lo que
+        hay en la pantalla.
         """
 
     @abstractmethod
