@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.37.0] - 2026-10-21
+
+**Privacidad de los emails y solicitudes que no se quedan colgadas.** Nadie ve
+ya el email de otro jugador salvo el organizador en su competición, las
+solicitudes de inscripción pendientes se rechazan al empezar a jugar, Sentry
+recibe la versión real y la imagen de Docker adelgaza. Va con el frontend
+**2.50.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones** y sin variables nuevas.
+- **Contrato: sin cambios incompatibles** (`oasdiff` sin errores). Los emails
+  ocultos viajan como `""` y el frontend ya los trata como «sin email». Orden
+  de siempre: backend, `/health`, frontend.
+- Tras desplegar, **comprobar en Sentry** que los eventos llegan bajo
+  `rydercup-backend@2.37.0` y que los eventos de auditoría con éxito ya no abren
+  issues.
+- Imagen nueva (`docker/Dockerfile` sin `postgresql-client`): si no arrancara,
+  Render mantiene la 2.36.0.
+- Ejecutar `scripts/purge_terms_acceptances.py` contra PRO, como en cada
+  release.
+
+### Changed
+
+- **Las solicitudes de inscripción pendientes se rechazan al empezar la
+  competición** (#624), por cualquiera de los cuatro caminos: inicio manual,
+  primer hoyo de una partida, primer hoyo de un partido y corrección de un hoyo
+  por el organizador. Cerrar la inscripción o nombrar capitanes no las toca: el
+  organizador aún puede aprobarlas.
+- **Los eventos de auditoría con éxito se registran en INFO** y dejan de abrir
+  issues en Sentry; los fallos van como mucho a WARNING y solo los críticos
+  llegan a Sentry (#229).
+- **Imagen de Docker más ligera**: sin `postgresql-client`, con
+  `apt-get upgrade`, `netcat-openbsd` sin recomendados y pip al día (#308).
+  Trivy: HIGH del sistema 56 → 49, CRITICAL de Python 1 → 0; 109 → 88 paquetes.
+- **Dependencias al día** (#604, #605, #606, #608, #609, #610): SQLAlchemy
+  2.1.4 → 2.1.5, asyncpg 0.31.0 → 0.32.0, starlette 1.7.0 → 1.8.0, numpy
+  2.4.4 → 2.5.4 y tzdata 2026.4 → 2026.5. En desarrollo: pip-tools ≥ 7.6.2.
+
+### Fixed
+
+- **Sentry recibe la versión real del backend** (#621): la release salía fija
+  como `rydercup-backend@1.8.0`; ahora es `rydercup-backend@<APP_VERSION>`, la
+  misma fuente que `/health`, y aparece en el log de arranque.
+- **Carreras con las solicitudes de inscripción** (#624): aprobar o rechazar
+  relee la inscripción con bloqueo (`find_by_id_for_update`) tras bloquear la
+  competición, y pedir plaza bloquea la competición, así que una solicitud
+  rechazada al empezar no puede aprobarse ni colarse después. Orden de bloqueo:
+  competición → inscripción.
+- `?status` del listado de inscripciones se valida en FastAPI: un valor
+  desconocido da 422 en vez de un `ValueError` convertido en 400 (#623).
+
+### Security
+
+- **Emails de otros jugadores** (#531):
+  - `GET /competitions/{id}/enrollments`: el organizador y los administradores
+    ven todas las filas con email; el resto, solo las aprobadas y la suya
+    propia, y solo su propio email.
+  - `GET /users/{id}/profile`: el email solo se devuelve a su dueño (los amigos
+    ya no lo reciben).
+  - `GET /users/search`: el email solo vuelve si se buscó por ese email exacto
+    o si el usuario encontrado es uno mismo.
+- **Sin trazas de excepciones en las respuestas** (#562, CodeQL
+  `py/stack-trace-exposure`): las cinco respuestas que devolvían `str(error)`
+  dan un texto fijo por código, definido una vez en el dominio. Códigos y forma
+  de las respuestas sin cambios; los nombres de jugadores van solo en `players`
+  y las reglas de la contraseña pierden «(actualmente: N)».
+- **Pillow 12.3.0 → 13.0.0** (#607), que corrige 8 CVEs.
+
+### Removed
+
+- El camino `include_email` y `CreatorDTO.email`, que nunca se activaron: el
+  email del organizador ya no puede enviarse (#623).
+- La variante sin filtrar de `ListEnrollmentsUseCase.execute()`, sin uso: el
+  listado exige siempre saber quién lo pide (#623).
+
 ## [2.36.0] - 2026-10-20
 
 **Aceptación de los Términos y cambios legales.** Tras la auditoría legal del
