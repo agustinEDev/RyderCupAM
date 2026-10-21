@@ -97,6 +97,7 @@ from src.modules.competition.application.use_cases.name_vice_captain_use_case im
     NotCaptainOrCreatorError,
 )
 from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
+    MARGEN,
     AnularProgramacionUseCase,
     ProgramarActualizacionUseCase,
 )
@@ -123,7 +124,10 @@ from src.modules.competition.domain.entities.competition import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
+from src.modules.competition.domain.services.ventana_de_actualizacion import (
+    CodigoDeVentana,
+    VentanaDeActualizacion,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
     CaptainOnWrongTeamError,
@@ -133,6 +137,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 
 # Aliases for shared exceptions
 CompleteNotFoundError = CompetitionNotFoundError
@@ -621,23 +626,30 @@ async def fill_captain(
 
 def respuesta_sin_franja(error: PlayersWithoutTeeWindowError) -> JSONResponse:
     """Stableford o Medal con aprobados sin franja (#251): 400 con la lista."""
-    return respuesta_con_jugadores(error, "PLAYERS_WITHOUT_TEE_WINDOW", error.players)
+    return respuesta_con_jugadores("PLAYERS_WITHOUT_TEE_WINDOW", error.players)
 
 
-def respuesta_con_jugadores(error: Exception, codigo: str, jugadores) -> JSONResponse:
+# Genérico por código: los nombres van solo en `players`, que la pantalla pinta
+# (CodeQL, BE #562). Antes el detail era el mensaje de la excepción, con ellos
+_DETALLE_CON_JUGADORES: dict[str, str] = {
+    "PLAYERS_WITHOUT_TEE": "Hay jugadores sin barra asignada.",
+    "PLAYERS_WITHOUT_HANDICAP": "Hay jugadores sin hándicap.",
+    "PLAYERS_WITHOUT_TEE_WINDOW": "Hay jugadores sin franja.",
+}
+
+
+def respuesta_con_jugadores(codigo: str, jugadores) -> JSONResponse:
     """El formato de «jugadores sin barras»: `error_code` en la raíz y la lista."""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={
-            "detail": str(error),
-            "error_code": codigo,
-            "players": [
-                BlockedPlayerDTO(
-                    user_id=p.user_id.value, name=p.name, missing=p.missing, tee_color=p.tee_color
-                ).model_dump(mode="json")
-                for p in jugadores
-            ],
-        },
+    return respuesta_con_codigo(
+        status.HTTP_400_BAD_REQUEST,
+        _DETALLE_CON_JUGADORES,
+        codigo,
+        players=[
+            BlockedPlayerDTO(
+                user_id=p.user_id.value, name=p.name, missing=p.missing, tee_color=p.tee_color
+            ).model_dump(mode="json")
+            for p in jugadores
+        ],
     )
 
 
@@ -648,7 +660,7 @@ def respuesta_sin_handicap(error: PlayersWithoutHandicapError) -> JSONResponse:
     En el mismo formato que «jugadores sin barras»: claves y no frases (24 sep),
     `error_code` en la raíz y `detail` para quien aún no lo lee.
     """
-    return respuesta_con_jugadores(error, "PLAYERS_WITHOUT_HANDICAP", error.players)
+    return respuesta_con_jugadores("PLAYERS_WITHOUT_HANDICAP", error.players)
 
 
 # ======================================================================================
@@ -762,7 +774,7 @@ async def schedule_handicap_update(
     except NotCompetitionCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ActualizacionNoPermitidaError as e:
-        return _no_permitida(e)
+        return _no_permitida(e, al_programar=True)
     except RefrescoDesactivadoError as e:
         return _conflicto(e)
     return ScheduledHandicapUpdateDTO(run_at=para)
@@ -794,15 +806,45 @@ async def cancel_scheduled_handicap_update(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
-def _no_permitida(error: ActualizacionNoPermitidaError) -> JSONResponse:
+# El texto de cada motivo, fijo y no el de la excepción (CodeQL, BE #562). Los
+# de la ventana son los de VentanaDeActualizacion; RUNNING, exacto: lo simula un
+# test del frontend
+_MOTIVOS_DE_LA_VENTANA: dict[str, str] = {
+    CodigoDeVentana.STATUS: VentanaDeActualizacion.MOTIVO_ESTADO,
+    CodigoDeVentana.NO_WINDOWS: "Sin franjas, se actualizan hasta iniciar la competición.",
+    CodigoDeVentana.RYDER: "En una Ryder se actualizan hasta iniciar la competición.",
+    CodigoDeVentana.DAY_IN_PLAY: "Hay una jornada en marcha: se podrá al acabar el día.",
+    CodigoDeVentana.NO_DAYS_LEFT: "Ya no quedan jornadas por jugar.",
+    CodigoDeVentana.TOO_CLOSE: (
+        "Queda muy poco para la siguiente salida: no daría tiempo a preguntar por todos."
+    ),
+    CodigoDeVentana.NO_TIMEZONE: "El campo de la franja no tiene zona horaria.",
+}
+_MOTIVOS_SIN_VENTANA: dict[str, str] = {
+    CodigoDeVentana.IN_THE_PAST: "Prográmala para un momento en el futuro.",
+    CodigoDeVentana.TOO_TIGHT: (
+        f"Demasiado justo: prográmala con al menos {int(MARGEN.total_seconds() // 60)} "
+        "minutos de margen antes de que se cierre la ventana."
+    ),
+    CodigoDeVentana.DISABLED: "La actualización con la RFEG solo está encendida en producción.",
+    CodigoDeVentana.RUNNING: "Ya se están actualizando los hándicaps.",
+}
+_DETALLE_AL_ACTUALIZAR = {**_MOTIVOS_DE_LA_VENTANA, **_MOTIVOS_SIN_VENTANA}
+# Al programar, la ventana se mira a la hora pedida
+_DETALLE_AL_PROGRAMAR = {
+    **{c: f"A esa hora no se podría: {t}" for c, t in _MOTIVOS_DE_LA_VENTANA.items()},
+    **_MOTIVOS_SIN_VENTANA,
+}
+
+
+def _no_permitida(error: ActualizacionNoPermitidaError, al_programar: bool = False) -> JSONResponse:
     """El 400 con el motivo como código, para decirlo en el idioma de la app (#541)."""
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={
-            "detail": str(error),
-            "error_code": "HANDICAP_UPDATE_NOT_ALLOWED",
-            "reason_code": error.codigo,
-        },
+    return respuesta_con_codigo(
+        status.HTTP_400_BAD_REQUEST,
+        _DETALLE_AL_PROGRAMAR if al_programar else _DETALLE_AL_ACTUALIZAR,
+        error.codigo,
+        error_code="HANDICAP_UPDATE_NOT_ALLOWED",
+        reason_code=error.codigo,
     )
 
 
@@ -813,11 +855,10 @@ def _conflicto(error: Exception) -> JSONResponse:
         if isinstance(error, ActualizacionEnCursoError)
         else CodigoDeVentana.DISABLED
     )
-    return JSONResponse(
-        status_code=status.HTTP_409_CONFLICT,
-        content={
-            "detail": str(error),
-            "error_code": "HANDICAP_UPDATE_NOT_ALLOWED",
-            "reason_code": codigo,
-        },
+    return respuesta_con_codigo(
+        status.HTTP_409_CONFLICT,
+        _DETALLE_AL_ACTUALIZAR,
+        codigo,
+        error_code="HANDICAP_UPDATE_NOT_ALLOWED",
+        reason_code=codigo,
     )
