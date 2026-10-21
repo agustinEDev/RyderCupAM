@@ -61,6 +61,17 @@ class SecurityAuditEvent(DomainEvent, ABC):
         """Tipo de agregado (Security para eventos de seguridad)"""
         return "Security"
 
+    @property
+    def is_failure(self) -> bool:
+        """
+        Si el evento cuenta que algo salió mal (BE #229).
+
+        Es otro eje que la severidad: un cambio de contraseña es HIGH para la
+        auditoría y no es un fallo. Por defecto, éxito; cada evento que puede
+        fallar lo redefine. No entra en to_dict: el registro no cambia.
+        """
+        return False
+
     def to_dict(self) -> dict[str, Any]:
         """
         Serializa el evento a diccionario para logging.
@@ -126,6 +137,11 @@ class LoginAttemptEvent(SecurityAuditEvent):
         else:
             # Login exitoso es MEDIUM (evento normal)
             object.__setattr__(self, "severity", SecuritySeverity.MEDIUM)
+
+    @property
+    def is_failure(self) -> bool:
+        """Fallo cuando no tuvo éxito"""
+        return not self.success
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa con campos específicos del evento"""
@@ -272,6 +288,11 @@ class RefreshTokenRevokedEvent(SecurityAuditEvent):
         else:
             object.__setattr__(self, "severity", SecuritySeverity.LOW)
 
+    @property
+    def is_failure(self) -> bool:
+        """Solo la revocación por brecha es un fallo; logout, inactividad y cambio de contraseña son normales"""
+        return self.reason == "security_breach"
+
     def to_dict(self) -> dict[str, Any]:
         """Serializa con campos específicos del evento"""
         base = super().to_dict()
@@ -390,6 +411,11 @@ class AccessDeniedEvent(SecurityAuditEvent):
         # Acceso denegado es HIGH (posible intento malicioso)
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
 
+    @property
+    def is_failure(self) -> bool:
+        """Un acceso denegado siempre es un fallo"""
+        return True
+
     def to_dict(self) -> dict[str, Any]:
         """Serializa con campos específicos del evento"""
         base = super().to_dict()
@@ -436,6 +462,11 @@ class RateLimitExceededEvent(SecurityAuditEvent):
 
         # Rate limit excedido es MEDIUM (puede ser uso legítimo intenso)
         object.__setattr__(self, "severity", SecuritySeverity.MEDIUM)
+
+    @property
+    def is_failure(self) -> bool:
+        """Superar el límite siempre es un fallo"""
+        return True
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa con campos específicos del evento"""
@@ -504,6 +535,11 @@ class PasswordResetRequestedAuditEvent(SecurityAuditEvent):
             object.__setattr__(self, "severity", SecuritySeverity.MEDIUM)
         else:
             object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    @property
+    def is_failure(self) -> bool:
+        """Fallo cuando no tuvo éxito"""
+        return not self.success
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa con campos específicos del evento"""
@@ -578,6 +614,11 @@ class PasswordResetCompletedAuditEvent(SecurityAuditEvent):
             object.__setattr__(self, "severity", SecuritySeverity.HIGH)
         else:
             object.__setattr__(self, "severity", SecuritySeverity.MEDIUM)
+
+    @property
+    def is_failure(self) -> bool:
+        """Fallo cuando no tuvo éxito"""
+        return not self.success
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa con campos específicos del evento"""

@@ -141,6 +141,10 @@ class TestUpdateSecurityUseCase:
             )
 
         assert error.value.error_code == "PASSWORD_REUSED"
+        # El texto, el del dominio: el mismo que da la ruta (BE #562)
+        from src.modules.user.domain.value_objects.password import MENSAJES_DE_LA_CONTRASENA
+
+        assert str(error.value) == MENSAJES_DE_LA_CONTRASENA["PASSWORD_REUSED"]
 
     async def test_update_password_only(self, uow, existing_user):
         """Debe actualizar solo el password cuando se proporciona."""

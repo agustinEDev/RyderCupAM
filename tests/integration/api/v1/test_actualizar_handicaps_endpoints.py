@@ -113,7 +113,8 @@ async def test_sin_zona_del_campo_no_se_sabe_cuando_sale_nadie(client: AsyncClie
     ficha = (await client.get(f"/api/v1/competitions/{competicion['id']}")).json()
 
     assert respuesta.status_code == 400, respuesta.text
-    assert "zona horaria" in respuesta.json()["detail"]
+    # Texto fijo por motivo, no el de la excepción (BE #562)
+    assert respuesta.json()["detail"] == "El campo de la franja no tiene zona horaria."
     # El código, para decirlo en el idioma de la app (#541)
     assert respuesta.json()["reason_code"] == "NO_TIMEZONE"
     assert ficha["handicap_update_window"]["open"] is False
@@ -202,3 +203,31 @@ async def test_programar_en_el_pasado_es_un_400_con_su_codigo(client: AsyncClien
     assert respuesta.status_code == 400, respuesta.text
     assert respuesta.json()["error_code"] == "HANDICAP_UPDATE_NOT_ALLOWED"
     assert respuesta.json()["reason_code"] == "IN_THE_PAST"
+    assert respuesta.json()["detail"] == "Prográmala para un momento en el futuro."
+
+
+async def test_programar_fuera_de_la_ventana_lo_dice_a_esa_hora(client: AsyncClient):
+    """
+    Given: Un Stableford cuyo campo no tiene zona horaria, y el refresco encendido
+    When: Se programa la actualización para el futuro
+    Then: 400 con el motivo de la ventana tras «A esa hora no se podría:», como
+          antes, pero con el texto fijo de su código (BE #562)
+    """
+    from main import app
+    from src.config.dependencies import get_lanzador_de_actualizaciones
+
+    _, competicion = await _cerrada(client, "STABLEFORD")
+    app.dependency_overrides[get_lanzador_de_actualizaciones] = _LanzadorQueApunta
+    try:
+        respuesta = await client.put(
+            f"{_url(competicion)}/schedule", json={"run_at": "2099-01-01T03:00:00Z"}
+        )
+    finally:
+        app.dependency_overrides.pop(get_lanzador_de_actualizaciones, None)
+
+    assert respuesta.status_code == 400, respuesta.text
+    assert respuesta.json() == {
+        "detail": "A esa hora no se podría: El campo de la franja no tiene zona horaria.",
+        "error_code": "HANDICAP_UPDATE_NOT_ALLOWED",
+        "reason_code": "NO_TIMEZONE",
+    }

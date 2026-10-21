@@ -71,6 +71,7 @@ from src.modules.competition.infrastructure.api.v1.competition_state_routes impo
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 
 router = APIRouter()
 
@@ -130,10 +131,7 @@ _DETALLE: dict[str, str] = {
 
 
 def _con_codigo(status_code: int, codigo: str) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content={"detail": _DETALLE.get(codigo, codigo), "error_code": codigo},
-    )
+    return respuesta_con_codigo(status_code, _DETALLE, codigo)
 
 
 def _respuesta(error: Exception) -> JSONResponse:
@@ -143,7 +141,7 @@ def _respuesta(error: Exception) -> JSONResponse:
         return _con_codigo(status.HTTP_400_BAD_REQUEST, error.codigo)
     for tipo, codigo in _CON_JUGADORES.items():
         if isinstance(error, tipo):
-            return respuesta_con_jugadores(error, codigo, error.players)
+            return respuesta_con_jugadores(codigo, error.players)
     for tipo, (status_code, codigo) in _CON_CODIGO.items():
         if isinstance(error, tipo):
             return _con_codigo(status_code, codigo)

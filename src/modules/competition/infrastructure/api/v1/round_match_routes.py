@@ -323,9 +323,9 @@ async def update_round(
         ) from e
     # Otro campo para una franja con partidas: alguien sin barras en él (#251)
     except JugadoresSinBarraError as e:
-        return respuesta_con_jugadores(e, "PLAYERS_WITHOUT_TEE", e.players)
+        return respuesta_con_jugadores("PLAYERS_WITHOUT_TEE", e.players)
     except JugadoresSinHandicapError as e:
-        return respuesta_con_jugadores(e, "PLAYERS_WITHOUT_HANDICAP", e.players)
+        return respuesta_con_jugadores("PLAYERS_WITHOUT_HANDICAP", e.players)
     except UpdateRoundNotCreatorError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

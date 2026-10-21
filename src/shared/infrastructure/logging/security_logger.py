@@ -179,8 +179,8 @@ class SecurityLogger:
         # Construir mensaje descriptivo
         message = self._build_message(event)
 
-        # Determinar nivel de logging según severity
-        log_level = self._severity_to_log_level(event.severity)
+        # Nivel según el resultado y la severidad: un éxito no es un error (BE #229)
+        log_level = self._log_level(event.severity, is_failure=event.is_failure)
 
         # Loggear con nivel apropiado
         self._logger.log(
@@ -240,19 +240,28 @@ class SecurityLogger:
         # Fallback genérico
         return f"🔐 {event_type} | {user_info} | Severity: {event.severity.value}"
 
-    def _severity_to_log_level(self, severity: SecuritySeverity) -> int:
+    @staticmethod
+    def _log_level(severity: SecuritySeverity, *, is_failure: bool) -> int:
         """
-        Convierte severity de seguridad a nivel de logging de Python.
+        Nivel de logging de un evento de seguridad (BE #229).
+
+        Sentry abre un issue con todo lo que llega a ERROR. La severidad sigue
+        en el registro de auditoría tal cual; el nivel sale del resultado:
+        - Éxito: INFO, sea cual sea la severidad.
+        - Fallo: WARNING como mucho (rastro, no issue), salvo CRITICAL.
 
         Args:
-            severity: Nivel de severidad del evento
+            severity: Severidad de auditoría del evento
+            is_failure: Si el evento cuenta que algo salió mal
 
         Returns:
-            Nivel de logging (logging.INFO, logging.WARNING, etc.)
+            Nivel de logging (logging.INFO, logging.WARNING o logging.CRITICAL)
         """
+        if not is_failure:
+            return logging.INFO
         mapping = {
             SecuritySeverity.CRITICAL: logging.CRITICAL,  # 50
-            SecuritySeverity.HIGH: logging.ERROR,  # 40
+            SecuritySeverity.HIGH: logging.WARNING,  # 30
             SecuritySeverity.MEDIUM: logging.WARNING,  # 30
             SecuritySeverity.LOW: logging.INFO,  # 20
         }
