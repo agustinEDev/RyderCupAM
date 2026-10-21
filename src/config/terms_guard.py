@@ -18,6 +18,7 @@ versión se le pide, acepte y pueda cerrar sesión. Completar el perfil NO está
 exento: el frontend acepta primero y luego guarda el perfil.
 """
 
+import logging
 import re
 
 from fastapi import Request, status
@@ -25,7 +26,16 @@ from fastapi.responses import JSONResponse
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 
+logger = logging.getLogger(__name__)
+
 TERMS_NOT_ACCEPTED = "TERMS_NOT_ACCEPTED"
+
+# Lo que pintan tal cual las PWA anteriores a la 2.49, que no conocen
+# /accept-terms: tiene que decir cómo llegar a la pantalla de aceptación
+TERMS_NOT_ACCEPTED_MESSAGE = (
+    "Tienes que aceptar los nuevos Términos de uso. "
+    "Cierra la app por completo y vuelve a abrirla para aceptarlos."
+)
 
 # (método, plantilla COMPLETA de la ruta) exentos. Una lista explícita y
 # cerrada: añadir una es una decisión, y tests/unit/config/test_terms_guard.py
@@ -66,7 +76,7 @@ class TermsNotAcceptedError(Exception):
 
     error_code = TERMS_NOT_ACCEPTED
 
-    def __init__(self, message: str = "Debes aceptar los Términos de uso vigentes para continuar."):
+    def __init__(self, message: str = TERMS_NOT_ACCEPTED_MESSAGE):
         super().__init__(message)
 
 
@@ -117,8 +127,13 @@ def require_current_terms(request: Request, user: UserResponseDTO) -> None:
     """
     if user.terms_accepted:
         return
-    if is_exempt_from_terms(request.method, request.scope["path"]):
+    path = request.scope["path"]
+    if is_exempt_from_terms(request.method, path):
         return
+    # Quién choca con la guarda y desde dónde, para verlo en Render. WARNING:
+    # el root no está configurado y un INFO de `src.*` no saldría; Sentry solo
+    # crea issues desde ERROR. Solo el id y la ruta ASGI (sin query string)
+    logger.warning("%s: user %s on %s %s", TERMS_NOT_ACCEPTED, user.id, request.method, path)
     raise TermsNotAcceptedError()
 
 

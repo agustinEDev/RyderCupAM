@@ -14,6 +14,7 @@ plantillas completas de las exentas.
 """
 
 import json
+import logging
 from collections.abc import Iterator
 from types import SimpleNamespace
 
@@ -30,6 +31,8 @@ from src.config.terms_guard import (
     require_current_terms,
     terms_not_accepted_handler,
 )
+
+USUARIO = "3f2b8c1e-9d4a-4e7b-8a2f-1c5d6e7f8a9b"
 
 DISPOSITIVO = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
 
@@ -68,7 +71,7 @@ def _request(method: str, path: str, root_path: str = "") -> Request:
 
 
 def _usuario(aceptado: bool) -> SimpleNamespace:
-    return SimpleNamespace(terms_accepted=aceptado)
+    return SimpleNamespace(id=USUARIO, terms_accepted=aceptado)
 
 
 def _routes(routes, prefix: str = "") -> Iterator[tuple[str, APIRoute]]:
@@ -258,6 +261,74 @@ class TestGuarda:
         require_current_terms(_request("PATCH", "/api/v1/users/profile"), _usuario(True))
 
 
+class TestRegistroDelBloqueo:
+    """
+    Cada bloqueo deja una línea WARNING (quién y dónde) en los logs de Render.
+
+    WARNING y no INFO: la app no configura el root (queda en WARNING sin
+    handlers), así que un INFO de `src.*` no saldría; y el LoggingIntegration
+    de Sentry solo crea eventos desde ERROR (un WARNING es solo breadcrumb).
+    """
+
+    def _registros(self, caplog) -> list[logging.LogRecord]:
+        return [r for r in caplog.records if r.name == "src.config.terms_guard"]
+
+    def test_block_is_logged_with_user_method_and_path(self, caplog):
+        """
+        Given: Un usuario sin la versión vigente aceptada
+        When: La guarda le rechaza una ruta (con query string)
+        Then: Una línea WARNING con su id, el método y la ruta, sin la query
+        """
+        caplog.set_level(logging.INFO, logger="src.config.terms_guard")
+        peticion = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/users/me/stats",
+                "root_path": "",
+                "headers": [],
+                "query_string": b"email=secreto@example.com",
+                "scheme": "http",
+                "server": ("testserver", 80),
+            }
+        )
+
+        with pytest.raises(TermsNotAcceptedError):
+            require_current_terms(peticion, _usuario(False))
+
+        registros = self._registros(caplog)
+        assert len(registros) == 1
+        registro = registros[0]
+        assert registro.levelno == logging.WARNING
+        mensaje = registro.getMessage()
+        assert USUARIO in mensaje
+        assert "GET /api/v1/users/me/stats" in mensaje
+        assert "TERMS_NOT_ACCEPTED" in mensaje
+        assert "secreto" not in mensaje
+        assert "?" not in mensaje
+
+    @pytest.mark.parametrize(("method", "path"), CONCRETAS)
+    def test_exempt_route_is_not_logged(self, caplog, method, path):
+        """
+        Given: Un usuario sin la versión vigente aceptada
+        When: Llama a una ruta exenta
+        Then: No se registra nada
+        """
+        caplog.set_level(logging.DEBUG, logger="src.config.terms_guard")
+        require_current_terms(_request(method, path), _usuario(False))
+        assert self._registros(caplog) == []
+
+    def test_accepted_user_is_not_logged(self, caplog):
+        """
+        Given: Un usuario con la versión vigente aceptada
+        When: Llama a una ruta con sesión
+        Then: No se registra nada
+        """
+        caplog.set_level(logging.DEBUG, logger="src.config.terms_guard")
+        require_current_terms(_request("GET", "/api/v1/users/me/stats"), _usuario(True))
+        assert self._registros(caplog) == []
+
+
 class TestRespuesta:
     @pytest.mark.asyncio
     async def test_handler_returns_403_with_error_code(self):
@@ -273,7 +344,13 @@ class TestRespuesta:
         assert respuesta.status_code == 403
         cuerpo = json.loads(respuesta.body)
         assert cuerpo["error_code"] == "TERMS_NOT_ACCEPTED"
-        assert isinstance(cuerpo["detail"], str) and cuerpo["detail"]
+        # Las PWA anteriores a la 2.49 no conocen /accept-terms y pintan el
+        # `detail` tal cual: tiene que decirles qué hacer
+        assert cuerpo["detail"] == (
+            "Tienes que aceptar los nuevos Términos de uso. "
+            "Cierra la app por completo y vuelve a abrirla para aceptarlos."
+        )
+        assert set(cuerpo) == {"detail", "error_code"}
 
     def test_handler_is_registered_in_the_app(self):
         """
