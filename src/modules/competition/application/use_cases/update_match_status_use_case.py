@@ -10,6 +10,10 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -42,15 +46,21 @@ class UpdateMatchStatusUseCase:
     La competicion debe estar IN_PROGRESS.
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
         self._uow = uow
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: UpdateMatchStatusRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateMatchStatusResponseDTO:
         async with self._uow:
             # 1-4. Validaciones
-            match, round_entity = await self._validate(request, user_id, is_admin)
+            match, round_entity, competition = await self._validate(request, user_id, is_admin)
 
             # 5. Ejecutar accion
             if request.action == "START":
@@ -63,6 +73,10 @@ class UpdateMatchStatusUseCase:
             if round_status_changed:
                 await self._uow.rounds.update(round_entity)
             await self._uow.matches.update(match)
+
+        # Cerrado y guardado: a cada jugador, su resultado en Actividad (BE-2)
+        if request.action == "COMPLETE":
+            await self._actividad.match_finished(competition, round_entity, match)
 
         return UpdateMatchStatusResponseDTO(
             match_id=match.id.value,
@@ -99,7 +113,7 @@ class UpdateMatchStatusUseCase:
                 f"La competicion debe estar IN_PROGRESS. Estado: {competition.status.value}"
             )
 
-        return match, round_entity
+        return match, round_entity, competition
 
     async def _handle_start(self, match, round_entity):
         """Ejecuta START: match.start() + pre-create HoleScores + auto-start round.

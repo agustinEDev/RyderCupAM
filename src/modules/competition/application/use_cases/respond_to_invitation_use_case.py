@@ -9,6 +9,10 @@ from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
     NotInviteeError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
@@ -18,6 +22,7 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -48,9 +53,12 @@ class RespondToInvitationUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._user_uow = user_uow
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(self, request: RespondInvitationRequestDTO) -> RespondInvitationResponseDTO:
         invitation_id = InvitationId(request.invitation_id)
@@ -108,6 +116,7 @@ class RespondToInvitationUseCase:
         # Fase 2: Procesar la respuesta
         enrollment_id = None
         competition_name = None
+        inscrito: tuple[Competition, Enrollment] | None = None
 
         async with self._uow:
             # Re-fetch para tener la entidad en la sesion actual
@@ -127,14 +136,24 @@ class RespondToInvitationUseCase:
 
             # Ejecutar accion
             if action == "ACCEPT":
-                enrollment_id, competition_name = await self._handle_accept(
-                    invitation, current_user_id
-                )
+                inscrito = await self._handle_accept(invitation, current_user_id)
+                competition, enrollment = inscrito
+                enrollment_id, competition_name = enrollment.id.value, str(competition.name)
             else:
                 await self._handle_decline(invitation)
 
+        await self._avisar_si_entro(inscrito)
+
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
+
+    async def _avisar_si_entro(self, inscrito: tuple[Competition, Enrollment] | None) -> None:
+        """
+        Ya guardada, a Actividad: entrar por invitación no es una solicitud
+        aceptada; sus amigos lo ven si el torneo es público (BE-2).
+        """
+        if inscrito is not None:
+            await self._actividad.enrolled(*inscrito, accepted_request=False)
 
     async def _releer_pendiente(
         self, invitation_id: InvitationId, bloqueada: bool = False
@@ -168,8 +187,10 @@ class RespondToInvitationUseCase:
         competition = await self._uow.competitions.find_by_id(invitation.competition_id)
         return competition is not None and competition.status in INSCRIPCION_CERRADA
 
-    async def _handle_accept(self, invitation, current_user_id: UserId):
-        """Procesa la aceptacion de una invitacion. Retorna (enrollment_id, competition_name)."""
+    async def _handle_accept(
+        self, invitation, current_user_id: UserId
+    ) -> tuple[Competition, Enrollment]:
+        """Procesa la aceptacion de una invitacion. Retorna la competicion y la inscripcion."""
         # Con la fila bloqueada: si se cierra a la vez, uno espera al otro y aquí
         # se lee el estado de verdad, no un «abierta» de antes del cierre (#710)
         competition = await self._uow.competitions.find_by_id_for_update(invitation.competition_id)
@@ -216,7 +237,7 @@ class RespondToInvitationUseCase:
             self._uow, invitation.competition_id, approved_count, competition.max_players
         )
 
-        return enrollment.id.value, str(competition.name)
+        return competition, enrollment
 
     async def _handle_decline(self, invitation):
         """Procesa el rechazo de una invitacion."""

@@ -14,6 +14,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -42,8 +46,14 @@ class RevertCompetitionToInProgressUseCase:
     5. Commit de la transacción
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
         self._uow = uow
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -86,7 +96,11 @@ class RevertCompetitionToInProgressUseCase:
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
 
-        # 5. Retornar DTO de respuesta
+        # 5. Ya guardada: su clasificacion final deja de valer en Actividad; al
+        #    volver a cerrarla sale la nueva (BE-2)
+        await self._actividad.reopened(competition.id)
+
+        # 6. Retornar DTO de respuesta
         return RevertCompetitionToInProgressResponseDTO(
             id=competition.id.value,
             status=competition.status.value,

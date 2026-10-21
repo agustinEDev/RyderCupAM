@@ -10,6 +10,7 @@ una partida o de un partido, y el primer hoyo que corrige el organizador en una
 partida—, y los cuatro llaman a esta regla.
 """
 
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -19,13 +20,18 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 
 async def rechazar_las_solicitudes_pendientes(
     uow: CompetitionUnitOfWorkInterface, competition_id: CompetitionId
-) -> None:
-    """Rechaza las solicitudes pendientes de la competición.
+) -> list[Enrollment]:
+    """Rechaza las solicitudes pendientes de la competición y las devuelve.
 
-    Sin aviso, como las invitaciones sin plaza. Las demás inscripciones, intactas.
+    Sin correo, como las invitaciones sin plaza. Las demás inscripciones,
+    intactas. Quien la llama avisa en Actividad («se cerró sin plaza», BE-2)
+    con las que devuelve, ya guardado: aquí se está dentro de su transacción.
     """
+    rechazadas = []
     for solicitud in await uow.enrollments.find_by_competition_and_status(
         competition_id, EnrollmentStatus.REQUESTED
     ):
         solicitud.reject()
         await uow.enrollments.update(solicitud)
+        rechazadas.append(solicitud)
+    return rechazadas

@@ -14,6 +14,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -46,14 +50,20 @@ class CancelCompetitionUseCase:
     5. Commit de la transacción
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
         """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: CancelCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -97,6 +107,9 @@ class CancelCompetitionUseCase:
 
             # 4. Persistir cambios
             await self._uow.competitions.update(competition)
+
+        # 5. Ya guardada: nadie sigue apuntado a ella en Actividad (BE-2)
+        await self._actividad.cancelled(competition.id)
 
         # 6. Retornar DTO de respuesta
         return CancelCompetitionResponseDTO(

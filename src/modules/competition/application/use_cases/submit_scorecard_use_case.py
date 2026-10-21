@@ -13,6 +13,10 @@ from src.modules.competition.application.exceptions import (
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -32,9 +36,12 @@ class SubmitScorecardUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         scoring_service: ScoringService,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._scoring_service = scoring_service
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -82,6 +89,7 @@ class SubmitScorecardUseCase:
 
             match_complete = False
             points = {"team_a": 0.0, "team_b": 0.0}
+            competition = None
 
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
@@ -107,6 +115,9 @@ class SubmitScorecardUseCase:
                     result_data, match.status.value
                 )
 
+                # La competicion, para avisar del resultado en Actividad (BE-2)
+                competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+
                 # Auto-complete round
                 all_matches = await self._uow.matches.find_by_round(match.round_id)
                 all_finished = all(m.is_finished() for m in all_matches)
@@ -115,6 +126,8 @@ class SubmitScorecardUseCase:
                     await self._uow.rounds.update(round_entity)
 
             await self._uow.matches.update(match)
+
+        await self._avisar_del_resultado(competition, round_entity, match)
 
         # Calculate player stats using hole results
         player_team = match.get_player_team(user_id) or "A"
@@ -132,6 +145,15 @@ class SubmitScorecardUseCase:
             stats=stats,
             match_complete=match_complete,
         )
+
+    async def _avisar_del_resultado(self, competition, round_entity, match) -> None:
+        """
+        Con la ultima tarjeta el partido queda cerrado: a cada jugador, su
+        resultado en Actividad, ya guardado (BE-2). Solo se lee la competicion
+        al cerrarlo, asi que sin ella no hay nada que contar.
+        """
+        if competition is not None:
+            await self._actividad.match_finished(competition, round_entity, match)
 
     @staticmethod
     def _comprueba_que_todo_esta_validado(player_scores) -> None:

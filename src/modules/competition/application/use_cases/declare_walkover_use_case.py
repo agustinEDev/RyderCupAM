@@ -8,6 +8,10 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -37,8 +41,14 @@ class DeclareWalkoverUseCase:
     La competicion debe estar IN_PROGRESS.
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
         self._uow = uow
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: DeclareWalkoverRequestDTO, user_id: UserId, is_admin: bool = False
@@ -86,6 +96,9 @@ class DeclareWalkoverUseCase:
                 round_entity.complete()
                 await self._uow.rounds.update(round_entity)
                 round_status_changed = round_entity.status.value
+
+        # Ya guardado: a cada jugador, su resultado en Actividad (BE-2)
+        await self._actividad.match_finished(competition, round_entity, match)
 
         return DeclareWalkoverResponseDTO(
             match_id=match.id.value,

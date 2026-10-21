@@ -29,7 +29,11 @@ from src.modules.competition.application.exceptions import (
     PartidaNotFoundError,
     ScoringNotOpenYetError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
 )
@@ -40,6 +44,7 @@ from src.modules.competition.application.services.vista_de_la_franja import (
     primera_salida_en_el_campo,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.golpe_de_partida import (
     PRIMER_HOYO,
     ULTIMO_HOYO,
@@ -131,8 +136,13 @@ async def comprobar_que_abrio_la_franja(
 
 async def arrancar_la_competicion(
     uow: CompetitionUnitOfWorkInterface, competicion: Competition
-) -> None:
-    """La competición en juego con su fila bloqueada (como la Ryder, BE #375)."""
+) -> list[Enrollment]:
+    """
+    La competición en juego con su fila bloqueada (como la Ryder, BE #375).
+
+    Devuelve las solicitudes que se rechazaron al empezar, para que quien llama
+    avise en Actividad cuando haya guardado (BE-2).
+    """
     bloqueada = await uow.competitions.find_by_id_for_update(competicion.id)
     if bloqueada is None or bloqueada.status not in _ANOTABLE:
         raise PartidaNoAnotableError("Esta competición no está en juego.")
@@ -140,7 +150,8 @@ async def arrancar_la_competicion(
         bloqueada.start()
         await uow.competitions.update(bloqueada)
         # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes
-        await rechazar_las_solicitudes_pendientes(uow, bloqueada.id)
+        return await rechazar_las_solicitudes_pendientes(uow, bloqueada.id)
+    return []
 
 
 class AnotarHoyoDePartidaUseCase:
@@ -151,10 +162,13 @@ class AnotarHoyoDePartidaUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, group_id: UUID, hoyo: int, body: SubmitHoleScoreBodyDTO, quien: UserId
@@ -174,6 +188,7 @@ class AnotarHoyoDePartidaUseCase:
         llegada = self._reloj()
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
             raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
+        cerradas: list[Enrollment] = []
         async with self._uow:
             partida = await self._uow.partidas.find_by_id(PartidaId(group_id))
             if partida is None:
@@ -192,7 +207,7 @@ class AnotarHoyoDePartidaUseCase:
             # Primero la competición, después la partida: el mismo orden que el
             # resto de lo que toca partidas, y solo en el primer golpe
             if competicion.status == CompetitionStatus.CLOSED:
-                await arrancar_la_competicion(self._uow, competicion)
+                cerradas = await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await self._uow.partidas.find_by_id_for_update(partida.id)
             if bloqueada is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
@@ -204,6 +219,9 @@ class AnotarHoyoDePartidaUseCase:
                 await self._uow.partidas.guardar([bloqueada])
 
             await self._apuntar(bloqueada, competicion, hoyo, body, quien, marcado, llegada)
+
+        # Si el golpe la arrancó, ya guardado: «tu solicitud se cerró sin plaza»
+        await self._actividad.requests_closed(competicion, cerradas)
 
     @staticmethod
     def _comprobar_quien(
