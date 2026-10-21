@@ -9,6 +9,13 @@ su propio botón.
 **Hecha para clientes de correo, no para navegadores.** Tablas y estilos en
 línea: Gmail borra los bloques <style>, y Outlook no entiende flex ni grid.
 
+**Siempre en claro, también en el modo oscuro de Mail (iOS).** El aviso del
+21 oct 2026 llegó allí sin la cabecera verde y con el botón invisible: el
+fondo puesto solo por CSS se perdía. Por eso la cabeza pide modo claro, cada
+fondo va también en el atributo `bgcolor` y los botones son de tabla: el
+color lo pone la celda y el enlace solo es texto, con su color repetido en un
+<span>.
+
 **Nada del usuario entra como HTML.** Cada pieza escapa el texto que recibe;
 solo `Html` —lo que la propia plantilla ya ha construido— pasa tal cual. Así
 un nombre con «&» o un mensaje con «<script>» no pueden romper el correo ni
@@ -71,7 +78,7 @@ def recuadro(titulo: str, *lineas: str) -> Html:
     return Html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="margin:0 0 14px;border-collapse:separate;">'
-        '<tr><td style="background:#f0faf3;border:1px solid #bbe5c8;border-radius:10px;'
+        '<tr><td bgcolor="#f0faf3" style="background:#f0faf3;border:1px solid #bbe5c8;border-radius:10px;'
         'padding:14px 16px;">'
         f'<div style="font-family:{_LETRA_TITULO};font-size:17px;font-weight:700;'
         f'line-height:1.3;color:{VERDE_OSCURO};">{_seguro(titulo)}</div>'
@@ -83,7 +90,7 @@ def cita(texto: str, autor: str) -> Html:
     """El mensaje personal de quien invita."""
     return Html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" data-cita '
-        'style="margin:0 0 14px;"><tr><td style="background:#f6f7f6;border-radius:10px;'
+        'style="margin:0 0 14px;"><tr><td bgcolor="#f6f7f6" style="background:#f6f7f6;border-radius:10px;'
         'padding:12px 16px;">'
         f'<div style="font-family:{_LETRA};font-size:14px;font-style:italic;line-height:1.55;'
         f'color:{TEXTO};">«{_seguro(texto)}»</div>'
@@ -96,30 +103,39 @@ def aviso(*partes: str) -> Html:
     """Algo que requiere atención —«¿no has sido tú?»—, en ámbar."""
     return Html(
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="margin:0 0 14px;"><tr><td style="background:#fff7ed;border:1px solid #fed7aa;'
+        'style="margin:0 0 14px;"><tr><td bgcolor="#fff7ed" style="background:#fff7ed;border:1px solid #fed7aa;'
         f"border-radius:10px;padding:12px 16px;font-family:{_LETRA};font-size:14px;"
         f'line-height:1.55;color:#7c2d12;">{frase(*partes)}</td></tr></table>'
     )
 
 
 def _boton(boton: Boton, principal: bool) -> str:
+    """
+    Botón «a prueba de balas»: el color lo pone la celda (`bgcolor` y estilo)
+    y el enlace solo es texto, con su color también en un <span>. Un <a> con
+    fondo propio desaparecía en el modo oscuro de Mail.
+    """
     if principal:
-        estilo = (
-            f"background:{VERDE};color:#ffffff;border:2px solid {VERDE};"
-            "font-size:15px;padding:13px 18px;"
-        )
+        fondo, letra, borde, tamano, relleno = VERDE, "#ffffff", "", "16px", "14px 0"
     else:
-        estilo = (
-            f"background:#ffffff;color:{VERDE};border:2px solid {VERDE};"
-            "font-size:14px;padding:10px 16px;"
+        fondo, letra, borde, tamano, relleno = (
+            "#ffffff",
+            VERDE,
+            f"border:2px solid {VERDE};",
+            "15px",
+            "11px 0",
         )
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="margin:4px 0 14px;"><tr><td align="center">'
-        f'<a data-boton href="{_html.escape(boton.enlace, quote=True)}" '
-        f'style="display:block;{estilo}border-radius:10px;font-family:{_LETRA};'
-        f'font-weight:700;text-align:center;text-decoration:none;">'
-        f"{_seguro(boton.texto)}</a></td></tr></table>"
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+        f'<td align="center" bgcolor="{fondo}" style="background:{fondo};{borde}'
+        'border-radius:10px;">'
+        f'<a data-boton href="{_html.escape(boton.enlace, quote=True)}" target="_blank" '
+        f'style="display:inline-block;width:100%;padding:{relleno};font-family:{_LETRA};'
+        f'font-size:{tamano};font-weight:700;color:{letra};text-decoration:none;">'
+        f'<span style="color:{letra};">{_seguro(boton.texto)}</span></a>'
+        "</td></tr></table></td></tr></table>"
     )
 
 
@@ -181,18 +197,20 @@ def correo(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<style>:root{{color-scheme:light only;supported-color-schemes:light only;}}</style>
 <title>{_seguro(titulo)}</title>
 </head>
-<body style="margin:0;padding:0;background:{FONDO};">
+<body bgcolor="{FONDO}" style="margin:0;padding:0;background:{FONDO};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{_seguro(resumen)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{FONDO};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="{FONDO}" style="background:{FONDO};">
 <tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;">
-<tr><td style="background:{VERDE};padding:18px 24px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;">
+<tr><td bgcolor="{VERDE}" style="background:{VERDE};padding:18px 24px;">
 <table role="presentation" cellpadding="0" cellspacing="0"><tr>
 <td style="padding-right:12px;"><img src="{logo}" width="40" alt="RCF" style="display:block;width:40px;height:auto;border:0;"></td>
-<td style="font-family:{_LETRA_TITULO};font-size:17px;font-weight:700;color:#ffffff;">RyderCupFriends</td>
+<td style="font-family:{_LETRA_TITULO};font-size:17px;font-weight:700;color:#ffffff;"><span style="color:#ffffff;">RyderCupFriends</span></td>
 </tr></table>
 </td></tr>
 <tr><td style="padding:28px 24px 4px;">
@@ -210,7 +228,7 @@ def correo(
 {_boton(ingles.boton, principal=False)}
 </td></tr></table>
 </td></tr>
-<tr><td style="background:#f8faf8;border-top:1px solid #eef1ee;padding:18px 24px 22px;font-family:{_LETRA};font-size:12px;line-height:1.5;color:{APAGADO};">
+<tr><td bgcolor="#f8faf8" style="background:#f8faf8;border-top:1px solid #eef1ee;padding:18px 24px 22px;font-family:{_LETRA};font-size:12px;line-height:1.5;color:{APAGADO};">
 {_seguro(pie)}<br>© {anio} RyderCupFriends
 </td></tr>
 </table>

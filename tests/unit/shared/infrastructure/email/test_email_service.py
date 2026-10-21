@@ -8,7 +8,9 @@ HTML no depende de un <style> que Gmail borra.
 """
 
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
 from unittest.mock import MagicMock
 
 import pytest
@@ -63,6 +65,13 @@ async def _los_cinco(servicio):
     htmls["invitacion"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
 
+    # Sin cuenta y con mensaje: el botón secundario de registrarse y la cita
+    await servicio.send_invitation_email(
+        "a@b.com", None, "Pablo", "Copa", "¡Vente!", datetime.now(UTC) + timedelta(days=7)
+    )
+    htmls["invitacion_sin_cuenta"] = _enviado(servicio)[3]
+    servicio._send_email.reset_mock()
+
     await servicio.send_friend_request_email("a@b.com", "Ana", "Pablo")
     htmls["amistad"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
@@ -87,7 +96,8 @@ class TestEveryEmailWearsTheAppsBranding:
         for nombre, cuerpo in (await _los_cinco(correo)).items():
             # El monograma blanco, sobre la cabecera verde de la app
             cabecera = re.search(
-                r'<td style="background:(#[0-9a-f]{6});[^"]*">\s*<table[^>]*><tr>\s*'
+                r'<td bgcolor="#[0-9a-f]{6}" style="background:(#[0-9a-f]{6});[^"]*">\s*'
+                r"<table[^>]*><tr>\s*"
                 r'<td[^>]*><img src="([^"]+)"',
                 cuerpo,
             )
@@ -97,9 +107,11 @@ class TestEveryEmailWearsTheAppsBranding:
 
     @pytest.mark.asyncio
     async def test_no_email_depends_on_a_style_block(self, correo):
-        # Gmail borra los <style>: todo va en línea
+        # Gmail borra los <style>: todo va en línea. El único es el del modo
+        # claro para Apple Mail, que sin él solo pierde ese refuerzo
         for nombre, cuerpo in (await _los_cinco(correo)).items():
-            assert "<style" not in cuerpo, nombre
+            assert cuerpo.count("<style") == 1, nombre
+            assert "<style>:root{color-scheme:light only;" in cuerpo, nombre
 
     @pytest.mark.asyncio
     async def test_the_footer_says_the_current_year(self, correo):
@@ -125,6 +137,196 @@ class TestEveryEmailRepeatsItsLink:
             principal = _botones(cuerpo)[0]
             assert "¿No funciona el botón?" in cuerpo, nombre
             assert f">{principal}</a>" in cuerpo, nombre
+
+
+@dataclass
+class _Nodo:
+    etiqueta: str
+    attrs: dict[str, str]
+    padre: "_Nodo | None" = None
+    hijos: list["_Nodo"] = field(default_factory=list)
+    texto: str = ""
+
+    @property
+    def estilo(self) -> str:
+        return self.attrs.get("style") or ""
+
+    def todos(self):
+        yield self
+        for hijo in self.hijos:
+            yield from hijo.todos()
+
+    def ancestros(self):
+        nodo = self.padre
+        while nodo is not None:
+            yield nodo
+            nodo = nodo.padre
+
+
+_VACIAS = {"meta", "img", "br", "hr", "link", "input"}
+
+
+class _Arbol(HTMLParser):
+    """Un árbol mínimo del HTML, sin cerrar nada por su cuenta: un <p> dentro
+    de otro <p> se queda dentro, y así se ve."""
+
+    def __init__(self, html_body):
+        super().__init__(convert_charrefs=True)
+        self.raiz = _Nodo("#raiz", {})
+        self._actual = self.raiz
+        self.feed(html_body)
+
+    def handle_starttag(self, tag, attrs):
+        nodo = _Nodo(tag, {k: v or "" for k, v in attrs}, padre=self._actual)
+        self._actual.hijos.append(nodo)
+        if tag not in _VACIAS:
+            self._actual = nodo
+
+    def handle_endtag(self, tag):
+        nodo = self._actual
+        while nodo is not None and nodo.etiqueta != tag:
+            nodo = nodo.padre
+        assert nodo is not None, f"</{tag}> sin abrir"
+        self._actual = nodo.padre
+
+    def handle_data(self, data):
+        self._actual.texto += data
+
+
+def _arbol(html_body):
+    return _Arbol(html_body).raiz
+
+
+def _nodos(html_body, etiqueta):
+    return [n for n in _arbol(html_body).todos() if n.etiqueta == etiqueta]
+
+
+def _anclas_de_boton(html_body):
+    return [n for n in _nodos(html_body, "a") if "data-boton" in n.attrs]
+
+
+def _fondo(nodo):
+    encontrado = re.search(r"(?:^|;)background:(#[0-9a-fA-F]{3,6})", nodo.estilo)
+    return encontrado.group(1) if encontrado else None
+
+
+VERDE = "#15803d"
+BLANCO = "#ffffff"
+
+
+class TestTheLayoutStaysLightInAppleMailDarkMode:
+    """En Mail de iOS con modo oscuro el aviso del 21 oct perdió la cabecera
+    verde y el botón: el fondo puesto solo por CSS desaparecía. Se pide modo
+    claro, el color va también en `bgcolor` y los botones son de tabla."""
+
+    @pytest.mark.asyncio
+    async def test_the_head_asks_for_light_mode_only(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            cabeza = cuerpo.split("</head>")[0]
+            assert '<meta name="color-scheme" content="light only">' in cabeza, nombre
+            assert '<meta name="supported-color-schemes" content="light only">' in cabeza, nombre
+            assert (
+                "<style>:root{color-scheme:light only;supported-color-schemes:light only;}</style>"
+                in cabeza
+            ), nombre
+
+    @pytest.mark.asyncio
+    async def test_every_coloured_background_also_carries_bgcolor(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            con_fondo = [n for n in _arbol(cuerpo).todos() if _fondo(n)]
+            for nodo in con_fondo:
+                assert nodo.attrs.get("bgcolor") == _fondo(nodo), (
+                    nombre,
+                    nodo.etiqueta,
+                    nodo.estilo,
+                )
+            colores = {_fondo(n) for n in con_fondo}
+            # Página, tarjeta, cabecera y pie, como mínimo
+            assert {"#eef2ee", BLANCO, VERDE, "#f8faf8"} <= colores, (nombre, colores)
+            cuerpo_html = _nodos(cuerpo, "body")[0]
+            assert cuerpo_html.attrs.get("bgcolor") == "#eef2ee", nombre
+
+    @pytest.mark.asyncio
+    async def test_the_boxes_carry_bgcolor_too(self, correo):
+        htmls = await _los_cinco(correo)
+        cajas = {
+            "recuadro": (htmls["invitacion"], "#f0faf3"),
+            "cita": (htmls["invitacion_sin_cuenta"], "#f6f7f6"),
+            "aviso": (htmls["cambiada"], "#fff7ed"),
+        }
+        for caja, (cuerpo, color) in cajas.items():
+            celdas = [n for n in _nodos(cuerpo, "td") if _fondo(n) == color]
+            assert celdas, caja
+            assert all(c.attrs.get("bgcolor") == color for c in celdas), caja
+
+    @pytest.mark.asyncio
+    async def test_primary_buttons_are_bulletproof(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            ancla = _anclas_de_boton(cuerpo)[0]
+            self._es_a_prueba_de_balas(ancla, fondo=VERDE, letra=BLANCO, nombre=nombre)
+            assert "border:" not in ancla.padre.estilo, nombre
+
+    @pytest.mark.asyncio
+    async def test_secondary_buttons_are_bulletproof_with_a_green_border(self, correo):
+        htmls = await _los_cinco(correo)
+        for nombre, cuerpo in htmls.items():
+            secundarios = _anclas_de_boton(cuerpo)[1:]
+            assert secundarios, nombre
+            for ancla in secundarios:
+                self._es_a_prueba_de_balas(ancla, fondo=BLANCO, letra=VERDE, nombre=nombre)
+                assert f"border:2px solid {VERDE};" in ancla.padre.estilo, nombre
+        # Registrarse + el inglés
+        assert len(_anclas_de_boton(htmls["invitacion_sin_cuenta"])) == 3
+
+    @staticmethod
+    def _es_a_prueba_de_balas(ancla, *, fondo, letra, nombre):
+        celda = ancla.padre
+        # El color lo pone la celda, por atributo y por estilo
+        assert celda.etiqueta == "td", nombre
+        assert celda.attrs.get("bgcolor") == fondo, nombre
+        assert _fondo(celda) == fondo, nombre
+        assert "border-radius:10px" in celda.estilo, nombre
+        # El enlace solo es texto: ni fondo ni bloque propio
+        assert "background" not in ancla.estilo, nombre
+        assert "display:block" not in ancla.estilo, nombre
+        assert "display:inline-block;width:100%;" in ancla.estilo, nombre
+        assert f"color:{letra};" in ancla.estilo, nombre
+        assert "padding:" in ancla.estilo, nombre
+        # Y el color, otra vez en un span alrededor del texto
+        assert len(ancla.hijos) == 1, nombre
+        span = ancla.hijos[0]
+        assert span.etiqueta == "span", nombre
+        assert span.estilo == f"color:{letra};", nombre
+        assert span.texto.strip(), nombre
+        assert not ancla.texto.strip(), nombre
+
+    @pytest.mark.asyncio
+    async def test_the_brand_name_carries_its_colour_in_a_span(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            marcas = [n for n in _nodos(cuerpo, "span") if n.texto == "RyderCupFriends"]
+            assert len(marcas) == 1, nombre
+            assert marcas[0].estilo == f"color:{BLANCO};", nombre
+            celda = marcas[0].padre
+            assert celda.etiqueta == "td", nombre
+            assert not celda.texto.strip(), nombre
+            assert any(_fondo(a) == VERDE for a in marcas[0].ancestros()), nombre
+
+    @pytest.mark.asyncio
+    async def test_no_paragraph_sits_inside_another(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            for p in _nodos(cuerpo, "p"):
+                assert all(a.etiqueta != "p" for a in p.ancestros()), nombre
+
+    @pytest.mark.asyncio
+    async def test_the_fallback_link_is_the_primary_buttons_link(self, correo):
+        for nombre, cuerpo in (await _los_cinco(correo)).items():
+            principal = _anclas_de_boton(cuerpo)[0].attrs["href"]
+            respaldo = [p for p in _nodos(cuerpo, "p") if "¿No funciona el botón?" in p.texto]
+            assert len(respaldo) == 1, nombre
+            enlaces = [n for n in respaldo[0].todos() if n.etiqueta == "a"]
+            assert len(enlaces) == 1, nombre
+            assert enlaces[0].attrs["href"] == principal, nombre
+            assert enlaces[0].texto == principal, nombre
 
 
 class TestTheButtonsGoWhereTheySay:
