@@ -477,6 +477,25 @@ class TestListEnrollmentsPrivacy:
         assert {f["status"] for f in del_extrano} == {"APPROVED"}
         assert len(del_extrano) == 2
 
+    @pytest.mark.asyncio
+    async def test_unknown_status_filter_is_a_422(self, client: AsyncClient):
+        """
+        Given: una competición
+        When: se lista con un estado que no existe
+        Then: 422, como cualquier otro parámetro mal formado
+        """
+        creador = await create_authenticated_user(
+            client, "creador_p531f@test.com", "P@ssw0rd123!", "Jugador", "Privacidad"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        r = await client.get(
+            f"/api/v1/competitions/{comp['id']}/enrollments?status=foo",
+            cookies=creador["cookies"],
+        )
+
+        assert r.status_code == 422, r.text
+
 
 class TestApproveRejectEnrollment:
     """Tests para POST /api/v1/enrollments/{id}/approve y /reject"""

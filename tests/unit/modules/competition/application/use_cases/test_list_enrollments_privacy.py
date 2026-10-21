@@ -87,8 +87,11 @@ class _Escenario:
         return inscripcion
 
     async def lista(self, viewer: UserId, is_admin: bool = False, status: str | None = None):
-        return await ListEnrollmentsUseCase(self.uow).execute_con_categorias(
-            str(self.torneo.value), status, viewer_id=viewer, viewer_is_admin=is_admin
+        return await ListEnrollmentsUseCase(self.uow).execute(
+            str(self.torneo.value),
+            EnrollmentStatus(status) if status else None,
+            viewer_id=viewer,
+            viewer_is_admin=is_admin,
         )
 
     @property
@@ -115,7 +118,7 @@ class TestElOrganizador:
     async def test_ve_todos_los_correos(self, e):
         lista = await e.lista(e.creador)
 
-        assert lista.correos_visibles == e.todos
+        assert lista.ve_todos_los_correos is True
 
     async def test_con_filtro_ve_las_filas_ajenas_de_ese_estado(self, e):
         lista = await e.lista(e.creador, status="REJECTED")
@@ -130,7 +133,7 @@ class TestUnAdmin:
         lista = await e.lista(admin, is_admin=True)
 
         assert _quienes(lista) == e.todos
-        assert lista.correos_visibles == e.todos
+        assert lista.ve_todos_los_correos is True
 
     async def test_con_filtro_ve_las_solicitudes_de_los_demas(self, e):
         lista = await e.lista(UserId(uuid4()), is_admin=True, status="REQUESTED")
@@ -162,7 +165,8 @@ class TestUnJugadorInscrito:
 
         lista = await e.lista(yo)
 
-        assert lista.correos_visibles == {yo}
+        # El suyo lo pone el mapper con su viewer_id
+        assert lista.ve_todos_los_correos is False
 
     async def test_con_filtro_requested_solo_ve_la_suya(self, e):
         yo = e.ajenos[EnrollmentStatus.REQUESTED]
@@ -208,8 +212,7 @@ class TestUnUsuarioSinRelacion:
 
         lista = await e.lista(extrano)
 
-        assert lista.correos_visibles == {extrano}
-        assert not lista.correos_visibles & e.todos
+        assert lista.ve_todos_los_correos is False
 
     async def test_con_filtro_de_un_estado_ajeno_no_ve_nada(self, e):
         for estado in NO_APROBADOS:
@@ -221,3 +224,9 @@ class TestUnUsuarioSinRelacion:
         lista = await e.lista(UserId(uuid4()), is_admin=False, status="REQUESTED")
 
         assert lista.enrollments == []
+
+
+async def test_sin_decir_quien_pide_no_hay_lista(e):
+    """El único punto de entrada exige a quien pide: no se lista sin filtrar (BE #531)."""
+    with pytest.raises(TypeError):
+        await ListEnrollmentsUseCase(e.uow).execute(str(e.torneo.value))  # type: ignore[call-arg]

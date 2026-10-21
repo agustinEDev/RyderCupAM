@@ -5,7 +5,7 @@ Endpoints FastAPI para gestión de inscripciones siguiendo Clean Architecture.
 """
 
 import logging
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -104,6 +104,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
     WithdrawEnrollmentUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -166,7 +167,9 @@ class EnrollmentDTOMapper:
         enrollments: Sequence[Enrollment],
         user_uow: UserUnitOfWorkInterface,
         categorias: Mapping[UserId, int | None] | None = None,
-        correos_visibles: Collection[UserId] = frozenset(),
+        *,
+        ve_todos_los_correos: bool = False,
+        viewer_id: UserId | None = None,
     ) -> list[EnrollmentResponseDTO]:
         """
         Convierte inscripciones a EnrollmentResponseDTO, con los datos de cada usuario.
@@ -179,8 +182,9 @@ class EnrollmentDTOMapper:
             user_uow: Unit of Work de usuarios
             categorias: La categoría de cada jugador, si ya está fijada (#251).
                 Sin ella, ni hándicap fijado ni categoría: aún no cuentan
-            correos_visibles: De quién puede ir el correo; del resto, vacío.
-                Por defecto ninguno (BE #531)
+            ve_todos_los_correos: Si van todos los correos (organizador o admin)
+            viewer_id: Quien pide: el suyo va siempre. Sin los dos, ningún
+                correo (BE #531)
 
         Returns:
             Un DTO por inscripción; `user` a None si el usuario ya no existe
@@ -195,7 +199,10 @@ class EnrollmentDTOMapper:
 
         return [
             EnrollmentDTOMapper._to_dto(
-                e, por_id.get(e.user_id), categorias, e.user_id in correos_visibles
+                e,
+                por_id.get(e.user_id),
+                categorias,
+                ve_todos_los_correos or e.user_id == viewer_id,
             )
             for e in enrollments
         ]
@@ -355,13 +362,16 @@ async def list_enrollments(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListEnrollmentsUseCase = Depends(get_list_enrollments_use_case),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    status_filter: str | None = Query(None, alias="status", description="Filtrar por estado"),
+    # Tipado con el enum: un estado que no existe es un 422 de FastAPI
+    status_filter: EnrollmentStatus | None = Query(
+        None, alias="status", description="Filtrar por estado"
+    ),
 ):
     """
     Lista inscripciones de una competición.
 
     Filtros disponibles:
-    - status: REQUESTED, APPROVED, REJECTED, CANCELLED, WITHDRAWN
+    - status: REQUESTED, INVITED, APPROVED, REJECTED, CANCELLED, WITHDRAWN
 
     Quién ve qué (BE #531): el organizador y los admin, todo; cualquier otro,
     los aprobados y sus propias filas, y solo su propio correo.
@@ -371,12 +381,13 @@ async def list_enrollments(
       - id, first_name, last_name, email (vacío si no lo puede ver)
       - handicap, country_code, avatar_url
     """
+    viewer_id = UserId(str(current_user.id))
     try:
         # Con la categoría de cada uno, si ya está fijada (#251)
-        lista = await use_case.execute_con_categorias(
+        lista = await use_case.execute(
             competition_id=str(competition_id),
             status=status_filter,
-            viewer_id=UserId(str(current_user.id)),
+            viewer_id=viewer_id,
             viewer_is_admin=current_user.is_admin,
         )
 
@@ -385,7 +396,8 @@ async def list_enrollments(
             lista.enrollments,
             user_uow,
             categorias=lista.categorias,
-            correos_visibles=lista.correos_visibles,
+            ve_todos_los_correos=lista.ve_todos_los_correos,
+            viewer_id=viewer_id,
         )
 
     except ListCompetitionNotFoundError as e:

@@ -92,7 +92,7 @@ class CreatorDTO(BaseModel):
     Campos incluidos:
     - Datos personales: id, first_name, last_name, display_name
     - Datos de juego: handicap, country_code
-    - Email: solo incluido cuando explícitamente solicitado (privacidad)
+    - Sin email: el del organizador no sale nunca (BE #531)
     """
 
     id: UUID = Field(..., description="ID único del usuario creador")
@@ -106,7 +106,6 @@ class CreatorDTO(BaseModel):
             "y last_name siguen aquí para lo que necesite el nombre real."
         ),
     )
-    email: str | None = Field(None, description="Email del creador (solo con include_email)")
     handicap: float | None = Field(None, description="Handicap actual del creador")
     country_code: str | None = Field(None, description="Código ISO del país del creador")
 

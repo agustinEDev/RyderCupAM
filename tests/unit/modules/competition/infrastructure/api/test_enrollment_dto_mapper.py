@@ -173,15 +173,25 @@ async def test_without_saying_whose_email_goes_no_email_goes(competition_id):
     assert dtos[0].user.email == ""
 
 
-async def test_only_the_visible_emails_go(competition_id):
-    """Cada fila lleva el correo solo si su usuario está entre los visibles (BE #531)."""
+async def test_only_the_viewer_email_goes(competition_id):
+    """Sin ver todos, la fila de quien pide lleva su correo y las demás no (BE #531)."""
     uow = _UoWQueCuenta()
     ana = await _usuario(uow, "Ana")
     bea = await _usuario(uow, "Bea")
     inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, bea)]
 
-    dtos = await EnrollmentDTOMapper.to_response_dtos(
-        inscripciones, uow, correos_visibles=frozenset({bea.id})
-    )
+    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow, viewer_id=bea.id)
 
     assert [d.user.email for d in dtos] == ["", str(bea.email)]
+
+
+async def test_seeing_every_email_sends_them_all(competition_id):
+    """El organizador o un admin: van todos los correos (BE #531)."""
+    uow = _UoWQueCuenta()
+    ana = await _usuario(uow, "Ana")
+    bea = await _usuario(uow, "Bea")
+    inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, bea)]
+
+    dtos = await EnrollmentDTOMapper.to_response_dtos(inscripciones, uow, ve_todos_los_correos=True)
+
+    assert [d.user.email for d in dtos] == [str(ana.email), str(bea.email)]

@@ -1,7 +1,7 @@
 """
 Caso de Uso: Listar Inscripciones (List Enrollments).
 
-Lista las inscripciones de una competicion con filtros opcionales.
+Lista las inscripciones de una competicion que puede ver quien pide.
 Retorna entidades (NO DTOs) - siguiendo Clean Architecture.
 """
 
@@ -25,6 +25,16 @@ HANDICAP_FIJADO = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class ListaDeInscritos:
+    """Lo que ve quien pide la lista de inscritos (BE #531)."""
+
+    enrollments: list[Enrollment]
+    categorias: dict[UserId, int | None]
+    # El organizador y los admin ven todos los correos; el resto, solo el suyo
+    ve_todos_los_correos: bool
+
+
 class ListEnrollmentsUseCase:
     """
     Caso de uso para listar inscripciones de una competicion.
@@ -32,13 +42,8 @@ class ListEnrollmentsUseCase:
     CLEAN ARCHITECTURE: Este use case retorna ENTIDADES de dominio, NO DTOs.
     La conversion a DTOs es responsabilidad de la capa de presentacion (API Layer).
 
-    Orquesta:
-    1. Validacion de existencia de la competicion
-    2. Obtencion de inscripciones con filtros
-    3. Retorno de entidades
-
-    Filtros disponibles:
-    - status: Filtrar por estado de inscripcion
+    Un solo punto de entrada, y exige saber quién pide: no hay forma de listar
+    sin aplicar quién ve qué (BE #531).
     """
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
@@ -50,52 +55,17 @@ class ListEnrollmentsUseCase:
         """
         self._uow = uow
 
-    async def execute(self, competition_id: str, status: str | None = None) -> list[Enrollment]:
-        """
-        Ejecuta el caso de uso de listado de inscripciones.
-
-        Args:
-            competition_id: ID de la competicion
-            status: Filtro opcional por estado (REQUESTED, APPROVED, etc.)
-
-        Returns:
-            Lista de entidades Enrollment
-
-        Raises:
-            CompetitionNotFoundError: Si la competicion no existe
-        """
-        async with self._uow:
-            comp_id = CompetitionId(competition_id)
-
-            # 1. Verificar que la competicion existe
-            competition = await self._uow.competitions.find_by_id(comp_id)
-            if not competition:
-                raise CompetitionNotFoundError(f"Competicion no encontrada: {competition_id}")
-
-            # 2. Obtener enrollments segun filtros
-            if status:
-                # Filtrar por estado
-                status_enum = EnrollmentStatus(status.upper())
-                enrollments = await self._uow.enrollments.find_by_competition_and_status(
-                    comp_id, status_enum
-                )
-            else:
-                # Todos los enrollments de la competicion
-                enrollments = await self._uow.enrollments.find_by_competition(comp_id)
-
-            return enrollments
-
-    async def execute_con_categorias(
+    async def execute(
         self,
         competition_id: str,
-        status: str | None = None,
+        status: EnrollmentStatus | None = None,
         *,
         viewer_id: UserId,
         viewer_is_admin: bool = False,
-    ) -> "ListaDeInscritos":
+    ) -> ListaDeInscritos:
         """
-        Las inscripciones que puede ver quien pide, de quién puede ver el correo
-        y, en un stroke play con el hándicap ya fijado (desde que se cierran las
+        Las inscripciones que puede ver quien pide, si ve todos los correos y,
+        en un stroke play con el hándicap ya fijado (desde que se cierran las
         inscripciones), la categoría fijada de cada aprobado.
 
         Quién ve qué (BE #531): el organizador y los admin, todas las filas y
@@ -105,6 +75,9 @@ class ListEnrollmentsUseCase:
 
         La categoría se fijó al cerrar, con la regla de los seis: aquí solo se
         lee, y no se mueve aunque alguien se retire (#251).
+
+        Raises:
+            CompetitionNotFoundError: Si la competicion no existe
         """
         async with self._uow:
             comp_id = CompetitionId(competition_id)
@@ -113,21 +86,18 @@ class ListEnrollmentsUseCase:
                 raise CompetitionNotFoundError(f"Competicion no encontrada: {competition_id}")
             if status:
                 enrollments = await self._uow.enrollments.find_by_competition_and_status(
-                    comp_id, EnrollmentStatus(status.upper())
+                    comp_id, status
                 )
             else:
                 enrollments = await self._uow.enrollments.find_by_competition(comp_id)
 
         ve_todo = viewer_is_admin or competition.is_creator(viewer_id)
-        if ve_todo:
-            correos = frozenset(e.user_id for e in enrollments)
-        else:
+        if not ve_todo:
             enrollments = [
                 e
                 for e in enrollments
                 if e.status is EnrollmentStatus.APPROVED or e.user_id == viewer_id
             ]
-            correos = frozenset({viewer_id})
 
         categorias: dict[UserId, int | None] = {}
         if competition.stroke_play is not None and competition.status in HANDICAP_FIJADO:
@@ -136,14 +106,4 @@ class ListEnrollmentsUseCase:
                 for e in enrollments
                 if e.status is EnrollmentStatus.APPROVED
             }
-        return ListaDeInscritos(enrollments, categorias, correos)
-
-
-@dataclass(frozen=True)
-class ListaDeInscritos:
-    """Lo que ve quien pide la lista de inscritos (BE #531)."""
-
-    enrollments: list[Enrollment]
-    categorias: dict[UserId, int | None]
-    # De quién puede ir el correo en la respuesta
-    correos_visibles: frozenset[UserId]
+        return ListaDeInscritos(enrollments, categorias, ve_todos_los_correos=ve_todo)

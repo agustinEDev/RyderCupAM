@@ -339,11 +339,10 @@ class CompetitionDTOMapper:
     async def _get_creator_dto(
         creator_id: UserId,
         user_uow: UserUnitOfWorkInterface,
-        *,
-        include_email: bool = False,
     ) -> CreatorDTO | None:
         """
-        Obtiene la información del creador de una competición.
+        Obtiene la información del creador de una competición. Sin su correo:
+        no sale nunca (BE #531).
 
         Assumes caller manages the user_uow transaction context.
         """
@@ -358,7 +357,6 @@ class CompetitionDTOMapper:
             first_name=creator.first_name,
             last_name=creator.last_name,
             display_name=creator.display_name,
-            email=str(creator.email) if include_email else None,
             handicap=creator.handicap.value if creator.handicap else None,
             country_code=(creator.country_code.value if creator.country_code else None),
         )
