@@ -72,3 +72,9 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
             return False
         await self._session.delete(round)
         return True
+
+    async def find_by_ids(self, round_ids: list[RoundId]) -> list[Round]:
+        if not round_ids:
+            return []
+        result = await self._session.execute(select(Round).where(Round._id.in_(round_ids)))
+        return list(result.scalars().all())

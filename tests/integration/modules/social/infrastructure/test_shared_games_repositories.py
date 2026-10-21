@@ -10,19 +10,34 @@ Las lecturas en bloque de las partidas jugadas juntos, contra Postgres (BE-3).
 | Partido con solo uno de los dos                       | No sale                            |
 | Grupos de stroke play con los dos y sus golpes        | Los suyos                          |
 | Campos por ids                                        | Enteros: salidas y hoyos           |
+| Rondas y competiciones por ids                        | Las pedidas, en una lectura        |
+| Caso 19: torneos en 2 o en 6 competiciones            | Las mismas consultas               |
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.competition_name import CompetitionName
+from src.modules.competition.domain.value_objects.date_range import DateRange
+from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.match_status import MatchStatus
+from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
+    SQLAlchemyCompetitionRepository,
+)
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_unit_of_work import (
     SQLAlchemyCompetitionUnitOfWork,
 )
@@ -33,6 +48,9 @@ from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.repositories.golf_course_repository import (
     GolfCourseRepository,
+)
+from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_unit_of_work import (
+    SQLAlchemyGolfCourseUnitOfWork,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
@@ -51,11 +69,21 @@ from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_h
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_repository import (
     SQLAlchemyQuickMatchRepository,
 )
+from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
+    SQLAlchemyQuickMatchUnitOfWork,
+)
+from src.modules.social.infrastructure.adapters.shared_games_adapter import SharedGamesAdapter
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
+    SQLAlchemyUnitOfWork as SQLAlchemyUserUnitOfWork,
+)
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
+from src.shared.domain.value_objects.play_mode import PlayMode
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from tests.integration.modules.competition.infrastructure.persistence.sqlalchemy.test_envelope_repository import (  # noqa: F401
+    BASE_DATE,
     jugadores,
     ronda,
 )
@@ -268,3 +296,124 @@ class TestCamposEnBloque:
         for course in leidos:
             assert len(course.hole_card_for(TeeColor.YELLOW, Gender.MALE)) == 18
         assert await GolfCourseRepository(db_session).find_by_ids([]) == []
+
+
+class TestRondasYCompeticionesEnBloque:
+    async def test_por_ids(self, db_session, jugadores, ronda):  # noqa: F811
+        uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+        otra = await _competicion(db_session, jugadores[0])
+        await _competicion(db_session, jugadores[0])
+        # Otra ronda que no se pide
+        await uow.rounds.add(
+            Round.create(
+                competition_id=otra.id,
+                golf_course_id=ronda.golf_course_id,
+                round_date=BASE_DATE,
+                session_type=SessionType.AFTERNOON,
+                match_format=MatchFormat.SINGLES,
+            )
+        )
+        await db_session.commit()
+        db_session.expunge_all()
+
+        rondas = await uow.rounds.find_by_ids([ronda.id])
+        competiciones = await uow.competitions.find_by_ids([ronda.competition_id, otra.id])
+
+        assert [r.id for r in rondas] == [ronda.id]
+        assert {c.id for c in competiciones} == {ronda.competition_id, otra.id}
+        assert await uow.rounds.find_by_ids([]) == []
+        assert await uow.competitions.find_by_ids([]) == []
+
+
+async def _competicion(
+    db_session, creador: UserId, tipo: TournamentType = TournamentType.RYDER_CUP
+) -> Competition:
+    competition = Competition.create(
+        id=CompetitionId(uuid4()),
+        creator_id=creador,
+        name=CompetitionName(f"Juntos Cup {uuid4().hex[:6]}"),
+        dates=DateRange(start_date=BASE_DATE, end_date=BASE_DATE + timedelta(days=2)),
+        location=Location(main_country=CountryCode("ES")),
+        play_mode=PlayMode.SCRATCH,
+        team_1_name="Team A" if tipo.has_teams else None,
+        team_2_name="Team B" if tipo.has_teams else None,
+        tournament_type=tipo,
+    )
+    await SQLAlchemyCompetitionRepository(db_session).add(competition)
+    await db_session.commit()
+    return competition
+
+
+async def _torneos_juntos(db_session, campo: GolfCourse, a: UserId, b: UserId, veces: int):
+    """`veces` partidos y `veces` grupos de a y b, cada uno en su competicion y su ronda."""
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    for _ in range(veces):
+        for tipo in (TournamentType.RYDER_CUP, TournamentType.STABLEFORD):
+            competition = await _competicion(db_session, a, tipo)
+            round_ = Round.create(
+                competition_id=competition.id,
+                golf_course_id=campo.id,
+                round_date=BASE_DATE,
+                session_type=SessionType.MORNING,
+                match_format=MatchFormat.SINGLES,
+            )
+            await uow.rounds.add(round_)
+            await db_session.commit()
+            if tipo.has_teams:
+                match = Match.create(
+                    round_id=round_.id,
+                    match_number=1,
+                    team_a_players=[_jugador_de_partido(a)],
+                    team_b_players=[_jugador_de_partido(b)],
+                )
+                match.start()
+                match.complete({"winner": "A", "score": "1UP"})
+                await uow.matches.add(match)
+            else:
+                grupo = Partida.crear(competition.id, round_.id, 1, [_jugador(a), _jugador(b)])
+                grupo.cerrar(completas=[a, b])
+                await uow.partidas.anadir([grupo])
+            await db_session.commit()
+
+
+async def _sentencias(db_session, a: UserId, b: UserId) -> tuple[int, int]:
+    adapter = SharedGamesAdapter(
+        SQLAlchemyQuickMatchUnitOfWork(db_session),
+        SQLAlchemyCompetitionUnitOfWork(db_session),
+        SQLAlchemyGolfCourseUnitOfWork(db_session),
+        SQLAlchemyUserUnitOfWork(db_session),
+    )
+    sentencias: list[str] = []
+
+    def _cuenta(conn, cursor, statement, *args):
+        sentencias.append(statement)
+
+    db_session.expunge_all()
+    event.listen(Engine, "before_cursor_execute", _cuenta)
+    try:
+        partidas = await adapter.between(a, b)
+    finally:
+        event.remove(Engine, "before_cursor_execute", _cuenta)
+    return len(partidas), len(sentencias)
+
+
+class TestSinUnaConsultaPorRonda:
+    async def test_las_mismas_consultas_con_una_competicion_que_con_seis(
+        self,
+        db_session,
+        jugadores,  # noqa: F811
+        campo,
+    ):
+        """
+        Caso 19, en torneos: un partido y un grupo en dos competiciones, frente
+        a tres y tres en seis / Then cuesta las mismas consultas.
+        """
+        a, b, c, d = jugadores
+        await _torneos_juntos(db_session, campo, a, b, veces=1)
+        await _torneos_juntos(db_session, campo, c, d, veces=3)
+
+        pocas, con_pocas = await _sentencias(db_session, a, b)
+        muchas, con_muchas = await _sentencias(db_session, c, d)
+
+        assert (pocas, muchas) == (2, 6)
+        assert con_muchas == con_pocas

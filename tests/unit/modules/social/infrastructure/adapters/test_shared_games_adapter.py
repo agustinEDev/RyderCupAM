@@ -919,9 +919,9 @@ class _Contador:
 class TestSinUnaConsultaPorPartida:
     async def test_jugadores_campos_y_golpes_en_bloque(self, mundo):
         """
-        Caso 19: tres partidas rapidas en tres campos y un partido de torneo /
-        When se leen / Then los jugadores, los campos y los golpes se piden de
-        una vez, nunca uno por uno.
+        Caso 19: tres partidas rapidas, tres partidos y tres grupos en seis
+        competiciones / When se leen / Then jugadores, campos, golpes, rondas y
+        competiciones se piden de una vez, nunca uno por uno.
         """
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
@@ -934,22 +934,32 @@ class TestSinUnaConsultaPorPartida:
                 [4, 5],
                 scoring_format=ScoringFormat.STABLEFORD,
             )
-        competition = await mundo.competicion(yo)
-        await mundo.partido(await mundo.ronda(competition, campos[0]), [yo], [el])
+        for course in campos:
+            ryder = await mundo.competicion(yo)
+            await mundo.partido(await mundo.ronda(ryder, course), [yo], [el])
+            stableford = await mundo.competicion(yo, TournamentType.STABLEFORD)
+            await mundo.grupo(
+                stableford, await mundo.ronda(stableford, course), {yo: [4] * 18, el: [4] * 18}
+            )
 
         uno_a_uno = [
             _Contador(mundo.users.users, "find_by_id"),
             _Contador(mundo.courses.golf_courses, "find_by_id"),
             _Contador(mundo.qm.quick_match_hole_scores, "find_by_match"),
+            _Contador(mundo.comp.rounds, "find_by_id"),
+            _Contador(mundo.comp.competitions, "find_by_id"),
         ]
         en_bloque = [
             _Contador(mundo.users.users, "find_by_ids"),
             _Contador(mundo.courses.golf_courses, "find_by_ids"),
             _Contador(mundo.qm.quick_match_hole_scores, "find_by_matches"),
+            _Contador(mundo.comp.rounds, "find_by_ids"),
+            _Contador(mundo.comp.competitions, "find_by_ids"),
         ]
 
         partidas = await _entre(mundo, yo, el)
 
-        assert len(partidas) == 4
-        assert [c.llamadas for c in uno_a_uno] == [0, 0, 0]
-        assert [c.llamadas for c in en_bloque] == [1, 1, 1]
+        assert len(partidas) == 9
+        assert {p.competition_name for p in partidas if p.competition_id} == {"Copa de Otoño"}
+        assert [c.llamadas for c in uno_a_uno] == [0, 0, 0, 0, 0]
+        assert [c.llamadas for c in en_bloque] == [1, 1, 1, 1, 1]

@@ -161,3 +161,8 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
     def _date_ranges_overlap(self, start1: date, end1: date, start2: date, end2: date) -> bool:
         """Verifica si dos rangos de fechas se solapan."""
         return start1 <= end2 and end1 >= start2
+
+    async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
+        return [
+            self._competitions[i] for i in dict.fromkeys(competition_ids) if i in self._competitions
+        ]

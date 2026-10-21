@@ -176,15 +176,15 @@ class SharedGamesAdapter(SharedGamesInterface):
                             golpe.hoyo
                         ] = golpe.golpes_validados
 
-            # Una lectura por ronda y competicion distintas, no por partido
-            for round_id in {m.round_id for m in leido.partidos} | {
-                g.round_id for g in leido.grupos
-            }:
-                leido.rondas[round_id] = await uow.rounds.find_by_id(round_id)
-            for competition_id in {r.competition_id for r in leido.rondas.values() if r}:
-                leido.competiciones[competition_id] = await uow.competitions.find_by_id(
-                    competition_id
-                )
+            # Rondas y competiciones de una vez, no una por partido
+            round_ids = {m.round_id for m in leido.partidos} | {g.round_id for g in leido.grupos}
+            if not round_ids:
+                return
+            leido.rondas = {r.id: r for r in await uow.rounds.find_by_ids(list(round_ids))}
+            competition_ids = {r.competition_id for r in leido.rondas.values()}
+            leido.competiciones = {
+                c.id: c for c in await uow.competitions.find_by_ids(list(competition_ids))
+            }
 
     @staticmethod
     def _jugaron_el_grupo(grupo: Partida, viewer_id: UserId, other_id: UserId) -> bool:
