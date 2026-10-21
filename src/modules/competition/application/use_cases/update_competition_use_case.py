@@ -16,6 +16,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -29,6 +33,7 @@ from src.modules.competition.domain.value_objects.date_range import DateRange
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
@@ -84,6 +89,7 @@ class UpdateCompetitionUseCase:
         uow: CompetitionUnitOfWorkInterface,
         location_builder: LocationBuilder,
         golf_course_repository: IGolfCourseRepository,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
@@ -97,6 +103,8 @@ class UpdateCompetitionUseCase:
         self._uow = uow
         self._location_builder = location_builder
         self._golf_course_repo = golf_course_repository
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def _paises_de_los_campos(self, competition) -> list:
         """El país de cada campo de golf de la competición."""
@@ -311,6 +319,7 @@ class UpdateCompetitionUseCase:
             if "enrollment_opens_days_before" in request.model_fields_set:
                 competition.schedule_enrollment_opening(request.enrollment_opens_days_before)
 
+            era_publica = competition.visibility == Visibility.PUBLIC
             competition.update_info(
                 visibility=request.visibility,
                 setup_mode=request.setup_mode,
@@ -328,6 +337,11 @@ class UpdateCompetitionUseCase:
 
             # 6. Persistir cambios
             await self._uow.competitions.update(competition)
+
+        # 6b. Ya guardada: si deja de ser publica, sus amigos dejan de ver quien
+        #     se apunto. Al hacerse publica no se publica nada hacia atras (BE-2)
+        if era_publica and competition.visibility != Visibility.PUBLIC:
+            await self._actividad.made_private(competition.id)
 
         # 7. Retornar DTO de respuesta
         return UpdateCompetitionResponseDTO(

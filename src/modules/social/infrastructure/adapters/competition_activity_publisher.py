@@ -121,6 +121,12 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
     async def reopened(self, competition_id: CompetitionId) -> None:
         await self._notices.reopened(str(competition_id.value))
 
+    async def made_private(self, competition_id: CompetitionId) -> None:
+        await self._notices.tournament_made_private(str(competition_id.value))
+
+    async def deleted(self, competition_id: CompetitionId) -> None:
+        await self._notices.tournament_deleted(str(competition_id.value))
+
 
 def _ref(competition: Competition) -> TournamentRef:
     return TournamentRef(

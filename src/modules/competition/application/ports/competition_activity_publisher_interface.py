@@ -65,3 +65,11 @@ class CompetitionActivityPublisherInterface(ABC):
     @abstractmethod
     async def reopened(self, competition_id: CompetitionId) -> None:
         """Una competicion terminada se reabre: su clasificacion final ya no vale."""
+
+    @abstractmethod
+    async def made_private(self, competition_id: CompetitionId) -> None:
+        """La competicion pasa de publica a privada."""
+
+    @abstractmethod
+    async def deleted(self, competition_id: CompetitionId) -> None:
+        """La competicion se borra."""

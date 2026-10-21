@@ -16,8 +16,10 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     CancelCompetitionRequestDTO,
     CompleteCompetitionRequestDTO,
+    DeleteCompetitionRequestDTO,
     RevertCompetitionToInProgressRequestDTO,
     StartCompetitionRequestDTO,
+    UpdateCompetitionRequestDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import (
     DirectEnrollPlayerRequestDTO,
@@ -56,6 +58,9 @@ from src.modules.competition.application.use_cases.concede_match_use_case import
 from src.modules.competition.application.use_cases.declare_walkover_use_case import (
     DeclareWalkoverUseCase,
 )
+from src.modules.competition.application.use_cases.delete_competition_use_case import (
+    DeleteCompetitionUseCase,
+)
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     DirectEnrollPlayerUseCase,
 )
@@ -86,6 +91,9 @@ from src.modules.competition.application.use_cases.submit_hole_score_use_case im
 from src.modules.competition.application.use_cases.submit_scorecard_use_case import (
     SubmitScorecardUseCase,
 )
+from src.modules.competition.application.use_cases.update_competition_use_case import (
+    UpdateCompetitionUseCase,
+)
 from src.modules.competition.application.use_cases.update_match_status_use_case import (
     UpdateMatchStatusUseCase,
 )
@@ -96,6 +104,7 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
@@ -131,6 +140,9 @@ from tests.unit.modules.competition.application.use_cases.test_submit_hole_score
     _body,
     _monta,
     _ReposDeCampos,
+)
+from tests.unit.modules.competition.application.use_cases.test_update_competition_use_case import (
+    _campos,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -174,6 +186,12 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def reopened(self, competition_id):
         self.avisos.append(("reopened", competition_id))
 
+    async def made_private(self, competition_id):
+        self.avisos.append(("made_private", competition_id))
+
+    async def deleted(self, competition_id):
+        self.avisos.append(("deleted", competition_id))
+
 
 class _Roto(CompetitionActivityPublisherInterface):
     """El feed caido: cualquier aviso revienta."""
@@ -183,6 +201,7 @@ class _Roto(CompetitionActivityPublisherInterface):
 
     enrolled = left = cancelled = invited = invitation_withdrawn = _falla  # type: ignore[assignment]
     requests_closed = request_rejected = match_finished = completed = reopened = _falla  # type: ignore[assignment]
+    made_private = deleted = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture
@@ -673,6 +692,65 @@ class TestCompeticion:
         )
 
         assert registro.avisos == [("reopened", competition_id)]
+
+
+class TestVisibilidadYBorrado:
+    """Revision de BE-2, puntos 1 y 2."""
+
+    async def _con_visibilidad(self, uow, competition_id, creator, visibilidad, actividad=None):
+        await UpdateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), _campos(), actividad=actividad
+        ).execute(competition_id, UpdateCompetitionRequestDTO(visibility=visibilidad), creator)
+
+    async def test_1_pasar_de_publica_a_privada_avisa(self, uow, registro):
+        competition_id, creator = await _abierta(uow)
+        await self._con_visibilidad(uow, competition_id, creator, "PUBLIC")
+
+        await self._con_visibilidad(uow, competition_id, creator, "PRIVATE", registro)
+
+        assert registro.avisos == [("made_private", competition_id)]
+
+    @pytest.mark.parametrize(
+        ("antes", "despues"), [("PRIVATE", "PUBLIC"), ("PUBLIC", "PUBLIC"), ("PRIVATE", "PRIVATE")]
+    )
+    async def test_1_lo_demas_no_avisa(self, uow, registro, antes, despues):
+        """1. De privada a publica no se publica nada hacia atras."""
+        competition_id, creator = await _abierta(uow)
+        await self._con_visibilidad(uow, competition_id, creator, antes)
+
+        await self._con_visibilidad(uow, competition_id, creator, despues, registro)
+
+        assert registro.avisos == []
+
+    async def test_1_cambiar_otra_cosa_no_avisa(self, uow, registro):
+        competition_id, creator = await _abierta(uow)
+        await self._con_visibilidad(uow, competition_id, creator, "PUBLIC")
+
+        await UpdateCompetitionUseCase(
+            uow, LocationBuilder(uow.countries), _campos(), actividad=registro
+        ).execute(competition_id, UpdateCompetitionRequestDTO(name="Otro nombre"), creator)
+
+        assert registro.avisos == []
+
+    async def test_2_borrar_la_competicion_avisa(self, uow, registro):
+        competition_id, creator = await _abierta(uow)
+
+        await DeleteCompetitionUseCase(uow, actividad=registro).execute(
+            DeleteCompetitionRequestDTO(competition_id=competition_id.value), creator
+        )
+
+        assert registro.avisos == [("deleted", competition_id)]
+
+    async def test_2_si_falla_el_aviso_queda_borrada(self, uow):
+        competition_id, creator = await _abierta(uow)
+
+        respuesta = await DeleteCompetitionUseCase(uow, actividad=_Roto()).execute(
+            DeleteCompetitionRequestDTO(competition_id=competition_id.value), creator
+        )
+
+        assert respuesta.deleted is True
+        async with uow:
+            assert await uow.competitions.find_by_id(competition_id) is None
 
 
 class TestG27UnFalloAlAvisarNoTumbaLaAccion:

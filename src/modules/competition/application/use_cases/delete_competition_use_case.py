@@ -17,6 +17,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.lo_jugado import LoJugado
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -48,14 +52,20 @@ class DeleteCompetitionUseCase:
     5. Commit de la transaccion
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
         """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: DeleteCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -120,6 +130,9 @@ class DeleteCompetitionUseCase:
 
             # 5. Eliminar la competicion
             await self._uow.competitions.delete(competition_id)
+
+        # 6. Ya borrada: fuera de Actividad todo lo que contaba de ella (BE-2)
+        await self._actividad.deleted(competition_id)
 
         # 7. Retornar DTO de respuesta
         return DeleteCompetitionResponseDTO(

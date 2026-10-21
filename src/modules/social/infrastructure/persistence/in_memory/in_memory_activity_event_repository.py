@@ -128,6 +128,17 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return antes - len(self._events)
 
+    async def delete_for_competition(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> int:
+        antes = len(self._events)
+        self._events = [
+            e
+            for e in self._events
+            if not (e.type in types and e.payload.get("competition_id") == competition_id)
+        ]
+        return antes - len(self._events)
+
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         ocultos = 0
         for e in self._events:

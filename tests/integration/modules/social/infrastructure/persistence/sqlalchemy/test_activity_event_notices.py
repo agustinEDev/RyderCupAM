@@ -137,3 +137,35 @@ async def test_borrar_sin_tipos_no_borra_nada(db_session):
 
     assert await repository.delete_from_source("torneo-1", []) == 0
     assert len(await _tipos(repository, user)) == 1
+
+
+async def test_2_borrar_por_competicion_mira_el_payload(db_session):
+    """2. Given avisos de dos torneos con origenes distintos / When se borra uno / Then solo los suyos."""
+    user = await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    del_torneo = ActivityEvent.create(
+        user_id=user.id,
+        type=T.INVITED_TO_TOURNAMENT,
+        occurred_at=CUANDO,
+        source_match_id="inv-1",
+        payload={"competition_id": "torneo-1"},
+    )
+    await repository.add_many(
+        [
+            del_torneo,
+            _evento(user, T.ENROLLED_IN_TOURNAMENT, "torneo-1"),
+            _evento(user, T.ENROLLED_IN_TOURNAMENT, "torneo-2"),
+            _evento(user, T.BIRDIE, "torneo-1"),
+        ]
+    )
+    await db_session.commit()
+
+    borrados = await repository.delete_for_competition(
+        "torneo-1", [T.INVITED_TO_TOURNAMENT, T.ENROLLED_IN_TOURNAMENT]
+    )
+    await db_session.commit()
+
+    assert borrados == 2
+    assert await _tipos(repository, user) == sorted(
+        [(T.ENROLLED_IN_TOURNAMENT, "torneo-2"), (T.BIRDIE, "torneo-1")]
+    )

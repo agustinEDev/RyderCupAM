@@ -87,3 +87,9 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
 
     async def reopened(self, competition_id: CompetitionId) -> None:
         await self._avisar("reopened", lambda p: p.reopened(competition_id))
+
+    async def made_private(self, competition_id: CompetitionId) -> None:
+        await self._avisar("made_private", lambda p: p.made_private(competition_id))
+
+    async def deleted(self, competition_id: CompetitionId) -> None:
+        await self._avisar("deleted", lambda p: p.deleted(competition_id))

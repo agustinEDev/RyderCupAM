@@ -209,6 +209,18 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 
+    async def delete_for_competition(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> int:
+        if not types:
+            return 0
+        stmt = delete(activity_events_table).where(
+            activity_events_table.c.payload["competition_id"].astext == competition_id,
+            activity_events_table.c.type.in_(sorted(types)),
+        )
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
+
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         if not types:
             return 0

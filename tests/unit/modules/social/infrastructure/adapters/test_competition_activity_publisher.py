@@ -111,12 +111,16 @@ class TestTraduccion:
         await adaptador.left(competicion.id, jugador)
         await adaptador.cancelled(competicion.id)
         await adaptador.reopened(competicion.id)
+        await adaptador.made_private(competicion.id)
+        await adaptador.deleted(competicion.id)
 
         crudo = str(competicion.id.value)
         assert avisos.llamadas == [
             ("left", (jugador, crudo), {}),
             ("tournament_cancelled", (crudo,), {}),
             ("reopened", (crudo,), {}),
+            ("tournament_made_private", (crudo,), {}),
+            ("tournament_deleted", (crudo,), {}),
         ]
 
     async def test_invitaciones_por_su_id(self, avisos):

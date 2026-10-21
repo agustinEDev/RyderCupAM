@@ -311,6 +311,51 @@ class TestAmigoApuntado:
         assert await _tipos(social_uow, ana) == []
         assert await _tipos(social_uow, eva) == []
 
+    async def test_1_pasar_a_privada_borra_los_avisos_de_apuntado(
+        self, avisos, social_uow, user_uow
+    ):
+        """1. Given dos apuntados a un publico / When pasa a privado / Then sin avisos de amigos."""
+        ana = await _user(user_uow)
+        eva = await _user(user_uow)
+        torneo = _torneo()
+        otro = _torneo()
+        await avisos.enrolled(ana.id, torneo, "enr-a", accepted_request=True)
+        await avisos.enrolled(eva.id, torneo, "enr-e", accepted_request=False)
+        await avisos.enrolled(eva.id, otro, "enr-o", accepted_request=False)
+
+        await avisos.tournament_made_private(torneo.competition_id)
+
+        assert await _tipos(social_uow, ana) == [T.ENROLLMENT_APPROVED]
+        assert [(e.type, e.source_match_id) for e in await _guardados(social_uow, eva)] == [
+            (T.ENROLLED_IN_TOURNAMENT, otro.competition_id)
+        ]
+
+    async def test_2_borrar_el_torneo_borra_todos_sus_avisos(self, avisos, social_uow, user_uow):
+        """
+        2. Given avisos de todo tipo de un torneo y de otro / When se borra / Then
+        no queda ninguno del borrado, aunque su origen sea la inscripcion, la
+        invitacion o el partido.
+        """
+        yo = await _user(user_uow)
+        torneo = _torneo()
+        otro = _torneo()
+        await avisos.enrolled(yo.id, torneo, "enr-1", accepted_request=True)
+        await avisos.invited(yo.id, torneo, "inv-1")
+        await avisos.request_rejected(yo.id, torneo, "enr-2")
+        await avisos.requests_closed(torneo, [(yo.id, "enr-3")])
+        await avisos.match_finished(
+            torneo,
+            MatchOutcome(str(uuid4()), date(2027, 3, 3), (yo.id,), (), "A", "1UP"),
+        )
+        await avisos.final_standings(torneo, "MEDAL", [StandingRef(yo.id, 1, False, 0, "OK")])
+        await avisos.invited(yo.id, otro, "inv-otro")
+
+        await avisos.tournament_deleted(torneo.competition_id)
+
+        assert [(e.type, e.source_match_id) for e in await _guardados(social_uow, yo)] == [
+            (T.INVITED_TO_TOURNAMENT, "inv-otro")
+        ]
+
     async def test_b12_con_la_publicacion_apagada_no_lo_ven_ni_al_encenderla(
         self, avisos, social_uow, user_uow
     ):

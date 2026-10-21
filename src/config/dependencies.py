@@ -1896,6 +1896,7 @@ def get_update_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     location_builder: LocationBuilder = Depends(get_location_builder),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> UpdateCompetitionUseCase:
     """
     Proveedor del caso de uso UpdateCompetitionUseCase.
@@ -1906,7 +1907,9 @@ def get_update_competition_use_case(
     3. Crea una instancia de `UpdateCompetitionUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateCompetitionUseCase(uow, location_builder, golf_course_uow.golf_courses)
+    return UpdateCompetitionUseCase(
+        uow, location_builder, golf_course_uow.golf_courses, actividad=actividad
+    )
 
 
 def get_get_competition_use_case(
@@ -1931,6 +1934,7 @@ def get_get_competition_use_case(
 
 def get_delete_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DeleteCompetitionUseCase:
     """
     Proveedor del caso de uso DeleteCompetitionUseCase.
@@ -1940,7 +1944,7 @@ def get_delete_competition_use_case(
     2. Crea una instancia de `DeleteCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return DeleteCompetitionUseCase(uow)
+    return DeleteCompetitionUseCase(uow, actividad=actividad)
 
 
 def get_activate_competition_use_case(

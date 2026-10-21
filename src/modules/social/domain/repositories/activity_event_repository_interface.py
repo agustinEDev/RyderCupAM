@@ -116,6 +116,16 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def delete_for_competition(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> int:
+        """
+        Borra los eventos de esos tipos que cuentan algo de esa competicion
+        (`payload.competition_id`), sea cual sea su origen. Para cuando la
+        competicion se borra. Devuelve cuantos borro.
+        """
+
+    @abstractmethod
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         """
         Oculta a sus amigos lo publicado de esos tipos, sin borrarlo.

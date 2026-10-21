@@ -20,6 +20,20 @@ from src.shared.domain.utc_clock import utc_now
 # cualquier zona de -12 a +12
 _MEDIODIA_UTC = time(12, 0)
 
+# Los avisos que salen de una competicion: todos menos los logros y la
+# partida rapida
+_AVISOS_DE_TORNEO = frozenset(
+    {
+        ActivityEventType.ENROLLMENT_APPROVED,
+        ActivityEventType.INVITED_TO_TOURNAMENT,
+        ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
+        ActivityEventType.ENROLLMENT_REJECTED,
+        ActivityEventType.ENROLLED_IN_TOURNAMENT,
+        ActivityEventType.TOURNAMENT_MATCH_RESULT,
+        ActivityEventType.TOURNAMENT_FINAL_STANDING,
+    }
+)
+
 # Lo que dice `Match.result["winner"]`
 _EMPATE = "HALVED"
 
@@ -230,6 +244,24 @@ class PublishCompetitionNoticesUseCase:
         vieja impediria publicarla.
         """
         await self._retirar(competition_id, [ActivityEventType.TOURNAMENT_FINAL_STANDING])
+
+    async def tournament_made_private(self, competition_id: str) -> None:
+        """
+        El torneo deja de ser publico: sus amigos dejan de ver quien se apunto
+        (revision de BE-2). Al reves no se publica nada hacia atras.
+        """
+        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT])
+
+    async def tournament_deleted(self, competition_id: str) -> None:
+        """
+        El torneo se borra: fuera todos sus avisos, sea cual sea su origen
+        (inscripcion, invitacion, partido o el propio torneo). Se buscan por el
+        `competition_id` que lleva cada uno en el `payload`.
+        """
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, _AVISOS_DE_TORNEO
+            )
 
     # === Ayudas ===
 
