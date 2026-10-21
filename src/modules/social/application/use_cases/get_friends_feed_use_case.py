@@ -99,28 +99,26 @@ class GetFriendsFeedUseCase:
         Quien publico cada entrada de esta pagina.
 
         Van en la respuesta para que pintar el feed no exija una peticion de
-        perfil por entrada. Se consulta cada autor una vez aunque aparezca en
-        varias entradas.
+        perfil por entrada. Se leen todos de una vez, no uno por autor.
         """
         ids = {e.user_id for e in eventos}
         if not ids:
             return {}
 
-        autores: dict[str, FeedAuthorDTO] = {}
         async with self._user_uow:
-            for user_id in ids:
-                user = await self._user_uow.users.find_by_id(user_id)
-                if user is None:
-                    continue
-                autores[str(user_id.value)] = FeedAuthorDTO(
-                    id=str(user_id.value),
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                    display_name=user.display_name,
-                    avatar_source=user.avatar_source.value,
-                    avatar_preset_id=user.avatar_preset_id,
-                )
-        return autores
+            usuarios = await self._user_uow.users.find_by_ids(list(ids))
+
+        return {
+            str(user.id.value): FeedAuthorDTO(
+                id=str(user.id.value),
+                first_name=user.first_name,
+                last_name=user.last_name,
+                display_name=user.display_name,
+                avatar_source=user.avatar_source.value,
+                avatar_preset_id=user.avatar_preset_id,
+            )
+            for user in usuarios
+        }
 
     async def _campos(self, eventos: list[ActivityEvent]) -> dict[str, str]:
         """

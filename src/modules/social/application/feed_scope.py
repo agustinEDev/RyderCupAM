@@ -67,14 +67,17 @@ async def resolve_feed_scope(
     async with social_uow:
         amigos = await social_uow.friendships.find_friend_ids(viewer_id)
 
-    publican = []
+    # Mis amigos y yo en una sola lectura, no una por amigo
     async with user_uow:
-        for amigo in amigos:
-            user = await user_uow.users.find_by_id(amigo)
-            if user is not None and user.is_active and user.share_activity:
-                publican.append(amigo)
-        viewer = await user_uow.users.find_by_id(viewer_id)
-        visto_hasta = viewer.feed_last_seen_at if viewer else None
+        usuarios = {u.id: u for u in await user_uow.users.find_by_ids([*amigos, viewer_id])}
+
+    publican = [
+        amigo
+        for amigo in amigos
+        if (user := usuarios.get(amigo)) is not None and user.is_active and user.share_activity
+    ]
+    viewer = usuarios.get(viewer_id)
+    visto_hasta = viewer.feed_last_seen_at if viewer else None
 
     return FeedScope(
         mine=ActivitySlice(user_ids=(viewer_id,), types=types_seen_by_author()),
