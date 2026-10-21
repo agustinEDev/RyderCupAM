@@ -77,6 +77,13 @@ class TestMedal:
         assert stroke_play_outcome(mia, suya, MEDAL) == Outcome.LOST
 
 
+class TestFormatoDesconocido:
+    def test_un_formato_que_no_es_stableford_ni_medal_no_cuenta(self):
+        """Solo se juzga en las dos modalidades conocidas; lo demás no se adivina."""
+        assert stroke_play_outcome(_card(net_to_par=1), _card(net_to_par=3), "SCRATCH") is None
+        assert stroke_play_outcome(_card(), _card(), None) is None
+
+
 class TestTarjetasQueNoCuentan:
     def test_mi_tarjeta_a_medias_no_cuenta(self):
         assert stroke_play_outcome(_card(complete=False), _card(), STABLEFORD) is None

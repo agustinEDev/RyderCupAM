@@ -8,6 +8,9 @@ Decidido con Agustín (22 oct, 00:45), sustituye a «Clasificación / En bruto»
   misma partida o grupo de stroke play) y **«Con él»** (compañeros en el MISMO
   partido de fourball o foursomes: cuenta el resultado del equipo). Ser del
   mismo equipo Ryder en partidos distintos no es jugar con él.
+- **Rivales en stroke play = el MISMO grupo** (la misma partida rapida, o el
+  mismo grupo de salida de un torneo). Jugar la misma ronda de un torneo en
+  grupos distintos no cuenta: es lo que respondió Agustín, y lo conservador.
 - **Quién gana, según la modalidad, nunca en bruto**: Stableford, más puntos;
   match play, quien ganó el partido; Medal, menos golpes netos. Igualdad, empate.
 - **Sin nada que contar, no hay cara a cara**: el apartado llega vacío (None) y
@@ -71,7 +74,7 @@ class HeadToHead:
 
 
 def stroke_play_outcome(
-    mine: CardResult | None, theirs: CardResult | None, scoring: ScoringFormat
+    mine: CardResult | None, theirs: CardResult | None, scoring: ScoringFormat | None
 ) -> Outcome | None:
     """
     Quién ganó entre dos rivales de una misma partida de stroke play.
@@ -84,10 +87,13 @@ def stroke_play_outcome(
     if scoring == ScoringFormat.STABLEFORD:
         # Mas puntos, mejor
         diferencia = mine.points - theirs.points
-    else:
-        # Medal: menos golpes netos respecto al par, mejor; asi se ordena la
+    elif scoring == ScoringFormat.MEDAL:
+        # Menos golpes netos respecto al par, mejor; asi se ordena la
         # clasificacion oficial y no cambia nada si los dos juegan el mismo par
         diferencia = theirs.net_to_par - mine.net_to_par
+    else:
+        # Una modalidad que no sea ninguna de las dos no se adivina: no cuenta
+        return None
     return _por_diferencia(diferencia)
 
 

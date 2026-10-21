@@ -267,6 +267,7 @@ class _Mundo:
         estado: EstadoPartida = EstadoPartida.COMPLETED,
         golpes_recibidos: dict[User, int] | None = None,
         sin_validar: dict[User, int] | None = None,
+        numero: int = 1,
     ) -> Partida:
         """
         `golpes[user]` son sus golpes validados, hoyo a hoyo desde el 1.
@@ -293,7 +294,7 @@ class _Mundo:
             id=PartidaId.generate(),
             competition_id=competition.id,
             round_id=round_.id,
-            numero=1,
+            numero=numero,
             jugadores=[foto(u) for u in golpes],
             marcadores=MarcadoresEnCadena.de(quedan) if len(quedan) > 1 else {},
             estado=estado,
@@ -782,6 +783,23 @@ class TestGruposDeStrokePlay:
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.outcome is None
+
+    async def test_en_la_misma_ronda_pero_en_grupos_distintos_no_sois_rivales(self, mundo):
+        """
+        Rivales en stroke play = el MISMO grupo (lo que respondió Agustín): jugar
+        la misma ronda del torneo saliendo en grupos distintos no cuenta.
+        """
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        otro1 = await mundo.jugador("Otro1")
+        otro2 = await mundo.jugador("Otro2")
+        course = await mundo.campo(yo)
+        competition = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        round_ = await mundo.ronda(competition, course)
+        await mundo.grupo(competition, round_, {yo: [4] * 18, otro1: [5] * 18}, numero=1)
+        await mundo.grupo(competition, round_, {el: [5] * 18, otro2: [4] * 18}, numero=2)
+
+        assert await _entre(mundo, yo, el) == []
 
     async def test_retirado_aunque_tenga_los_18_validados_no_cuenta(self, mundo):
         """Solo se juzga la tarjeta entregada."""
