@@ -2,6 +2,10 @@
 
 from pydantic import BaseModel, Field
 
+from src.modules.social.application.dto.head_to_head_dto import (
+    GamesTogetherPageDTO,
+    HeadToHeadDTO,
+)
 from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
 from src.shared.application.utc_datetime import UtcDatetime
 
@@ -85,6 +89,21 @@ class PlayerProfileResponseDTO(BaseModel):
         description=(
             "Solo uno mismo y sus amigos: el mismo resumen que su propio panel "
             "(BE #128, #167). None para cualquier otro"
+        ),
+    )
+    head_to_head: HeadToHeadDTO | None = Field(
+        default=None,
+        description=(
+            "Solo entre amigos: ganadas, empatadas y perdidas contra él y con él. "
+            "None para cualquier otro, para uno mismo y si no habeis jugado nada que contar"
+        ),
+    )
+    games_together: GamesTogetherPageDTO | None = Field(
+        default=None,
+        description=(
+            "Solo entre amigos: la primera pagina de partidas terminadas juntos (5); "
+            "el resto, en `GET /users/{id}/games-together`. None para cualquier otro "
+            "y para uno mismo"
         ),
     )
 

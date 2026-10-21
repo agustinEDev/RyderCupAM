@@ -67,3 +67,14 @@ class ActivityNotVisibleError(Exception):
     """
 
     pass
+
+
+class GamesTogetherNotVisibleError(Exception):
+    """
+    Las partidas juntos y el cara a cara con ese jugador son solo para amigos.
+
+    **Se traduce a 403**, como la actividad: la ficha minima ya es visible, asi
+    que su existencia no es ningun secreto.
+    """
+
+    pass
