@@ -89,16 +89,17 @@ class TestSecurityLoggerWriting:
         assert log_entry["extra"]["event_class"] == "LoginAttemptEvent"
         assert log_entry["extra"]["severity"] == "HIGH"
 
-    def test_severity_mapping_to_log_levels(self, logger):
-        """Severity se mapea correctamente a logging levels"""
-        # MEDIUM → WARNING (30)
-        assert logger._severity_to_log_level(SecuritySeverity.MEDIUM) == 30
-        # HIGH → ERROR (40)
-        assert logger._severity_to_log_level(SecuritySeverity.HIGH) == 40
-        # CRITICAL → CRITICAL (50)
-        assert logger._severity_to_log_level(SecuritySeverity.CRITICAL) == 50
-        # LOW → INFO (20)
-        assert logger._severity_to_log_level(SecuritySeverity.LOW) == 20
+    def test_level_follows_outcome_not_severity(self, logger):
+        """El nivel sale del resultado: un éxito HIGH va a INFO (BE #229)"""
+        # Éxito → INFO aunque sea HIGH o CRITICAL
+        assert logger._log_level(SecuritySeverity.HIGH, is_failure=False) == 20
+        assert logger._log_level(SecuritySeverity.CRITICAL, is_failure=False) == 20
+        # Fallo → HIGH/MEDIUM en WARNING (30), LOW en INFO (20)
+        assert logger._log_level(SecuritySeverity.HIGH, is_failure=True) == 30
+        assert logger._log_level(SecuritySeverity.MEDIUM, is_failure=True) == 30
+        assert logger._log_level(SecuritySeverity.LOW, is_failure=True) == 20
+        # Fallo CRITICAL → CRITICAL (50)
+        assert logger._log_level(SecuritySeverity.CRITICAL, is_failure=True) == 50
 
 
 class TestSecurityLoggerHelpers:
