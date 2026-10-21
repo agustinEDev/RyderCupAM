@@ -216,7 +216,9 @@ class PublishCompetitionNoticesUseCase:
         recibe sin el, con su estado.
         """
         terminado = datetime.combine(tournament.end_date, _MEDIODIA_UTC)
-        await self._publicar(
+        await self._sustituir(
+            tournament.competition_id,
+            ActivityEventType.TOURNAMENT_FINAL_STANDING,
             [
                 ActivityEvent.create(
                     user_id=fila.user_id,
@@ -234,7 +236,7 @@ class PublishCompetitionNoticesUseCase:
                     },
                 )
                 for fila in rows
-            ]
+            ],
         )
 
     async def reopened(self, competition_id: str) -> None:
@@ -301,6 +303,20 @@ class PublishCompetitionNoticesUseCase:
         # Una fecha para todos y el interruptor de cada uno, de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
+            await self._social_uow.activity_events.add_many(eventos)
+
+    async def _sustituir(
+        self, origen: str, tipo: ActivityEventType, eventos: list[ActivityEvent]
+    ) -> None:
+        """
+        Borra lo publicado de ese tipo desde ese origen y publica lo nuevo, en
+        la misma transaccion: si el borrado al reabrir fallo, la clasificacion
+        vieja no puede impedir la nueva (con la clave unica, el alta se la
+        saltaria) ni quedar a medias.
+        """
+        eventos = await stamp_for_publication(self._user_uow, eventos)
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source(origen, [tipo])
             await self._social_uow.activity_events.add_many(eventos)
 
     async def _retirar(

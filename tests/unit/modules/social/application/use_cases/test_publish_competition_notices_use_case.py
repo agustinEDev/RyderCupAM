@@ -506,6 +506,36 @@ class TestResultadosDeTorneo:
         assert evento.payload["position"] == 2
         assert evento.payload["value"] == -1
 
+    async def test_4_cerrar_otra_vez_sustituye_aunque_no_se_borrara_al_reabrir(
+        self, avisos, social_uow, user_uow, monkeypatch
+    ):
+        """
+        4. Given 4.º publicado y un reabrir cuyo borrado fallo / When se cierra
+        con 2.º / Then queda el 2.º, uno solo, y en una sola transaccion.
+        """
+        yo = await _user(user_uow)
+        torneo = _torneo()
+        await avisos.final_standings(
+            torneo, "MEDAL", [StandingRef(yo.id, 4, False, 3, "CLASIFICADO")]
+        )
+        entradas = []
+        original = type(social_uow).__aenter__
+
+        async def _cuenta(uow):
+            entradas.append(1)
+            return await original(uow)
+
+        monkeypatch.setattr(type(social_uow), "__aenter__", _cuenta)
+
+        await avisos.final_standings(
+            torneo, "MEDAL", [StandingRef(yo.id, 2, False, -1, "CLASIFICADO")]
+        )
+
+        monkeypatch.undo()
+        (evento,) = await _guardados(social_uow, yo)
+        assert evento.payload["position"] == 2
+        assert len(entradas) == 1
+
     async def test_reabrir_no_toca_otros_avisos_del_torneo(self, avisos, social_uow, user_uow):
         """Given apuntado y clasificado / When se reabre / Then el aviso de apuntado sigue."""
         yo = await _user(user_uow)
