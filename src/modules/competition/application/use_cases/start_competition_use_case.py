@@ -17,6 +17,9 @@ from src.modules.competition.application.services.actualizaciones_de_handicaps i
     ActualizacionesDeHandicaps,
 )
 from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
+from src.modules.competition.application.services.solicitudes_al_empezar import (
+    rechazar_las_solicitudes_pendientes,
+)
 from src.modules.competition.domain.entities.competition import CompetitionStateError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -125,7 +128,10 @@ class StartCompetitionUseCase:
             #     no se actualizó antes de empezar se queda como estaba (#251)
             await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
-            # 4. Persistir cambios
+            # 4c. Una solicitud que siga pendiente ya no cabe (21 oct)
+            await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
+
+            # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
         # 6. Retornar DTO de respuesta

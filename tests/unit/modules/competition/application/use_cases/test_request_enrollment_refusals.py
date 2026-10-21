@@ -161,3 +161,23 @@ async def test_g1_sin_genero_no_se_pide_plaza_y_lo_dice():
 
     async with uow:
         assert await uow.enrollments.find_by_user_and_competition(quien, competicion.id) is None
+
+
+async def test_r5_pedir_plaza_bloquea_la_competicion_como_empezarla(monkeypatch):
+    """CodeRabbit (BE #624): sin el bloqueo, una solicitud que valida «CLOSED»
+    mientras otra transacción la empieza se guarda REQUESTED con la competición
+    ya en juego, después de que el arranque haya rechazado las pendientes."""
+    uow = InMemoryUnitOfWork()
+    competicion = await _publica(uow, empieza=date.today())
+    lecturas = []
+    original = uow.competitions.find_by_id_for_update
+
+    async def con_bloqueo(competition_id):
+        lecturas.append(competition_id)
+        return await original(competition_id)
+
+    monkeypatch.setattr(uow.competitions, "find_by_id_for_update", con_bloqueo)
+
+    await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
+
+    assert lecturas == [competicion.id]

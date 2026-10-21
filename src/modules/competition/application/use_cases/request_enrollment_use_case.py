@@ -120,8 +120,11 @@ class RequestEnrollmentUseCase:
             competition_id = CompetitionId(request.competition_id)
             user_id = UserId(request.user_id)
 
-            # 1. Verificar que la competicion existe
-            competition = await self._uow.competitions.find_by_id(competition_id)
+            # 1. Verificar que la competicion existe. Con la fila bloqueada, como
+            # al empezarla: si no, una solicitud que valida «cerrada» mientras
+            # otra transacción la arranca quedaba pendiente con la competición
+            # ya en juego (CodeRabbit, BE #624)
+            competition = await self._uow.competitions.find_by_id_for_update(competition_id)
             if not competition:
                 raise CompetitionNotFoundError(
                     f"Competicion no encontrada: {request.competition_id}"
