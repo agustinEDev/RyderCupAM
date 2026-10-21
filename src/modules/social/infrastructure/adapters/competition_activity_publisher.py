@@ -12,7 +12,11 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
     MatchOutcome,
@@ -41,13 +45,26 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
     tiene puesto individual que contar.
     """
 
-    def __init__(self, notices: PublishCompetitionNoticesUseCase, standings: OfficialStandings):
+    def __init__(
+        self,
+        notices: PublishCompetitionNoticesUseCase,
+        standings: OfficialStandings,
+        competition_uow: CompetitionUnitOfWorkInterface,
+    ):
         self._notices = notices
         self._standings = standings
+        # Para releer la inscripcion justo antes de avisar de ella
+        self._competition_uow = competition_uow
 
     async def enrolled(
         self, competition: Competition, enrollment: Enrollment, accepted_request: bool
     ) -> None:
+        # Se relee justo antes de publicar: si entre guardarla y avisar se
+        # retiro, su aviso llegaria tarde y nadie lo retiraria ya
+        async with self._competition_uow:
+            actual = await self._competition_uow.enrollments.find_by_id(enrollment.id)
+        if actual is None or actual.status != EnrollmentStatus.APPROVED:
+            return
         await self._notices.enrolled(
             enrollment.user_id, _ref(competition), str(enrollment.id.value), accepted_request
         )

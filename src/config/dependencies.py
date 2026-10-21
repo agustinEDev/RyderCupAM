@@ -1770,7 +1770,7 @@ def get_competition_activity_publisher(
     ella, no de otra cuenta.
     """
     return CompetitionActivityPublisher(
-        notices, ClasificacionGeneralUseCase(uow=uow, user_repository=user_uow.users)
+        notices, ClasificacionGeneralUseCase(uow=uow, user_repository=user_uow.users), uow
     )
 
 

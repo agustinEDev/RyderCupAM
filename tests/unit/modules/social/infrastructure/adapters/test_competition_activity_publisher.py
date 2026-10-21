@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
     MatchOutcome,
@@ -50,6 +51,25 @@ class _General:
         return self._respuesta
 
 
+class _Inscripciones:
+    """La UoW de competition, solo para releer una inscripcion; aprobada si no se dice."""
+
+    def __init__(self, estado: EnrollmentStatus | None = EnrollmentStatus.APPROVED):
+        self._estado = estado
+        self.enrollments = self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        return False
+
+    async def find_by_id(self, enrollment_id):
+        if self._estado is None:
+            return None
+        return SimpleNamespace(id=enrollment_id, status=self._estado)
+
+
 def _competicion(visibility=Visibility.PUBLIC, stroke_play=None):
     return SimpleNamespace(
         id=CompetitionId(uuid4()),
@@ -80,7 +100,7 @@ class TestTraduccion:
         competicion = _competicion()
         inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
 
-        await CompetitionActivityPublisher(avisos, _General([])).enrolled(
+        await CompetitionActivityPublisher(avisos, _General([]), _Inscripciones()).enrolled(
             competicion, inscripcion, accepted_request=True
         )
 
@@ -92,11 +112,27 @@ class TestTraduccion:
             )
         ]
 
+    @pytest.mark.parametrize(
+        "estado", [EnrollmentStatus.WITHDRAWN, EnrollmentStatus.CANCELLED, None]
+    )
+    async def test_8_si_ya_no_esta_inscrito_no_se_publica(self, avisos, estado):
+        """
+        8. Given una inscripcion que se retiro (o se borro) antes de publicar
+        su aviso / When se publica / Then nada: el aviso llegaria tarde.
+        """
+        inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
+
+        await CompetitionActivityPublisher(avisos, _General([]), _Inscripciones(estado)).enrolled(
+            _competicion(), inscripcion, accepted_request=True
+        )
+
+        assert avisos.llamadas == []
+
     async def test_un_privado_no_es_publico(self, avisos):
         competicion = _competicion(visibility=Visibility.PRIVATE)
         inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
 
-        await CompetitionActivityPublisher(avisos, _General([])).enrolled(
+        await CompetitionActivityPublisher(avisos, _General([]), _Inscripciones()).enrolled(
             competicion, inscripcion, accepted_request=False
         )
 
@@ -106,7 +142,7 @@ class TestTraduccion:
     async def test_retirar_cancelar_y_reabrir_van_por_el_id(self, avisos):
         competicion = _competicion()
         jugador = UserId(uuid4())
-        adaptador = CompetitionActivityPublisher(avisos, _General([]))
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
 
         await adaptador.left(competicion.id, jugador)
         await adaptador.cancelled(competicion.id)
@@ -128,7 +164,7 @@ class TestTraduccion:
         invitacion = SimpleNamespace(
             id=SimpleNamespace(value=uuid4()), invitee_user_id=UserId(uuid4())
         )
-        adaptador = CompetitionActivityPublisher(avisos, _General([]))
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
 
         await adaptador.invited(competicion, invitacion)
         await adaptador.invitation_withdrawn(invitacion)
@@ -143,7 +179,7 @@ class TestTraduccion:
         competicion = _competicion()
         una = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
         otra = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
-        adaptador = CompetitionActivityPublisher(avisos, _General([]))
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
 
         await adaptador.requests_closed(competicion, [una, otra])
         await adaptador.request_rejected(competicion, una)
@@ -179,7 +215,7 @@ class TestTraduccion:
         )
         ronda = SimpleNamespace(round_date=date(2027, 3, 4))
 
-        await CompetitionActivityPublisher(avisos, _General([])).match_finished(
+        await CompetitionActivityPublisher(avisos, _General([]), _Inscripciones()).match_finished(
             competicion, ronda, partido
         )
 
@@ -210,7 +246,7 @@ class TestTraduccion:
             result={"winner": "A", "score": "1UP"},
         )
 
-        await CompetitionActivityPublisher(avisos, _General([])).match_finished(
+        await CompetitionActivityPublisher(avisos, _General([]), _Inscripciones()).match_finished(
             competicion, SimpleNamespace(round_date=None), partido
         )
 
@@ -232,7 +268,7 @@ class TestClasificacionFinal:
             tipo="STABLEFORD",
         )
 
-        await CompetitionActivityPublisher(avisos, general).completed(competicion)
+        await CompetitionActivityPublisher(avisos, general, _Inscripciones()).completed(competicion)
 
         assert general.pedida == [(competicion.id.value, None)]
         assert avisos.llamadas == [
@@ -253,7 +289,9 @@ class TestClasificacionFinal:
     async def test_una_ryder_no_tiene_clasificacion_individual(self, avisos):
         general = _General([])
 
-        await CompetitionActivityPublisher(avisos, general).completed(_competicion())
+        await CompetitionActivityPublisher(avisos, general, _Inscripciones()).completed(
+            _competicion()
+        )
 
         assert general.pedida == []
         assert avisos.llamadas == []
