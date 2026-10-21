@@ -10,6 +10,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivityEventRepositoryInterface,
@@ -107,6 +108,27 @@ async def resolve_feed_scope(
         ),
         last_seen_at=visto_hasta,
     )
+
+
+def payload_for(evento: ActivityEvent, viewer_id: UserId) -> dict:
+    """
+    El detalle de un evento tal como lo puede ver quien mira.
+
+    El nombre de un invitado (sin cuenta) lo escribio el autor en su partida:
+    solo lo ve el. A cualquier otro le llega sin nombre y el cliente pinta «un
+    invitado» (revision de BE-2).
+    """
+    payload = evento.payload
+    if evento.user_id == viewer_id:
+        return payload
+    for clave in ("opponents", "partners"):
+        personas = payload.get(clave)
+        if isinstance(personas, list):
+            payload[clave] = [
+                {**p, "name": None} if isinstance(p, dict) and not p.get("user_id") else p
+                for p in personas
+            ]
+    return payload
 
 
 async def pending_requests(

@@ -177,3 +177,21 @@ class SQLAlchemyFriendshipRepository(FriendshipRepositoryInterface):
             addressee_id if requester_id == user_id else requester_id
             for requester_id, addressee_id in result.all()
         ]
+
+    async def find_blocked_ids(self, user_id: UserId) -> list[UserId]:
+        # El bloqueo se guarda en la misma fila de la amistad, con cualquiera
+        # de los dos en cualquier columna: como `find_friend_ids`
+        stmt = select(friendships_table.c.requester_id, friendships_table.c.addressee_id).where(
+            and_(
+                friendships_table.c.status == FriendshipStatus.BLOCKED,
+                or_(
+                    friendships_table.c.requester_id == user_id,
+                    friendships_table.c.addressee_id == user_id,
+                ),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return [
+            addressee_id if requester_id == user_id else requester_id
+            for requester_id, addressee_id in result.all()
+        ]

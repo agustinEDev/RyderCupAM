@@ -386,3 +386,113 @@ class TestPaginasSinPartirTarjetas:
         ]
         assert [e.source_match_id for e in segunda.events] == ["viejo"]
         assert segunda.next_cursor is None
+
+
+class TestPrivacidadDeLosNombrados:
+    """Revision de BE-2, punto 3: a quien nombra una tarjeta, segun quien mira."""
+
+    async def _resultado(self, social_uow, autor: User, rivales: list, compis: list | None = None):
+        async with social_uow:
+            await social_uow.activity_events.add_many(
+                [
+                    ActivityEvent.create(
+                        user_id=autor.id,
+                        type=ActivityEventType.QUICK_MATCH_FINISHED,
+                        occurred_at=DESPUES,
+                        source_match_id=f"partida-{uuid4().hex[:6]}",
+                        published_at=DESPUES,
+                        payload={"opponents": rivales, "partners": compis or []},
+                    )
+                ]
+            )
+
+    @staticmethod
+    def _con_cuenta(user: User) -> dict:
+        return {"user_id": str(user.id.value), "name": None}
+
+    async def _amistad(self, social_uow, a: User, b: User, estado: str) -> None:
+        amistad = Friendship.create(id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id)
+        if estado == "amigos":
+            amistad.accept()
+        else:
+            amistad.block(a.id)
+        async with social_uow:
+            await social_uow.friendships.add(amistad)
+
+    @pytest.mark.parametrize("quien_bloquea", ["yo", "el"])
+    async def test_3_un_bloqueado_no_viene_en_los_autores(
+        self, social_uow, user_uow, quien_bloquea
+    ):
+        """
+        3. Given un resultado mio contra Eva (bloqueo entre los dos, lo puso
+        cualquiera) y Luz / When abro / Then Luz viene; Eva no («un jugador»).
+        """
+        yo = await _user(user_uow)
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        if quien_bloquea == "yo":
+            await self._amistad(social_uow, yo, eva, "bloqueo")
+        else:
+            await self._amistad(social_uow, eva, yo, "bloqueo")
+        await self._resultado(social_uow, yo, [self._con_cuenta(eva), self._con_cuenta(luz)])
+
+        feed = await _feed(social_uow, user_uow, yo)
+
+        assert set(feed.authors) == {str(yo.id.value), str(luz.id.value)}
+
+    async def test_3_una_cuenta_desactivada_no_viene_en_los_autores(self, social_uow, user_uow):
+        yo = await _user(user_uow)
+        eva = await _user(user_uow, "Eva")
+        eva.deactivate(str(uuid4()))
+        async with user_uow:
+            await user_uow.users.save(eva)
+        await self._resultado(social_uow, yo, [self._con_cuenta(eva)])
+
+        feed = await _feed(social_uow, user_uow, yo)
+
+        assert set(feed.authors) == {str(yo.id.value)}
+
+    async def test_3_el_bloqueo_del_amigo_no_me_afecta(self, social_uow, user_uow):
+        """3. El bloqueo se mira contra quien MIRA: el del autor con otro no cuenta para mi."""
+        yo = await _user(user_uow)
+        amigo = await _user(user_uow, "Amigo")
+        eva = await _user(user_uow, "Eva")
+        await self._amistad(social_uow, yo, amigo, "amigos")
+        await self._amistad(social_uow, amigo, eva, "bloqueo")
+        await self._resultado(social_uow, yo, [self._con_cuenta(eva)])
+
+        feed = await _feed(social_uow, user_uow, yo)
+
+        assert str(eva.id.value) in feed.authors
+
+    async def test_3_el_nombre_del_invitado_solo_lo_ve_el_autor(self, social_uow, user_uow):
+        """
+        3. Given mi partida contra un invitado / When la vemos mi amigo y yo /
+        Then yo veo su nombre; mi amigo, sin nombre («un invitado»), en el feed
+        y en mi actividad.
+        """
+        yo = await _user(user_uow)
+        amigo = await _user(user_uow, "Amigo")
+        await self._amistad(social_uow, yo, amigo, "amigos")
+        luz = await _user(user_uow, "Luz")
+        invitado = {"user_id": None, "name": "Seve Ballesteros"}
+        await self._resultado(
+            social_uow, yo, [invitado, self._con_cuenta(luz)], compis=[dict(invitado)]
+        )
+
+        (mio,) = (await _feed(social_uow, user_uow, yo)).events
+        (suyo,) = (await _feed(social_uow, user_uow, amigo)).events
+        (en_mi_perfil,) = (
+            await GetPlayerActivityUseCase(social_uow, user_uow).execute(
+                str(amigo.id.value), str(yo.id.value)
+            )
+        ).events
+
+        assert mio.payload["opponents"][0]["name"] == "Seve Ballesteros"
+        assert mio.payload["partners"][0]["name"] == "Seve Ballesteros"
+        for visto in (suyo, en_mi_perfil):
+            assert visto.payload["opponents"] == [
+                {"user_id": None, "name": None},
+                self._con_cuenta(luz),
+            ]
+            assert visto.payload["partners"] == [{"user_id": None, "name": None}]

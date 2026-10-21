@@ -10,6 +10,7 @@ from src.modules.social.application.feed_cursor import (
     parse_cursor,
     sin_partir_tarjetas,
 )
+from src.modules.social.application.feed_scope import payload_for
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -116,7 +117,7 @@ class GetPlayerActivityUseCase:
                     type=e.type.value,
                     occurred_at=e.occurred_at,
                     published_at=e.published_at,
-                    payload=e.payload,
+                    payload=payload_for(e, viewer_id),
                     source_match_id=e.source_match_id,
                     group_key=e.card_key,
                 )

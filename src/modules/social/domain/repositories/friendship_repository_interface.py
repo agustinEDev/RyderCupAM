@@ -102,3 +102,10 @@ class FriendshipRepositoryInterface(ABC):
         estado por amigo para tirarlos acto seguido.
         """
         pass
+
+    @abstractmethod
+    async def find_blocked_ids(self, user_id: UserId) -> list[UserId]:
+        """
+        Con quien hay un bloqueo, lo pusiera quien lo pusiera, en una sola
+        consulta. El feed no nombra a nadie con quien haya uno.
+        """

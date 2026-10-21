@@ -20,6 +20,7 @@ from src.modules.social.application.feed_cursor import (
 )
 from src.modules.social.application.feed_scope import (
     count_unseen,
+    payload_for,
     pending_requests,
     resolve_feed_scope,
 )
@@ -109,11 +110,11 @@ class GetFriendsFeedUseCase:
                 solicitudes = await pending_requests(self._social_uow.friendships, viewer_id)
                 no_vistos = await count_unseen(self._social_uow.activity_events, scope, solicitudes)
 
-        autores = await self._autores(eventos, [s.requester_id for s in solicitudes])
+        autores = await self._autores(eventos, viewer_id, [s.requester_id for s in solicitudes])
         campos = await self._campos(eventos)
 
         return FeedResponseDTO(
-            events=[self._a_dto(e) for e in eventos],
+            events=[self._a_dto(e, viewer_id) for e in eventos],
             authors=autores,
             courses=campos,
             next_cursor=build_cursor(eventos, limit),
@@ -131,7 +132,10 @@ class GetFriendsFeedUseCase:
         )
 
     async def _autores(
-        self, eventos: list[ActivityEvent], otros: list[UserId] | None = None
+        self,
+        eventos: list[ActivityEvent],
+        viewer_id: UserId,
+        otros: list[UserId] | None = None,
     ) -> dict[str, FeedAuthorDTO]:
         """
         Quien publico cada entrada de esta pagina, y las demas personas que
@@ -139,15 +143,29 @@ class GetFriendsFeedUseCase:
 
         Van en la respuesta para que pintar el feed no exija una peticion de
         perfil por entrada. Se leen todos de una vez, no uno por autor.
+
+        **De los nombrados solo vienen los que quien mira puede ver**: nadie
+        con quien tenga un bloqueo, lo pusiera quien lo pusiera, ni una cuenta
+        desactivada. Sin sus datos, el cliente pinta «un jugador».
         """
-        ids = {e.user_id for e in eventos} | set(otros or [])
+        propios = {e.user_id for e in eventos} | set(otros or [])
+        nombrados: set[UserId] = set()
         for evento in eventos:
-            ids.update(_nombrados(evento.payload))
+            nombrados.update(_nombrados(evento.payload))
+        nombrados -= propios
+        if nombrados:
+            async with self._social_uow:
+                nombrados -= set(await self._social_uow.friendships.find_blocked_ids(viewer_id))
+        ids = propios | nombrados
         if not ids:
             return {}
 
         async with self._user_uow:
-            usuarios = await self._user_uow.users.find_by_ids(list(ids))
+            usuarios = [
+                u
+                for u in await self._user_uow.users.find_by_ids(list(ids))
+                if u.id in propios or u.is_active
+            ]
 
         return {
             str(user.id.value): FeedAuthorDTO(
@@ -199,14 +217,14 @@ class GetFriendsFeedUseCase:
         return campos
 
     @staticmethod
-    def _a_dto(evento: ActivityEvent) -> ActivityEventDTO:
+    def _a_dto(evento: ActivityEvent, viewer_id: UserId) -> ActivityEventDTO:
         return ActivityEventDTO(
             id=str(evento.id),
             user_id=str(evento.user_id.value),
             type=evento.type.value,
             occurred_at=evento.occurred_at,
             published_at=evento.published_at,
-            payload=evento.payload,
+            payload=payload_for(evento, viewer_id),
             source_match_id=evento.source_match_id,
             group_key=evento.card_key,
         )
