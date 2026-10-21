@@ -400,6 +400,44 @@ class TestPartidaRapidaStrokePlay:
 
         assert partida.outcome == Outcome.HALVED
 
+    async def test_si_uno_no_tiene_handicap_sale_pero_no_cuenta(self, mundo):
+        """
+        Partida con hándicap y él sin hándicap: se le repartiría como scratch,
+        que no es su juego real. La partida sale en la lista, sin resultado.
+        """
+        yo = await mundo.jugador("Yo", handicap=10)
+        el = await mundo.jugador("El", handicap=None)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome is None
+
+    async def test_en_una_partida_scratch_el_handicap_no_hace_falta(self, mundo):
+        """Nadie recibe golpes: que él no tenga hándicap no cambia nada."""
+        yo = await mundo.jugador("Yo", handicap=10)
+        el = await mundo.jugador("El", handicap=None)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+            play_mode=PlayMode.SCRATCH,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.WON
+
     async def test_una_tarjeta_a_medias_sale_pero_no_cuenta(self, mundo):
         """Caso 10: él dejo el 18 sin anotar; la partida sale, sin resultado."""
         yo = await mundo.jugador("Yo")

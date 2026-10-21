@@ -238,7 +238,13 @@ class SharedGamesAdapter(SharedGamesInterface):
 
         # Sin campo no hay reparto de golpes, y a bruto no se juzga
         if match.match_format is None:
-            if course is not None and match.scoring_format is not None and yo and el:
+            if (
+                course is not None
+                and match.scoring_format is not None
+                and yo
+                and el
+                and self._con_handicap_conocido(match, (yo, el), usuarios)
+            ):
                 golpes_recibidos = quick_match_strokes(
                     match, course, usuarios, self._stroke_allocation
                 )
@@ -263,6 +269,25 @@ class SharedGamesAdapter(SharedGamesInterface):
             relation=relation,
             outcome=outcome,
         )
+
+    @staticmethod
+    def _con_handicap_conocido(
+        match: QuickMatch,
+        participantes: tuple[QuickMatchParticipant, ...],
+        usuarios: dict[UserId, User],
+    ) -> bool:
+        """
+        Si los dos tienen handicap, o la partida es scratch. Sin el suyo, el
+        reparto le da 0 golpes: su tarjeta no seria su juego y no se juzga.
+        """
+        if not match.uses_handicap():
+            return True
+        for participante in participantes:
+            user = usuarios.get(participante.user_id) if participante.user_id else None
+            perfil = user.handicap.value if user and user.handicap else None
+            if participante.effective_handicap(perfil) is None:
+                return False
+        return True
 
     def _match_play_rapido(
         self,
