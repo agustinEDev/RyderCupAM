@@ -20,6 +20,9 @@ from src.modules.social.application.use_cases.get_feed_unseen_count_use_case imp
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
 )
+from src.modules.social.application.use_cases.get_player_activity_use_case import (
+    GetPlayerActivityUseCase,
+)
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
@@ -319,3 +322,67 @@ class TestRivalesConNombre:
 
         assert set(feed.authors) == {str(u.id.value) for u in (yo, eva, luz, pablo)}
         assert feed.authors[str(eva.id.value)].first_name == "Eva"
+
+
+class TestPaginasSinPartirTarjetas:
+    async def test_7_una_tarjeta_en_el_borde_de_la_pagina_va_entera(self, social_uow, user_uow):
+        """
+        7. Given un aviso reciente, una vuelta con tres logros y otro aviso mas
+        viejo / When pido paginas de 2 / Then la primera trae el aviso y la
+        vuelta entera, y la segunda sigue tras la vuelta sin repetir nada.
+        """
+        yo = await _user(user_uow)
+        async with social_uow:
+            await social_uow.activity_events.add_many(
+                [
+                    ActivityEvent.create(
+                        user_id=yo.id,
+                        type=ActivityEventType.ENROLLMENT_APPROVED,
+                        occurred_at=DESPUES,
+                        source_match_id="reciente",
+                        published_at=DESPUES + timedelta(minutes=5),
+                    ),
+                    *[
+                        ActivityEvent.create(
+                            user_id=yo.id,
+                            type=tipo,
+                            occurred_at=DESPUES,
+                            source_match_id="vuelta-1",
+                            published_at=DESPUES,
+                        )
+                        for tipo in (
+                            ActivityEventType.BIRDIE,
+                            ActivityEventType.EAGLE_OR_BETTER,
+                            ActivityEventType.NEW_COURSE,
+                        )
+                    ],
+                    ActivityEvent.create(
+                        user_id=yo.id,
+                        type=ActivityEventType.ENROLLMENT_REJECTED,
+                        occurred_at=DESPUES,
+                        source_match_id="viejo",
+                        published_at=DESPUES - timedelta(minutes=5),
+                    ),
+                ]
+            )
+
+        caso = GetFriendsFeedUseCase(
+            social_uow, user_uow, InMemoryGolfCourseUnitOfWork(), reloj=lambda: DESPUES
+        )
+        primera = await caso.execute(str(yo.id.value), limit=2)
+        segunda = await caso.execute(str(yo.id.value), limit=2, cursor=primera.next_cursor)
+        actividad = GetPlayerActivityUseCase(social_uow, user_uow)
+        mia = await actividad.execute(str(yo.id.value), str(yo.id.value), limit=2)
+
+        assert [e.source_match_id for e in mia.events] == [
+            e.source_match_id for e in primera.events
+        ]
+
+        assert [e.source_match_id for e in primera.events] == [
+            "reciente",
+            "vuelta-1",
+            "vuelta-1",
+            "vuelta-1",
+        ]
+        assert [e.source_match_id for e in segunda.events] == ["viejo"]
+        assert segunda.next_cursor is None

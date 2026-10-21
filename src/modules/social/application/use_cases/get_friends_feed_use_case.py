@@ -13,7 +13,11 @@ from src.modules.social.application.dto.profile_dto import (
     FeedResponseDTO,
     FriendRequestNoticeDTO,
 )
-from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
+from src.modules.social.application.feed_cursor import (
+    build_cursor,
+    parse_cursor,
+    sin_partir_tarjetas,
+)
 from src.modules.social.application.feed_scope import (
     count_unseen,
     pending_requests,
@@ -90,6 +94,10 @@ class GetFriendsFeedUseCase:
         async with self._social_uow:
             eventos = await self._social_uow.activity_events.find_in(
                 scope.slices, limit=limit, before=before, before_id=before_id
+            )
+            # Ninguna tarjeta partida entre dos paginas
+            eventos = await sin_partir_tarjetas(
+                self._social_uow.activity_events, scope.slices, eventos, limit
             )
             # Las solicitudes de amistad y el mismo recuento que da `GET
             # /users/me/feed/unseen-count`: el numero del boton y el de la

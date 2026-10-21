@@ -5,7 +5,11 @@ from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
     ProfileNotVisibleError,
 )
-from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
+from src.modules.social.application.feed_cursor import (
+    build_cursor,
+    parse_cursor,
+    sin_partir_tarjetas,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -98,6 +102,10 @@ class GetPlayerActivityUseCase:
         async with self._social_uow:
             eventos = await self._social_uow.activity_events.find_in(
                 [trozo], limit=limit, before=before, before_id=before_id
+            )
+            # Ninguna tarjeta partida entre dos paginas, como en el feed
+            eventos = await sin_partir_tarjetas(
+                self._social_uow.activity_events, [trozo], eventos, limit
             )
 
         return FeedResponseDTO(
