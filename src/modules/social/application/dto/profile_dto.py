@@ -96,7 +96,10 @@ class ActivityEventDTO(BaseModel):
     user_id: str
     type: str
     occurred_at: UtcDatetime = Field(
-        description="Cuando se jugo, en UTC (con «Z»): el dia de la ronda o la creacion de la partida"
+        description=(
+            "Cuando se jugo, en UTC (con «Z»): el dia de la ronda a las 12:00, para que caiga "
+            "en el mismo dia en cualquier zona, o la creacion de la partida"
+        )
     )
     published_at: UtcDatetime | None = Field(
         default=None,

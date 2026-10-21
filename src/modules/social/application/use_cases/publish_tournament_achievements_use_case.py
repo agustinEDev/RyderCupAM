@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -38,6 +38,11 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import countable_holes
 
 logger = logging.getLogger(__name__)
+
+# La ronda es una fecha, pero sale al JSON en UTC y con «Z»: a mediodia cae en
+# el mismo dia en cualquier zona de -12 a +12; a medianoche, al oeste de
+# Greenwich se veria el dia anterior
+_MEDIODIA_UTC = time(12, 0)
 
 # Cuantas vueltas del jugador se miran hacia atras para saber si estrena torneo.
 MAX_HISTORY_LOOKUP = 200
@@ -245,7 +250,7 @@ class PublishTournamentAchievementsUseCase:
             user_id=user_id,
             match_id=str(partido.id.value),
             golf_course_id=str(ronda.golf_course_id.value),
-            occurred_at=datetime.combine(ronda.round_date, datetime.min.time()),
+            occurred_at=datetime.combine(ronda.round_date, _MEDIODIA_UTC),
             visible_to_friends=visible_to_friends,
             holes=[
                 PlayedHole(

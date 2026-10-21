@@ -6,7 +6,7 @@ partido lleva su propio `source_match_id`, y `FIRST_TOURNAMENT` se publica una
 sola vez aunque el jugador haya jugado cuatro partidos.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -557,3 +557,25 @@ async def test_los_logros_de_un_torneo_comparten_fecha_de_publicacion(
     eventos = await _feed_de(social_uow, player)
     assert len(eventos) >= 2
     assert len({e.published_at for e in eventos}) == 1
+
+
+async def test_la_ronda_de_torneo_se_fecha_a_mediodia_utc(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """
+    Given un torneo jugado el 1 de junio / When se publica / Then `occurred_at`
+    es ese dia a las 12:00 UTC: sale con «Z», y a medianoche se veria el dia
+    anterior en cualquier zona al oeste de Greenwich.
+    """
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival)
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    eventos = await _feed_de(social_uow, player)
+    assert eventos
+    assert {e.occurred_at for e in eventos} == {datetime(2026, 6, 1, 12, 0)}
