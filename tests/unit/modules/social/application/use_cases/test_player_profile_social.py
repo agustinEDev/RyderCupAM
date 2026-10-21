@@ -156,6 +156,7 @@ class TestNoAmigo:
         """Caso 1: nombre, foto, amigos y hándicap; lo demás en None, nunca a cero."""
         yo = await _usuario(user_uow)
         el = await _usuario(user_uow, handicap=8.4)
+        await _amigos(social_uow, el, await _usuario(user_uow))
         partidas = _PartidasFijas([_partida()])
 
         perfil = await _perfil(social_uow, user_uow, stats, partidas).execute(
@@ -164,7 +165,7 @@ class TestNoAmigo:
 
         assert perfil.first_name == "Luis"
         assert perfil.handicap == 8.4
-        assert perfil.friends_count == 0
+        assert perfil.friends_count == 1
         assert perfil.stats is None
         assert perfil.head_to_head is None
         assert perfil.games_together is None
@@ -184,9 +185,10 @@ class TestNoAmigo:
         assert perfil.handicap is None
 
     async def test_si_lo_bloquee_no_veo_su_handicap(self, social_uow, user_uow, stats):
-        """Caso 3: solo nombre y foto."""
+        """Caso 3: solo nombre y foto; el número de amigos, a 0 (no admite null)."""
         yo = await _usuario(user_uow)
         el = await _usuario(user_uow, handicap=8.4)
+        await _amigos(social_uow, el, await _usuario(user_uow))
         await _bloqueo(social_uow, yo, el)
 
         perfil = await _perfil(social_uow, user_uow, stats).execute(
@@ -196,6 +198,7 @@ class TestNoAmigo:
         assert perfil.first_name == "Luis"
         assert perfil.friendship.status == "BLOCKED"
         assert perfil.handicap is None
+        assert perfil.friends_count == 0
         assert perfil.stats is None
         assert perfil.head_to_head is None
         assert perfil.games_together is None
@@ -204,6 +207,7 @@ class TestNoAmigo:
         """Caso 3, del otro lado."""
         yo = await _usuario(user_uow)
         el = await _usuario(user_uow, handicap=8.4)
+        await _amigos(social_uow, el, await _usuario(user_uow))
         await _bloqueo(social_uow, el, yo)
 
         perfil = await _perfil(social_uow, user_uow, stats).execute(
@@ -211,6 +215,7 @@ class TestNoAmigo:
         )
 
         assert perfil.handicap is None
+        assert perfil.friends_count == 0
 
 
 class TestAmigo:

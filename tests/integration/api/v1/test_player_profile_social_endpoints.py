@@ -103,9 +103,10 @@ class TestPerfilSocial:
         assert datos["games_together"] is None
 
     async def test_bloqueado_no_ve_el_handicap(self, client: AsyncClient):
-        """Caso 3."""
+        """Caso 3: solo nombre y foto; el número de amigos llega a 0."""
         yo = await _usuario(client, "ps_b1@test.com", "Ana")
         el = await _usuario(client, "ps_b2@test.com", "Luis")
+        await hacerse_amigos(client, el, await _usuario(client, "ps_b3@test.com", "Eva"))
         set_auth_cookies(client, el["cookies"])
         await client.post(
             "/api/v1/handicaps/update-manual",
@@ -119,6 +120,7 @@ class TestPerfilSocial:
 
         assert datos["friendship"]["status"] == "BLOCKED"
         assert datos["handicap"] is None
+        assert datos["friends_count"] == 0
 
     async def test_un_amigo_ve_el_cara_a_cara_y_las_partidas_juntos(self, client: AsyncClient):
         """Caso 4: gano el singles (4 contra 5, scratch en un hoyo)."""

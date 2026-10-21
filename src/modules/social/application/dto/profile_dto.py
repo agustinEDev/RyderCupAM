@@ -69,7 +69,9 @@ class PlayerProfileResponseDTO(BaseModel):
         default=0,
         description=(
             "Cuantos amigos tiene. Va en la ficha publica, como el contador de "
-            "seguidores de cualquier perfil: es un numero, no dice quienes son"
+            "seguidores de cualquier perfil: es un numero, no dice quienes son. "
+            "Con un bloqueo entre los dos, en cualquier sentido, llega a 0 (solo "
+            "nombre y foto): el cliente no lo pinta en un perfil bloqueado"
         ),
     )
     friendship: FriendshipStateDTO = Field(

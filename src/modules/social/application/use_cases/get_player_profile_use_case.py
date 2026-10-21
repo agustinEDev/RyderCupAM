@@ -107,7 +107,9 @@ class GetPlayerProfileUseCase:
 
         return PlayerProfileResponseDTO(
             **ficha,
-            friends_count=amigos,
+            # Bloqueado, solo nombre y foto: el campo no admite null sin romper
+            # el contrato, asi que va a 0 y el cliente no lo pinta
+            friends_count=0 if bloqueado else amigos,
             friendship=relacion,
             is_friend=amigo,
             # Ni a los amigos: el correo es dato suyo
