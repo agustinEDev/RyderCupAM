@@ -197,3 +197,13 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             traidos={fila.user_id for fila in filas if fila.brought_in},
             jugaron={fila.user_id for fila in filas if fila.played},
         )
+
+    async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
+        jugadores = tee_group_players_table
+
+        def de(uid: UserId):
+            return tee_groups_table.c.id.in_(
+                select(jugadores.c.group_id).where(jugadores.c.user_id == uid)
+            )
+
+        return await self._donde(de(user_id) & de(other_id))

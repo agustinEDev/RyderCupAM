@@ -1,6 +1,6 @@
 """Match Repository - SQLAlchemy Implementation."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import cast, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -133,3 +133,24 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
             return False
         await self._session.delete(match)
         return True
+
+    async def find_with_both_players(
+        self, user_id: UserId, other_id: UserId, statuses: Collection[MatchStatus]
+    ) -> list[Match]:
+        """Por contención (`@>`) en los dos bandos, como `find_completed_for_player`."""
+
+        def juega(uid: UserId):
+            jugador = cast([{"user_id": str(uid.value)}], JSONB)
+            return or_(
+                matches_table.c.team_a_players.op("@>")(jugador),
+                matches_table.c.team_b_players.op("@>")(jugador),
+            )
+
+        statement = (
+            select(Match)
+            .where(juega(user_id))
+            .where(juega(other_id))
+            .where(matches_table.c.status.in_(list(statuses)))
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())

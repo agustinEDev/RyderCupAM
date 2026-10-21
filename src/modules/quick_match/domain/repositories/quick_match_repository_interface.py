@@ -79,3 +79,15 @@ class QuickMatchRepositoryInterface(ABC):
         (incluyendo a otros participantes) si no se bloquea antes.
         """
         pass
+
+    @abstractmethod
+    async def list_shared_by(
+        self, user_id: UserId, other_id: UserId, status: QuickMatchStatus
+    ) -> list[QuickMatch]:
+        """
+        Las partidas en ese estado donde juegan los dos y que ninguno oculto.
+
+        Basta con que uno la haya quitado de su lista (la papelera) para que deje
+        de ser «de los dos»: es lo que se enseña en el perfil del otro (BE-3).
+        """
+        pass

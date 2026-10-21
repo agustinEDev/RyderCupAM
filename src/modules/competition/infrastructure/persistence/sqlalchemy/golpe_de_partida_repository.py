@@ -84,3 +84,8 @@ class SQLAlchemyGolpeDePartidaRepository(GolpeDePartidaRepositoryInterface):
             )
             for f in filas
         ]
+
+    async def de_las_partidas(self, partida_ids: list[PartidaId]) -> list[GolpeDePartida]:
+        if not partida_ids:
+            return []
+        return await self._donde(tabla.c.group_id.in_([str(p) for p in partida_ids]))

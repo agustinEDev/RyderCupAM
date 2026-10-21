@@ -43,3 +43,11 @@ class InMemoryQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInterfa
         results = [hs for hs in self._hole_scores.values() if hs.quick_match_id == quick_match_id]
         results.sort(key=lambda x: x.hole_number)
         return results
+
+    async def find_by_matches(
+        self, quick_match_ids: list[QuickMatchId]
+    ) -> list[QuickMatchHoleScore]:
+        wanted = set(quick_match_ids)
+        results = [hs for hs in self._hole_scores.values() if hs.quick_match_id in wanted]
+        results.sort(key=lambda x: x.hole_number)
+        return results

@@ -50,3 +50,16 @@ class SQLAlchemyQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInter
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def find_by_matches(
+        self, quick_match_ids: list[QuickMatchId]
+    ) -> list[QuickMatchHoleScore]:
+        if not quick_match_ids:
+            return []
+        stmt = (
+            select(QuickMatchHoleScore)
+            .where(QuickMatchHoleScore._quick_match_id.in_(quick_match_ids))
+            .order_by(QuickMatchHoleScore._hole_number.asc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
