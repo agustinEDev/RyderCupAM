@@ -32,7 +32,15 @@ PASSWORD = "P@ssw0rd123!"
 
 
 async def _usuario(client: AsyncClient, email: str, nombre: str) -> dict:
-    return await create_authenticated_user(client, email, PASSWORD, nombre, "Golfista")
+    """Con hándicap: sin él, una partida con hándicap no se juzga en el cara a cara."""
+    usuario = await create_authenticated_user(client, email, PASSWORD, nombre, "Golfista")
+    set_auth_cookies(client, usuario["cookies"])
+    puesto = await client.post(
+        "/api/v1/handicaps/update-manual",
+        json={"user_id": usuario["user"]["id"], "handicap": 10.0},
+    )
+    assert puesto.status_code == 200, puesto.text
+    return usuario
 
 
 async def _campo(client: AsyncClient, prefijo: str, creador: dict) -> str:

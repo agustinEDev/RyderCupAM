@@ -581,6 +581,65 @@ class TestPartidaRapidaMatchPlay:
         assert partida.relation == Relation.AGAINST
         assert partida.outcome == Outcome.LOST
 
+    async def test_singles_con_handicap_si_el_no_tiene_sale_pero_no_cuenta(self, mundo):
+        """Sin su hándicap se le repartiría como scratch: no es su partido real."""
+        yo = await mundo.jugador("Yo", handicap=10)
+        el = await mundo.jugador("El", handicap=None)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            match_format=MatchFormat.SINGLES,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.relation == Relation.AGAINST
+        assert partida.outcome is None
+
+    async def test_fourball_si_cualquiera_de_los_cuatro_no_tiene_handicap_no_cuenta(self, mundo):
+        """Un rival sin hándicap ya tuerce el reparto de todos: conservador."""
+        yo = await mundo.jugador("Yo", handicap=10)
+        el = await mundo.jugador("El", handicap=12)
+        rival1 = await mundo.jugador("Rival1", handicap=None)
+        rival2 = await mundo.jugador("Rival2", handicap=8)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(el.id, team="A"),
+                QuickMatchParticipant.for_user(rival1.id, team="B"),
+                QuickMatchParticipant.for_user(rival2.id, team="B"),
+            ],
+            [4, 4, 5, 5],
+            match_format=MatchFormat.FOURBALL,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.relation == Relation.WITH
+        assert partida.outcome is None
+
+    async def test_match_play_scratch_sin_handicap_si_cuenta(self, mundo):
+        yo = await mundo.jugador("Yo", handicap=None)
+        el = await mundo.jugador("El", handicap=None)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            match_format=MatchFormat.SINGLES,
+            play_mode=PlayMode.SCRATCH,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.WON
+
 
 class TestPartidasRapidasQueNoSalen:
     async def test_oculta_por_mi_no_sale(self, mundo):

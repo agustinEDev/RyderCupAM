@@ -305,7 +305,10 @@ class SharedGamesAdapter(SharedGamesInterface):
         mi_bando = "A" if yo.participant_id in team_a_ids else "B"
         su_bando = "A" if el.participant_id in team_a_ids else "B"
         relation = relation_between(mi_bando, su_bando)
-        if course is None:
+        # Un hándicap que falte, de cualquiera de los bandos, tuerce el reparto
+        # de todos: la partida sale, pero no se juzga (conservador)
+        todos = tuple(match.participants)
+        if course is None or not self._con_handicap_conocido(match, todos, usuarios):
             return relation, None
 
         winner, _ = match_play_result(
