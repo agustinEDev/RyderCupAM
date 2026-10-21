@@ -161,3 +161,27 @@ async def test_categories_reach_each_enrollment(competition_id):
     )
 
     assert [d.category for d in dtos] == [1, 2]
+
+
+async def test_without_saying_whose_email_goes_no_email_goes(competition_id):
+    """Por defecto, ningún correo: abrirlo tiene que ser explícito (BE #531)."""
+    uow = _UoWQueCuenta()
+    ana = await _usuario(uow, "Ana")
+
+    dtos = await EnrollmentDTOMapper.to_response_dtos([_inscripcion(competition_id, ana)], uow)
+
+    assert dtos[0].user.email == ""
+
+
+async def test_only_the_visible_emails_go(competition_id):
+    """Cada fila lleva el correo solo si su usuario está entre los visibles (BE #531)."""
+    uow = _UoWQueCuenta()
+    ana = await _usuario(uow, "Ana")
+    bea = await _usuario(uow, "Bea")
+    inscripciones = [_inscripcion(competition_id, ana), _inscripcion(competition_id, bea)]
+
+    dtos = await EnrollmentDTOMapper.to_response_dtos(
+        inscripciones, uow, correos_visibles=frozenset({bea.id})
+    )
+
+    assert [d.user.email for d in dtos] == ["", str(bea.email)]

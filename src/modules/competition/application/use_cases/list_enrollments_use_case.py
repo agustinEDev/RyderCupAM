@@ -5,6 +5,8 @@ Lista las inscripciones de una competicion con filtros opcionales.
 Retorna entidades (NO DTOs) - siguiendo Clean Architecture.
 """
 
+from dataclasses import dataclass
+
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -84,17 +86,25 @@ class ListEnrollmentsUseCase:
             return enrollments
 
     async def execute_con_categorias(
-        self, competition_id: str, status: str | None = None
-    ) -> tuple[list[Enrollment], dict[UserId, int | None]]:
+        self,
+        competition_id: str,
+        status: str | None = None,
+        *,
+        viewer_id: UserId,
+        viewer_is_admin: bool = False,
+    ) -> "ListaDeInscritos":
         """
-        Las inscripciones y, en un stroke play con el hándicap ya fijado (desde
-        que se cierran las inscripciones), la categoría fijada de cada aprobado.
+        Las inscripciones que puede ver quien pide, de quién puede ver el correo
+        y, en un stroke play con el hándicap ya fijado (desde que se cierran las
+        inscripciones), la categoría fijada de cada aprobado.
+
+        Quién ve qué (BE #531): el organizador y los admin, todas las filas y
+        todos los correos; cualquier otro, los aprobados y sus propias filas
+        (en el estado que estén), y solo su propio correo. El filtro de estado
+        va encima.
 
         La categoría se fijó al cerrar, con la regla de los seis: aquí solo se
         lee, y no se mueve aunque alguien se retire (#251).
-
-        Returns:
-            Las inscripciones, y la categoría de cada aprobado (vacío si no toca)
         """
         async with self._uow:
             comp_id = CompetitionId(competition_id)
@@ -107,10 +117,33 @@ class ListEnrollmentsUseCase:
                 )
             else:
                 enrollments = await self._uow.enrollments.find_by_competition(comp_id)
-        if competition.stroke_play is None or competition.status not in HANDICAP_FIJADO:
-            return enrollments, {}
-        return enrollments, {
-            e.user_id: e.fixed_category
-            for e in enrollments
-            if e.status is EnrollmentStatus.APPROVED
-        }
+
+        ve_todo = viewer_is_admin or competition.is_creator(viewer_id)
+        if ve_todo:
+            correos = frozenset(e.user_id for e in enrollments)
+        else:
+            enrollments = [
+                e
+                for e in enrollments
+                if e.status is EnrollmentStatus.APPROVED or e.user_id == viewer_id
+            ]
+            correos = frozenset({viewer_id})
+
+        categorias: dict[UserId, int | None] = {}
+        if competition.stroke_play is not None and competition.status in HANDICAP_FIJADO:
+            categorias = {
+                e.user_id: e.fixed_category
+                for e in enrollments
+                if e.status is EnrollmentStatus.APPROVED
+            }
+        return ListaDeInscritos(enrollments, categorias, correos)
+
+
+@dataclass(frozen=True)
+class ListaDeInscritos:
+    """Lo que ve quien pide la lista de inscritos (BE #531)."""
+
+    enrollments: list[Enrollment]
+    categorias: dict[UserId, int | None]
+    # De quién puede ir el correo en la respuesta
+    correos_visibles: frozenset[UserId]

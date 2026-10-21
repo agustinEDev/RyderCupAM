@@ -281,7 +281,10 @@ class TestLaListaDeInscritos:
             ListEnrollmentsUseCase,
         )
 
-        return await ListEnrollmentsUseCase(e.uow).execute_con_categorias(str(torneo.value))
+        lista = await ListEnrollmentsUseCase(e.uow).execute_con_categorias(
+            str(torneo.value), viewer_id=e.creador
+        )
+        return lista.enrollments, lista.categorias
 
     async def test_antes_de_cerrar_no_hay_categorias(self, e):
         torneo = await e.torneo()
