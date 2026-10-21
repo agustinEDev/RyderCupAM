@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.37.1] - 2026-10-21
+
+**Hotfix: las apps viejas explican cómo aceptar los Términos.** Las PWA
+instaladas antes del frontend 2.49 no conocen la pantalla de aceptación y
+mostraban el error del 403 tal cual, sin salida. Sin cambios en el frontend.
+
+**Notas de despliegue.**
+
+- **Sin migraciones** y sin variables nuevas.
+- **Contrato: sin cambios incompatibles** (`oasdiff` sin cambios): mismo 403,
+  mismo `error_code` y misma forma; solo cambia el texto de `detail`.
+- Tras desplegar, buscar `TERMS_NOT_ACCEPTED` en los logs de Render para ver
+  quién choca con la guarda y desde qué ruta.
+
+### Fixed
+
+- **Texto del 403 `TERMS_NOT_ACCEPTED`**: ahora dice «Tienes que aceptar los
+  nuevos Términos de uso. Cierra la app por completo y vuelve a abrirla para
+  aceptarlos.», seguido de lo mismo en inglés, que es lo que pintan las apps
+  anteriores a la 2.49 (no lo traducen).
+- **Cada bloqueo de la guarda de Términos queda en el log** (WARNING, con el id
+  del usuario, el método y la ruta sin query string, escapada para que un
+  salto de línea codificado no falsee líneas del log). WARNING porque un INFO de
+  la app no llega a los logs; Sentry solo lo guarda como breadcrumb.
+
 ## [2.37.0] - 2026-10-21
 
 **Privacidad de los emails y solicitudes que no se quedan colgadas.** Nadie ve
