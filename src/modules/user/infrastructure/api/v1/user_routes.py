@@ -128,7 +128,7 @@ async def find_user(
     email: str | None = Query(None, description="Email del usuario a buscar"),
     full_name: str | None = Query(None, description="Nombre completo del usuario a buscar"),
     use_case: FindUserUseCase = Depends(get_find_user_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Endpoint para buscar un usuario por email o nombre completo.
@@ -138,6 +138,9 @@ async def find_user(
     - Nombre completo: Búsqueda por nombre y apellidos
 
     Al menos uno de los dos parámetros debe ser proporcionado.
+
+    El correo del encontrado solo vuelve si se buscó por ese mismo correo o es
+    uno mismo; vacío en otro caso (BE #531).
     """
     try:
         # Validar que al menos un parámetro sea proporcionado
@@ -151,7 +154,7 @@ async def find_user(
         request = FindUserRequestDTO(email=email, full_name=full_name)
 
         # Ejecutar el caso de uso
-        return await use_case.execute(request)
+        return await use_case.execute(request, viewer_id=UserId(str(current_user.id)))
     except UserNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
