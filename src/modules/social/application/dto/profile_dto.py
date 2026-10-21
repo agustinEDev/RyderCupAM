@@ -78,10 +78,7 @@ class PlayerProfileResponseDTO(BaseModel):
     is_friend: bool = Field(default=False, description="Atajo de `friendship.status == ACCEPTED`")
     email: str | None = Field(
         default=None,
-        description=(
-            "Solo uno mismo y sus amigos: una amistad aceptada es un contacto de "
-            "verdad. None para cualquier otro"
-        ),
+        description="Solo uno mismo (BE #531). None para cualquier otro, amigos incluidos",
     )
     handicap: float | None = Field(
         default=None,

@@ -34,6 +34,7 @@ class GetPlayerProfileUseCase:
     mandarle una solicitud, y no dice nada que la propia busqueda no diga ya.
 
     **Lo de detras es solo para amigos**: handicap, estadisticas y actividad.
+    El correo, ni eso: solo se lo ve uno mismo (BE #531).
     Quien no es amigo los recibe en None, no recortados ni a cero: un cero se
     leeria como "juega fatal" en vez de "esto no se puede ver".
 
@@ -92,7 +93,8 @@ class GetPlayerProfileUseCase:
             friends_count=amigos,
             friendship=relacion,
             is_friend=relacion.status == FriendshipStatus.ACCEPTED.value,
-            email=email if puede_ver_todo else None,
+            # Ni a los amigos: el correo es dato suyo
+            email=email if propio else None,
             handicap=handicap if puede_ver_todo else None,
             stats=stats,
         )
