@@ -1,7 +1,5 @@
 """DTOs del perfil de un jugador y del feed de actividad."""
 
-from datetime import datetime
-
 from pydantic import BaseModel, Field
 
 from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
@@ -97,7 +95,9 @@ class ActivityEventDTO(BaseModel):
     id: str
     user_id: str
     type: str
-    occurred_at: datetime
+    occurred_at: UtcDatetime = Field(
+        description="Cuando se jugo, en UTC (con «Z»): el dia de la ronda o la creacion de la partida"
+    )
     published_at: UtcDatetime | None = Field(
         default=None,
         description=(
@@ -162,7 +162,8 @@ class FeedResponseDTO(BaseModel):
             "Cuantas entradas de este feed se han publicado desde la ultima visita, "
             "las propias incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
             "visita previa cuenta todo. Es el mismo numero que da "
-            "`GET /users/me/feed/unseen-count`"
+            "`GET /users/me/feed/unseen-count`. Solo se calcula en la primera pagina: "
+            "con `cursor` llega a 0"
         ),
     )
 

@@ -40,16 +40,6 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
             for e in self._events
         )
 
-    async def find_for_users(
-        self,
-        user_ids: list[UserId],
-        limit: int,
-        before: datetime | None = None,
-        before_id: UUID | None = None,
-    ) -> list[ActivityEvent]:
-        encontrados = [e for e in self._events if e.user_id in user_ids]
-        return self._pagina(encontrados, limit, before, before_id)
-
     async def find_in(
         self,
         slices: Sequence[ActivitySlice],
@@ -108,6 +98,9 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     async def delete_for_user(
         self, user_id: UserId, types: Collection[ActivityEventType] | None = None
     ) -> int:
+        # Como en SQL: una lista de tipos vacia es "ninguno", no "todos"
+        if types is not None and not types:
+            return 0
         antes = len(self._events)
         self._events = [
             e

@@ -31,6 +31,11 @@ EAGLE = ActivityEventType.EAGLE_OR_BETTER
 HIO = ActivityEventType.HOLE_IN_ONE
 
 
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
+
+
 async def _user(db_session) -> User:
     user = User.create(
         first_name="Ana",
@@ -154,7 +159,7 @@ async def test_ocultar_a_los_amigos_solo_toca_los_tipos_pedidos(db_session):
     assert ocultos == 1
     visibles = {
         e.source_match_id: e.visible_to_friends
-        for e in await repository.find_for_users([ana.id, luis.id], limit=10)
+        for e in await repository.find_in([_todos(ana.id, luis.id)], limit=10)
     }
     assert visibles == {"ana-hio": False, "ana-birdie": True, "luis-hio": True}
 
@@ -170,6 +175,6 @@ async def test_borrar_por_tipos_conserva_los_demas(db_session):
     await db_session.commit()
 
     assert borrados == 1
-    assert [e.source_match_id for e in await repository.find_for_users([ana.id], limit=10)] == [
+    assert [e.source_match_id for e in await repository.find_in([_todos(ana.id)], limit=10)] == [
         "birdie"
     ]

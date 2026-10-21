@@ -11,6 +11,9 @@ from uuid import uuid4
 import pytest
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.sqlalchemy.activity_event_repository import (
     SQLAlchemyActivityEventRepository,
@@ -23,6 +26,11 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository impo
 pytestmark = pytest.mark.integration
 
 HOY = datetime(2026, 8, 10, 12, 0)
+
+
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
 
 
 async def _user(db_session) -> User:
@@ -57,7 +65,7 @@ async def test_guarda_y_lee_la_publicacion_y_la_visibilidad(db_session):
     )
     await db_session.commit()
 
-    [leido] = await repository.find_for_users([user.id], limit=10)
+    [leido] = await repository.find_in([_todos(user.id)], limit=10)
 
     assert leido.published_at == HOY
     assert leido.occurred_at == HOY - timedelta(days=3)
@@ -79,7 +87,7 @@ async def test_a6_ordena_por_publicacion_y_no_por_juego(db_session):
     )
     await db_session.commit()
 
-    encontrados = await repository.find_for_users([user.id], limit=10)
+    encontrados = await repository.find_in([_todos(user.id)], limit=10)
 
     assert [e.source_match_id for e in encontrados] == ["torneo", "ayer"]
 
@@ -98,8 +106,8 @@ async def test_a4_misma_publicacion_pagina_por_id_sin_repetir_ni_saltar(db_sessi
 
     vistos, ultimo = [], None
     for _ in range(10):
-        pagina = await repository.find_for_users(
-            [user.id],
+        pagina = await repository.find_in(
+            [_todos(user.id)],
             limit=3,
             before=ultimo.published_at if ultimo else None,
             before_id=ultimo.id if ultimo else None,
@@ -126,8 +134,8 @@ async def test_a5_un_cursor_de_antes_del_cambio_sigue_valiendo(db_session):
     await repository.add_many(viejos)
     await db_session.commit()
 
-    pagina = await repository.find_for_users(
-        [user.id], limit=2, before=viejos[1].occurred_at, before_id=viejos[1].id
+    pagina = await repository.find_in(
+        [_todos(user.id)], limit=2, before=viejos[1].occurred_at, before_id=viejos[1].id
     )
 
     assert [e.source_match_id for e in pagina] == ["v-2", "v-3"]

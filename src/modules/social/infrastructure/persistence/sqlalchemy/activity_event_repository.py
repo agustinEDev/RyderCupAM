@@ -65,19 +65,6 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             stmt.on_conflict_do_nothing(constraint=UQ_ACTIVITY_EVENTS_MATCH_TYPE)
         )
 
-    async def find_for_users(
-        self,
-        user_ids: list[UserId],
-        limit: int,
-        before: datetime | None = None,
-        before_id: UUID | None = None,
-    ) -> list[ActivityEvent]:
-        if not user_ids:
-            return []
-        return await self._pagina(
-            ActivityEvent._user_id.in_(user_ids), limit, before=before, before_id=before_id
-        )
-
     async def find_in(
         self,
         slices: Sequence[ActivitySlice],

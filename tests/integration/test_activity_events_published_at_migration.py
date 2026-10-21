@@ -178,3 +178,33 @@ def test_se_puede_bajar_y_volver_a_subir(base_desechable):
 
     assert _indice_valido(base_desechable) is True
     assert _fila(base_desechable, event_id).published_at == JUGADO
+
+
+def test_bajar_la_migracion_borra_lo_oculto_a_los_amigos(base_desechable):
+    """
+    Given un logro publicado con la publicacion apagada (oculto) y otro
+    visible / When se baja la migracion / Then el oculto se borra y el visible
+    queda.
+
+    Sin la columna, el codigo de antes enseñaria a los amigos todo lo que
+    quedara: un logro que el jugador pidio no enseñar se destaparia.
+    """
+    _alembic(base_desechable, "upgrade", ANTERIOR)
+    visible = _evento_viejo(base_desechable)
+    _alembic(base_desechable, "upgrade", INDICE)
+    oculto = _evento_viejo(base_desechable)
+    engine = create_engine(base_desechable)
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE activity_events SET visible_to_friends = false WHERE id = :id"),
+            {"id": oculto},
+        )
+    engine.dispose()
+
+    _alembic(base_desechable, "downgrade", ANTERIOR)
+
+    engine = create_engine(base_desechable)
+    with engine.connect() as conn:
+        quedan = set(conn.execute(text("SELECT id FROM activity_events")).scalars())
+    engine.dispose()
+    assert {str(i).strip() for i in quedan} == {visible}

@@ -39,6 +39,9 @@ from src.modules.social.application.ports.player_differentials_interface import 
 from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
     PublishRoundAchievementsUseCase,
 )
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
@@ -54,6 +57,11 @@ from src.shared.domain.value_objects.scoring_format import ScoringFormat
 pytestmark = pytest.mark.asyncio
 
 PAR = 4
+
+
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
 
 
 class _DifferentialsStub(PlayerDifferentialsInterface):
@@ -219,7 +227,7 @@ def _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials=None,
 
 async def _feed_de(social_uow, user):
     async with social_uow:
-        return await social_uow.activity_events.find_for_users([user.id], limit=50)
+        return await social_uow.activity_events.find_in([_todos(user.id)], limit=50)
 
 
 class TestQueSePublica:
@@ -603,3 +611,60 @@ class TestParPorBarra:
         birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
         assert len(birdies) == 1
         assert birdies[0].payload["holes"] == [1]
+
+
+class _ApagaAlJuzgar(_CourseHistoryFake):
+    """
+    Apaga la publicacion del jugador mientras se juzga la vuelta: es la carrera
+    de quien pulsa el interruptor justo cuando se cierra su partida.
+    """
+
+    def __init__(self, user):
+        super().__init__()
+        self._user = user
+
+    async def has_played_course_before(self, user_id, golf_course_id, excluding_match_id):
+        self._user.set_activity_sharing(False)
+        return await super().has_played_course_before(user_id, golf_course_id, excluding_match_id)
+
+
+class TestCarrerasYFechas:
+    async def test_apagar_la_publicacion_antes_de_guardar_deja_el_logro_oculto(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given un jugador que publica al empezar / When apaga la publicacion
+        antes de que se guarden sus logros / Then se guardan ocultos: manda el
+        interruptor del momento de guardar, no el del principio.
+        """
+        user = await _create_user(user_uow)
+        course = await _create_course(golf_course_uow, user.id)
+        match = await _played_match(qm_uow, course, user)
+
+        await _use_case(
+            social_uow, qm_uow, golf_course_uow, user_uow, history=_ApagaAlJuzgar(user)
+        ).execute(str(match.id.value))
+
+        eventos = await _feed_de(social_uow, user)
+        assert eventos
+        assert all(e.visible_to_friends is False for e in eventos)
+
+    async def test_los_logros_de_una_publicacion_comparten_fecha(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given una vuelta con varios logros / When se publica / Then todos llevan
+        el mismo `published_at`: el cursor desempata por id entre ellos.
+        """
+        user = await _create_user(user_uow)
+        course = await _create_course(golf_course_uow, user.id)
+        tarjeta = dict.fromkeys(range(1, 19), PAR)
+        tarjeta[1] = PAR - 1
+        tarjeta[2] = PAR - 2
+        match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
+
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
+
+        eventos = await _feed_de(social_uow, user)
+        assert len(eventos) >= 2
+        assert len({e.published_at for e in eventos}) == 1

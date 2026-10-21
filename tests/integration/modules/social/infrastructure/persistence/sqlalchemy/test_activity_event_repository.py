@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 import pytest
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.sqlalchemy.activity_event_repository import (
     SQLAlchemyActivityEventRepository,
@@ -17,6 +20,11 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository impo
 pytestmark = pytest.mark.integration
 
 CUANDO = datetime(2026, 8, 10, 12, 0)
+
+
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
 
 
 async def _make_saved_user(db_session, email: str) -> User:
@@ -57,7 +65,7 @@ async def test_publica_los_eventos_de_una_vuelta(db_session):
     )
     await db_session.commit()
 
-    encontrados = await repository.find_for_users([user.id], limit=10)
+    encontrados = await repository.find_in([_todos(user.id)], limit=10)
 
     assert len(encontrados) == 2
     assert {e.type for e in encontrados} == {
@@ -96,7 +104,7 @@ async def test_reprocesar_la_misma_vuelta_no_duplica(db_session):
     )
     await db_session.commit()
 
-    encontrados = await repository.find_for_users([user.id], limit=10)
+    encontrados = await repository.find_in([_todos(user.id)], limit=10)
 
     assert len(encontrados) == 2
 
@@ -110,7 +118,7 @@ async def test_el_mismo_logro_en_otra_partida_si_se_publica(db_session):
     await repository.add_many([_event(user, ActivityEventType.BIRDIE, "match-2")])
     await db_session.commit()
 
-    encontrados = await repository.find_for_users([user.id], limit=10)
+    encontrados = await repository.find_in([_todos(user.id)], limit=10)
 
     assert len(encontrados) == 2
 
@@ -129,7 +137,7 @@ async def test_el_feed_llega_del_mas_reciente_al_mas_antiguo(db_session):
     )
     await db_session.commit()
 
-    encontrados = await repository.find_for_users([user.id], limit=10)
+    encontrados = await repository.find_in([_todos(user.id)], limit=10)
 
     assert [e.source_match_id for e in encontrados] == [
         "match-nuevo",
@@ -150,9 +158,9 @@ async def test_pagina_por_fecha_y_no_por_numero_de_pagina(db_session):
     )
     await db_session.commit()
 
-    primera = await repository.find_for_users([user.id], limit=2)
-    segunda = await repository.find_for_users(
-        [user.id],
+    primera = await repository.find_in([_todos(user.id)], limit=2)
+    segunda = await repository.find_in(
+        [_todos(user.id)],
         limit=2,
         before=primera[-1].occurred_at,
         before_id=primera[-1].id,
@@ -186,8 +194,8 @@ async def test_no_pierde_eventos_que_comparten_la_misma_fecha(db_session):
     vistos = []
     cursor = None
     while True:
-        pagina = await repository.find_for_users(
-            [user.id],
+        pagina = await repository.find_in(
+            [_todos(user.id)],
             limit=2,
             before=cursor.occurred_at if cursor else None,
             before_id=cursor.id if cursor else None,
@@ -211,7 +219,7 @@ async def test_solo_devuelve_lo_de_los_jugadores_pedidos(db_session):
     await repository.add_many([_event(luis, ActivityEventType.BIRDIE, "match-luis")])
     await db_session.commit()
 
-    encontrados = await repository.find_for_users([ana.id], limit=10)
+    encontrados = await repository.find_in([_todos(ana.id)], limit=10)
 
     assert [e.source_match_id for e in encontrados] == ["match-ana"]
 
@@ -220,7 +228,7 @@ async def test_sin_jugadores_no_consulta_nada(db_session):
     """Given un jugador sin amigos / When pide el feed / Then llega vacio."""
     repository = SQLAlchemyActivityEventRepository(db_session)
 
-    assert await repository.find_for_users([], limit=10) == []
+    assert await repository.find_in([_todos()], limit=10) == []
 
 
 async def test_sabe_si_una_partida_ya_se_publico(db_session):
@@ -255,8 +263,8 @@ async def test_borra_todo_lo_publicado_por_un_jugador(db_session):
     await db_session.commit()
 
     assert borrados == 2
-    assert await repository.find_for_users([ana.id], limit=10) == []
-    assert len(await repository.find_for_users([luis.id], limit=10)) == 1
+    assert await repository.find_in([_todos(ana.id)], limit=10) == []
+    assert len(await repository.find_in([_todos(luis.id)], limit=10)) == 1
 
 
 async def test_publicar_una_lista_vacia_no_hace_nada(db_session):
@@ -267,4 +275,4 @@ async def test_publicar_una_lista_vacia_no_hace_nada(db_session):
     await repository.add_many([])
     await db_session.commit()
 
-    assert await repository.find_for_users([user.id], limit=10) == []
+    assert await repository.find_in([_todos(user.id)], limit=10) == []

@@ -50,27 +50,6 @@ class ActivityEventRepositoryInterface(ABC):
         """Publica varios eventos de una vez (los de una misma vuelta)."""
 
     @abstractmethod
-    async def find_for_users(
-        self,
-        user_ids: list[UserId],
-        limit: int,
-        before: datetime | None = None,
-        before_id: UUID | None = None,
-    ) -> list[ActivityEvent]:
-        """
-        Eventos de un conjunto de jugadores, del más reciente al más antiguo.
-
-        Se pagina por cursor y no por número de página: el feed crece por
-        arriba, así que un desplazamiento numérico repetiría entradas cada vez
-        que alguien publica algo mientras se navega.
-
-        El cursor son **las dos cosas**, `before` y `before_id`, porque la fecha
-        sola no es única: todos los eventos de una misma vuelta comparten
-        `published_at`. Paginar solo por fecha se dejaría fuera los que aún no se
-        han enseñado de esa vuelta. Se ordena por publicación, no por juego.
-        """
-
-    @abstractmethod
     async def find_in(
         self,
         slices: Sequence[ActivitySlice],
@@ -79,8 +58,17 @@ class ActivityEventRepositoryInterface(ABC):
         before_id: UUID | None = None,
     ) -> list[ActivityEvent]:
         """
-        Los eventos de varios trozos en una sola pagina, del mas reciente al
-        mas antiguo, con el mismo cursor que `find_for_users`.
+        Los eventos de varios trozos en una sola pagina, del más reciente al más
+        antiguo por fecha de publicación.
+
+        Se pagina por cursor y no por número de página: el feed crece por
+        arriba, así que un desplazamiento numérico repetiría entradas cada vez
+        que alguien publica algo mientras se navega.
+
+        El cursor son **las dos cosas**, `before` y `before_id`, porque la fecha
+        sola no es única: todos los eventos de una misma publicación comparten
+        `published_at`. Paginar solo por fecha se dejaría fuera los que aún no se
+        han enseñado.
         """
 
     @abstractmethod

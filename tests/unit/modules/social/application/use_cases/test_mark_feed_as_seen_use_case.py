@@ -134,6 +134,51 @@ async def test_b9_una_marca_posterior_si_avanza(user_uow):
     assert guardado.feed_last_seen_at == mediodia + timedelta(seconds=1)
 
 
+async def test_una_marca_de_mas_de_cinco_minutos_en_el_futuro_se_sustituye(user_uow):
+    """
+    Given una marca guardada 2 h por delante (hora local vieja en un servidor
+    que no esta en UTC) / When se marca el feed ahora / Then queda la de ahora:
+    si no, el aviso se quedaria congelado esas 2 h.
+    """
+    user = await _create_user(user_uow)
+    ahora = datetime(2026, 8, 10, 12, 0)
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora + timedelta(hours=2)).execute(
+        str(user.id.value)
+    )
+
+    visto_en = await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora).execute(
+        str(user.id.value)
+    )
+
+    assert visto_en == ahora
+
+
+@pytest.mark.parametrize(
+    ("adelanto", "queda"),
+    [
+        (timedelta(minutes=5), "guardada"),
+        (timedelta(minutes=5, seconds=1), "ahora"),
+    ],
+)
+async def test_el_limite_de_la_marca_futura_es_de_cinco_minutos(user_uow, adelanto, queda):
+    """
+    Given una marca guardada justo 5 min por delante, o un segundo mas / When se
+    marca ahora / Then con 5 min se respeta (desfase de reloj, B9) y pasado ese
+    margen se sustituye por la de ahora.
+    """
+    user = await _create_user(user_uow)
+    ahora = datetime(2026, 8, 10, 12, 0)
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora + adelanto).execute(
+        str(user.id.value)
+    )
+
+    visto_en = await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora).execute(
+        str(user.id.value)
+    )
+
+    assert visto_en == (ahora + adelanto if queda == "guardada" else ahora)
+
+
 async def test_b10_tras_marcarlo_el_aviso_queda_a_cero(user_uow):
     """
     B10. Given un logro mio recien publicado (hora UTC) / When marco el feed

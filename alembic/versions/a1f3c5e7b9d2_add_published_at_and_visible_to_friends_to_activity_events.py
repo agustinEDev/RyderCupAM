@@ -63,5 +63,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Lo publicado con la publicacion apagada se borra antes de quitar la
+    # columna: sin ella, el codigo de antes se lo enseñaria a los amigos. Bajar
+    # solo el codigo, sin la migracion, tampoco protege esto
+    op.execute("DELETE FROM activity_events WHERE visible_to_friends = false")
     op.drop_column("activity_events", "visible_to_friends")
     op.drop_column("activity_events", "published_at")

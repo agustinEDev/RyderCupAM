@@ -1,5 +1,8 @@
 """Caso de Uso: El feed de actividad de mis amigos."""
 
+from collections.abc import Callable
+from datetime import datetime
+
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -19,6 +22,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 # Tope duro por pagina. El cliente puede pedir menos, nunca mas: el feed carga
 # los autores de cada pagina, y una pagina enorme seria una consulta enorme.
@@ -60,10 +64,12 @@ class GetFriendsFeedUseCase:
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
+        reloj: Callable[[], datetime] = utc_now,
     ):
         self._social_uow = social_uow
         self._user_uow = user_uow
         self._golf_course_uow = golf_course_uow
+        self._reloj = reloj
 
     async def execute(
         self, viewer_id_raw: str, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None
@@ -72,16 +78,19 @@ class GetFriendsFeedUseCase:
         limit = max(1, min(limit, MAX_PAGE_SIZE))
         before, before_id = parse_cursor(cursor)
 
-        scope = await resolve_feed_scope(self._social_uow, self._user_uow, viewer_id)
+        scope = await resolve_feed_scope(self._social_uow, self._user_uow, viewer_id, self._reloj)
 
         # Los dos trozos en una sola consulta: la pagina y el cursor cuadran
         async with self._social_uow:
             eventos = await self._social_uow.activity_events.find_in(
                 scope.slices, limit=limit, before=before, before_id=before_id
             )
-        # El mismo recuento que da `GET /users/me/feed/unseen-count`: el numero
-        # del boton y el de la pantalla no pueden discrepar
-        no_vistos = await count_unseen(self._social_uow, scope)
+            # El mismo recuento que da `GET /users/me/feed/unseen-count`: el
+            # numero del boton y el de la pantalla no pueden discrepar. Solo en
+            # la primera pagina: las siguientes no lo pintan
+            no_vistos = (
+                await count_unseen(self._social_uow.activity_events, scope) if before is None else 0
+            )
 
         autores = await self._autores(eventos)
         campos = await self._campos(eventos)

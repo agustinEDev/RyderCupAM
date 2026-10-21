@@ -1,13 +1,14 @@
 """Caso de Uso: Dar el feed por visto."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 
 class MarkFeedAsSeenUseCase:
@@ -38,7 +39,7 @@ class MarkFeedAsSeenUseCase:
         reloj: Callable[[], datetime] | None = None,
     ):
         self._user_uow = user_uow
-        self._reloj = reloj or (lambda: datetime.now(UTC).replace(tzinfo=None))
+        self._reloj = reloj or utc_now
 
     async def execute(self, user_id_raw: str) -> datetime:
         """Marca el feed como visto y devuelve la marca que queda guardada."""

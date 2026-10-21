@@ -224,3 +224,64 @@ async def test_c16_coincide_con_el_del_feed(social_uow, user_uow, mios, suyos, v
     feed = await _feed(social_uow, user_uow, yo)
 
     assert feed.unseen_count == contador == min(mios + suyos, 10)
+
+
+async def test_una_ultima_visita_en_el_futuro_cuenta_como_si_fuera_ahora(social_uow, user_uow):
+    """
+    Given una ultima visita guardada 2 h por delante del reloj (hora local
+    vieja) y un logro publicado despues de ahora / When se cuenta / Then suma:
+    la visita se toma como mucho en el momento actual.
+    """
+    ahora = VISITA
+    yo = await _create_user(user_uow, visto=ahora + timedelta(hours=2))
+    amigo = await _create_user(user_uow)
+    await _amigos(social_uow, yo, amigo)
+    await _publica(social_uow, amigo, publicado=ahora + timedelta(minutes=1))
+
+    resultado = await GetFeedUnseenCountUseCase(social_uow, user_uow, reloj=lambda: ahora).execute(
+        str(yo.id.value)
+    )
+
+    assert resultado.unseen_count == 1
+
+
+async def test_el_feed_tambien_toma_la_visita_futura_como_ahora(social_uow, user_uow):
+    """Given la misma visita futura / When pido el feed / Then su aviso tambien la cuenta."""
+    ahora = VISITA
+    yo = await _create_user(user_uow, visto=ahora + timedelta(hours=2))
+    amigo = await _create_user(user_uow)
+    await _amigos(social_uow, yo, amigo)
+    await _publica(social_uow, amigo, publicado=ahora + timedelta(minutes=1))
+
+    feed = await GetFriendsFeedUseCase(
+        social_uow, user_uow, InMemoryGolfCourseUnitOfWork(), reloj=lambda: ahora
+    ).execute(str(yo.id.value))
+
+    assert feed.unseen_count == 1
+
+
+async def test_las_paginas_siguientes_no_cuentan_novedades(social_uow, user_uow):
+    """
+    Given novedades / When pido una pagina con cursor / Then su aviso va a 0 y
+    no se cuenta nada: el numero solo hace falta en la primera pagina.
+    """
+    yo = await _create_user(user_uow)
+    amigo = await _create_user(user_uow)
+    await _amigos(social_uow, yo, amigo)
+    await _publica(social_uow, amigo, cuantos=3)
+    use_case = GetFriendsFeedUseCase(social_uow, user_uow, InMemoryGolfCourseUnitOfWork())
+    primera = await use_case.execute(str(yo.id.value), limit=1)
+    llamadas = []
+    original = social_uow.activity_events.count_in
+
+    async def _espia(*args, **kwargs):
+        llamadas.append(1)
+        return await original(*args, **kwargs)
+
+    social_uow.activity_events.count_in = _espia
+
+    siguiente = await use_case.execute(str(yo.id.value), limit=1, cursor=primera.next_cursor)
+
+    assert primera.unseen_count == 3
+    assert siguiente.unseen_count == 0
+    assert llamadas == []

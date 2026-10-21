@@ -6,10 +6,12 @@ del boton y el de la pantalla tienen que salir de la misma regla, o acabarian
 discrepando en cuanto una de las dos cambiara.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivityEventRepositoryInterface,
     ActivitySlice,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
@@ -23,6 +25,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 # Tope del contador de novedades. El cliente pinta «9+», asi que pasado el 10
 # el numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
@@ -46,6 +49,7 @@ async def resolve_feed_scope(
     social_uow: SocialUnitOfWorkInterface,
     user_uow: UserUnitOfWorkInterface,
     viewer_id: UserId,
+    reloj: Callable[[], datetime] = utc_now,
 ) -> FeedScope:
     """
     Lo mio que veo yo y lo de mis amigos que ven ellos, y cuando mire por
@@ -63,6 +67,11 @@ async def resolve_feed_scope(
     Las unidades de trabajo se abren en serie, nunca una dentro de otra:
     comparten sesion por debajo, y el `commit` de la interior cerraria la
     transaccion que la exterior todavia esta usando.
+
+    La ultima visita se toma como mucho en el momento actual: una marca vieja
+    en hora local de un servidor que no estaba en UTC puede ir horas por
+    delante, y sin esto el aviso no contaria nada hasta que el reloj la
+    alcanzara.
     """
     async with social_uow:
         amigos = await social_uow.friendships.find_friend_ids(viewer_id)
@@ -78,6 +87,8 @@ async def resolve_feed_scope(
     ]
     viewer = usuarios.get(viewer_id)
     visto_hasta = viewer.feed_last_seen_at if viewer else None
+    if visto_hasta is not None:
+        visto_hasta = min(visto_hasta, reloj())
 
     return FeedScope(
         mine=ActivitySlice(user_ids=(viewer_id,), types=types_seen_by_author()),
@@ -90,7 +101,7 @@ async def resolve_feed_scope(
     )
 
 
-async def count_unseen(social_uow: SocialUnitOfWorkInterface, scope: FeedScope) -> int:
+async def count_unseen(events: ActivityEventRepositoryInterface, scope: FeedScope) -> int:
     """
     Cuanto de lo que veria en el feed se ha publicado desde mi ultima visita,
     con el tope de `UNSEEN_CAP`.
@@ -98,8 +109,8 @@ async def count_unseen(social_uow: SocialUnitOfWorkInterface, scope: FeedScope) 
     Cuenta **tambien lo propio** (decision de producto, 21 oct 2026): el numero
     anuncia todo lo nuevo de Actividad, y ahi salen tambien los avisos que son
     solo para uno. Sin visita previa, todo lo visible es nuevo.
+
+    Recibe el repositorio y no la unidad de trabajo para contar dentro de la
+    misma que ya tenga abierta quien llama.
     """
-    async with social_uow:
-        return await social_uow.activity_events.count_in(
-            scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP
-        )
+    return await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)

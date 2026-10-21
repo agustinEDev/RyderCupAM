@@ -27,6 +27,9 @@ from src.modules.social.application.use_cases.set_activity_sharing_use_case impo
 )
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.entities.friendship import Friendship
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.value_objects.activity_audience import (
     AUDIENCE_BY_TYPE,
     ActivityAudience,
@@ -51,6 +54,11 @@ SOLO_AMIGOS = ActivityEventType.EAGLE_OR_BETTER
 AMBOS = ActivityEventType.HOLE_IN_ONE
 
 TODOS_LOS_LOGROS = list(ActivityEventType)
+
+
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
 
 
 @pytest.fixture
@@ -209,7 +217,7 @@ class TestInterruptor:
         assert retirados == 2
         assert await _feed_de(social_uow, user_uow, yo) == {aviso, hoyo}
         async with social_uow:
-            mios = await social_uow.activity_events.find_for_users([yo.id], limit=50)
+            mios = await social_uow.activity_events.find_in([_todos(yo.id)], limit=50)
         assert apuntado not in {e.source_match_id for e in mios}
         # Volver a encenderlo no lo destapa: se retiro y se queda retirado
         await _sharing(social_uow, user_uow, yo, enabled=True)

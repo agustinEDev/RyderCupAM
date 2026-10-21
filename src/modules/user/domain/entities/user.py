@@ -38,6 +38,10 @@ LOCKOUT_DURATION_MINUTES = 30
 AVATAR_PRESET_COUNT = 10
 AVATAR_MAX_STORED_UPLOADS = 5
 
+# Cuanto puede ir por delante la ultima visita al feed antes de darla por mala:
+# lo justo para el desfase entre relojes, no las horas de una zona horaria
+FEED_SEEN_FUTURE_TOLERANCE = timedelta(minutes=5)
+
 
 class User:
     """
@@ -267,8 +271,14 @@ class User:
 
         Nunca hacia atras: una marca con un reloj que va por detras (otro
         servidor, un ajuste de hora) resucitaria como novedad lo ya visto.
+
+        Salvo que la guardada vaya por delante mas de
+        `FEED_SEEN_FUTURE_TOLERANCE`: eso ya no es desfase de reloj sino una
+        marca vieja en hora local de un servidor que no esta en UTC, y
+        respetarla congelaria el aviso esas horas.
         """
-        if self._feed_last_seen_at is None or at > self._feed_last_seen_at:
+        previa = self._feed_last_seen_at
+        if previa is None or at > previa or previa - at > FEED_SEEN_FUTURE_TOLERANCE:
             self._feed_last_seen_at = at
 
     def set_activity_sharing(self, enabled: bool) -> None:

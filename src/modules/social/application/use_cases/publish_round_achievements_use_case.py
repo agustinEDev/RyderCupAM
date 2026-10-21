@@ -18,6 +18,7 @@ from src.modules.social.application.ports.player_course_history_interface import
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.application.publication import stamp_for_publication
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -158,6 +159,8 @@ class PublishRoundAchievementsUseCase:
             return 0
 
         # Fase 3: publicar
+        # Una fecha para toda la publicacion y el interruptor de ahora mismo
+        eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
             await self._social_uow.activity_events.add_many(eventos)
 

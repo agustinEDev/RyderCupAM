@@ -1,10 +1,11 @@
 """Entidad: ActivityEvent — un logro publicado en el feed de los amigos."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 
 class ActivityEvent:
@@ -59,7 +60,7 @@ class ActivityEvent:
         self._payload = dict(payload or {})
         self._source_match_id = source_match_id
         # En UTC y sin zona, como el resto de fechas que se guardan
-        self._published_at = published_at or datetime.now(UTC).replace(tzinfo=None)
+        self._published_at = published_at or utc_now()
         # Con la publicación apagada el logro se guarda igual, pero solo para
         # su autor: encenderla después no lo destapa
         self._visible_to_friends = visible_to_friends

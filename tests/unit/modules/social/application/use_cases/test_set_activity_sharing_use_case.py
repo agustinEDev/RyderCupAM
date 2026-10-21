@@ -14,6 +14,9 @@ from src.modules.social.application.use_cases.set_activity_sharing_use_case impo
     SetActivitySharingUseCase,
 )
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
@@ -25,6 +28,11 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
 
 
 @pytest.fixture
@@ -66,7 +74,7 @@ async def _publica(social_uow, user, match_id: str) -> None:
 async def _feed_de(social_uow, user):
     """Lo suyo que ven sus amigos: apagar lo oculta, pero el autor lo conserva."""
     async with social_uow:
-        eventos = await social_uow.activity_events.find_for_users([user.id], limit=50)
+        eventos = await social_uow.activity_events.find_in([_todos(user.id)], limit=50)
     return [e for e in eventos if e.visible_to_friends]
 
 
@@ -154,3 +162,18 @@ async def test_un_jugador_que_no_existe_falla(user_uow, social_uow):
     """Given un id que no existe / When se cambia el interruptor / Then falla."""
     with pytest.raises(UserNotFoundError):
         await SetActivitySharingUseCase(user_uow, social_uow).execute(str(uuid4()), enabled=False)
+
+
+async def test_borrar_con_una_lista_de_tipos_vacia_no_borra_nada(social_uow, user_uow):
+    """
+    Given un jugador con logros / When se borran sus eventos de ningun tipo /
+    Then no se borra nada: lista vacia es "ninguno", no "todos" (como en SQL).
+    """
+    user = await _create_user(user_uow)
+    await _publica(social_uow, user, "match-1")
+
+    async with social_uow:
+        borrados = await social_uow.activity_events.delete_for_user(user.id, frozenset())
+
+    assert borrados == 0
+    assert len(await _feed_de(social_uow, user)) == 1
