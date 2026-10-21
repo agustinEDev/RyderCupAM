@@ -30,11 +30,16 @@ def respuesta_con_codigo(
         codigo: El código del error; elige el texto y es el `error_code`
         **campos: Más campos de la raíz, tras los dos fijos; un `error_code`
             aquí sustituye al código (el de la actualización de hándicaps, con
-            el motivo aparte en `reason_code`)
+            el motivo aparte en `reason_code`). Un `detail`, nunca
 
     Returns:
         La respuesta, sin nada del mensaje de la excepción
+
+    Raises:
+        TypeError: Si entre los campos va un `detail`: el texto es el fijo
     """
+    if "detail" in campos:
+        raise TypeError("respuesta_con_codigo: el `detail` es el texto fijo del código")
     detalle = textos.get(codigo, DETALLE_GENERICO) if codigo is not None else DETALLE_GENERICO
     return JSONResponse(
         status_code=status_code,

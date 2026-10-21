@@ -11,6 +11,8 @@ class InvalidResetTokenError(ValueError):
     """
 
     error_code = "RESET_TOKEN_INVALID"
+    # El texto que dice también la ruta (BE #562)
+    MENSAJE = "Token de reseteo inválido o expirado"
 
-    def __init__(self, message: str = "Token de reseteo inválido o expirado"):
+    def __init__(self, message: str = MENSAJE):
         super().__init__(message)

@@ -19,11 +19,30 @@ OWASP Coverage:
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
+from types import MappingProxyType
 
 import bcrypt
 
 from src.shared.security.password_blacklist import is_common_password
+
+
+class CodigoDeContrasena(StrEnum):
+    """El código de cada regla, estable para el cliente (BE #519)."""
+
+    EMPTY = "PASSWORD_EMPTY"
+    EDGE_SPACES = "PASSWORD_EDGE_SPACES"
+    TOO_SHORT = "PASSWORD_TOO_SHORT"
+    TOO_LONG = "PASSWORD_TOO_LONG"
+    NO_UPPERCASE = "PASSWORD_NO_UPPERCASE"
+    NO_LOWERCASE = "PASSWORD_NO_LOWERCASE"
+    NO_DIGIT = "PASSWORD_NO_DIGIT"
+    NO_SYMBOL = "PASSWORD_NO_SYMBOL"
+    TOO_COMMON = "PASSWORD_TOO_COMMON"
+    REUSED = "PASSWORD_REUSED"
+    INVALID = "PASSWORD_INVALID"
 
 
 class InvalidPasswordError(ValueError):
@@ -36,12 +55,17 @@ class InvalidPasswordError(ValueError):
     usuario leía «Error interno del servidor» en vez de qué le falta.
     """
 
-    def __init__(self, message: str, error_code: str = "PASSWORD_INVALID"):
+    def __init__(self, message: str, error_code: str = CodigoDeContrasena.INVALID):
         super().__init__(message)
         # Una regla, un código (BE #519): el mensaje va en español, y el cliente
         # necesita algo estable para enseñarlo en el idioma del usuario. Con el
         # nombre de siempre en el proyecto (`error_code`, como SCORING_NOT_OPEN_YET)
         self.error_code = error_code
+
+
+def _rota(codigo: CodigoDeContrasena, detalle: str = "") -> tuple[CodigoDeContrasena, str]:
+    """La regla rota: su código y su texto, con lo tecleado si hace falta."""
+    return codigo, f"{MENSAJES_DE_LA_CONTRASENA[codigo]}{detalle}"
 
 
 @dataclass(frozen=True)
@@ -120,7 +144,7 @@ class Password:
         return violation[1] if violation else None
 
     @staticmethod
-    def _password_violation(password: str) -> tuple[str, str] | None:  # noqa: PLR0911
+    def _password_violation(password: str) -> tuple[CodigoDeContrasena, str] | None:  # noqa: PLR0911
         """
         Valida la fortaleza de la contraseña según OWASP ASVS V2.1.
 
@@ -139,60 +163,42 @@ class Password:
         """
         # 1. Validar que la contraseña no sea None o vacía
         if not password:
-            return "PASSWORD_EMPTY", "La contraseña no puede estar vacía"
+            return _rota(CodigoDeContrasena.EMPTY)
 
         # 2. Remover espacios leading/trailing (común en copy-paste)
         password_trimmed = password.strip()
         if password_trimmed != password:
-            return "PASSWORD_EDGE_SPACES", "La contraseña no puede tener espacios al inicio o final"
+            return _rota(CodigoDeContrasena.EDGE_SPACES)
 
         # 3. Validar longitud mínima (OWASP: 12+ chars)
         if len(password) < Password.MIN_LENGTH:
-            return (
-                "PASSWORD_TOO_SHORT",
-                f"La contraseña debe tener al menos {Password.MIN_LENGTH} caracteres (actualmente: {len(password)})",
-            )
+            return _rota(CodigoDeContrasena.TOO_SHORT, f" (actualmente: {len(password)})")
 
         # 4. Validar longitud máxima (límite técnico)
         if len(password) > Password.MAX_LENGTH:
-            return (
-                "PASSWORD_TOO_LONG",
-                f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres (actualmente: {len(password)})",
-            )
+            return _rota(CodigoDeContrasena.TOO_LONG, f" (actualmente: {len(password)})")
 
         # 5. Validar complejidad: al menos 1 mayúscula
         if not any(c.isupper() for c in password):
-            return (
-                "PASSWORD_NO_UPPERCASE",
-                "La contraseña debe contener al menos una letra mayúscula (A-Z)",
-            )
+            return _rota(CodigoDeContrasena.NO_UPPERCASE)
 
         # 6. Validar complejidad: al menos 1 minúscula
         if not any(c.islower() for c in password):
-            return (
-                "PASSWORD_NO_LOWERCASE",
-                "La contraseña debe contener al menos una letra minúscula (a-z)",
-            )
+            return _rota(CodigoDeContrasena.NO_LOWERCASE)
 
         # 7. Validar complejidad: al menos 1 número
         if not any(c.isdigit() for c in password):
-            return "PASSWORD_NO_DIGIT", "La contraseña debe contener al menos un número (0-9)"
+            return _rota(CodigoDeContrasena.NO_DIGIT)
 
         # 8. Validar complejidad: al menos 1 carácter especial
         # Caracteres especiales permitidos: !@#$%^&*()_+-=[]{}|;:,.<>?
         special_chars_pattern = r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]"
         if not re.search(special_chars_pattern, password):
-            return (
-                "PASSWORD_NO_SYMBOL",
-                "La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)",
-            )
+            return _rota(CodigoDeContrasena.NO_SYMBOL)
 
         # 9. Validar contra blacklist de contraseñas comunes (OWASP V2.1.7)
         if is_common_password(password):
-            return (
-                "PASSWORD_TOO_COMMON",
-                "Esta contraseña es demasiado común y fácil de adivinar. Por favor, elige una contraseña más única",
-            )
+            return _rota(CodigoDeContrasena.TOO_COMMON)
 
         # Todas las validaciones pasaron
         return None
@@ -227,3 +233,30 @@ class Password:
     def __hash__(self) -> int:
         """Hash del objeto - Permite usar en sets y como keys de dict."""
         return hash(self.hashed_value)
+
+
+# El texto de cada código, uno solo: lo dicen el dominio y la ruta, que no copia
+# nada (BE #562). La longitud, sin lo tecleado: el dominio le añade
+# «(actualmente: N)». REUSED va en inglés: el cliente lo buscaba por ese texto.
+MENSAJES_DE_LA_CONTRASENA: Mapping[str, str] = MappingProxyType(
+    {
+        CodigoDeContrasena.EMPTY: "La contraseña no puede estar vacía",
+        CodigoDeContrasena.EDGE_SPACES: "La contraseña no puede tener espacios al inicio o final",
+        CodigoDeContrasena.TOO_SHORT: f"La contraseña debe tener al menos {Password.MIN_LENGTH} caracteres",
+        CodigoDeContrasena.TOO_LONG: f"La contraseña no puede exceder {Password.MAX_LENGTH} caracteres",
+        CodigoDeContrasena.NO_UPPERCASE: "La contraseña debe contener al menos una letra mayúscula (A-Z)",
+        CodigoDeContrasena.NO_LOWERCASE: "La contraseña debe contener al menos una letra minúscula (a-z)",
+        CodigoDeContrasena.NO_DIGIT: "La contraseña debe contener al menos un número (0-9)",
+        CodigoDeContrasena.NO_SYMBOL: (
+            "La contraseña debe contener al menos un carácter especial (!@#$%^&*()_+-=[]{}|;:,.<>?)"
+        ),
+        CodigoDeContrasena.TOO_COMMON: (
+            "Esta contraseña es demasiado común y fácil de adivinar. Por favor, elige una "
+            "contraseña más única"
+        ),
+        CodigoDeContrasena.REUSED: (
+            "Cannot reuse any of your last 5 passwords. Please choose a different password."
+        ),
+        CodigoDeContrasena.INVALID: "La contraseña no es válida",
+    }
+)

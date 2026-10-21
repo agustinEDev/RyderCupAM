@@ -97,3 +97,45 @@ def test_unknown_code_gets_a_generic_text_not_the_message():
 
     assert CENTINELA not in json.dumps(cuerpo)
     assert cuerpo == {"detail": DETALLE_GENERICO, "error_code": "NUEVO"}
+
+
+# --- Un solo texto: el del dominio (BE #562) -------------------------------------
+
+
+def _mensajes():
+    # Dentro del test: si falta, falla el test y no la recogida
+    from src.modules.user.domain.value_objects.password import MENSAJES_DE_LA_CONTRASENA
+
+    return MENSAJES_DE_LA_CONTRASENA
+
+
+@pytest.mark.parametrize("codigo", sorted(_ESPERADO.keys() - {"RESET_TOKEN_INVALID"}))
+def test_route_text_is_the_domain_text(codigo):
+    """
+    Given: El texto de cada código de contraseña
+    When: Se compara el de la ruta con el del dominio
+    Then: Es el mismo, así que no pueden divergir
+    """
+    assert _DETALLE[codigo] == _mensajes()[codigo]
+
+
+def test_reset_token_route_text_is_the_domain_text():
+    assert _DETALLE["RESET_TOKEN_INVALID"] == InvalidResetTokenError.MENSAJE
+    assert str(InvalidResetTokenError()) == InvalidResetTokenError.MENSAJE
+
+
+@pytest.mark.parametrize(("codigo", "password"), list(_POR_REGLA.items()))
+def test_domain_raises_with_its_own_text(codigo, password):
+    """
+    Given: Una contraseña que rompe una regla
+    When: El dominio la rechaza
+    Then: Su mensaje empieza por el texto del código (la longitud añade lo tecleado)
+    """
+    with pytest.raises(InvalidPasswordError) as error:
+        Password.from_plain_text(password)
+
+    mensaje = str(error.value)
+    if codigo in ("PASSWORD_TOO_SHORT", "PASSWORD_TOO_LONG"):
+        assert mensaje == f"{_mensajes()[codigo]} (actualmente: {len(password)})"
+    else:
+        assert mensaje == _mensajes()[codigo]

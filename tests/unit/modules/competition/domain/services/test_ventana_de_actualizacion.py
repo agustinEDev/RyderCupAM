@@ -159,3 +159,39 @@ class TestElCodigoDeCadaMotivo:
 
     def test_abierta_sin_codigo(self):
         assert _ventana(datetime(2030, 10, 10, 12, 0, tzinfo=UTC)).codigo is None
+
+
+class TestElMotivoEsElDelDominio:
+    """El motivo de la ventana es la constante del dominio que lee la ruta (BE #562)."""
+
+    def test_cada_motivo_es_su_constante(self):
+        from src.modules.competition.domain.services.ventana_de_actualizacion import MOTIVOS
+
+        casos = [
+            _ventana(datetime(2030, 10, 1, tzinfo=UTC), status=CompetitionStatus.ACTIVE),
+            _ventana(
+                datetime(2030, 10, 1, tzinfo=UTC),
+                status=CompetitionStatus.IN_PROGRESS,
+                stroke_play=False,
+                jornadas=(),
+            ),
+            _ventana(
+                datetime(2030, 10, 1, tzinfo=UTC),
+                status=CompetitionStatus.IN_PROGRESS,
+                jornadas=(),
+            ),
+            _ventana(datetime(2030, 10, 11, 10, 0, tzinfo=UTC)),
+            _ventana(datetime(2030, 10, 13, 10, 0, tzinfo=UTC)),
+            _ventana(datetime(2030, 10, 11, 6, 59, 50, tzinfo=UTC)),
+        ]
+
+        assert [v.codigo for v in casos] == [
+            "STATUS",
+            "RYDER",
+            "NO_WINDOWS",
+            "DAY_IN_PLAY",
+            "NO_DAYS_LEFT",
+            "TOO_CLOSE",
+        ]
+        for ventana in casos:
+            assert ventana.motivo == MOTIVOS[ventana.codigo]

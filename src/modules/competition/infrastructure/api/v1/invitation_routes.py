@@ -66,7 +66,6 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 )
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
-from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 
 
 def _validate_status_filter(status_filter: str | None) -> str | None:
@@ -91,15 +90,6 @@ SIN_PLAZAS = "The competition is full: there are no places left to invite."
 # Y al agotar el freno por hora: el texto de la excepcion lleva el id de la
 # competicion. La pantalla lo dice con el `limit`, en su idioma
 FRENO_POR_HORA = "Too many invitations sent in the last hour for this competition."
-
-
-# Texto fijo y no el de la excepción (CodeQL, BE #562)
-_DETALLE_SIN_PLAZA = {InvitationNoRoomViolation.error_code: InvitationNoRoomViolation.MENSAJE}
-
-
-def _sin_plaza(e: InvitationNoRoomViolation) -> JSONResponse:
-    """El 409 de una invitación sin plaza, con su código en la raíz (#360; BE #385)."""
-    return respuesta_con_codigo(status.HTTP_409_CONFLICT, _DETALLE_SIN_PLAZA, e.error_code)
 
 
 def _freno_por_hora(e: InvitationRateLimitViolation) -> JSONResponse:
@@ -282,10 +272,17 @@ async def respond_to_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotInviteeError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except InvitationNoRoomViolation as e:
+    except InvitationNoRoomViolation:
         # Con su codigo en la raiz, para que la pantalla lo diga en su idioma
-        # (claves siempre, #360; BE #385)
-        return _sin_plaza(e)
+        # (claves siempre, #360; BE #385). El texto, la constante de la clase y
+        # nunca el de la excepción (CodeQL, BE #562)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": InvitationNoRoomViolation.MENSAJE,
+                "error_code": InvitationNoRoomViolation.error_code,
+            },
+        )
     except InvalidInvitationStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationExpiredViolation as e:

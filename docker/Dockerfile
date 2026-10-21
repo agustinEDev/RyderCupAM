@@ -19,8 +19,10 @@
 FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
 
 # 2. Paquetes del sistema (BE #308)
-# - upgrade en la misma capa que el update: cada build recoge los parches de Debian
-#   publicados después del digest de la imagen base
+# - upgrade en la misma capa que el update: recoge los parches de Debian publicados
+#   después del digest de la imagen base, pero solo cuando se reconstruye la capa
+#   (cambia el Dockerfile o el digest de la base, o --no-cache); con caché se
+#   reutiliza tal cual. El digest lo renueva Dependabot (ecosistema docker)
 # - netcat-openbsd: el `nc` con el que entrypoint.sh espera a PostgreSQL
 # Sin postgresql-client: nada lo usa en esta imagen (todo psql, pg_dump y
 # pg_isready se ejecuta en el contenedor de Postgres) y arrastraba perl, krb5,
@@ -35,9 +37,10 @@ WORKDIR /app
 
 # 4. Copiar e instalar dependencias de Python
 # (aprovecha cache de Docker si requirements.txt no cambia)
-# pip y setuptools al día antes que nada: los de la imagen base traen alertas (BE #308)
+# pip al día antes que nada: el de la imagen base trae alertas (BE #308). Sin
+# setuptools: las imágenes 3.12+ no lo traen y requirements.txt fija su versión
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools \
+RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 # 5. Copiar código de la aplicación

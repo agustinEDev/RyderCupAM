@@ -14,14 +14,19 @@ hándicaps de sus jugadores con un botón (o dejarlo programado):
 Aquí solo está la decisión: las jornadas llegan ya en horas absolutas.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
+from types import MappingProxyType
 
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 
 # Lo que tarda la pasada por jugador, de sobra: el margen antes de cada salida
 SEGUNDOS_POR_JUGADOR = 10
+# El vigilante pasa cada minuto y la vuelta tarda: lo programado tiene que caber
+# con este margen dentro de la ventana
+MARGEN_AL_PROGRAMAR = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,44 @@ class CodigoDeVentana(StrEnum):
     TOO_TIGHT = "TOO_TIGHT"
 
 
+# El texto de cada motivo, uno solo: lo dicen el dominio, los casos de uso y la
+# ruta, que no copia nada (BE #562). RUNNING, exacto: lo simula un test del frontend
+MOTIVOS_DE_LA_VENTANA: Mapping[CodigoDeVentana, str] = MappingProxyType(
+    {
+        CodigoDeVentana.STATUS: (
+            "Los hándicaps se actualizan desde que se cierran las inscripciones hasta que "
+            "termina la competición."
+        ),
+        CodigoDeVentana.NO_WINDOWS: "Sin franjas, se actualizan hasta iniciar la competición.",
+        CodigoDeVentana.RYDER: "En una Ryder se actualizan hasta iniciar la competición.",
+        CodigoDeVentana.DAY_IN_PLAY: "Hay una jornada en marcha: se podrá al acabar el día.",
+        CodigoDeVentana.NO_DAYS_LEFT: "Ya no quedan jornadas por jugar.",
+        CodigoDeVentana.TOO_CLOSE: (
+            "Queda muy poco para la siguiente salida: no daría tiempo a preguntar por todos."
+        ),
+        CodigoDeVentana.NO_TIMEZONE: "El campo de la franja no tiene zona horaria.",
+    }
+)
+# Los que no salen de la ventana: al programar van sin prefijo
+MOTIVOS_SIN_VENTANA: Mapping[CodigoDeVentana, str] = MappingProxyType(
+    {
+        CodigoDeVentana.IN_THE_PAST: "Prográmala para un momento en el futuro.",
+        CodigoDeVentana.TOO_TIGHT: (
+            "Demasiado justo: prográmala con al menos "
+            f"{int(MARGEN_AL_PROGRAMAR.total_seconds() // 60)} minutos de margen antes de "
+            "que se cierre la ventana."
+        ),
+        CodigoDeVentana.DISABLED: "La actualización con la RFEG solo está encendida en producción.",
+        CodigoDeVentana.RUNNING: "Ya se están actualizando los hándicaps.",
+    }
+)
+MOTIVOS: Mapping[CodigoDeVentana, str] = MappingProxyType(
+    {**MOTIVOS_DE_LA_VENTANA, **MOTIVOS_SIN_VENTANA}
+)
+# Al programar, el motivo de la ventana se mira a la hora pedida
+PREFIJO_A_ESA_HORA = "A esa hora no se podría: "
+
+
 @dataclass(frozen=True)
 class Ventana:
     """Si se puede actualizar ahora, hasta cuándo, y si no, por qué."""
@@ -63,10 +106,7 @@ class Ventana:
 class VentanaDeActualizacion:
     """Calcula la ventana del botón de actualizar hándicaps."""
 
-    MOTIVO_ESTADO = (
-        "Los hándicaps se actualizan desde que se cierran las inscripciones hasta que "
-        "termina la competición."
-    )
+    MOTIVO_ESTADO = MOTIVOS[CodigoDeVentana.STATUS]
 
     @staticmethod
     def calcular(
@@ -94,12 +134,12 @@ class VentanaDeActualizacion:
             if stroke_play:
                 return Ventana(
                     False,
-                    motivo="Sin franjas, se actualizan hasta iniciar la competición.",
+                    motivo=MOTIVOS[CodigoDeVentana.NO_WINDOWS],
                     codigo=CodigoDeVentana.NO_WINDOWS,
                 )
             return Ventana(
                 False,
-                motivo="En una Ryder se actualizan hasta iniciar la competición.",
+                motivo=MOTIVOS[CodigoDeVentana.RYDER],
                 codigo=CodigoDeVentana.RYDER,
             )
         return VentanaDeActualizacion._entre_jornadas(jornadas, jugadores, ahora)
@@ -111,14 +151,14 @@ class VentanaDeActualizacion:
             if jornada.primera_salida <= ahora < jornada.fin:
                 return Ventana(
                     False,
-                    motivo="Hay una jornada en marcha: se podrá al acabar el día.",
+                    motivo=MOTIVOS[CodigoDeVentana.DAY_IN_PLAY],
                     codigo=CodigoDeVentana.DAY_IN_PLAY,
                 )
         siguientes = [j.primera_salida for j in jornadas if j.primera_salida > ahora]
         if not siguientes:
             return Ventana(
                 False,
-                motivo="Ya no quedan jornadas por jugar.",
+                motivo=MOTIVOS[CodigoDeVentana.NO_DAYS_LEFT],
                 codigo=CodigoDeVentana.NO_DAYS_LEFT,
             )
         cierra = min(siguientes) - timedelta(seconds=SEGUNDOS_POR_JUGADOR * jugadores)
@@ -126,8 +166,7 @@ class VentanaDeActualizacion:
             return Ventana(
                 False,
                 cierra=cierra,
-                motivo="Queda muy poco para la siguiente salida: no daría tiempo a "
-                "preguntar por todos.",
+                motivo=MOTIVOS[CodigoDeVentana.TOO_CLOSE],
                 codigo=CodigoDeVentana.TOO_CLOSE,
             )
         return Ventana(True, cierra=cierra)

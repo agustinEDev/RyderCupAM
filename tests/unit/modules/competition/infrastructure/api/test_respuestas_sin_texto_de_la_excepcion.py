@@ -6,6 +6,8 @@ excepción se lanza con un mensaje centinela, que no puede aparecer en la respue
 """
 
 import json
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -28,7 +30,10 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
 from src.modules.competition.infrastructure.api.v1 import (
     competition_state_routes as rutas,
 )
-from src.modules.competition.infrastructure.api.v1.invitation_routes import _sin_plaza
+from src.modules.competition.infrastructure.api.v1.invitation_routes import (
+    RespondInvitationBody,
+    respond_to_invitation,
+)
 from src.modules.competition.infrastructure.api.v1.tee_group_routes import _CON_JUGADORES
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.api.respuesta_con_codigo import DETALLE_GENERICO
@@ -211,7 +216,7 @@ def test_close_enrollment_errors_do_not_leak_their_message(respuesta, error):
 # --- Invitación sin plaza (#385) ---------------------------------------------------
 
 
-def test_no_room_answers_its_fixed_text():
+async def test_no_room_answers_its_fixed_text():
     """
     Given: Una invitación sin plaza cuyo mensaje se ha cambiado por un centinela
     When: Se responde el 409
@@ -220,10 +225,49 @@ def test_no_room_answers_its_fixed_text():
     error = InvitationNoRoomViolation()
     error.args = (CENTINELA,)
 
-    respuesta = _sin_plaza(error)
+    class _SinPlaza:
+        async def execute(self, _dto):
+            raise error
+
+    respuesta = await respond_to_invitation(
+        invitation_id=uuid4(),
+        body=RespondInvitationBody(action="ACCEPT"),
+        current_user=SimpleNamespace(id=uuid4()),
+        use_case=_SinPlaza(),
+    )
 
     assert respuesta.status_code == 409
     assert _cuerpo(respuesta) == {
         "detail": "Esta invitación se quedó sin plaza",
         "error_code": "INVITATION_NO_ROOM",
     }
+
+
+# --- Un solo texto por motivo: el del dominio (BE #562) ---------------------------
+
+
+def _dominio():
+    # Dentro del test: si falta, falla el test y no la recogida
+    from src.modules.competition.domain.services import ventana_de_actualizacion
+
+    return ventana_de_actualizacion
+
+
+@pytest.mark.parametrize("codigo", list(CodigoDeVentana), ids=str)
+def test_route_text_is_the_domain_constant(codigo):
+    """
+    Given: El texto de cada motivo
+    When: Se compara el de la ruta con el del dominio
+    Then: Es el mismo, al actualizar y al programar (con el prefijo si es de la ventana)
+    """
+    dominio = _dominio()
+    texto = dominio.MOTIVOS[codigo]
+
+    assert rutas._DETALLE_AL_ACTUALIZAR[codigo] == texto
+    if codigo in dominio.MOTIVOS_DE_LA_VENTANA:
+        texto = f"{dominio.PREFIJO_A_ESA_HORA}{texto}"
+    assert rutas._DETALLE_AL_PROGRAMAR[codigo] == texto
+
+
+def test_every_code_has_a_domain_text():
+    assert set(_dominio().MOTIVOS) == set(CodigoDeVentana)

@@ -97,7 +97,6 @@ from src.modules.competition.application.use_cases.name_vice_captain_use_case im
     NotCaptainOrCreatorError,
 )
 from src.modules.competition.application.use_cases.programar_actualizacion_use_case import (
-    MARGEN,
     AnularProgramacionUseCase,
     ProgramarActualizacionUseCase,
 )
@@ -125,8 +124,11 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.ventana_de_actualizacion import (
+    MOTIVOS,
+    MOTIVOS_DE_LA_VENTANA,
+    MOTIVOS_SIN_VENTANA,
+    PREFIJO_A_ESA_HORA,
     CodigoDeVentana,
-    VentanaDeActualizacion,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
@@ -806,34 +808,13 @@ async def cancel_scheduled_handicap_update(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
-# El texto de cada motivo, fijo y no el de la excepción (CodeQL, BE #562). Los
-# de la ventana son los de VentanaDeActualizacion; RUNNING, exacto: lo simula un
-# test del frontend
-_MOTIVOS_DE_LA_VENTANA: dict[str, str] = {
-    CodigoDeVentana.STATUS: VentanaDeActualizacion.MOTIVO_ESTADO,
-    CodigoDeVentana.NO_WINDOWS: "Sin franjas, se actualizan hasta iniciar la competición.",
-    CodigoDeVentana.RYDER: "En una Ryder se actualizan hasta iniciar la competición.",
-    CodigoDeVentana.DAY_IN_PLAY: "Hay una jornada en marcha: se podrá al acabar el día.",
-    CodigoDeVentana.NO_DAYS_LEFT: "Ya no quedan jornadas por jugar.",
-    CodigoDeVentana.TOO_CLOSE: (
-        "Queda muy poco para la siguiente salida: no daría tiempo a preguntar por todos."
-    ),
-    CodigoDeVentana.NO_TIMEZONE: "El campo de la franja no tiene zona horaria.",
-}
-_MOTIVOS_SIN_VENTANA: dict[str, str] = {
-    CodigoDeVentana.IN_THE_PAST: "Prográmala para un momento en el futuro.",
-    CodigoDeVentana.TOO_TIGHT: (
-        f"Demasiado justo: prográmala con al menos {int(MARGEN.total_seconds() // 60)} "
-        "minutos de margen antes de que se cierre la ventana."
-    ),
-    CodigoDeVentana.DISABLED: "La actualización con la RFEG solo está encendida en producción.",
-    CodigoDeVentana.RUNNING: "Ya se están actualizando los hándicaps.",
-}
-_DETALLE_AL_ACTUALIZAR = {**_MOTIVOS_DE_LA_VENTANA, **_MOTIVOS_SIN_VENTANA}
+# El texto de cada motivo, fijo y no el de la excepción (CodeQL, BE #562): las
+# constantes del dominio, sin copiarlas
+_DETALLE_AL_ACTUALIZAR = MOTIVOS
 # Al programar, la ventana se mira a la hora pedida
 _DETALLE_AL_PROGRAMAR = {
-    **{c: f"A esa hora no se podría: {t}" for c, t in _MOTIVOS_DE_LA_VENTANA.items()},
-    **_MOTIVOS_SIN_VENTANA,
+    **{c: f"{PREFIJO_A_ESA_HORA}{t}" for c, t in MOTIVOS_DE_LA_VENTANA.items()},
+    **MOTIVOS_SIN_VENTANA,
 }
 
 
