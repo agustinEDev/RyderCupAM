@@ -1,0 +1,255 @@
+"""
+Tests del adaptador que lleva a Actividad lo de `competition` (BE-2): que
+traduce bien y que la clasificacion final sale de la general oficial, sin
+recalcularla.
+"""
+
+from datetime import date
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.visibility import Visibility
+from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
+    MatchOutcome,
+    StandingRef,
+    TournamentRef,
+)
+from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
+    CompetitionActivityPublisher,
+)
+from src.modules.user.domain.value_objects.user_id import UserId
+
+pytestmark = pytest.mark.asyncio
+
+
+class _Avisos:
+    """El caso de uso social, apuntando lo que recibe."""
+
+    def __init__(self):
+        self.llamadas: list[tuple] = []
+
+    def __getattr__(self, nombre):
+        async def _apunta(*args, **kwargs):
+            self.llamadas.append((nombre, args, kwargs))
+
+        return _apunta
+
+
+class _General:
+    """La general oficial: lo que devuelve, tal cual."""
+
+    def __init__(self, filas, tipo="STABLEFORD"):
+        self.pedida: list = []
+        self._respuesta = SimpleNamespace(tournament_type=tipo, rows=filas)
+
+    async def execute(self, competition_id, categoria=None):
+        self.pedida.append((competition_id, categoria))
+        return self._respuesta
+
+
+def _competicion(visibility=Visibility.PUBLIC, stroke_play=None):
+    return SimpleNamespace(
+        id=CompetitionId(uuid4()),
+        name="Open de Otoño",
+        dates=SimpleNamespace(start_date=date(2027, 3, 3), end_date=date(2027, 3, 4)),
+        visibility=visibility,
+        stroke_play=stroke_play,
+    )
+
+
+def _ref(competicion, is_public=True) -> TournamentRef:
+    return TournamentRef(
+        competition_id=str(competicion.id.value),
+        name="Open de Otoño",
+        start_date=date(2027, 3, 3),
+        end_date=date(2027, 3, 4),
+        is_public=is_public,
+    )
+
+
+@pytest.fixture
+def avisos():
+    return _Avisos()
+
+
+class TestTraduccion:
+    async def test_inscrito_en_un_publico(self, avisos):
+        competicion = _competicion()
+        inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
+
+        await CompetitionActivityPublisher(avisos, _General([])).enrolled(
+            competicion, inscripcion, accepted_request=True
+        )
+
+        assert avisos.llamadas == [
+            (
+                "enrolled",
+                (inscripcion.user_id, _ref(competicion), str(inscripcion.id.value), True),
+                {},
+            )
+        ]
+
+    async def test_un_privado_no_es_publico(self, avisos):
+        competicion = _competicion(visibility=Visibility.PRIVATE)
+        inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
+
+        await CompetitionActivityPublisher(avisos, _General([])).enrolled(
+            competicion, inscripcion, accepted_request=False
+        )
+
+        (_, args, _) = avisos.llamadas[0]
+        assert args[1].is_public is False
+
+    async def test_retirar_cancelar_y_reabrir_van_por_el_id(self, avisos):
+        competicion = _competicion()
+        jugador = UserId(uuid4())
+        adaptador = CompetitionActivityPublisher(avisos, _General([]))
+
+        await adaptador.left(competicion.id, jugador)
+        await adaptador.cancelled(competicion.id)
+        await adaptador.reopened(competicion.id)
+
+        crudo = str(competicion.id.value)
+        assert avisos.llamadas == [
+            ("left", (jugador, crudo), {}),
+            ("tournament_cancelled", (crudo,), {}),
+            ("reopened", (crudo,), {}),
+        ]
+
+    async def test_invitaciones_por_su_id(self, avisos):
+        competicion = _competicion()
+        invitacion = SimpleNamespace(
+            id=SimpleNamespace(value=uuid4()), invitee_user_id=UserId(uuid4())
+        )
+        adaptador = CompetitionActivityPublisher(avisos, _General([]))
+
+        await adaptador.invited(competicion, invitacion)
+        await adaptador.invitation_withdrawn(invitacion)
+
+        crudo = str(invitacion.id.value)
+        assert avisos.llamadas == [
+            ("invited", (invitacion.invitee_user_id, _ref(competicion), crudo), {}),
+            ("invitation_withdrawn", (invitacion.invitee_user_id, crudo), {}),
+        ]
+
+    async def test_solicitudes_cerradas_y_rechazada(self, avisos):
+        competicion = _competicion()
+        una = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
+        otra = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))
+        adaptador = CompetitionActivityPublisher(avisos, _General([]))
+
+        await adaptador.requests_closed(competicion, [una, otra])
+        await adaptador.request_rejected(competicion, una)
+
+        assert avisos.llamadas == [
+            (
+                "requests_closed",
+                (
+                    _ref(competicion),
+                    [(una.user_id, str(una.id.value)), (otra.user_id, str(otra.id.value))],
+                ),
+                {},
+            ),
+            ("request_rejected", (una.user_id, _ref(competicion), str(una.id.value)), {}),
+        ]
+
+    @pytest.mark.parametrize(
+        ("result", "winner", "score"),
+        [
+            ({"winner": "A", "score": "3&2"}, "A", "3&2"),
+            ({"winner": "B", "score": "CONCEDED"}, "B", "CONCEDED"),
+            (None, None, None),
+        ],
+    )
+    async def test_partido_terminado(self, avisos, result, winner, score):
+        competicion = _competicion()
+        a, b = UserId(uuid4()), UserId(uuid4())
+        partido = SimpleNamespace(
+            id=SimpleNamespace(value=uuid4()),
+            team_a_players=(SimpleNamespace(user_id=a),),
+            team_b_players=(SimpleNamespace(user_id=b),),
+            result=result,
+        )
+        ronda = SimpleNamespace(round_date=date(2027, 3, 4))
+
+        await CompetitionActivityPublisher(avisos, _General([])).match_finished(
+            competicion, ronda, partido
+        )
+
+        assert avisos.llamadas == [
+            (
+                "match_finished",
+                (
+                    _ref(competicion),
+                    MatchOutcome(
+                        match_id=str(partido.id.value),
+                        played_on=date(2027, 3, 4),
+                        team_a=(a,),
+                        team_b=(b,),
+                        winner=winner,
+                        score=score,
+                    ),
+                ),
+                {},
+            )
+        ]
+
+    async def test_una_ronda_sin_fecha_toma_el_primer_dia(self, avisos):
+        competicion = _competicion()
+        partido = SimpleNamespace(
+            id=SimpleNamespace(value=uuid4()),
+            team_a_players=(),
+            team_b_players=(),
+            result={"winner": "A", "score": "1UP"},
+        )
+
+        await CompetitionActivityPublisher(avisos, _General([])).match_finished(
+            competicion, SimpleNamespace(round_date=None), partido
+        )
+
+        assert avisos.llamadas[0][1][1].played_on == date(2027, 3, 3)
+
+
+class TestClasificacionFinal:
+    async def test_c14_sale_de_la_general_oficial(self, avisos):
+        """C14. Given la general oficial / When termina / Then sus filas tal cual."""
+        competicion = _competicion(stroke_play=object())
+        ana, eva = uuid4(), uuid4()
+        general = _General(
+            [
+                SimpleNamespace(
+                    user_id=ana, position=1, tied=False, value=40, status="CLASIFICADO"
+                ),
+                SimpleNamespace(user_id=eva, position=None, tied=False, value=None, status="NR"),
+            ],
+            tipo="STABLEFORD",
+        )
+
+        await CompetitionActivityPublisher(avisos, general).completed(competicion)
+
+        assert general.pedida == [(competicion.id.value, None)]
+        assert avisos.llamadas == [
+            (
+                "final_standings",
+                (
+                    _ref(competicion),
+                    "STABLEFORD",
+                    [
+                        StandingRef(UserId(ana), 1, False, 40, "CLASIFICADO"),
+                        StandingRef(UserId(eva), None, False, None, "NR"),
+                    ],
+                ),
+                {},
+            )
+        ]
+
+    async def test_una_ryder_no_tiene_clasificacion_individual(self, avisos):
+        general = _General([])
+
+        await CompetitionActivityPublisher(avisos, general).completed(_competicion())
+
+        assert general.pedida == []
+        assert avisos.llamadas == []

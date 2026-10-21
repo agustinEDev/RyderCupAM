@@ -100,6 +100,22 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def delete_from_source(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
+    ) -> int:
+        """
+        Borra lo publicado desde ese origen (`source_match_id`) de esos tipos:
+        de un jugador, o de todos si no se dice. Devuelve cuantos borro.
+
+        Es como se retira un aviso que deja de ser cierto: la invitacion
+        retirada, el amigo que se borra del torneo, la clasificacion de un
+        torneo que se reabre. Una lista de tipos vacia no borra nada.
+        """
+
+    @abstractmethod
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         """
         Oculta a sus amigos lo publicado de esos tipos, sin borrarlo.
