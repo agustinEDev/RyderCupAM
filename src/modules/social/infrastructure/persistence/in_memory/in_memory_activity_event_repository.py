@@ -47,20 +47,20 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         encontrados = [e for e in self._events if e.user_id in user_ids]
         if before is not None:
             # El mismo par (fecha, id) que compara el SQL: sin el id, los eventos
-            # de una misma vuelta —que comparten `occurred_at`— se perderian al
+            # de una misma vuelta —que comparten `published_at`— se perderian al
             # pasar de pagina
             if before_id is not None:
                 encontrados = [
-                    e for e in encontrados if (e.occurred_at, str(e.id)) < (before, str(before_id))
+                    e for e in encontrados if (e.published_at, str(e.id)) < (before, str(before_id))
                 ]
             else:
-                encontrados = [e for e in encontrados if e.occurred_at < before]
+                encontrados = [e for e in encontrados if e.published_at < before]
 
-        encontrados.sort(key=lambda e: (e.occurred_at, str(e.id)), reverse=True)
+        encontrados.sort(key=lambda e: (e.published_at, str(e.id)), reverse=True)
         return encontrados[:limit]
 
     async def count_for_users_since(self, user_ids: list[UserId], since: datetime) -> int:
-        return len([e for e in self._events if e.user_id in user_ids and e.occurred_at > since])
+        return len([e for e in self._events if e.user_id in user_ids and e.published_at > since])
 
     async def exists_for_match(self, match_id: str) -> bool:
         return any(e.source_match_id == match_id for e in self._events)

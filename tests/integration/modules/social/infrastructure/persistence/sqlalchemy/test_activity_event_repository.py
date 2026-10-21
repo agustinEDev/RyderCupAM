@@ -32,12 +32,15 @@ async def _make_saved_user(db_session, email: str) -> User:
 
 
 def _event(user, type_, match_id, occurred_at=CUANDO, payload=None) -> ActivityEvent:
+    # Publicado cuando se jugo: estos tests miran el orden y el cursor, que van
+    # por `published_at`, y asi siguen hablando de una sola fecha
     return ActivityEvent.create(
         user_id=user.id,
         type=type_,
         occurred_at=occurred_at,
         source_match_id=match_id,
         payload=payload,
+        published_at=occurred_at,
     )
 
 

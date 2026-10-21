@@ -89,6 +89,7 @@ class GetPlayerActivityUseCase:
                     user_id=str(e.user_id.value),
                     type=e.type.value,
                     occurred_at=e.occurred_at,
+                    published_at=e.published_at,
                     payload=e.payload,
                     source_match_id=e.source_match_id,
                 )

@@ -1,21 +1,12 @@
 """DTOs del mapa de hoyos: lo que ve el jugador y lo que revisa el admin (BE #532)."""
 
-from datetime import UTC, datetime
-from typing import Annotated
+from datetime import datetime
 
 from geojson_pydantic import FeatureCollection
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
-
-
-def _utc_z(moment: datetime) -> str:
-    """En UTC y con «Z»: sin zona, un navegador la tomaría por hora local."""
-    if moment.tzinfo is not None:
-        moment = moment.astimezone(UTC).replace(tzinfo=None)
-    return moment.isoformat() + "Z"
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # Las fechas del mapa se guardan en UTC sin zona; al JSON salen con «Z»
-UtcDatetime = Annotated[datetime, PlainSerializer(_utc_z, return_type=str, when_used="json")]
+from src.shared.application.utc_datetime import UtcDatetime, utc_z
 
 
 class HoleMapDTO(BaseModel):
@@ -64,7 +55,7 @@ class PendingHoleMapDTO(BaseModel):
 
 def version_of(imported_at: datetime) -> str:
     """La versión de un mapa: su fecha de importación como texto (UTC, con µs)."""
-    return _utc_z(imported_at)
+    return utc_z(imported_at)
 
 
 class GetHoleMapRequestDTO(BaseModel):

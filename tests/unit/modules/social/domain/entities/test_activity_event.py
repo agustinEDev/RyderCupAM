@@ -1,6 +1,6 @@
 """Tests de ActivityEvent (BE #175)."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -123,6 +123,73 @@ class TestIdentidad:
 
         assert evento.is_from("match-1")
         assert not evento.is_from("match-2")
+
+
+class TestPublicacion:
+    """
+    Cuando se publico, que no es cuando se jugo: un torneo publica al cerrarse
+    vueltas de hace dias, y el aviso de novedades y el orden del feed se rigen
+    por lo primero.
+    """
+
+    def test_sin_fecha_de_publicacion_se_publica_ahora_en_utc(self, user_id):
+        """
+        Given un evento creado sin `published_at` / When se crea / Then lleva
+        el momento actual en UTC y sin zona, como el resto de fechas guardadas.
+        """
+        antes = datetime.now(UTC).replace(tzinfo=None)
+
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=datetime(2026, 8, 1),
+            source_match_id="match-1",
+        )
+
+        despues = datetime.now(UTC).replace(tzinfo=None)
+        assert evento.published_at.tzinfo is None
+        assert antes <= evento.published_at <= despues
+
+    def test_respeta_la_fecha_de_publicacion_dada(self, user_id):
+        """Given un `published_at` explicito / When se crea / Then se conserva."""
+        publicado = datetime(2026, 8, 12, 9, 30)
+
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=publicado - timedelta(days=3),
+            source_match_id="match-1",
+            published_at=publicado,
+        )
+
+        assert evento.published_at == publicado
+        assert evento.occurred_at == publicado - timedelta(days=3)
+
+    def test_por_defecto_lo_ven_los_amigos(self, user_id):
+        """Given un evento sin indicar visibilidad / When se crea / Then es visible a amigos."""
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=datetime(2026, 8, 1),
+            source_match_id="match-1",
+        )
+
+        assert evento.visible_to_friends is True
+
+    def test_se_puede_publicar_solo_para_el_autor(self, user_id):
+        """
+        Given la publicacion apagada / When se crea el evento oculto / Then no
+        es visible a los amigos.
+        """
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=datetime(2026, 8, 1),
+            source_match_id="match-1",
+            visible_to_friends=False,
+        )
+
+        assert evento.visible_to_friends is False
 
 
 class TestTipos:

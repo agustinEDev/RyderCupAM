@@ -215,6 +215,7 @@ class GetFriendsFeedUseCase:
             user_id=str(evento.user_id.value),
             type=evento.type.value,
             occurred_at=evento.occurred_at,
+            published_at=evento.published_at,
             payload=evento.payload,
             source_match_id=evento.source_match_id,
         )

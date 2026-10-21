@@ -49,6 +49,8 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 "user_id": event.user_id,
                 "type": event.type,
                 "occurred_at": event.occurred_at,
+                "published_at": event.published_at,
+                "visible_to_friends": event.visible_to_friends,
                 "payload": event.payload,
                 "source_match_id": event.source_match_id,
             }
@@ -73,20 +75,24 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         stmt = select(ActivityEvent).where(ActivityEvent._user_id.in_(user_ids))
         if before is not None:
             # El cursor compara el par entero, no solo la fecha. Todos los
-            # eventos de una misma vuelta comparten `occurred_at` al
-            # microsegundo —salen del mismo `created_at`— asi que filtrar por
-            # fecha estricta tiraria tambien los que aun no se han enseñado, y
+            # eventos de una misma vuelta comparten `published_at` al
+            # microsegundo —se publican juntos— asi que filtrar por fecha
+            # estricta tiraria tambien los que aun no se han enseñado, y
             # filtrar por `<=` repetiria los ya vistos. El par (fecha, id) si es
-            # unico, y `id` desempata de forma estable entre paginas
+            # unico, y `id` desempata de forma estable entre paginas.
+            #
+            # Un cursor de antes de `published_at` llevaba `occurred_at`: las
+            # filas de entonces se rellenaron con esa misma fecha, asi que sigue
+            # cayendo en su sitio
             if before_id is not None:
                 stmt = stmt.where(
-                    tuple_(ActivityEvent._occurred_at, ActivityEvent._id)
+                    tuple_(ActivityEvent._published_at, ActivityEvent._id)
                     < tuple_(before, before_id)
                 )
             else:
-                stmt = stmt.where(ActivityEvent._occurred_at < before)
+                stmt = stmt.where(ActivityEvent._published_at < before)
 
-        stmt = stmt.order_by(ActivityEvent._occurred_at.desc(), ActivityEvent._id.desc()).limit(
+        stmt = stmt.order_by(ActivityEvent._published_at.desc(), ActivityEvent._id.desc()).limit(
             limit
         )
 
@@ -102,7 +108,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             .select_from(activity_events_table)
             .where(
                 activity_events_table.c.user_id.in_(user_ids),
-                activity_events_table.c.occurred_at > since,
+                activity_events_table.c.published_at > since,
             )
         )
         result = await self._session.execute(stmt)

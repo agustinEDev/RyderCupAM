@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
+from src.shared.application.utc_datetime import UtcDatetime
 
 
 class FriendshipStateDTO(BaseModel):
@@ -97,6 +98,14 @@ class ActivityEventDTO(BaseModel):
     user_id: str
     type: str
     occurred_at: datetime
+    published_at: UtcDatetime | None = Field(
+        default=None,
+        description=(
+            "Cuando llego al feed, en UTC (con «Z»). Es la fecha por la que se ordena "
+            "el feed y se cuentan las novedades; `occurred_at` es cuando se jugo, y "
+            "un torneo publica dias despues de sus vueltas"
+        ),
+    )
     payload: dict = Field(
         default_factory=dict,
         description="El detalle propio de cada tipo: cuantos birdies, en que hoyos, que campo",
@@ -126,7 +135,7 @@ class FeedResponseDTO(BaseModel):
     Una pagina del feed, con el cursor para pedir la siguiente.
 
     El cursor son **dos** valores y no solo la fecha: todos los logros de una
-    misma vuelta comparten `occurred_at`, asi que paginar por fecha sola se
+    misma vuelta comparten `published_at`, asi que paginar por fecha sola se
     dejaria fuera los que aun no se han enseñado de esa vuelta.
     """
 

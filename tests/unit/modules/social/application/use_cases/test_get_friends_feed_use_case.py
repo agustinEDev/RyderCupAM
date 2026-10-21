@@ -95,6 +95,8 @@ async def _publica(
                     occurred_at=cuando,
                     source_match_id=match_id,
                     payload=payload,
+                    # Publicado cuando se jugo: estos tests hablan de una sola fecha
+                    published_at=cuando,
                 )
             ]
         )
