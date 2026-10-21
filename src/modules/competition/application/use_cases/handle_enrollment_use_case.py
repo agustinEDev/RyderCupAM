@@ -108,6 +108,12 @@ class HandleEnrollmentUseCase:
                     f"Competición no encontrada: {enrollment.competition_id}"
                 )
 
+            # 2b. Releerla ya con el bloqueo: si la competición empezó mientras se
+            #     esperaba, la solicitud está rechazada y aprobarla la pisaría
+            enrollment = await self._uow.enrollments.find_by_id_for_update(enrollment_id)
+            if not enrollment:
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
+
             # 3. Verificar que es el creador
             if not is_admin and competition.creator_id != creator_id:
                 raise NotCreatorError(

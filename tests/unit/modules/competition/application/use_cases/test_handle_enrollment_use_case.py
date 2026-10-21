@@ -1,5 +1,6 @@
 """Tests para HandleEnrollmentUseCase."""
 
+import copy
 from datetime import date
 from types import SimpleNamespace
 from uuid import uuid4
@@ -23,7 +24,10 @@ from src.modules.competition.application.use_cases.handle_enrollment_use_case im
     HandleEnrollmentUseCase,
     NotCreatorError,
 )
-from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.enrollment import (
+    Enrollment,
+    EnrollmentStateError,
+)
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
@@ -350,3 +354,38 @@ class TestHandleEnrollmentUseCase:
 
         with pytest.raises(CompetitionNotFoundError):
             await use_case.execute(request, creator_id)
+
+    @pytest.mark.parametrize("accion", ["APPROVE", "REJECT"])
+    async def test_decide_con_el_estado_de_despues_del_bloqueo(
+        self, uow: InMemoryUnitOfWork, creator_id: UserId, other_user_id: UserId, accion
+    ):
+        """Si la competición empieza mientras espera el bloqueo, la solicitud ya está
+        rechazada: aprobarla la pisaría (21 oct)."""
+        created = await self._create_active_competition(uow, creator_id)
+        enrollment = await self._create_requested_enrollment(uow, created.id, other_user_id)
+        bloquear = uow.competitions.find_by_id_for_update
+        leer = uow.enrollments.find_by_id
+
+        async def _otra_transaccion_la_rechaza_antes(competition_id):
+            # Lo que otra transacción guardó: un objeto nuevo con el estado nuevo
+            rechazada = copy.deepcopy(enrollment)
+            rechazada.reject()
+            await uow.enrollments.update(rechazada)
+            return await bloquear(competition_id)
+
+        async def _la_que_la_sesion_ya_tenia(_enrollment_id):
+            # Como el mapa de identidad de SQLAlchemy: sin relectura, la de antes
+            return enrollment
+
+        uow.competitions.find_by_id_for_update = _otra_transaccion_la_rechaza_antes
+        uow.enrollments.find_by_id = _la_que_la_sesion_ya_tenia
+
+        with pytest.raises(EnrollmentStateError):
+            await HandleEnrollmentUseCase(uow, _Usuarios()).execute(
+                HandleEnrollmentRequestDTO(enrollment_id=enrollment.id.value, action=accion),
+                creator_id,
+            )
+
+        async with uow:
+            guardada = await leer(enrollment.id)
+        assert guardada.status == EnrollmentStatus.REJECTED

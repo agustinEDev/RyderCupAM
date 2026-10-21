@@ -73,6 +73,22 @@ class EnrollmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_for_update(self, enrollment_id: EnrollmentId) -> Enrollment | None:
+        """
+        Busca una inscripción por su ID con bloqueo de fila (SELECT ... FOR UPDATE).
+
+        Devuelve el estado de la base de datos, aunque la sesión ya la tuviera
+        cargada: quien la lee tras esperar un bloqueo decide con el estado nuevo.
+
+        Args:
+            enrollment_id: El identificador único de la inscripción
+
+        Returns:
+            Optional[Enrollment]: La inscripción encontrada o None si no existe
+        """
+        pass
+
+    @abstractmethod
     async def find_by_competition(
         self, competition_id: CompetitionId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:
