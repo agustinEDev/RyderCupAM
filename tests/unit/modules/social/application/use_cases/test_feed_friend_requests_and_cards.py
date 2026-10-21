@@ -387,6 +387,54 @@ class TestPaginasSinPartirTarjetas:
         assert [e.source_match_id for e in segunda.events] == ["viejo"]
         assert segunda.next_cursor is None
 
+    async def test_7_lo_que_queda_en_medio_y_las_tarjetas_que_trae_tambien_van(
+        self, social_uow, user_uow
+    ):
+        """
+        7. Given la vuelta 1 con logros en tres momentos y, en medio, la vuelta 2
+        que sigue despues / When pido paginas de 2 / Then la primera llega hasta
+        el ultimo de las dos vueltas, con lo de en medio, y la segunda sigue.
+        """
+        yo = await _user(user_uow)
+
+        def _logro(tipo, origen, minutos):
+            return ActivityEvent.create(
+                user_id=yo.id,
+                type=tipo,
+                occurred_at=DESPUES,
+                source_match_id=origen,
+                published_at=DESPUES + timedelta(minutes=minutos),
+            )
+
+        async with social_uow:
+            await social_uow.activity_events.add_many(
+                [
+                    _logro(ActivityEventType.ENROLLMENT_APPROVED, "reciente", 10),
+                    _logro(ActivityEventType.BIRDIE, "vuelta-1", 9),
+                    _logro(ActivityEventType.EAGLE_OR_BETTER, "vuelta-1", 8),
+                    _logro(ActivityEventType.BIRDIE, "vuelta-2", 7),
+                    _logro(ActivityEventType.NEW_COURSE, "vuelta-1", 6),
+                    _logro(ActivityEventType.NEW_COURSE, "vuelta-2", 5),
+                    _logro(ActivityEventType.ENROLLMENT_REJECTED, "viejo", 0),
+                ]
+            )
+
+        caso = GetFriendsFeedUseCase(
+            social_uow, user_uow, InMemoryGolfCourseUnitOfWork(), reloj=lambda: DESPUES
+        )
+        primera = await caso.execute(str(yo.id.value), limit=2)
+        segunda = await caso.execute(str(yo.id.value), limit=2, cursor=primera.next_cursor)
+
+        assert [e.source_match_id for e in primera.events] == [
+            "reciente",
+            "vuelta-1",
+            "vuelta-1",
+            "vuelta-2",
+            "vuelta-1",
+            "vuelta-2",
+        ]
+        assert [e.source_match_id for e in segunda.events] == ["viejo"]
+
 
 class TestPrivacidadDeLosNombrados:
     """Revision de BE-2, punto 3: a quien nombra una tarjeta, segun quien mira."""
@@ -434,6 +482,8 @@ class TestPrivacidadDeLosNombrados:
             await self._amistad(social_uow, yo, eva, "bloqueo")
         else:
             await self._amistad(social_uow, eva, yo, "bloqueo")
+        # Una amistad no es un bloqueo: Luz sigue viniendo
+        await self._amistad(social_uow, luz, yo, "amigos")
         await self._resultado(social_uow, yo, [self._con_cuenta(eva), self._con_cuenta(luz)])
 
         feed = await _feed(social_uow, user_uow, yo)

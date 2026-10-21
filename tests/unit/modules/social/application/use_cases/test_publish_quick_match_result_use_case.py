@@ -347,15 +347,19 @@ class TestStableford:
         ana = await _user(user_uow, "Ana")
         eva = await _user(user_uow, "Eva")
         luz = await _user(user_uow, "Luz")
+        pablo = await _user(user_uow, "Pablo")
         course = await _campo(golf_course_uow, ana.id)
+        # Pablo: nueve hoyos que suman 73, lo mismo que la vuelta de Ana
+        nueve_en_73 = {**dict.fromkeys(range(1, 9), 8), 9: 9}
         match = await _partida(
             qm_uow,
             course,
             ana,
-            [_tarjeta(4, h1=5), {h: 4 for h in range(1, 10)}, _tarjeta(5)],
+            [_tarjeta(4, h1=5), dict.fromkeys(range(1, 10), 4), _tarjeta(5), nueve_en_73],
             otros=[
                 QuickMatchParticipant.for_user(eva.id),
                 QuickMatchParticipant.for_user(luz.id).with_handicap(36),
+                QuickMatchParticipant.for_user(pablo.id),
             ],
         )
 
@@ -369,6 +373,9 @@ class TestStableford:
         assert de_ana.payload["best_gross_in_group"] is True
         assert de_eva.payload["best_gross_in_group"] is False
         assert de_luz.payload["best_gross_in_group"] is False
+        de_pablo = await _uno_de(social_uow, pablo)
+        assert de_pablo.payload["gross_strokes"] == 73
+        assert de_pablo.payload["best_gross_in_group"] is False
 
 
 class TestMedal:
