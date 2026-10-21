@@ -13,6 +13,7 @@ LA TABLA:
     S1'  empieza a mano (START)                          | REQUESTED -> REJECTED
     S1'  empieza con el primer golpe de una partida      | REQUESTED -> REJECTED
     S1'  empieza con el primer golpe de un partido       | REQUESTED -> REJECTED
+    S1'  empieza con un hoyo que corrige el organizador  | REQUESTED -> REJECTED
     S1'  un golpe con la competición ya en juego         | no toca nada
     S1'  el organizador las contaba como pendientes      | al empezar, ninguna
     S2   sin aviso                                       | ningún evento nuevo
@@ -33,6 +34,7 @@ from src.modules.competition.application.dto.competition_dto import (
     StartCompetitionRequestDTO,
 )
 from src.modules.competition.application.dto.enrollment_dto import HandleEnrollmentRequestDTO
+from src.modules.competition.application.dto.partidas_dto import CorrectHoleBodyDTO
 from src.modules.competition.application.services.solicitudes_al_empezar import (
     rechazar_las_solicitudes_pendientes,
 )
@@ -47,6 +49,9 @@ from src.modules.competition.application.use_cases.handle_enrollment_use_case im
 )
 from src.modules.competition.application.use_cases.name_captains_use_case import (
     NameCaptainsUseCase,
+)
+from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    CorregirHoyoDePartidaUseCase,
 )
 from src.modules.competition.application.use_cases.start_competition_use_case import (
     StartCompetitionUseCase,
@@ -74,6 +79,9 @@ from tests.unit.modules.competition.application.use_cases.helpers import (
     USUARIOS_CON_GENERO,
     create_approved_enrollment,
     create_competition,
+)
+from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
+    _partida,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -177,7 +185,7 @@ async def test_en_una_ryder_cerrada_el_organizador_aun_la_aprueba():
     assert respuesta.status == "APPROVED"
 
 
-# --- S1': empezar las rechaza, por los tres caminos ----------------------------
+# --- S1': empezar las rechaza, por los cuatro caminos ----------------------------
 
 
 async def test_iniciar_a_mano_rechaza_las_solicitudes_pendientes():
@@ -209,6 +217,29 @@ async def test_el_primer_golpe_de_un_partido_rechaza_las_solicitudes_pendientes(
         await caso._arranca_la_competicion(comp_id, RuntimeError("no se puede"))
 
     assert await _estado(uow, solicitud) == EnrollmentStatus.REJECTED
+
+
+async def test_el_organizador_corrigiendo_un_hoyo_rechaza_las_solicitudes_pendientes():
+    escenario, partida = await _partida()
+    comp_id = escenario.competicion.id
+    assert escenario.competicion.status == CompetitionStatus.CLOSED
+    solicitud = await _solicitud(escenario.uow, comp_id)
+
+    await CorregirHoyoDePartidaUseCase(
+        uow=escenario.uow, zonas=escenario.zonas, reloj=lambda: escenario.ahora
+    ).execute(
+        partida.id.value,
+        partida.user_ids[0].value,
+        1,
+        CorrectHoleBodyDTO(own_score=4),
+        escenario.creador,
+        False,
+    )
+
+    assert (await escenario.uow.competitions.find_by_id(comp_id)).status == (
+        CompetitionStatus.IN_PROGRESS
+    )
+    assert await _estado(escenario.uow, solicitud) == EnrollmentStatus.REJECTED
 
 
 async def test_un_golpe_con_la_competicion_ya_en_juego_no_toca_nada():

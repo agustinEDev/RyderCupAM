@@ -84,5 +84,5 @@ async def test_iniciar_la_rechaza_y_ya_no_se_puede_aprobar(client: AsyncClient):
 
     set_auth_cookies(client, creador["cookies"])
     aprobada = await client.post(f"/api/v1/enrollments/{solicitud_id}/approve")
-    assert aprobada.status_code >= 400, aprobada.text
+    assert aprobada.status_code == 400, aprobada.text
     assert await _estado_de_su_inscripcion(client, creador, jugador, comp) == "REJECTED"

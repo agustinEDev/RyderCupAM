@@ -5,8 +5,9 @@ Hasta que se juega, el organizador puede aprobarlas: en una Ryder, incluso con l
 inscripción cerrada. Una vez en juego ya no caben, y si siguieran pendientes al
 organizador le seguirían saliendo «Aprobar» y «Rechazar».
 
-La competición empieza por tres caminos —iniciarla a mano y el primer golpe de
-una partida o de un partido—, y los tres llaman a esta regla.
+La competición empieza por cuatro caminos —iniciarla a mano, el primer golpe de
+una partida o de un partido, y el primer hoyo que corrige el organizador en una
+partida—, y los cuatro llaman a esta regla.
 """
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (

@@ -131,7 +131,7 @@ class StartCompetitionUseCase:
             # 4c. Una solicitud que siga pendiente ya no cabe (21 oct)
             await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
 
-            # 4. Persistir cambios
+            # 5. Persistir cambios
             await self._uow.competitions.update(competition)
 
         # 6. Retornar DTO de respuesta
