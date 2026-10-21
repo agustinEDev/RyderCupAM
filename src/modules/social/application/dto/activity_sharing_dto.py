@@ -9,7 +9,8 @@ class SetActivitySharingRequestDTO(BaseModel):
     enabled: bool = Field(
         description=(
             "Si los logros del jugador se publican en el feed de sus amigos. "
-            "Apagarlo retira ademas lo ya publicado."
+            "Apagarlo se lo retira ademas a ellos de lo ya publicado; el jugador "
+            "sigue viendo sus logros en su propio feed."
         )
     )
 
@@ -21,7 +22,8 @@ class ActivitySharingResponseDTO(BaseModel):
     removed_events: int = Field(
         default=0,
         description=(
-            "Cuantas entradas se retiraron del feed. Siempre 0 al encender: "
-            "encender no recupera lo borrado, el feed se llena con lo que se juegue."
+            "Cuantas entradas dejaron de ver sus amigos. Siempre 0 al encender: "
+            "encender no destapa lo retirado ni lo publicado mientras estuvo apagado; "
+            "sus amigos ven lo que se publique a partir de ahi."
         ),
     )

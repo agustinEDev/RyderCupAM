@@ -64,8 +64,10 @@ async def _publica(social_uow, user, match_id: str) -> None:
 
 
 async def _feed_de(social_uow, user):
+    """Lo suyo que ven sus amigos: apagar lo oculta, pero el autor lo conserva."""
     async with social_uow:
-        return await social_uow.activity_events.find_for_users([user.id], limit=50)
+        eventos = await social_uow.activity_events.find_for_users([user.id], limit=50)
+    return [e for e in eventos if e.visible_to_friends]
 
 
 async def test_apagarlo_retira_lo_ya_publicado(user_uow, social_uow):

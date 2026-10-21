@@ -350,10 +350,13 @@ async def test_reprocesar_el_cierre_no_duplica(
     assert len(await _feed_de(social_uow, player)) == antes
 
 
-async def test_no_publica_de_quien_lo_tiene_apagado(
+async def test_con_la_publicacion_apagada_publica_solo_para_el(
     social_uow, competition_uow, golf_course_uow, user_uow
 ):
-    """Given un inscrito con la publicacion apagada / When se cierra / Then no aparece."""
+    """
+    D20a. Given un inscrito con la publicacion apagada / When se cierra / Then
+    sus logros se guardan, pero ocultos a sus amigos.
+    """
     player = await _create_user(user_uow, share_activity=False)
     rival = await _create_user(user_uow)
     course = await _create_course(golf_course_uow, player.id)
@@ -363,7 +366,27 @@ async def test_no_publica_de_quien_lo_tiene_apagado(
         str(competition.id.value)
     )
 
-    assert await _feed_de(social_uow, player) == []
+    suyos = await _feed_de(social_uow, player)
+    assert suyos
+    assert all(e.visible_to_friends is False for e in suyos)
+
+
+async def test_con_la_publicacion_encendida_lo_ven_sus_amigos(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """D20c. Given un inscrito que publica / When se cierra / Then sus logros son visibles."""
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival)
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    suyos = await _feed_de(social_uow, player)
+    assert suyos
+    assert all(e.visible_to_friends is True for e in suyos)
 
 
 async def test_un_torneo_sin_cerrar_no_publica(

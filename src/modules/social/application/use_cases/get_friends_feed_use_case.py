@@ -13,8 +13,15 @@ from src.modules.social.application.dto.profile_dto import (
 )
 from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
+)
+from src.modules.social.domain.value_objects.activity_audience import (
+    types_seen_by_author,
+    types_seen_by_friends,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -30,6 +37,10 @@ DEFAULT_PAGE_SIZE = 20
 class GetFriendsFeedUseCase:
     """
     Lo que hemos conseguido mis amigos y yo, de lo mas reciente a lo mas antiguo.
+
+    **Cada tipo de evento tiene su publico** (`ActivityAudience`): de lo mio
+    veo lo SELF y lo BOTH; de mis amigos, lo FRIENDS y lo BOTH que publicaron
+    con la publicacion encendida.
 
     **Uno se ve a si mismo en su propio feed.** Un feed donde no sale lo que
     acabas de hacer se lee como si no se hubiera guardado, y ademas deja el feed
@@ -77,25 +88,29 @@ class GetFriendsFeedUseCase:
 
         de_amigos, visto_hasta = await self._publicables_y_ultima_visita(viewer_id, amigos)
 
-        # El jugador se ve a si mismo en su propio feed, junto a sus amigos: un
+        # Dos trozos en una sola consulta. Lo mio que veo yo (SELF y BOTH): un
         # feed donde no sale lo que uno acaba de hacer se lee como si no se
-        # hubiera guardado. Se añade sin mirar su `share_activity`, porque ese
-        # interruptor gobierna lo que ven los demas, no lo que uno ve de si mismo
-        publicables = [*de_amigos, viewer_id]
+        # hubiera guardado, y va sin mirar mi `share_activity`, que gobierna lo
+        # que ven los demas. Y lo de mis amigos que ven ellos (FRIENDS y BOTH),
+        # sin lo que publicaron con la publicacion apagada
+        mio = ActivitySlice(user_ids=(viewer_id,), types=types_seen_by_author())
+        suyo = ActivitySlice(
+            user_ids=tuple(de_amigos),
+            types=types_seen_by_friends(),
+            only_visible_to_friends=True,
+        )
 
         async with self._social_uow:
-            eventos = await self._social_uow.activity_events.find_for_users(
-                publicables, limit=limit, before=before, before_id=before_id
+            eventos = await self._social_uow.activity_events.find_in(
+                [mio, suyo], limit=limit, before=before, before_id=before_id
             )
             # El aviso cuenta solo lo de los amigos: los logros de uno mismo no
             # son novedad para uno. Terminar una partida y que el feed anuncie
             # "3 novedades" que son tuyas seria absurdo
             no_vistos = (
                 0
-                if visto_hasta is None or not de_amigos
-                else await self._social_uow.activity_events.count_for_users_since(
-                    de_amigos, since=visto_hasta
-                )
+                if visto_hasta is None
+                else await self._social_uow.activity_events.count_in([suyo], since=visto_hasta)
             )
 
         autores = await self._autores(eventos)

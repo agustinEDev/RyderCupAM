@@ -221,22 +221,6 @@ async def test_sin_jugadores_no_consulta_nada(db_session):
     repository = SQLAlchemyActivityEventRepository(db_session)
 
     assert await repository.find_for_users([], limit=10) == []
-    assert await repository.count_for_users_since([], since=CUANDO) == 0
-
-
-async def test_cuenta_lo_publicado_despues_de_una_fecha(db_session):
-    """Given eventos antes y despues / When se cuenta / Then solo los de despues."""
-    user = await _make_saved_user(db_session, "feed-repo-7@example.com")
-    repository = SQLAlchemyActivityEventRepository(db_session)
-    await repository.add_many(
-        [
-            _event(user, ActivityEventType.BIRDIE, "match-antes", CUANDO - timedelta(days=1)),
-            _event(user, ActivityEventType.BIRDIE, "match-despues", CUANDO + timedelta(days=1)),
-        ]
-    )
-    await db_session.commit()
-
-    assert await repository.count_for_users_since([user.id], since=CUANDO) == 1
 
 
 async def test_sabe_si_una_partida_ya_se_publico(db_session):

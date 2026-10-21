@@ -391,10 +391,14 @@ class TestQuienPublica:
             ActivityEventType.BIRDIE
         ) == 1
 
-    async def test_no_publica_de_quien_lo_tiene_apagado(
+    async def test_con_la_publicacion_apagada_publica_solo_para_el(
         self, social_uow, qm_uow, golf_course_uow, user_uow
     ):
-        """Given un jugador con la publicacion apagada / When se publica / Then no aparece."""
+        """
+        D20a. Given un jugador con la publicacion apagada / When se publica /
+        Then sus logros se guardan, pero ocultos a sus amigos: el interruptor
+        decide lo que ven los demas, no lo que ve uno de si mismo.
+        """
         callado = await _create_user(user_uow, share_activity=False)
         course = await _create_course(golf_course_uow, callado.id)
         match = await _played_match(qm_uow, course, callado)
@@ -403,8 +407,23 @@ class TestQuienPublica:
             str(match.id.value)
         )
 
-        assert publicados == 0
-        assert await _feed_de(social_uow, callado) == []
+        eventos = await _feed_de(social_uow, callado)
+        assert publicados == len(eventos) > 0
+        assert all(e.visible_to_friends is False for e in eventos)
+
+    async def test_con_la_publicacion_encendida_lo_ven_sus_amigos(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """D20c. Given la publicacion encendida / When se publica / Then es visible a amigos."""
+        user = await _create_user(user_uow)
+        course = await _create_course(golf_course_uow, user.id)
+        match = await _played_match(qm_uow, course, user)
+
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
+
+        eventos = await _feed_de(social_uow, user)
+        assert eventos
+        assert all(e.visible_to_friends is True for e in eventos)
 
     async def test_los_invitados_no_generan_eventos(
         self, social_uow, qm_uow, golf_course_uow, user_uow

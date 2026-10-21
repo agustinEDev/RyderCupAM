@@ -10,8 +10,15 @@ from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
 )
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
+)
+from src.modules.social.domain.value_objects.activity_audience import (
+    types_seen_by_author,
+    types_seen_by_friends,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -77,9 +84,20 @@ class GetPlayerActivityUseCase:
         if not publica and viewer_id != target_id:
             return FeedResponseDTO()
 
+        # Cada uno ve de si mismo lo SELF y lo BOTH, como en su feed; sus amigos,
+        # lo FRIENDS y lo BOTH que no publico con la publicacion apagada
+        if viewer_id == target_id:
+            trozo = ActivitySlice(user_ids=(target_id,), types=types_seen_by_author())
+        else:
+            trozo = ActivitySlice(
+                user_ids=(target_id,),
+                types=types_seen_by_friends(),
+                only_visible_to_friends=True,
+            )
+
         async with self._social_uow:
-            eventos = await self._social_uow.activity_events.find_for_users(
-                [target_id], limit=limit, before=before, before_id=before_id
+            eventos = await self._social_uow.activity_events.find_in(
+                [trozo], limit=limit, before=before, before_id=before_id
             )
 
         return FeedResponseDTO(

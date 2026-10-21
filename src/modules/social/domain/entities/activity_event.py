@@ -131,6 +131,10 @@ class ActivityEvent:
     def is_from(self, match_id: str) -> bool:
         return self._source_match_id == match_id
 
+    def hide_from_friends(self) -> None:
+        """Deja de verlo nadie mas que su autor (apagar la publicacion)."""
+        self._visible_to_friends = False
+
     def __eq__(self, other) -> bool:
         return isinstance(other, ActivityEvent) and self._id == other._id
 
