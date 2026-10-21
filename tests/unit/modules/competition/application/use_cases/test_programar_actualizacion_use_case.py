@@ -142,3 +142,28 @@ class TestAnularYVer:
         )
 
         assert ventana.scheduled_at == A_LAS_TRES
+
+
+class TestLosTextosSonLosDelDominio:
+    """Lo que dice cada error es la constante del dominio que lee la ruta (BE #562)."""
+
+    async def test_cada_motivo_al_programar(self, e):  # noqa: F811
+        from src.modules.competition.domain.services.ventana_de_actualizacion import (
+            MOTIVOS,
+            PREFIJO_A_ESA_HORA,
+        )
+
+        await e.torneo()
+        casos = [
+            (datetime(2030, 10, 10, 17, 0, tzinfo=UTC), MOTIVOS["IN_THE_PAST"]),
+            (CERCA, f"{PREFIJO_A_ESA_HORA}{MOTIVOS['TOO_CLOSE']}"),
+            (datetime(2030, 10, 11, 6, 58, tzinfo=UTC), MOTIVOS["TOO_TIGHT"]),
+        ]
+        for para, texto in casos:
+            with pytest.raises(ActualizacionNoPermitidaError) as error:
+                await _programar(e, para)
+            assert str(error.value) == texto
+
+        with pytest.raises(RefrescoDesactivadoError) as apagado:
+            await _programar(e, A_LAS_TRES, refresco_activo=False)
+        assert str(apagado.value) == MOTIVOS["DISABLED"]

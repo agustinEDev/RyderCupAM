@@ -41,7 +41,14 @@ class EnrolledUserDTO(BaseModel):
             "tiene, y si no su nombre completo."
         ),
     )
-    email: str = Field(..., description="Email del usuario")
+    # Vacío y no None: un null aquí lo marca oasdiff como cambio incompatible
+    email: str = Field(
+        ...,
+        description=(
+            "Email del usuario. Solo para el organizador, los admin y el propio "
+            "jugador; vacío para cualquier otro (BE #531)"
+        ),
+    )
     handicap: Decimal | None = Field(None, description="Handicap oficial del usuario")
     country_code: str | None = Field(None, description="Código ISO del país del usuario")
     avatar_url: str | None = Field(None, description="URL del avatar del usuario (futuro)")

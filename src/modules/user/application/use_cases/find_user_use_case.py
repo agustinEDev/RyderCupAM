@@ -8,6 +8,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.services.user_finder import UserFinder
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class FindUserUseCase:
@@ -22,12 +23,18 @@ class FindUserUseCase:
         self._uow = uow
         self._user_finder = UserFinder(self._uow.users)
 
-    async def execute(self, request: FindUserRequestDTO) -> FindUserResponseDTO:
+    async def execute(
+        self, request: FindUserRequestDTO, *, viewer_id: UserId
+    ) -> FindUserResponseDTO:
         """
         Ejecuta el caso de uso de búsqueda.
 
+        El correo del encontrado solo vuelve si es eco del que se tecleó o si
+        es quien busca; si no, vacío: buscar por nombre no destapa correos.
+
         Args:
             request: DTO con los criterios de búsqueda.
+            viewer_id: Quien busca.
 
         Returns:
             DTO con la información básica del usuario encontrado.
@@ -37,10 +44,10 @@ class FindUserUseCase:
         """
         async with self._uow:
             user = None
+            email_vo = Email(request.email) if request.email else None
 
             # Buscar por email si se proporciona
-            if request.email:
-                email_vo = Email(request.email)
+            if email_vo:
                 user = await self._user_finder.by_email(email_vo)
 
             # Si no se encontró por email, buscar por nombre completo
@@ -58,10 +65,11 @@ class FindUserUseCase:
                 criteria_str = " o ".join(search_criteria)
                 raise UserNotFoundError(f"No se encontró ningún usuario con {criteria_str}.")
 
-            # Crear y devolver el DTO de respuesta
+            # Eco de lo tecleado, o uno mismo
+            ve_correo = user.email == email_vo or user.id == viewer_id
             return FindUserResponseDTO(
                 user_id=user.id.value,
-                email=user.email.value,
+                email=user.email.value if ve_correo else "",
                 full_name=user.get_full_name(),
                 display_name=user.display_name,
             )

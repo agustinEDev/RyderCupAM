@@ -329,3 +329,36 @@ class TestElCodigoSinZona:
 
         assert not ventana.open
         assert ventana.reason_code == "NO_TIMEZONE"
+
+
+class TestLosTextosSonLosDelDominio:
+    """RUNNING y DISABLED dicen la constante del dominio que lee la ruta (BE #562)."""
+
+    async def test_al_pulsar(self, e):
+        from src.modules.competition.domain.services.ventana_de_actualizacion import MOTIVOS
+
+        await e.torneo()
+        with pytest.raises(RefrescoDesactivadoError) as apagado:
+            await e.pulsar(lanzador=False)
+        await e.pulsar()
+        with pytest.raises(ActualizacionEnCursoError) as en_curso:
+            await e.pulsar()
+
+        assert str(apagado.value) == MOTIVOS["DISABLED"]
+        assert str(en_curso.value) == MOTIVOS["RUNNING"]
+        assert MOTIVOS["RUNNING"] == "Ya se están actualizando los hándicaps."
+
+    async def test_en_la_ficha(self, e):
+        from src.modules.competition.domain.services.ventana_de_actualizacion import MOTIVOS
+
+        await e.torneo()
+        apagada = await VentanaDeActualizacionUseCase(
+            e.uow, e.zonas, lambda: A_TIEMPO, refresco_activo=False
+        ).execute(e.competicion.id, e.creador)
+        await e.pulsar()
+        en_marcha = await VentanaDeActualizacionUseCase(e.uow, e.zonas, lambda: A_TIEMPO).execute(
+            e.competicion.id, e.creador
+        )
+
+        assert apagada.reason == MOTIVOS["DISABLED"]
+        assert en_marcha.reason == MOTIVOS["RUNNING"]

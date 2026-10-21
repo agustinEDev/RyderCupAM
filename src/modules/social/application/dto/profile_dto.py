@@ -37,16 +37,13 @@ class PlayerProfileResponseDTO(BaseModel):
     falta para encontrar a alguien por su nombre y reconocerlo antes de mandarle
     una solicitud, y no dice nada de el que no diga ya la busqueda.
 
-    **Solo el propio jugador y sus amigos ven lo de detras**: correo, handicap,
+    **Solo el propio jugador y sus amigos ven lo de detras**: handicap,
     estadisticas y actividad. Esos campos llegan en None a cualquier otro, no
     recortados ni a cero — un cero se leeria como "juega fatal" en lugar de "no
     puedes ver esto".
 
-    El correo esta entre amigos porque una amistad aceptada aqui es un contacto
-    de verdad, y poder escribirle fuera de la aplicacion es parte de eso. Lo que
-    no puede pasar —y no pasa— es que se recolecten direcciones sin relacion
-    alguna: la busqueda por nombre no devuelve ninguna, y aqui hace falta que el
-    otro haya aceptado.
+    **El correo, solo el propio jugador** (#531, 21 oct): ni los amigos lo
+    reciben; os comunicais por la aplicacion. A cualquier otro llega en None.
     """
 
     id: str
@@ -78,10 +75,7 @@ class PlayerProfileResponseDTO(BaseModel):
     is_friend: bool = Field(default=False, description="Atajo de `friendship.status == ACCEPTED`")
     email: str | None = Field(
         default=None,
-        description=(
-            "Solo uno mismo y sus amigos: una amistad aceptada es un contacto de "
-            "verdad. None para cualquier otro"
-        ),
+        description="Solo uno mismo (BE #531). None para cualquier otro, amigos incluidos",
     )
     handicap: float | None = Field(
         default=None,

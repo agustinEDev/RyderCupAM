@@ -33,6 +33,9 @@ from src.modules.competition.application.ports.competition_timezone import IComp
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
 )
+from src.modules.competition.application.services.solicitudes_al_empezar import (
+    rechazar_las_solicitudes_pendientes,
+)
 from src.modules.competition.application.services.vista_de_la_franja import (
     primera_salida_en_el_campo,
 )
@@ -136,6 +139,8 @@ async def arrancar_la_competicion(
     if bloqueada.status == CompetitionStatus.CLOSED:
         bloqueada.start()
         await uow.competitions.update(bloqueada)
+        # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes
+        await rechazar_las_solicitudes_pendientes(uow, bloqueada.id)
 
 
 class AnotarHoyoDePartidaUseCase:

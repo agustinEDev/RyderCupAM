@@ -362,6 +362,141 @@ class TestListEnrollmentsBeyondOneHundred:
         assert {f["status"] for f in filas} == {"APPROVED"}
 
 
+class TestListEnrollmentsPrivacy:
+    """BE #531: quién ve qué filas y qué correos en la lista de inscritos."""
+
+    async def _montaje(self, client: AsyncClient, sufijo: str) -> dict:
+        """Creador, un aprobado, dos pendientes y uno rechazado."""
+        gente = {}
+        for rol in ("creador", "aprobado", "pendiente", "otro_pendiente", "rechazado"):
+            gente[rol] = await create_authenticated_user(
+                client, f"{rol}_{sufijo}@test.com", "P@ssw0rd123!", "Jugador", "Privacidad"
+            )
+        comp = await create_competition(client, gente["creador"]["cookies"])
+        await activate_competition(client, gente["creador"]["cookies"], comp["id"])
+        ids = {}
+        for rol in ("aprobado", "pendiente", "otro_pendiente", "rechazado"):
+            r = await client.post(
+                f"/api/v1/competitions/{comp['id']}/enrollments",
+                cookies=gente[rol]["cookies"],
+            )
+            assert r.status_code == 201, r.text
+            ids[rol] = r.json()["id"]
+        for rol, accion in (("aprobado", "approve"), ("rechazado", "reject")):
+            r = await client.post(
+                f"/api/v1/enrollments/{ids[rol]}/{accion}", cookies=gente["creador"]["cookies"]
+            )
+            assert r.status_code == 200, r.text
+        return {"comp": comp, "gente": gente}
+
+    async def _lista(self, client: AsyncClient, m: dict, quien: dict, filtro: str = "") -> list:
+        r = await client.get(
+            f"/api/v1/competitions/{m['comp']['id']}/enrollments{filtro}", cookies=quien["cookies"]
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    @staticmethod
+    def _por_email(m: dict, filas: list) -> dict:
+        """Cada fila, por el correo REAL de su dueño (no el que llega)."""
+        por_id = {g["user"]["id"]: g["user"]["email"] for g in m["gente"].values()}
+        return {por_id[f["user_id"]]: f for f in filas}
+
+    @pytest.mark.asyncio
+    async def test_organizer_sees_every_row_and_every_email(self, client: AsyncClient):
+        m = await self._montaje(client, "p531a")
+
+        filas = await self._lista(client, m, m["gente"]["creador"])
+
+        assert {f["status"] for f in filas} == {"APPROVED", "REQUESTED", "REJECTED"}
+        assert len(filas) == 5
+        assert all(f["user"]["email"] == e for e, f in self._por_email(m, filas).items())
+
+    @pytest.mark.asyncio
+    async def test_admin_sees_every_row_and_every_email(self, client: AsyncClient):
+        m = await self._montaje(client, "p531b")
+        admin = await create_admin_user(client, "admin_p531b@test.com", "P@ssw0rd123!", "Ad", "Min")
+
+        filas = await self._lista(client, m, admin)
+
+        assert len(filas) == 5
+        assert all(f["user"]["email"] == e for e, f in self._por_email(m, filas).items())
+
+    @pytest.mark.asyncio
+    async def test_pending_player_sees_approved_and_own_row_and_only_own_email(
+        self, client: AsyncClient
+    ):
+        m = await self._montaje(client, "p531c")
+        yo = m["gente"]["pendiente"]
+
+        filas = await self._lista(client, m, yo)
+        por_email = self._por_email(m, filas)
+
+        assert set(por_email) == {
+            m["gente"][r]["user"]["email"] for r in ("creador", "aprobado", "pendiente")
+        }
+        assert por_email[yo["user"]["email"]]["status"] == "REQUESTED"
+        assert por_email[yo["user"]["email"]]["user"]["email"] == yo["user"]["email"]
+        ajenos = [f for e, f in por_email.items() if e != yo["user"]["email"]]
+        assert all(f["user"]["email"] == "" for f in ajenos)
+
+    @pytest.mark.asyncio
+    async def test_unrelated_user_sees_only_approved_and_no_email(self, client: AsyncClient):
+        m = await self._montaje(client, "p531d")
+        extrano = await create_authenticated_user(
+            client, "extrano_p531d@test.com", "P@ssw0rd123!", "Extra", "No"
+        )
+
+        respuesta = await client.get(
+            f"/api/v1/competitions/{m['comp']['id']}/enrollments", cookies=extrano["cookies"]
+        )
+
+        filas = respuesta.json()
+        assert {f["status"] for f in filas} == {"APPROVED"}
+        assert len(filas) == 2
+        assert all(f["user"]["email"] == "" for f in filas)
+        for g in m["gente"].values():
+            assert g["user"]["email"] not in respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_status_filter_goes_on_top_of_what_each_one_sees(self, client: AsyncClient):
+        m = await self._montaje(client, "p531e")
+        g = m["gente"]
+        extrano = await create_authenticated_user(
+            client, "extrano_p531e@test.com", "P@ssw0rd123!", "Extra", "No"
+        )
+
+        del_creador = await self._lista(client, m, g["creador"], "?status=REQUESTED")
+        del_pendiente = await self._lista(client, m, g["pendiente"], "?status=REQUESTED")
+        del_aprobado = await self._lista(client, m, g["aprobado"], "?status=REJECTED")
+        del_extrano = await self._lista(client, m, extrano, "?status=APPROVED")
+
+        assert len(del_creador) == 2
+        assert [f["user_id"] for f in del_pendiente] == [g["pendiente"]["user"]["id"]]
+        assert del_aprobado == []
+        assert {f["status"] for f in del_extrano} == {"APPROVED"}
+        assert len(del_extrano) == 2
+
+    @pytest.mark.asyncio
+    async def test_unknown_status_filter_is_a_422(self, client: AsyncClient):
+        """
+        Given: una competición
+        When: se lista con un estado que no existe
+        Then: 422, como cualquier otro parámetro mal formado
+        """
+        creador = await create_authenticated_user(
+            client, "creador_p531f@test.com", "P@ssw0rd123!", "Jugador", "Privacidad"
+        )
+        comp = await create_competition(client, creador["cookies"])
+
+        r = await client.get(
+            f"/api/v1/competitions/{comp['id']}/enrollments?status=foo",
+            cookies=creador["cookies"],
+        )
+
+        assert r.status_code == 422, r.text
+
+
 class TestApproveRejectEnrollment:
     """Tests para POST /api/v1/enrollments/{id}/approve y /reject"""
 

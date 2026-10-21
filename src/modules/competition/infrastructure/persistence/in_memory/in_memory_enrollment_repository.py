@@ -42,6 +42,10 @@ class InMemoryEnrollmentRepository(EnrollmentRepositoryInterface):
         """Busca una inscripción por su ID."""
         return self._enrollments.get(enrollment_id)
 
+    async def find_by_id_for_update(self, enrollment_id: EnrollmentId) -> Enrollment | None:
+        # En memoria no hay nada que bloquear: lo guardado ya es lo último
+        return self._enrollments.get(enrollment_id)
+
     async def find_by_competition_and_status(
         self,
         competition_id: CompetitionId,

@@ -18,12 +18,18 @@
 # vale para Render (amd64) y para el Kind en un Mac (arm64).
 FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
 
-# 2. Instalar dependencias del sistema
-# netcat-openbsd: Para verificar conexión con PostgreSQL (opcional en producción)
-# postgresql-client: Para herramientas CLI de postgres si es necesario
-RUN apt-get update && apt-get install -y \
-    netcat-openbsd \
-    postgresql-client \
+# 2. Paquetes del sistema (BE #308)
+# - upgrade en la misma capa que el update: recoge los parches de Debian publicados
+#   después del digest de la imagen base, pero solo cuando se reconstruye la capa
+#   (cambia el Dockerfile o el digest de la base, o --no-cache); con caché se
+#   reutiliza tal cual. El digest lo renueva Dependabot (ecosistema docker)
+# - netcat-openbsd: el `nc` con el que entrypoint.sh espera a PostgreSQL
+# Sin postgresql-client: nada lo usa en esta imagen (todo psql, pg_dump y
+# pg_isready se ejecuta en el contenedor de Postgres) y arrastraba perl, krb5,
+# ldap y sasl, con la mayoría de las alertas de Trivy. psycopg2-binary trae su libpq
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Directorio de trabajo
@@ -31,8 +37,11 @@ WORKDIR /app
 
 # 4. Copiar e instalar dependencias de Python
 # (aprovecha cache de Docker si requirements.txt no cambia)
+# pip al día antes que nada: el de la imagen base trae alertas (BE #308). Sin
+# setuptools: las imágenes 3.12+ no lo traen y requirements.txt fija su versión
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
 # 5. Copiar código de la aplicación
 COPY . .

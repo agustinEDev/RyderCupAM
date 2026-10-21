@@ -272,12 +272,16 @@ async def respond_to_invitation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotInviteeError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except InvitationNoRoomViolation as e:
+    except InvitationNoRoomViolation:
         # Con su codigo en la raiz, para que la pantalla lo diga en su idioma
-        # (claves siempre, #360; BE #385)
+        # (claves siempre, #360; BE #385). El texto, la constante de la clase y
+        # nunca el de la excepción (CodeQL, BE #562)
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"detail": str(e), "error_code": e.error_code},
+            content={
+                "detail": InvitationNoRoomViolation.MENSAJE,
+                "error_code": InvitationNoRoomViolation.error_code,
+            },
         )
     except InvalidInvitationStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e

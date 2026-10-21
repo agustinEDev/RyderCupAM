@@ -65,6 +65,19 @@ class SQLAlchemyEnrollmentRepository(EnrollmentRepositoryInterface):
         """
         return await self._session.get(Enrollment, enrollment_id)
 
+    async def find_by_id_for_update(self, enrollment_id: EnrollmentId) -> Enrollment | None:
+        # `populate_existing`: sin él, SQLAlchemy devuelve el objeto que la sesión
+        # ya tenía, con el estado de antes del bloqueo (mismo patrón que las
+        # invitaciones y las franjas)
+        stmt = (
+            select(Enrollment)
+            .where(Enrollment._id == enrollment_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def find_by_competition(
         self, competition_id: CompetitionId, limit: int | None = None, offset: int = 0
     ) -> list[Enrollment]:

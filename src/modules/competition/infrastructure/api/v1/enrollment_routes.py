@@ -104,6 +104,7 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
     WithdrawEnrollmentUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -166,6 +167,9 @@ class EnrollmentDTOMapper:
         enrollments: Sequence[Enrollment],
         user_uow: UserUnitOfWorkInterface,
         categorias: Mapping[UserId, int | None] | None = None,
+        *,
+        ve_todos_los_correos: bool = False,
+        viewer_id: UserId | None = None,
     ) -> list[EnrollmentResponseDTO]:
         """
         Convierte inscripciones a EnrollmentResponseDTO, con los datos de cada usuario.
@@ -178,6 +182,9 @@ class EnrollmentDTOMapper:
             user_uow: Unit of Work de usuarios
             categorias: La categoría de cada jugador, si ya está fijada (#251).
                 Sin ella, ni hándicap fijado ni categoría: aún no cuentan
+            ve_todos_los_correos: Si van todos los correos (organizador o admin)
+            viewer_id: Quien pide: el suyo va siempre. Sin los dos, ningún
+                correo (BE #531)
 
         Returns:
             Un DTO por inscripción; `user` a None si el usuario ya no existe
@@ -191,7 +198,13 @@ class EnrollmentDTOMapper:
         por_id = {u.id: u for u in usuarios}
 
         return [
-            EnrollmentDTOMapper._to_dto(e, por_id.get(e.user_id), categorias) for e in enrollments
+            EnrollmentDTOMapper._to_dto(
+                e,
+                por_id.get(e.user_id),
+                categorias,
+                ve_todos_los_correos or e.user_id == viewer_id,
+            )
+            for e in enrollments
         ]
 
     @staticmethod
@@ -199,12 +212,13 @@ class EnrollmentDTOMapper:
         enrollment: Enrollment,
         user: User | None,
         categorias: Mapping[UserId, int | None] | None,
+        con_correo: bool,
     ) -> EnrollmentResponseDTO:
         return EnrollmentResponseDTO(
             id=enrollment.id.value,
             competition_id=enrollment.competition_id.value,
             user_id=enrollment.user_id.value,
-            user=EnrollmentDTOMapper._user_dto(enrollment, user),
+            user=EnrollmentDTOMapper._user_dto(enrollment, user, con_correo),
             status=enrollment.status.value,
             team_id=enrollment.team_id,
             custom_handicap=enrollment.custom_handicap,
@@ -217,7 +231,9 @@ class EnrollmentDTOMapper:
         )
 
     @staticmethod
-    def _user_dto(enrollment: Enrollment, user: User | None) -> EnrolledUserDTO | None:
+    def _user_dto(
+        enrollment: Enrollment, user: User | None, con_correo: bool
+    ) -> EnrolledUserDTO | None:
         """
         Los datos del usuario inscrito.
 
@@ -233,7 +249,7 @@ class EnrollmentDTOMapper:
             first_name=user.first_name,
             last_name=user.last_name,
             display_name=user.display_name_or_legal(enrollment.use_real_name),
-            email=str(user.email),
+            email=str(user.email) if con_correo else "",
             handicap=user.handicap.value if user.handicap else None,
             country_code=user.country_code.value if user.country_code else None,
             avatar_url=None,  # TODO: Implementar cuando tengamos sistema de avatares
@@ -343,31 +359,45 @@ async def direct_enroll_player(
 )
 async def list_enrollments(
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: ListEnrollmentsUseCase = Depends(get_list_enrollments_use_case),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    status_filter: str | None = Query(None, alias="status", description="Filtrar por estado"),
+    # Tipado con el enum: un estado que no existe es un 422 de FastAPI
+    status_filter: EnrollmentStatus | None = Query(
+        None, alias="status", description="Filtrar por estado"
+    ),
 ):
     """
     Lista inscripciones de una competición.
 
     Filtros disponibles:
-    - status: REQUESTED, APPROVED, REJECTED, CANCELLED, WITHDRAWN
+    - status: REQUESTED, INVITED, APPROVED, REJECTED, CANCELLED, WITHDRAWN
+
+    Quién ve qué (BE #531): el organizador y los admin, todo; cualquier otro,
+    los aprobados y sus propias filas, y solo su propio correo.
 
     **Returns:**
     - Lista de enrollments con objeto `user` nested incluyendo:
-      - id, first_name, last_name, email
+      - id, first_name, last_name, email (vacío si no lo puede ver)
       - handicap, country_code, avatar_url
     """
+    viewer_id = UserId(str(current_user.id))
     try:
         # Con la categoría de cada uno, si ya está fijada (#251)
-        enrollments, categorias = await use_case.execute_con_categorias(
-            competition_id=str(competition_id), status=status_filter
+        lista = await use_case.execute(
+            competition_id=str(competition_id),
+            status=status_filter,
+            viewer_id=viewer_id,
+            viewer_is_admin=current_user.is_admin,
         )
 
         # Entidades a DTOs, con los datos de cada usuario leídos en bloque
         return await EnrollmentDTOMapper.to_response_dtos(
-            enrollments, user_uow, categorias=categorias
+            lista.enrollments,
+            user_uow,
+            categorias=lista.categorias,
+            ve_todos_los_correos=lista.ve_todos_los_correos,
+            viewer_id=viewer_id,
         )
 
     except ListCompetitionNotFoundError as e:

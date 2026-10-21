@@ -30,6 +30,10 @@ from src.modules.competition.domain.entities.actualizacion_de_handicaps import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.ventana_de_actualizacion import (
+    MOTIVOS,
+    CodigoDeVentana,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 
 
@@ -74,12 +78,10 @@ class ActualizacionesDeHandicaps:
             ActualizacionEnCursoError: Si ya hay una en marcha
         """
         if self._lanzador is None:
-            raise RefrescoDesactivadoError(
-                "La actualización con la RFEG solo está encendida en producción."
-            )
+            raise RefrescoDesactivadoError(MOTIVOS[CodigoDeVentana.DISABLED])
         ultima = await self._uow.handicap_updates.ultima_de(competition_id)
         if ultima is not None and ultima.sigue():
-            raise ActualizacionEnCursoError("Ya se están actualizando los hándicaps.")
+            raise ActualizacionEnCursoError(MOTIVOS[CodigoDeVentana.RUNNING])
         if ultima is not None and ultima.estado is EstadoActualizacion.INCOMPLETA:
             ultima.reanudar(ahora)
             await self._uow.handicap_updates.update(ultima)

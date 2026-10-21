@@ -17,6 +17,9 @@ from src.modules.competition.application.exceptions import (
     ScoringNotOpenYetError,
 )
 from src.modules.competition.application.services.match_opener import MatchOpener
+from src.modules.competition.application.services.solicitudes_al_empezar import (
+    rechazar_las_solicitudes_pendientes,
+)
 from src.modules.competition.domain.entities.hole_score import MAX_HOLE, MIN_HOLE
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -275,6 +278,8 @@ class SubmitHoleScoreUseCase:
             raise no_se_puede
         competition.start()
         await self._uow.competitions.update(competition)
+        # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes
+        await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
 
     async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
         """Actualiza own_score para los jugadores afectados."""

@@ -227,6 +227,71 @@ class TestUserRoutes:
         # Ambas búsquedas deben devolver el mismo user_id
         assert email_data["user_id"] == name_data["user_id"]
 
+    async def test_find_user_by_name_other_user_returns_empty_email(self, client: AsyncClient):
+        """
+        Given: dos jugadores registrados
+        When: uno busca al otro por su nombre
+        Then: lo encuentra, pero sin su correo (BE #531)
+        """
+        buscador = await create_authenticated_user(
+            client, "buscador.nombre@example.com", "s3cur3P@ssw0rd!", "Buscador", "Nombre"
+        )
+        otro = await create_authenticated_user(
+            client, "buscado.nombre@example.com", "s3cur3P@ssw0rd!", "Buscado", "Nombre"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search",
+            params={"full_name": "Buscado Nombre"},
+            headers={"Authorization": f"Bearer {buscador['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["user_id"] == otro["user"]["id"]
+        assert data["email"] == ""
+
+    async def test_find_user_by_exact_email_other_user_echoes_email(self, client: AsyncClient):
+        """
+        Given: dos jugadores registrados
+        When: uno busca al otro por su correo exacto, en otras mayúsculas
+        Then: el correo vuelve: es eco de lo tecleado
+        """
+        buscador = await create_authenticated_user(
+            client, "buscador.correo@example.com", "s3cur3P@ssw0rd!", "Buscador", "Correo"
+        )
+        await create_authenticated_user(
+            client, "buscado.correo@example.com", "s3cur3P@ssw0rd!", "Buscado", "Correo"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search",
+            params={"email": "Buscado.Correo@Example.com"},
+            headers={"Authorization": f"Bearer {buscador['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["email"] == "buscado.correo@example.com"
+
+    async def test_find_user_by_name_self_returns_own_email(self, client: AsyncClient):
+        """
+        Given: un jugador registrado
+        When: se busca a sí mismo por nombre
+        Then: ve su propio correo
+        """
+        yo = await create_authenticated_user(
+            client, "yo.mismo@example.com", "s3cur3P@ssw0rd!", "Yo", "Mismo"
+        )
+
+        response = await client.get(
+            "/api/v1/users/search",
+            params={"full_name": "Yo Mismo"},
+            headers={"Authorization": f"Bearer {yo['token']}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["email"] == "yo.mismo@example.com"
+
     # ========================================================================
     # Tests para Update Profile (PATCH /api/v1/users/profile)
     # ========================================================================
