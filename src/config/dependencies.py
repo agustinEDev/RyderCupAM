@@ -420,6 +420,9 @@ from src.modules.social.application.use_cases.block_user_use_case import BlockUs
 from src.modules.social.application.use_cases.delete_profile_photo_use_case import (
     DeleteProfilePhotoUseCase,
 )
+from src.modules.social.application.use_cases.get_feed_unseen_count_use_case import (
+    GetFeedUnseenCountUseCase,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
 )
@@ -1631,6 +1634,14 @@ def get_friends_feed_use_case(
 ) -> GetFriendsFeedUseCase:
     """Proveedor del caso de uso GetFriendsFeedUseCase."""
     return GetFriendsFeedUseCase(social_uow, user_uow, golf_course_uow)
+
+
+def get_feed_unseen_count_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetFeedUnseenCountUseCase:
+    """Proveedor del caso de uso GetFeedUnseenCountUseCase."""
+    return GetFeedUnseenCountUseCase(social_uow, user_uow)
 
 
 def get_mark_feed_as_seen_use_case(

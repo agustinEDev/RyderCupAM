@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -19,6 +19,7 @@ from src.modules.social.application.ports.player_course_history_interface import
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.application.publication import stamp_for_publication
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -38,6 +39,11 @@ from src.shared.domain.services.countable_round import countable_holes
 
 logger = logging.getLogger(__name__)
 
+# La ronda es una fecha, pero sale al JSON en UTC y con «Z»: a mediodia cae en
+# el mismo dia en cualquier zona de -12 a +12; a medianoche, al oeste de
+# Greenwich se veria el dia anterior
+_MEDIODIA_UTC = time(12, 0)
+
 # Cuantas vueltas del jugador se miran hacia atras para saber si estrena torneo.
 MAX_HISTORY_LOOKUP = 200
 
@@ -51,6 +57,8 @@ class _TournamentRound:
     golf_course_id: str
     occurred_at: datetime
     holes: list[PlayedHole]
+    # Con la publicacion apagada el logro se guarda solo para el
+    visible_to_friends: bool
 
 
 class PublishTournamentAchievementsUseCase:
@@ -130,6 +138,8 @@ class PublishTournamentAchievementsUseCase:
         if not eventos:
             return 0
 
+        # Una fecha para toda la publicacion y el interruptor de ahora mismo
+        eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
             await self._social_uow.activity_events.add_many(eventos)
 
@@ -158,8 +168,10 @@ class PublishTournamentAchievementsUseCase:
             rounds: dict = {}
 
             for enrollment in enrollments:
+                # Con la publicacion apagada tambien se publica, pero solo para
+                # el: el interruptor decide lo que ven los demas
                 user = await self._user_uow.users.find_by_id(enrollment.user_id)
-                if user is None or not user.share_activity:
+                if user is None:
                     continue
 
                 partidos = await self._competition_uow.matches.find_completed_for_player(
@@ -188,14 +200,16 @@ class PublishTournamentAchievementsUseCase:
                 estrena_torneo[user_id_raw] = not otros_torneos
 
                 for partido, ronda in del_torneo:
-                    vuelta = await self._a_vuelta(partido, ronda, enrollment.user_id, courses)
+                    vuelta = await self._a_vuelta(
+                        partido, ronda, enrollment.user_id, courses, user.share_activity
+                    )
                     if vuelta is not None:
                         vueltas.setdefault(user_id_raw, []).append(vuelta)
 
         return vueltas, estrena_torneo
 
     async def _a_vuelta(
-        self, partido, ronda, user_id: UserId, courses: dict
+        self, partido, ronda, user_id: UserId, courses: dict, visible_to_friends: bool
     ) -> _TournamentRound | None:
         """
         La vuelta de un jugador en un partido, o None si su tarjeta no cuenta.
@@ -236,7 +250,8 @@ class PublishTournamentAchievementsUseCase:
             user_id=user_id,
             match_id=str(partido.id.value),
             golf_course_id=str(ronda.golf_course_id.value),
-            occurred_at=datetime.combine(ronda.round_date, datetime.min.time()),
+            occurred_at=datetime.combine(ronda.round_date, _MEDIODIA_UTC),
+            visible_to_friends=visible_to_friends,
             holes=[
                 PlayedHole(
                     number=hole.number,
@@ -273,6 +288,7 @@ class PublishTournamentAchievementsUseCase:
                 occurred_at=vuelta.occurred_at,
                 source_match_id=vuelta.match_id,
                 payload=self._payload(logro, vuelta),
+                visible_to_friends=vuelta.visible_to_friends,
             )
             for logro in logros
         ]

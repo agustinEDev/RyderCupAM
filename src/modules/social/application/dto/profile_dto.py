@@ -1,10 +1,9 @@
 """DTOs del perfil de un jugador y del feed de actividad."""
 
-from datetime import datetime
-
 from pydantic import BaseModel, Field
 
 from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
+from src.shared.application.utc_datetime import UtcDatetime
 
 
 class FriendshipStateDTO(BaseModel):
@@ -96,7 +95,20 @@ class ActivityEventDTO(BaseModel):
     id: str
     user_id: str
     type: str
-    occurred_at: datetime
+    occurred_at: UtcDatetime = Field(
+        description=(
+            "Cuando se jugo, en UTC (con «Z»): el dia de la ronda a las 12:00, para que caiga "
+            "en el mismo dia en cualquier zona, o la creacion de la partida"
+        )
+    )
+    published_at: UtcDatetime | None = Field(
+        default=None,
+        description=(
+            "Cuando llego al feed, en UTC (con «Z»). Es la fecha por la que se ordena "
+            "el feed y se cuentan las novedades; `occurred_at` es cuando se jugo, y "
+            "un torneo publica dias despues de sus vueltas"
+        ),
+    )
     payload: dict = Field(
         default_factory=dict,
         description="El detalle propio de cada tipo: cuantos birdies, en que hoyos, que campo",
@@ -126,7 +138,7 @@ class FeedResponseDTO(BaseModel):
     Una pagina del feed, con el cursor para pedir la siguiente.
 
     El cursor son **dos** valores y no solo la fecha: todos los logros de una
-    misma vuelta comparten `occurred_at`, asi que paginar por fecha sola se
+    misma vuelta comparten `published_at`, asi que paginar por fecha sola se
     dejaria fuera los que aun no se han enseñado de esa vuelta.
     """
 
@@ -150,8 +162,21 @@ class FeedResponseDTO(BaseModel):
     unseen_count: int = Field(
         default=0,
         description=(
-            "Cuantas entradas **de amigos** se han publicado desde la ultima visita. "
-            "Los logros propios no cuentan: lo que uno acaba de hacer no es novedad "
-            "para uno"
+            "Cuantas entradas de este feed se han publicado desde la ultima visita, "
+            "las propias incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
+            "visita previa cuenta todo. Es el mismo numero que da "
+            "`GET /users/me/feed/unseen-count`. Solo se calcula en la primera pagina: "
+            "con `cursor` llega a 0"
+        ),
+    )
+
+
+class FeedUnseenCountResponseDTO(BaseModel):
+    """El numero del boton de Actividad, sin cargar el feed."""
+
+    unseen_count: int = Field(
+        description=(
+            "Cuantas entradas del feed se han publicado desde la ultima visita, "
+            "las propias incluidas, con tope de 10. Sin visita previa cuenta todo"
         ),
     )

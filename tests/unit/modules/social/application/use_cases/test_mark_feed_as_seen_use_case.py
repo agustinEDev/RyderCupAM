@@ -1,12 +1,23 @@
 """Tests de dar el feed por visto (BE #176)."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 
+from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
+    InMemoryGolfCourseUnitOfWork,
+)
+from src.modules.social.application.use_cases.get_friends_feed_use_case import (
+    GetFriendsFeedUseCase,
+)
 from src.modules.social.application.use_cases.mark_feed_as_seen_use_case import (
     MarkFeedAsSeenUseCase,
+)
+from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
+    InMemorySocialUnitOfWork,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
@@ -64,29 +75,136 @@ async def test_guarda_el_momento_de_la_llamada_y_no_una_fecha_del_pasado(user_uo
     lo que se publique mientras lee debe volver a contar como novedad.
     """
     user = await _create_user(user_uow)
-    antes = datetime.now() - timedelta(seconds=5)
+    antes = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=5)
 
     visto_en = await MarkFeedAsSeenUseCase(user_uow).execute(str(user.id.value))
 
     assert visto_en > antes
 
 
-async def test_la_fecha_es_comparable_con_la_de_los_eventos(user_uow):
+async def test_b8_se_guarda_en_utc_sin_zona(user_uow):
     """
-    Given un logro publicado ahora / When se marca el feed como visto / Then la
-    marca queda por delante del logro, asi que deja de contar como novedad.
-
-    Fija la regla horaria: esta fecha se compara con el `occurred_at` de los
-    eventos, que el dominio escribe con `datetime.now()`. Si se guardara en UTC,
-    quedaria desplazada y los logros de las ultimas horas contarian como no
-    vistos para siempre.
+    B8. Given un jugador / When marca el feed / Then la fecha es la de ahora en
+    UTC y sin zona: se compara con el `published_at` de los eventos, que se
+    escribe asi. Con la hora local quedaria desplazada lo que separe al
+    servidor de UTC.
     """
     user = await _create_user(user_uow)
-    ocurrio_ahora = datetime.now()
+    antes = datetime.now(UTC).replace(tzinfo=None)
 
     visto_en = await MarkFeedAsSeenUseCase(user_uow).execute(str(user.id.value))
 
-    assert visto_en >= ocurrio_ahora
+    despues = datetime.now(UTC).replace(tzinfo=None)
+    assert visto_en.tzinfo is None
+    assert antes <= visto_en <= despues
+
+
+async def test_b9_la_marca_nunca_va_hacia_atras(user_uow):
+    """
+    B9. Given un feed marcado a las 12:00 / When llega otra marca con un reloj
+    que va por detras (otro servidor, un ajuste de hora) / Then se queda la de
+    las 12:00: retroceder resucitaria como novedad lo ya visto.
+    """
+    user = await _create_user(user_uow)
+    mediodia = datetime(2026, 8, 10, 12, 0)
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: mediodia).execute(str(user.id.value))
+
+    visto_en = await MarkFeedAsSeenUseCase(
+        user_uow, reloj=lambda: mediodia - timedelta(minutes=5)
+    ).execute(str(user.id.value))
+
+    async with user_uow:
+        guardado = await user_uow.users.find_by_id(user.id)
+    assert guardado.feed_last_seen_at == mediodia
+    assert visto_en == mediodia
+
+
+async def test_b9_una_marca_posterior_si_avanza(user_uow):
+    """Given un feed marcado / When se marca mas tarde / Then la fecha avanza."""
+    user = await _create_user(user_uow)
+    mediodia = datetime(2026, 8, 10, 12, 0)
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: mediodia).execute(str(user.id.value))
+
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: mediodia + timedelta(seconds=1)).execute(
+        str(user.id.value)
+    )
+
+    async with user_uow:
+        guardado = await user_uow.users.find_by_id(user.id)
+    assert guardado.feed_last_seen_at == mediodia + timedelta(seconds=1)
+
+
+async def test_una_marca_de_mas_de_cinco_minutos_en_el_futuro_se_sustituye(user_uow):
+    """
+    Given una marca guardada 2 h por delante (hora local vieja en un servidor
+    que no esta en UTC) / When se marca el feed ahora / Then queda la de ahora:
+    si no, el aviso se quedaria congelado esas 2 h.
+    """
+    user = await _create_user(user_uow)
+    ahora = datetime(2026, 8, 10, 12, 0)
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora + timedelta(hours=2)).execute(
+        str(user.id.value)
+    )
+
+    visto_en = await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora).execute(
+        str(user.id.value)
+    )
+
+    assert visto_en == ahora
+
+
+@pytest.mark.parametrize(
+    ("adelanto", "queda"),
+    [
+        (timedelta(minutes=5), "guardada"),
+        (timedelta(minutes=5, seconds=1), "ahora"),
+    ],
+)
+async def test_el_limite_de_la_marca_futura_es_de_cinco_minutos(user_uow, adelanto, queda):
+    """
+    Given una marca guardada justo 5 min por delante, o un segundo mas / When se
+    marca ahora / Then con 5 min se respeta (desfase de reloj, B9) y pasado ese
+    margen se sustituye por la de ahora.
+    """
+    user = await _create_user(user_uow)
+    ahora = datetime(2026, 8, 10, 12, 0)
+    await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora + adelanto).execute(
+        str(user.id.value)
+    )
+
+    visto_en = await MarkFeedAsSeenUseCase(user_uow, reloj=lambda: ahora).execute(
+        str(user.id.value)
+    )
+
+    assert visto_en == (ahora + adelanto if queda == "guardada" else ahora)
+
+
+async def test_b10_tras_marcarlo_el_aviso_queda_a_cero(user_uow):
+    """
+    B10. Given un logro mio recien publicado (hora UTC) / When marco el feed
+    como visto con el reloj de verdad / Then el aviso queda a cero.
+    """
+    user = await _create_user(user_uow)
+    social_uow = InMemorySocialUnitOfWork()
+    async with social_uow:
+        await social_uow.activity_events.add_many(
+            [
+                ActivityEvent.create(
+                    user_id=user.id,
+                    type=ActivityEventType.BIRDIE,
+                    occurred_at=datetime(2026, 8, 1),
+                    source_match_id="match-1",
+                )
+            ]
+        )
+
+    await MarkFeedAsSeenUseCase(user_uow).execute(str(user.id.value))
+
+    feed = await GetFriendsFeedUseCase(
+        social_uow, user_uow, InMemoryGolfCourseUnitOfWork()
+    ).execute(str(user.id.value))
+    assert len(feed.events) == 1
+    assert feed.unseen_count == 0
 
 
 async def test_un_jugador_que_no_existe_falla(user_uow):

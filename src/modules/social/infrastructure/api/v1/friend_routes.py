@@ -225,9 +225,10 @@ async def list_my_pending_requests(
     response_model=ActivitySharingResponseDTO,
     summary="Turn achievement sharing on or off",
     description=(
-        "Controls whether the player's achievements are published to their friends' feed. "
-        "Turning it off also removes what was already published; turning it back on does "
-        "not restore it."
+        "Controls whether the player's achievements are visible in their friends' feed. "
+        "Turning it off also hides from friends what was already published, and what is "
+        "published while it stays off is visible only to the player. Turning it back on "
+        "does not reveal any of that."
     ),
 )
 async def set_activity_sharing(

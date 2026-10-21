@@ -18,6 +18,7 @@ from src.modules.social.application.ports.player_course_history_interface import
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.application.publication import stamp_for_publication
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -59,6 +60,8 @@ class _RoundToJudge:
     golf_course_id: str
     occurred_at: datetime
     holes: list[PlayedHole]
+    # Con la publicacion apagada el logro se guarda solo para el
+    visible_to_friends: bool
 
 
 class PublishRoundAchievementsUseCase:
@@ -148,6 +151,7 @@ class PublishRoundAchievementsUseCase:
                     vuelta.golf_course_id,
                     vuelta.occurred_at,
                     len(vuelta.holes),
+                    vuelta.visible_to_friends,
                 )
             )
 
@@ -155,6 +159,8 @@ class PublishRoundAchievementsUseCase:
             return 0
 
         # Fase 3: publicar
+        # Una fecha para toda la publicacion y el interruptor de ahora mismo
+        eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
             await self._social_uow.activity_events.add_many(eventos)
 
@@ -186,8 +192,11 @@ class PublishRoundAchievementsUseCase:
                 if participant.is_guest or participant.user_id is None:
                     continue
 
+                # Con la publicacion apagada tambien se publica, pero solo para
+                # el: el interruptor decide lo que ven los demas, no lo que ve
+                # uno de si mismo
                 user = await self._user_uow.users.find_by_id(participant.user_id)
-                if user is None or not user.share_activity:
+                if user is None:
                     continue
 
                 scores_by_hole = {
@@ -212,6 +221,7 @@ class PublishRoundAchievementsUseCase:
                         match_id=str(match.id.value),
                         golf_course_id=str(match.golf_course_id.value),
                         occurred_at=match.created_at,
+                        visible_to_friends=user.share_activity,
                         holes=[
                             PlayedHole(
                                 number=hole.number,
@@ -271,6 +281,7 @@ class PublishRoundAchievementsUseCase:
         golf_course_id: str,
         occurred_at: datetime,
         holes_played: int,
+        visible_to_friends: bool,
     ) -> list[ActivityEvent]:
         """Convierte los logros detectados en entradas del feed."""
         return [
@@ -282,6 +293,7 @@ class PublishRoundAchievementsUseCase:
                 occurred_at=occurred_at,
                 source_match_id=match_id,
                 payload=self._payload(logro, golf_course_id, holes_played),
+                visible_to_friends=visible_to_friends,
             )
             for logro in logros
         ]

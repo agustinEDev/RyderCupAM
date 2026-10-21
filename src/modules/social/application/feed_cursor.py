@@ -6,9 +6,13 @@ son la misma paginacion sobre los mismos eventos, y dos implementaciones se
 separarian en cuanto una de las dos cambiara de formato.
 
 El cursor son **dos** valores, fecha e id, y no solo la fecha. Todos los logros
-de una misma vuelta se publican con el mismo `occurred_at` —salen del mismo
+de una misma vuelta se publican con el mismo `published_at` —salen del mismo
 instante—, asi que un cursor por fecha sola dejaria fuera los que aun no se han
 enseñado de esa vuelta.
+
+La fecha es la de publicacion, por la que se ordena el feed. Antes era la de
+juego (`occurred_at`) con el mismo formato; las filas de entonces se rellenaron
+con esa misma fecha, asi que un cursor viejo sigue cayendo en su sitio.
 """
 
 from datetime import UTC, datetime
@@ -56,4 +60,4 @@ def build_cursor(eventos: list[ActivityEvent], limit: int) -> str | None:
     if len(eventos) < limit:
         return None
     ultimo = eventos[-1]
-    return f"{ultimo.occurred_at.isoformat()}{CURSOR_SEPARATOR}{ultimo.id}"
+    return f"{ultimo.published_at.isoformat()}{CURSOR_SEPARATOR}{ultimo.id}"

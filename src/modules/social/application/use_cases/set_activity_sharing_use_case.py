@@ -3,6 +3,10 @@
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
+from src.modules.social.domain.value_objects.activity_audience import (
+    types_seen_by_author,
+    types_seen_by_friends,
+)
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -14,15 +18,18 @@ class SetActivitySharingUseCase:
     """
     El jugador decide si sus logros se publican en el feed de sus amigos.
 
-    **Apagarlo retira lo ya publicado**, no solo deja de generar. Es la parte que
-    importa: quien apaga esto casi siempre quiere que lo suyo deje de verse, no
-    que se congele donde estaba. Dejar el historial visible seria cumplir la
-    letra de la peticion y no lo que se estaba pidiendo.
+    **Apagarlo retira de los amigos lo ya publicado**, no solo deja de generar.
+    Es la parte que importa: quien apaga esto casi siempre quiere que lo suyo
+    deje de verse, no que se congele donde estaba.
 
-    Volver a encenderlo **no recupera nada**: los eventos borrados no vuelven, y
-    el feed se llena otra vez con las vueltas que se jueguen a partir de ahi.
-    Guardar lo retirado por si acaso significaria conservar justo lo que el
-    jugador pidio quitar.
+    Pero solo de los amigos (decidido con Agustin el 21 oct 2026): lo que era
+    solo para ellos (FRIENDS) se borra, y lo que tambien ve el autor (BOTH) se
+    le oculta a ellos y se le queda a el. Lo SELF no se toca. Mientras siga
+    apagado, lo nuevo se publica igual, pero oculto.
+
+    Volver a encenderlo **no destapa nada**: lo retirado o publicado a oscuras
+    sigue siendo solo del autor, y sus amigos ven lo que se publique a partir
+    de ahi.
     """
 
     def __init__(
@@ -35,9 +42,10 @@ class SetActivitySharingUseCase:
 
     async def execute(self, user_id_raw: str, enabled: bool) -> int:
         """
-        Cambia el interruptor y devuelve cuantos eventos se retiraron.
+        Cambia el interruptor y devuelve cuantos eventos se retiraron de los
+        amigos, borrados u ocultos.
 
-        Devuelve 0 al encender: encender no borra nada.
+        Devuelve 0 al encender: encender no borra ni destapa nada.
         """
         user_id = UserId(user_id_raw)
 
@@ -55,5 +63,9 @@ class SetActivitySharingUseCase:
         # Se borra despues de guardar el interruptor: si fallara entre medias,
         # es preferible haber dejado de publicar con el historial aun visible
         # que seguir publicando con el historial ya borrado
+        solo_amigos = types_seen_by_friends() - types_seen_by_author()
+        de_ambos = types_seen_by_friends() & types_seen_by_author()
         async with self._social_uow:
-            return await self._social_uow.activity_events.delete_for_user(user_id)
+            borrados = await self._social_uow.activity_events.delete_for_user(user_id, solo_amigos)
+            ocultos = await self._social_uow.activity_events.hide_from_friends(user_id, de_ambos)
+        return borrados + ocultos

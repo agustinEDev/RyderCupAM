@@ -1,16 +1,19 @@
 """Activity Event Repository - SQLAlchemy Implementation."""
 
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, tuple_
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivityEventRepositoryInterface,
+    ActivitySlice,
 )
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
     activity_events_table,
 )
@@ -49,6 +52,8 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 "user_id": event.user_id,
                 "type": event.type,
                 "occurred_at": event.occurred_at,
+                "published_at": event.published_at,
+                "visible_to_friends": event.visible_to_friends,
                 "payload": event.payload,
                 "source_match_id": event.source_match_id,
             }
@@ -60,53 +65,89 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             stmt.on_conflict_do_nothing(constraint=UQ_ACTIVITY_EVENTS_MATCH_TYPE)
         )
 
-    async def find_for_users(
+    async def find_in(
         self,
-        user_ids: list[UserId],
+        slices: Sequence[ActivitySlice],
         limit: int,
         before: datetime | None = None,
         before_id: UUID | None = None,
     ) -> list[ActivityEvent]:
-        if not user_ids:
+        condicion = self._condicion(slices)
+        if condicion is None:
             return []
+        return await self._pagina(condicion, limit, before=before, before_id=before_id)
 
-        stmt = select(ActivityEvent).where(ActivityEvent._user_id.in_(user_ids))
+    async def count_in(
+        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+    ) -> int:
+        condicion = self._condicion(slices)
+        if condicion is None:
+            return 0
+
+        filas = select(activity_events_table.c.id).where(condicion)
+        if since is not None:
+            filas = filas.where(activity_events_table.c.published_at > since)
+        if cap is not None:
+            # Se cuenta sobre un LIMIT: pasado el tope el numero ya no cambia
+            # nada en la pantalla, y asi no se recorre el historial entero
+            filas = filas.limit(cap)
+
+        stmt = select(func.count()).select_from(filas.subquery())
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one())
+
+    @staticmethod
+    def _condicion(slices: Sequence[ActivitySlice]) -> ColumnElement[bool] | None:
+        """
+        El WHERE de varios trozos: un OR de (jugadores y tipos), con la
+        visibilidad cuando el trozo es de amigos. None si no queda ninguno.
+        """
+        partes = []
+        for trozo in slices:
+            if trozo.is_empty:
+                continue
+            parte = and_(
+                activity_events_table.c.user_id.in_(trozo.user_ids),
+                activity_events_table.c.type.in_(sorted(trozo.types)),
+            )
+            if trozo.only_visible_to_friends:
+                parte = and_(parte, activity_events_table.c.visible_to_friends.is_(True))
+            partes.append(parte)
+        return or_(*partes) if partes else None
+
+    async def _pagina(
+        self,
+        condicion: ColumnElement[bool],
+        limit: int,
+        before: datetime | None,
+        before_id: UUID | None,
+    ) -> list[ActivityEvent]:
+        stmt = select(ActivityEvent).where(condicion)
         if before is not None:
             # El cursor compara el par entero, no solo la fecha. Todos los
-            # eventos de una misma vuelta comparten `occurred_at` al
-            # microsegundo —salen del mismo `created_at`— asi que filtrar por
-            # fecha estricta tiraria tambien los que aun no se han enseñado, y
+            # eventos de una misma vuelta comparten `published_at` al
+            # microsegundo —se publican juntos— asi que filtrar por fecha
+            # estricta tiraria tambien los que aun no se han enseñado, y
             # filtrar por `<=` repetiria los ya vistos. El par (fecha, id) si es
-            # unico, y `id` desempata de forma estable entre paginas
+            # unico, y `id` desempata de forma estable entre paginas.
+            #
+            # Un cursor de antes de `published_at` llevaba `occurred_at`: las
+            # filas de entonces se rellenaron con esa misma fecha, asi que sigue
+            # cayendo en su sitio
             if before_id is not None:
                 stmt = stmt.where(
-                    tuple_(ActivityEvent._occurred_at, ActivityEvent._id)
+                    tuple_(ActivityEvent._published_at, ActivityEvent._id)
                     < tuple_(before, before_id)
                 )
             else:
-                stmt = stmt.where(ActivityEvent._occurred_at < before)
+                stmt = stmt.where(ActivityEvent._published_at < before)
 
-        stmt = stmt.order_by(ActivityEvent._occurred_at.desc(), ActivityEvent._id.desc()).limit(
+        stmt = stmt.order_by(ActivityEvent._published_at.desc(), ActivityEvent._id.desc()).limit(
             limit
         )
 
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
-
-    async def count_for_users_since(self, user_ids: list[UserId], since: datetime) -> int:
-        if not user_ids:
-            return 0
-
-        stmt = (
-            select(func.count())
-            .select_from(activity_events_table)
-            .where(
-                activity_events_table.c.user_id.in_(user_ids),
-                activity_events_table.c.occurred_at > since,
-            )
-        )
-        result = await self._session.execute(stmt)
-        return int(result.scalar_one())
 
     async def exists_for_match(self, match_id: str) -> bool:
         stmt = (
@@ -117,7 +158,28 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.first() is not None
 
-    async def delete_for_user(self, user_id: UserId) -> int:
+    async def delete_for_user(
+        self, user_id: UserId, types: Collection[ActivityEventType] | None = None
+    ) -> int:
         stmt = delete(activity_events_table).where(activity_events_table.c.user_id == user_id)
+        if types is not None:
+            if not types:
+                return 0
+            stmt = stmt.where(activity_events_table.c.type.in_(sorted(types)))
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
+
+    async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
+        if not types:
+            return 0
+        stmt = (
+            update(activity_events_table)
+            .where(
+                activity_events_table.c.user_id == user_id,
+                activity_events_table.c.type.in_(sorted(types)),
+                activity_events_table.c.visible_to_friends.is_(True),
+            )
+            .values(visible_to_friends=False)
+        )
         result = await self._session.execute(stmt)
         return result.rowcount or 0

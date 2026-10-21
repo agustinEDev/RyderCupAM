@@ -1,5 +1,6 @@
 """Caso de Uso: Dar el feed por visto."""
 
+from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
@@ -7,6 +8,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 
 class MarkFeedAsSeenUseCase:
@@ -22,21 +24,27 @@ class MarkFeedAsSeenUseCase:
     devuelto: lo que se publique mientras el jugador lee vuelve a contar como
     novedad, que es lo que se espera de un aviso.
 
-    Usa `datetime.now()` y no UTC porque esta fecha se compara con el
-    `occurred_at` de los eventos, que sale del `created_at` de la partida, y ese
-    lo escribe el dominio con `datetime.now()`. Con UTC quedaria desplazada las
-    horas que separen al servidor de UTC, y los logros publicados en esa
-    ventana contarian como no vistos para siempre: el aviso no se apagaria nunca
-    del todo.
+    **En UTC y sin zona**, como el `published_at` de los eventos con el que se
+    compara. Antes usaba la hora local porque se comparaba con `occurred_at`,
+    que el dominio escribe con `datetime.now()`; desde que el aviso cuenta por
+    publicacion, la hora local la desplazaria lo que separe al servidor de UTC.
+
+    Y **nunca hacia atras**: si la marca guardada es posterior a la de ahora
+    (otro reloj, un ajuste de hora), se queda la guardada.
     """
 
-    def __init__(self, user_uow: UserUnitOfWorkInterface):
+    def __init__(
+        self,
+        user_uow: UserUnitOfWorkInterface,
+        reloj: Callable[[], datetime] | None = None,
+    ):
         self._user_uow = user_uow
+        self._reloj = reloj or utc_now
 
     async def execute(self, user_id_raw: str) -> datetime:
-        """Marca el feed como visto y devuelve el momento registrado."""
+        """Marca el feed como visto y devuelve la marca que queda guardada."""
         user_id = UserId(user_id_raw)
-        visto_en = datetime.now()
+        visto_en = self._reloj()
 
         async with self._user_uow:
             user = await self._user_uow.users.find_by_id(user_id)
@@ -45,5 +53,6 @@ class MarkFeedAsSeenUseCase:
 
             user.mark_feed_as_seen(visto_en)
             await self._user_uow.users.save(user)
+            guardado = user.feed_last_seen_at
 
-        return visto_en
+        return guardado

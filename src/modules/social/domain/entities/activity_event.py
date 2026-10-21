@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 
 class ActivityEvent:
@@ -25,8 +26,13 @@ class ActivityEvent:
     no deja fuera ningún caso real y sí cierra ese hueco.
 
     El evento es inmutable: un logro ocurrió o no ocurrió. Si deja de ser
-    publicable (el jugador apaga la publicación, se borra la partida) se borra;
-    no se edita.
+    publicable (se borra la partida) se borra; no se edita. La única excepción
+    es `visible_to_friends`, que apagar la publicación pone a False.
+
+    **Dos fechas distintas.** `occurred_at` es cuándo se jugó (el día de la
+    ronda, la creación de la partida rápida); `published_at`, cuándo llegó al
+    feed. Un torneo publica al cerrarse vueltas de hace días, así que el orden
+    del feed y el aviso de novedades van por la segunda.
     """
 
     def __init__(
@@ -37,6 +43,8 @@ class ActivityEvent:
         occurred_at: datetime,
         source_match_id: str,
         payload: dict | None = None,
+        published_at: datetime | None = None,
+        visible_to_friends: bool = True,
     ):
         if not isinstance(user_id, UserId):
             raise TypeError("user_id must be a UserId")
@@ -51,6 +59,11 @@ class ActivityEvent:
         self._occurred_at = occurred_at
         self._payload = dict(payload or {})
         self._source_match_id = source_match_id
+        # En UTC y sin zona, como el resto de fechas que se guardan
+        self._published_at = published_at or utc_now()
+        # Con la publicación apagada el logro se guarda igual, pero solo para
+        # su autor: encenderla después no lo destapa
+        self._visible_to_friends = visible_to_friends
 
     # === Factory Methods ===
 
@@ -62,6 +75,8 @@ class ActivityEvent:
         occurred_at: datetime,
         source_match_id: str,
         payload: dict | None = None,
+        published_at: datetime | None = None,
+        visible_to_friends: bool = True,
     ) -> "ActivityEvent":
         return cls(
             id=uuid4(),
@@ -70,6 +85,8 @@ class ActivityEvent:
             occurred_at=occurred_at,
             payload=payload,
             source_match_id=source_match_id,
+            published_at=published_at,
+            visible_to_friends=visible_to_friends,
         )
 
     @classmethod
@@ -95,6 +112,14 @@ class ActivityEvent:
         return self._occurred_at
 
     @property
+    def published_at(self) -> datetime:
+        return self._published_at
+
+    @property
+    def visible_to_friends(self) -> bool:
+        return self._visible_to_friends
+
+    @property
     def payload(self) -> dict:
         return dict(self._payload)
 
@@ -106,6 +131,10 @@ class ActivityEvent:
 
     def is_from(self, match_id: str) -> bool:
         return self._source_match_id == match_id
+
+    def hide_from_friends(self) -> None:
+        """Deja de verlo nadie mas que su autor (apagar la publicacion)."""
+        self._visible_to_friends = False
 
     def __eq__(self, other) -> bool:
         return isinstance(other, ActivityEvent) and self._id == other._id
