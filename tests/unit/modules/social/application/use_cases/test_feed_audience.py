@@ -53,7 +53,8 @@ SOLO_AUTOR = ActivityEventType.BIRDIE
 SOLO_AMIGOS = ActivityEventType.EAGLE_OR_BETTER
 AMBOS = ActivityEventType.HOLE_IN_ONE
 
-TODOS_LOS_LOGROS = list(ActivityEventType)
+# Los seis logros: los avisos de BE-2 tienen su propio publico
+TODOS_LOS_LOGROS = [t for t in ActivityEventType if t.is_achievement]
 
 
 def _todos(*user_ids) -> ActivitySlice:
