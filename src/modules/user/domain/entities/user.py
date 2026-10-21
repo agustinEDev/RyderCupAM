@@ -262,8 +262,14 @@ class User:
         return self._share_activity
 
     def mark_feed_as_seen(self, at) -> None:
-        """Deja de avisar de lo publicado hasta esta fecha."""
-        self._feed_last_seen_at = at
+        """
+        Deja de avisar de lo publicado hasta esta fecha.
+
+        Nunca hacia atras: una marca con un reloj que va por detras (otro
+        servidor, un ajuste de hora) resucitaria como novedad lo ya visto.
+        """
+        if self._feed_last_seen_at is None or at > self._feed_last_seen_at:
+            self._feed_last_seen_at = at
 
     def set_activity_sharing(self, enabled: bool) -> None:
         """
