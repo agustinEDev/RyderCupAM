@@ -31,10 +31,13 @@ logger = logging.getLogger(__name__)
 TERMS_NOT_ACCEPTED = "TERMS_NOT_ACCEPTED"
 
 # Lo que pintan tal cual las PWA anteriores a la 2.49, que no conocen
-# /accept-terms: tiene que decir cómo llegar a la pantalla de aceptación
+# /accept-terms: tiene que decir cómo llegar a la pantalla de aceptación. En los
+# dos idiomas, porque esas versiones no lo traducen
 TERMS_NOT_ACCEPTED_MESSAGE = (
     "Tienes que aceptar los nuevos Términos de uso. "
-    "Cierra la app por completo y vuelve a abrirla para aceptarlos."
+    "Cierra la app por completo y vuelve a abrirla para aceptarlos. / "
+    "You must accept the new Terms of Use. "
+    "Close the app completely and open it again to accept them."
 )
 
 # (método, plantilla COMPLETA de la ruta) exentos. Una lista explícita y
@@ -132,8 +135,12 @@ def require_current_terms(request: Request, user: UserResponseDTO) -> None:
         return
     # Quién choca con la guarda y desde dónde, para verlo en Render. WARNING:
     # el root no está configurado y un INFO de `src.*` no saldría; Sentry solo
-    # crea issues desde ERROR. Solo el id y la ruta ASGI (sin query string)
-    logger.warning("%s: user %s on %s %s", TERMS_NOT_ACCEPTED, user.id, request.method, path)
+    # crea issues desde ERROR. Solo el id y la ruta ASGI (sin query string),
+    # escapada: llega decodificada y un %0A falsearía líneas del log
+    ruta_escapada = path.encode("unicode_escape").decode("ascii")
+    logger.warning(
+        "%s: user %s on %s %s", TERMS_NOT_ACCEPTED, user.id, request.method, ruta_escapada
+    )
     raise TermsNotAcceptedError()
 
 

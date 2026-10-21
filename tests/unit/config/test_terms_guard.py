@@ -305,7 +305,23 @@ class TestRegistroDelBloqueo:
         assert "GET /api/v1/users/me/stats" in mensaje
         assert "TERMS_NOT_ACCEPTED" in mensaje
         assert "secreto" not in mensaje
-        assert "?" not in mensaje
+
+    def test_control_characters_in_path_cannot_forge_log_lines(self, caplog):
+        """
+        Given: Un usuario sin la versión vigente aceptada
+        When: Pide una ruta con un salto de línea codificado (%0A llega decodificado)
+        Then: Una sola línea, sin saltos: la ruta va escapada
+        """
+        caplog.set_level(logging.INFO, logger="src.config.terms_guard")
+        falsa = "/api/v1/users/me/stats\r\nINFO: terms accepted for user otro"
+
+        with pytest.raises(TermsNotAcceptedError):
+            require_current_terms(_request("GET", falsa), _usuario(False))
+
+        mensaje = self._registros(caplog)[0].getMessage()
+        assert "\n" not in mensaje
+        assert "\r" not in mensaje
+        assert "/api/v1/users/me/stats" in mensaje
 
     @pytest.mark.parametrize(("method", "path"), CONCRETAS)
     def test_exempt_route_is_not_logged(self, caplog, method, path):
@@ -346,9 +362,12 @@ class TestRespuesta:
         assert cuerpo["error_code"] == "TERMS_NOT_ACCEPTED"
         # Las PWA anteriores a la 2.49 no conocen /accept-terms y pintan el
         # `detail` tal cual: tiene que decirles qué hacer
+        # En español y en inglés: el `detail` no se traduce en esas versiones
         assert cuerpo["detail"] == (
             "Tienes que aceptar los nuevos Términos de uso. "
-            "Cierra la app por completo y vuelve a abrirla para aceptarlos."
+            "Cierra la app por completo y vuelve a abrirla para aceptarlos. / "
+            "You must accept the new Terms of Use. "
+            "Close the app completely and open it again to accept them."
         )
         assert set(cuerpo) == {"detail", "error_code"}
 

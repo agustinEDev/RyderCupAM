@@ -23,9 +23,11 @@ mostraban el error del 403 tal cual, sin salida. Sin cambios en el frontend.
 
 - **Texto del 403 `TERMS_NOT_ACCEPTED`**: ahora dice «Tienes que aceptar los
   nuevos Términos de uso. Cierra la app por completo y vuelve a abrirla para
-  aceptarlos.», que es lo que pintan las apps anteriores a la 2.49.
+  aceptarlos.», seguido de lo mismo en inglés, que es lo que pintan las apps
+  anteriores a la 2.49 (no lo traducen).
 - **Cada bloqueo de la guarda de Términos queda en el log** (WARNING, con el id
-  del usuario, el método y la ruta sin query string). WARNING porque un INFO de
+  del usuario, el método y la ruta sin query string, escapada para que un
+  salto de línea codificado no falsee líneas del log). WARNING porque un INFO de
   la app no llega a los logs; Sentry solo lo guarda como breadcrumb.
 
 ## [2.37.0] - 2026-10-21
