@@ -4,6 +4,8 @@ los grupos de stroke play de sus torneos, no solo en partidas rapidas y partidos
 de la Ryder.
 """
 
+from datetime import timedelta
+
 import pytest
 
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
@@ -15,6 +17,8 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
 )
@@ -24,7 +28,8 @@ from src.modules.social.infrastructure.adapters.player_course_history_adapter im
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
-from tests.unit.modules.social.stroke_play_world import StrokePlayWorld, tarjeta
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
+from tests.unit.modules.social.stroke_play_world import DIA, StrokePlayWorld, tarjeta
 
 pytestmark = pytest.mark.asyncio
 
@@ -159,4 +164,43 @@ async def test_a_ryder_match_of_a_tournament_still_open_does_not_count(world):
 
     assert not await _adapter(world).has_played_course_before(
         ana.id, str(course.id.value), "otra-vuelta"
+    )
+
+
+# ==================== Corte por fecha (revision final) ====================
+
+
+async def test_only_rounds_before_the_cut_count(world):
+    ana, _, course, _ = await _jugado(world)  # ronda del 1 jun 2026, torneo cerrado
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=DIA
+    )
+    assert await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=DIA + timedelta(days=1)
+    )
+
+
+async def test_only_quick_matches_before_the_cut_count(world):
+    ana = await world.user()
+    course = await world.course(ana)
+    qm_uow = InMemoryQuickMatchUnitOfWork()
+    match = QuickMatch.create(
+        id=QuickMatchId.generate(),
+        creator_id=ana.id,
+        golf_course_id=course.id,
+        scoring_format=ScoringFormat.STABLEFORD,
+    )
+    match.start([match.creator_participant_id])
+    match.complete()
+    async with qm_uow:
+        await qm_uow.quick_matches.add(match)
+    adapter = PlayerCourseHistoryAdapter(qm_uow, world.comp)
+    hoy = match.created_at.date()
+
+    assert not await adapter.has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=hoy
+    )
+    assert await adapter.has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=hoy + timedelta(days=1)
     )

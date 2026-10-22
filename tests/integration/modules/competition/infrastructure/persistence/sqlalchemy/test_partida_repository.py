@@ -481,3 +481,29 @@ async def test_finished_groups_of_several_players_in_one_read(
     leida = next(p for p in leidas if p.id == de_a.id)
     assert leida.estados_de_tarjeta == {a: EstadoDeTarjeta.ENTREGADA, b: EstadoDeTarjeta.ENTREGADA}
     assert await uow.partidas.completadas_de_jugadores([]) == []
+
+
+async def test_the_status_mark_is_read_fresh(db_session, ronda):  # noqa: F811
+    """Revision final: el estado y la ultima modificacion de la fila, sin la cache de la sesion."""
+    await db_session.commit()
+    db_session.expunge_all()
+    repo = SQLAlchemyCompetitionRepository(db_session)
+    fila = (
+        await db_session.execute(
+            text("SELECT status, updated_at FROM competitions WHERE id = :id"),
+            {"id": str(ronda.competition_id.value)},
+        )
+    ).one()
+
+    marca = await repo.find_status_mark(ronda.competition_id)
+
+    assert marca is not None
+    assert (marca[0].value, marca[1]) == (fila[0], fila[1])
+    await db_session.execute(
+        text("UPDATE competitions SET status = 'COMPLETED' WHERE id = :id"),
+        {"id": str(ronda.competition_id.value)},
+    )
+    nueva = await repo.find_status_mark(ronda.competition_id)
+    assert nueva is not None
+    assert nueva[0].value == "COMPLETED"
+    assert await repo.find_status_mark(CompetitionId(uuid4())) is None

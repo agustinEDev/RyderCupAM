@@ -12,7 +12,7 @@ play:
 6. Reabrir y publicar se serializan con el candado del torneo.
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -29,6 +29,8 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
 )
@@ -60,6 +62,7 @@ from src.modules.user.application.use_cases.get_player_stats_use_case import (
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 from tests.unit.modules.social.stroke_play_world import DIA, StrokePlayWorld, tarjeta
 
 pytestmark = pytest.mark.asyncio
@@ -80,7 +83,7 @@ def world():
     )
 
 
-def _publisher(world, social_uow) -> PublishTournamentAchievementsUseCase:
+def _publisher(world, social_uow, qm_uow=None) -> PublishTournamentAchievementsUseCase:
     """El publicador con el historial y las estadisticas de verdad."""
     stats = GetPlayerStatsUseCase(
         user_uow=world.users,
@@ -94,7 +97,7 @@ def _publisher(world, social_uow) -> PublishTournamentAchievementsUseCase:
         golf_course_uow=world.golf,
         user_uow=world.users,
         differentials=StatsPlayerDifferentialsAdapter(stats),
-        history=PlayerCourseHistoryAdapter(InMemoryQuickMatchUnitOfWork(), world.comp),
+        history=PlayerCourseHistoryAdapter(qm_uow or InMemoryQuickMatchUnitOfWork(), world.comp),
     )
 
 
@@ -242,8 +245,11 @@ class TestFirstTournamentCountsClosedOnes:
         course = await world.course(ana)
         cerrada = await world.competition(ana, tipo=RYDER, enrolled=[ana, rival])
         await world.match(await world.round(cerrada, course), ana, rival, tarjeta())
-        competition = await world.competition(ana, enrolled=[ana])
-        await world.group(competition, await world.round(competition, course), {ana: tarjeta()})
+        despues = DIA + timedelta(days=30)
+        competition = await world.competition(ana, enrolled=[ana], start=despues)
+        await world.group(
+            competition, await world.round(competition, course, despues), {ana: tarjeta()}
+        )
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 
@@ -380,3 +386,86 @@ class TestTournamentLock:
         await _publisher(world, social_uow).execute(str(competition.id.value))
 
         assert llamadas[:2] == [("lock_scope", str(competition.id.value)), ("add_many", None)]
+
+
+# ==================== Corte por fecha: ANTES del torneo (revision final) ====================
+
+
+class TestOnlyWhatWasPlayedBefore:
+    """
+    «Campo nuevo» y «primer torneo» miran solo lo jugado ANTES: un torneo que
+    se reabre y se vuelve a cerrar no pierde sus logros porque despues se
+    jugara otra vez en el campo o se cerrara otro torneo.
+    """
+
+    async def test_a_later_closed_tournament_on_the_course_does_not_take_it_away(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        course = await world.course(ana)
+        primero = await world.competition(ana, enrolled=[ana])
+        await world.group(primero, await world.round(primero, course), {ana: tarjeta()})
+        despues = DIA + timedelta(days=30)
+        luego = await world.competition(ana, enrolled=[ana], start=despues)
+        await world.group(luego, await world.round(luego, course, despues), {ana: tarjeta()})
+
+        await _publisher(world, social_uow).execute(str(primero.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+        assert len(await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)) == 1
+
+    async def test_the_later_tournament_is_neither_new_course_nor_first(self, world, social_uow):
+        ana = await world.user()
+        course = await world.course(ana)
+        primero = await world.competition(ana, enrolled=[ana])
+        await world.group(primero, await world.round(primero, course), {ana: tarjeta()})
+        despues = DIA + timedelta(days=30)
+        luego = await world.competition(ana, enrolled=[ana], start=despues)
+        await world.group(luego, await world.round(luego, course, despues), {ana: tarjeta()})
+
+        await _publisher(world, social_uow).execute(str(luego.id.value))
+
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
+        assert await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT) == []
+
+    async def test_a_quick_match_played_after_the_round_does_not_take_it_away(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        course = await world.course(ana)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        await _partida_rapida(qm_uow, ana, course)  # se crea hoy, despues de DIA
+        competition = await world.competition(ana, enrolled=[ana])
+        await world.group(competition, await world.round(competition, course), {ana: tarjeta()})
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+
+    async def test_a_quick_match_played_before_the_round_counts(self, world, social_uow):
+        ana = await world.user()
+        course = await world.course(ana)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        await _partida_rapida(qm_uow, ana, course)
+        futuro = date.today() + timedelta(days=60)
+        competition = await world.competition(ana, enrolled=[ana], start=futuro)
+        ronda = await world.round(competition, course, futuro)
+        await world.group(competition, ronda, {ana: tarjeta()})
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
+
+
+async def _partida_rapida(qm_uow, user, course) -> None:
+    """Una partida rapida terminada en ese campo, creada hoy."""
+    match = QuickMatch.create(
+        id=QuickMatchId.generate(),
+        creator_id=user.id,
+        golf_course_id=course.id,
+        scoring_format=ScoringFormat.STABLEFORD,
+    )
+    match.start([match.creator_participant_id])
+    match.complete()
+    async with qm_uow:
+        await qm_uow.quick_matches.add(match)

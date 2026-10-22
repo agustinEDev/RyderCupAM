@@ -334,6 +334,43 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 
+    async def replace_for_competition(
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        events: list[ActivityEvent],
+    ) -> None:
+        tabla = activity_events_table.c
+        if types:
+            filas = (
+                await self._session.execute(
+                    select(
+                        tabla.id,
+                        tabla.user_id,
+                        tabla.source_match_id,
+                        tabla.type,
+                        tabla.payload,
+                        tabla.visible_to_friends,
+                    ).where(
+                        tabla.payload["competition_id"].astext == competition_id,
+                        tabla.type.in_(sorted(types)),
+                    )
+                )
+            ).all()
+            nuevos = {(e.user_id, e.source_match_id, e.type): e for e in events}
+            sobran = [
+                fila.id
+                for fila in filas
+                if (nuevo := nuevos.get((fila.user_id, fila.source_match_id, fila.type))) is None
+                or nuevo.payload != fila.payload
+                or nuevo.visible_to_friends != fila.visible_to_friends
+            ]
+            if sobran:
+                await self._session.execute(
+                    delete(activity_events_table).where(tabla.id.in_(sobran))
+                )
+        await self.add_many(events)
+
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         if not types:
             return 0

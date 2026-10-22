@@ -1,5 +1,7 @@
 """Adaptador: el historial de campos sale de las partidas rapidas y los torneos."""
 
+from datetime import date
+
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -43,15 +45,16 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         golf_course_id: str,
         excluding_match_id: str,
         excluding_competition_id: str | None = None,
+        before: date | None = None,
     ) -> bool:
-        if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id):
+        if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id, before):
             return True
         return await self._jugo_en_torneo_cerrado(
-            user_id, golf_course_id, excluding_match_id, excluding_competition_id
+            user_id, golf_course_id, excluding_match_id, excluding_competition_id, before
         )
 
     async def _jugo_en_partida_rapida(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
+        self, user_id: UserId, golf_course_id: str, excluding_match_id: str, before: date | None
     ) -> bool:
         async with self._quick_match_uow:
             partidas = await self._quick_match_uow.quick_matches.list_for_user(
@@ -60,6 +63,8 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         return any(
             str(partida.id.value) != excluding_match_id
             and str(partida.golf_course_id.value) == golf_course_id
+            # No guarda cuando se jugo: se crea el mismo dia
+            and (before is None or partida.created_at.date() < before)
             for partida in partidas
         )
 
@@ -69,6 +74,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         golf_course_id: str,
         excluding_match_id: str,
         excluding_competition_id: str | None,
+        before: date | None,
     ) -> bool:
         """
         Un partido de la Ryder o un grupo de stroke play en ese campo, de un
@@ -97,7 +103,12 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
             if not round_ids:
                 return False
             rondas = await uow.rounds.find_by_ids(list(round_ids))
-            en_el_campo = [r for r in rondas if str(r.golf_course_id.value) == golf_course_id]
+            en_el_campo = [
+                r
+                for r in rondas
+                if str(r.golf_course_id.value) == golf_course_id
+                and (before is None or r.round_date < before)
+            ]
             if not en_el_campo:
                 return False
             torneos = await uow.competitions.find_by_ids(

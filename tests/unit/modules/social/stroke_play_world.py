@@ -110,12 +110,13 @@ class StrokePlayWorld:
         completed: bool = True,
         play_mode: PlayMode = PlayMode.HANDICAP,
         enrolled: list[User] | None = None,
+        start: date = DIA,
     ) -> Competition:
         competition = Competition.create(
             id=CompetitionId(uuid4()),
             creator_id=creator.id,
             name=CompetitionName("Medal de Otoño"),
-            dates=DateRange(start_date=DIA, end_date=DIA + timedelta(days=2)),
+            dates=DateRange(start_date=start, end_date=start + timedelta(days=2)),
             location=Location(main_country=CountryCode("ES")),
             play_mode=play_mode,
             tournament_type=tipo,

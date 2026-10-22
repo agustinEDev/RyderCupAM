@@ -90,7 +90,12 @@ class _History(PlayerCourseHistoryInterface):
         self.preguntas: list = []
 
     async def has_played_course_before(
-        self, user_id, golf_course_id, excluding_match_id, excluding_competition_id=None
+        self,
+        user_id,
+        golf_course_id,
+        excluding_match_id,
+        excluding_competition_id=None,
+        before=None,
     ):
         self.preguntas.append((user_id, golf_course_id, excluding_match_id))
         return any(
@@ -136,9 +141,10 @@ async def _tipos(social_uow, user) -> list[ActivityEventType]:
 async def _torneo(world, golpes_por_jugador, **grupo):
     """Un torneo de stroke play cerrado, una ronda y un grupo con esas tarjetas."""
     jugadores = list(golpes_por_jugador)
-    competition = await world.competition(jugadores[0], enrolled=jugadores)
+    dia = grupo.pop("dia", DIA)
+    competition = await world.competition(jugadores[0], enrolled=jugadores, start=dia)
     course = await world.course(jugadores[0], pars=grupo.pop("course_pars", None))
-    round_ = await world.round(competition, course)
+    round_ = await world.round(competition, course, dia)
     partida = await world.group(competition, round_, golpes_por_jugador, **grupo)
     return competition, course, partida
 
@@ -313,13 +319,12 @@ class TestCardsThatDoNotCount:
 class TestFirstTournamentLooksAtStrokePlay:
     async def test_a_previous_stroke_play_tournament_is_not_the_first(self, world, social_uow):
         ana = await world.user()
-        anterior, _, _ = await _torneo(world, {ana: tarjeta()})
-        competition, _, _ = await _torneo(world, {ana: tarjeta()})
+        await _torneo(world, {ana: tarjeta()})
+        competition, _, _ = await _torneo(world, {ana: tarjeta()}, dia=DIA + timedelta(days=30))
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 
         assert T.FIRST_TOURNAMENT not in await _tipos(social_uow, ana)
-        assert anterior.id != competition.id
 
     async def test_a_no_show_in_a_previous_tournament_did_not_play_it(self, world, social_uow):
         ana = await world.user()
@@ -327,7 +332,7 @@ class TestFirstTournamentLooksAtStrokePlay:
         await _torneo(
             world, {bea: tarjeta(), ana: tarjeta()}, estados={ana: EstadoDeTarjeta.NO_PRESENTADO}
         )
-        competition, _, _ = await _torneo(world, {ana: tarjeta()})
+        competition, _, _ = await _torneo(world, {ana: tarjeta()}, dia=DIA + timedelta(days=30))
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 

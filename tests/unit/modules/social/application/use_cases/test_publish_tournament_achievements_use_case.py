@@ -92,7 +92,12 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
         self._vueltas.add((str(user_id.value), golf_course_id, match_id))
 
     async def has_played_course_before(
-        self, user_id, golf_course_id: str, excluding_match_id: str, excluding_competition_id=None
+        self,
+        user_id,
+        golf_course_id: str,
+        excluding_match_id: str,
+        excluding_competition_id=None,
+        before=None,
     ) -> bool:
         return any(
             usuario == str(user_id.value)
@@ -520,7 +525,12 @@ class _ApagaAlJuzgar(_CourseHistoryFake):
         self._user = user
 
     async def has_played_course_before(
-        self, user_id, golf_course_id, excluding_match_id, excluding_competition_id=None
+        self,
+        user_id,
+        golf_course_id,
+        excluding_match_id,
+        excluding_competition_id=None,
+        before=None,
     ):
         self._user.set_activity_sharing(False)
         return await super().has_played_course_before(user_id, golf_course_id, excluding_match_id)

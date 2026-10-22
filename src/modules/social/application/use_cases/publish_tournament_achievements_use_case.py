@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field, replace
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -47,6 +47,12 @@ _MEDIODIA_UTC = time(12, 0)
 
 # Cuantas vueltas del jugador se miran hacia atras para saber si estrena torneo.
 MAX_HISTORY_LOOKUP = 200
+
+# Cuantas veces se recalcula si el torneo cambia mientras se publica
+MAX_INTENTOS = 3
+
+# Los tipos que publica un torneo: los que se sustituyen en cada cierre
+_LOGROS = frozenset(t for t in ActivityEventType if t.is_achievement)
 
 
 @dataclass(frozen=True)
@@ -113,10 +119,58 @@ class PublishTournamentAchievementsUseCase:
         self._detector = detector or AchievementDetector()
 
     async def execute(self, competition_id_raw: str) -> int:
-        """Publica lo que merezca publicarse y devuelve cuantos eventos creo."""
+        """
+        Publica los logros del ultimo cierre del torneo y devuelve cuantos son.
+
+        Calcularlos lleva un rato y no se hace bajo el candado del torneo: en
+        ese hueco se puede reabrir, corregir una tarjeta y volver a cerrar
+        (revision final del 22 oct 2026). Por eso, ya con el candado y en la
+        misma transaccion que escribe, se vuelve a leer la marca del cierre
+        (estado y ultima modificacion):
+
+        - Ya no esta cerrado: no se publica nada. La reapertura borra lo suyo.
+        - Sigue cerrado pero la marca cambio (se cerro otra vez, o se toco):
+          lo calculado es viejo y se recalcula, hasta `MAX_INTENTOS`.
+        - Igual: se sustituye lo publicado del torneo por lo calculado. Lo que
+          ya estaba igual no se toca; lo que sobra se borra, aunque una
+          reapertura anterior no llegara a borrarlo.
+        """
+        competition_id = CompetitionId(competition_id_raw)
+        for _ in range(MAX_INTENTOS):
+            async with self._competition_uow:
+                marca = await self._competition_uow.competitions.find_status_mark(competition_id)
+            if marca is None or marca[0] != CompetitionStatus.COMPLETED:
+                return 0
+
+            eventos = await self._calcular(competition_id_raw)
+            if eventos:
+                # Una fecha para toda la publicacion y el interruptor de ahora
+                eventos = await stamp_for_publication(self._user_uow, eventos)
+
+            async with self._social_uow:
+                # El mismo candado que la reapertura y los avisos del torneo
+                await self._social_uow.activity_events.lock_scope(competition_id_raw)
+                # Comparten sesion: esta lectura va dentro de la transaccion
+                # que tiene el candado, y no abre la suya (que la cerraria)
+                ahora = await self._competition_uow.competitions.find_status_mark(competition_id)
+                if ahora is None or ahora[0] != CompetitionStatus.COMPLETED:
+                    return 0
+                if ahora == marca:
+                    await self._social_uow.activity_events.replace_for_competition(
+                        competition_id_raw, _LOGROS, eventos
+                    )
+                    return len(eventos)
+
+        logger.warning(
+            "Tournament %s kept changing while publishing its achievements", competition_id_raw
+        )
+        return 0
+
+    async def _calcular(self, competition_id_raw: str) -> list[ActivityEvent]:
+        """Los logros del torneo tal como esta ahora, sin publicar."""
         vueltas_por_jugador, estrena_torneo = await self._leer_vueltas(competition_id_raw)
         if not vueltas_por_jugador:
-            return 0
+            return []
 
         eventos: list[ActivityEvent] = []
         for user_id_raw, sin_ordenar in vueltas_por_jugador.items():
@@ -150,6 +204,9 @@ class PublishTournamentAchievementsUseCase:
                         vuelta.golf_course_id,
                         vuelta.match_id,
                         excluding_competition_id=competition_id_raw,
+                        # Lo jugado ANTES de esta vuelta, la primera del torneo
+                        # en el campo (revision final del 22 oct 2026)
+                        before=vuelta.occurred_at.date(),
                     ),
                     # Colgado del primer partido para que se publique una vez
                     is_first_tournament=indice == 0 and estrena_torneo.get(user_id_raw, False),
@@ -159,18 +216,7 @@ class PublishTournamentAchievementsUseCase:
                 logros = self._detector.detect(holes=vuelta.holes, context=contexto)
                 eventos.extend(self._a_eventos(logros, vuelta))
 
-        if not eventos:
-            return 0
-
-        # Una fecha para toda la publicacion y el interruptor de ahora mismo
-        eventos = await stamp_for_publication(self._user_uow, eventos)
-        async with self._social_uow:
-            # En fila con la reapertura del torneo, que borra estos logros: el
-            # mismo candado que los avisos del torneo (revision del 22 oct 2026)
-            await self._social_uow.activity_events.lock_scope(competition_id_raw)
-            await self._social_uow.activity_events.add_many(eventos)
-
-        return len(eventos)
+        return eventos
 
     async def _leer_vueltas(
         self, competition_id_raw: str
@@ -237,17 +283,20 @@ class PublishTournamentAchievementsUseCase:
                     if vuelta is not None:
                         vueltas.setdefault(user_id_raw, []).append(vuelta)
 
-            cerrados = await self._torneos_cerrados(otros_por_jugador)
+            cerrados = await self._torneos_cerrados(otros_por_jugador, competition.dates.start_date)
             for user_id_raw, otros in otros_por_jugador.items():
                 estrena_torneo[user_id_raw] = not (otros & cerrados)
 
         return vueltas, estrena_torneo
 
-    async def _torneos_cerrados(self, otros_por_jugador: dict[str, set[str]]) -> set[str]:
+    async def _torneos_cerrados(
+        self, otros_por_jugador: dict[str, set[str]], empieza: date
+    ) -> set[str]:
         """
-        De los otros torneos de los inscritos, los ya cerrados, en una lectura:
-        uno en juego o cancelado no se ha jugado todavia, asi que no le quita el
-        estreno a nadie (revision del 22 oct 2026).
+        De los otros torneos de los inscritos, los ya cerrados que empezaron
+        ANTES que este, en una lectura (revision final del 22 oct 2026): uno en
+        juego o cancelado no se ha jugado todavia, y uno posterior no le quita el
+        estreno a este aunque se cerrara antes de reabrirlo y volver a cerrarlo.
         """
         ids = {crudo for otros in otros_por_jugador.values() for crudo in otros}
         if not ids:
@@ -258,7 +307,7 @@ class PublishTournamentAchievementsUseCase:
         return {
             str(torneo.id.value)
             for torneo in torneos
-            if torneo.status == CompetitionStatus.COMPLETED
+            if torneo.status == CompetitionStatus.COMPLETED and torneo.dates.start_date < empieza
         }
 
     async def _partidos(
