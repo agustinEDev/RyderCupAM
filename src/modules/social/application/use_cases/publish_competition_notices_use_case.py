@@ -337,8 +337,24 @@ class PublishCompetitionNoticesUseCase:
         Se reabre un torneo terminado: su clasificacion final ya no vale (C15).
         Se borra, y al volver a cerrarlo sale la nueva: con la clave unica, la
         vieja impediria publicarla.
+
+        Tambien se retiran sus logros, de la Ryder y de stroke play (L12 y
+        decision del 22 oct 2026): al reabrir se puede corregir una tarjeta, y
+        el birdie que ya no existe no debe quedarse en el feed. Se encuentran
+        por el `competition_id` de su `payload`; los publicados antes de que lo
+        llevaran no se pueden encontrar y se quedan.
         """
-        await self._retirar(competition_id, [ActivityEventType.TOURNAMENT_FINAL_STANDING])
+        async with self._social_uow:
+            # En fila con la publicacion de logros del torneo, que toma el
+            # mismo candado: un cierre a medio publicar no escribe despues de
+            # este borrado (revision del 22 oct 2026)
+            await self._social_uow.activity_events.lock_scope(competition_id)
+            await self._social_uow.activity_events.delete_from_source(
+                competition_id, [ActivityEventType.TOURNAMENT_FINAL_STANDING]
+            )
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [t for t in ActivityEventType if t.is_achievement]
+            )
 
     async def tournament_made_private(self, competition_id: str) -> None:
         """

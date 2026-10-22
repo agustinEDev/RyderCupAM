@@ -375,6 +375,9 @@ from src.modules.quick_match.application.use_cases.exclude_quick_match_from_stat
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.get_shared_quick_match_use_case import (
+    GetSharedQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
     HideQuickMatchUseCase,
 )
@@ -1814,10 +1817,9 @@ def get_tournament_achievements_publisher(
     publish_use_case: PublishTournamentAchievementsUseCase = Depends(
         get_publish_tournament_achievements_use_case
     ),
-    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
 ) -> TournamentAchievementsPublisherInterface:
     """Proveedor del adaptador que conecta competition con el feed social."""
-    return TournamentAchievementsPublisher(publish_use_case, uows.differentials)
+    return TournamentAchievementsPublisher(publish_use_case)
 
 
 def get_publish_quick_match_result_use_case(
@@ -1922,6 +1924,20 @@ def get_get_quick_match_use_case(
 ) -> GetQuickMatchUseCase:
     """Proveedor del caso de uso GetQuickMatchUseCase."""
     return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service, golf_course_uow)
+
+
+def get_get_shared_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    scoring_service: MatchPlayScoring = Depends(get_match_play_scoring),
+    coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetSharedQuickMatchUseCase:
+    """Proveedor de la partida rapida de un amigo en solo lectura (bloque K)."""
+    return GetSharedQuickMatchUseCase(
+        uow, user_uow, social_uow, scoring_service, coverage_service, golf_course_uow
+    )
 
 
 def get_list_my_quick_matches_use_case(

@@ -7,7 +7,7 @@ Esta interfaz pertenece al dominio y será implementada en la capa de infraestru
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime
 
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -301,6 +301,19 @@ class CompetitionRepositoryInterface(ABC):
     @abstractmethod
     async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
         """Esas competiciones en una sola lectura, no una por competicion (BE-3)."""
+        pass
+
+    @abstractmethod
+    async def find_status_mark(
+        self, competition_id: CompetitionId
+    ) -> tuple[CompetitionStatus, datetime] | None:
+        """
+        El estado y la ultima modificacion de la competicion, leidos en ese
+        momento y sin el agregado (ni la cache de la sesion). Es la marca de un
+        cierre: si cambia entre calcular y escribir los logros, alguien la
+        reabrio o la volvio a cerrar entretanto (revision final, 22 oct 2026).
+        None si no existe.
+        """
         pass
 
     @abstractmethod

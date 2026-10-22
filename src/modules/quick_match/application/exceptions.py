@@ -77,3 +77,12 @@ class QuickMatchIdTakenError(Exception):
     """El id que manda el cliente ya es de una partida de otro creador (FE #848)."""
 
     pass
+
+
+class QuickMatchNotSharedError(Exception):
+    """
+    Quien mira no puede ver esta partida de un amigo (bloque K): no es amigo de
+    nadie que la comparta, o la partida no esta terminada.
+    """
+
+    pass

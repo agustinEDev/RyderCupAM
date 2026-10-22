@@ -181,6 +181,25 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def replace_for_competition(
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        events: list[ActivityEvent],
+    ) -> None:
+        """
+        Deja de esos tipos, para esa competicion (`payload.competition_id`),
+        exactamente `events`: borra lo que ya no esta o ha cambiado (otro
+        `payload` u otra visibilidad) y publica lo que falta. Lo que ya estaba
+        igual no se toca: conserva su id y su fecha de publicacion, asi que
+        repetir la misma publicacion no lo vuelve a dar por nuevo.
+
+        Es como se publica el ultimo cierre de un torneo sobre lo del anterior
+        (revision final del 22 oct 2026). Quien llama toma antes el candado
+        del torneo.
+        """
+
+    @abstractmethod
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         """
         Oculta a sus amigos lo publicado de esos tipos, sin borrarlo.

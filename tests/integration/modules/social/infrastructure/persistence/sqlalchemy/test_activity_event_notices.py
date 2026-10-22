@@ -318,3 +318,62 @@ async def test_borrar_por_parejas_de_jugador_y_origen_en_un_solo_delete(db_sessi
     )
     assert await _tipos(repository, eva) == [(T.INVITED_TO_TOURNAMENT, "inv-a")]
     assert await repository.delete_pairs(T.INVITED_TO_TOURNAMENT, []) == 0
+
+
+def _logro(user: User, tipo: ActivityEventType, origen: str, torneo: str, **extra) -> ActivityEvent:
+    return ActivityEvent.create(
+        user_id=user.id,
+        type=tipo,
+        occurred_at=CUANDO,
+        source_match_id=origen,
+        published_at=CUANDO + timedelta(minutes=1),
+        payload={"competition_id": torneo, "from_tournament": True, **extra},
+    )
+
+
+async def _ids(repository, user: User) -> dict[tuple, tuple]:
+    eventos = await repository.find_in([ActivitySlice(user_ids=(user.id,), types=TODOS)], 50)
+    return {(e.type, e.source_match_id): (e.id, e.payload) for e in eventos}
+
+
+async def test_replacing_a_tournaments_achievements_keeps_what_did_not_change(db_session):
+    """
+    Revision final del 22 oct 2026: el ultimo cierre deja exactamente sus
+    logros. Lo igual se queda (mismo id), lo cambiado y lo que sobra se van, lo
+    nuevo entra; otros torneos y otros tipos, intactos.
+    """
+    ana = await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    igual = _logro(ana, T.FIRST_TOURNAMENT, "grupo-1", "torneo-1")
+    await repository.add_many(
+        [
+            igual,
+            _logro(ana, T.BIRDIE, "grupo-1", "torneo-1", holes=[4]),
+            _logro(ana, T.EAGLE_OR_BETTER, "grupo-1", "torneo-1"),
+            _logro(ana, T.BIRDIE, "grupo-9", "torneo-2"),
+            _evento(ana, T.TOURNAMENT_FINAL_STANDING, "torneo-1"),
+        ]
+    )
+    await db_session.commit()
+
+    await repository.replace_for_competition(
+        "torneo-1",
+        [T.FIRST_TOURNAMENT, T.BIRDIE, T.EAGLE_OR_BETTER, T.NEW_COURSE],
+        [
+            _logro(ana, T.FIRST_TOURNAMENT, "grupo-1", "torneo-1"),
+            _logro(ana, T.BIRDIE, "grupo-1", "torneo-1", holes=[5]),
+            _logro(ana, T.NEW_COURSE, "grupo-1", "torneo-1"),
+        ],
+    )
+    await db_session.commit()
+
+    quedan = await _ids(repository, ana)
+    assert set(quedan) == {
+        (T.FIRST_TOURNAMENT, "grupo-1"),
+        (T.BIRDIE, "grupo-1"),
+        (T.NEW_COURSE, "grupo-1"),
+        (T.BIRDIE, "grupo-9"),
+        (T.TOURNAMENT_FINAL_STANDING, "torneo-1"),
+    }
+    assert quedan[(T.FIRST_TOURNAMENT, "grupo-1")][0] == igual.id
+    assert quedan[(T.BIRDIE, "grupo-1")][1]["holes"] == [5]

@@ -5,7 +5,7 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 """
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -447,6 +447,18 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         # Ejecutar query
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def find_status_mark(
+        self, competition_id: CompetitionId
+    ) -> tuple[CompetitionStatus, datetime] | None:
+        """Dos columnas leidas ahora: la cache de la sesion no puede dar un estado viejo."""
+        tabla = competitions_table.c
+        fila = (
+            await self._session.execute(
+                select(tabla.status, tabla.updated_at).where(tabla.id == competition_id)
+            )
+        ).first()
+        return None if fila is None else (CompetitionStatus(fila[0]), fila[1])
 
     async def find_visibilities(
         self, competition_ids: list[CompetitionId]
