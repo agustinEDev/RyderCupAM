@@ -169,6 +169,18 @@ class TestFotoDeStrokePlay:
         assert set(salidas[a].partner_ids) == {falta, b}
         assert (salidas[falta].out_of_play, salidas[a].out_of_play) == (True, False)
 
+    def test_a_group_beyond_the_sheet_has_no_hour_instead_of_failing(self):
+        """
+        Una partida numerada fuera de la hoja (de 9:00 a 10:00 cada 10 min hay 7)
+        no tumba la accion: se queda sin hora (CodeRabbit BE #638).
+        """
+        franja = _franja()
+        a, b = _ids(2)
+
+        salidas = de_las_partidas(franja, [_partida(franja, 8, [a, b])])
+
+        assert salidas[a].tee_time is None
+
 
 class TestFotoDeRyder:
     def test_singles_no_hour_no_partner_one_rival(self):

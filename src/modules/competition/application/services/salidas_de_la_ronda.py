@@ -40,7 +40,13 @@ def de_las_partidas(
     hoja = hoja or franja.hoja_de_salidas
     salidas: Salidas = {}
     for partida in partidas:
-        hora = hoja.hora_de(partida.numero) if hoja else None
+        # Una partida fuera de la hoja se queda sin hora en vez de tumbar la
+        # accion que avisa (CodeRabbit BE #638)
+        hora = (
+            hoja.hora_de(partida.numero)
+            if hoja and 1 <= partida.numero <= hoja.numero_de_salidas
+            else None
+        )
         # El grupo asignado, falte quien falte: que alguien no se presente o se
         # retire no cambia la salida de nadie (revision final del 22 oct). El
         # que falta queda fuera de juego: su aviso no se toca
