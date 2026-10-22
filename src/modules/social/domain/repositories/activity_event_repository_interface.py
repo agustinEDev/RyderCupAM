@@ -124,6 +124,16 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def delete_pairs(
+        self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        """
+        Borra los eventos de ese tipo de cada pareja (jugador, origen), todos en
+        una sola operacion. Para retirar en lote los avisos de las invitaciones
+        que se cierran solas. Sin parejas no borra nada. Devuelve cuantos borro.
+        """
+
+    @abstractmethod
     async def delete_for_competition(
         self, competition_id: str, types: Collection[ActivityEventType]
     ) -> int:

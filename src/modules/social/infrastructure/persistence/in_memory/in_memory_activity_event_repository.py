@@ -125,6 +125,18 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return antes - len(self._events)
 
+    async def delete_pairs(
+        self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        parejas = set(pairs)
+        antes = len(self._events)
+        self._events = [
+            e
+            for e in self._events
+            if not (e.type == type and (e.user_id, e.source_match_id) in parejas)
+        ]
+        return antes - len(self._events)
+
     async def delete_from_source(
         self,
         source_id: str,

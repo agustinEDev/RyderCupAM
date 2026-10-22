@@ -184,11 +184,11 @@ class PublishCompetitionNoticesUseCase:
         """
         if not invitations:
             return
+        # Un solo borrado para todo el lote, no uno por invitacion
         async with self._social_uow:
-            for user_id, invitation_id in invitations:
-                await self._social_uow.activity_events.delete_from_source(
-                    invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id
-                )
+            await self._social_uow.activity_events.delete_pairs(
+                ActivityEventType.INVITED_TO_TOURNAMENT, invitations
+            )
 
     async def requests_closed(
         self, tournament: TournamentRef, requests: Sequence[tuple[UserId, str]]

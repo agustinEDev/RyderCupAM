@@ -707,3 +707,27 @@ class TestInvitacionesCerradasSolas:
         await avisos.invitations_closed([])
 
         assert len(await _guardados(social_uow, ana)) == 1
+
+    async def test_todas_en_un_solo_borrado(self, avisos, social_uow, user_uow, monkeypatch):
+        """Revision: un DELETE por lote, no uno por invitacion."""
+        ana = await _user(user_uow)
+        await avisos.invited(ana.id, _torneo(), "inv-a")
+        await avisos.invited(ana.id, _torneo(), "inv-b")
+        repo = social_uow.activity_events
+        llamadas = []
+        original = repo.delete_pairs
+
+        async def espia(tipo, parejas):
+            llamadas.append(list(parejas))
+            return await original(tipo, parejas)
+
+        async def prohibido(*_args, **_kwargs):
+            raise AssertionError("un borrado por invitacion")
+
+        monkeypatch.setattr(repo, "delete_pairs", espia)
+        monkeypatch.setattr(repo, "delete_from_source", prohibido)
+
+        await avisos.invitations_closed([(ana.id, "inv-a"), (ana.id, "inv-b")])
+
+        assert len(llamadas) == 1
+        assert await _guardados(social_uow, ana) == []

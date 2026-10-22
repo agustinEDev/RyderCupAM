@@ -240,6 +240,19 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 
+    async def delete_pairs(
+        self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        if not pairs:
+            return 0
+        tabla = activity_events_table.c
+        stmt = delete(activity_events_table).where(
+            tabla.type == type,
+            tuple_(tabla.user_id, tabla.source_match_id).in_(list(pairs)),
+        )
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
+
     async def delete_for_competition(
         self, competition_id: str, types: Collection[ActivityEventType]
     ) -> int:
