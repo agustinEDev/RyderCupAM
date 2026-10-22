@@ -79,7 +79,8 @@ async def test_los_tipos_nuevos_caben_y_no_se_duplican(db_session):
         await repository.add_many([_evento(user, t, "origen-1") for t in nuevos])
         await db_session.commit()
 
-    assert len(await _tipos(repository, user)) == len(nuevos) == 9
+    # Los ocho avisos de BE-2, ENROLLMENT_CONFIRMED (C) y TEE_TIME_ASSIGNED (G)
+    assert len(await _tipos(repository, user)) == len(nuevos) == 10
 
 
 async def test_borrar_desde_un_origen_de_un_jugador(db_session):
@@ -288,3 +289,32 @@ async def test_g3_lo_publicado_desde_un_origen(db_session):
         [(str(ana.id.value), "ronda-1"), (str(eva.id.value), "ronda-1")]
     )
     assert await repository.find_from_source("ronda-1", []) == []
+
+
+async def test_borrar_por_parejas_de_jugador_y_origen_en_un_solo_delete(db_session):
+    """Revision: las invitaciones cerradas se retiran en lote, cada una solo de su jugador."""
+    ana = await _user(db_session)
+    eva = await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.add_many(
+        [
+            _evento(ana, T.INVITED_TO_TOURNAMENT, "inv-a"),
+            _evento(ana, T.INVITED_TO_TOURNAMENT, "inv-otra"),
+            _evento(eva, T.INVITED_TO_TOURNAMENT, "inv-e"),
+            _evento(eva, T.INVITED_TO_TOURNAMENT, "inv-a"),
+            _evento(ana, T.ENROLLMENT_APPROVED, "inv-a"),
+        ]
+    )
+    await db_session.commit()
+
+    borrados = await repository.delete_pairs(
+        T.INVITED_TO_TOURNAMENT, [(ana.id, "inv-a"), (eva.id, "inv-e")]
+    )
+    await db_session.commit()
+
+    assert borrados == 2
+    assert await _tipos(repository, ana) == sorted(
+        [(T.ENROLLMENT_APPROVED, "inv-a"), (T.INVITED_TO_TOURNAMENT, "inv-otra")]
+    )
+    assert await _tipos(repository, eva) == [(T.INVITED_TO_TOURNAMENT, "inv-a")]
+    assert await repository.delete_pairs(T.INVITED_TO_TOURNAMENT, []) == 0

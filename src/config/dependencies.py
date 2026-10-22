@@ -414,6 +414,9 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.invitation_availability_interface import (
+    InvitationAvailabilityInterface,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
     PlayerCourseHistoryInterface,
 )
@@ -425,6 +428,9 @@ from src.modules.social.application.ports.shared_games_interface import (
 )
 from src.modules.social.application.ports.social_email_service_interface import (
     ISocialEmailService,
+)
+from src.modules.social.application.ports.tournament_visibility_interface import (
+    TournamentVisibilityInterface,
 )
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
 from src.modules.social.application.use_cases.delete_profile_photo_use_case import (
@@ -489,6 +495,9 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
     CompetitionActivityPublisher,
 )
+from src.modules.social.infrastructure.adapters.invitation_availability_adapter import (
+    InvitationAvailabilityAdapter,
+)
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
 )
@@ -503,6 +512,9 @@ from src.modules.social.infrastructure.adapters.shared_games_adapter import (
 )
 from src.modules.social.infrastructure.adapters.tournament_achievements_publisher import (
     TournamentAchievementsPublisher,
+)
+from src.modules.social.infrastructure.adapters.tournament_visibility_adapter import (
+    TournamentVisibilityAdapter,
 )
 from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
     SQLAlchemySocialUnitOfWork,
@@ -1657,22 +1669,44 @@ def get_games_together_use_case(
     return GetGamesTogetherUseCase(social_uow, user_uow, shared_games)
 
 
+def get_tournament_visibility(
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> TournamentVisibilityInterface:
+    """Proveedor del puerto de visibilidad de torneos del feed (tabla del 22 oct, E)."""
+    return TournamentVisibilityAdapter(competition_uow)
+
+
+def get_invitation_availability(
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> InvitationAvailabilityInterface:
+    """Proveedor del puerto de invitaciones abiertas del feed (revision final, 22 oct)."""
+    return InvitationAvailabilityAdapter(competition_uow)
+
+
 def get_player_activity_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    tournaments: TournamentVisibilityInterface = Depends(get_tournament_visibility),
+    invitations: InvitationAvailabilityInterface = Depends(get_invitation_availability),
 ) -> GetPlayerActivityUseCase:
     """Proveedor del caso de uso GetPlayerActivityUseCase."""
-    return GetPlayerActivityUseCase(social_uow, user_uow, golf_course_uow)
+    return GetPlayerActivityUseCase(
+        social_uow, user_uow, golf_course_uow, tournaments=tournaments, invitations=invitations
+    )
 
 
 def get_friends_feed_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    tournaments: TournamentVisibilityInterface = Depends(get_tournament_visibility),
+    invitations: InvitationAvailabilityInterface = Depends(get_invitation_availability),
 ) -> GetFriendsFeedUseCase:
     """Proveedor del caso de uso GetFriendsFeedUseCase."""
-    return GetFriendsFeedUseCase(social_uow, user_uow, golf_course_uow)
+    return GetFriendsFeedUseCase(
+        social_uow, user_uow, golf_course_uow, tournaments=tournaments, invitations=invitations
+    )
 
 
 def get_feed_unseen_count_use_case(
@@ -2395,6 +2429,7 @@ def get_close_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CloseEnrollmentsUseCase:
     """
     Proveedor del caso de uso CloseEnrollmentsUseCase.
@@ -2406,7 +2441,7 @@ def get_close_enrollments_use_case(
     """
     # Los usuarios, para el hándicap de cada inscrito en un stroke play; y el
     # refresco con la RFEG en segundo plano, solo en producción (#251)
-    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador)
+    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador, actividad=actividad)
 
 
 def get_actualizar_handicaps_use_case(
@@ -2469,9 +2504,10 @@ def get_handicap_update_status_use_case(
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> NameCaptainsUseCase:
     """Proveedor del caso de uso NameCaptainsUseCase (BE #320), con el refresco (#251)."""
-    return NameCaptainsUseCase(uow, lanzador)
+    return NameCaptainsUseCase(uow, lanzador, actividad=actividad)
 
 
 def get_name_vice_captain_use_case(
@@ -3077,9 +3113,10 @@ def get_cancel_invitation_use_case(
 def get_list_competition_invitations_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ListCompetitionInvitationsUseCase:
     """Proveedor del caso de uso ListCompetitionInvitationsUseCase."""
-    return ListCompetitionInvitationsUseCase(uow, user_uow)
+    return ListCompetitionInvitationsUseCase(uow, user_uow, actividad=actividad)
 
 
 # ======================================================================================

@@ -27,6 +27,9 @@ CURSOR_SEPARATOR = "|"
 # Dia, instante e id
 _PARTES_DEL_CURSOR = 3
 
+# La partida rapida que no cuenta por los hoyos anotados (tabla del 22 oct, A)
+UNFINISHED_RESULT = "UNFINISHED"
+
 # De 5 en 5, con «ver mas» (tabla aprobada del 22 oct)
 GAMES_PAGE_SIZE = 5
 
@@ -109,6 +112,13 @@ def _record(record: Record | None) -> HeadToHeadRecordDTO | None:
     return HeadToHeadRecordDTO(won=record.won, halved=record.halved, lost=record.lost)
 
 
+def _resultado(game: SharedGame) -> str | None:
+    """WON, HALVED o LOST; UNFINISHED si no cuenta por los hoyos; None si no se juzga."""
+    if game.unfinished:
+        return UNFINISHED_RESULT
+    return game.outcome.value if game.outcome else None
+
+
 def _to_dto(game: SharedGame) -> GameTogetherDTO:
     rapida = game.kind == SharedGameKind.QUICK_MATCH
     return GameTogetherDTO(
@@ -119,7 +129,7 @@ def _to_dto(game: SharedGame) -> GameTogetherDTO:
         golf_course_name=game.golf_course_name,
         format=game.format,
         relation=game.relation.value,
-        result=game.outcome.value if game.outcome else None,
+        result=_resultado(game),
         quick_match_id=game.game_id if rapida else None,
         competition_id=game.competition_id,
         competition_name=game.competition_name,

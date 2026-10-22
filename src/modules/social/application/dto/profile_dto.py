@@ -81,6 +81,15 @@ class PlayerProfileResponseDTO(BaseModel):
         description="En que punto esta tu relacion con el, para saber que boton ofrecer"
     )
     is_friend: bool = Field(default=False, description="Atajo de `friendship.status == ACCEPTED`")
+    blocked_by_me: bool = Field(
+        default=False,
+        description=(
+            "True si quien mira bloqueo a este jugador (puede desbloquearlo). Con "
+            "`friendship.status == BLOCKED` y esto en false, el bloqueo lo puso el otro. "
+            "Con un bloqueo en cualquier sentido el perfil llega sin hándicap y con "
+            "`friends_count` a 0"
+        ),
+    )
     email: str | None = Field(
         default=None,
         description="Solo uno mismo (BE #531). None para cualquier otro, amigos incluidos",
@@ -202,7 +211,15 @@ class FeedResponseDTO(BaseModel):
     dejaria fuera los que aun no se han enseñado de esa vuelta.
     """
 
-    events: list[ActivityEventDTO] = Field(default_factory=list)
+    events: list[ActivityEventDTO] = Field(
+        default_factory=list,
+        description=(
+            "Las entradas de la pagina, de la mas reciente a la mas antigua. Un "
+            "ENROLLED_IN_TOURNAMENT de un torneo que ahora es privado no sale aunque "
+            "siga guardado, asi que una pagina puede venir con menos de `limit` "
+            "entradas y aun asi traer `next_cursor`: sigue pidiendo mientras lo traiga"
+        ),
+    )
     authors: dict[str, FeedAuthorDTO] = Field(
         default_factory=dict, description="Autores de esta pagina, indexados por id"
     )
@@ -223,7 +240,7 @@ class FeedResponseDTO(BaseModel):
         default=0,
         description=(
             "Cuantas tarjetas de este feed se han publicado desde la ultima visita, "
-            "las propias y las solicitudes de amistad recibidas incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
+            "las propias y las solicitudes de amistad recibidas incluidas, con tope de 99. Sin "
             "visita previa cuenta todo. Es el mismo numero que da "
             "`GET /users/me/feed/unseen-count`. Solo se calcula en la primera pagina: "
             "con `cursor` llega a 0"
@@ -246,6 +263,6 @@ class FeedUnseenCountResponseDTO(BaseModel):
     unseen_count: int = Field(
         description=(
             "Cuantas entradas del feed se han publicado desde la ultima visita, "
-            "las propias incluidas, con tope de 10. Sin visita previa cuenta todo"
+            "las propias incluidas, con tope de 99. Sin visita previa cuenta todo"
         ),
     )

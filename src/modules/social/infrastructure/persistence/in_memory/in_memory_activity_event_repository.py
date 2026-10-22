@@ -18,6 +18,12 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
 
     def __init__(self):
         self._events: list[ActivityEvent] = []
+        # En memoria no hay tabla de competiciones: los tests dicen aqui que
+        # torneos son privados para `skip_private_enrollments`
+        self.private_competition_ids: set[str] = set()
+        # Ni las invitaciones: las que siguen abiertas, para `open_invitations_at`
+        # (None = no se filtra)
+        self.open_invitation_ids: set[str] | None = None
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -51,17 +57,38 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         return self._pagina(encontrados, limit, before, before_id)
 
     async def count_in(
-        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+        self,
+        slices: Sequence[ActivitySlice],
+        since: datetime | None,
+        cap: int | None = None,
+        skip_private_enrollments: bool = False,
+        open_invitations_at: datetime | None = None,
     ) -> int:
         # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
             {
                 e.card_key
                 for e in self._events
-                if self._entra(e, slices) and (since is None or e.published_at > since)
+                if self._entra(e, slices)
+                and (since is None or e.published_at > since)
+                and not (skip_private_enrollments and self._apuntado_a_privado(e))
+                and not (open_invitations_at is not None and self._invitacion_cerrada(e))
             }
         )
         return cuenta if cap is None else min(cuenta, cap)
+
+    def _invitacion_cerrada(self, event: ActivityEvent) -> bool:
+        return (
+            event.type == ActivityEventType.INVITED_TO_TOURNAMENT
+            and self.open_invitation_ids is not None
+            and event.source_match_id not in self.open_invitation_ids
+        )
+
+    def _apuntado_a_privado(self, event: ActivityEvent) -> bool:
+        return (
+            event.type == ActivityEventType.ENROLLED_IN_TOURNAMENT
+            and event.payload.get("competition_id") in self.private_competition_ids
+        )
 
     @staticmethod
     def _entra(event: ActivityEvent, slices: Sequence[ActivitySlice]) -> bool:
@@ -107,6 +134,18 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
             e
             for e in self._events
             if not (e.user_id == user_id and (types is None or e.type in types))
+        ]
+        return antes - len(self._events)
+
+    async def delete_pairs(
+        self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        parejas = set(pairs)
+        antes = len(self._events)
+        self._events = [
+            e
+            for e in self._events
+            if not (e.type == type and (e.user_id, e.source_match_id) in parejas)
         ]
         return antes - len(self._events)
 

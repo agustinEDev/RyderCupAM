@@ -87,7 +87,7 @@ class GetPlayerProfileUseCase:
             handicap = float(user.handicap.value) if user.handicap else None
             email = user.email.value
 
-        relacion, amigos = await self._relacion_y_amigos(viewer_id, target_id, propio)
+        relacion, amigos, lo_bloquee = await self._relacion_y_amigos(viewer_id, target_id, propio)
         amigo = relacion.status == FriendshipStatus.ACCEPTED.value
         puede_ver_todo = propio or amigo
         # Con un bloqueo de por medio, de un lado o del otro, solo nombre y foto
@@ -112,6 +112,8 @@ class GetPlayerProfileUseCase:
             friends_count=0 if bloqueado else amigos,
             friendship=relacion,
             is_friend=amigo,
+            # Quien puso el bloqueo: solo quien bloqueo puede deshacerlo (F)
+            blocked_by_me=lo_bloquee,
             # Ni a los amigos: el correo es dato suyo
             email=email if propio else None,
             # El handicap ya es publico entre usuarios con sesion (BE-3, 22 oct
@@ -124,7 +126,7 @@ class GetPlayerProfileUseCase:
 
     async def _relacion_y_amigos(
         self, viewer_id: UserId, target_id: UserId, propio: bool
-    ) -> tuple[FriendshipStateDTO, int]:
+    ) -> tuple[FriendshipStateDTO, int, bool]:
         """
         En que punto esta la relacion y cuantos amigos tiene el otro.
 
@@ -140,12 +142,12 @@ class GetPlayerProfileUseCase:
             amigos = await self._social_uow.friendships.count_friends(target_id)
 
             if propio:
-                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos
+                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False
 
             friendship = await self._social_uow.friendships.find_by_pair(viewer_id, target_id)
 
         if friendship is None:
-            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos
+            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False
 
         return (
             FriendshipStateDTO(
@@ -153,6 +155,7 @@ class GetPlayerProfileUseCase:
                 friendship_id=str(friendship.id.value),
             ),
             amigos,
+            friendship.is_blocked() and friendship.blocked_by == viewer_id,
         )
 
     @staticmethod

@@ -389,11 +389,30 @@ class TestTraduccion:
 
         await adaptador.invited(competicion, invitacion)
         await adaptador.invitation_withdrawn(invitacion)
+        await adaptador.invitation_answered(invitacion)
 
         crudo = str(invitacion.id.value)
         assert avisos.llamadas == [
             ("invited", (invitacion.invitee_user_id, _ref(competicion), crudo), {}),
             ("invitation_withdrawn", (invitacion.invitee_user_id, crudo), {}),
+            ("invitation_answered", (invitacion.invitee_user_id, crudo), {}),
+        ]
+
+    async def test_invitaciones_cerradas_solas_por_su_id(self, avisos):
+        con_cuenta = SimpleNamespace(
+            id=SimpleNamespace(value=uuid4()), invitee_user_id=UserId(uuid4())
+        )
+        sin_cuenta = SimpleNamespace(id=SimpleNamespace(value=uuid4()), invitee_user_id=None)
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
+
+        await adaptador.invitations_closed([con_cuenta, sin_cuenta])
+
+        assert avisos.llamadas == [
+            (
+                "invitations_closed",
+                ([(con_cuenta.invitee_user_id, str(con_cuenta.id.value))],),
+                {},
+            )
         ]
 
     async def test_solicitudes_cerradas_y_rechazada(self, avisos):

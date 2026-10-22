@@ -169,6 +169,12 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def invitation_withdrawn(self, invitation):
         self.avisos.append(("invitation_withdrawn", invitation.id, invitation.invitee_user_id))
 
+    async def invitation_answered(self, invitation):
+        self.avisos.append(("invitation_answered", invitation.id, invitation.invitee_user_id))
+
+    async def invitations_closed(self, invitations):
+        self.avisos.append(("invitations_closed", [(i.id, i.invitee_user_id) for i in invitations]))
+
     async def requests_closed(self, competition, enrollments):
         self.avisos.append(
             ("requests_closed", competition.id, sorted(str(e.user_id) for e in enrollments))
@@ -210,6 +216,7 @@ class _Roto(CompetitionActivityPublisherInterface):
         raise RuntimeError("feed caido")
 
     enrolled = left = cancelled = invited = invitation_withdrawn = _falla  # type: ignore[assignment]
+    invitation_answered = invitations_closed = _falla  # type: ignore[assignment]
     requests_closed = request_rejected = match_finished = completed = reopened = _falla  # type: ignore[assignment]
     made_private = deleted = tee_times = _falla  # type: ignore[assignment]
 
@@ -587,13 +594,33 @@ class TestInvitaciones:
             )
         )
 
-        assert registro.avisos == [("enrolled", competition_id, invitado.id, False)]
+        # C (22 oct): su aviso de invitado se retira, y queda inscrito
+        assert registro.avisos == [
+            ("invitation_answered", invitacion.id, invitado.id),
+            ("enrolled", competition_id, invitado.id, False),
+        ]
 
-    async def test_declinar_no_avisa(self, uow, user_uow, registro):
+    async def test_c_declinar_retira_el_aviso_de_invitado(self, uow, user_uow, registro):
+        """C (22 oct). Given una invitacion / When la rechazo / Then se retira su aviso."""
         creador = await _usuario(user_uow, "org@test.com")
         invitado = await _usuario(user_uow, "inv@test.com")
         competition_id = CompetitionId((await create_competition(uow, creador.id)).id)
         invitacion = await self._invitacion(uow, competition_id, creador.id, invitado)
+
+        await RespondToInvitationUseCase(uow, user_uow, actividad=registro).execute(
+            RespondInvitationRequestDTO(
+                invitation_id=invitacion.id.value, user_id=invitado.id.value, action="DECLINE"
+            )
+        )
+
+        assert registro.avisos == [("invitation_answered", invitacion.id, invitado.id)]
+
+    async def test_c_responder_la_de_quien_no_tenia_cuenta_no_avisa(self, uow, user_uow, registro):
+        """Sin cuenta al invitarle no hubo aviso que retirar: responde por su correo."""
+        creador = await _usuario(user_uow, "org@test.com")
+        invitado = await _usuario(user_uow, "nadie@test.com")
+        competition_id = CompetitionId((await create_competition(uow, creador.id)).id)
+        invitacion = await self._invitacion(uow, competition_id, creador.id, None)
 
         await RespondToInvitationUseCase(uow, user_uow, actividad=registro).execute(
             RespondInvitationRequestDTO(
@@ -826,6 +853,31 @@ class TestG27UnFalloAlAvisarNoTumbaLaAccion:
         )
 
         assert respuesta.status == CompetitionStatus.IN_PROGRESS.value
+
+    async def test_c_declinar_sigue_declinada(self, uow, caplog):
+        user_uow = UserInMemoryUoW()
+        creador = await _usuario(user_uow, "org@test.com")
+        invitado = await _usuario(user_uow, "inv@test.com")
+        competition_id = CompetitionId((await create_competition(uow, creador.id)).id)
+        invitacion = Invitation.create(
+            id=InvitationId.generate(),
+            competition_id=competition_id,
+            inviter_id=creador.id,
+            invitee_email="inv@test.com",
+            invitee_user_id=invitado.id,
+        )
+        async with uow:
+            await uow.invitations.add(invitacion)
+
+        with caplog.at_level(logging.WARNING):
+            respuesta = await RespondToInvitationUseCase(uow, user_uow, actividad=_Roto()).execute(
+                RespondInvitationRequestDTO(
+                    invitation_id=invitacion.id.value, user_id=invitado.id.value, action="DECLINE"
+                )
+            )
+
+        assert respuesta.status == "DECLINED"
+        assert any(r.levelno == logging.WARNING for r in caplog.records)
 
     async def test_retirarse_sigue_retirado(self, uow):
         competition_id, _ = await _abierta(uow)

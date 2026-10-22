@@ -24,6 +24,7 @@ from src.modules.competition.application.services.invitaciones_al_cerrar import 
     al_ocupar_una_plaza,
 )
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
 )
@@ -133,6 +134,7 @@ class HandleEnrollmentUseCase:
             # 4. Ejecutar acción. Solo una solicitud se avisa como aceptada o
             #    rechazada: una invitación tiene su propio camino
             era_solicitud = enrollment.status == EnrollmentStatus.REQUESTED
+            sin_plaza: list[Invitation] = []
             if request.action == "APPROVE":
                 # Verificar capacidad antes de aprobar
                 approved_count = await self._uow.enrollments.count_approved_by_competition(
@@ -166,7 +168,7 @@ class HandleEnrollmentUseCase:
                 enrollment.approve()
                 # Si era la última plaza, las invitaciones pendientes se quedan sin
                 # ella ya (BE #359)
-                await al_ocupar_una_plaza(
+                sin_plaza = await al_ocupar_una_plaza(
                     self._uow, enrollment.competition_id, approved_count, competition.max_players
                 )
             elif request.action == "REJECT":
@@ -183,6 +185,8 @@ class HandleEnrollmentUseCase:
         #    rechazado a mano (BE-2)
         if request.action == "APPROVE":
             await self._actividad.enrolled(competition, enrollment, accepted_request=era_solicitud)
+            # Las pendientes que se quedaron sin plaza retiran su aviso (22 oct)
+            await self._actividad.invitations_closed(sin_plaza)
         elif era_solicitud:
             await self._actividad.request_rejected(competition, enrollment)
 

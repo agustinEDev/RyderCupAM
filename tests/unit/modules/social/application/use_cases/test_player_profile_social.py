@@ -170,6 +170,7 @@ class TestNoAmigo:
         assert perfil.head_to_head is None
         assert perfil.games_together is None
         assert perfil.email is None
+        assert perfil.blocked_by_me is False
         # Ni se pregunta: lo que no se puede ver no se calcula
         assert partidas.preguntas == []
 
@@ -197,6 +198,8 @@ class TestNoAmigo:
 
         assert perfil.first_name == "Luis"
         assert perfil.friendship.status == "BLOCKED"
+        # F (22 oct): lo bloquee yo, y puedo desbloquearlo
+        assert perfil.blocked_by_me is True
         assert perfil.handicap is None
         assert perfil.friends_count == 0
         assert perfil.stats is None
@@ -216,6 +219,9 @@ class TestNoAmigo:
 
         assert perfil.handicap is None
         assert perfil.friends_count == 0
+        # F (22 oct): me bloqueo el, no yo
+        assert perfil.blocked_by_me is False
+        assert perfil.friendship.status == "BLOCKED"
 
 
 class TestAmigo:
@@ -512,3 +518,25 @@ class TestBloquearYQuitar:
         assert perfil.friendship.status == "NONE"
         assert perfil.head_to_head is None
         assert solicitud.status == "PENDING"
+
+
+class TestTablaFQuienBloqueo:
+    async def test_f_un_amigo_no_esta_bloqueado(self, social_uow, user_uow, stats):
+        yo = await _usuario(user_uow)
+        el = await _usuario(user_uow)
+        await _amigos(social_uow, yo, el)
+
+        perfil = await _perfil(social_uow, user_uow, stats).execute(
+            str(yo.id.value), str(el.id.value)
+        )
+
+        assert perfil.blocked_by_me is False
+
+    async def test_f_uno_mismo_no_esta_bloqueado(self, social_uow, user_uow, stats):
+        yo = await _usuario(user_uow)
+
+        perfil = await _perfil(social_uow, user_uow, stats).execute(
+            str(yo.id.value), str(yo.id.value)
+        )
+
+        assert perfil.blocked_by_me is False

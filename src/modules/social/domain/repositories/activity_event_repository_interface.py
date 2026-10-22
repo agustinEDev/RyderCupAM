@@ -73,7 +73,12 @@ class ActivityEventRepositoryInterface(ABC):
 
     @abstractmethod
     async def count_in(
-        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+        self,
+        slices: Sequence[ActivitySlice],
+        since: datetime | None,
+        cap: int | None = None,
+        skip_private_enrollments: bool = False,
+        open_invitations_at: datetime | None = None,
     ) -> int:
         """
         Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
@@ -82,6 +87,14 @@ class ActivityEventRepositoryInterface(ABC):
         Cuenta tarjetas y no filas (`ActivityEvent.card_key`): tres logros de
         una vuelta se ven como una tarjeta, y el numero tiene que decir lo que
         hay en la pantalla.
+
+        Con `skip_private_enrollments` no cuenta los ENROLLED_IN_TOURNAMENT de
+        torneos que ahora son privados: el feed no los enseña (regla E, 22 oct
+        2026), y el numero tiene que decir lo mismo que la pantalla.
+
+        Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT de
+        invitaciones que en ese instante ya no se pueden aceptar (no pendientes,
+        caducadas o borradas), que el feed tampoco enseña.
         """
 
     @abstractmethod
@@ -113,6 +126,16 @@ class ActivityEventRepositoryInterface(ABC):
         Es como se retira un aviso que deja de ser cierto: la invitacion
         retirada, el amigo que se borra del torneo, la clasificacion de un
         torneo que se reabre. Una lista de tipos vacia no borra nada.
+        """
+
+    @abstractmethod
+    async def delete_pairs(
+        self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        """
+        Borra los eventos de ese tipo de cada pareja (jugador, origen), todos en
+        una sola operacion. Para retirar en lote los avisos de las invitaciones
+        que se cierran solas. Sin parejas no borra nada. Devuelve cuantos borro.
         """
 
     @abstractmethod

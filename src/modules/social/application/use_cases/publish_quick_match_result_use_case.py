@@ -8,11 +8,11 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
+from src.modules.quick_match.application.services.match_play_result import match_play_reading
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
-from src.modules.quick_match.domain.services.hole_completion_service import hole_is_complete
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     ParticipantStrokes,
     StrokeAllocationService,
@@ -28,6 +28,11 @@ from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
+from src.modules.social.domain.services.counted_round import (
+    counting_units,
+    holes_by_side,
+    match_play_counts,
+)
 from src.modules.social.domain.services.ranking import rank
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.entities.user import User
@@ -41,8 +46,9 @@ from src.shared.domain.services.stroke_play_scoring import (
 )
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
-TOTAL_HOLES = 18
 _EMPATE = "HALVED"
+# El match play que no cuenta por los hoyos anotados (tabla del 22 oct, A)
+_SIN_TERMINAR = "UNFINISHED"
 
 
 @dataclass(frozen=True)
@@ -90,6 +96,14 @@ class PublishQuickMatchResultUseCase:
     mismo motor que el historial de partidas (`MatchPlayScoring`).
 
     Los invitados cuentan en la clasificacion, pero no tienen donde publicar.
+
+    **Cuando cuenta** (tabla del 22 oct 2026, A, `counted_round`): la
+    referencia es el maximo de hoyos anotados; cuentan quienes tienen
+    exactamente esos hoyos y al menos 9, y entre ellos se reparten puestos. Los
+    demas salen con `unfinished: true`, sin puesto. En match play, sin terminar
+    si los bandos no entregaron los mismos hoyos (9 o mas), salvo que se
+    decidiera antes de tiempo. El resultado que pinta la propia partida no
+    cambia: esto es solo lo social.
     """
 
     def __init__(
@@ -182,37 +196,47 @@ class PublishQuickMatchResultUseCase:
         if not vueltas:
             return []
 
-        valores = [v.to_par if es_medal else v.points for v in vueltas]
-        puestos = rank(valores, higher_is_better=not es_medal)
-        hay_puesto = len(vueltas) > 1
-        # El mejor bruto, solo entre tarjetas completas: nueve hoyos siempre
-        # tienen menos golpes que dieciocho. El orden no se toca: el cliente
-        # clasifica las incompletas con todas, por puntos o contra el par de lo
-        # jugado (`StablefordCalculator`), y aqui se le sigue
-        completas = [v.gross for v in vueltas if v.complete]
-        mejor_bruto = min(completas) if completas else None
+        # Cuentan los que tienen los hoyos de la referencia, 9 o mas (tabla
+        # del 22 oct, A). Los demas salen «sin terminar»: ni puesto ni mejor
+        # bruto, y no ocupan sitio en la clasificacion de nadie
+        cuentan_ids = counting_units(
+            {pid: hoyos.keys() for pid, hoyos in lectura.scores.items() if hoyos}
+        )
+        cuentan = [v for v in vueltas if v.participant.participant_id in cuentan_ids]
+        valores = [v.to_par if es_medal else v.points for v in cuentan]
+        puestos = dict(
+            zip(
+                (v.participant.participant_id for v in cuentan),
+                rank(valores, higher_is_better=not es_medal),
+                strict=True,
+            )
+        )
+        # Uno solo que cuenta es como quien juega solo: sin puesto (D18, A5)
+        hay_puesto = len(cuentan) > 1
+        con_mejor_bruto = self._mejor_bruto(cuentan, puestos) if hay_puesto else set()
 
         eventos = []
-        for vuelta, puesto in zip(vueltas, puestos, strict=True):
+        for vuelta in vueltas:
             user_id = vuelta.participant.user_id
             if user_id is None:
                 continue
+            pid = vuelta.participant.participant_id
+            puesto = puestos.get(pid)
             payload: dict = {
                 "golf_course_id": str(match.golf_course_id.value),
                 "scoring_format": match.scoring_format.value if match.scoring_format else None,
                 "holes_played": vuelta.holes_played,
                 "gross_strokes": vuelta.gross,
-                "total_players": len(vueltas),
-                "position": puesto.position if hay_puesto else None,
-                "tied": puesto.tied if hay_puesto else False,
+                # Solo los que cuentan: «2.º de 2»
+                "total_players": len(cuentan),
+                "position": puesto.position if puesto and hay_puesto else None,
+                "tied": puesto.tied if puesto and hay_puesto else False,
+                "unfinished": puesto is None,
                 # La etiqueta «mejor bruto del grupo», solo si no gano: quien
-                # gano ya tiene su titular
-                "best_gross_in_group": (
-                    hay_puesto
-                    and vuelta.complete
-                    and vuelta.gross == mejor_bruto
-                    and puesto.position != 1
-                ),
+                # gano ya tiene su titular. Si el 1.º tiene ese mismo bruto, nadie
+                # la lleva; si la comparten varios, todos, con la marca (D)
+                "best_gross_in_group": pid in con_mejor_bruto,
+                "best_gross_tied": pid in con_mejor_bruto and len(con_mejor_bruto) > 1,
             }
             if es_medal:
                 payload["net_strokes"] = vuelta.net
@@ -221,6 +245,19 @@ class PublishQuickMatchResultUseCase:
                 payload["points"] = vuelta.points
             eventos.append(self._evento(match, user_id, payload))
         return eventos
+
+    @staticmethod
+    def _mejor_bruto(cuentan: list[_Totales], puestos: dict) -> set[ParticipantId]:
+        """
+        Quien lleva la etiqueta de mejor bruto (tabla del 22 oct, D): nadie si
+        el mejor bruto es tambien de un 1.º; si no, todos los que lo comparten.
+        Todos los que cuentan tienen los mismos hoyos, asi que se comparan.
+        """
+        mejor = min(v.gross for v in cuentan)
+        con_el = [v for v in cuentan if v.gross == mejor]
+        if any(puestos[v.participant.participant_id].position == 1 for v in con_el):
+            return set()
+        return {v.participant.participant_id for v in con_el}
 
     def _totales(self, lectura: _Lectura, p: QuickMatchParticipant) -> _Totales | None:
         """
@@ -261,32 +298,26 @@ class PublishQuickMatchResultUseCase:
             return []
         bando_a, bando_b = bandos
 
-        resultados = []
-        for numero in range(1, TOTAL_HOLES + 1):
-            del_hoyo = {
-                pid: hoyos[numero] for pid, hoyos in lectura.scores.items() if numero in hoyos
-            }
-            if not hole_is_complete(del_hoyo, bando_a, bando_b, match.match_format):
-                continue
-            resultados.append(
-                self._match_play.calculate_hole_winner(
-                    [
-                        self._neto(lectura, pid, numero, del_hoyo)
-                        for pid in bando_a
-                        if pid in del_hoyo
-                    ],
-                    [
-                        self._neto(lectura, pid, numero, del_hoyo)
-                        for pid in bando_b
-                        if pid in del_hoyo
-                    ],
-                    match.match_format,
-                )
-            )
-        if not resultados:
+        # El mismo calculo que el historial de partidas y el cara a cara
+        # Un hoyo es del bando en cuanto lo anota uno, con el mejor neto que
+        # haya, tambien en fourball (Agustin, 22 oct 2026)
+        resultado = match_play_reading(
+            match, lectura.scores, lectura.strokes, self._match_play, one_ball_per_side=True
+        )
+        hoyos_a = holes_by_side(lectura.scores, bando_a)
+        hoyos_b = holes_by_side(lectura.scores, bando_b)
+        # Sin un solo hoyo de ningun bando no hay nada que contar. Con hoyos
+        # pero ninguno adjudicable (la ida frente a la vuelta, o un rival sin
+        # anotar) si hay aviso: sin terminar, como lo cuenta «Partidas juntos»
+        if not hoyos_a and not hoyos_b:
             return []
+        # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
+        # los mismos hoyos, 9 o mas (tabla del 22 oct, A). Si no, «sin
+        # terminar» y sin tanteo: un 1UP tras un hoyo no es una victoria
+        cuenta = resultado.winner is not None and match_play_counts(
+            hoyos_a, hoyos_b, resultado.decided_early
+        )
 
-        ganador, tanteo = self._resultado(resultados)
         eventos = []
         for p in match.participants:
             if p.user_id is None:
@@ -295,9 +326,14 @@ class PublishQuickMatchResultUseCase:
             payload = {
                 "golf_course_id": str(match.golf_course_id.value),
                 "match_format": match.match_format.value if match.match_format else None,
-                "holes_played": len(resultados),
-                "outcome": self._lado(ganador, "A" if mio is bando_a else "B"),
-                "score": tanteo,
+                "holes_played": resultado.holes_played,
+                "outcome": (
+                    self._lado(resultado.winner, "A" if mio is bando_a else "B")
+                    if cuenta and resultado.winner is not None
+                    else _SIN_TERMINAR
+                ),
+                "score": resultado.score if cuenta else None,
+                "unfinished": not cuenta,
                 "partners": [
                     self._quien(o) for o in match.participants if o.participant_id in mio and o != p
                 ],
@@ -307,28 +343,6 @@ class PublishQuickMatchResultUseCase:
             }
             eventos.append(self._evento(match, p.user_id, payload))
         return eventos
-
-    def _resultado(self, resultados: list[str]) -> tuple[str | None, str]:
-        """
-        Quien gano y el tanteo, como el historial de partidas: «3&2» si se
-        decidio antes del 18, la ventaja tal cual si no, «AS» si acabo igualado.
-        """
-        standing = self._match_play.calculate_match_standing(resultados)
-        if self._match_play.is_match_decided(standing):
-            decidido = self._match_play.format_decided_result(resultados)
-            return decidido["winner"], decidido["score"]
-        if standing["leading_team"] is None:
-            return _EMPATE, "AS"
-        return standing["leading_team"], standing["status"]
-
-    @staticmethod
-    def _neto(lectura: _Lectura, pid: ParticipantId, hoyo: int, del_hoyo: dict) -> int | None:
-        # La raya se propaga: es el bando que no entrega bola y pierde el hoyo
-        score = del_hoyo[pid]
-        if score is None:
-            return None
-        golpes = lectura.strokes.get(pid)
-        return golpes.net_score(hoyo, score) if golpes else score
 
     @staticmethod
     def _quien(p: QuickMatchParticipant) -> dict:

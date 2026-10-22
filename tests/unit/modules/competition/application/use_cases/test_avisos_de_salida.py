@@ -177,6 +177,8 @@ class _Salidas(CompetitionActivityPublisherInterface):
     enrolled = left = cancelled = invited = invitation_withdrawn = _nada  # type: ignore[assignment]
     requests_closed = request_rejected = match_finished = completed = _nada  # type: ignore[assignment]
     reopened = made_private = deleted = _nada  # type: ignore[assignment]
+    # De la otra rama (revision social, 22 oct): invitaciones respondidas o cerradas solas
+    invitation_answered = invitations_closed = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):

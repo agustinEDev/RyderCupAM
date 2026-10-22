@@ -17,7 +17,13 @@ from tests.conftest import (
     create_competition,
     set_auth_cookies,
 )
-from tests.integration.api.v1.helpers.feed_helper import hacerse_amigos, insertar_eventos
+from tests.integration.api.v1.helpers.feed_helper import (
+    caducar_invitacion,
+    hacer_privada,
+    hacerse_amigos,
+    insertar_eventos,
+    rechazar_sin_avisar,
+)
 from tests.integration.api.v1.test_quick_match_endpoints import _create_approved_golf_course
 
 FEED = "/api/v1/users/me/feed"
@@ -53,6 +59,56 @@ async def test_b8_la_inscripcion_directa_en_un_publico_la_ven_los_amigos(client:
     assert respuesta.status_code == 201, respuesta.text
 
     assert await _tipos_del_feed(client, amigo) == ["ENROLLED_IN_TOURNAMENT"]
+    # C (22 oct): yo, «ya estas inscrito»
+    assert await _tipos_del_feed(client, yo) == ["ENROLLMENT_CONFIRMED"]
+
+
+async def _invitado(client: AsyncClient, prefijo: str) -> tuple[dict, str]:
+    """Una competicion activa y una invitacion para mi; el id de la invitacion."""
+    org = await create_authenticated_user(client, f"{prefijo}_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(
+        client, f"{prefijo}_yo@test.com", PASSWORD, "Juan", "Lopez"
+    )
+    comp = await create_competition(client, org["cookies"])
+    await activate_competition(client, org["cookies"], comp["id"])
+    set_auth_cookies(client, org["cookies"])
+    invitada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": yo["user"]["id"]},
+    )
+    assert invitada.status_code == 201, invitada.text
+    assert await _tipos_del_feed(client, yo) == ["INVITED_TO_TOURNAMENT"]
+    set_auth_cookies(client, yo["cookies"])
+    (suya,) = (await client.get("/api/v1/invitations/me")).json()["invitations"]
+    return yo, suya["id"]
+
+
+@pytest.mark.asyncio
+async def test_c_aceptar_la_invitacion_la_retira_y_confirma(client: AsyncClient):
+    """
+    C (22 oct). Given una invitacion avisada / When la acepto / Then su aviso
+    desaparece y llega «ya estas inscrito».
+    """
+    yo, invitacion = await _invitado(client, "be2c_ok")
+
+    respuesta = await client.post(
+        f"/api/v1/invitations/{invitacion}/respond", json={"action": "ACCEPT"}
+    )
+    assert respuesta.status_code == 200, respuesta.text
+
+    assert await _tipos_del_feed(client, yo) == ["ENROLLMENT_CONFIRMED"]
+
+
+@pytest.mark.asyncio
+async def test_c_rechazar_la_invitacion_la_retira(client: AsyncClient):
+    """C (22 oct). Given una invitacion avisada / When la rechazo / Then el feed queda vacio."""
+    yo, invitacion = await _invitado(client, "be2c_no")
+
+    respuesta = await client.post(
+        f"/api/v1/invitations/{invitacion}/respond", json={"action": "DECLINE"}
+    )
+    assert respuesta.status_code == 200, respuesta.text
+
     assert await _tipos_del_feed(client, yo) == []
 
 
@@ -121,3 +177,131 @@ async def test_e22_cada_evento_lleva_su_clave_de_tarjeta(client: AsyncClient):
     (evento,) = (await client.get(FEED)).json()["events"]
 
     assert evento["group_key"] == f"{yo['user']['id']}:{evento['source_match_id']}"
+
+
+@pytest.mark.asyncio
+async def test_e_un_torneo_que_ahora_es_privado_no_sale_aunque_quede_su_aviso(
+    client: AsyncClient,
+):
+    """
+    E (22 oct). Given mi amigo apuntado a dos torneos publicos y uno pasa a
+    privado sin que se borre su aviso / When pido el feed y su actividad /
+    Then solo sale el del que sigue publico.
+    """
+    org = await create_authenticated_user(client, "be2e_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(client, "be2e_yo@test.com", PASSWORD, "Juan", "Lopez")
+    amigo = await create_authenticated_user(client, "be2e_am@test.com", PASSWORD, "Eva", "Ruiz")
+    await hacerse_amigos(client, yo, amigo)
+    privada = await create_competition(client, org["cookies"])
+    publica = await create_competition(client, org["cookies"])
+    ahora = datetime.now().replace(microsecond=0)
+    for minuto, comp in ((1, privada), (2, publica)):
+        await insertar_eventos(
+            amigo["user"]["id"],
+            [ahora + timedelta(minutes=minuto)],
+            tipo="ENROLLED_IN_TOURNAMENT",
+            payload={"competition_id": comp["id"], "competition_name": comp["name"]},
+            source_match_id=comp["id"],
+        )
+    await hacer_privada(privada["id"])
+
+    set_auth_cookies(client, yo["cookies"])
+    feed = (await client.get(FEED)).json()["events"]
+    actividad = (await client.get(f"/api/v1/users/{amigo['user']['id']}/activity")).json()
+
+    assert [e["payload"]["competition_id"] for e in feed] == [publica["id"]]
+    assert [e["payload"]["competition_id"] for e in actividad["events"]] == [publica["id"]]
+
+
+@pytest.mark.asyncio
+async def test_cerrar_la_inscripcion_retira_el_aviso_de_invitado(client: AsyncClient):
+    """
+    Agustin, 22 oct. Given una invitacion avisada / When el organizador cierra
+    la inscripcion y la invitacion se queda sin plaza / Then su aviso desaparece.
+    """
+    org = await create_authenticated_user(client, "be2nr_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(client, "be2nr_yo@test.com", PASSWORD, "Juan", "Lopez")
+    comp = await create_competition(client, org["cookies"])
+    await activate_competition(client, org["cookies"], comp["id"])
+    set_auth_cookies(client, org["cookies"])
+    invitada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": yo["user"]["id"]},
+    )
+    assert invitada.status_code == 201, invitada.text
+    assert await _tipos_del_feed(client, yo) == ["INVITED_TO_TOURNAMENT"]
+
+    set_auth_cookies(client, org["cookies"])
+    cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+    assert cerrada.status_code == 200, cerrada.text
+
+    assert await _tipos_del_feed(client, yo) == []
+
+
+@pytest.mark.asyncio
+async def test_e_el_contador_cuenta_lo_mismo_que_se_ve(client: AsyncClient):
+    """
+    Revision (22 oct). Given mi amigo apuntado a dos publicos y a uno que pasa a
+    privado, y mi «ya estas inscrito» en ese privado / When pido el contador /
+    Then 3: el apuntado al privado no cuenta; lo mio de ese torneo, si.
+    """
+    org = await create_authenticated_user(client, "be2ec_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(client, "be2ec_yo@test.com", PASSWORD, "Juan", "Lopez")
+    amigo = await create_authenticated_user(client, "be2ec_am@test.com", PASSWORD, "Eva", "Ruiz")
+    await hacerse_amigos(client, yo, amigo)
+    privada = await create_competition(client, org["cookies"])
+    publicas = [await create_competition(client, org["cookies"]) for _ in range(2)]
+    ahora = datetime.now().replace(microsecond=0)
+    for minuto, comp in enumerate([privada, *publicas], start=1):
+        await insertar_eventos(
+            amigo["user"]["id"],
+            [ahora + timedelta(minutes=minuto)],
+            tipo="ENROLLED_IN_TOURNAMENT",
+            payload={"competition_id": comp["id"], "competition_name": comp["name"]},
+            source_match_id=comp["id"],
+        )
+    await insertar_eventos(
+        yo["user"]["id"],
+        [ahora + timedelta(minutes=5)],
+        tipo="ENROLLMENT_CONFIRMED",
+        payload={"competition_id": privada["id"], "competition_name": privada["name"]},
+        source_match_id=privada["id"],
+    )
+    await hacer_privada(privada["id"])
+
+    set_auth_cookies(client, yo["cookies"])
+    contador = (await client.get(CONTADOR)).json()
+    feed = (await client.get(FEED)).json()
+
+    assert contador == {"unseen_count": 3}
+    assert feed["unseen_count"] == 3
+    assert len(feed["events"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_una_invitacion_caducada_sin_tocar_no_sale_ni_cuenta(client: AsyncClient):
+    """
+    Revision final (22 oct). Given una invitacion avisada que caduca sin que
+    nadie la toque / When pido el feed y el contador / Then ni sale ni cuenta.
+    """
+    yo, invitacion = await _invitado(client, "be2cad")
+    set_auth_cookies(client, yo["cookies"])
+    assert (await client.get(CONTADOR)).json() == {"unseen_count": 1}
+
+    await caducar_invitacion(invitacion)
+
+    set_auth_cookies(client, yo["cookies"])
+    assert (await client.get(CONTADOR)).json() == {"unseen_count": 0}
+    assert await _tipos_del_feed(client, yo) == []
+
+
+@pytest.mark.asyncio
+async def test_una_invitacion_ya_no_pendiente_no_sale_ni_cuenta(client: AsyncClient):
+    """Revision final. Given su aviso se quedo al rechazarla / Then ni sale ni cuenta."""
+    yo, invitacion = await _invitado(client, "be2dec")
+
+    await rechazar_sin_avisar(invitacion)
+
+    set_auth_cookies(client, yo["cookies"])
+    assert (await client.get(CONTADOR)).json() == {"unseen_count": 0}
+    assert await _tipos_del_feed(client, yo) == []

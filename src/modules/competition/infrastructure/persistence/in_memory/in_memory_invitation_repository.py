@@ -79,6 +79,17 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results[offset : offset + limit]
 
+    async def find_acceptable_ids(
+        self, invitation_ids: list[InvitationId], now: datetime
+    ) -> set[InvitationId]:
+        return {
+            i
+            for i in invitation_ids
+            if (inv := self._invitations.get(i)) is not None
+            and inv.status == InvitationStatus.PENDING
+            and now < inv.expires_at
+        }
+
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         return [
             inv
