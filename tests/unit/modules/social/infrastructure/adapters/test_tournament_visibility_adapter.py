@@ -50,3 +50,16 @@ async def test_sin_ids_no_lee_nada():
     assert (
         await TournamentVisibilityAdapter(InMemoryCompetitionUnitOfWork()).private_ids([]) == set()
     )
+
+
+async def test_no_carga_las_competiciones_enteras():
+    """Revision: solo lee la visibilidad, no el agregado con todas sus relaciones."""
+    uow = InMemoryCompetitionUnitOfWork()
+    privado = await _torneo(uow, Visibility.PRIVATE)
+
+    async def _prohibido(*_args, **_kwargs):
+        raise AssertionError("find_by_ids carga el agregado entero")
+
+    uow.competitions.find_by_ids = _prohibido
+
+    assert await TournamentVisibilityAdapter(uow).private_ids([privado]) == {privado}

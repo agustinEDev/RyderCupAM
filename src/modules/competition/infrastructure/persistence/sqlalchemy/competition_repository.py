@@ -28,8 +28,10 @@ from src.modules.competition.domain.value_objects.competition_name import (
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     competition_golf_courses_table,
+    competitions_table,
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -445,6 +447,17 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         # Ejecutar query
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def find_visibilities(
+        self, competition_ids: list[CompetitionId]
+    ) -> dict[CompetitionId, Visibility]:
+        """Solo el id y la visibilidad: sin el agregado ni sus `selectinload`."""
+        if not competition_ids:
+            return {}
+        tabla = competitions_table.c
+        stmt = select(tabla.id, tabla.visibility).where(tabla.id.in_(competition_ids))
+        result = await self._session.execute(stmt)
+        return {fila[0]: fila[1] for fila in result.all()}
 
     async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
         """Esas competiciones enteras, como `find_by_id`, en una sola consulta."""

@@ -31,6 +31,11 @@ class TournamentVisibilityAdapter(TournamentVisibilityInterface):
                 continue
         if not legibles:
             return set()
+        # Solo la visibilidad: el agregado entero cargaria todas sus relaciones
         async with self._competition_uow:
-            competiciones = await self._competition_uow.competitions.find_by_ids(legibles)
-        return {str(c.id.value) for c in competiciones if c.visibility != Visibility.PUBLIC}
+            visibilidades = await self._competition_uow.competitions.find_visibilities(legibles)
+        return {
+            str(competition_id.value)
+            for competition_id, visibilidad in visibilidades.items()
+            if visibilidad != Visibility.PUBLIC
+        }
