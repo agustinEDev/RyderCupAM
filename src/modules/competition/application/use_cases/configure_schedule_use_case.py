@@ -13,6 +13,10 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     ScheduleAlreadyInPlayError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas import comprobar_agenda
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -21,6 +25,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 from src.modules.competition.domain.services.schedule_format_service import ScheduleFormatService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.schedule_config_mode import ScheduleConfigMode
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -50,9 +55,12 @@ class ConfigureScheduleUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         schedule_format_service: ScheduleFormatService | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
+        """`actividad` olvida lo que Actividad guardaba de las sesiones sustituidas."""
         self._uow = uow
         self._format_service = schedule_format_service or ScheduleFormatService()
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: ConfigureScheduleRequestDTO, user_id: UserId, is_admin: bool = False
@@ -109,7 +117,7 @@ class ConfigureScheduleUseCase:
                 raise NoGolfCoursesError("La competición no tiene campos de golf asociados")
 
             # 5. Eliminar rondas existentes
-            await self._vaciar_la_agenda(competition_id)
+            borradas = await self._vaciar_la_agenda(competition_id)
 
             # 6. Generar rondas automáticamente
             total_sessions = request.total_sessions or 3
@@ -161,6 +169,11 @@ class ConfigureScheduleUseCase:
                     session_in_day = 0
                     current_date += timedelta(days=1)
 
+        # Ya guardado: Actividad olvida lo que tenia de las sesiones sustituidas
+        # (revision final de bugs, 22 oct 2026), como al borrar una suelta
+        for round_id in borradas:
+            await self._actividad.round_deleted(competition_id, round_id)
+
         return ConfigureScheduleResponseDTO(
             competition_id=request.competition_id,
             mode=ScheduleConfigMode.AUTOMATIC.value,
@@ -168,7 +181,7 @@ class ConfigureScheduleUseCase:
             message=f"Schedule generado con {rounds_created} rondas.",
         )
 
-    async def _vaciar_la_agenda(self, competition_id: CompetitionId) -> None:
+    async def _vaciar_la_agenda(self, competition_id: CompetitionId) -> list[RoundId]:
         """Borra las sesiones que hay, para sustituirlas por las nuevas.
 
         Las SUSTITUYE todas, así que con alguna ya con partidos no se hace: se
@@ -190,3 +203,4 @@ class ConfigureScheduleUseCase:
 
         if existing_rounds:
             await self._uow.flush()  # Forzar DELETE antes de INSERT (unique constraint)
+        return [r.id for r in existing_rounds]

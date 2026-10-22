@@ -2883,9 +2883,12 @@ def get_declare_walkover_use_case(
 
 def get_configure_schedule_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ConfigureScheduleUseCase:
-    """Proveedor del caso de uso ConfigureScheduleUseCase."""
-    return ConfigureScheduleUseCase(uow, schedule_format_service=ScheduleFormatService())
+    """Proveedor del caso de uso ConfigureScheduleUseCase (olvida en Actividad lo sustituido)."""
+    return ConfigureScheduleUseCase(
+        uow, schedule_format_service=ScheduleFormatService(), actividad=actividad
+    )
 
 
 def get_assign_teams_use_case(

@@ -194,3 +194,24 @@ async def test_deleting_the_round_forgets_its_withdrawn_notices(client: AsyncCli
     assert respuesta.status_code == 200, respuesta.text
 
     assert await _anotaciones_de_la_ronda(round_id) == 0
+
+
+async def test_replacing_the_schedule_forgets_its_withdrawn_notices(client: AsyncClient):
+    """Revision final de bugs (22 oct): la agenda automatica sustituye las sesiones."""
+    from tests.integration.api.v1.test_generate_matches_block import _fourball_de_uno_contra_uno
+
+    montaje = await _fourball_de_uno_contra_uno(client)
+    round_id = montaje["round_id"]
+    creador = montaje["creador"]
+    assert (
+        await _anotaciones_de_la_ronda(round_id, (creador["user"]["id"], montaje["comp_id"])) == 1
+    )
+
+    set_auth_cookies(client, creador["cookies"])
+    respuesta = await client.post(
+        f"/api/v1/competitions/{montaje['comp_id']}/schedule/configure",
+        json={"mode": "AUTOMATIC", "total_sessions": 2, "sessions_per_day": 2},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+
+    assert await _anotaciones_de_la_ronda(round_id) == 0

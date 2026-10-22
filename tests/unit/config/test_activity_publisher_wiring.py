@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from src.config.dependencies import (
     get_competition_activity_publisher,
+    get_configure_schedule_use_case,
     get_delete_round_use_case,
 )
 
@@ -30,5 +31,13 @@ def test_deleting_a_round_tells_activity():
     actividad = object()
 
     caso = get_delete_round_use_case(uow=object(), actividad=actividad)  # type: ignore[arg-type]
+
+    assert caso._actividad._publisher is actividad
+
+
+def test_replacing_the_schedule_tells_activity():
+    actividad = object()
+
+    caso = get_configure_schedule_use_case(uow=object(), actividad=actividad)  # type: ignore[arg-type]
 
     assert caso._actividad._publisher is actividad
