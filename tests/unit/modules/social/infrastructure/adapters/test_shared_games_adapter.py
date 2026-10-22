@@ -23,7 +23,7 @@ Las partidas que dos jugadores terminaron juntos, y quien gano cada una (BE-3).
 | Jugadores y campos en bloque (caso 19)                   | Sin una consulta por partida     |
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -115,9 +115,12 @@ class _Mundo:
             await self.users.users.save(user)
         return user
 
-    async def campo(self, creador: User, nombre: str = "El Saler") -> GolfCourse:
+    async def campo(
+        self, creador: User, nombre: str = "El Saler", timezone: str | None = None
+    ) -> GolfCourse:
         """Par 72: 18 hoyos de par 4, indice 1 a 18."""
         course = GolfCourse.create(
+            timezone=timezone,
             name=nombre,
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
@@ -208,12 +211,13 @@ class _Mundo:
         competition: Competition,
         course: GolfCourse,
         match_format: MatchFormat = MatchFormat.SINGLES,
+        session_type: SessionType = SessionType.MORNING,
     ) -> Round:
         round_ = Round.create(
             competition_id=competition.id,
             golf_course_id=course.id,
             round_date=DIA,
-            session_type=SessionType.MORNING,
+            session_type=session_type,
             match_format=match_format,
         )
         async with self.comp:
@@ -1029,6 +1033,66 @@ class _Contador:
             return await original(*args, **kwargs)
 
         setattr(objeto, nombre, contado)
+
+
+class TestElInstanteDeCadaPartida:
+    """
+    Revision del 22 oct: el instante ordena las del mismo dia. En UTC y sin
+    zona, la misma escala para las tres fuentes.
+    """
+
+    async def test_la_partida_rapida_lleva_su_hora_de_creacion(self, mundo):
+        """Se juegan del tiron: la hora de creacion es la del juego."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        match = await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+        match._created_at = datetime(2026, 9, 1, 17, 45)
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.played_at == datetime(2026, 9, 1, 17, 45)
+
+    @pytest.mark.parametrize(
+        ("sesion", "hora_utc"),
+        [(SessionType.MORNING, 4), (SessionType.AFTERNOON, 10), (SessionType.EVENING, 16)],
+    )
+    async def test_un_partido_de_torneo_lleva_la_hora_de_su_sesion_en_utc(
+        self, mundo, sesion, hora_utc
+    ):
+        """
+        Given una ronda en un campo de Madrid (UTC+2 en septiembre) / Then el
+        instante es la hora de su sesion (6, 12 o 18 locales) pasada a UTC.
+        """
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo, timezone="Europe/Madrid")
+        competition = await mundo.competicion(yo)
+        round_ = await mundo.ronda(competition, course, session_type=sesion)
+        await mundo.partido(round_, [yo], [el])
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.played_at == datetime.combine(DIA, time(hora_utc))
+
+    async def test_un_grupo_sin_zona_conocida_lleva_la_hora_local_de_su_sesion(self, mundo):
+        """Sin zona del campo no hay conversion: la hora local de la sesion, tal cual."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        competition = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        round_ = await mundo.ronda(competition, course, session_type=SessionType.AFTERNOON)
+        await mundo.grupo(competition, round_, {yo: [4] * 18, el: [4] * 18})
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.played_at == datetime.combine(DIA, time(12))
 
 
 class TestSinUnaConsultaPorPartida:

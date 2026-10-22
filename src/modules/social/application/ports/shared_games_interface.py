@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 
 from src.modules.social.domain.services.head_to_head import Outcome, Relation
@@ -25,6 +25,10 @@ class SharedGame:
     `outcome` es None cuando no cuenta para el cara a cara (sin resultado, o
     una tarjeta a medias), aunque si salga en «Partidas juntos».
     `game_id` es el id de la partida rapida, del partido o del grupo.
+
+    `played_at` es el instante en que se jugo, en UTC y sin zona: ordena las
+    del mismo dia. None si no se sabe; entonces cuenta como el principio del
+    dia.
     """
 
     kind: SharedGameKind
@@ -37,6 +41,7 @@ class SharedGame:
     outcome: Outcome | None
     competition_id: str | None = None
     competition_name: str | None = None
+    played_at: datetime | None = None
 
 
 class SharedGamesInterface(ABC):

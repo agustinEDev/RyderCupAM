@@ -5,7 +5,7 @@ Vive aparte porque lo comparten el perfil (cara a cara y primera pagina) y el
 «ver mas» de las partidas juntos: los dos tienen que ordenar y paginar igual.
 """
 
-from datetime import date
+from datetime import date, datetime, time
 from uuid import UUID
 
 from src.modules.social.application.dto.head_to_head_dto import (
@@ -14,6 +14,7 @@ from src.modules.social.application.dto.head_to_head_dto import (
     HeadToHeadDTO,
     HeadToHeadRecordDTO,
 )
+from src.modules.social.application.feed_cursor import parse_instant
 from src.modules.social.application.ports.shared_games_interface import (
     SharedGame,
     SharedGameKind,
@@ -22,6 +23,9 @@ from src.modules.social.domain.services.head_to_head import Record, tally
 
 # La fecha en ISO no contiene '|', asi que parte el cursor sin ambiguedad
 CURSOR_SEPARATOR = "|"
+
+# Dia, instante e id
+_PARTES_DEL_CURSOR = 3
 
 # De 5 en 5, con «ver mas» (tabla aprobada del 22 oct)
 GAMES_PAGE_SIZE = 5
@@ -43,9 +47,10 @@ def page_of(
     """
     Una pagina, de la mas reciente a la mas antigua, a partir del cursor.
 
-    Se ordena por fecha y, dentro del mismo dia, por id: dos partidas del mismo
-    dia no se pierden ni se repiten entre paginas. Un cursor corrupto da la
-    primera pagina, como el del feed.
+    Se ordena por dia, dentro del dia por el instante en que se jugo y, a la
+    misma hora, por id: el id solo desempata, asi que dos partidas del mismo
+    dia salen por su hora y ninguna se pierde ni se repite entre paginas. Un
+    cursor corrupto da la primera pagina, como el del feed.
     """
     ordenadas = sorted(games, key=_clave, reverse=True)
     desde = _parse_cursor(cursor)
@@ -60,25 +65,42 @@ def page_of(
     )
 
 
-def _clave(game: SharedGame) -> tuple[str, str]:
-    return game.played_on.isoformat(), game.game_id
+def _clave(game: SharedGame) -> tuple[date, datetime, str]:
+    """
+    Dia, instante e id. El dia va primero aunque el instante ya lo lleve: el
+    instante esta en UTC y el dia es el del campo, y la lista no puede pintar
+    un dia antes que el siguiente. Sin instante conocido, el principio del dia.
+    """
+    instante = game.played_at or datetime.combine(game.played_on, time.min)
+    return game.played_on, instante, game.game_id
 
 
 def _build_cursor(game: SharedGame) -> str:
-    fecha, game_id = _clave(game)
-    return f"{fecha}{CURSOR_SEPARATOR}{game_id}"
+    dia, instante, game_id = _clave(game)
+    return CURSOR_SEPARATOR.join((dia.isoformat(), instante.isoformat(), game_id))
 
 
-def _parse_cursor(cursor: str | None) -> tuple[str, str] | None:
-    if not cursor or CURSOR_SEPARATOR not in cursor:
+def _parse_cursor(cursor: str | None) -> tuple[date, datetime, str] | None:
+    """
+    El cursor de vuelta, o None si no vale. El instante se lee como el del
+    feed: una fecha que se sale del calendario al pasarla a UTC no tumba la
+    peticion, cuenta como corrupta.
+    """
+    if not cursor:
         return None
-    fecha, game_id = cursor.split(CURSOR_SEPARATOR, 1)
+    partes = cursor.split(CURSOR_SEPARATOR)
+    if len(partes) != _PARTES_DEL_CURSOR:
+        return None
+    dia_raw, instante_raw, game_id = partes
+    instante = parse_instant(instante_raw)
+    if instante is None:
+        return None
     try:
-        date.fromisoformat(fecha)
+        dia = date.fromisoformat(dia_raw)
         UUID(game_id)
     except ValueError:
         return None
-    return fecha, game_id
+    return dia, instante, game_id
 
 
 def _record(record: Record | None) -> HeadToHeadRecordDTO | None:
