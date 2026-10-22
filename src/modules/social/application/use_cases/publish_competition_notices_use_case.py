@@ -51,6 +51,10 @@ _PARTIDO = "MATCH"
 # Lo que dice `Match.result["winner"]`
 _EMPATE = "HALVED"
 
+# La clasificacion final de una Ryder: una variante de TOURNAMENT_FINAL_STANDING
+# (tabla del 22 oct 2026, I) con este `tournament_type`
+_RYDER_CUP = "RYDER_CUP"
+
 
 @dataclass(frozen=True)
 class TournamentRef:
@@ -93,6 +97,18 @@ class TeeTimeRef:
     out_of_play: bool = False
 
 
+def _desenlace(result: "RyderResultRef", bando: str) -> str:
+    """WON, LOST o HALVED del equipo `bando` ("A" o "B") por los puntos."""
+    mios, suyos = (
+        (result.team_a_points, result.team_b_points)
+        if bando == "A"
+        else (result.team_b_points, result.team_a_points)
+    )
+    if mios == suyos:
+        return "HALVED"
+    return "WON" if mios > suyos else "LOST"
+
+
 def _misma_salida(payload: dict, salida: TeeTimeRef) -> bool:
     """
     Si lo publicado cuenta la misma salida: dia, sesion, hora, compañeros y
@@ -117,6 +133,21 @@ class StandingRef:
     tied: bool
     value: int | None
     status: str
+
+
+@dataclass(frozen=True)
+class RyderResultRef:
+    """
+    El marcador final de una Ryder, tal cual lo da su leaderboard oficial, y
+    quien jugo en cada equipo. A es el equipo 1 (`team_1_name`), B el 2.
+    """
+
+    team_a_name: str
+    team_b_name: str
+    team_a_points: float
+    team_b_points: float
+    team_a: tuple[UserId, ...]
+    team_b: tuple[UserId, ...]
 
 
 class PublishCompetitionNoticesUseCase:
@@ -330,6 +361,43 @@ class PublishCompetitionNoticesUseCase:
                 )
                 for fila in rows
             ],
+        )
+
+    async def ryder_final_result(self, tournament: TournamentRef, result: RyderResultRef) -> None:
+        """
+        La clasificacion final de una Ryder (tabla del 22 oct 2026, I): a cada
+        jugador, si su equipo gano, perdio o empato y con que puntos («tu
+        equipo (Europa) gano 15½-12½»).
+
+        **Es TOURNAMENT_FINAL_STANDING con `tournament_type: RYDER_CUP`**, no un
+        tipo nuevo: es la misma noticia («como acabo el torneo»), es SELF como
+        la de stroke play, y asi reabrir (`reopened`), borrar el torneo y la
+        clave unica (jugador, torneo, tipo) la tratan igual sin tocar nada.
+        Sustituye lo publicado, como la de stroke play.
+        """
+        terminado = datetime.combine(tournament.end_date, _MEDIODIA_UTC)
+        eventos = [
+            ActivityEvent.create(
+                user_id=user_id,
+                type=ActivityEventType.TOURNAMENT_FINAL_STANDING,
+                occurred_at=terminado,
+                source_match_id=tournament.competition_id,
+                payload={
+                    **self._del_torneo(tournament),
+                    "tournament_type": _RYDER_CUP,
+                    "team_a_name": result.team_a_name,
+                    "team_b_name": result.team_b_name,
+                    "team_a_points": result.team_a_points,
+                    "team_b_points": result.team_b_points,
+                    "my_team": bando,
+                    "outcome": _desenlace(result, bando),
+                },
+            )
+            for bando, suyos in (("A", result.team_a), ("B", result.team_b))
+            for user_id in suyos
+        ]
+        await self._sustituir(
+            tournament.competition_id, ActivityEventType.TOURNAMENT_FINAL_STANDING, eventos
         )
 
     async def reopened(self, competition_id: str) -> None:

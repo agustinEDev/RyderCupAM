@@ -24,6 +24,7 @@ from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
     MatchOutcome,
     PublishCompetitionNoticesUseCase,
+    RyderResultRef,
     StandingRef,
     TeeTimeRef,
     TournamentRef,
@@ -37,6 +38,12 @@ class OfficialStandings(Protocol):
     async def execute(self, competition_id: UUID, categoria: int | None = None): ...
 
 
+class RyderScoreboard(Protocol):
+    """El leaderboard oficial de una Ryder (`GetLeaderboardUseCase`)."""
+
+    async def execute(self, competition_id_str: str): ...
+
+
 class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
     """
     Une `competition` con Actividad sin que ninguno importe al otro: el mismo
@@ -45,8 +52,9 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
 
     **La clasificacion final sale de la general oficial**, la misma que ve
     cualquiera en la ficha del torneo, y no se recalcula: se le pide y se pasa
-    tal cual. Solo la tiene un stroke play; una Ryder se juega por equipos y no
-    tiene puesto individual que contar.
+    tal cual. **La de una Ryder sale de su leaderboard oficial** (tabla del 22
+    oct 2026, I): los mismos puntos que ve cualquiera, sin otra cuenta; los
+    equipos, de la asignacion de equipos mas quien jugo algun partido.
     """
 
     def __init__(
@@ -54,9 +62,11 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         notices: PublishCompetitionNoticesUseCase,
         standings: OfficialStandings,
         competition_uow: CompetitionUnitOfWorkInterface,
+        ryder_scoreboard: RyderScoreboard | None = None,
     ):
         self._notices = notices
         self._standings = standings
+        self._ryder_scoreboard = ryder_scoreboard
         # Para releer la inscripcion justo antes de avisar de ella
         self._competition_uow = competition_uow
 
@@ -138,6 +148,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
 
     async def completed(self, competition: Competition) -> None:
         if competition.stroke_play is None:
+            await self._ryder_completed(competition)
             return
         general = await self._standings.execute(competition.id.value, None)
         await self._notices.final_standings(
@@ -153,6 +164,40 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
                 )
                 for fila in general.rows
             ],
+        )
+
+    async def _ryder_completed(self, competition: Competition) -> None:
+        """El marcador del leaderboard oficial y quien jugo en cada equipo."""
+        if self._ryder_scoreboard is None:
+            return
+        marcador = await self._ryder_scoreboard.execute(str(competition.id.value))
+        async with self._competition_uow:
+            asignacion = await self._competition_uow.team_assignments.find_by_competition(
+                competition.id
+            )
+        equipo_a = list(asignacion.team_a_player_ids) if asignacion else []
+        equipo_b = list(asignacion.team_b_player_ids) if asignacion else []
+        # Quien jugo un partido sin estar en la asignacion (un cambio de
+        # jugador) tambien acabo el torneo con su equipo
+        for partido in marcador.matches:
+            for jugadores, equipo in (
+                (partido.team_a_players, equipo_a),
+                (partido.team_b_players, equipo_b),
+            ):
+                for jugador in jugadores:
+                    user_id = UserId(jugador.user_id)
+                    if user_id not in equipo_a and user_id not in equipo_b:
+                        equipo.append(user_id)
+        await self._notices.ryder_final_result(
+            _ref(competition),
+            RyderResultRef(
+                team_a_name=marcador.team_a_name,
+                team_b_name=marcador.team_b_name,
+                team_a_points=marcador.team_a_points,
+                team_b_points=marcador.team_b_points,
+                team_a=tuple(equipo_a),
+                team_b=tuple(equipo_b),
+            ),
         )
 
     async def reopened(self, competition_id: CompetitionId) -> None:

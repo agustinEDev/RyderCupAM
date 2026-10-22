@@ -1857,12 +1857,14 @@ def get_competition_activity_publisher(
     Proveedor del adaptador que lleva a Actividad lo de `competition` (BE-2).
 
     Con la general oficial a mano: la clasificacion final de cada uno sale de
-    ella, no de otra cuenta. Todo sobre la sesion propia de Actividad.
+    ella, no de otra cuenta; la de una Ryder, de su leaderboard oficial (I).
+    Todo sobre la sesion propia de Actividad.
     """
     return CompetitionActivityPublisher(
         notices,
         ClasificacionGeneralUseCase(uow=uows.competition, user_repository=uows.user.users),
         uows.competition,
+        ryder_scoreboard=GetLeaderboardUseCase(uows.competition, uows.user.users, ScoringService()),
     )
 
 
