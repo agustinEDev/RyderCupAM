@@ -18,6 +18,7 @@ from sqlalchemy import (
     or_,
     select,
     table,
+    text,
     tuple_,
     update,
 )
@@ -277,8 +278,50 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 
+    async def lock_scope(self, scope_id: str) -> None:
+        """
+        `pg_advisory_xact_lock`: lo suelta el propio Postgres al acabar la
+        transaccion, pase lo que pase. La clave lleva un prefijo para no
+        chocar con otros candados por id.
+        """
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
+            {"clave": f"activity-scope:{scope_id}"},
+        )
+
+    async def find_from_source(
+        self, source_id: str, types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        if not types:
+            return []
+        stmt = select(ActivityEvent).where(
+            activity_events_table.c.source_match_id == source_id,
+            activity_events_table.c.type.in_(sorted(types)),
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete_from_source_for_users(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_ids: Collection[UserId],
+    ) -> int:
+        if not types or not user_ids:
+            return 0
+        stmt = delete(activity_events_table).where(
+            activity_events_table.c.source_match_id == source_id,
+            activity_events_table.c.type.in_(sorted(types)),
+            activity_events_table.c.user_id.in_(list(user_ids)),
+        )
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
+
     async def delete_for_competition(
-        self, competition_id: str, types: Collection[ActivityEventType]
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
     ) -> int:
         if not types:
             return 0
@@ -286,6 +329,8 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             activity_events_table.c.payload["competition_id"].astext == competition_id,
             activity_events_table.c.type.in_(sorted(types)),
         )
+        if user_id is not None:
+            stmt = stmt.where(activity_events_table.c.user_id == user_id)
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 

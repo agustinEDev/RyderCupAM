@@ -61,6 +61,8 @@ SOLO_EL_AUTOR = [
     ActivityEventType.TOURNAMENT_FINAL_STANDING,
     # Tabla del 22 oct 2026, C: «ya estás inscrito», solo tuyo
     ActivityEventType.ENROLLMENT_CONFIRMED,
+    # G6: tu salida o tu partido, solo tuyo
+    ActivityEventType.TEE_TIME_ASSIGNED,
 ]
 
 

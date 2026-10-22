@@ -3,7 +3,7 @@ import os
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -2076,10 +2076,13 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
 def get_coger_plaza_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CogerPlazaUseCase:
-    """Coger plaza en una franja de stroke play (#251)."""
+    """Coger plaza en una franja de stroke play (#251); quien deja una pierde su aviso de salida."""
     return CogerPlazaUseCase(
-        uow, zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        actividad=actividad,
     )
 
 
@@ -2162,12 +2165,14 @@ def get_marcar_no_presentado_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MarcarNoPresentadoUseCase:
-    """El organizador marca a alguien como no presentado (#251)."""
+    """El organizador marca a alguien como no presentado (#251); avisa a quien se recoloca (G3)."""
     return MarcarNoPresentadoUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 
@@ -2276,6 +2281,7 @@ def get_generar_partidas_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GenerarPartidasUseCase:
     """Generar las partidas de una franja (#251): el campo da barras y zona horaria."""
     return GenerarPartidasUseCase(
@@ -2284,6 +2290,7 @@ def get_generar_partidas_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2292,6 +2299,7 @@ def get_mover_jugador_de_partida_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MoverJugadorUseCase:
     """Mover a un jugador de partida (#251): quien no tenía, saca su foto con el campo."""
     return MoverJugadorUseCase(
@@ -2300,6 +2308,7 @@ def get_mover_jugador_de_partida_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2311,13 +2320,15 @@ def _de_las_partidas(
     uow: CompetitionUnitOfWorkInterface,
     gc_uow: GolfCourseUnitOfWorkInterface,
     user_uow: UserUnitOfWorkInterface,
+    **extra: Any,
 ) -> T:
-    """Los que solo necesitan la zona del campo y los nombres (#251)."""
+    """Los que solo necesitan la zona del campo y los nombres (#251); `extra`, lo de cada uno."""
     return caso_de_uso(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
+        **extra,
     )
 
 
@@ -2325,9 +2336,10 @@ def get_reordenar_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ReordenarPartidasUseCase:
-    """Reordenar las partidas de una franja (#251)."""
-    return _de_las_partidas(ReordenarPartidasUseCase, uow, gc_uow, user_uow)
+    """Reordenar las partidas de una franja (#251): avisa a quien cambia de hora (G3)."""
+    return _de_las_partidas(ReordenarPartidasUseCase, uow, gc_uow, user_uow, actividad=actividad)
 
 
 def get_cambiar_marcadores_use_case(
@@ -2343,9 +2355,10 @@ def get_borrar_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> BorrarPartidasUseCase:
     """Borrar las partidas de una franja (#251)."""
-    return _de_las_partidas(BorrarPartidasUseCase, uow, gc_uow, user_uow)
+    return _de_las_partidas(BorrarPartidasUseCase, uow, gc_uow, user_uow, actividad=actividad)
 
 
 def get_ver_partidas_use_case(
@@ -2580,6 +2593,7 @@ def get_revert_competition_to_in_progress_use_case(
 def get_reopen_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ReopenEnrollmentsUseCase:
     """
     Proveedor del caso de uso ReopenEnrollmentsUseCase.
@@ -2593,6 +2607,7 @@ def get_reopen_enrollments_use_case(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2752,6 +2767,7 @@ def get_update_round_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> UpdateRoundUseCase:
     """Proveedor del caso de uso UpdateRoundUseCase: con el campo, rehace las partidas (#251)."""
     return UpdateRoundUseCase(
@@ -2759,6 +2775,7 @@ def get_update_round_use_case(
         jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 
@@ -2774,6 +2791,7 @@ def get_get_schedule_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GetScheduleUseCase:
     """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse).
 
@@ -2787,7 +2805,7 @@ def get_get_schedule_use_case(
             uow,
             user_uow.users,
             timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-            generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+            generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
         ),
     )
 
@@ -2859,7 +2877,7 @@ def get_make_draft_pick_use_case(
 
 
 def _construir_generador(
-    uow, gc_uow, user_uow, scoring_service, handicap_service=None
+    uow, gc_uow, user_uow, scoring_service, handicap_service=None, actividad=None
 ) -> GenerateMatchesUseCase:
     """El unico sitio que monta GenerateMatchesUseCase.
 
@@ -2874,10 +2892,13 @@ def _construir_generador(
         handicap_calculator=PlayingHandicapCalculator(),
         scoring_service=scoring_service,
         handicap_service=handicap_service,
+        actividad=actividad,
     )
 
 
-def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatchesUseCase:
+def _generador_al_abrir(
+    uow, gc_uow, user_uow, scoring_service, actividad=None
+) -> GenerateMatchesUseCase:
     """Lo que crea los partidos al abrirse los sobres (BE #361).
 
     Sobre la MISMA Unit of Work que el caso de uso de los sobres: abrirlos y
@@ -2885,7 +2906,7 @@ def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatch
     abrir no se pregunta a la RFEG, que seria una llamada de red por jugador
     dentro de la lectura de la pantalla.
     """
-    return _construir_generador(uow, gc_uow, user_uow, scoring_service)
+    return _construir_generador(uow, gc_uow, user_uow, scoring_service, actividad=actividad)
 
 
 def get_list_my_sessions_without_matches_use_case(
@@ -2900,6 +2921,7 @@ def get_submit_envelope_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SubmitEnvelopeUseCase:
     """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655).
 
@@ -2910,7 +2932,7 @@ def get_submit_envelope_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
     )
 
 
@@ -2919,6 +2941,7 @@ def get_envelopes_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GetEnvelopesUseCase:
     """Proveedor del caso de uso GetEnvelopesUseCase (FE #655).
 
@@ -2929,7 +2952,7 @@ def get_envelopes_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
     )
 
 
@@ -2938,6 +2961,7 @@ def get_reveal_envelopes_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> RevealEnvelopesUseCase:
     """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655).
 
@@ -2952,7 +2976,7 @@ def get_reveal_envelopes_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
     )
 
 
@@ -2975,13 +2999,14 @@ def get_list_my_pending_envelopes_use_case(
 def get_reset_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ResetEnvelopesUseCase:
     """Proveedor del caso de uso ResetEnvelopesUseCase (FE #655).
 
     Sin zona horaria: rehacer los sobres no mira ningun reloj, solo que no se
     haya jugado nada de esa sesion.
     """
-    return ResetEnvelopesUseCase(uow, user_uow.users)
+    return ResetEnvelopesUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_generate_matches_use_case(
@@ -2990,9 +3015,10 @@ def get_generate_matches_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GenerateMatchesUseCase:
     """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
-    return _construir_generador(uow, gc_uow, user_uow, scoring_service, handicap_service)
+    return _construir_generador(uow, gc_uow, user_uow, scoring_service, handicap_service, actividad)
 
 
 def get_reassign_match_players_use_case(
@@ -3000,6 +3026,7 @@ def get_reassign_match_players_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ReassignMatchPlayersUseCase:
     """Proveedor del caso de uso ReassignMatchPlayersUseCase (cross-module: Competition + GolfCourse + User)."""
     return ReassignMatchPlayersUseCase(
@@ -3008,6 +3035,7 @@ def get_reassign_match_players_use_case(
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
         scoring_service=scoring_service,
+        actividad=actividad,
     )
 
 

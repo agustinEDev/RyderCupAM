@@ -4,24 +4,43 @@ traduce bien y que la clasificacion final sale de la general oficial, sin
 recalcularla.
 """
 
-from datetime import date
+from datetime import date, time
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.partida import Partida
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.visibility import Visibility
+from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
     MatchOutcome,
     StandingRef,
+    TeeTimeRef,
     TournamentRef,
 )
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
     CompetitionActivityPublisher,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.gender import Gender
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 pytestmark = pytest.mark.asyncio
 
@@ -90,12 +109,214 @@ def _ref(competicion, is_public=True) -> TournamentRef:
     )
 
 
+def _en_partido(user_id: UserId) -> MatchPlayer:
+    return MatchPlayer.create(
+        user_id=user_id,
+        playing_handicap=0,
+        tee_color=TeeColor.YELLOW,
+        tee_gender=Gender.MALE,
+        strokes_received=[],
+    )
+
+
+def _en_partida(user_id: UserId) -> JugadorDePartida:
+    return JugadorDePartida(
+        user_id=user_id,
+        handicap=Decimal("0"),
+        playing_handicap=0,
+        tee_color=TeeColor.YELLOW,
+        tee_gender=Gender.MALE,
+        golpes_por_hoyo=(0,) * 18,
+        par_por_hoyo=(4,) * 18,
+    )
+
+
+async def _inscritos(uow, competicion, jugadores, estado=EnrollmentStatus.APPROVED) -> None:
+    async with uow:
+        for jugador in jugadores:
+            await uow.enrollments.add(
+                Enrollment(
+                    id=EnrollmentId.generate(),
+                    competition_id=competicion.id,
+                    user_id=jugador,
+                    status=estado,
+                )
+            )
+
+
 @pytest.fixture
 def avisos():
     return _Avisos()
 
 
 class TestTraduccion:
+    async def test_g_las_salidas_se_releen_de_la_ronda(self, avisos):
+        """
+        G3. No publica la foto que trae la accion: le da al caso de uso como
+        releer la ronda, que lo hace con el candado puesto. La hora va
+        «HH:MM», el partido por su id, la sesion por su nombre.
+        """
+        competicion = _competicion()
+        uow = InMemoryUnitOfWork()
+        yo, pedro, juan, luis = (UserId(uuid4()) for _ in range(4))
+        sesion = Round.create(
+            competition_id=competicion.id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2027, 3, 3),
+            session_type=SessionType.AFTERNOON,
+            match_format=MatchFormat.FOURBALL,
+        )
+        partido = Match.create(
+            round_id=sesion.id,
+            match_number=1,
+            team_a_players=[_en_partido(yo), _en_partido(pedro)],
+            team_b_players=[_en_partido(juan), _en_partido(luis)],
+        )
+        async with uow:
+            await uow.rounds.add(sesion)
+            await uow.matches.add(partido)
+        await _inscritos(uow, competicion, [yo, pedro, juan, luis])
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
+
+        # Lo que trae la accion no cuenta: puede ser viejo
+        await adaptador.tee_times(competicion, sesion.id, [], [UserId(uuid4())])
+
+        ((nombre, (torneo, ronda, releer), _),) = avisos.llamadas
+        assert (nombre, torneo, ronda) == ("tee_times", _ref(competicion), str(sesion.id.value))
+        assert sorted(await releer(), key=lambda r: str(r.user_id)) == sorted(
+            [
+                TeeTimeRef(
+                    user_id=yo,
+                    round_date=date(2027, 3, 3),
+                    session_type="AFTERNOON",
+                    tee_time=None,
+                    partner_ids=(pedro,),
+                    opponent_ids=(juan, luis),
+                    match_id=str(partido.id.value),
+                ),
+                TeeTimeRef(
+                    user_id=pedro,
+                    round_date=date(2027, 3, 3),
+                    session_type="AFTERNOON",
+                    tee_time=None,
+                    partner_ids=(yo,),
+                    opponent_ids=(juan, luis),
+                    match_id=str(partido.id.value),
+                ),
+                TeeTimeRef(
+                    user_id=juan,
+                    round_date=date(2027, 3, 3),
+                    session_type="AFTERNOON",
+                    tee_time=None,
+                    partner_ids=(luis,),
+                    opponent_ids=(yo, pedro),
+                    match_id=str(partido.id.value),
+                ),
+                TeeTimeRef(
+                    user_id=luis,
+                    round_date=date(2027, 3, 3),
+                    session_type="AFTERNOON",
+                    tee_time=None,
+                    partner_ids=(juan,),
+                    opponent_ids=(yo, pedro),
+                    match_id=str(partido.id.value),
+                ),
+            ],
+            key=lambda r: str(r.user_id),
+        )
+
+    async def test_g_la_hora_de_stroke_play_va_hh_mm(self, avisos):
+        competicion = _competicion()
+        uow = InMemoryUnitOfWork()
+        yo, pedro = UserId(uuid4()), UserId(uuid4())
+        franja = Round.create_franja(
+            competition_id=competicion.id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2027, 3, 3),
+            session_type=SessionType.MORNING,
+            hoja_de_salidas=HojaDeSalidas(time(9, 0), time(10, 0), 5, 4),
+        )
+        async with uow:
+            await uow.rounds.add(franja)
+            await uow.partidas.anadir(
+                [Partida.crear(competicion.id, franja.id, 2, [_en_partida(yo), _en_partida(pedro)])]
+            )
+        await _inscritos(uow, competicion, [yo, pedro])
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
+
+        await adaptador.tee_times(competicion, franja.id, [], [])
+
+        ((_, (_, _, releer), _),) = avisos.llamadas
+        assert [
+            (r.tee_time, r.partner_ids, r.match_id) for r in await releer() if r.user_id == yo
+        ] == [("09:05", (pedro,), None)]
+
+    async def test_g_quien_ya_no_esta_inscrito_no_tiene_salida(self, avisos):
+        """
+        Revision final del 22 oct: quien se dio de baja sigue en su partido
+        hasta que lo reasignen, pero no recupera su aviso.
+        """
+        competicion = _competicion()
+        uow = InMemoryUnitOfWork()
+        yo, baja = UserId(uuid4()), UserId(uuid4())
+        sesion = Round.create(
+            competition_id=competicion.id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2027, 3, 3),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        async with uow:
+            await uow.rounds.add(sesion)
+            await uow.matches.add(
+                Match.create(
+                    round_id=sesion.id,
+                    match_number=1,
+                    team_a_players=[_en_partido(yo)],
+                    team_b_players=[_en_partido(baja)],
+                )
+            )
+        await _inscritos(uow, competicion, [yo])
+        await _inscritos(uow, competicion, [baja], EnrollmentStatus.WITHDRAWN)
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
+
+        await adaptador.tee_times(competicion, sesion.id, [], [])
+
+        ((_, (_, _, releer), _),) = avisos.llamadas
+        assert [r.user_id for r in await releer()] == [yo]
+
+    async def test_g_el_no_presentado_va_fuera_de_juego(self, avisos):
+        competicion = _competicion()
+        uow = InMemoryUnitOfWork()
+        falta, yo = UserId(uuid4()), UserId(uuid4())
+        franja = Round.create_franja(
+            competition_id=competicion.id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2027, 3, 3),
+            session_type=SessionType.MORNING,
+            hoja_de_salidas=HojaDeSalidas(time(9, 0), time(10, 0), 5, 4),
+        )
+        partida = Partida.crear(competicion.id, franja.id, 1, [_en_partida(falta), _en_partida(yo)])
+        partida.no_presentado(falta, [])
+        async with uow:
+            await uow.rounds.add(franja)
+            await uow.partidas.anadir([partida])
+        await _inscritos(uow, competicion, [falta, yo])
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
+
+        await adaptador.tee_times(competicion, franja.id, [], [])
+
+        ((_, (_, _, releer), _),) = avisos.llamadas
+        assert {r.user_id: r.out_of_play for r in await releer()} == {falta: True, yo: False}
+
+    async def test_g_una_ronda_que_ya_no_existe_no_tiene_salidas(self, avisos):
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), InMemoryUnitOfWork())
+
+        await adaptador.tee_times(_competicion(), RoundId.generate(), [], [])
+
+        ((_, (_, _, releer), _),) = avisos.llamadas
+        assert await releer() == []
+
     async def test_inscrito_en_un_publico(self, avisos):
         competicion = _competicion()
         inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))

@@ -2,6 +2,8 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date, time
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -9,7 +11,47 @@ from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.user.domain.value_objects.user_id import UserId
+
+
+@dataclass(frozen=True)
+class TeeTimeAssignment:
+    """
+    La salida de un jugador en una ronda: cuando sale y con quien (G1-G3).
+
+    En stroke play, la hora de su partida y sus compañeros de grupo; en una
+    Ryder, el partido —sin hora: la sesion es mañana, tarde o noche—, con su
+    compañero si lo hay y sus rivales.
+
+    `changed` dice si sustituye a una salida que ya tenia en esa ronda.
+    `out_of_play`: no se presento o se retiro; sigue en su grupo, que es el
+    asignado, pero su aviso no se toca ni se le manda otro.
+    `match_id` no cuenta para saber si cambio: regenerar los mismos
+    emparejamientos crea partidos nuevos y, para el jugador, nada cambia.
+    """
+
+    user_id: UserId
+    round_date: date
+    session_type: SessionType
+    tee_time: time | None
+    partner_ids: tuple[UserId, ...]
+    opponent_ids: tuple[UserId, ...]
+    match_id: MatchId | None = None
+    changed: bool = False
+    out_of_play: bool = False
+
+    def same_slot_as(self, other: "TeeTimeAssignment") -> bool:
+        """Si para el jugador es la misma salida: dia, sesion, hora, compañeros y rivales."""
+        return (
+            self.round_date == other.round_date
+            and self.session_type == other.session_type
+            and self.tee_time == other.tee_time
+            and set(self.partner_ids) == set(other.partner_ids)
+            and set(self.opponent_ids) == set(other.opponent_ids)
+        )
 
 
 class CompetitionActivityPublisherInterface(ABC):
@@ -84,3 +126,22 @@ class CompetitionActivityPublisherInterface(ABC):
     @abstractmethod
     async def deleted(self, competition_id: CompetitionId) -> None:
         """La competicion se borra."""
+
+    @abstractmethod
+    async def tee_times(
+        self,
+        competition: Competition,
+        round_id: RoundId,
+        assigned: Sequence[TeeTimeAssignment],
+        withdrawn: Sequence[UserId],
+    ) -> None:
+        """
+        Las salidas de una ronda cambiaron (G1-G4): `assigned`, las nuevas o
+        cambiadas segun esta accion; `withdrawn`, quienes se quedan sin salida
+        en ella. Se llama solo si a alguien le cambia algo.
+
+        Quien publica no tiene por que fiarse de esa foto: las publicaciones van
+        tras su commit y sin orden garantizado, y la de una accion vieja puede
+        llegar la ultima. El adaptador de Actividad relee la ronda con ella
+        bloqueada y compara con lo ya publicado (revision del 22 oct 2026).
+        """

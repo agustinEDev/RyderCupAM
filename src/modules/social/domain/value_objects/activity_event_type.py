@@ -41,6 +41,8 @@ class ActivityEventType(StrEnum):
     # «Ya estás inscrito»: entraste sin solicitud, aceptando una invitacion o
     # inscrito por el organizador (tabla del 22 oct 2026, C)
     ENROLLMENT_CONFIRMED = "ENROLLMENT_CONFIRMED"
+    # Tu salida o tu partido en una ronda de torneo (G, tabla del 22 oct 2026)
+    TEE_TIME_ASSIGNED = "TEE_TIME_ASSIGNED"
 
     @property
     def is_achievement(self) -> bool:

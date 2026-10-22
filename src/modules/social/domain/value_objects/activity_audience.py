@@ -53,6 +53,8 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.ENROLLED_IN_TOURNAMENT: ActivityAudience.FRIENDS,
     # Como acabo cada uno la partida rapida: uno se ve y le ven sus amigos
     ActivityEventType.QUICK_MATCH_FINISHED: ActivityAudience.BOTH,
+    # Tu salida o tu partido: asunto tuyo, aunque el torneo sea publico (G6)
+    ActivityEventType.TEE_TIME_ASSIGNED: ActivityAudience.SELF,
 }
 
 

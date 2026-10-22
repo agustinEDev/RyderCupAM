@@ -198,6 +198,16 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def deleted(self, competition_id):
         self.avisos.append(("deleted", competition_id))
 
+    async def tee_times(self, competition, round_id, assigned, withdrawn):
+        self.avisos.append(
+            (
+                "tee_times",
+                round_id,
+                sorted((str(s.user_id), s.changed) for s in assigned),
+                sorted(str(u) for u in withdrawn),
+            )
+        )
+
 
 class _Roto(CompetitionActivityPublisherInterface):
     """El feed caido: cualquier aviso revienta."""
@@ -208,7 +218,7 @@ class _Roto(CompetitionActivityPublisherInterface):
     enrolled = left = cancelled = invited = invitation_withdrawn = _falla  # type: ignore[assignment]
     invitation_answered = invitations_closed = _falla  # type: ignore[assignment]
     requests_closed = request_rejected = match_finished = completed = reopened = _falla  # type: ignore[assignment]
-    made_private = deleted = _falla  # type: ignore[assignment]
+    made_private = deleted = tee_times = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture

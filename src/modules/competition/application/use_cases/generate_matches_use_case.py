@@ -15,6 +15,10 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopePairings,
@@ -25,6 +29,10 @@ from src.modules.competition.application.services.match_players_builder import (
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.refresco_rfeg import RefrescoRfeg
+from src.modules.competition.application.services.salidas_de_la_ronda import (
+    Salidas,
+    de_los_partidos,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -172,8 +180,18 @@ class GenerateMatchesUseCase:
         handicap_calculator: PlayingHandicapCalculator | None = None,
         scoring_service: ScoringService | None = None,
         handicap_service: HandicapService | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
+        """
+        Args:
+            actividad: Los avisos de partido en Actividad (G); sin el, no se avisa
+        """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
+        # Lo que hay que avisar cuando se guarde: generar va dentro de una
+        # transaccion que no es suya (la de abrir los sobres), y avisar antes
+        # de confirmarla seria contar partidos que aun pueden deshacerse
+        self._salidas_por_avisar: list[tuple[Competition, RoundId, Salidas, Salidas]] = []
         self._gc_repo = golf_course_repository
         self._user_repo = user_repository
         self._calculator = handicap_calculator or PlayingHandicapCalculator()
@@ -250,6 +268,7 @@ class GenerateMatchesUseCase:
         if fallo is not None:
             raise fallo
 
+        await self.avisar_salidas()
         return GenerateMatchesResponseDTO(
             round_id=round_entity.id.value,
             matches_generated=matches_created,
@@ -272,10 +291,13 @@ class GenerateMatchesUseCase:
         Returns:
             Los partidos creados, y el error que devolver si no se pudo
         """
+        marca = self.marca_de_salidas()
         try:
             async with self._uow.savepoint():
                 return await self.generar_dentro(round_entity, competition, manual_pairings), None
         except Exception as error:
+            # Lo deshecho no se avisa
+            self.descartar_salidas(desde=marca)
             motivo = bloqueo_por(error, datetime.now(UTC).replace(tzinfo=None))
             if motivo is None:
                 raise
@@ -405,7 +427,7 @@ class GenerateMatchesUseCase:
 
         # 12. Generar partidos
         if pairings:
-            matches_created = await self._generate_manual(
+            creados = await self._generate_manual(
                 pairings,
                 round_entity,
                 enrollment_map,
@@ -420,7 +442,7 @@ class GenerateMatchesUseCase:
                 holes_by_tee,
             )
         else:
-            matches_created = await self._generate_auto(
+            creados = await self._generate_auto(
                 round_entity,
                 team_a_ids,
                 team_b_ids,
@@ -440,7 +462,38 @@ class GenerateMatchesUseCase:
         # 13. Transicionar ronda
         round_entity.mark_matches_generated()
         await self._uow.rounds.update(round_entity)
-        return matches_created
+        # Se avisa al guardar, y solo a quien le cambia algo: regenerar los
+        # mismos emparejamientos no avisa a nadie (G2, G3)
+        self._salidas_por_avisar.append(
+            (
+                competition,
+                round_entity.id,
+                de_los_partidos(round_entity, existing_matches),
+                de_los_partidos(round_entity, creados),
+            )
+        )
+        return len(creados)
+
+    async def avisar_salidas(self) -> None:
+        """
+        Avisa de los partidos generados, ya guardados (G2). Quien genera dentro
+        de su transaccion —abrir los sobres— lo llama tras confirmarla.
+        """
+        pendientes, self._salidas_por_avisar = self._salidas_por_avisar, []
+        for competition, round_id, antes, despues in pendientes:
+            await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
+
+    def marca_de_salidas(self) -> int:
+        """Hasta donde llega lo pendiente de avisar: para descartar solo lo que venga despues."""
+        return len(self._salidas_por_avisar)
+
+    def descartar_salidas(self, desde: int) -> None:
+        """
+        Lo generado desde `desde` se deshizo: eso no se avisa. Lo de antes
+        —otra sesion abierta en la misma lectura— sigue en pie (revision del
+        22 oct 2026).
+        """
+        del self._salidas_por_avisar[desde:]
 
     async def _comprobar_inscripciones(self, pairings, enrollment_map, competition) -> None:
         """Todos los emparejados tienen que tener la inscripción aprobada.
@@ -598,7 +651,7 @@ class GenerateMatchesUseCase:
         user_gender_map,
         max_playing_handicap=None,
         holes_by_tee=None,
-    ):
+    ) -> list[Match]:
         """Genera partidos automáticamente emparejando por ranking."""
         # Para SINGLES: 1v1, para FOURBALL/FOURSOMES: 2v2
         num_matches = min(len(team_a_ids), len(team_b_ids)) // players_per_team
@@ -610,7 +663,7 @@ class GenerateMatchesUseCase:
 
         match_format = round_entity.match_format
 
-        matches_created = 0
+        creados: list[Match] = []
         for i in range(num_matches):
             start = i * players_per_team
             end = start + players_per_team
@@ -645,9 +698,9 @@ class GenerateMatchesUseCase:
             )
             match.set_marker_assignments(marker_assignments)
             await self._uow.matches.add(match)
-            matches_created += 1
+            creados.append(match)
 
-        return matches_created
+        return creados
 
     async def _generate_manual(
         self,
@@ -663,7 +716,7 @@ class GenerateMatchesUseCase:
         user_gender_map,
         max_playing_handicap=None,
         holes_by_tee=None,
-    ):
+    ) -> list[Match]:
         """Genera partidos según emparejamientos ya decididos.
 
         Los trae el organizador en la petición, o los fijan los sobres de los
@@ -671,7 +724,7 @@ class GenerateMatchesUseCase:
         """
         match_format = round_entity.match_format
 
-        matches_created = 0
+        creados: list[Match] = []
         for i, pairing in enumerate(pairings):
             a_ids = [UserId(uid) for uid in pairing.team_a_player_ids]
             b_ids = [UserId(uid) for uid in pairing.team_b_player_ids]
@@ -704,6 +757,6 @@ class GenerateMatchesUseCase:
             )
             match.set_marker_assignments(marker_assignments)
             await self._uow.matches.add(match)
-            matches_created += 1
+            creados.append(match)
 
-        return matches_created
+        return creados

@@ -139,13 +139,45 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def lock_scope(self, scope_id: str) -> None:
+        """
+        Bloquea ese ambito (un torneo) hasta el final de la transaccion: dos
+        publicaciones de salidas del torneo, o una publicacion y la baja o la
+        cancelacion que borran sus avisos, no se cruzan, y la segunda ve lo
+        que dejo la primera (G3, revision del 22 oct 2026).
+        """
+
+    @abstractmethod
+    async def find_from_source(
+        self, source_id: str, types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        """Lo publicado desde ese origen de esos tipos, de todos los jugadores."""
+
+    @abstractmethod
+    async def delete_from_source_for_users(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_ids: Collection[UserId],
+    ) -> int:
+        """
+        Como `delete_from_source`, pero de varios jugadores de una vez: las
+        salidas de una ronda se sustituyen por lotes (G3), y uno por jugador
+        serian tantas consultas como jugadores. Sin jugadores no borra nada.
+        """
+
+    @abstractmethod
     async def delete_for_competition(
-        self, competition_id: str, types: Collection[ActivityEventType]
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
     ) -> int:
         """
         Borra los eventos de esos tipos que cuentan algo de esa competicion
-        (`payload.competition_id`), sea cual sea su origen. Para cuando la
-        competicion se borra. Devuelve cuantos borro.
+        (`payload.competition_id`), sea cual sea su origen: de un jugador, o de
+        todos si no se dice. Para cuando la competicion se borra o se cancela,
+        o un jugador se retira de ella. Devuelve cuantos borro.
         """
 
     @abstractmethod

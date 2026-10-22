@@ -225,4 +225,6 @@ class TestTipos:
             "QUICK_MATCH_FINISHED",
             # Tabla del 22 oct 2026, C
             "ENROLLMENT_CONFIRMED",
+            # Aviso de horario (G, tabla del 22 oct 2026)
+            "TEE_TIME_ASSIGNED",
         }
