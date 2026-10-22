@@ -251,14 +251,15 @@ class SharedGamesAdapter(SharedGamesInterface):
             sin_terminar = not (
                 yo and el and yo.participant_id in cuentan and el.participant_id in cuentan
             )
-            # Sin campo no hay reparto de golpes, y a bruto no se juzga
+            # Sin campo no hay reparto de golpes, y a bruto no se juzga. Sin
+            # hándicap se juega con 0, como en la propia partida y en su aviso
+            # (Agustín, 22 oct 2026): se juzga igual
             if (
                 not sin_terminar
                 and course is not None
                 and match.scoring_format is not None
                 and yo
                 and el
-                and self._con_handicap_conocido(match, (yo, el), usuarios)
             ):
                 golpes_recibidos = quick_match_strokes(
                     match, course, usuarios, self._stroke_allocation
@@ -289,25 +290,6 @@ class SharedGamesAdapter(SharedGamesInterface):
             unfinished=sin_terminar,
         )
 
-    @staticmethod
-    def _con_handicap_conocido(
-        match: QuickMatch,
-        participantes: tuple[QuickMatchParticipant, ...],
-        usuarios: dict[UserId, User],
-    ) -> bool:
-        """
-        Si los dos tienen handicap, o la partida es scratch. Sin el suyo, el
-        reparto le da 0 golpes: su tarjeta no seria su juego y no se juzga.
-        """
-        if not match.uses_handicap():
-            return True
-        for participante in participantes:
-            user = usuarios.get(participante.user_id) if participante.user_id else None
-            perfil = user.handicap.value if user and user.handicap else None
-            if participante.effective_handicap(perfil) is None:
-                return False
-        return True
-
     def _match_play_rapido(
         self,
         match: QuickMatch,
@@ -325,11 +307,10 @@ class SharedGamesAdapter(SharedGamesInterface):
         mi_bando = "A" if yo.participant_id in team_a_ids else "B"
         su_bando = "A" if el.participant_id in team_a_ids else "B"
         relation = relation_between(mi_bando, su_bando)
-        # Un hándicap que falte, de cualquiera de los bandos, tuerce el reparto
-        # de todos: la partida sale, pero no se juzga (conservador). Tampoco se
-        # sabe si se decidio antes de tiempo, asi que no se marca a medias
-        todos = tuple(match.participants)
-        if course is None or not self._con_handicap_conocido(match, todos, usuarios):
+        # Sin campo no hay reparto: sale, pero no se juzga. Tampoco se sabe si
+        # se decidio antes de tiempo, asi que no se marca a medias. Un hándicap
+        # que falte ya no lo impide: juega con 0 (Agustín, 22 oct 2026)
+        if course is None:
             return relation, None, False
 
         lectura = match_play_reading(

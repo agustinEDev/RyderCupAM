@@ -411,10 +411,10 @@ class TestPartidaRapidaStrokePlay:
 
         assert partida.outcome == Outcome.HALVED
 
-    async def test_si_uno_no_tiene_handicap_sale_pero_no_cuenta(self, mundo):
+    async def test_si_uno_no_tiene_handicap_cuenta_como_cero(self, mundo):
         """
-        Partida con hándicap y él sin hándicap: se le repartiría como scratch,
-        que no es su juego real. La partida sale en la lista, sin resultado.
+        Partida con hándicap y él sin hándicap: juega con 0, como en la propia
+        partida y en su aviso (Agustín, 22 oct 2026). Se juzga.
         """
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
@@ -429,7 +429,9 @@ class TestPartidaRapidaStrokePlay:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
+        (suya,) = await _entre(mundo, el, yo)
+        assert suya.outcome == Outcome.LOST
 
     async def test_en_una_partida_scratch_el_handicap_no_hace_falta(self, mundo):
         """Nadie recibe golpes: que él no tenga hándicap no cambia nada."""
@@ -592,8 +594,8 @@ class TestPartidaRapidaMatchPlay:
         assert partida.relation == Relation.AGAINST
         assert partida.outcome == Outcome.LOST
 
-    async def test_singles_con_handicap_si_el_no_tiene_sale_pero_no_cuenta(self, mundo):
-        """Sin su hándicap se le repartiría como scratch: no es su partido real."""
+    async def test_singles_con_handicap_si_el_no_tiene_juega_con_cero(self, mundo):
+        """Sin su hándicap juega con 0, como en la partida y su aviso (22 oct 2026)."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
         course = await mundo.campo(yo)
@@ -608,10 +610,10 @@ class TestPartidaRapidaMatchPlay:
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.relation == Relation.AGAINST
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
 
-    async def test_fourball_si_cualquiera_de_los_cuatro_no_tiene_handicap_no_cuenta(self, mundo):
-        """Un rival sin hándicap ya tuerce el reparto de todos: conservador."""
+    async def test_fourball_un_rival_sin_handicap_juega_con_cero_y_cuenta(self, mundo):
+        """Un rival sin hándicap juega con 0: el partido se juzga (22 oct 2026)."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=12)
         rival1 = await mundo.jugador("Rival1", handicap=None)
@@ -632,7 +634,7 @@ class TestPartidaRapidaMatchPlay:
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.relation == Relation.WITH
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
 
     async def test_match_play_scratch_sin_handicap_si_cuenta(self, mundo):
         yo = await mundo.jugador("Yo", handicap=None)
@@ -1252,8 +1254,8 @@ class TestTablaAStrokePlayRapidoDesdeNueveHoyos:
 
         assert partida.unfinished is True
 
-    async def test_sin_handicap_y_contando_sigue_sin_resultado_pero_no_sin_terminar(self, mundo):
-        """El hándicap que falta no es una tarjeta a medias: sale sin resultado, como hoy."""
+    async def test_sin_handicap_y_contando_se_juzga_con_cero(self, mundo):
+        """Sin hándicap juega con 0 (22 oct 2026): cuenta y se juzga, sin marcarse a medias."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
         course = await mundo.campo(yo)
@@ -1268,7 +1270,7 @@ class TestTablaAStrokePlayRapidoDesdeNueveHoyos:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
         assert partida.unfinished is False
 
 
@@ -1408,8 +1410,8 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
 
         assert (partida.unfinished, partida.outcome) == (True, None)
 
-    async def test_sin_handicap_sigue_sin_resultado(self, mundo):
-        """Sin el hándicap de alguien no se juzga, como hoy; tampoco se marca a medias."""
+    async def test_sin_handicap_juega_con_cero_y_se_juzga(self, mundo):
+        """Sin hándicap juega con 0 (22 oct 2026): se juzga y no se marca a medias."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
         course = await mundo.campo(yo)
@@ -1423,7 +1425,7 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
         assert partida.unfinished is False
 
 

@@ -139,8 +139,12 @@ async def _partida(
     scoring_format: ScoringFormat | None = ScoringFormat.STABLEFORD,
     match_format: MatchFormat | None = None,
     complete: bool = True,
+    congelar: dict | None = None,
 ):
-    """Una partida rapida terminada; `tarjetas[i]` es la del participante i."""
+    """
+    Una partida rapida terminada; `tarjetas[i]` es la del participante i.
+    `congelar`, el hándicap de perfil de cada uno al empezar (BE #514).
+    """
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
         creator_id=creador.id,
@@ -152,6 +156,8 @@ async def _partida(
         match.add_participant(participante)
     anotador = match.participants[0].participant_id
     match.start(scorer_ids=[anotador])
+    if congelar is not None:
+        match.freeze_handicaps(congelar)
     if complete:
         match.complete()
 
@@ -784,7 +790,8 @@ class TestTablaACuandoCuentaElStrokePlay:
         """
         A2. Given Medal en la ida: Eva hcp 18 a 5 por hoyo, Ana scratch a 4 /
         When se publica / Then Eva recibe 9 golpes (uno por hoyo jugado) y
-        empatan a 36 netos.
+        empatan a 36 netos. Ana no tiene hándicap: cuenta como 0 y desempata
+        delante de los 18 de Eva (H4, 22 oct 2026).
         """
         ana = await _user(user_uow, "Ana")
         eva = await _user(user_uow, "Eva")
@@ -803,9 +810,8 @@ class TestTablaACuandoCuentaElStrokePlay:
         de_eva = await _uno_de(social_uow, eva)
         assert de_eva.payload["gross_strokes"] == 45
         assert de_eva.payload["net_strokes"] == 36
-        for user in (ana, eva):
-            evento = await _uno_de(social_uow, user)
-            assert (evento.payload["position"], evento.payload["tied"]) == (1, True)
+        assert _puesto(await _uno_de(social_uow, ana)) == (1, False)
+        assert _puesto(de_eva) == (2, False)
 
 
 class TestTablaDMejorBruto:
@@ -1213,3 +1219,216 @@ class TestTablaASinHoyoAdjudicable:
         await publicar(match)
 
         assert (await _uno_de(social_uow, ana)).payload["outcome"] == "UNFINISHED"
+
+
+async def _con_handicap(user_uow, nombre: str, handicap: float | None) -> User:
+    user = await _user(user_uow, nombre)
+    if handicap is not None:
+        user.update_handicap(handicap)
+        async with user_uow:
+            await user_uow.users.save(user)
+    return user
+
+
+def _puesto(evento) -> tuple:
+    return evento.payload["position"], evento.payload["tied"]
+
+
+class TestDesempatePorHandicap:
+    """
+    Tabla del 22 oct 2026, H. En el campo de los tests (CR 72, slope 113, par
+    72) el hándicap de juego es el 95 % del índice, redondeado: con 19.0
+    recibe 18, un golpe por hoyo, y con 5 en todos hace 36 puntos, como quien
+    no recibe ninguno con 4. Con 12.4 recibe 12; con 10.5, 10; con 3.0, 3.
+    """
+
+    async def test_h1_empate_a_puntos_delante_el_de_menos_handicap(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _con_handicap(user_uow, "Ana", 19.0)
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        # Eva, 12.4: golpe en los hoyos 1-12; 5 ahi y 4 en el resto, 36
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [
+                _tarjeta(5),
+                _tarjeta(4, **{f"h{i}": 5 for i in range(1, 13)}),
+                _tarjeta(6),
+            ],
+            otros=[
+                QuickMatchParticipant.for_user(eva.id).with_handicap(12.4),
+                QuickMatchParticipant.for_user(luz.id).with_handicap(30.0),
+            ],
+        )
+
+        await publicar(match)
+
+        de_ana, de_eva = await _uno_de(social_uow, ana), await _uno_de(social_uow, eva)
+        assert de_ana.payload["points"] == de_eva.payload["points"] == 36
+        assert _puesto(de_eva) == (1, False)
+        assert _puesto(de_ana) == (2, False)
+        assert _puesto(await _uno_de(social_uow, luz))[0] == 3
+
+    async def test_h3_con_el_mismo_handicap_exacto_comparten_puesto(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _con_handicap(user_uow, "Ana", 19.0)
+        eva = await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(5), _tarjeta(5)],
+            otros=[QuickMatchParticipant.for_user(eva.id).with_handicap(19.0)],
+        )
+
+        await publicar(match)
+
+        assert _puesto(await _uno_de(social_uow, ana)) == (1, True)
+        assert _puesto(await _uno_de(social_uow, eva)) == (1, True)
+
+    async def test_h4_sin_handicap_cuenta_como_cero_en_el_empate(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _user(user_uow, "Ana")
+        eva = await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        # Ana sin hándicap no recibe golpes: con 4 en todos, 36 como Eva con 18
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4), _tarjeta(5)],
+            otros=[QuickMatchParticipant.for_user(eva.id).with_handicap(19.0)],
+        )
+
+        await publicar(match)
+
+        de_ana, de_eva = await _uno_de(social_uow, ana), await _uno_de(social_uow, eva)
+        assert de_ana.payload["points"] == de_eva.payload["points"] == 36
+        # Ana sin hándicap cuenta como 0: delante de los 19.0 de Eva
+        assert _puesto(de_ana) == (1, False)
+        assert _puesto(de_eva) == (2, False)
+
+    async def test_h2_cuenta_el_handicap_con_el_que_jugo_la_partida(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given Ana empezo con 19.0 fijado y hoy su perfil dice 2.0 / Then desempata
+        con 19.0: Eva, con 10.5, delante. Con el de hoy iria ella primera.
+        """
+        ana = await _con_handicap(user_uow, "Ana", 2.0)
+        eva = await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(5), _tarjeta(4, **{f"h{i}": 5 for i in range(1, 11)})],
+            otros=[QuickMatchParticipant.for_user(eva.id).with_handicap(10.5)],
+            congelar={ana.id: 19.0},
+        )
+
+        await publicar(match)
+
+        de_ana, de_eva = await _uno_de(social_uow, ana), await _uno_de(social_uow, eva)
+        assert de_ana.payload["points"] == de_eva.payload["points"] == 36
+        assert _puesto(de_eva) == (1, False)
+        assert _puesto(de_ana) == (2, False)
+
+    async def test_h1_empate_a_golpes_netos_en_medal(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _con_handicap(user_uow, "Ana", 19.0)
+        eva = await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        # Las dos, 72 netos: Ana 90 con 18 golpes (19.0); Eva 75 con 3
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(5), _tarjeta(4, h1=5, h2=5, h3=5)],
+            otros=[QuickMatchParticipant.for_user(eva.id).with_handicap(3.0)],
+            scoring_format=ScoringFormat.MEDAL,
+        )
+
+        await publicar(match)
+
+        de_ana, de_eva = await _uno_de(social_uow, ana), await _uno_de(social_uow, eva)
+        assert de_ana.payload["to_par"] == de_eva.payload["to_par"] == 0
+        assert _puesto(de_eva) == (1, False)
+        assert _puesto(de_ana) == (2, False)
+
+    async def test_empate_triple_mezclado_y_uno_que_no_cuenta(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given tres a 36 con 19.0, 12.4 y 19.0, y una con solo 9 hoyos / Then
+        12.4 1.ª; las de 19.0, T2; la de 9 hoyos, sin terminar y sin puesto.
+        """
+        ana = await _con_handicap(user_uow, "Ana", 19.0)
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        mar = await _user(user_uow, "Mar")
+        course = await _campo(golf_course_uow, ana.id)
+        nueve = dict.fromkeys(range(1, 10), 3)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [
+                _tarjeta(5),
+                _tarjeta(4, **{f"h{i}": 5 for i in range(1, 13)}),
+                _tarjeta(5),
+                nueve,
+            ],
+            otros=[
+                QuickMatchParticipant.for_user(eva.id).with_handicap(12.4),
+                QuickMatchParticipant.for_user(luz.id).with_handicap(19.0),
+                QuickMatchParticipant.for_user(mar.id).with_handicap(0.0),
+            ],
+        )
+
+        await publicar(match)
+
+        assert _puesto(await _uno_de(social_uow, eva)) == (1, False)
+        assert _puesto(await _uno_de(social_uow, ana)) == (2, True)
+        assert _puesto(await _uno_de(social_uow, luz)) == (2, True)
+        de_mar = await _uno_de(social_uow, mar)
+        assert de_mar.payload["unfinished"] is True
+        assert de_mar.payload["position"] is None
+        assert de_mar.payload["total_players"] == 3
+
+
+class TestSinHandicapCuentaComoCero:
+    """Agustín, 22 oct 2026: sin hándicap ni uno manual, juega con 0."""
+
+    async def test_match_play_contra_uno_sin_handicap_se_decide(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given Ana con 10 y Eva sin hándicap, Ana a 4 y Eva a 5 / Then Ana gana
+        y Eva pierde: lo mismo que dice «Partidas juntos» de esa partida.
+        """
+        ana = await _con_handicap(user_uow, "Ana", 10.0)
+        eva = await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4), _tarjeta(5)],
+            otros=[QuickMatchParticipant.for_user(eva.id)],
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+        )
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, ana)).payload["outcome"] == "WON"
+        assert (await _uno_de(social_uow, eva)).payload["outcome"] == "LOST"

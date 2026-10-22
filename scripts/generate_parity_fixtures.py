@@ -15,24 +15,70 @@ Escribe el JSON en el repositorio del frontend, donde lo lee
 `MatchPlayStrokeAllocator.parity.test.js`. Si ese test falla despues de tocar el
 reparto del backend: se regenera este fichero y se arregla el cliente hasta que
 vuelva a cuadrar. No al reves.
+
+Tambien escribe `backendStandingsParity.json` (tabla del 22 oct 2026, H): el
+ORDEN de la clasificacion de una partida rapida Stableford o Medal, con el
+desempate por menor handicap y quien no cuenta por sus hoyos. Sale de ejecutar
+de verdad `PublishQuickMatchResultUseCase` (el aviso QUICK_MATCH_FINISHED), con
+las unidades de trabajo en memoria: es el puesto que el backend publica.
+
+    PYTHONPATH=. python scripts/generate_parity_fixtures.py                # los dos
+    PYTHONPATH=. python scripts/generate_parity_fixtures.py --standings    # solo el orden
 """
 
+import asyncio
 import json
+import sys
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
+from src.modules.golf_course.domain.entities.golf_course import GolfCourse
+from src.modules.golf_course.domain.entities.hole import Hole
+from src.modules.golf_course.domain.entities.tee import Tee
+from src.modules.golf_course.domain.value_objects.course_type import CourseType
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
+from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
+    InMemoryGolfCourseUnitOfWork,
+)
+from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.entities.quick_match_hole_score import (
+    QuickMatchHoleScore,
+)
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
 )
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
+from src.modules.quick_match.domain.value_objects.quick_match_hole_score_id import (
+    QuickMatchHoleScoreId,
+)
+from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_participant import (
     QuickMatchParticipant,
 )
+from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
+    InMemoryQuickMatchUnitOfWork,
+)
+from src.modules.social.application.use_cases.publish_quick_match_result_use_case import (
+    PublishQuickMatchResultUseCase,
+)
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
+    InMemorySocialUnitOfWork,
+)
+from src.modules.user.domain.entities.user import User
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
 from src.shared.domain.services.playing_handicap_calculator import TeeRating
+from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
+from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 OUTPUT = (
     Path(__file__).resolve().parent.parent.parent
@@ -165,6 +211,12 @@ def run(
 
 
 def main() -> None:
+    if "--standings" not in sys.argv:
+        _allocation()
+    asyncio.run(_standings())
+
+
+def _allocation() -> None:
     yellow, white = TeeColor.YELLOW, TeeColor.WHITE
     male, female = Gender.MALE, Gender.FEMALE
     handicap, scratch = PlayMode.HANDICAP, PlayMode.SCRATCH
@@ -344,6 +396,316 @@ def main() -> None:
         handle.write("\n")
 
     print(f"{len(scenarios)} escenarios escritos en {OUTPUT}")
+
+
+# ==================== Orden de la clasificacion (H) ====================
+
+STANDINGS_OUTPUT = OUTPUT.with_name("backendStandingsParity.json")
+
+# El campo de los escenarios: par 72 (18 de par 4), indice = numero de hoyo, y
+# una barra amarilla de caballeros con CR 72 y slope 113. Asi el handicap de
+# juego es el 95 % del indice redondeado: 19.0 recibe 18, uno por hoyo
+STANDINGS_PAR = 4
+STANDINGS_CR = 72.0
+STANDINGS_SLOPE = 113
+
+
+def _card(golpes: int | None, **excepciones: int | None) -> dict[int, int | None]:
+    """Los 18 hoyos con `golpes`, salvo `h3=5` y similares (None, la raya)."""
+    tarjeta: dict[int, int | None] = dict.fromkeys(range(1, 19), golpes)
+    for clave, valor in excepciones.items():
+        tarjeta[int(clave[1:])] = valor
+    return tarjeta
+
+
+def _con(golpes: int, desde: int, hasta: int, base: int = 4) -> dict[int, int | None]:
+    """`base` en todos y `golpes` del hoyo `desde` al `hasta`."""
+    return {h: (golpes if desde <= h <= hasta else base) for h in range(1, 19)}
+
+
+def _hoyos(golpes: int, hoyos) -> dict[int, int | None]:
+    return dict.fromkeys(hoyos, golpes)
+
+
+async def _campo_de_paridad(gc, creador) -> GolfCourse:
+    """El campo de los escenarios, guardado en memoria."""
+    course = GolfCourse.create(
+        name="Parity",
+        country_code=CountryCode("ES"),
+        course_type=CourseType.STANDARD_18,
+        creator_id=creador.id,
+        tees=[
+            Tee(
+                color=TeeColor.YELLOW,
+                gender=Gender.MALE,
+                identifier="Yellow",
+                course_rating=STANDINGS_CR,
+                slope_rating=STANDINGS_SLOPE,
+            )
+        ],
+        holes=[Hole(number=i, par=STANDINGS_PAR, stroke_index=i) for i in range(1, 19)],
+    )
+    course.approve()
+    async with gc:
+        await gc.golf_courses.save(course)
+    return course
+
+
+async def _esperado(social, formato, jugadores, cuentas) -> dict:
+    """Lo que publico el caso de uso para cada uno: su puesto y sus cuentas."""
+    esperado = {}
+    for (etiqueta, _, _), user in zip(jugadores, cuentas, strict=True):
+        async with social:
+            eventos = await social.activity_events.find_in(
+                [ActivitySlice(user_ids=(user.id,), types=frozenset(ActivityEventType))],
+                limit=5,
+            )
+        (evento,) = [e for e in eventos if e.type == ActivityEventType.QUICK_MATCH_FINISHED]
+        p = evento.payload
+        fila = {
+            "position": p["position"],
+            "tied": p["tied"],
+            "unfinished": p["unfinished"],
+            "totalPlayers": p["total_players"],
+            "holesPlayed": p["holes_played"],
+            "grossStrokes": p["gross_strokes"],
+        }
+        if formato == ScoringFormat.MEDAL:
+            fila["netStrokes"] = p["net_strokes"]
+            fila["toPar"] = p["to_par"]
+        else:
+            fila["points"] = p["points"]
+        esperado[etiqueta] = fila
+    return esperado
+
+
+async def _escenario(
+    escenarios: list[dict], name: str, formato, jugadores: list[tuple[str, float | None, dict]]
+) -> None:
+    """`jugadores`: (etiqueta, indice o None, tarjeta). El primero crea la partida."""
+    social, qm, gc, users = (
+        InMemorySocialUnitOfWork(),
+        InMemoryQuickMatchUnitOfWork(),
+        InMemoryGolfCourseUnitOfWork(),
+        InMemoryUnitOfWork(),
+    )
+    cuentas = []
+    for etiqueta, _, _ in jugadores:
+        user = User.create(
+            first_name=etiqueta,
+            last_name="Parity",
+            email_str=f"parity_{uuid4().hex[:10]}@test.com",
+            plain_password="SecureP@ssw0rd123",
+        )
+        async with users:
+            await users.users.save(user)
+        cuentas.append(user)
+    creador = cuentas[0]
+    if jugadores[0][1] is not None:
+        creador.update_handicap(jugadores[0][1])
+        async with users:
+            await users.users.save(creador)
+
+    course = await _campo_de_paridad(gc, creador)
+
+    match = QuickMatch.create(
+        id=QuickMatchId.generate(),
+        creator_id=creador.id,
+        golf_course_id=course.id,
+        scoring_format=formato,
+        match_format=None,
+    )
+    for (_, indice, _), user in zip(jugadores[1:], cuentas[1:], strict=True):
+        participante = QuickMatchParticipant.for_user(user.id)
+        if indice is not None:
+            participante = participante.with_handicap(indice)
+        match.add_participant(participante)
+    anotador = match.participants[0].participant_id
+    match.start(scorer_ids=[anotador])
+    match.complete()
+
+    etiquetas = {}
+    async with qm:
+        await qm.quick_matches.add(match)
+        for participante, (etiqueta, _, tarjeta) in zip(match.participants, jugadores, strict=True):
+            etiquetas[participante.participant_id] = etiqueta
+            for hoyo, golpes in tarjeta.items():
+                await qm.quick_match_hole_scores.add(
+                    QuickMatchHoleScore(
+                        id=QuickMatchHoleScoreId.generate(),
+                        quick_match_id=match.id,
+                        hole_number=hoyo,
+                        participant_id=participante.participant_id,
+                        score=golpes,
+                        recorded_by_participant_id=anotador,
+                    )
+                )
+        await qm.commit()
+
+    await PublishQuickMatchResultUseCase(social, qm, gc, users).execute(str(match.id.value))
+
+    esperado = await _esperado(social, formato, jugadores, cuentas)
+
+    escenarios.append(
+        {
+            "name": name,
+            "scoringFormat": formato.value,
+            "playMode": match.play_mode.value,
+            "allowancePercentage": match.get_effective_allowance(),
+            "holes": [
+                {"holeNumber": i, "par": STANDINGS_PAR, "strokeIndex": i} for i in range(1, 19)
+            ],
+            "tees": [
+                {
+                    "color": "YELLOW",
+                    "gender": "MALE",
+                    "courseRating": STANDINGS_CR,
+                    "slopeRating": STANDINGS_SLOPE,
+                }
+            ],
+            "participants": [
+                {
+                    "participantId": etiquetas[p.participant_id],
+                    "handicap": indice,
+                    "color": p.tee_color.value if p.tee_color else None,
+                    "teeGender": p.tee_gender.value if p.tee_gender else None,
+                }
+                for p, (_, indice, _) in zip(match.participants, jugadores, strict=True)
+            ],
+            "scores": {
+                etiqueta: {str(h): g for h, g in sorted(tarjeta.items())}
+                for etiqueta, _, tarjeta in jugadores
+            },
+            "expected": esperado,
+        }
+    )
+
+
+async def _standings() -> None:
+    stableford, medal = ScoringFormat.STABLEFORD, ScoringFormat.MEDAL
+    escenarios: list[dict] = []
+
+    # --- Stableford ---
+    await _escenario(
+        escenarios,
+        "stableford empate a puntos, delante el de menos handicap",
+        stableford,
+        [("a", 19.0, _card(5)), ("b", 12.4, _con(5, 1, 12)), ("c", 30.0, _card(6))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford empate con el mismo handicap exacto: comparten",
+        stableford,
+        [("a", 19.0, _card(5)), ("b", 19.0, _card(5)), ("c", 0.0, _card(5))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford empate triple con handicaps mezclados",
+        stableford,
+        [
+            ("a", 19.0, _card(5)),
+            ("b", 12.4, _con(5, 1, 12)),
+            ("c", 19.0, _card(5)),
+            ("d", 0.0, _card(5)),
+        ],
+    )
+    await _escenario(
+        escenarios,
+        "stableford sin handicap cuenta como 0: delante de 19.0",
+        stableford,
+        [("a", None, _card(4)), ("b", 19.0, _card(5))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford sin handicap empata con un 0.0",
+        stableford,
+        [("a", None, _card(4)), ("b", 0.0, _card(4)), ("c", 30.0, _card(6))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford un plus delante de un 0.0",
+        stableford,
+        [("a", 0.0, _card(4)), ("b", -1.0, _card(4, h18=3))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford uno con 17 hoyos no cuenta y no ocupa puesto",
+        stableford,
+        [
+            ("a", 19.0, _card(5)),
+            ("b", 12.4, _con(5, 1, 12)),
+            ("c", 0.0, dict.fromkeys(range(1, 18), 3)),
+        ],
+    )
+    await _escenario(
+        escenarios,
+        "stableford solo uno cuenta: sin puesto",
+        stableford,
+        [("a", 10.0, _card(4)), ("b", 10.0, _hoyos(4, range(1, 10)))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford con raya (hoyo recogido)",
+        stableford,
+        [("a", 19.0, _card(5, h1=None)), ("b", 19.0, _card(5, h1=7))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford nueve hoyos: la ida",
+        stableford,
+        [("a", 19.0, _hoyos(5, range(1, 10))), ("b", 0.0, _hoyos(4, range(1, 10)))],
+    )
+    await _escenario(
+        escenarios,
+        "stableford conjuntos distintos de nueve: no cuenta nadie",
+        stableford,
+        [("a", 10.0, _hoyos(4, range(1, 10))), ("b", 10.0, _hoyos(4, range(10, 19)))],
+    )
+
+    # --- Medal ---
+    await _escenario(
+        escenarios,
+        "medal empate a netos, delante el de menos handicap",
+        medal,
+        [("a", 19.0, _card(5)), ("b", 3.0, _con(5, 1, 3))],
+    )
+    await _escenario(
+        escenarios,
+        "medal empate triple con sin handicap y el mismo 0",
+        medal,
+        [("a", None, _card(4)), ("b", 19.0, _card(5)), ("c", 0.0, _card(4))],
+    )
+    await _escenario(
+        escenarios,
+        "medal empate con el mismo handicap exacto",
+        medal,
+        [("a", 12.4, _con(5, 1, 12)), ("b", 12.4, _con(5, 7, 18)), ("c", 30.0, _card(4))],
+    )
+    await _escenario(
+        escenarios,
+        "medal uno con 9 hoyos entre los de 18 no cuenta",
+        medal,
+        [
+            ("a", 19.0, _card(5)),
+            ("b", 3.0, _con(5, 1, 3)),
+            ("c", 0.0, _hoyos(3, range(1, 10))),
+        ],
+    )
+
+    STANDINGS_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    with STANDINGS_OUTPUT.open("w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "generatedBy": "RyderCupAm PublishQuickMatchResultUseCase",
+                "scenarios": escenarios,
+            },
+            handle,
+            indent=2,
+            ensure_ascii=False,
+        )
+        handle.write("\n")
+
+    print(f"{len(escenarios)} escenarios de clasificacion escritos en {STANDINGS_OUTPUT}")
 
 
 if __name__ == "__main__":

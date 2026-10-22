@@ -3,8 +3,11 @@ Clasificacion - Las clasificaciones de un stroke play (#251, PR 5).
 
 Decidido con Agustín (decisión 4 y 7 de la #251, y P5-P8, P13, P14 el 9 oct 2026):
 
-- **Sin desempate automático**: los empatados comparten puesto («T3»); dentro del
-  empate se pintan por hándicap (P5).
+- **Desempate por menor hándicap** (tabla del 22 oct 2026, H; sustituye a P5):
+  ante un empate a puntos o a golpes, delante quien tenga MENOS hándicap índice,
+  el de su inscripción. Solo comparten puesto («T3») quienes tienen exactamente
+  el mismo. La regla vive en `shared` (`handicap_tiebreak_key`): la usan
+  también la partida rápida y el cara a cara.
 - **Stableford**: más puntos, mejor (netos; brutos en el scratch, P13). Un
   retirado cuenta con lo jugado (P6).
 - **Medal**: menos golpes respecto al par de lo jugado, mejor (netos o brutos):
@@ -26,6 +29,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.handicap_tiebreak import handicap_tiebreak_key
 
 from ..value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from ..value_objects.overall_standing import OverallStanding
@@ -126,10 +130,11 @@ class Clasificacion:
             if resultado.estado != EstadoEnClasificacion.CLASIFICADO:
                 filas_sin_puesto.append(_fila(participante, resultado, None, False))
                 continue
-            clave = _clave(resultado, medal, regla)
+            # El hándicap va en la clave: solo empatan quienes tienen el mismo
+            clave = (*_clave(resultado, medal, regla), handicap_tiebreak_key(participante.handicap))
             clasificados.append((clave, participante, resultado))
 
-        clasificados.sort(key=lambda c: (c[0], c[1].handicap, str(c[1].user_id)))
+        clasificados.sort(key=lambda c: (c[0], str(c[1].user_id)))
         repeticiones: dict[tuple, int] = {}
         for clave, _, _ in clasificados:
             repeticiones[clave] = repeticiones.get(clave, 0) + 1

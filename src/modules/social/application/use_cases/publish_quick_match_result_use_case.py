@@ -76,6 +76,8 @@ class _Lectura:
     scores: dict[ParticipantId, dict[int, int | None]]
     users: dict
     strokes: dict[ParticipantId, ParticipantStrokes]
+    # El índice con el que jugó cada uno la partida: el que desempata (H)
+    handicaps: dict[ParticipantId, Decimal | None]
 
 
 class PublishQuickMatchResultUseCase:
@@ -91,8 +93,11 @@ class PublishQuickMatchResultUseCase:
     pinta el cliente (`StablefordCalculator.rankParticipants`). Aqui se cuenta
     igual —los mismos golpes repartidos que el detalle de la partida y las
     mismas reglas por hoyo, que estan portadas con paridad en
-    `StrokePlayScoring`— con una diferencia decidida en la tabla: un empate a
-    puntos comparte puesto, no lo desempatan los golpes. El match play sale del
+    `StrokePlayScoring`. Un empate a puntos (o a netos en Medal) lo deshace el
+    menor hándicap índice con el que jugó cada uno; solo con el mismo exacto
+    comparten puesto, y sin hándicap se queda detrás (tabla del 22 oct 2026,
+    H). No lo desempatan los golpes. El orden lo fija el arnés de paridad
+    (`scripts/generate_parity_fixtures.py`) para que el cliente no se separe. El match play sale del
     mismo motor que el historial de partidas (`MatchPlayScoring`).
 
     Los invitados cuentan en la clasificacion, pero no tienen donde publicar.
@@ -159,18 +164,26 @@ class PublishQuickMatchResultUseCase:
         scores: dict[ParticipantId, dict[int, int | None]] = {}
         for anotado in anotados:
             scores.setdefault(anotado.participant_id, {})[anotado.hole_number] = anotado.score
-        return _Lectura(match, course, scores, users, self._golpes(match, course, users))
+        handicaps = self._indices(match, users)
+        return _Lectura(
+            match, course, scores, users, self._golpes(match, course, handicaps), handicaps
+        )
 
-    def _golpes(
-        self, match: QuickMatch, course: GolfCourse, users: dict
-    ) -> dict[ParticipantId, ParticipantStrokes]:
-        """El reparto de golpes de la partida, el mismo que da su detalle."""
-        contexto = StrokeContextBuilder.build(course)
+    @staticmethod
+    def _indices(match: QuickMatch, users: dict) -> dict[ParticipantId, Decimal | None]:
+        """El índice con el que juega cada uno: el fijado al empezar, o el de siempre."""
         handicaps: dict[ParticipantId, Decimal | None] = {}
         for p in match.participants:
             user: User | None = users.get(p.user_id) if p.user_id else None
             indice = p.effective_handicap(user.handicap.value if user and user.handicap else None)
             handicaps[p.participant_id] = None if indice is None else Decimal(str(indice))
+        return handicaps
+
+    def _golpes(
+        self, match: QuickMatch, course: GolfCourse, handicaps: dict[ParticipantId, Decimal | None]
+    ) -> dict[ParticipantId, ParticipantStrokes]:
+        """El reparto de golpes de la partida, el mismo que da su detalle."""
+        contexto = StrokeContextBuilder.build(course)
         return self._stroke_allocation.allocate(
             participants=match.participants,
             handicaps=handicaps,
@@ -204,10 +217,13 @@ class PublishQuickMatchResultUseCase:
         )
         cuentan = [v for v in vueltas if v.participant.participant_id in cuentan_ids]
         valores = [v.to_par if es_medal else v.points for v in cuentan]
+        # A igual valor, delante el de menos hándicap; solo con el mismo
+        # comparten puesto (tabla del 22 oct 2026, H)
+        indices = [lectura.handicaps.get(v.participant.participant_id) for v in cuentan]
         puestos = dict(
             zip(
                 (v.participant.participant_id for v in cuentan),
-                rank(valores, higher_is_better=not es_medal),
+                rank(valores, indices, higher_is_better=not es_medal),
                 strict=True,
             )
         )
