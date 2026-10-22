@@ -14,6 +14,8 @@ from uuid import uuid4
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
+from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.services.marcadores_en_cadena import MarcadoresEnCadena
@@ -25,8 +27,10 @@ from src.modules.competition.domain.value_objects.estado_de_tarjeta import Estad
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
 from src.modules.competition.domain.value_objects.location import Location
+from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
@@ -115,6 +119,9 @@ class StrokePlayWorld:
             location=Location(main_country=CountryCode("ES")),
             play_mode=play_mode,
             tournament_type=tipo,
+            team_1_name="Team A" if tipo.has_teams else None,
+            team_2_name="Team B" if tipo.has_teams else None,
+            team_assignment=TeamAssignment.MANUAL if tipo.has_teams else None,
         )
         competition.activate()
         competition.close_enrollments(total_enrollments=len(enrolled or []))
@@ -211,3 +218,45 @@ class StrokePlayWorld:
                     golpe.anotar_del_marcador(valor + 1, True, user.id, MOMENTO)
                     await self.comp.golpes_de_partida.guardar(golpe)
         return partida
+
+    async def match(
+        self,
+        round_: Round,
+        player: User,
+        rival: User,
+        golpes: dict[int, int | None],
+        *,
+        numero: int = 1,
+    ) -> Match:
+        """Un partido individual de Ryder acabado, con la tarjeta propia de `player`."""
+
+        def jugador(user: User) -> MatchPlayer:
+            return MatchPlayer(
+                user_id=user.id,
+                playing_handicap=0,
+                tee_color=TeeColor.YELLOW,
+                tee_gender=Gender.MALE,
+                strokes_received=(),
+            )
+
+        match = Match.create(
+            round_id=round_.id,
+            match_number=numero,
+            team_a_players=[jugador(player)],
+            team_b_players=[jugador(rival)],
+        )
+        match.start()
+        match.complete({"winner": "A", "score": "2UP"})
+        async with self.comp:
+            await self.comp.matches.add(match)
+            for hoyo, valor in golpes.items():
+                hole_score = HoleScore.create(
+                    match_id=match.id,
+                    hole_number=hoyo,
+                    player_user_id=player.id,
+                    team="A",
+                    strokes_received=0,
+                )
+                hole_score.set_own_score(valor)
+                await self.comp.hole_scores.add(hole_score)
+        return match

@@ -60,8 +60,8 @@ class _TournamentRound:
     holes: list[PlayedHole]
     # Con la publicacion apagada el logro se guarda solo para el
     visible_to_friends: bool
-    # Lo que el logro necesita para abrir su tarjeta, si no es un partido de
-    # Ryder: el grupo de stroke play y su torneo (bloque L)
+    # Lo que el logro necesita para abrir su tarjeta o la ficha del torneo:
+    # `kind` (MATCH o TEE_GROUP), `competition_id` y, en stroke play, `group_id`
     link: dict = field(default_factory=dict)
 
 
@@ -112,36 +112,44 @@ class PublishTournamentAchievementsUseCase:
         self._history = history
         self._detector = detector or AchievementDetector()
 
-    async def execute(
-        self,
-        competition_id_raw: str,
-        best_differential_before: dict[str, float | None] | None = None,
-    ) -> int:
+    async def execute(self, competition_id_raw: str) -> int:
         """Publica lo que merezca publicarse y devuelve cuantos eventos creo."""
-        best_before = best_differential_before or {}
-
         vueltas_por_jugador, estrena_torneo = await self._leer_vueltas(competition_id_raw)
         if not vueltas_por_jugador:
             return 0
 
         eventos: list[ActivityEvent] = []
         for user_id_raw, sin_ordenar in vueltas_por_jugador.items():
-            # `FIRST_TOURNAMENT` y el record cuelgan de `vueltas[0]`, asi que
-            # cual sea esa vuelta no puede depender del orden en que la base de
-            # datos devolvio los partidos: si cambia entre ejecuciones, el mismo
-            # logro colgaria de otro partido y la clave unica dejaria de
-            # reconocerlo como repetido
+            # `FIRST_TOURNAMENT`, el record y el campo nuevo cuelgan de la
+            # primera vuelta, asi que cual sea no puede depender del orden en que
+            # la base de datos devolvio los partidos: si cambia entre
+            # ejecuciones, el mismo logro colgaria de otra vuelta y la clave
+            # unica dejaria de reconocerlo como repetido
             vueltas = sorted(sin_ordenar, key=lambda v: (v.occurred_at, v.match_id))
-            marca_previa = best_before.get(user_id_raw)
+            # La marca de ANTES del torneo, sin ninguna de sus vueltas
+            # (decision del 22 oct 2026): se puede pedir en cualquier momento,
+            # tambien al volver a cerrar un torneo reabierto
+            marca_previa = await self._differentials.best_differential(
+                vueltas[0].user_id, excluding_competition_id=competition_id_raw
+            )
             # El record se mide una vez por jugador, no una por vuelta: solo hay
             # una marca previa con la que comparar y la mejor de sus vueltas
             # nuevas es la que la batio
             record = await self._diferencial_si_es_record(vueltas[0].user_id, marca_previa)
+            # «Campo nuevo» sale una vez por campo y torneo: con la primera
+            # vuelta del torneo en el, y si no lo habia jugado ANTES del torneo
+            campos_del_torneo: set[str] = set()
 
             for indice, vuelta in enumerate(vueltas):
+                estrena_campo = vuelta.golf_course_id not in campos_del_torneo
+                campos_del_torneo.add(vuelta.golf_course_id)
                 contexto = RoundContext(
-                    is_first_round_on_course=not await self._history.has_played_course_before(
-                        vuelta.user_id, vuelta.golf_course_id, vuelta.match_id
+                    is_first_round_on_course=estrena_campo
+                    and not await self._history.has_played_course_before(
+                        vuelta.user_id,
+                        vuelta.golf_course_id,
+                        vuelta.match_id,
+                        excluding_competition_id=competition_id_raw,
                     ),
                     # Colgado del primer partido para que se publique una vez
                     is_first_tournament=indice == 0 and estrena_torneo.get(user_id_raw, False),
@@ -157,6 +165,9 @@ class PublishTournamentAchievementsUseCase:
         # Una fecha para toda la publicacion y el interruptor de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
+            # En fila con la reapertura del torneo, que borra estos logros: el
+            # mismo candado que los avisos del torneo (revision del 22 oct 2026)
+            await self._social_uow.activity_events.lock_scope(competition_id_raw)
             await self._social_uow.activity_events.add_many(eventos)
 
         return len(eventos)
@@ -186,6 +197,7 @@ class PublishTournamentAchievementsUseCase:
             courses: dict = {}
             rounds: dict = {}
             grupos = await self._grupos(competition_id, [e.user_id for e in enrollments], rounds)
+            otros_por_jugador: dict[str, set[str]] = {}
 
             for enrollment in enrollments:
                 # Con la publicacion apagada tambien se publica, pero solo para
@@ -204,7 +216,7 @@ class PublishTournamentAchievementsUseCase:
                     continue
 
                 user_id_raw = str(enrollment.user_id.value)
-                estrena_torneo[user_id_raw] = not otros_torneos
+                otros_por_jugador[user_id_raw] = otros_torneos
 
                 for partido, ronda in del_torneo:
                     vuelta = await self._a_vuelta(
@@ -225,7 +237,29 @@ class PublishTournamentAchievementsUseCase:
                     if vuelta is not None:
                         vueltas.setdefault(user_id_raw, []).append(vuelta)
 
+            cerrados = await self._torneos_cerrados(otros_por_jugador)
+            for user_id_raw, otros in otros_por_jugador.items():
+                estrena_torneo[user_id_raw] = not (otros & cerrados)
+
         return vueltas, estrena_torneo
+
+    async def _torneos_cerrados(self, otros_por_jugador: dict[str, set[str]]) -> set[str]:
+        """
+        De los otros torneos de los inscritos, los ya cerrados, en una lectura:
+        uno en juego o cancelado no se ha jugado todavia, asi que no le quita el
+        estreno a nadie (revision del 22 oct 2026).
+        """
+        ids = {crudo for otros in otros_por_jugador.values() for crudo in otros}
+        if not ids:
+            return set()
+        torneos = await self._competition_uow.competitions.find_by_ids(
+            [CompetitionId(crudo) for crudo in ids]
+        )
+        return {
+            str(torneo.id.value)
+            for torneo in torneos
+            if torneo.status == CompetitionStatus.COMPLETED
+        }
 
     async def _partidos(
         self, user_id: UserId, competition_id: CompetitionId, rounds: dict, otros_torneos: set
@@ -352,7 +386,7 @@ class PublishTournamentAchievementsUseCase:
             for hole_score in hole_scores
             if hole_score.own_score is not None
         }
-        return await self._vuelta_de(
+        vuelta = await self._vuelta_de(
             ronda,
             courses,
             scores_by_hole,
@@ -360,6 +394,12 @@ class PublishTournamentAchievementsUseCase:
             match_id=str(partido.id.value),
             user_id=user_id,
             visible_to_friends=visible_to_friends,
+        )
+        if vuelta is None:
+            return None
+        return replace(
+            vuelta,
+            link={"kind": "MATCH", "competition_id": str(ronda.competition_id.value)},
         )
 
     async def _vuelta_de(
@@ -454,8 +494,9 @@ class PublishTournamentAchievementsUseCase:
             "holes_played": len(vuelta.holes),
             # Distingue en el feed una vuelta de torneo de una entre amigos
             "from_tournament": True,
-            # En stroke play, `kind` TEE_GROUP, `group_id` y `competition_id`:
-            # el logro abre la tarjeta del grupo, no la de un partido
+            # `kind` (MATCH o TEE_GROUP), `competition_id` y, en stroke play,
+            # `group_id`: el logro abre la tarjeta o, a quien no la jugo, la
+            # ficha del torneo
             **vuelta.link,
         }
         if logro.count > 1:

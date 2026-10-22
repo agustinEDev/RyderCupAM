@@ -191,7 +191,24 @@ class TestFriendCanViewFinishedMatch:
 
         detalle = await escena.ver()
 
+        assert detalle.id == escena.qm.id.value
+        assert detalle.status == "COMPLETED"
         assert detalle.read_only is True
+        assert detalle.viewer_is_participant is False
+        assert [(h.hole_number, h.score) for h in detalle.hole_scores] == [(1, 4)]
+        assert escena.nombre_de(detalle, escena.bea.id.value) == escena.bea.display_name
+        assert escena.nombre_de(detalle, escena.carlos.id.value) == escena.carlos.display_name
+
+    async def test_the_order_of_the_players_does_not_matter(self, escena):
+        """Al reves que el anterior: el que no publica va despues, y con Bea basta."""
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.carlos.id)
+        escena.carlos.set_activity_sharing(False)
+        await _save_user(escena.user_uow, escena.carlos)
+
+        detalle = await escena.ver()
+
+        assert detalle.id == escena.qm.id.value
 
     async def test_hidden_by_another_player_does_not_matter(self, escena):
         """La papelera es de cada uno: la de Ana no le quita nada a Bea."""

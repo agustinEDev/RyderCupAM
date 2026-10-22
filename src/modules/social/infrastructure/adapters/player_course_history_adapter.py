@@ -3,6 +3,7 @@
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
@@ -37,13 +38,17 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         self._competition_uow = competition_uow
 
     async def has_played_course_before(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
+        self,
+        user_id: UserId,
+        golf_course_id: str,
+        excluding_match_id: str,
+        excluding_competition_id: str | None = None,
     ) -> bool:
         if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id):
             return True
-        if await self._jugo_en_torneo(user_id, golf_course_id, excluding_match_id):
-            return True
-        return await self._jugo_en_stroke_play(user_id, golf_course_id, excluding_match_id)
+        return await self._jugo_en_torneo_cerrado(
+            user_id, golf_course_id, excluding_match_id, excluding_competition_id
+        )
 
     async def _jugo_en_partida_rapida(
         self, user_id: UserId, golf_course_id: str, excluding_match_id: str
@@ -58,45 +63,48 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
             for partida in partidas
         )
 
-    async def _jugo_en_torneo(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
+    async def _jugo_en_torneo_cerrado(
+        self,
+        user_id: UserId,
+        golf_course_id: str,
+        excluding_match_id: str,
+        excluding_competition_id: str | None,
     ) -> bool:
-        async with self._competition_uow:
-            partidos = await self._competition_uow.matches.find_completed_for_player(
-                user_id, limit=MAX_HISTORY_LOOKUP
-            )
-            rondas: dict = {}
-            for partido in partidos:
-                if str(partido.id.value) == excluding_match_id:
-                    continue
-                if partido.round_id not in rondas:
-                    rondas[partido.round_id] = await self._competition_uow.rounds.find_by_id(
-                        partido.round_id
-                    )
-                ronda = rondas[partido.round_id]
-                if ronda is not None and str(ronda.golf_course_id.value) == golf_course_id:
-                    return True
-        return False
+        """
+        Un partido de la Ryder o un grupo de stroke play en ese campo, de un
+        torneo YA CERRADO que no sea el que se juzga: un torneo en juego o
+        cancelado todavia no se ha jugado (revision del 22 oct 2026). En el
+        grupo, quien no se presento no piso el campo; quien se retiro, si.
 
-    async def _jugo_en_stroke_play(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
-    ) -> bool:
-        """
-        Un grupo de stroke play acabado en ese campo. Quien no se presento no
-        piso el campo; quien se retiro, si. Grupos y rondas, en dos consultas.
+        Todo por lotes: partidos, grupos, rondas y torneos, una lectura de cada.
         """
         async with self._competition_uow:
+            uow = self._competition_uow
+            partidos = [
+                partido
+                for partido in await uow.matches.find_completed_for_player(
+                    user_id, limit=MAX_HISTORY_LOOKUP
+                )
+                if str(partido.id.value) != excluding_match_id
+            ]
             grupos = [
                 grupo
-                for grupo in await self._competition_uow.partidas.completadas_de_jugadores(
-                    [user_id]
-                )
+                for grupo in await uow.partidas.completadas_de_jugadores([user_id])
                 if str(grupo.id.value) != excluding_match_id
                 and grupo.estados_de_tarjeta.get(user_id) != EstadoDeTarjeta.NO_PRESENTADO
             ]
-            if not grupos:
+            round_ids = {p.round_id for p in partidos} | {g.round_id for g in grupos}
+            if not round_ids:
                 return False
-            rondas = await self._competition_uow.rounds.find_by_ids(
-                list({grupo.round_id for grupo in grupos})
+            rondas = await uow.rounds.find_by_ids(list(round_ids))
+            en_el_campo = [r for r in rondas if str(r.golf_course_id.value) == golf_course_id]
+            if not en_el_campo:
+                return False
+            torneos = await uow.competitions.find_by_ids(
+                list({r.competition_id for r in en_el_campo})
             )
-        return any(str(ronda.golf_course_id.value) == golf_course_id for ronda in rondas)
+        return any(
+            torneo.status == CompetitionStatus.COMPLETED
+            and str(torneo.id.value) != excluding_competition_id
+            for torneo in torneos
+        )

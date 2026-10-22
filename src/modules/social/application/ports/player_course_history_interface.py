@@ -17,7 +17,11 @@ class PlayerCourseHistoryInterface(ABC):
 
     @abstractmethod
     async def has_played_course_before(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
+        self,
+        user_id: UserId,
+        golf_course_id: str,
+        excluding_match_id: str,
+        excluding_competition_id: str | None = None,
     ) -> bool:
         """
         Si el jugador ya habia terminado otra vuelta en ese campo.
@@ -25,4 +29,9 @@ class PlayerCourseHistoryInterface(ABC):
         `excluding_match_id` deja fuera la vuelta que se esta juzgando: cuando
         esto corre ya esta cerrada, asi que contarla haria que nadie estrenara
         campo nunca.
+
+        `excluding_competition_id` deja fuera el torneo entero que se juzga
+        (decision del 22 oct 2026): «campo nuevo» es no haberlo jugado ANTES de
+        ese torneo, asi que sus otras vueltas en el campo no lo bloquean. De
+        los demas torneos solo cuentan los ya cerrados.
         """

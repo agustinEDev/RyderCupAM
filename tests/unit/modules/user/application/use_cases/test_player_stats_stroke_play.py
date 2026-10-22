@@ -16,6 +16,7 @@ import pytest
 
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryCompetitionUnitOfWork,
 )
@@ -228,3 +229,26 @@ class TestReadsInBulk:
 
         assert stats.rounds_played == 2
         assert uno_a_uno == []
+
+
+class TestExcludingOneTournament:
+    """La marca de antes de un torneo: sin ninguna de sus vueltas, Ryder o stroke play."""
+
+    async def test_its_groups_and_matches_are_left_out(self, world):
+        ana = await world.user()
+        rival = await world.user()
+        competition, course, _ = await _jugada(world, ana)
+        ryder = await world.competition(ana, tipo=TournamentType.RYDER_CUP, enrolled=[ana, rival])
+        await world.match(await world.round(ryder, course), ana, rival, tarjeta())
+
+        todo = await _stats(world).execute(ana.id)
+        sin_stroke = await _stats(world).execute(
+            ana.id, excluding_competition_id=str(competition.id.value)
+        )
+        sin_ryder = await _stats(world).execute(
+            ana.id, excluding_competition_id=str(ryder.id.value)
+        )
+
+        assert todo.rounds_played == 2
+        assert sin_stroke.rounds_played == 1
+        assert sin_ryder.rounds_played == 1

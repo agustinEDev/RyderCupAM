@@ -205,15 +205,23 @@ class GetPlayerStatsUseCase:
         return len(enrollments), active
 
     async def _collect_rounds(
-        self, user_id: UserId, golf_course_id: GolfCourseId | None, handicap: float | None
+        self,
+        user_id: UserId,
+        golf_course_id: GolfCourseId | None,
+        handicap: float | None,
+        excluding_competition_id: str | None = None,
     ) -> list["_ComputableRound"]:
         """
-        Las vueltas computables del jugador, de las dos fuentes y ya ordenadas.
+        Las vueltas computables del jugador, de las fuentes y ya ordenadas.
 
         La usan el resumen Y el desglose, y esa es la razón de que exista: si
         cada uno recolectara por su cuenta, bastaría con tocar una de las dos
         copias para que la media y el desglose dejaran de hablar de las mismas
         vueltas, sin que ningún test lo viera.
+
+        `excluding_competition_id` deja fuera todas las vueltas de un torneo,
+        de la Ryder o de stroke play: es la marca de ANTES de ese torneo, con
+        la que se mide su «mejor marca» (decisión del 22 oct 2026).
         """
         quick_rounds = await self._collect_quick_match_rounds(user_id, golf_course_id, handicap)
 
@@ -223,6 +231,13 @@ class GetPlayerStatsUseCase:
             )
             rounds_by_match = await self._rounds_by_match(competition_matches)
             scratch_competitions = await self._scratch_competitions(rounds_by_match)
+            if excluding_competition_id is not None:
+                competition_matches = [
+                    match
+                    for match in competition_matches
+                    if (round_ := rounds_by_match.get(match.id)) is None
+                    or str(round_.competition_id.value) != excluding_competition_id
+                ]
             if golf_course_id is not None:
                 competition_matches = [
                     match
@@ -246,7 +261,7 @@ class GetPlayerStatsUseCase:
         )
 
         stroke_play_rounds = await self._collect_stroke_play_rounds(
-            user_id, golf_course_id, handicap
+            user_id, golf_course_id, handicap, excluding_competition_id
         )
 
         # Las fuentes llegan ordenadas por su cuenta; el registro del WHS es
@@ -258,7 +273,11 @@ class GetPlayerStatsUseCase:
         )
 
     async def execute(
-        self, user_id: UserId, golf_course_id: GolfCourseId | None = None
+        self,
+        user_id: UserId,
+        golf_course_id: GolfCourseId | None = None,
+        *,
+        excluding_competition_id: str | None = None,
     ) -> PlayerStatsResponseDTO:
         """
         Resumen del jugador, opcionalmente restringido a un campo.
@@ -266,9 +285,14 @@ class GetPlayerStatsUseCase:
         Con `golf_course_id` solo entran las rondas de ese campo, y los
         contadores de torneos se dejan a cero: son globales del jugador y
         repetirlos en un desglose por campo induciría a error.
+
+        Con `excluding_competition_id`, sin ninguna vuelta de ese torneo: la
+        marca de antes de él, para el récord del feed. La API no lo usa.
         """
         handicap = await self._profile_handicap(user_id)
-        computable_rounds = await self._collect_rounds(user_id, golf_course_id, handicap)
+        computable_rounds = await self._collect_rounds(
+            user_id, golf_course_id, handicap, excluding_competition_id
+        )
         tournaments_total, tournaments_active = await self._tournament_counters(
             user_id, golf_course_id
         )
@@ -539,6 +563,7 @@ class GetPlayerStatsUseCase:
         user_id: UserId,
         golf_course_id: GolfCourseId | None,
         profile_handicap: float | None,
+        excluding_competition_id: str | None = None,
     ) -> list[_ComputableRound]:
         """
         Vueltas de stroke play de torneo (grupos de salida) computables (L10).
@@ -548,10 +573,8 @@ class GetPlayerStatsUseCase:
 
         - Ni el no presentado ni el retirado: no entregaron vuelta.
         - El torneo, cerrado: hasta entonces el organizador aún puede corregir
-          tarjetas, y la «mejor marca» del cierre se mide contra el mejor
-          diferencial de justo antes de cerrar. Si las tarjetas contaran desde
-          que acaba el grupo, esa marca previa ya las incluiría y el récord no
-          saldría nunca.
+          tarjetas, y un torneo en juego o cancelado no se ha jugado todavía
+          (el mismo criterio que «campo nuevo» y «primer torneo»).
 
         Todo por lotes: grupos, golpes, rondas, torneos y campos, una consulta
         de cada, sean cuantos sean los grupos.
@@ -590,6 +613,8 @@ class GetPlayerStatsUseCase:
             if round_ is None or competition is None:
                 continue
             if competition.status != CompetitionStatus.COMPLETED:
+                continue
+            if str(competition.id.value) == excluding_competition_id:
                 continue
             if golf_course_id is not None and round_.golf_course_id != golf_course_id:
                 continue

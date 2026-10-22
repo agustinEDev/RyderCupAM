@@ -8,6 +8,7 @@ import pytest
 
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryCompetitionUnitOfWork,
 )
@@ -99,6 +100,62 @@ async def test_a_withdrawn_player_did_play_the_course(world):
 
 async def test_a_group_still_on_the_course_does_not_count(world):
     ana, _, course, _ = await _jugado(world, estado=EstadoPartida.IN_PROGRESS)
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta"
+    )
+
+
+# ==================== Decisiones del 22 oct: antes del torneo y solo los cerrados ====================
+
+
+async def test_the_tournament_being_judged_never_counts(world):
+    """Otra vuelta del mismo torneo en el campo no lo hace «ya jugado»."""
+    ana, _, course, _ = await _jugado(world)
+    competition = (await world.comp.partidas.completadas_de_jugadores([ana.id]))[0].competition_id
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", excluding_competition_id=str(competition.value)
+    )
+
+
+async def test_a_ryder_match_of_the_tournament_being_judged_never_counts(world):
+    ana = await world.user()
+    rival = await world.user()
+    competition = await world.competition(ana, tipo=TournamentType.RYDER_CUP, enrolled=[ana, rival])
+    course = await world.course(ana)
+    await world.match(await world.round(competition, course), ana, rival, tarjeta())
+
+    assert await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta"
+    )
+    assert not await _adapter(world).has_played_course_before(
+        ana.id,
+        str(course.id.value),
+        "otra-vuelta",
+        excluding_competition_id=str(competition.id.value),
+    )
+
+
+async def test_a_group_of_a_tournament_still_open_does_not_count(world):
+    ana = await world.user()
+    competition = await world.competition(ana, enrolled=[ana], completed=False)
+    course = await world.course(ana)
+    await world.group(competition, await world.round(competition, course), {ana: tarjeta()})
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta"
+    )
+
+
+async def test_a_ryder_match_of_a_tournament_still_open_does_not_count(world):
+    ana = await world.user()
+    rival = await world.user()
+    competition = await world.competition(
+        ana, tipo=TournamentType.RYDER_CUP, enrolled=[ana, rival], completed=False
+    )
+    course = await world.course(ana)
+    await world.match(await world.round(competition, course), ana, rival, tarjeta())
 
     assert not await _adapter(world).has_played_course_before(
         ana.id, str(course.id.value), "otra-vuelta"

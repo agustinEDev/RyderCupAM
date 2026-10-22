@@ -71,11 +71,15 @@ T = ActivityEventType
 
 
 class _Differentials(PlayerDifferentialsInterface):
-    def __init__(self, por_jugador: dict | None = None):
-        self._por_jugador = por_jugador or {}
+    """`ahora`: el mejor diferencial de hoy; `antes`: el de antes del torneo."""
 
-    async def best_differential(self, user_id):
-        return self._por_jugador.get(str(user_id.value))
+    def __init__(self, ahora: dict | None = None, antes: dict | None = None):
+        self._ahora = ahora or {}
+        self._antes = antes or {}
+
+    async def best_differential(self, user_id, excluding_competition_id=None):
+        fuente = self._antes if excluding_competition_id else self._ahora
+        return fuente.get(str(user_id.value))
 
 
 class _History(PlayerCourseHistoryInterface):
@@ -85,7 +89,9 @@ class _History(PlayerCourseHistoryInterface):
         self.vueltas: set = set()
         self.preguntas: list = []
 
-    async def has_played_course_before(self, user_id, golf_course_id, excluding_match_id):
+    async def has_played_course_before(
+        self, user_id, golf_course_id, excluding_match_id, excluding_competition_id=None
+    ):
         self.preguntas.append((user_id, golf_course_id, excluding_match_id))
         return any(
             u == str(user_id.value) and c == golf_course_id and m != excluding_match_id
@@ -219,11 +225,9 @@ class TestStrokePlayAchievements:
     async def test_personal_best_hangs_from_the_group(self, world, social_uow):
         ana = await world.user()
         competition, _, partida = await _torneo(world, {ana: tarjeta()})
-        ahora = _Differentials({str(ana.id.value): 5.0})
+        ahora = _Differentials({str(ana.id.value): 5.0}, antes={str(ana.id.value): 9.0})
 
-        await _publisher(world, social_uow, differentials=ahora).execute(
-            str(competition.id.value), best_differential_before={str(ana.id.value): 9.0}
-        )
+        await _publisher(world, social_uow, differentials=ahora).execute(str(competition.id.value))
 
         record = next(e for e in await _feed(social_uow, ana) if e.type == T.PERSONAL_BEST)
         assert record.source_match_id == str(partida.id.value)
@@ -442,7 +446,7 @@ class TestPersonalBestEndToEnd:
         )
         differentials = StatsPlayerDifferentialsAdapter(stats)
         publisher = TournamentAchievementsPublisher(
-            _publisher(world, social_uow, differentials=differentials), differentials
+            _publisher(world, social_uow, differentials=differentials)
         )
 
         await CompleteCompetitionUseCase(world.comp, achievements=publisher).execute(

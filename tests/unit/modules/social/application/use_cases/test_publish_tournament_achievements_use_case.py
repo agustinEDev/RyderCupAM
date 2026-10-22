@@ -71,11 +71,15 @@ def _todos(*user_ids) -> ActivitySlice:
 
 
 class _DifferentialsStub(PlayerDifferentialsInterface):
-    def __init__(self, por_jugador: dict | None = None):
-        self._por_jugador = por_jugador or {}
+    """`ahora`: el mejor diferencial de hoy; `antes`: el de antes del torneo."""
 
-    async def best_differential(self, user_id):
-        return self._por_jugador.get(str(user_id.value))
+    def __init__(self, ahora: dict | None = None, antes: dict | None = None):
+        self._ahora = ahora or {}
+        self._antes = antes or {}
+
+    async def best_differential(self, user_id, excluding_competition_id=None):
+        fuente = self._antes if excluding_competition_id else self._ahora
+        return fuente.get(str(user_id.value))
 
 
 class _CourseHistoryFake(PlayerCourseHistoryInterface):
@@ -88,7 +92,7 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
         self._vueltas.add((str(user_id.value), golf_course_id, match_id))
 
     async def has_played_course_before(
-        self, user_id, golf_course_id: str, excluding_match_id: str
+        self, user_id, golf_course_id: str, excluding_match_id: str, excluding_competition_id=None
     ) -> bool:
         return any(
             usuario == str(user_id.value)
@@ -515,7 +519,9 @@ class _ApagaAlJuzgar(_CourseHistoryFake):
         super().__init__()
         self._user = user
 
-    async def has_played_course_before(self, user_id, golf_course_id, excluding_match_id):
+    async def has_played_course_before(
+        self, user_id, golf_course_id, excluding_match_id, excluding_competition_id=None
+    ):
         self._user.set_activity_sharing(False)
         return await super().has_played_course_before(user_id, golf_course_id, excluding_match_id)
 

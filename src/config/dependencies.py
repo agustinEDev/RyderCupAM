@@ -1783,10 +1783,9 @@ def get_tournament_achievements_publisher(
     publish_use_case: PublishTournamentAchievementsUseCase = Depends(
         get_publish_tournament_achievements_use_case
     ),
-    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
 ) -> TournamentAchievementsPublisherInterface:
     """Proveedor del adaptador que conecta competition con el feed social."""
-    return TournamentAchievementsPublisher(publish_use_case, uows.differentials)
+    return TournamentAchievementsPublisher(publish_use_case)
 
 
 def get_publish_quick_match_result_use_case(
