@@ -13,12 +13,16 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
     LanzadorDeActualizaciones,
 )
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.application.services.handicaps_al_cerrar import HandicapsAlCerrar
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
@@ -61,6 +65,7 @@ class CloseEnrollmentsUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface | None = None,
         lanzador: LanzadorDeActualizaciones | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
@@ -69,6 +74,8 @@ class CloseEnrollmentsUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # Los avisos de Actividad: las invitaciones que se cierran (22 oct 2026)
+        self._actividad = AvisosDeActividad(actividad)
         # Para el hándicap de cada inscrito en un stroke play (#251)
         self._users = user_repository
         # El refresco con la RFEG en segundo plano; sin él, no hay (fuera de producción)
@@ -145,10 +152,12 @@ class CloseEnrollmentsUseCase:
                 await self._uow.esperas.vaciar(competition.id)
 
             # 6. Las invitaciones pendientes se quedan sin plaza (#710)
-            await sin_plaza_para_las_pendientes(self._uow, competition_id)
+            sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition_id)
 
         # 7. Ya guardada, se lanza: la respuesta no espera a la RFEG
         self._actualizaciones.lanzar(actualizacion)
+        # Y las invitaciones cerradas retiran su aviso de invitado (22 oct 2026)
+        await self._actividad.invitations_closed(sin_plaza)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(

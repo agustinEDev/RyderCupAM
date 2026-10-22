@@ -153,8 +153,12 @@ class _Mundo:
         play_mode: PlayMode = PlayMode.HANDICAP,
         hoyos: list[int] | None = None,
         terminar: bool = True,
+        jugados: list | None = None,
     ) -> QuickMatch:
-        """`golpes[i]` son los golpes por hoyo del participante i (0 = creador)."""
+        """
+        `golpes[i]` son los golpes por hoyo del participante i (0 = creador).
+        `hoyos[i]`, cuantos jugo (del 1 al N); `jugados[i]`, que hoyos exactos.
+        """
         match = QuickMatch.create(
             id=QuickMatchId.generate(),
             creator_id=creador.id,
@@ -172,8 +176,11 @@ class _Mundo:
         async with self.qm:
             await self.qm.quick_matches.add(match)
             for indice, participant_id in enumerate(ids):
-                jugados = hoyos[indice] if hoyos else 18
-                for hoyo in range(1, jugados + 1):
+                if jugados is not None:
+                    suyos = list(jugados[indice])
+                else:
+                    suyos = list(range(1, (hoyos[indice] if hoyos else 18) + 1))
+                for hoyo in suyos:
                     await self.qm.quick_match_hole_scores.add(
                         QuickMatchHoleScore(
                             id=QuickMatchHoleScoreId.generate(),
@@ -1145,3 +1152,345 @@ class TestSinUnaConsultaPorPartida:
         assert {p.competition_name for p in partidas if p.competition_id} == {"Copa de Otoño"}
         assert [c.llamadas for c in uno_a_uno] == [0, 0, 0, 0, 0]
         assert [c.llamadas for c in en_bloque] == [1, 1, 1, 1, 1]
+
+
+# === Tabla del 22 oct 2026, A: cuando cuenta una partida rapida ===
+
+IDA = range(1, 10)
+VUELTA = range(10, 19)
+
+
+class TestTablaAStrokePlayRapidoDesdeNueveHoyos:
+    async def test_nueve_hoyos_de_los_dos_cuentan(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+            jugados=[IDA, IDA],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.WON
+        assert partida.unfinished is False
+
+    async def test_ocho_hoyos_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+            hoyos=[8, 8],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome is None
+        assert partida.unfinished is True
+
+    async def test_si_el_tiene_menos_hoyos_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [5, 4],
+            scoring_format=ScoringFormat.STABLEFORD,
+            hoyos=[18, 17],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome is None
+        assert partida.unfinished is True
+
+    async def test_si_un_tercero_tiene_mas_hoyos_los_dos_sin_terminar(self, mundo):
+        """La referencia la pone el tercero, con 18: nuestros 9 no cuentan."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        otro = await mundo.jugador("Otro")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id), QuickMatchParticipant.for_user(otro.id)],
+            [4, 5, 4],
+            scoring_format=ScoringFormat.STABLEFORD,
+            hoyos=[9, 9, 18],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.unfinished is True
+        assert partida.outcome is None
+
+    async def test_mismo_numero_pero_distintos_hoyos_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.MEDAL,
+            jugados=[IDA, VUELTA],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.unfinished is True
+
+    async def test_sin_handicap_y_contando_sigue_sin_resultado_pero_no_sin_terminar(self, mundo):
+        """El hándicap que falta no es una tarjeta a medias: sale sin resultado, como hoy."""
+        yo = await mundo.jugador("Yo", handicap=10)
+        el = await mundo.jugador("El", handicap=None)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+            jugados=[IDA, IDA],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome is None
+        assert partida.unfinished is False
+
+
+class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
+    async def test_un_solo_hoyo_ya_no_cuenta(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [3, 4],
+            match_format=MatchFormat.SINGLES,
+            hoyos=[1, 1],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome is None
+        assert partida.unfinished is True
+
+    async def test_nueve_hoyos_cuenta(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [3, 4],
+            match_format=MatchFormat.SINGLES,
+            jugados=[VUELTA, VUELTA],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.WON
+        assert partida.unfinished is False
+
+    async def test_decidido_antes_de_tiempo_cuenta_aunque_el_otro_siguiera(self, mundo):
+        """Gano todos los hoyos: 10&8 tras el 10, y él anotó dos hoyos más."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [3, 4],
+            match_format=MatchFormat.SINGLES,
+            hoyos=[10, 12],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.WON
+        assert partida.unfinished is False
+
+    async def test_fourball_basta_la_bola_de_uno_del_bando(self, mundo):
+        """
+        Fourball (Agustin, 22 oct): él solo anota birdie en el 1 y el 2; yo y
+        los rivales, 4 en los 18. Cuenta con los 18 y lo ganamos 2UP.
+        """
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        rival1 = await mundo.jugador("Rival1")
+        rival2 = await mundo.jugador("Rival2")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(el.id, team="A"),
+                QuickMatchParticipant.for_user(rival1.id, team="B"),
+                QuickMatchParticipant.for_user(rival2.id, team="B"),
+            ],
+            [4, 3, 4, 4],
+            match_format=MatchFormat.FOURBALL,
+            jugados=[HOLES, [1, 2], HOLES, HOLES],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.relation == Relation.WITH
+        assert partida.unfinished is False
+        assert partida.outcome == Outcome.WON
+
+    async def test_fourball_el_mejor_neto_de_los_que_haya_en_cada_hoyo(self, mundo):
+        """
+        Fourball: él solo anota birdie en el 1 y el 2, y un rival solo birdie en
+        el 3, el 4 y el 5. Con la bola de uno por bando cuentan los 18: ganamos
+        dos hoyos, perdemos tres, y lo perdemos 1UP.
+        """
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        rival1 = await mundo.jugador("Rival1")
+        rival2 = await mundo.jugador("Rival2")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(el.id, team="A"),
+                QuickMatchParticipant.for_user(rival1.id, team="B"),
+                QuickMatchParticipant.for_user(rival2.id, team="B"),
+            ],
+            [4, 3, 4, 3],
+            match_format=MatchFormat.FOURBALL,
+            jugados=[HOLES, [1, 2], HOLES, [3, 4, 5]],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.unfinished, partida.outcome) == (False, Outcome.LOST)
+
+    async def test_fourball_un_hoyo_sin_bola_del_bando_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        rival1 = await mundo.jugador("Rival1")
+        rival2 = await mundo.jugador("Rival2")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(el.id, team="A"),
+                QuickMatchParticipant.for_user(rival1.id, team="B"),
+                QuickMatchParticipant.for_user(rival2.id, team="B"),
+            ],
+            [4, 4, 4, 4],
+            match_format=MatchFormat.FOURBALL,
+            hoyos=[17, 17, 18, 18],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.unfinished, partida.outcome) == (True, None)
+
+    async def test_sin_handicap_sigue_sin_resultado(self, mundo):
+        """Sin el hándicap de alguien no se juzga, como hoy; tampoco se marca a medias."""
+        yo = await mundo.jugador("Yo", handicap=10)
+        el = await mundo.jugador("El", handicap=None)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            match_format=MatchFormat.SINGLES,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome is None
+        assert partida.unfinished is False
+
+
+class TestTablaAMatchPlaySinHoyoAdjudicableYFoursomes:
+    async def test_ida_frente_a_vuelta_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 4],
+            match_format=MatchFormat.SINGLES,
+            jugados=[IDA, VUELTA],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.outcome, partida.unfinished) == (None, True)
+
+    async def test_foursomes_una_bola_por_bando_nueve_hoyos_cuenta(self, mundo):
+        yo = await mundo.jugador("Yo")
+        companero = await mundo.jugador("Companero")
+        el = await mundo.jugador("El")
+        suyo = await mundo.jugador("Suyo")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(companero.id, team="A"),
+                QuickMatchParticipant.for_user(el.id, team="B"),
+                QuickMatchParticipant.for_user(suyo.id, team="B"),
+            ],
+            [3, 0, 4, 0],
+            match_format=MatchFormat.FOURSOMES,
+            jugados=[IDA, [], IDA, []],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.relation, partida.outcome, partida.unfinished) == (
+            Relation.AGAINST,
+            Outcome.WON,
+            False,
+        )
+
+    async def test_foursomes_un_bando_corto_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        companero = await mundo.jugador("Companero")
+        el = await mundo.jugador("El")
+        suyo = await mundo.jugador("Suyo")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(companero.id, team="A"),
+                QuickMatchParticipant.for_user(el.id, team="B"),
+                QuickMatchParticipant.for_user(suyo.id, team="B"),
+            ],
+            [4, 0, 4, 0],
+            match_format=MatchFormat.FOURSOMES,
+            jugados=[IDA, [], range(1, 9), []],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.outcome, partida.unfinished) == (None, True)

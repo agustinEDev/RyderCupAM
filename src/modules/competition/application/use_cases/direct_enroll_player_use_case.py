@@ -194,13 +194,15 @@ class DirectEnrollPlayerUseCase:
 
             # Si era la última plaza, las invitaciones pendientes se quedan sin
             # ella ya (BE #359)
-            await al_ocupar_una_plaza(
+            sin_plaza = await al_ocupar_una_plaza(
                 self._uow, competition_id, approved_count, competition.max_players
             )
 
         # 8. Ya guardado, a Actividad: sin aviso de aceptado, que no pidió nada;
-        #    sus amigos lo ven si el torneo es público (BE-2)
+        #    sus amigos lo ven si el torneo es público (BE-2). Y las pendientes
+        #    que se quedaron sin plaza retiran su aviso (22 oct 2026)
         await self._actividad.enrolled(competition, enrollment, accepted_request=False)
+        await self._actividad.invitations_closed(sin_plaza)
 
         # 9. Retornar DTO
         return DirectEnrollPlayerResponseDTO(

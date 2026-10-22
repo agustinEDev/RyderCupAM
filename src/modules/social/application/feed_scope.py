@@ -32,9 +32,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.utc_clock import utc_now
 
-# Tope del contador de novedades. El cliente pinta «9+», asi que pasado el 10
-# el numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
-UNSEEN_CAP = 10
+# Tope del contador de novedades (tabla del 22 oct 2026, B). Mas alla, el
+# numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
+UNSEEN_CAP = 99
 
 # Cuantas solicitudes de amistad pendientes se leen para el feed. Nadie tiene
 # tantas sin responder, y el contador no necesita mas que su tope
@@ -161,7 +161,17 @@ async def count_unseen(
     Recibe el repositorio y no la unidad de trabajo para contar dentro de la
     misma que ya tenga abierta quien llama.
     """
-    tarjetas = await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)
+    # Sin los apuntados a torneos que ahora son privados: el feed no los enseña
+    # (regla E), y el numero tiene que decir lo mismo que la pantalla
+    # Ni las invitaciones que ya no se pueden aceptar, con el reloj de la propia
+    # invitacion (`Invitation.is_expired`, hora local sin zona)
+    tarjetas = await events.count_in(
+        scope.slices,
+        since=scope.last_seen_at,
+        cap=UNSEEN_CAP,
+        skip_private_enrollments=True,
+        open_invitations_at=datetime.now(),
+    )
     solicitudes = sum(
         1
         for solicitud in requests

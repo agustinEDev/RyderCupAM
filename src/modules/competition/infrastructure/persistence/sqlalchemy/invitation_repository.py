@@ -12,6 +12,9 @@ from src.modules.competition.domain.repositories.invitation_repository_interface
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
+    invitations_table,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -105,6 +108,21 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def find_acceptable_ids(
+        self, invitation_ids: list[InvitationId], now: datetime
+    ) -> set[InvitationId]:
+        """Solo el id: sin cargar las invitaciones."""
+        if not invitation_ids:
+            return set()
+        tabla = invitations_table.c
+        stmt = select(tabla.id).where(
+            tabla.id.in_(invitation_ids),
+            tabla.status == InvitationStatus.PENDING,
+            tabla.expires_at > now,
+        )
+        result = await self._session.execute(stmt)
+        return set(result.scalars().all())
 
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         stmt = select(Invitation).where(

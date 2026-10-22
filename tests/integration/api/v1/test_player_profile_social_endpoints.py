@@ -51,9 +51,12 @@ async def _campo(client: AsyncClient, prefijo: str, creador: dict) -> str:
 
 
 async def _singles(
-    client: AsyncClient, course_id: str, yo: dict, el: dict, mio: int, suyo: int
+    client: AsyncClient, course_id: str, yo: dict, el: dict, mio: int, suyo: int, hoyos: int = 9
 ) -> str:
-    """Un singles rapido de un hoyo, anotado por cada uno y terminado."""
+    """
+    Un singles rapido de `hoyos` hoyos (9 por defecto, lo minimo que cuenta
+    desde la tabla del 22 oct), anotado por cada uno y terminado.
+    """
     set_auth_cookies(client, yo["cookies"])
     creada = await client.post(
         "/api/v1/quick-matches", json={"golf_course_id": course_id, "match_format": "SINGLES"}
@@ -70,13 +73,17 @@ async def _singles(
         json={"scorer_ids": [yo["user"]["id"], el["user"]["id"]]},
     )
     assert empezada.status_code == 200, empezada.text
-    assert (
-        await client.post(f"/api/v1/quick-matches/{match_id}/holes/1/score", json={"score": mio})
-    ).status_code == 200
-    set_auth_cookies(client, el["cookies"])
-    assert (
-        await client.post(f"/api/v1/quick-matches/{match_id}/holes/1/score", json={"score": suyo})
-    ).status_code == 200
+    for hoyo in range(1, hoyos + 1):
+        set_auth_cookies(client, yo["cookies"])
+        anotado = await client.post(
+            f"/api/v1/quick-matches/{match_id}/holes/{hoyo}/score", json={"score": mio}
+        )
+        assert anotado.status_code == 200, anotado.text
+        set_auth_cookies(client, el["cookies"])
+        anotado = await client.post(
+            f"/api/v1/quick-matches/{match_id}/holes/{hoyo}/score", json={"score": suyo}
+        )
+        assert anotado.status_code == 200, anotado.text
     set_auth_cookies(client, yo["cookies"])
     terminada = await client.post(f"/api/v1/quick-matches/{match_id}/complete")
     assert terminada.status_code == 200, terminada.text
@@ -129,6 +136,9 @@ class TestPerfilSocial:
         assert datos["friendship"]["status"] == "BLOCKED"
         assert datos["handicap"] is None
         assert datos["friends_count"] == 0
+        # F (22 oct): me bloqueo el; desde su lado, lo bloqueo el
+        assert datos["blocked_by_me"] is False
+        assert (await _perfil(client, el, yo))["blocked_by_me"] is True
 
     async def test_un_amigo_ve_el_cara_a_cara_y_las_partidas_juntos(self, client: AsyncClient):
         """Caso 4: gano el singles (4 contra 5, scratch en un hoyo)."""
@@ -155,6 +165,20 @@ class TestPerfilSocial:
         # Y desde su lado, la perdio
         suyos = await _perfil(client, el, yo)
         assert suyos["head_to_head"]["against"] == {"won": 0, "halved": 0, "lost": 1}
+
+    async def test_con_un_solo_hoyo_sale_sin_terminar_y_no_cuenta(self, client: AsyncClient):
+        """Tabla del 22 oct, A: un hoyo anotado ya no es «Ganaste 1UP»."""
+        yo = await _usuario(client, "ps_u1@test.com", "Ana")
+        el = await _usuario(client, "ps_u2@test.com", "Luis")
+        await hacerse_amigos(client, yo, el)
+        course_id = await _campo(client, "ps_u", yo)
+        await _singles(client, course_id, yo, el, mio=4, suyo=5, hoyos=1)
+
+        datos = await _perfil(client, yo, el)
+
+        assert datos["head_to_head"] is None
+        (partida,) = datos["games_together"]["games"]
+        assert partida["result"] == "UNFINISHED"
 
     async def test_uno_mismo_no_tiene_cara_a_cara(self, client: AsyncClient):
         """Caso 6."""

@@ -31,12 +31,17 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.ENROLLED_IN_TOURNAMENT,
         ActivityEventType.TOURNAMENT_MATCH_RESULT,
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
+        ActivityEventType.ENROLLMENT_CONFIRMED,
         ActivityEventType.TEE_TIME_ASSIGNED,
     }
 )
 
-# Lo que se va cuando ya no estas en el torneo: que estas apuntado y tus salidas
-_DE_ESTAR_APUNTADO = (ActivityEventType.ENROLLED_IN_TOURNAMENT,)
+# Lo que se va cuando ya no estas en el torneo: que estas apuntado, tu «ya
+# estas inscrito» (C) y tus salidas
+_DE_ESTAR_APUNTADO = (
+    ActivityEventType.ENROLLED_IN_TOURNAMENT,
+    ActivityEventType.ENROLLMENT_CONFIRMED,
+)
 _SALIDA = ActivityEventType.TEE_TIME_ASSIGNED
 
 # Que clase de salida es, para que el cliente no lo deduzca de los nulos
@@ -146,13 +151,23 @@ class PublishCompetitionNoticesUseCase:
         Queda inscrito: «te han aceptado» si fue aprobando su solicitud (A1), y
         «X se ha apuntado» para sus amigos si el torneo es publico (B8, B9).
         Inscrito directamente o aceptando una invitacion no hay nada que
-        aceptarle, asi que solo sale lo de los amigos (A2).
+        aceptarle: le llega «ya estas inscrito» (ENROLLMENT_CONFIRMED, tabla del
+        22 oct 2026, C), uno por torneo, para retirarlo al irse.
         """
         eventos = []
         if accepted_request:
             eventos.append(
                 self._aviso(
                     user_id, ActivityEventType.ENROLLMENT_APPROVED, enrollment_id, tournament
+                )
+            )
+        else:
+            eventos.append(
+                self._aviso(
+                    user_id,
+                    ActivityEventType.ENROLLMENT_CONFIRMED,
+                    tournament.competition_id,
+                    tournament,
                 )
             )
         if tournament.is_public:
@@ -168,8 +183,8 @@ class PublishCompetitionNoticesUseCase:
 
     async def left(self, user_id: UserId, competition_id: str) -> None:
         """
-        Se retira: sus amigos dejan de ver que esta apuntado (B11), y sus
-        salidas de ese torneo se van (G9): ya no sale en ninguna.
+        Se retira: sus amigos dejan de ver que esta apuntado (B11), el deja de
+        ver «ya estas inscrito» (C) y sus salidas de ese torneo se van (G9).
         """
         async with self._social_uow:
             # En fila con las publicaciones de salidas del torneo: una que leyo
@@ -183,7 +198,7 @@ class PublishCompetitionNoticesUseCase:
             )
 
     async def tournament_cancelled(self, competition_id: str) -> None:
-        """Torneo cancelado: nadie esta ya apuntado a el (B11) ni tiene salida (G9)."""
+        """Torneo cancelado: nadie esta ya apuntado (B11, C) ni tiene salida (G9)."""
         async with self._social_uow:
             await self._social_uow.activity_events.lock_scope(competition_id)
             await self._social_uow.activity_events.delete_from_source(
@@ -204,6 +219,27 @@ class PublishCompetitionNoticesUseCase:
     async def invitation_withdrawn(self, user_id: UserId, invitation_id: str) -> None:
         """El organizador retira la invitacion: su aviso desaparece (A4)."""
         await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
+
+    async def invitation_answered(self, user_id: UserId, invitation_id: str) -> None:
+        """
+        El invitado la acepta o la rechaza: su aviso de invitado ya no pide nada
+        y desaparece (tabla del 22 oct 2026, C).
+        """
+        await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
+
+    async def invitations_closed(self, invitations: Sequence[tuple[UserId, str]]) -> None:
+        """
+        Invitaciones que se cerraron solas (sin plaza o caducadas): su aviso de
+        invitado ya no pide nada y desaparece (Agustin, 22 oct 2026). Todas en
+        la misma transaccion.
+        """
+        if not invitations:
+            return
+        # Un solo borrado para todo el lote, no uno por invitacion
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_pairs(
+                ActivityEventType.INVITED_TO_TOURNAMENT, invitations
+            )
 
     async def requests_closed(
         self, tournament: TournamentRef, requests: Sequence[tuple[UserId, str]]

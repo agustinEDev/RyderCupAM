@@ -24,6 +24,10 @@ class SharedGame:
 
     `outcome` es None cuando no cuenta para el cara a cara (sin resultado, o
     una tarjeta a medias), aunque si salga en «Partidas juntos».
+
+    `unfinished` marca la partida rapida que no cuenta para alguno de los dos
+    por los hoyos que anoto (tabla del 22 oct 2026, A): sale «sin terminar» y
+    su `outcome` es None.
     `game_id` es el id de la partida rapida, del partido o del grupo.
 
     `played_at` es el instante en que se jugo, en UTC y sin zona: ordena las
@@ -42,6 +46,7 @@ class SharedGame:
     competition_id: str | None = None
     competition_name: str | None = None
     played_at: datetime | None = None
+    unfinished: bool = False
 
 
 class SharedGamesInterface(ABC):

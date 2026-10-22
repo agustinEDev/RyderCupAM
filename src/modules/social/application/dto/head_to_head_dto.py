@@ -50,8 +50,23 @@ class GameTogetherDTO(BaseModel):
     result: str | None = Field(
         default=None,
         description=(
-            "WON, HALVED o LOST para quien mira. None si no cuenta para el cara a "
-            "cara: sin resultado o con una tarjeta a medias"
+            "WON, HALVED o LOST para quien mira; UNFINISHED o None si no cuenta. "
+            "Ni UNFINISHED ni None suman en el cara a cara. "
+            "PARTIDA RAPIDA STROKE PLAY: UNFINISHED si alguno de los dos no cuenta "
+            "por sus hoyos (la referencia es el maximo de hoyos anotados por alguien "
+            "de la partida; cuentan quienes tienen exactamente esos hoyos y al menos "
+            "9; con conjuntos distintos del mismo tamaño maximo no cuenta nadie). "
+            "Si los dos cuentan, None cuando no se puede juzgar: sin campo, sin "
+            "modalidad, o en una partida con hándicap sin el de alguno de los dos. "
+            "PARTIDA RAPIDA MATCH PLAY: None si no se puede juzgar (sin campo, o en "
+            "una partida con hándicap sin el de cualquiera de los participantes). Si "
+            "se puede, UNFINISHED salvo que se decidiera antes de tiempo (un 3&2) o "
+            "que los dos bandos entregaran los mismos hoyos, al menos 9; un hoyo es "
+            "del bando en cuanto lo anota uno de sus jugadores, tambien en fourball. "
+            "Incluye la partida sin ningun hoyo adjudicable. "
+            "TORNEO: nunca UNFINISHED; None si el partido no tiene ganador o, en un "
+            "grupo de stroke play, si alguna de las dos tarjetas no esta entregada "
+            "con los 18 hoyos validados"
         ),
     )
     quick_match_id: str | None = Field(default=None, description="Para abrir la partida rapida")

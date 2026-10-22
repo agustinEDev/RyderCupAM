@@ -10,10 +10,14 @@ from sqlalchemy import (
     and_,
     case,
     cast,
+    column,
     delete,
+    exists,
     func,
+    not_,
     or_,
     select,
+    table,
     text,
     tuple_,
     update,
@@ -91,11 +95,20 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         return await self._pagina(condicion, limit, before=before, before_id=before_id)
 
     async def count_in(
-        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+        self,
+        slices: Sequence[ActivitySlice],
+        since: datetime | None,
+        cap: int | None = None,
+        skip_private_enrollments: bool = False,
+        open_invitations_at: datetime | None = None,
     ) -> int:
         condicion = self._condicion(slices)
         if condicion is None:
             return 0
+        if skip_private_enrollments:
+            condicion = and_(condicion, not_(self._apuntado_a_privado()))
+        if open_invitations_at is not None:
+            condicion = and_(condicion, not_(self._invitacion_cerrada(open_invitations_at)))
 
         # Una fila por tarjeta: los logros de una vuelta de un jugador comparten
         # tarjeta (`ActivityEvent.card_key`); cada aviso va en la suya
@@ -119,6 +132,48 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         stmt = select(func.count()).select_from(filas.subquery())
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
+
+    @staticmethod
+    def _invitacion_cerrada(ahora: datetime) -> ColumnElement[bool]:
+        """
+        Un INVITED_TO_TOURNAMENT cuya invitacion (su origen) ya no se puede
+        aceptar en `ahora`: no hay una PENDING sin caducar con ese id. Como con
+        los torneos, se mira la tabla `invitations` por su nombre y el id como
+        texto.
+        """
+        tabla = activity_events_table.c
+        invitaciones = table("invitations", column("id"), column("status"), column("expires_at"))
+        return and_(
+            tabla.type == ActivityEventType.INVITED_TO_TOURNAMENT,
+            not_(
+                exists().where(
+                    cast(invitaciones.c.id, String) == tabla.source_match_id,
+                    invitaciones.c.status == "PENDING",
+                    invitaciones.c.expires_at > ahora,
+                )
+            ),
+        )
+
+    @staticmethod
+    def _apuntado_a_privado() -> ColumnElement[bool]:
+        """
+        Un ENROLLED_IN_TOURNAMENT de un torneo que ahora no es publico (regla E).
+
+        Se mira la tabla `competitions` por su nombre, sin importar el modulo de
+        competicion: es una lectura de dos columnas dentro de la misma consulta
+        del contador, y solo se evalua en las filas de ese tipo. El id va como
+        texto porque el del `payload` es texto y un valor ilegible no puede
+        tumbar la consulta con un cast a UUID.
+        """
+        tabla = activity_events_table.c
+        competiciones = table("competitions", column("id"), column("visibility"))
+        return and_(
+            tabla.type == ActivityEventType.ENROLLED_IN_TOURNAMENT,
+            exists().where(
+                cast(competiciones.c.id, String) == tabla.payload["competition_id"].astext,
+                competiciones.c.visibility != "PUBLIC",
+            ),
+        )
 
     @staticmethod
     def _condicion(slices: Sequence[ActivitySlice]) -> ColumnElement[bool] | None:
@@ -207,6 +262,19 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         if user_id is not None:
             stmt = stmt.where(activity_events_table.c.user_id == user_id)
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
+
+    async def delete_pairs(
+        self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
+    ) -> int:
+        if not pairs:
+            return 0
+        tabla = activity_events_table.c
+        stmt = delete(activity_events_table).where(
+            tabla.type == type,
+            tuple_(tabla.user_id, tabla.source_match_id).in_(list(pairs)),
+        )
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 

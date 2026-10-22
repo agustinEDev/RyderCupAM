@@ -145,7 +145,7 @@ async def get_games_together(
         "What you and your friends have achieved, newest first by publication time, "
         "paginated by cursor rather than page number — the feed grows from the top, so "
         "an offset would repeat entries. `unseen_count` counts what was published since "
-        "your last visit, your own entries included, capped at 10."
+        "your last visit, your own entries included, capped at 99."
     ),
 )
 async def get_my_feed(
@@ -163,7 +163,7 @@ async def get_my_feed(
     summary="Count what is new in my feed",
     description=(
         "The number on the Activity button, without loading the feed: entries published "
-        "since your last visit, your own included, capped at 10 (clients show 9+). "
+        "since your last visit, your own included, capped at 99. "
         "Everything counts if you have never opened the feed. Same number as the "
         "feed's `unseen_count`."
     ),

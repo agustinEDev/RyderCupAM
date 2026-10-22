@@ -142,15 +142,38 @@ class TestSolicitudesDeAmistad:
 
         assert await _no_vistos(social_uow, user_uow, yo) == 1
 
-    async def test_f23_el_numero_sigue_con_tope_de_10(self, social_uow, user_uow):
-        """F23. Given 12 solicitudes nuevas / When se cuenta / Then 10: el cliente pinta «9+»."""
+    async def test_f23_doce_solicitudes_cuentan_doce(self, social_uow, user_uow):
+        """F23 y B (22 oct). Given 12 solicitudes nuevas / When se cuenta / Then 12 (tope 99)."""
         yo = await _user(user_uow)
         for i in range(12):
             otro = await _user(user_uow, f"Otro{i}")
             await _solicitud(social_uow, otro, yo)
 
-        assert await _no_vistos(social_uow, user_uow, yo) == 10
-        assert (await _feed(social_uow, user_uow, yo)).unseen_count == 10
+        assert await _no_vistos(social_uow, user_uow, yo) == 12
+        assert (await _feed(social_uow, user_uow, yo)).unseen_count == 12
+
+    async def test_b_tarjetas_y_solicitudes_juntas_se_quedan_en_99(self, social_uow, user_uow):
+        """B (22 oct). Given 95 tarjetas mias y 10 solicitudes nuevas / When se cuenta / Then 99."""
+        yo = await _user(user_uow)
+        async with social_uow:
+            await social_uow.activity_events.add_many(
+                [
+                    ActivityEvent.create(
+                        user_id=yo.id,
+                        type=ActivityEventType.BIRDIE,
+                        occurred_at=DESPUES,
+                        source_match_id=f"m-{i}",
+                        published_at=DESPUES + timedelta(seconds=i),
+                    )
+                    for i in range(95)
+                ]
+            )
+        for i in range(10):
+            otro = await _user(user_uow, f"Otro{i}")
+            await _solicitud(social_uow, otro, yo)
+
+        assert await _no_vistos(social_uow, user_uow, yo) == 99
+        assert (await _feed(social_uow, user_uow, yo)).unseen_count == 99
 
     async def test_f24_aceptada_o_rechazada_desaparece(self, social_uow, user_uow):
         """
