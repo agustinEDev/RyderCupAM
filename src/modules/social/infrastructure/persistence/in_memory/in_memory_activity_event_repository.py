@@ -18,6 +18,9 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
 
     def __init__(self):
         self._events: list[ActivityEvent] = []
+        # En memoria no hay tabla de competiciones: los tests dicen aqui que
+        # torneos son privados para `skip_private_enrollments`
+        self.private_competition_ids: set[str] = set()
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -51,17 +54,29 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         return self._pagina(encontrados, limit, before, before_id)
 
     async def count_in(
-        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+        self,
+        slices: Sequence[ActivitySlice],
+        since: datetime | None,
+        cap: int | None = None,
+        skip_private_enrollments: bool = False,
     ) -> int:
         # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
             {
                 e.card_key
                 for e in self._events
-                if self._entra(e, slices) and (since is None or e.published_at > since)
+                if self._entra(e, slices)
+                and (since is None or e.published_at > since)
+                and not (skip_private_enrollments and self._apuntado_a_privado(e))
             }
         )
         return cuenta if cap is None else min(cuenta, cap)
+
+    def _apuntado_a_privado(self, event: ActivityEvent) -> bool:
+        return (
+            event.type == ActivityEventType.ENROLLED_IN_TOURNAMENT
+            and event.payload.get("competition_id") in self.private_competition_ids
+        )
 
     @staticmethod
     def _entra(event: ActivityEvent, slices: Sequence[ActivitySlice]) -> bool:

@@ -10,10 +10,14 @@ from sqlalchemy import (
     and_,
     case,
     cast,
+    column,
     delete,
+    exists,
     func,
+    not_,
     or_,
     select,
+    table,
     tuple_,
     update,
 )
@@ -90,11 +94,17 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         return await self._pagina(condicion, limit, before=before, before_id=before_id)
 
     async def count_in(
-        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+        self,
+        slices: Sequence[ActivitySlice],
+        since: datetime | None,
+        cap: int | None = None,
+        skip_private_enrollments: bool = False,
     ) -> int:
         condicion = self._condicion(slices)
         if condicion is None:
             return 0
+        if skip_private_enrollments:
+            condicion = and_(condicion, not_(self._apuntado_a_privado()))
 
         # Una fila por tarjeta: los logros de una vuelta de un jugador comparten
         # tarjeta (`ActivityEvent.card_key`); cada aviso va en la suya
@@ -118,6 +128,27 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         stmt = select(func.count()).select_from(filas.subquery())
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
+
+    @staticmethod
+    def _apuntado_a_privado() -> ColumnElement[bool]:
+        """
+        Un ENROLLED_IN_TOURNAMENT de un torneo que ahora no es publico (regla E).
+
+        Se mira la tabla `competitions` por su nombre, sin importar el modulo de
+        competicion: es una lectura de dos columnas dentro de la misma consulta
+        del contador, y solo se evalua en las filas de ese tipo. El id va como
+        texto porque el del `payload` es texto y un valor ilegible no puede
+        tumbar la consulta con un cast a UUID.
+        """
+        tabla = activity_events_table.c
+        competiciones = table("competitions", column("id"), column("visibility"))
+        return and_(
+            tabla.type == ActivityEventType.ENROLLED_IN_TOURNAMENT,
+            exists().where(
+                cast(competiciones.c.id, String) == tabla.payload["competition_id"].astext,
+                competiciones.c.visibility != "PUBLIC",
+            ),
+        )
 
     @staticmethod
     def _condicion(slices: Sequence[ActivitySlice]) -> ColumnElement[bool] | None:

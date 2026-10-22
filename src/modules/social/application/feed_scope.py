@@ -161,7 +161,11 @@ async def count_unseen(
     Recibe el repositorio y no la unidad de trabajo para contar dentro de la
     misma que ya tenga abierta quien llama.
     """
-    tarjetas = await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)
+    # Sin los apuntados a torneos que ahora son privados: el feed no los enseña
+    # (regla E), y el numero tiene que decir lo mismo que la pantalla
+    tarjetas = await events.count_in(
+        scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP, skip_private_enrollments=True
+    )
     solicitudes = sum(
         1
         for solicitud in requests

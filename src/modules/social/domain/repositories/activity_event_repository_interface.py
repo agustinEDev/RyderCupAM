@@ -73,7 +73,11 @@ class ActivityEventRepositoryInterface(ABC):
 
     @abstractmethod
     async def count_in(
-        self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
+        self,
+        slices: Sequence[ActivitySlice],
+        since: datetime | None,
+        cap: int | None = None,
+        skip_private_enrollments: bool = False,
     ) -> int:
         """
         Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
@@ -82,6 +86,10 @@ class ActivityEventRepositoryInterface(ABC):
         Cuenta tarjetas y no filas (`ActivityEvent.card_key`): tres logros de
         una vuelta se ven como una tarjeta, y el numero tiene que decir lo que
         hay en la pantalla.
+
+        Con `skip_private_enrollments` no cuenta los ENROLLED_IN_TOURNAMENT de
+        torneos que ahora son privados: el feed no los enseña (regla E, 22 oct
+        2026), y el numero tiene que decir lo mismo que la pantalla.
         """
 
     @abstractmethod

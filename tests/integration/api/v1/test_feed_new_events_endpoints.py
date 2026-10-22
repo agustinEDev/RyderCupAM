@@ -234,3 +234,43 @@ async def test_cerrar_la_inscripcion_retira_el_aviso_de_invitado(client: AsyncCl
     assert cerrada.status_code == 200, cerrada.text
 
     assert await _tipos_del_feed(client, yo) == []
+
+
+@pytest.mark.asyncio
+async def test_e_el_contador_cuenta_lo_mismo_que_se_ve(client: AsyncClient):
+    """
+    Revision (22 oct). Given mi amigo apuntado a dos publicos y a uno que pasa a
+    privado, y mi «ya estas inscrito» en ese privado / When pido el contador /
+    Then 3: el apuntado al privado no cuenta; lo mio de ese torneo, si.
+    """
+    org = await create_authenticated_user(client, "be2ec_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(client, "be2ec_yo@test.com", PASSWORD, "Juan", "Lopez")
+    amigo = await create_authenticated_user(client, "be2ec_am@test.com", PASSWORD, "Eva", "Ruiz")
+    await hacerse_amigos(client, yo, amigo)
+    privada = await create_competition(client, org["cookies"])
+    publicas = [await create_competition(client, org["cookies"]) for _ in range(2)]
+    ahora = datetime.now().replace(microsecond=0)
+    for minuto, comp in enumerate([privada, *publicas], start=1):
+        await insertar_eventos(
+            amigo["user"]["id"],
+            [ahora + timedelta(minutes=minuto)],
+            tipo="ENROLLED_IN_TOURNAMENT",
+            payload={"competition_id": comp["id"], "competition_name": comp["name"]},
+            source_match_id=comp["id"],
+        )
+    await insertar_eventos(
+        yo["user"]["id"],
+        [ahora + timedelta(minutes=5)],
+        tipo="ENROLLMENT_CONFIRMED",
+        payload={"competition_id": privada["id"], "competition_name": privada["name"]},
+        source_match_id=privada["id"],
+    )
+    await hacer_privada(privada["id"])
+
+    set_auth_cookies(client, yo["cookies"])
+    contador = (await client.get(CONTADOR)).json()
+    feed = (await client.get(FEED)).json()
+
+    assert contador == {"unseen_count": 3}
+    assert feed["unseen_count"] == 3
+    assert len(feed["events"]) == 3

@@ -27,6 +27,9 @@ from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf
 from src.modules.social.application.ports.tournament_visibility_interface import (
     TournamentVisibilityInterface,
 )
+from src.modules.social.application.use_cases.get_feed_unseen_count_use_case import (
+    GetFeedUnseenCountUseCase,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
 )
@@ -253,3 +256,25 @@ class TestActividadDelPerfil:
         )
         assert [e.id for e in siguiente.events] == [str(primera.id)]
         assert siguiente.next_cursor is None
+
+
+class TestContador:
+    """Revision: el numero del boton no cuenta lo que la regla E oculta al leer."""
+
+    async def test_e_el_contador_no_cuenta_los_apuntados_a_privados(
+        self, social_uow, user_uow, torneos, pareja
+    ):
+        yo, amigo = pareja
+        # El repositorio en memoria no conoce los torneos: se le dice cuales son privados
+        social_uow.activity_events.private_competition_ids = {PRIVADO}
+        await _evento(social_uow, amigo, T.ENROLLED_IN_TOURNAMENT, PRIVADO, 1)
+        await _evento(social_uow, amigo, T.ENROLLED_IN_TOURNAMENT, PUBLICO, 2)
+        # Mi «ya estas inscrito» del privado si cuenta: es mio
+        await _evento(social_uow, yo, T.ENROLLMENT_CONFIRMED, PRIVADO, 3)
+
+        contador = await GetFeedUnseenCountUseCase(social_uow, user_uow).execute(str(yo.id.value))
+        feed = await _feed(social_uow, user_uow, torneos).execute(str(yo.id.value))
+
+        assert contador.unseen_count == 2
+        assert feed.unseen_count == 2
+        assert len(feed.events) == 2
