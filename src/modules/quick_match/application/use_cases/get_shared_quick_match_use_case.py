@@ -31,6 +31,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 
+# A quien no participa: un unico 403, termine o no la partida (22 oct 2026)
+_NOT_SHARED = "You cannot view this quick match."
+
 
 class GetSharedQuickMatchUseCase:
     """
@@ -86,7 +89,8 @@ class GetSharedQuickMatchUseCase:
             # Al participante se le responde en cualquier estado: el cliente lo
             # lleva a su anotacion con `viewer_is_participant` (22 oct)
             if not is_participant and quick_match.status != QuickMatchStatus.COMPLETED:
-                raise QuickMatchNotSharedError("Only finished quick matches can be viewed.")
+                # El mismo mensaje que sin permiso: no le deja deducir el estado
+                raise QuickMatchNotSharedError(_NOT_SHARED)
             hole_scores = await self._uow.quick_match_hole_scores.find_by_match(quick_match.id)
 
         registered = [p.user_id for p in quick_match.participants if p.user_id is not None]
@@ -99,7 +103,7 @@ class GetSharedQuickMatchUseCase:
                 friends = set(await self._social_uow.friendships.find_friend_ids(viewer_id))
                 blocked = set(await self._social_uow.friendships.find_blocked_ids(viewer_id))
             if not self._shared_by_a_friend(quick_match, users, friends):
-                raise QuickMatchNotSharedError("You cannot view this quick match.")
+                raise QuickMatchNotSharedError(_NOT_SHARED)
             hidden_names = blocked | {
                 uid for uid in registered if uid not in users or not users[uid].is_active
             }
