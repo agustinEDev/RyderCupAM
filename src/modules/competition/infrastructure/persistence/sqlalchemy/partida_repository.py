@@ -198,6 +198,26 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             jugaron={fila.user_id for fila in filas if fila.played},
         )
 
+    async def competiciones_con_los_dos(
+        self, user_id: UserId, other_id: UserId
+    ) -> list[CompetitionId]:
+        grupos, jugadores = tee_groups_table, tee_group_players_table
+
+        def de(uid: UserId):
+            return (
+                select(grupos.c.competition_id)
+                .join(jugadores, jugadores.c.group_id == grupos.c.id)
+                .where(jugadores.c.user_id == uid)
+            )
+
+        resultado = await self._session.execute(
+            select(grupos.c.competition_id)
+            .where(grupos.c.competition_id.in_(de(user_id)))
+            .where(grupos.c.competition_id.in_(de(other_id)))
+            .distinct()
+        )
+        return list(resultado.scalars().all())
+
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
         jugadores = tee_group_players_table
 

@@ -58,5 +58,14 @@ class PartidaRepositoryInterface(ABC):
         """Si juega en alguna partida, de cualquier competición (antes de borrar al usuario)."""
 
     @abstractmethod
+    async def competiciones_con_los_dos(
+        self, user_id: UserId, other_id: UserId
+    ) -> list[CompetitionId]:
+        """
+        Las competiciones en las que los dos tienen alguna partida, sea o no la
+        misma (el cara a cara por la general final, tabla del 22 oct 2026, J).
+        """
+
+    @abstractmethod
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
         """Las partidas, de cualquier competición, donde juegan los dos (BE-3)."""

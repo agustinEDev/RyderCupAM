@@ -2,7 +2,12 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Protocol
+from uuid import UUID
 
+from src.modules.competition.application.use_cases.clasificaciones_use_case import (
+    ClasificacionGeneralUseCase,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
@@ -44,6 +49,7 @@ from src.modules.social.application.ports.shared_games_interface import (
     SharedGame,
     SharedGameKind,
     SharedGamesInterface,
+    StrokePlayStanding,
 )
 from src.modules.social.domain.services.counted_round import (
     counting_units,
@@ -78,6 +84,16 @@ _SCORING_BY_TOURNAMENT = {
 }
 
 
+# Quien no se presento a ninguna jornada no jugo el torneo con nadie
+_NO_PRESENTADO = "NP"
+
+
+class OfficialStandings(Protocol):
+    """La general oficial de un stroke play (`ClasificacionGeneralUseCase`)."""
+
+    async def execute(self, competition_id: UUID, categoria: int | None = None): ...
+
+
 @dataclass
 class _Leido:
     """Todo lo leido de las tres fuentes antes de resolver campos y jugadores."""
@@ -89,6 +105,8 @@ class _Leido:
     validados: dict = field(default_factory=dict)
     rondas: dict = field(default_factory=dict)
     competiciones: dict = field(default_factory=dict)
+    # Los stroke play COMPLETADOS que jugaron los dos, en cualquier grupo (J)
+    torneos_cerrados: list[Competition] = field(default_factory=list)
 
 
 class SharedGamesAdapter(SharedGamesInterface):
@@ -113,11 +131,17 @@ class SharedGamesAdapter(SharedGamesInterface):
         stroke_allocation_service: StrokeAllocationService | None = None,
         scoring_service: MatchPlayScoring | None = None,
         stroke_play_scoring: StrokePlayScoring | None = None,
+        standings: OfficialStandings | None = None,
     ):
         self._quick_match_uow = quick_match_uow
         self._competition_uow = competition_uow
         self._golf_course_uow = golf_course_uow
         self._user_uow = user_uow
+        # La general final de un stroke play decide su cara a cara (J): la
+        # oficial, la misma que se ve en la ficha, con su desempate
+        self._standings = standings or ClasificacionGeneralUseCase(
+            uow=competition_uow, user_repository=user_uow.users
+        )
         self._stroke_allocation = stroke_allocation_service or StrokeAllocationService()
         self._scoring = scoring_service or MatchPlayScoring()
         self._stroke_play = stroke_play_scoring or StrokePlayScoring()
@@ -128,6 +152,11 @@ class SharedGamesAdapter(SharedGamesInterface):
         await self._leer_torneos(leido, viewer_id, other_id)
         campos = await self._campos(leido)
         usuarios = await self._usuarios(leido)
+        torneos = [
+            juego
+            for competicion in leido.torneos_cerrados
+            if (juego := await self._de_torneo_cerrado(competicion, viewer_id, other_id))
+        ]
 
         return (
             [
@@ -145,6 +174,7 @@ class SharedGamesAdapter(SharedGamesInterface):
                 for g in leido.grupos
                 if (ronda := leido.rondas.get(g.round_id)) is not None
             ]
+            + torneos
         )
 
     # ==================== Lectura ====================
@@ -170,10 +200,36 @@ class SharedGamesAdapter(SharedGamesInterface):
             leido.partidos = await uow.matches.find_with_both_players(
                 viewer_id, other_id, FINISHED_MATCH_STATUSES
             )
-            leido.grupos = [
+            grupos = [
                 grupo
                 for grupo in await uow.partidas.con_los_dos(viewer_id, other_id)
                 if self._jugaron_el_grupo(grupo, viewer_id, other_id)
+            ]
+            # Los stroke play en los que estuvieron los dos, en el mismo grupo
+            # o no: si ya se completaron, cuentan enteros por su general (J)
+            con_los_dos = await uow.partidas.competiciones_con_los_dos(viewer_id, other_id)
+
+            # Rondas y competiciones de una vez, no una por partido
+            round_ids = {m.round_id for m in leido.partidos} | {g.round_id for g in grupos}
+            if round_ids:
+                leido.rondas = {r.id: r for r in await uow.rounds.find_by_ids(list(round_ids))}
+            competition_ids = {r.competition_id for r in leido.rondas.values()}
+            competition_ids.update(con_los_dos)
+            if competition_ids:
+                leido.competiciones = {
+                    c.id: c for c in await uow.competitions.find_by_ids(list(competition_ids))
+                }
+            leido.torneos_cerrados = [
+                c
+                for c in leido.competiciones.values()
+                if c.id in set(con_los_dos) and _stroke_play_completado(c)
+            ]
+            # El grupo de un torneo ya completado no sale suelto: lo cuenta
+            # la entrada del torneo entero
+            leido.grupos = [
+                g
+                for g in grupos
+                if not _stroke_play_completado(leido.competiciones.get(g.competition_id))
             ]
             if leido.grupos:
                 for golpe in await uow.golpes_de_partida.de_las_partidas(
@@ -183,16 +239,6 @@ class SharedGamesAdapter(SharedGamesInterface):
                         leido.validados.setdefault((golpe.partida_id, golpe.user_id), {})[
                             golpe.hoyo
                         ] = golpe.golpes_validados
-
-            # Rondas y competiciones de una vez, no una por partido
-            round_ids = {m.round_id for m in leido.partidos} | {g.round_id for g in leido.grupos}
-            if not round_ids:
-                return
-            leido.rondas = {r.id: r for r in await uow.rounds.find_by_ids(list(round_ids))}
-            competition_ids = {r.competition_id for r in leido.rondas.values()}
-            leido.competiciones = {
-                c.id: c for c in await uow.competitions.find_by_ids(list(competition_ids))
-            }
 
     @staticmethod
     def _jugaron_el_grupo(grupo: Partida, viewer_id: UserId, other_id: UserId) -> bool:
@@ -439,6 +485,50 @@ class SharedGamesAdapter(SharedGamesInterface):
             net_to_par=tarjeta.al_par_neto,
         )
 
+    async def _de_torneo_cerrado(
+        self, competicion: Competition, viewer_id: UserId, other_id: UserId
+    ) -> SharedGame | None:
+        """
+        Un stroke play COMPLETADO, entero (tabla del 22 oct 2026, J): quien
+        quedo por delante en la general final gana, con el desempate por
+        hándicap; si comparten puesto, empate. Cuenta una vez por torneo,
+        aunque jugaran varias rondas o en grupos distintos.
+
+        Quien no se presento a nada (NP) no jugo el torneo: no sale. Quien no
+        quedo clasificado (retirado, NR) sale sin puesto y no cuenta.
+        """
+        general = await self._standings.execute(competicion.id.value, None)
+        filas = {fila.user_id: fila for fila in general.rows}
+        mia, suya = filas.get(viewer_id.value), filas.get(other_id.value)
+        if mia is None or suya is None or _NO_PRESENTADO in (mia.status, suya.status):
+            return None
+        outcome = None
+        if mia.position is not None and suya.position is not None:
+            if mia.position == suya.position:
+                outcome = Outcome.HALVED
+            else:
+                outcome = Outcome.WON if mia.position < suya.position else Outcome.LOST
+        return SharedGame(
+            kind=SharedGameKind.TOURNAMENT_STROKE_PLAY,
+            game_id=str(competicion.id.value),
+            # Se cuenta el dia que acaba: es cuando hay general final
+            played_on=competicion.dates.end_date,
+            golf_course_id=None,
+            golf_course_name=None,
+            format=competicion.tournament_type.value,
+            relation=Relation.AGAINST,
+            outcome=outcome,
+            competition_id=str(competicion.id.value),
+            competition_name=competicion.name.value,
+            standing=StrokePlayStanding(
+                my_position=mia.position,
+                my_tied=mia.tied,
+                their_position=suya.position,
+                their_tied=suya.tied,
+                total_players=len(general.rows),
+            ),
+        )
+
     @staticmethod
     def _de_torneo(
         *,
@@ -466,6 +556,15 @@ class SharedGamesAdapter(SharedGamesInterface):
             competition_id=str(competicion.id.value) if competicion else None,
             competition_name=competicion.name.value if competicion else None,
         )
+
+
+def _stroke_play_completado(competicion: Competition | None) -> bool:
+    """Un Stableford o un Medal ya completado: tiene general final (J)."""
+    return (
+        competicion is not None
+        and competicion.stroke_play is not None
+        and competicion.is_completed()
+    )
 
 
 def _sin_zona(instante: datetime) -> datetime:

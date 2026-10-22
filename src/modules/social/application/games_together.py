@@ -121,6 +121,9 @@ def _resultado(game: SharedGame) -> str | None:
 
 def _to_dto(game: SharedGame) -> GameTogetherDTO:
     rapida = game.kind == SharedGameKind.QUICK_MATCH
+    # El torneo entero: su id es el del torneo, no hay partido ni grupo (J)
+    torneo = game.kind == SharedGameKind.TOURNAMENT_STROKE_PLAY
+    puestos = game.standing
     return GameTogetherDTO(
         kind=game.kind.value,
         id=game.game_id,
@@ -133,5 +136,10 @@ def _to_dto(game: SharedGame) -> GameTogetherDTO:
         quick_match_id=game.game_id if rapida else None,
         competition_id=game.competition_id,
         competition_name=game.competition_name,
-        match_id=None if rapida else game.game_id,
+        match_id=None if rapida or torneo else game.game_id,
+        my_position=puestos.my_position if puestos else None,
+        my_tied=puestos.my_tied if puestos else None,
+        their_position=puestos.their_position if puestos else None,
+        their_tied=puestos.their_tied if puestos else None,
+        total_players=puestos.total_players if puestos else None,
     )

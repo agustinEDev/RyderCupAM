@@ -9,6 +9,7 @@ Las lecturas en bloque de las partidas jugadas juntos, contra Postgres (BE-3).
 | Partidos de torneo con los dos, por estado            | Solo los de esos estados           |
 | Partido con solo uno de los dos                       | No sale                            |
 | Grupos de stroke play con los dos y sus golpes        | Los suyos                          |
+| J: competiciones con los dos, en grupos distintos     | Salen, una vez                     |
 | Campos por ids                                        | Enteros: salidas y hoyos           |
 | Rondas y competiciones por ids                        | Las pedidas, en una lectura        |
 | Caso 19: torneos en 2 o en 6 competiciones            | Las mismas consultas               |
@@ -281,6 +282,26 @@ class TestGruposDeStrokePlayDeLosDos:
         assert {(g.partida_id, g.user_id) for g in golpes} == {(juntos.id, yo), (juntos.id, el)}
         assert await uow.golpes_de_partida.de_las_partidas([]) == []
         assert await uow.partidas.con_los_dos(yo, cuarto) == []
+
+    async def test_j_las_competiciones_con_los_dos_aunque_en_grupos_distintos(
+        self,
+        db_session,
+        jugadores,  # noqa: F811
+        ronda,  # noqa: F811
+    ):
+        """Tabla del 22 oct 2026, J: el torneo cuenta entero, juntos o no en el grupo."""
+        yo, el, otro, cuarto = jugadores
+        uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+        await uow.partidas.anadir(
+            [
+                Partida.crear(ronda.competition_id, ronda.id, 1, [_jugador(yo), _jugador(otro)]),
+                Partida.crear(ronda.competition_id, ronda.id, 2, [_jugador(el)]),
+            ]
+        )
+        await db_session.commit()
+
+        assert await uow.partidas.competiciones_con_los_dos(yo, el) == [ronda.competition_id]
+        assert await uow.partidas.competiciones_con_los_dos(yo, cuarto) == []
 
 
 class TestCamposEnBloque:

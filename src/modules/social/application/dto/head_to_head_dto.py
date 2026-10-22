@@ -40,8 +40,19 @@ class HeadToHeadDTO(BaseModel):
 class GameTogetherDTO(BaseModel):
     """Una partida terminada que jugasteis los dos."""
 
-    kind: str = Field(description="QUICK_MATCH, TOURNAMENT_MATCH o TOURNAMENT_GROUP")
-    id: str = Field(description="Id de la partida rapida, del partido o del grupo")
+    kind: str = Field(
+        description=(
+            "QUICK_MATCH, TOURNAMENT_MATCH, TOURNAMENT_GROUP o TOURNAMENT_STROKE_PLAY "
+            "(un stroke play COMPLETADO entero, una sola entrada por torneo con los dos "
+            "puestos de la general final; sus grupos ya no salen sueltos)"
+        )
+    )
+    id: str = Field(
+        description=(
+            "Id de la partida rapida, del partido o del grupo; en TOURNAMENT_STROKE_PLAY, "
+            "el del torneo"
+        )
+    )
     played_on: date
     golf_course_id: str | None = None
     golf_course_name: str | None = None
@@ -66,15 +77,34 @@ class GameTogetherDTO(BaseModel):
             "del bando en cuanto lo anota uno de sus jugadores, tambien en fourball. "
             "Incluye la partida sin ningun hoyo adjudicable. "
             "TORNEO: nunca UNFINISHED; None si el partido no tiene ganador o, en un "
-            "grupo de stroke play, si alguna de las dos tarjetas no esta entregada "
-            "con los 18 hoyos validados"
+            "grupo de stroke play de un torneo sin completar, si alguna de las dos "
+            "tarjetas no esta entregada con los 18 hoyos validados. "
+            "TOURNAMENT_STROKE_PLAY: por la general final, con el desempate por menor "
+            "hándicap: delante gana, mismo puesto empata; None si alguno no quedo "
+            "clasificado (retirado, NR)"
         ),
     )
     quick_match_id: str | None = Field(default=None, description="Para abrir la partida rapida")
     competition_id: str | None = Field(default=None, description="Para abrir el torneo")
     competition_name: str | None = None
     match_id: str | None = Field(
-        default=None, description="El partido o el grupo dentro del torneo"
+        default=None,
+        description="El partido o el grupo dentro del torneo; None en TOURNAMENT_STROKE_PLAY",
+    )
+    # Solo en TOURNAMENT_STROKE_PLAY (tabla del 22 oct 2026, J): «4.º y 7.º de 16»
+    my_position: int | None = Field(
+        default=None,
+        description="Mi puesto en la general final; None si no quede clasificado (NR)",
+    )
+    my_tied: bool | None = Field(
+        default=None, description="Si comparto el puesto (mismo valor y mismo hándicap)"
+    )
+    their_position: int | None = Field(
+        default=None, description="Su puesto en la general final; None si no quedo clasificado"
+    )
+    their_tied: bool | None = Field(default=None, description="Si comparte su puesto")
+    total_players: int | None = Field(
+        default=None, description="Filas de la general final (todos los inscritos que jugaron)"
     )
 
 

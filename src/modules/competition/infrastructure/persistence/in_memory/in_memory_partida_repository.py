@@ -68,5 +68,12 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
             if condicion(p)
         ]
 
+    async def competiciones_con_los_dos(
+        self, user_id: UserId, other_id: UserId
+    ) -> list[CompetitionId]:
+        de_uno = {p.competition_id for p in self._donde(lambda p: user_id in p.user_ids)}
+        del_otro = {p.competition_id for p in self._donde(lambda p: other_id in p.user_ids)}
+        return list(de_uno & del_otro)
+
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
         return self._donde(lambda p: user_id in p.user_ids and other_id in p.user_ids)
