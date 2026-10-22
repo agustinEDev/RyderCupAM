@@ -2,6 +2,10 @@
 
 from pydantic import BaseModel, Field
 
+from src.modules.social.application.dto.head_to_head_dto import (
+    GamesTogetherPageDTO,
+    HeadToHeadDTO,
+)
 from src.modules.user.application.dto.player_stats_dto import PlayerStatsResponseDTO
 from src.shared.application.utc_datetime import UtcDatetime
 
@@ -36,8 +40,11 @@ class PlayerProfileResponseDTO(BaseModel):
     falta para encontrar a alguien por su nombre y reconocerlo antes de mandarle
     una solicitud, y no dice nada de el que no diga ya la busqueda.
 
-    **Solo el propio jugador y sus amigos ven lo de detras**: handicap,
-    estadisticas y actividad. Esos campos llegan en None a cualquier otro, no
+    **El handicap, cualquiera con sesion** (BE-3), salvo que haya un bloqueo
+    entre los dos, en cualquier sentido: entonces solo nombre y foto.
+
+    **Solo el propio jugador y sus amigos ven lo de detras**: estadisticas,
+    actividad, cara a cara y partidas juntos. Esos campos llegan en None a cualquier otro, no
     recortados ni a cero — un cero se leeria como "juega fatal" en lugar de "no
     puedes ver esto".
 
@@ -65,7 +72,9 @@ class PlayerProfileResponseDTO(BaseModel):
         default=0,
         description=(
             "Cuantos amigos tiene. Va en la ficha publica, como el contador de "
-            "seguidores de cualquier perfil: es un numero, no dice quienes son"
+            "seguidores de cualquier perfil: es un numero, no dice quienes son. "
+            "Con un bloqueo entre los dos, en cualquier sentido, llega a 0 (solo "
+            "nombre y foto): el cliente no lo pinta en un perfil bloqueado"
         ),
     )
     friendship: FriendshipStateDTO = Field(
@@ -78,13 +87,31 @@ class PlayerProfileResponseDTO(BaseModel):
     )
     handicap: float | None = Field(
         default=None,
-        description=("Solo uno mismo y sus amigos. None si no lo sois o si no lo ha fijado"),
+        description=(
+            "Cualquier usuario con sesion (BE-3). None si hay un bloqueo entre los "
+            "dos, en cualquier sentido, o si no lo ha fijado"
+        ),
     )
     stats: PlayerStatsResponseDTO | None = Field(
         default=None,
         description=(
             "Solo uno mismo y sus amigos: el mismo resumen que su propio panel "
             "(BE #128, #167). None para cualquier otro"
+        ),
+    )
+    head_to_head: HeadToHeadDTO | None = Field(
+        default=None,
+        description=(
+            "Solo entre amigos: ganadas, empatadas y perdidas contra él y con él. "
+            "None para cualquier otro, para uno mismo y si no habeis jugado nada que contar"
+        ),
+    )
+    games_together: GamesTogetherPageDTO | None = Field(
+        default=None,
+        description=(
+            "Solo entre amigos: la primera pagina de partidas terminadas juntos (5); "
+            "el resto, en `GET /users/{id}/games-together`. None para cualquier otro "
+            "y para uno mismo"
         ),
     )
 

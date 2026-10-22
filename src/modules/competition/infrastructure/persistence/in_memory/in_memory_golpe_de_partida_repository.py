@@ -38,3 +38,7 @@ class InMemoryGolpeDePartidaRepository(GolpeDePartidaRepositoryInterface):
             )
             if condicion(g)
         ]
+
+    async def de_las_partidas(self, partida_ids: list[PartidaId]) -> list[GolpeDePartida]:
+        buscadas = set(partida_ids)
+        return self._donde(lambda g: g.partida_id in buscadas)

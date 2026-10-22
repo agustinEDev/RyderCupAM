@@ -1,0 +1,105 @@
+"""
+El cara a cara y la lista de partidas juntos, a partir de las partidas leidas.
+
+Vive aparte porque lo comparten el perfil (cara a cara y primera pagina) y el
+«ver mas» de las partidas juntos: los dos tienen que ordenar y paginar igual.
+"""
+
+from datetime import date
+from uuid import UUID
+
+from src.modules.social.application.dto.head_to_head_dto import (
+    GamesTogetherPageDTO,
+    GameTogetherDTO,
+    HeadToHeadDTO,
+    HeadToHeadRecordDTO,
+)
+from src.modules.social.application.ports.shared_games_interface import (
+    SharedGame,
+    SharedGameKind,
+)
+from src.modules.social.domain.services.head_to_head import Record, tally
+
+# La fecha en ISO no contiene '|', asi que parte el cursor sin ambiguedad
+CURSOR_SEPARATOR = "|"
+
+# De 5 en 5, con «ver mas» (tabla aprobada del 22 oct)
+GAMES_PAGE_SIZE = 5
+
+
+def head_to_head_of(games: list[SharedGame]) -> HeadToHeadDTO | None:
+    """El cara a cara, o None si no hay ninguna partida que contar."""
+    cara_a_cara = tally((game.relation, game.outcome) for game in games)
+    if cara_a_cara is None:
+        return None
+    return HeadToHeadDTO(
+        against=_record(cara_a_cara.against), alongside=_record(cara_a_cara.alongside)
+    )
+
+
+def page_of(
+    games: list[SharedGame], cursor: str | None, limit: int = GAMES_PAGE_SIZE
+) -> GamesTogetherPageDTO:
+    """
+    Una pagina, de la mas reciente a la mas antigua, a partir del cursor.
+
+    Se ordena por fecha y, dentro del mismo dia, por id: dos partidas del mismo
+    dia no se pierden ni se repiten entre paginas. Un cursor corrupto da la
+    primera pagina, como el del feed.
+    """
+    ordenadas = sorted(games, key=_clave, reverse=True)
+    desde = _parse_cursor(cursor)
+    if desde is not None:
+        ordenadas = [game for game in ordenadas if _clave(game) < desde]
+
+    pagina = ordenadas[:limit]
+    hay_mas = len(ordenadas) > limit
+    return GamesTogetherPageDTO(
+        games=[_to_dto(game) for game in pagina],
+        next_cursor=_build_cursor(pagina[-1]) if hay_mas else None,
+    )
+
+
+def _clave(game: SharedGame) -> tuple[str, str]:
+    return game.played_on.isoformat(), game.game_id
+
+
+def _build_cursor(game: SharedGame) -> str:
+    fecha, game_id = _clave(game)
+    return f"{fecha}{CURSOR_SEPARATOR}{game_id}"
+
+
+def _parse_cursor(cursor: str | None) -> tuple[str, str] | None:
+    if not cursor or CURSOR_SEPARATOR not in cursor:
+        return None
+    fecha, game_id = cursor.split(CURSOR_SEPARATOR, 1)
+    try:
+        date.fromisoformat(fecha)
+        UUID(game_id)
+    except ValueError:
+        return None
+    return fecha, game_id
+
+
+def _record(record: Record | None) -> HeadToHeadRecordDTO | None:
+    if record is None:
+        return None
+    return HeadToHeadRecordDTO(won=record.won, halved=record.halved, lost=record.lost)
+
+
+def _to_dto(game: SharedGame) -> GameTogetherDTO:
+    rapida = game.kind == SharedGameKind.QUICK_MATCH
+    return GameTogetherDTO(
+        kind=game.kind.value,
+        id=game.game_id,
+        played_on=game.played_on,
+        golf_course_id=game.golf_course_id,
+        golf_course_name=game.golf_course_name,
+        format=game.format,
+        relation=game.relation.value,
+        result=game.outcome.value if game.outcome else None,
+        quick_match_id=game.game_id if rapida else None,
+        competition_id=game.competition_id,
+        competition_name=game.competition_name,
+        match_id=None if rapida else game.game_id,
+    )

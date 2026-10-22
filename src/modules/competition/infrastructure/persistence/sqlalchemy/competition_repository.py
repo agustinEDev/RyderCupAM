@@ -445,3 +445,15 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         # Ejecutar query
         result = await self._session.execute(query)
         return list(result.scalars().all())
+
+    async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
+        """Esas competiciones enteras, como `find_by_id`, en una sola consulta."""
+        if not competition_ids:
+            return []
+        stmt = (
+            select(Competition)
+            .where(Competition._id.in_(competition_ids))
+            .options(*self._agregado_completo())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

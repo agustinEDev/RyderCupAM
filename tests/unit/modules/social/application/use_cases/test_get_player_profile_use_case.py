@@ -97,7 +97,8 @@ class TestGuardDeAmistad:
     ):
         """
         Given dos usuarios sin amistad / When uno pide el perfil / Then ve
-        nombre, apellidos y foto, pero ni handicap ni estadisticas.
+        nombre, apellidos, foto y handicap (BE-3, 22 oct 2026), pero no las
+        estadisticas.
 
         La ficha minima es lo que permite reconocer a alguien encontrado por su
         nombre antes de mandarle una solicitud.
@@ -113,14 +114,14 @@ class TestGuardDeAmistad:
         assert perfil.avatar_source is not None
         assert perfil.is_friend is False
         assert perfil.friendship.status == "NONE"
-        assert perfil.handicap is None
+        assert perfil.handicap == 8.4
         assert perfil.stats is None
 
     async def test_lo_privado_llega_en_none_y_no_a_cero(self, social_uow, user_uow, stats):
         """
-        Given un perfil de alguien que no es amigo / When se pide / Then el
-        handicap llega en None, no en 0: un cero se leeria como "juega fatal"
-        en lugar de "esto no se puede ver".
+        Given un perfil de alguien que no es amigo / When se pide / Then las
+        estadisticas llegan en None, no a cero: un cero se leeria como "juega
+        fatal" en lugar de "esto no se puede ver". El handicap si se ve (BE-3).
         """
         ana = await _create_user(user_uow)
         luis = await _create_user(user_uow, handicap=8.4)
@@ -129,7 +130,7 @@ class TestGuardDeAmistad:
             str(ana.id.value), str(luis.id.value)
         )
 
-        assert perfil.handicap is None
+        assert perfil.handicap == 8.4
         assert perfil.stats is None
 
     async def test_una_solicitud_pendiente_no_da_acceso_pero_si_se_distingue(
@@ -197,7 +198,8 @@ class TestGuardDeAmistad:
         despues = await use_case.execute(str(ana.id.value), str(luis.id.value))
         assert despues.first_name == "Ana"
         assert despues.stats is None
-        assert despues.handicap is None
+        # El handicap queda: ya lo ve cualquiera con sesion (BE-3)
+        assert despues.handicap == 8.4
 
     async def test_uno_siempre_puede_ver_su_propio_perfil(self, social_uow, user_uow, stats):
         """

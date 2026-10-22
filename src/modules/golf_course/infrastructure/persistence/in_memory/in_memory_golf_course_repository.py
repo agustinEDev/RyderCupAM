@@ -218,3 +218,7 @@ class InMemoryGolfCourseRepository(IGolfCourseRepository):
         Limpia todos los campos (útil para tests).
         """
         self._golf_courses.clear()
+
+    async def find_by_ids(self, golf_course_ids: list[GolfCourseId]) -> list[GolfCourse]:
+        wanted = {str(i.value) for i in golf_course_ids}
+        return [c for k, c in self._golf_courses.items() if k in wanted]

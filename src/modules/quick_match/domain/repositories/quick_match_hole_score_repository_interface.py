@@ -36,3 +36,10 @@ class QuickMatchHoleScoreRepositoryInterface(ABC):
     async def find_by_match(self, quick_match_id: QuickMatchId) -> list[QuickMatchHoleScore]:
         """Lista todos los scores registrados de una partida, ordenados por hoyo."""
         pass
+
+    @abstractmethod
+    async def find_by_matches(
+        self, quick_match_ids: list[QuickMatchId]
+    ) -> list[QuickMatchHoleScore]:
+        """Los scores de varias partidas en una sola lectura, no una por partida."""
+        pass

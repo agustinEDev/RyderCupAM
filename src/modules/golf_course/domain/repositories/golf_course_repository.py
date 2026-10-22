@@ -178,3 +178,13 @@ class IGolfCourseRepository(ABC):
             golf_course_id: ID del campo a eliminar
         """
         pass
+
+    @abstractmethod
+    async def find_by_ids(self, golf_course_ids: list[GolfCourseId]) -> list[GolfCourse]:
+        """
+        Esos campos, enteros, en una sola consulta.
+
+        Para listas que necesitan las tarjetas de varios campos a la vez (las
+        partidas jugadas con un amigo): uno por uno seria una consulta por fila.
+        """
+        pass

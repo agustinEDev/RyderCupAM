@@ -296,3 +296,8 @@ class CompetitionRepositoryInterface(ABC):
             RepositoryError: Si ocurre un error de consulta
         """
         pass
+
+    @abstractmethod
+    async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
+        """Esas competiciones en una sola lectura, no una por competicion (BE-3)."""
+        pass

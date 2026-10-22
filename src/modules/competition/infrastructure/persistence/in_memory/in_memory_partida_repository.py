@@ -67,3 +67,6 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
             for p in sorted(self._partidas.values(), key=lambda p: (str(p.round_id), p.numero))
             if condicion(p)
         ]
+
+    async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
+        return self._donde(lambda p: user_id in p.user_ids and other_id in p.user_ids)
