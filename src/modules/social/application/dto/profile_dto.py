@@ -40,8 +40,11 @@ class PlayerProfileResponseDTO(BaseModel):
     falta para encontrar a alguien por su nombre y reconocerlo antes de mandarle
     una solicitud, y no dice nada de el que no diga ya la busqueda.
 
-    **Solo el propio jugador y sus amigos ven lo de detras**: handicap,
-    estadisticas y actividad. Esos campos llegan en None a cualquier otro, no
+    **El handicap, cualquiera con sesion** (BE-3), salvo que haya un bloqueo
+    entre los dos, en cualquier sentido: entonces solo nombre y foto.
+
+    **Solo el propio jugador y sus amigos ven lo de detras**: estadisticas,
+    actividad, cara a cara y partidas juntos. Esos campos llegan en None a cualquier otro, no
     recortados ni a cero — un cero se leeria como "juega fatal" en lugar de "no
     puedes ver esto".
 
@@ -84,7 +87,10 @@ class PlayerProfileResponseDTO(BaseModel):
     )
     handicap: float | None = Field(
         default=None,
-        description=("Solo uno mismo y sus amigos. None si no lo sois o si no lo ha fijado"),
+        description=(
+            "Cualquier usuario con sesion (BE-3). None si hay un bloqueo entre los "
+            "dos, en cualquier sentido, o si no lo ha fijado"
+        ),
     )
     stats: PlayerStatsResponseDTO | None = Field(
         default=None,
