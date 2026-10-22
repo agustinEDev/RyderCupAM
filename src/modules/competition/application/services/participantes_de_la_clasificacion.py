@@ -96,15 +96,25 @@ async def generales_netas(
     round_ids = list({p.round_id for p in partidas})
     franjas = {f.id: f for f in await uow.rounds.find_by_ids(round_ids)} if round_ids else {}
 
+    # Agrupadas una sola vez: recorrerlas por cada torneo crecía con el número
+    # de torneos compartidos (CodeRabbit BE #641)
+    partidas_de: dict[CompetitionId, list[Partida]] = {}
+    for partida in partidas:
+        partidas_de.setdefault(partida.competition_id, []).append(partida)
+    torneo_de_partida = {p.id: p.competition_id for p in partidas}
+    golpes_de: dict[CompetitionId, list[GolpeDePartida]] = {}
+    for golpe in golpes:
+        torneo = torneo_de_partida.get(golpe.partida_id)
+        if torneo is not None:
+            golpes_de.setdefault(torneo, []).append(golpe)
+
     generales: dict[CompetitionId, list[Fila]] = {}
     for competicion in de_stroke_play:
         ajustes = competicion.stroke_play
         if ajustes is None:
             continue
-        suyas = [p for p in partidas if p.competition_id == competicion.id]
-        ids = {p.id for p in suyas}
         participantes, _ = participantes_de(
-            suyas, [g for g in golpes if g.partida_id in ids], franjas, {}
+            partidas_de.get(competicion.id, []), golpes_de.get(competicion.id, []), franjas, {}
         )
         generales[competicion.id] = Clasificacion.de(
             participantes, competicion.tournament_type, Escala.NETA, ajustes.overall_standing

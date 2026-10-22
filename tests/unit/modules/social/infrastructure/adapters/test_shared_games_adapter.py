@@ -1907,6 +1907,28 @@ class TestTablaJSinUnaGeneralPorTorneo:
             (f.user_id, f.position, f.tied, f.status) for f in oficial.rows
         ]
 
+    async def test_en_la_general_de_cada_torneo_solo_entran_los_suyos(self, mundo):
+        """
+        Dos torneos leídos de una vez: la general de cada uno lleva solo a sus
+        jugadores, nunca a los del otro (agrupado por torneo, CodeRabbit BE #641).
+        """
+        yo, el, ella = [await mundo.jugador(n) for n in ("Yo", "El", "Ella")]
+        course = await mundo.campo(yo)
+        primero = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(primero, course)
+        await mundo.grupo(primero, ronda, {yo: [4] * 18, el: [5] * 18}, numero=1)
+        await _completar(mundo, primero)
+        segundo = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(segundo, course)
+        await mundo.grupo(segundo, ronda, {yo: [4] * 18, ella: [5] * 18}, numero=1)
+        await _completar(mundo, segundo)
+
+        async with mundo.comp:
+            generales = await generales_netas(mundo.comp, [primero, segundo])
+
+        assert {f.user_id for f in generales[primero.id]} == {yo.id, el.id}
+        assert {f.user_id for f in generales[segundo.id]} == {yo.id, ella.id}
+
     async def test_cada_torneo_con_su_general(self, mundo):
         """Por lotes, pero cada torneo con lo suyo: gano uno y pierdo el otro."""
         yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
