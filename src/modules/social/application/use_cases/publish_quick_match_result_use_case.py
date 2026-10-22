@@ -13,7 +13,6 @@ from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
-from src.modules.quick_match.domain.services.hole_completion_service import holes_delivered
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     ParticipantStrokes,
     StrokeAllocationService,
@@ -31,6 +30,7 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
 )
 from src.modules.social.domain.services.counted_round import (
     counting_units,
+    holes_by_side,
     match_play_counts,
 )
 from src.modules.social.domain.services.ranking import rank
@@ -299,9 +299,13 @@ class PublishQuickMatchResultUseCase:
         bando_a, bando_b = bandos
 
         # El mismo calculo que el historial de partidas y el cara a cara
-        resultado = match_play_reading(match, lectura.scores, lectura.strokes, self._match_play)
-        hoyos_a = holes_delivered(lectura.scores, bando_a, match.match_format)
-        hoyos_b = holes_delivered(lectura.scores, bando_b, match.match_format)
+        # Un hoyo es del bando en cuanto lo anota uno, con el mejor neto que
+        # haya, tambien en fourball (Agustin, 22 oct 2026)
+        resultado = match_play_reading(
+            match, lectura.scores, lectura.strokes, self._match_play, one_ball_per_side=True
+        )
+        hoyos_a = holes_by_side(lectura.scores, bando_a)
+        hoyos_b = holes_by_side(lectura.scores, bando_b)
         # Sin un solo hoyo de ningun bando no hay nada que contar. Con hoyos
         # pero ninguno adjudicable (la ida frente a la vuelta, o un rival sin
         # anotar) si hay aviso: sin terminar, como lo cuenta «Partidas juntos»

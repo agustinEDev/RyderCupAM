@@ -18,6 +18,7 @@ Cuando cuenta una partida rapida en lo social (tabla aprobada el 22 oct 2026, A)
 from src.modules.social.domain.services.counted_round import (
     MIN_COUNTED_HOLES,
     counting_units,
+    holes_by_side,
     match_play_counts,
 )
 
@@ -81,3 +82,17 @@ class TestMatchPlayCounts:
 
     def test_bandos_con_hoyos_distintos_no_cuenta(self):
         assert not match_play_counts(IDA, VUELTA, decided_early=False)
+
+
+class TestHolesBySide:
+    """Un hoyo es del bando en cuanto lo anota uno de sus jugadores (Agustin, 22 oct)."""
+
+    def test_singles_los_del_jugador(self):
+        assert holes_by_side({"ana": {1: 4, 2: 5}, "eva": {3: 4}}, {"ana"}) == {1, 2}
+
+    def test_fourball_basta_uno_de_los_dos(self):
+        scores = {"ana": {1: 4, 2: 5}, "pepa": {3: None}, "eva": {4: 4}}
+        assert holes_by_side(scores, {"ana", "pepa"}) == {1, 2, 3}
+
+    def test_bando_sin_nada(self):
+        assert holes_by_side({"eva": {1: 4}}, {"ana", "pepa"}) == frozenset()

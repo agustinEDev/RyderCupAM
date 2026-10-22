@@ -19,7 +19,7 @@ como acabo cada uno.
 Puro, sin IO: recibe los hoyos ya leidos.
 """
 
-from collections.abc import Hashable, Iterable, Mapping
+from collections.abc import Collection, Hashable, Iterable, Mapping
 from typing import TypeVar
 
 # Media vuelta: lo minimo que se juega y se cuenta
@@ -41,6 +41,20 @@ def counting_units(holes_by_unit: Mapping[K, Iterable[int]]) -> frozenset[K]:
         return frozenset()
     (referencia,) = referencias
     return frozenset(unidad for unidad, hoyos in conjuntos.items() if hoyos == referencia)
+
+
+def holes_by_side(
+    scores_by_player: Mapping[K, Mapping[int, int | None]], side: Collection[K]
+) -> frozenset[int]:
+    """
+    Los hoyos que entrego un bando: los que anoto al menos uno de sus jugadores.
+
+    En fourball cuenta el mejor hoyo del bando, asi que basta la bola de uno
+    (Agustin, 22 oct 2026); en foursomes el bando juega una sola bola; en
+    individual, el bando es el jugador. La raya (score nulo) es un hoyo
+    entregado: recogio la bola, pero el hoyo esta acabado.
+    """
+    return frozenset(hoyo for jugador in side for hoyo in scores_by_player.get(jugador, {}))
 
 
 def match_play_counts(holes_a: Iterable[int], holes_b: Iterable[int], decided_early: bool) -> bool:

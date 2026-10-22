@@ -1020,12 +1020,14 @@ class TestTablaACuandoCuentaElMatchPlay:
         assert (de_ana.payload["outcome"], de_ana.payload["score"]) == ("WON", "3&2")
         assert de_ana.payload["unfinished"] is False
 
-    async def test_a_fourball_un_companero_sin_hoyos_deja_al_bando_corto(
+    async def test_a_fourball_basta_la_bola_de_uno_del_bando(
         self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
     ):
         """
-        A. Given un fourball donde la pareja de Ana solo anoto 12 hoyos / When se
-        publica / Then sin terminar: el bando de Ana no entrego los 18.
+        A (fourball, Agustin 22 oct). Given la pareja de Ana anota birdie en el
+        1 y el 2, levanta en el 3 y el 4 y no anota mas; Ana y las rivales
+        hacen 4 en los 18 / When se publica / Then cuenta con los 18 hoyos: cada
+        hoyo es del bando en cuanto lo anota uno, con el mejor neto que haya.
         """
         ana = await _user(user_uow, "Ana")
         pepa = await _user(user_uow, "Pepa")
@@ -1036,8 +1038,7 @@ class TestTablaACuandoCuentaElMatchPlay:
             qm_uow,
             course,
             ana,
-            # Igualados: no se decide antes de tiempo, solo cuentan los hoyos
-            [_tarjeta(4), _hoyos(range(1, 13)), _tarjeta(4), _tarjeta(4)],
+            [_tarjeta(4), {1: 3, 2: 3, 3: None, 4: None}, _tarjeta(4), _tarjeta(4)],
             otros=[
                 QuickMatchParticipant.for_user(pepa.id, team="A"),
                 QuickMatchParticipant.for_user(eva.id, team="B"),
@@ -1049,8 +1050,39 @@ class TestTablaACuandoCuentaElMatchPlay:
 
         await publicar(match)
 
-        for user in (ana, pepa, eva, luz):
-            assert (await _uno_de(social_uow, user)).payload["outcome"] == "UNFINISHED"
+        for user in (ana, pepa):
+            evento = await _uno_de(social_uow, user)
+            assert (evento.payload["outcome"], evento.payload["score"]) == ("WON", "2UP")
+            assert evento.payload["unfinished"] is False
+            assert evento.payload["holes_played"] == 18
+        assert (await _uno_de(social_uow, eva)).payload["outcome"] == "LOST"
+
+    async def test_a_fourball_un_bando_sin_bola_en_un_hoyo_queda_corto(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """Si ninguno de los dos anota un hoyo, el bando no lo entrego: sin terminar."""
+        ana = await _user(user_uow, "Ana")
+        pepa = await _user(user_uow, "Pepa")
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_hoyos(range(1, 18)), _hoyos(range(1, 18)), _tarjeta(4), _tarjeta(4)],
+            otros=[
+                QuickMatchParticipant.for_user(pepa.id, team="A"),
+                QuickMatchParticipant.for_user(eva.id, team="B"),
+                QuickMatchParticipant.for_user(luz.id, team="B"),
+            ],
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+        )
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, ana)).payload["outcome"] == "UNFINISHED"
 
     async def test_a_fourball_nueve_hoyos_de_los_cuatro_cuenta(
         self, publicar, social_uow, qm_uow, golf_course_uow, user_uow

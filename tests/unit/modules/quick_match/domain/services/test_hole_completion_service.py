@@ -2,10 +2,7 @@
 
 from uuid import uuid4
 
-from src.modules.quick_match.domain.services.hole_completion_service import (
-    hole_is_complete,
-    holes_delivered,
-)
+from src.modules.quick_match.domain.services.hole_completion_service import hole_is_complete
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
 from src.shared.domain.value_objects.match_format import MatchFormat
 
@@ -75,27 +72,3 @@ class TestItReadsAMappingToo:
 
         assert hole_is_complete(scores, TEAM_A, TEAM_B, MatchFormat.FOURSOMES)
         assert not hole_is_complete(scores, TEAM_A, TEAM_B, MatchFormat.FOURBALL)
-
-
-class TestHolesDeliveredBySide:
-    """
-    Que hoyos ha entregado un bando: la misma regla que `hole_is_complete`
-    mirada desde un solo lado (lo usa lo social para saber si una partida
-    rapida cuenta, tabla del 22 oct 2026).
-    """
-
-    def test_singles_los_hoyos_del_jugador(self):
-        scores = {A1: {1: 4, 2: 5}, B1: {1: 4}}
-        assert holes_delivered(scores, {A1}, MatchFormat.SINGLES) == {1, 2}
-        assert holes_delivered(scores, {B1}, MatchFormat.SINGLES) == {1}
-
-    def test_fourball_hace_falta_la_bola_de_los_dos(self):
-        scores = {A1: {1: 4, 2: 5, 3: 4}, A2: {1: 4, 2: None}}
-        assert holes_delivered(scores, TEAM_A, MatchFormat.FOURBALL) == {1, 2}
-
-    def test_foursomes_basta_la_bola_de_cualquiera(self):
-        scores = {A1: {1: 4}, A2: {2: 5}}
-        assert holes_delivered(scores, TEAM_A, MatchFormat.FOURSOMES) == {1, 2}
-
-    def test_un_bando_sin_nada(self):
-        assert holes_delivered({}, TEAM_A, MatchFormat.FOURBALL) == frozenset()

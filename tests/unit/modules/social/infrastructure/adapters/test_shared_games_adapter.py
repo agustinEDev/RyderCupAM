@@ -1328,7 +1328,11 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
         assert partida.outcome == Outcome.WON
         assert partida.unfinished is False
 
-    async def test_fourball_con_un_companero_corto_sin_terminar(self, mundo):
+    async def test_fourball_basta_la_bola_de_uno_del_bando(self, mundo):
+        """
+        Fourball (Agustin, 22 oct): él solo anota birdie en el 1 y el 2; yo y
+        los rivales, 4 en los 18. Cuenta con los 18 y lo ganamos 2UP.
+        """
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
         rival1 = await mundo.jugador("Rival1")
@@ -1342,17 +1346,67 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
                 QuickMatchParticipant.for_user(rival1.id, team="B"),
                 QuickMatchParticipant.for_user(rival2.id, team="B"),
             ],
-            # Igualados: sin decidir antes de tiempo, solo cuentan los hoyos
-            [4, 4, 4, 4],
+            [4, 3, 4, 4],
             match_format=MatchFormat.FOURBALL,
-            hoyos=[18, 12, 18, 18],
+            jugados=[HOLES, [1, 2], HOLES, HOLES],
         )
 
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.relation == Relation.WITH
-        assert partida.unfinished is True
-        assert partida.outcome is None
+        assert partida.unfinished is False
+        assert partida.outcome == Outcome.WON
+
+    async def test_fourball_el_mejor_neto_de_los_que_haya_en_cada_hoyo(self, mundo):
+        """
+        Fourball: él solo anota birdie en el 1 y el 2, y un rival solo birdie en
+        el 3, el 4 y el 5. Con la bola de uno por bando cuentan los 18: ganamos
+        dos hoyos, perdemos tres, y lo perdemos 1UP.
+        """
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        rival1 = await mundo.jugador("Rival1")
+        rival2 = await mundo.jugador("Rival2")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(el.id, team="A"),
+                QuickMatchParticipant.for_user(rival1.id, team="B"),
+                QuickMatchParticipant.for_user(rival2.id, team="B"),
+            ],
+            [4, 3, 4, 3],
+            match_format=MatchFormat.FOURBALL,
+            jugados=[HOLES, [1, 2], HOLES, [3, 4, 5]],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.unfinished, partida.outcome) == (False, Outcome.LOST)
+
+    async def test_fourball_un_hoyo_sin_bola_del_bando_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        rival1 = await mundo.jugador("Rival1")
+        rival2 = await mundo.jugador("Rival2")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(el.id, team="A"),
+                QuickMatchParticipant.for_user(rival1.id, team="B"),
+                QuickMatchParticipant.for_user(rival2.id, team="B"),
+            ],
+            [4, 4, 4, 4],
+            match_format=MatchFormat.FOURBALL,
+            hoyos=[17, 17, 18, 18],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.unfinished, partida.outcome) == (True, None)
 
     async def test_sin_handicap_sigue_sin_resultado(self, mundo):
         """Sin el hándicap de alguien no se juzga, como hoy; tampoco se marca a medias."""

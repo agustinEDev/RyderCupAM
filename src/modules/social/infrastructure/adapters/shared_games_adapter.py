@@ -31,7 +31,6 @@ from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
-from src.modules.quick_match.domain.services.hole_completion_service import holes_delivered
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     ParticipantStrokes,
     StrokeAllocationService,
@@ -48,6 +47,7 @@ from src.modules.social.application.ports.shared_games_interface import (
 )
 from src.modules.social.domain.services.counted_round import (
     counting_units,
+    holes_by_side,
     match_play_counts,
 )
 from src.modules.social.domain.services.head_to_head import (
@@ -337,12 +337,14 @@ class SharedGamesAdapter(SharedGamesInterface):
             golpes,
             quick_match_strokes(match, course, usuarios, self._stroke_allocation),
             self._scoring,
+            # Basta la bola de uno por bando, tambien en fourball (Agustin, 22 oct)
+            one_ball_per_side=True,
         )
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla A)
         if not match_play_counts(
-            holes_delivered(golpes, team_a_ids, match.match_format),
-            holes_delivered(golpes, team_b_ids, match.match_format),
+            holes_by_side(golpes, team_a_ids),
+            holes_by_side(golpes, team_b_ids),
             lectura.decided_early,
         ):
             return relation, None, True

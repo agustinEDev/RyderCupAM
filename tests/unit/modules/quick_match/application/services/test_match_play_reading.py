@@ -84,3 +84,36 @@ class TestMatchPlayReading:
         resultado = match_play_result(match, {yo: {1: 3}, el: {1: 4}}, {}, MatchPlayScoring())
 
         assert resultado == ("A", "1UP")
+
+
+class TestUnaBolaPorBando:
+    """Lo social lee el fourball con la bola de uno por bando (Agustin, 22 oct)."""
+
+    def _fourball(self):
+        match = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=UserId(uuid4()),
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.FOURBALL,
+        )
+        for team in ("A", "B", "B"):
+            match.add_participant(QuickMatchParticipant.for_user(UserId(uuid4()), team=team))
+        return match
+
+    def test_con_un_companero_sin_anotar_el_hoyo_cuenta_con_el_mejor_que_haya(self):
+        match = self._fourball()
+        a1, a2, b1, b2 = (p.participant_id for p in match.participants)
+        scores = {a1: {1: 3, 2: 4}, a2: {}, b1: {1: 4, 2: 4}, b2: {1: 4, 2: 4}}
+
+        lectura = match_play_reading(match, scores, {}, MatchPlayScoring(), one_ball_per_side=True)
+
+        assert (lectura.winner, lectura.score, lectura.holes_played) == ("A", "1UP", 2)
+
+    def test_por_defecto_sigue_exigiendo_las_cuatro(self):
+        match = self._fourball()
+        a1, a2, b1, b2 = (p.participant_id for p in match.participants)
+        scores = {a1: {1: 3, 2: 4}, a2: {}, b1: {1: 4, 2: 4}, b2: {1: 4, 2: 4}}
+
+        lectura = match_play_reading(match, scores, {}, MatchPlayScoring())
+
+        assert lectura.holes_played == 0
