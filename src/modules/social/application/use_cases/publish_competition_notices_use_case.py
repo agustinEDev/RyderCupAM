@@ -227,6 +227,10 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_for_competition(
                 competition_id, [_SALIDA], user_id
             )
+            # Su aviso se fue por la baja, no por un cambio: si vuelve, es nuevo
+            await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
+                competition_id, user_id
+            )
 
     async def tournament_cancelled(self, competition_id: str) -> None:
         """Torneo cancelado: nadie esta ya apuntado (B11, C) ni tiene salida (G9)."""
@@ -236,6 +240,9 @@ class PublishCompetitionNoticesUseCase:
                 competition_id, _DE_ESTAR_APUNTADO
             )
             await self._social_uow.activity_events.delete_for_competition(competition_id, [_SALIDA])
+            await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
+                competition_id
+            )
 
     async def invited(self, user_id: UserId, tournament: TournamentRef, invitation_id: str) -> None:
         """Le invitan (A3). Uno por invitacion: si se retira, se retira ese."""
@@ -442,8 +449,26 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_for_competition(
                 competition_id, _AVISOS_DE_TORNEO
             )
+            await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
+                competition_id
+            )
 
     # === Salidas ===
+
+    async def round_deleted(self, competition_id: str, round_id: str) -> None:
+        """
+        Se borra una ronda: fuera sus avisos de salida, si quedaba alguno, y lo
+        apuntado de quien perdio el suyo por un cambio en ella; si no, se
+        quedaria huerfano (revisor sin contexto, 22 oct 2026). Con el candado
+        del torneo, como las publicaciones de salidas.
+        """
+        async with self._social_uow:
+            eventos = self._social_uow.activity_events
+            await eventos.lock_scope(competition_id)
+            await eventos.delete_from_source(round_id, [_SALIDA])
+            retirados = await eventos.withdrawn_tee_times(round_id)
+            if retirados:
+                await eventos.forget_withdrawn_tee_times(round_id, retirados)
 
     async def tee_times(
         self,
@@ -469,6 +494,15 @@ class PublishCompetitionNoticesUseCase:
         viejo y publicar el nuevo: sale como aviso nuevo, con su fecha, y cuenta
         como novedad. Todo de una vez: un borrado y una escritura.
 
+        **Quien se queda sin salida por un cambio se recuerda** (prueba de punta
+        a punta del 22 oct 2026): reasignar rivales de la Ryder son dos
+        `PUT matches/{id}/players`, y entre los dos alguien se queda sin
+        partido. Su aviso se retira —puede quedarse asi, y un aviso de un
+        partido que ya no es suyo seria falso—, pero se apunta en la misma
+        transaccion y con el mismo candado. Si vuelve a tener salida en la
+        ronda, su aviso nuevo dice `changed`. Lo olvidan su vuelta, su baja y la
+        cancelacion o el borrado del torneo: tras ellas, el siguiente es nuevo.
+
         **Sin leer usuarios**: es solo suyo, y el interruptor de publicar decide
         lo que ven los amigos, que aqui es nada. Leerlos abriria otra
         transaccion y soltaria el candado antes de escribir.
@@ -481,6 +515,8 @@ class PublishCompetitionNoticesUseCase:
             fuera = {s.user_id for s in leidas if s.out_of_play}
             ahora = {s.user_id: s for s in leidas if not s.out_of_play}
             publicados = {e.user_id: e for e in await eventos.find_from_source(round_id, [_SALIDA])}
+            # Quien perdio su aviso de esta ronda por un cambio y no lo recupero
+            retirados = await eventos.withdrawn_tee_times(round_id)
             quitar = [
                 user_id
                 for user_id, evento in publicados.items()
@@ -488,12 +524,25 @@ class PublishCompetitionNoticesUseCase:
                 and (user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id]))
             ]
             nuevos = [
-                self._salida(tournament, round_id, salida, changed=user_id in publicados)
+                self._salida(
+                    tournament,
+                    round_id,
+                    salida,
+                    changed=user_id in publicados or user_id in retirados,
+                )
                 for user_id, salida in ahora.items()
                 if user_id not in publicados or user_id in quitar
             ]
+            sin_salida = [user_id for user_id in quitar if user_id not in ahora]
+            vuelven = [user_id for user_id in ahora if user_id in retirados]
             if quitar:
                 await eventos.delete_from_source_for_users(round_id, [_SALIDA], quitar)
+            if sin_salida:
+                await eventos.remember_withdrawn_tee_times(
+                    round_id, tournament.competition_id, sin_salida
+                )
+            if vuelven:
+                await eventos.forget_withdrawn_tee_times(round_id, vuelven)
             if nuevos:
                 await eventos.add_many(nuevos)
 

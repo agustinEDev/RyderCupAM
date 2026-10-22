@@ -140,6 +140,15 @@ class ActivityEvent:
             return f"{self._user_id.value}:{self._source_match_id}"
         return str(self._id)
 
+    @property
+    def comes_from_a_quick_match(self) -> bool:
+        """
+        Si salio de una partida rapida (su origen es su id): el «como acabo» y
+        los logros que no son de torneo. La papelera del autor lo oculta a sus
+        amigos (prueba de punta a punta, 22 oct 2026).
+        """
+        return self._type.may_come_from_a_quick_match and not self._payload.get("from_tournament")
+
     # === Business Rules ===
 
     def is_from(self, match_id: str) -> bool:

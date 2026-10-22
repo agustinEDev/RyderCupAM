@@ -321,3 +321,50 @@ class TestDeleteRoundUseCase:
         # Act & Assert
         with pytest.raises(RoundNotModifiableError):
             await use_case.execute(request, creator_id)
+
+
+class _Actividad:
+    """Apunta los avisos de borrado de ronda; lo demas no interesa aqui."""
+
+    def __init__(self):
+        self.borradas: list[tuple] = []
+
+    async def round_deleted(self, competition_id, round_id):
+        self.borradas.append((competition_id, round_id))
+
+
+class TestDeleteRoundTellsActivity:
+    """
+    Revisor sin contexto (22 oct 2026): al borrar una ronda, Actividad olvida
+    los avisos de salida retirados de esa ronda (`withdrawn_tee_time_notices`).
+    """
+
+    async def _escena(self, uow, creator_id):
+        golf_course_id = GolfCourseId(uuid4())
+        helper = TestDeleteRoundUseCase()
+        competition = await helper._create_closed_competition_with_course(
+            uow, creator_id, golf_course_id
+        )
+        ronda = await helper._create_round_for_competition(uow, competition, golf_course_id)
+        return competition, ronda
+
+    async def test_deleting_a_round_tells_activity(self):
+        uow, creator_id, actividad = InMemoryUnitOfWork(), UserId(uuid4()), _Actividad()
+        competition, ronda = await self._escena(uow, creator_id)
+
+        await DeleteRoundUseCase(uow, actividad=actividad).execute(
+            DeleteRoundRequestDTO(round_id=ronda.id.value), creator_id
+        )
+
+        assert actividad.borradas == [(competition.id, ronda.id)]
+
+    async def test_a_refused_deletion_tells_nothing(self):
+        uow, creator_id, actividad = InMemoryUnitOfWork(), UserId(uuid4()), _Actividad()
+        _, ronda = await self._escena(uow, creator_id)
+
+        with pytest.raises(NotCompetitionCreatorError):
+            await DeleteRoundUseCase(uow, actividad=actividad).execute(
+                DeleteRoundRequestDTO(round_id=ronda.id.value), UserId(uuid4())
+            )
+
+        assert actividad.borradas == []

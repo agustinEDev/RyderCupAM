@@ -48,6 +48,7 @@ class FeedScope:
     mine: ActivitySlice
     friends: ActivitySlice
     last_seen_at: datetime | None
+    viewer_id: UserId
 
     @property
     def slices(self) -> list[ActivitySlice]:
@@ -107,6 +108,7 @@ async def resolve_feed_scope(
             only_visible_to_friends=True,
         ),
         last_seen_at=visto_hasta,
+        viewer_id=viewer_id,
     )
 
 
@@ -171,6 +173,9 @@ async def count_unseen(
         cap=UNSEEN_CAP,
         skip_private_enrollments=True,
         open_invitations_at=datetime.now(),
+        # Ni lo de partidas rapidas que su autor tiene en la papelera, salvo
+        # lo mio (22 oct 2026)
+        hide_trashed_quick_matches_from=scope.viewer_id,
     )
     solicitudes = sum(
         1

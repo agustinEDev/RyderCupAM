@@ -79,6 +79,7 @@ class ActivityEventRepositoryInterface(ABC):
         cap: int | None = None,
         skip_private_enrollments: bool = False,
         open_invitations_at: datetime | None = None,
+        hide_trashed_quick_matches_from: UserId | None = None,
     ) -> int:
         """
         Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
@@ -95,6 +96,10 @@ class ActivityEventRepositoryInterface(ABC):
         Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT de
         invitaciones que en ese instante ya no se pueden aceptar (no pendientes,
         caducadas o borradas), que el feed tampoco enseña.
+
+        Con `hide_trashed_quick_matches_from` (quien mira) tampoco cuenta lo
+        que salio de una partida rapida que su autor tiene en la papelera
+        (`ActivityEvent.comes_from_a_quick_match`), salvo lo de quien mira.
         """
 
     @abstractmethod
@@ -164,6 +169,35 @@ class ActivityEventRepositoryInterface(ABC):
         Como `delete_from_source`, pero de varios jugadores de una vez: las
         salidas de una ronda se sustituyen por lotes (G3), y uno por jugador
         serian tantas consultas como jugadores. Sin jugadores no borra nada.
+        """
+
+    @abstractmethod
+    async def remember_withdrawn_tee_times(
+        self, round_id: str, competition_id: str, user_ids: Collection[UserId]
+    ) -> None:
+        """
+        Apunta que esos jugadores perdieron su aviso de salida de esa ronda por
+        un cambio en ella —se quedaron sin partido o sin grupo—, no por una
+        baja ni una cancelacion. Si luego vuelven a tener salida en la ronda,
+        su aviso nuevo es un cambio (`changed`), no el primero (prueba de punta
+        a punta del 22 oct 2026: reasignar en dos pasos). Repetirlo no duplica.
+        """
+
+    @abstractmethod
+    async def withdrawn_tee_times(self, round_id: str) -> set[UserId]:
+        """Quien perdio su aviso de salida de esa ronda por un cambio y aun no lo recupero."""
+
+    @abstractmethod
+    async def forget_withdrawn_tee_times(self, round_id: str, user_ids: Collection[UserId]) -> None:
+        """Olvida esos apuntes de la ronda: esos jugadores ya tienen salida otra vez."""
+
+    @abstractmethod
+    async def forget_withdrawn_tee_times_of_competition(
+        self, competition_id: str, user_id: UserId | None = None
+    ) -> None:
+        """
+        Olvida los apuntes de ese torneo, de un jugador o de todos: tras una
+        baja o una cancelacion, la siguiente salida es nueva de verdad.
         """
 
     @abstractmethod

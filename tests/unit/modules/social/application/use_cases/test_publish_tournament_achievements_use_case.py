@@ -98,6 +98,7 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
         excluding_match_id: str,
         excluding_competition_id=None,
         before=None,
+        tournament_start=None,
     ) -> bool:
         return any(
             usuario == str(user_id.value)
@@ -531,6 +532,7 @@ class _ApagaAlJuzgar(_CourseHistoryFake):
         excluding_match_id,
         excluding_competition_id=None,
         before=None,
+        tournament_start=None,
     ):
         self._user.set_activity_sharing(False)
         return await super().has_played_course_before(user_id, golf_course_id, excluding_match_id)

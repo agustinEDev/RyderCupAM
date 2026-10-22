@@ -863,10 +863,11 @@ async def get_quick_match(
     response_model=SharedQuickMatchDetailResponseDTO,
     summary="View a friend's finished quick match (read-only)",
     description=(
-        "Read-only view of a FINISHED quick match: same fields as the detail, plus "
-        "`read_only` and `viewer_is_participant`. Open to its players and to the friends "
-        "of any registered player who shares activity, is active, has no block with the "
-        "viewer and has not hidden the match. For non-players, the `name` of guests and of "
+        "Read-only view of a quick match: same fields as the detail, plus `read_only` "
+        "and `viewer_is_participant`. Open to its players in any status (the client "
+        "sends them to their scoring view) and, once FINISHED, to the friends of any "
+        "registered player who shares activity, is active, has no block with the viewer "
+        "and has not hidden the match. For non-players, the `name` of guests and of "
         "players blocked with the viewer or deactivated comes as null. Anyone else gets 403."
     ),
 )

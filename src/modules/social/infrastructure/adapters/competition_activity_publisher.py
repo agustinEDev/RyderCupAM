@@ -1,5 +1,6 @@
 """Adaptador: `competition` avisa en Actividad a traves del modulo social."""
 
+import logging
 from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
@@ -29,7 +30,12 @@ from src.modules.social.application.use_cases.publish_competition_notices_use_ca
     TeeTimeRef,
     TournamentRef,
 )
+from src.modules.social.application.use_cases.publish_tournament_achievements_use_case import (
+    PublishTournamentAchievementsUseCase,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 
 class OfficialStandings(Protocol):
@@ -63,8 +69,12 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         standings: OfficialStandings,
         competition_uow: CompetitionUnitOfWorkInterface,
         ryder_scoreboard: RyderScoreboard | None = None,
+        achievements: PublishTournamentAchievementsUseCase | None = None,
     ):
         self._notices = notices
+        # Para volver a publicar los torneos del mismo dia que dependen de uno
+        # que se cancela (revision final de bugs, 22 oct 2026)
+        self._achievements = achievements
         self._standings = standings
         self._ryder_scoreboard = ryder_scoreboard
         # Para releer la inscripcion justo antes de avisar de ella
@@ -88,6 +98,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
 
     async def cancelled(self, competition_id: CompetitionId) -> None:
         await self._notices.tournament_cancelled(str(competition_id.value))
+        await self._republicar_los_del_mismo_dia(competition_id)
 
     async def invited(self, competition: Competition, invitation: Invitation) -> None:
         if invitation.invitee_user_id is None:
@@ -201,13 +212,34 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         )
 
     async def reopened(self, competition_id: CompetitionId) -> None:
+        # No hace falta volver a publicar los del mismo dia: uno reabierto sigue
+        # contando para ellos como cuando estaba cerrado. Lo que se corrija
+        # mientras, lo recogen el nuevo cierre o la cancelacion
         await self._notices.reopened(str(competition_id.value))
+
+    async def _republicar_los_del_mismo_dia(self, competition_id: CompetitionId) -> None:
+        """
+        «Campo nuevo» y «primer torneo» de los torneos cerrados del mismo dia
+        dependen de este: al cancelarlo deja de contar y se vuelven a publicar. Con fallo seguro: el aviso
+        propio ya salio y la accion no falla por esto.
+        """
+        if self._achievements is None:
+            return
+        try:
+            await self._achievements.republish_same_day(str(competition_id.value))
+        except Exception:
+            logger.warning(
+                "Could not republish the same-day tournaments of %s", competition_id, exc_info=True
+            )
 
     async def made_private(self, competition_id: CompetitionId) -> None:
         await self._notices.tournament_made_private(str(competition_id.value))
 
     async def deleted(self, competition_id: CompetitionId) -> None:
         await self._notices.tournament_deleted(str(competition_id.value))
+
+    async def round_deleted(self, competition_id: CompetitionId, round_id: RoundId) -> None:
+        await self._notices.round_deleted(str(competition_id.value), str(round_id.value))
 
     async def tee_times(
         self,

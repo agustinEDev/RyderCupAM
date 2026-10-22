@@ -22,7 +22,10 @@ from sqlalchemy import (
     tuple_,
     update,
 )
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import (
+    JSONB,
+    insert as pg_insert,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
@@ -33,6 +36,7 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
     activity_events_table,
+    withdrawn_tee_time_notices_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -101,6 +105,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         cap: int | None = None,
         skip_private_enrollments: bool = False,
         open_invitations_at: datetime | None = None,
+        hide_trashed_quick_matches_from: UserId | None = None,
     ) -> int:
         condicion = self._condicion(slices)
         if condicion is None:
@@ -109,6 +114,11 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             condicion = and_(condicion, not_(self._apuntado_a_privado()))
         if open_invitations_at is not None:
             condicion = and_(condicion, not_(self._invitacion_cerrada(open_invitations_at)))
+        if hide_trashed_quick_matches_from is not None:
+            condicion = and_(
+                condicion,
+                not_(self._en_la_papelera_de_otro(hide_trashed_quick_matches_from)),
+            )
 
         # Una fila por tarjeta: los logros de una vuelta de un jugador comparten
         # tarjeta (`ActivityEvent.card_key`); cada aviso va en la suya
@@ -132,6 +142,30 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         stmt = select(func.count()).select_from(filas.subquery())
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
+
+    @staticmethod
+    def _en_la_papelera_de_otro(viewer_id: UserId) -> ColumnElement[bool]:
+        """
+        Lo de otro que salio de una partida rapida que el tiene en su papelera
+        (`ActivityEvent.comes_from_a_quick_match`): su origen es el id de la
+        partida y su autor esta en `hidden_by_participant_ids`, donde un
+        jugador con cuenta va con el id de su usuario. Como con los torneos, se
+        mira la tabla `quick_matches` por su nombre y el id como texto.
+        """
+        tabla = activity_events_table.c
+        partidas = table("quick_matches", column("id"), column("hidden_by_participant_ids", JSONB))
+        tipos = sorted(t for t in ActivityEventType if t.may_come_from_a_quick_match)
+        return and_(
+            tabla.user_id != viewer_id,
+            tabla.type.in_(tipos),
+            tabla.payload["from_tournament"].astext.is_distinct_from("true"),
+            exists().where(
+                cast(partidas.c.id, String) == tabla.source_match_id,
+                partidas.c.hidden_by_participant_ids.op("@>")(
+                    func.jsonb_build_array(cast(tabla.user_id, String))
+                ),
+            ),
+        )
 
     @staticmethod
     def _invitacion_cerrada(ahora: datetime) -> ColumnElement[bool]:
@@ -385,3 +419,47 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return result.rowcount or 0
+
+    async def remember_withdrawn_tee_times(
+        self, round_id: str, competition_id: str, user_ids: Collection[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        stmt = (
+            pg_insert(withdrawn_tee_time_notices_table)
+            .values(
+                [
+                    {"user_id": user_id, "round_id": round_id, "competition_id": competition_id}
+                    for user_id in user_ids
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["user_id", "round_id"])
+        )
+        await self._session.execute(stmt)
+
+    async def withdrawn_tee_times(self, round_id: str) -> set[UserId]:
+        stmt = select(withdrawn_tee_time_notices_table.c.user_id).where(
+            withdrawn_tee_time_notices_table.c.round_id == round_id
+        )
+        result = await self._session.execute(stmt)
+        return set(result.scalars().all())
+
+    async def forget_withdrawn_tee_times(self, round_id: str, user_ids: Collection[UserId]) -> None:
+        if not user_ids:
+            return
+        await self._session.execute(
+            delete(withdrawn_tee_time_notices_table).where(
+                withdrawn_tee_time_notices_table.c.round_id == round_id,
+                withdrawn_tee_time_notices_table.c.user_id.in_(list(user_ids)),
+            )
+        )
+
+    async def forget_withdrawn_tee_times_of_competition(
+        self, competition_id: str, user_id: UserId | None = None
+    ) -> None:
+        stmt = delete(withdrawn_tee_time_notices_table).where(
+            withdrawn_tee_time_notices_table.c.competition_id == competition_id
+        )
+        if user_id is not None:
+            stmt = stmt.where(withdrawn_tee_time_notices_table.c.user_id == user_id)
+        await self._session.execute(stmt)

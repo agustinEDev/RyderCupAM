@@ -380,6 +380,17 @@ class TestTraduccion:
             ("tournament_deleted", (crudo,), {}),
         ]
 
+    async def test_borrar_una_ronda_va_por_los_ids(self, avisos):
+        competicion = _competicion()
+        ronda = RoundId.generate()
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
+
+        await adaptador.round_deleted(competicion.id, ronda)
+
+        assert avisos.llamadas == [
+            ("round_deleted", (str(competicion.id.value), str(ronda.value)), {})
+        ]
+
     async def test_invitaciones_por_su_id(self, avisos):
         competicion = _competicion()
         invitacion = SimpleNamespace(

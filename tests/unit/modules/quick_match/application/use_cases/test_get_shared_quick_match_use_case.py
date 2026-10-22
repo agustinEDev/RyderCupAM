@@ -87,7 +87,7 @@ class _Escena:
         self.social_uow = social_uow
         self.golf_course_uow = golf_course_uow
 
-    async def montar(self, *, completar: bool = True) -> "_Escena":
+    async def montar(self, *, completar: bool = True, iniciar: bool = True) -> "_Escena":
         self.ana = await create_user(self.user_uow, unique_email("ana"))
         self.bea = await create_user(self.user_uow, unique_email("bea"))
         self.carlos = await create_user(self.user_uow, unique_email("carlos"))
@@ -104,8 +104,9 @@ class _Escena:
         qm.add_participant(QuickMatchParticipant.for_user(self.carlos.id))
         self.guest = QuickMatchParticipant.for_guest("Gonzalo", "Invitado", handicap=12.0)
         qm.add_participant(self.guest)
-        qm.start([qm.creator_participant_id, ParticipantId(self.bea.id.value)])
-        if completar:
+        if iniciar:
+            qm.start([qm.creator_participant_id, ParticipantId(self.bea.id.value)])
+        if iniciar and completar:
             qm.complete()
         async with self.qm_uow:
             await self.qm_uow.quick_matches.add(qm)
@@ -384,6 +385,70 @@ class TestParticipantsKeepTheirView:
                 ScoringCoverageService(),
                 escena.golf_course_uow,
             ).execute(str(escena.qm.id.value), str(escena.viewer.id.value))
+
+
+class TestParticipantSeesItInAnyState:
+    """
+    Arreglo del 22 oct (prueba de punta a punta): a un PARTICIPANTE se le responde
+    200 con `viewer_is_participant: true` sea cual sea el estado, para que el
+    cliente lo lleve a su anotacion. A los demas, igual que antes.
+    """
+
+    async def test_participant_of_a_match_in_progress_gets_it(
+        self, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        escena = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar(
+            completar=False
+        )
+
+        detalle = await escena.ver(escena.bea)
+
+        assert detalle.viewer_is_participant is True
+        assert detalle.status == "IN_PROGRESS"
+
+    async def test_participant_of_a_pending_match_gets_it(
+        self, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        escena = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar(iniciar=False)
+
+        detalle = await escena.ver(escena.carlos)
+
+        assert detalle.viewer_is_participant is True
+        assert detalle.status == "PENDING"
+
+    async def test_the_creator_of_a_cancelled_match_gets_it(
+        self, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        escena = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar(
+            completar=False
+        )
+        escena.qm.cancel()
+        async with escena.qm_uow:
+            await escena.qm_uow.quick_matches.update(escena.qm)
+
+        detalle = await escena.ver(escena.ana)
+
+        assert detalle.viewer_is_participant is True
+        assert detalle.status == "CANCELLED"
+
+    async def test_a_friend_of_a_pending_match_still_gets_forbidden(
+        self, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        escena = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar(iniciar=False)
+        await create_accepted_friendship(social_uow, escena.viewer.id, escena.bea.id)
+
+        with pytest.raises(QuickMatchNotSharedError):
+            await escena.ver()
+
+    async def test_a_stranger_of_a_match_in_progress_still_gets_forbidden(
+        self, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        escena = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar(
+            completar=False
+        )
+
+        with pytest.raises(QuickMatchNotSharedError):
+            await escena.ver()
 
 
 # ==================== Sin N+1 ====================

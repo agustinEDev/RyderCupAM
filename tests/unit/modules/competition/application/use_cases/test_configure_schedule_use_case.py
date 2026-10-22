@@ -6,7 +6,10 @@ from uuid import uuid4
 import pytest
 
 from src.modules.competition.application.dto.round_match_dto import ConfigureScheduleRequestDTO
-from src.modules.competition.application.exceptions import AgendaNotEditableError
+from src.modules.competition.application.exceptions import (
+    AgendaNotEditableError,
+    ScheduleAlreadyInPlayError,
+)
 from src.modules.competition.application.use_cases.configure_schedule_use_case import (
     CompetitionNotFoundError,
     ConfigureScheduleUseCase,
@@ -333,3 +336,75 @@ class TestConfigureScheduleUseCase:
         # Act & Assert
         with pytest.raises(NoGolfCoursesError):
             await use_case.execute(request, creator_id)
+
+
+class _Actividad:
+    """Apunta las rondas borradas de las que se avisa."""
+
+    def __init__(self):
+        self.borradas: list = []
+
+    async def round_deleted(self, competition_id, round_id):
+        self.borradas.append((competition_id, round_id))
+
+
+class TestReplacingTheScheduleTellsActivity:
+    """
+    Revision final de bugs (22 oct 2026): la agenda automatica sustituye las
+    sesiones que habia; Actividad olvida lo que guardaba de cada una, tras el
+    commit, como al borrar una sesion suelta.
+    """
+
+    async def _agenda(self, uow, competition, creator_id, actividad):
+        return await ConfigureScheduleUseCase(uow=uow, actividad=actividad).execute(
+            ConfigureScheduleRequestDTO(
+                competition_id=str(competition.id.value),
+                mode="AUTOMATIC",
+                total_sessions=2,
+                sessions_per_day=2,
+            ),
+            creator_id,
+        )
+
+    async def test_each_replaced_round_is_told(self):
+        uow, creator_id = InMemoryUnitOfWork(), UserId(uuid4())
+        competition = await TestConfigureScheduleUseCase()._create_closed_competition_with_course(
+            uow, creator_id, GolfCourseId(uuid4())
+        )
+        await self._agenda(uow, competition, creator_id, None)
+        async with uow:
+            viejas = {r.id for r in await uow.rounds.find_by_competition(competition.id)}
+        actividad = _Actividad()
+
+        await self._agenda(uow, competition, creator_id, actividad)
+
+        assert {r for _, r in actividad.borradas} == viejas
+        assert {c for c, _ in actividad.borradas} == {competition.id}
+        assert len(actividad.borradas) == len(viejas) == 2
+
+    async def test_a_first_schedule_tells_nothing(self):
+        uow, creator_id, actividad = InMemoryUnitOfWork(), UserId(uuid4()), _Actividad()
+        competition = await TestConfigureScheduleUseCase()._create_closed_competition_with_course(
+            uow, creator_id, GolfCourseId(uuid4())
+        )
+
+        await self._agenda(uow, competition, creator_id, actividad)
+
+        assert actividad.borradas == []
+
+    async def test_a_refused_schedule_tells_nothing(self):
+        uow, creator_id, actividad = InMemoryUnitOfWork(), UserId(uuid4()), _Actividad()
+        competition = await TestConfigureScheduleUseCase()._create_closed_competition_with_course(
+            uow, creator_id, GolfCourseId(uuid4())
+        )
+        await self._agenda(uow, competition, creator_id, None)
+        async with uow:
+            ronda = (await uow.rounds.find_by_competition(competition.id))[0]
+            ronda.mark_teams_assigned()
+            ronda.mark_matches_generated()
+            await uow.rounds.update(ronda)
+
+        with pytest.raises(ScheduleAlreadyInPlayError):
+            await self._agenda(uow, competition, creator_id, actividad)
+
+        assert actividad.borradas == []

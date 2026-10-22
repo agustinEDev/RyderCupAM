@@ -93,6 +93,33 @@ activity_events_table = Table(
     UniqueConstraint("user_id", "source_match_id", "type", name="uq_activity_events_match_type"),
 )
 
+# Quien perdio su aviso de salida de una ronda por un cambio en ella (se quedo
+# sin partido o sin grupo) y aun no lo ha recuperado: si vuelve a tener salida
+# en esa ronda, su aviso nuevo es un cambio (prueba de punta a punta del 22 oct
+# 2026: reasignar rivales de la Ryder son dos pasos). Una fila por (jugador,
+# ronda); el torneo, para olvidarlas todas con una baja o una cancelacion
+withdrawn_tee_time_notices_table = Table(
+    "withdrawn_tee_time_notices",
+    metadata,
+    Column(
+        "user_id",
+        SocialUserIdType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    # Sin FK, como `source_match_id`: la ronda es de otro modulo
+    Column("round_id", String(36), primary_key=True),
+    Column("competition_id", String(36), nullable=False),
+    Column(
+        "withdrawn_at",
+        DateTime,
+        nullable=False,
+        server_default=text("timezone('utc', now())"),
+    ),
+    Index("ix_withdrawn_tee_time_notices_round", "round_id"),
+    Index("ix_withdrawn_tee_time_notices_competition", "competition_id"),
+)
+
 # El orden del feed: por publicacion y con el id de desempate, como el cursor.
 # Fuera de la tabla porque las columnas en DESC se declaran sobre la columna
 Index(

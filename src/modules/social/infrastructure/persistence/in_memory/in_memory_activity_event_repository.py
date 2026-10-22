@@ -24,6 +24,11 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         # Ni las invitaciones: las que siguen abiertas, para `open_invitations_at`
         # (None = no se filtra)
         self.open_invitation_ids: set[str] | None = None
+        # Ni las partidas rapidas: las (partida, autor) que el autor tiene en su
+        # papelera, para `hide_trashed_quick_matches_from`
+        self.trashed_quick_matches: set[tuple[str, UserId]] = set()
+        # Avisos de salida retirados por un cambio: (ronda, jugador) -> torneo
+        self._salidas_retiradas: dict[tuple[str, UserId], str] = {}
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -63,6 +68,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         cap: int | None = None,
         skip_private_enrollments: bool = False,
         open_invitations_at: datetime | None = None,
+        hide_trashed_quick_matches_from: UserId | None = None,
     ) -> int:
         # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
@@ -73,9 +79,20 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
                 and (since is None or e.published_at > since)
                 and not (skip_private_enrollments and self._apuntado_a_privado(e))
                 and not (open_invitations_at is not None and self._invitacion_cerrada(e))
+                and not (
+                    hide_trashed_quick_matches_from is not None
+                    and self._en_la_papelera_de_otro(e, hide_trashed_quick_matches_from)
+                )
             }
         )
         return cuenta if cap is None else min(cuenta, cap)
+
+    def _en_la_papelera_de_otro(self, event: ActivityEvent, viewer_id: UserId) -> bool:
+        return (
+            event.user_id != viewer_id
+            and event.comes_from_a_quick_match
+            and (event.source_match_id, event.user_id) in self.trashed_quick_matches
+        )
 
     def _invitacion_cerrada(self, event: ActivityEvent) -> bool:
         return (
@@ -237,3 +254,25 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
                 e.hide_from_friends()
                 ocultos += 1
         return ocultos
+
+    async def remember_withdrawn_tee_times(
+        self, round_id: str, competition_id: str, user_ids: Collection[UserId]
+    ) -> None:
+        for user_id in user_ids:
+            self._salidas_retiradas[(round_id, user_id)] = competition_id
+
+    async def withdrawn_tee_times(self, round_id: str) -> set[UserId]:
+        return {user_id for ronda, user_id in self._salidas_retiradas if ronda == round_id}
+
+    async def forget_withdrawn_tee_times(self, round_id: str, user_ids: Collection[UserId]) -> None:
+        for user_id in user_ids:
+            self._salidas_retiradas.pop((round_id, user_id), None)
+
+    async def forget_withdrawn_tee_times_of_competition(
+        self, competition_id: str, user_id: UserId | None = None
+    ) -> None:
+        self._salidas_retiradas = {
+            clave: torneo
+            for clave, torneo in self._salidas_retiradas.items()
+            if torneo != competition_id or (user_id is not None and clave[1] != user_id)
+        }

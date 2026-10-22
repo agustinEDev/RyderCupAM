@@ -1,9 +1,12 @@
 """Adaptador: el historial de campos sale de las partidas rapidas y los torneos."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
+)
+from src.modules.competition.domain.services.scoring_opening_service import (
+    OPENING_HOUR_BY_SESSION,
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
@@ -12,6 +15,7 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
 from src.modules.social.application.ports.player_course_history_interface import (
+    PlayedBefore,
     PlayerCourseHistoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -45,16 +49,26 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         golf_course_id: str,
         excluding_match_id: str,
         excluding_competition_id: str | None = None,
-        before: date | None = None,
+        before: PlayedBefore | None = None,
+        tournament_start: date | None = None,
     ) -> bool:
         if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id, before):
             return True
         return await self._jugo_en_torneo_cerrado(
-            user_id, golf_course_id, excluding_match_id, excluding_competition_id, before
+            user_id,
+            golf_course_id,
+            excluding_match_id,
+            excluding_competition_id,
+            before,
+            tournament_start,
         )
 
     async def _jugo_en_partida_rapida(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str, before: date | None
+        self,
+        user_id: UserId,
+        golf_course_id: str,
+        excluding_match_id: str,
+        before: PlayedBefore | None,
     ) -> bool:
         async with self._quick_match_uow:
             partidas = await self._quick_match_uow.quick_matches.list_for_user(
@@ -63,8 +77,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         return any(
             str(partida.id.value) != excluding_match_id
             and str(partida.golf_course_id.value) == golf_course_id
-            # No guarda cuando se jugo: se crea el mismo dia
-            and (before is None or partida.created_at.date() < before)
+            and (before is None or _rapida_antes(partida.created_at, before))
             for partida in partidas
         )
 
@@ -74,7 +87,8 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         golf_course_id: str,
         excluding_match_id: str,
         excluding_competition_id: str | None,
-        before: date | None,
+        before: PlayedBefore | None,
+        tournament_start: date | None = None,
     ) -> bool:
         """
         Un partido de la Ryder o un grupo de stroke play en ese campo, de un
@@ -107,7 +121,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
                 r
                 for r in rondas
                 if str(r.golf_course_id.value) == golf_course_id
-                and (before is None or r.round_date < before)
+                and (before is None or _ronda_antes(r, before))
             ]
             if not en_el_campo:
                 return False
@@ -115,7 +129,52 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
                 list({r.competition_id for r in en_el_campo})
             )
         return any(
-            torneo.status == CompetitionStatus.COMPLETED
-            and str(torneo.id.value) != excluding_competition_id
+            str(torneo.id.value) != excluding_competition_id and _cuenta(torneo, tournament_start)
             for torneo in torneos
         )
+
+
+def _cuenta(torneo, tournament_start: date | None) -> bool:
+    """
+    Si lo jugado en ese torneo cuenta como ya jugado: cerrado, o del mismo dia
+    que el que se juzga aunque siga en juego, salvo cancelado (revision final
+    de bugs, 22 oct 2026). El mismo criterio que «primer torneo».
+    """
+    if torneo.status == CompetitionStatus.COMPLETED:
+        return True
+    return (
+        tournament_start is not None
+        and torneo.dates.start_date == tournament_start
+        and torneo.status != CompetitionStatus.CANCELLED
+    )
+
+
+def _rapida_antes(creada: datetime, before: PlayedBefore) -> bool:
+    """
+    Si una partida rapida se jugo ANTES del corte. No guarda cuando se jugo,
+    solo cuando se creo, y se juega del tiron: ese instante vale. Con el
+    instante del corte (el campo tiene zona) se compara en UTC; sin el, por
+    fecha, y el mismo dia no cuenta.
+    """
+    if before.utc_instant is None:
+        return creada.date() < before.day
+    return _utc_sin_zona(creada) < before.utc_instant
+
+
+def _ronda_antes(ronda, before: PlayedBefore) -> bool:
+    """
+    Si una ronda de otro torneo EN EL MISMO CAMPO se jugo antes del corte: misma
+    zona, asi que basta la fecha y la hora local de su sesion. Sin la hora del
+    corte, por fecha: el mismo dia no cuenta.
+    """
+    hora = OPENING_HOUR_BY_SESSION.get(ronda.session_type)
+    if before.local_hour is None or hora is None:
+        return ronda.round_date < before.day
+    return (ronda.round_date, hora) < (before.day, before.local_hour)
+
+
+def _utc_sin_zona(instante: datetime) -> datetime:
+    """En UTC y sin zona, como `shared_games_adapter`: las fechas sin zona ya son UTC."""
+    if instante.tzinfo is None:
+        return instante
+    return instante.astimezone(UTC).replace(tzinfo=None)

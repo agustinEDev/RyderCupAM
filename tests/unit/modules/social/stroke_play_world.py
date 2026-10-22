@@ -79,9 +79,16 @@ class StrokePlayWorld:
             await self.users.users.save(user)
         return user
 
-    async def course(self, creator: User, *, pars: dict[int, int] | None = None) -> GolfCourse:
+    async def course(
+        self,
+        creator: User,
+        *,
+        pars: dict[int, int] | None = None,
+        timezone: str | None = None,
+    ) -> GolfCourse:
         pars = pars or {}
         course = GolfCourse.create(
+            timezone=timezone,
             name=f"Stroke Club {uuid4().hex[:4]}",
             country_code=CountryCode("ES"),
             course_type=CourseType.STANDARD_18,
@@ -145,12 +152,18 @@ class StrokePlayWorld:
         async with self.comp:
             await self.comp.competitions.update(competition)
 
-    async def round(self, competition: Competition, course: GolfCourse, dia: date = DIA) -> Round:
+    async def round(
+        self,
+        competition: Competition,
+        course: GolfCourse,
+        dia: date = DIA,
+        session: SessionType = SessionType.MORNING,
+    ) -> Round:
         round_ = Round.create(
             competition_id=competition.id,
             golf_course_id=course.id,
             round_date=dia,
-            session_type=SessionType.MORNING,
+            session_type=session,
             match_format=MatchFormat.SINGLES,
         )
         async with self.comp:
