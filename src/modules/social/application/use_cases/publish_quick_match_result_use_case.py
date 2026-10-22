@@ -87,7 +87,8 @@ class PublishQuickMatchResultUseCase:
     - **Stableford o Medal**: su puesto, de cuantos, si lo comparte, sus puntos
       (o su neto y su resultado contra el par) y sus golpes. Tambien el ultimo:
       lo decidio Agustin (21 oct 2026). Jugando solo, sin puesto (D18).
-    - **Match play**: ganado, perdido o empatado, el tanteo y contra quien.
+    - **Match play**: ganado, perdido o empatado, el tanteo y contra quien,
+      con `holes_played` y `decided_early` (si se cerro antes de tiempo).
 
     **El puesto no lo guarda nadie**: la clasificacion de la partida rapida la
     pinta el cliente (`StablefordCalculator.rankParticipants`). Aqui se cuenta
@@ -343,6 +344,10 @@ class PublishQuickMatchResultUseCase:
                 "golf_course_id": str(match.golf_course_id.value),
                 "match_format": match.match_format.value if match.match_format else None,
                 "holes_played": resultado.holes_played,
+                # Cerrado antes de tiempo (un 3&2): el tanteo ya dice cuantos
+                # hoyos se jugaron. Si no y cuenta con menos de 18, el cliente
+                # añade «· N hoyos» (Agustin, 22 oct 2026)
+                "decided_early": resultado.decided_early,
                 "outcome": (
                     self._lado(resultado.winner, "A" if mio is bando_a else "B")
                     if cuenta and resultado.winner is not None

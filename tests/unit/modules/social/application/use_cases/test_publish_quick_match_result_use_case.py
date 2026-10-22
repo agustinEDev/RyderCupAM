@@ -1432,3 +1432,83 @@ class TestSinHandicapCuentaComoCero:
 
         assert (await _uno_de(social_uow, ana)).payload["outcome"] == "WON"
         assert (await _uno_de(social_uow, eva)).payload["outcome"] == "LOST"
+
+
+class TestMatchPlayDecididoAntesDeTiempo:
+    """
+    Agustín, 22 oct 2026: el aviso de match play que cuenta con menos de 18
+    hoyos dice «· N hoyos», salvo que se decidiera antes de tiempo (un 3&2 ya
+    lo dice). Para eso el payload lleva `decided_early` junto a `holes_played`.
+    """
+
+    async def _singles(self, user_uow, qm_uow, golf_course_uow, tarjetas):
+        ana, eva = await _user(user_uow, "Ana"), await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            tarjetas,
+            otros=[QuickMatchParticipant.for_user(eva.id)],
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+        )
+        return ana, eva, match
+
+    async def test_decidido_antes_de_tiempo(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """Ana gana los 10 primeros y se deja de jugar: 10&8, decidido antes de tiempo."""
+        diez = range(1, 11)
+        ana, eva, match = await self._singles(
+            user_uow,
+            qm_uow,
+            golf_course_uow,
+            [dict.fromkeys(diez, 3), dict.fromkeys(diez, 4)],
+        )
+
+        await publicar(match)
+
+        for user in (ana, eva):
+            payload = (await _uno_de(social_uow, user)).payload
+            assert payload["score"] == "10&8"
+            assert payload["decided_early"] is True
+            assert payload["unfinished"] is False
+
+    async def test_hasta_el_18_no_se_decidio_antes(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana, _eva, match = await self._singles(
+            user_uow, qm_uow, golf_course_uow, [_tarjeta(4, h1=3), _tarjeta(4)]
+        )
+
+        await publicar(match)
+
+        payload = (await _uno_de(social_uow, ana)).payload
+        assert (payload["outcome"], payload["score"]) == ("WON", "1UP")
+        assert (payload["decided_early"], payload["holes_played"]) == (False, 18)
+
+    async def test_nueve_hoyos_que_cuentan_sin_decidirse_antes(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ida = dict.fromkeys(range(1, 10), 4)
+        _ana, eva, match = await self._singles(
+            user_uow, qm_uow, golf_course_uow, [{**ida, 1: 3}, ida]
+        )
+
+        await publicar(match)
+
+        payload = (await _uno_de(social_uow, eva)).payload
+        assert payload["outcome"] == "LOST"
+        assert (payload["decided_early"], payload["holes_played"]) == (False, 9)
+
+    async def test_sin_terminar_tambien_lleva_el_campo(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana, _eva, match = await self._singles(user_uow, qm_uow, golf_course_uow, [{1: 3}, {1: 4}])
+
+        await publicar(match)
+
+        payload = (await _uno_de(social_uow, ana)).payload
+        assert payload["unfinished"] is True
+        assert payload["decided_early"] is False
