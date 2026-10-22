@@ -18,6 +18,10 @@ Las reglas del cara a cara (BE-3, tabla aprobada el 22 oct 2026).
 | Solo contra él                                    | «Con él» en None                |
 """
 
+from decimal import Decimal
+
+import pytest
+
 from src.modules.social.domain.services.head_to_head import (
     CardResult,
     HeadToHead,
@@ -35,8 +39,10 @@ STABLEFORD = ScoringFormat.STABLEFORD
 MEDAL = ScoringFormat.MEDAL
 
 
-def _card(points: int = 36, net_to_par: int = 0, complete: bool = True) -> CardResult:
-    return CardResult(complete=complete, points=points, net_to_par=net_to_par)
+def _card(
+    points: int = 36, net_to_par: int = 0, complete: bool = True, handicap=10.0
+) -> CardResult:
+    return CardResult(complete=complete, points=points, net_to_par=net_to_par, handicap=handicap)
 
 
 class TestStableford:
@@ -75,6 +81,43 @@ class TestMedal:
         suya = _card(points=20, net_to_par=0)
 
         assert stroke_play_outcome(mia, suya, MEDAL) == Outcome.LOST
+
+
+class TestDesempatePorHandicap:
+    """
+    Tabla del 22 oct 2026, H: el cara a cara deshace el empate como el aviso y
+    la clasificación, con el menor índice exacto; sin hándicap cuenta como 0.
+    """
+
+    @pytest.mark.parametrize("formato", [STABLEFORD, MEDAL])
+    def test_a_igual_valor_gana_el_de_menos_handicap(self, formato):
+        assert stroke_play_outcome(_card(handicap=12.4), _card(handicap=19.0), formato) == (
+            Outcome.WON
+        )
+        assert stroke_play_outcome(_card(handicap=19.0), _card(handicap=12.4), formato) == (
+            Outcome.LOST
+        )
+
+    def test_con_el_mismo_indice_exacto_empata(self):
+        mia, suya = _card(handicap=12.4), _card(handicap=Decimal("12.40"))
+
+        assert stroke_play_outcome(mia, suya, STABLEFORD) == Outcome.HALVED
+
+    def test_sin_handicap_cuenta_como_cero(self):
+        assert stroke_play_outcome(_card(handicap=None), _card(handicap=19.0), STABLEFORD) == (
+            Outcome.WON
+        )
+        assert stroke_play_outcome(_card(handicap=None), _card(handicap=0.0), STABLEFORD) == (
+            Outcome.HALVED
+        )
+        assert stroke_play_outcome(_card(handicap=None), _card(handicap=-1.0), STABLEFORD) == (
+            Outcome.LOST
+        )
+
+    def test_el_handicap_no_cambia_lo_que_no_esta_empatado(self):
+        mia, suya = _card(points=37, handicap=30.0), _card(points=36, handicap=0.0)
+
+        assert stroke_play_outcome(mia, suya, STABLEFORD) == Outcome.WON
 
 
 class TestFormatoDesconocido:

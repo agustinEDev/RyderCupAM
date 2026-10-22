@@ -1,12 +1,18 @@
 """
 Las clasificaciones de un stroke play (#251, PR 5; decisión 4 y P5-P8, P13, P14).
 
-Sin desempate automático: los empatados comparten puesto («T3») y, dentro del
-empate, se pintan por hándicap (P5).
+Desempate por menor hándicap (tabla del 22 oct 2026, H): ante un empate a
+puntos o a golpes, delante quien tenga MENOS hándicap índice; solo comparten
+puesto («T3») los que tienen exactamente el mismo.
 
 | Caso                                                     | Resultado                       |
 |----------------------------------------------------------|---------------------------------|
-| Stableford neto: A 20, B 18, C 20 (C, menos hándicap)    | C y A T1 (C delante), B 3.º     |
+| Stableford neto: A 20, B 18, C 20 (C, menos hándicap)    | C 1.º, A 2.º, B 3.º (H1)        |
+| Empate triple 12.4 / 8.1 / 12.4                          | 8.1 1.º; los 12.4, T2 (H3)      |
+| Medal neto empatado, acumulado y mejor tarjeta           | Menos hándicap delante (H1)     |
+| Acumulado Medal: más tarjetas manda sobre el hándicap   | Más tarjetas, luego hándicap    |
+| Retirados en el empate (Stableford cuenta, Medal NR)     | El NR no ocupa puesto           |
+| Scratch y categoría empatados                            | También por hándicap            |
 | Medal: -2 y +1                                           | 1.º y 2.º                       |
 | Medal retirado / Stableford retirado                     | NR sin puesto / cuenta lo jugado|
 | Stableford retirado sin ningún hoyo validado             | NR sin puesto, no «sin empezar» |
@@ -85,15 +91,133 @@ def _puestos(filas, participantes) -> list[tuple[int, int | None, bool]]:
     return [(indice[f.user_id], f.puesto, f.empatado) for f in filas]
 
 
-def test_stableford_ties_share_the_position_and_go_by_handicap():
+def test_h1_stableford_tie_goes_to_the_lower_handicap():
     a = _jugador(_tarjeta(20), handicap="12.0")
     b = _jugador(_tarjeta(18))
     c = _jugador(_tarjeta(20), handicap="5.0")
 
     filas = _clasificar([a, b, c])
 
-    assert _puestos(filas, [a, b, c]) == [(2, 1, True), (0, 1, True), (1, 3, False)]
+    assert _puestos(filas, [a, b, c]) == [(2, 1, False), (0, 2, False), (1, 3, False)]
     assert [f.valor for f in filas] == [20, 20, 18]
+
+
+class TestDesempatePorHandicap:
+    """Tabla del 22 oct 2026, H: delante el de menos hándicap; iguales, comparten."""
+
+    def test_h2_a_tenth_decides(self):
+        a = _jugador(_tarjeta(30), handicap="12.5")
+        b = _jugador(_tarjeta(30), handicap="12.4")
+
+        filas = _clasificar([a, b])
+
+        assert _puestos(filas, [a, b]) == [(1, 1, False), (0, 2, False)]
+
+    def test_h3_triple_tie_with_mixed_handicaps(self):
+        a = _jugador(_tarjeta(30), handicap="12.4")
+        b = _jugador(_tarjeta(30), handicap="8.1")
+        c = _jugador(_tarjeta(30), handicap="12.40")
+        d = _jugador(_tarjeta(25), handicap="0.0")
+
+        filas = _clasificar([a, b, c, d])
+
+        assert _puestos(filas, [a, b, c, d])[0] == (1, 1, False)
+        assert sorted(_puestos(filas, [a, b, c, d])[1:3]) == [(0, 2, True), (2, 2, True)]
+        assert _puestos(filas, [a, b, c, d])[3] == (3, 4, False)
+
+    def test_h3_same_exact_handicap_shares_the_position(self):
+        a = _jugador(_tarjeta(30), handicap="7.3")
+        b = _jugador(_tarjeta(30), handicap="7.3")
+
+        filas = _clasificar([a, b])
+
+        assert {(f.puesto, f.empatado) for f in filas} == {(1, True)}
+
+    def test_a_plus_handicap_goes_ahead_of_scratch(self):
+        cero = _jugador(_tarjeta(30), handicap="0.0")
+        plus = _jugador(_tarjeta(30), handicap="-1.2")
+
+        filas = _clasificar([cero, plus])
+
+        assert _puestos(filas, [cero, plus]) == [(1, 1, False), (0, 2, False)]
+
+    @pytest.mark.parametrize("regla", [ACUMULADO, MEJOR])
+    def test_h1_medal_net_tie_goes_to_the_lower_handicap(self, regla):
+        a = _jugador(_tarjeta(al_par=1), _tarjeta(al_par=-3), handicap="15.0")
+        b = _jugador(_tarjeta(al_par=-1), _tarjeta(al_par=-1), handicap="3.2")
+
+        filas = _clasificar([a, b], tipo=MEDAL, regla=regla)
+
+        assert [f.valor for f in filas] == ([-2, -2] if regla == ACUMULADO else [-3, -1])
+        if regla == ACUMULADO:
+            # Mismo neto acumulado y mismas tarjetas: el de 3.2 delante
+            assert _puestos(filas, [a, b]) == [(1, 1, False), (0, 2, False)]
+        else:
+            # Mejor tarjeta: -3 contra -1, sin empate que deshacer
+            assert _puestos(filas, [a, b]) == [(0, 1, False), (1, 2, False)]
+
+    def test_best_card_medal_tie_goes_to_the_lower_handicap(self):
+        a = _jugador(_tarjeta(al_par=4), _tarjeta(al_par=-2), handicap="9.9")
+        b = _jugador(_tarjeta(al_par=-2), handicap="9.8")
+
+        filas = _clasificar([a, b], tipo=MEDAL, regla=MEJOR)
+
+        assert _puestos(filas, [a, b]) == [(1, 1, False), (0, 2, False)]
+
+    def test_accumulated_medal_more_cards_still_comes_before_the_handicap(self):
+        dos = _jugador(_tarjeta(al_par=2), _tarjeta(al_par=2), handicap="20.0")
+        una = _jugador(_tarjeta(al_par=4), handicap="1.0")
+
+        filas = _clasificar([una, dos], tipo=MEDAL)
+
+        assert _puestos(filas, [dos, una]) == [(0, 1, False), (1, 2, False)]
+
+    def test_retired_stableford_ties_by_handicap_and_medal_nr_takes_no_position(self):
+        st_ret = _jugador(_tarjeta(30, tras=12, estado=RETIRADO), handicap="4.0")
+        st = _jugador(_tarjeta(30), handicap="6.0")
+        medal_ret = _jugador(_tarjeta(al_par=-9, tras=9, estado=RETIRADO), handicap="0.1")
+        m1 = _jugador(_tarjeta(al_par=1), handicap="6.0")
+        m2 = _jugador(_tarjeta(al_par=1), handicap="4.0")
+
+        st_filas = _clasificar([st, st_ret])
+        medal_filas = _clasificar([medal_ret, m1, m2], tipo=MEDAL)
+
+        assert _puestos(st_filas, [st_ret, st]) == [(0, 1, False), (1, 2, False)]
+        assert _puestos(medal_filas, [medal_ret, m1, m2]) == [
+            (2, 1, False),
+            (1, 2, False),
+            (0, None, False),
+        ]
+
+    def test_scratch_ties_also_go_by_handicap(self):
+        a = _jugador(_tarjeta(10, brutos=20), handicap="14.0")
+        b = _jugador(_tarjeta(12, brutos=20), handicap="11.0")
+
+        filas = _clasificar([a, b], escala=Escala.SCRATCH)
+
+        assert _puestos(filas, [a, b]) == [(1, 1, False), (0, 2, False)]
+
+    def test_a_category_breaks_its_own_ties(self):
+        a = _jugador(_tarjeta(30), handicap="10.0", categoria=2)
+        b = _jugador(_tarjeta(30), handicap="9.0", categoria=2)
+        fuera = _jugador(_tarjeta(30), handicap="1.0", categoria=1)
+
+        filas = _clasificar([a, b, fuera], categoria=2)
+
+        assert _puestos(filas, [a, b]) == [(1, 1, False), (0, 2, False)]
+
+    def test_the_cut_keeps_everyone_who_shares_the_last_position(self):
+        participantes = [_jugador(_tarjeta(100 - i)) for i in range(24)]
+        participantes += [
+            _jugador(_tarjeta(50), handicap="3.0"),
+            _jugador(_tarjeta(50), handicap="2.0"),
+        ]
+
+        visibles, _ = Clasificacion.cortar(_clasificar(participantes), 25, None)
+
+        # Ya no empatan: el de 2.0 es el 25.º y el de 3.0, el 26.º, fuera
+        assert len(visibles) == 25
+        assert visibles[-1].handicap == Decimal("2.0")
 
 
 def test_medal_lower_to_par_wins():

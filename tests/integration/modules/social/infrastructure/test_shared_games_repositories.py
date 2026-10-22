@@ -9,6 +9,7 @@ Las lecturas en bloque de las partidas jugadas juntos, contra Postgres (BE-3).
 | Partidos de torneo con los dos, por estado            | Solo los de esos estados           |
 | Partido con solo uno de los dos                       | No sale                            |
 | Grupos de stroke play con los dos y sus golpes        | Los suyos                          |
+| J: competiciones con los dos, en grupos distintos     | Salen, una vez                     |
 | Campos por ids                                        | Enteros: salidas y hoyos           |
 | Rondas y competiciones por ids                        | Las pedidas, en una lectura        |
 | Caso 19: torneos en 2 o en 6 competiciones            | Las mismas consultas               |
@@ -282,6 +283,26 @@ class TestGruposDeStrokePlayDeLosDos:
         assert await uow.golpes_de_partida.de_las_partidas([]) == []
         assert await uow.partidas.con_los_dos(yo, cuarto) == []
 
+    async def test_j_las_competiciones_con_los_dos_aunque_en_grupos_distintos(
+        self,
+        db_session,
+        jugadores,  # noqa: F811
+        ronda,  # noqa: F811
+    ):
+        """Tabla del 22 oct 2026, J: el torneo cuenta entero, juntos o no en el grupo."""
+        yo, el, otro, cuarto = jugadores
+        uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+        await uow.partidas.anadir(
+            [
+                Partida.crear(ronda.competition_id, ronda.id, 1, [_jugador(yo), _jugador(otro)]),
+                Partida.crear(ronda.competition_id, ronda.id, 2, [_jugador(el)]),
+            ]
+        )
+        await db_session.commit()
+
+        assert await uow.partidas.competiciones_con_los_dos(yo, el) == [ronda.competition_id]
+        assert await uow.partidas.competiciones_con_los_dos(yo, cuarto) == []
+
 
 class TestCamposEnBloque:
     async def test_enteros_con_salidas_y_hoyos(self, db_session, jugadores):  # noqa: F811
@@ -416,4 +437,63 @@ class TestSinUnaConsultaPorRonda:
         muchas, con_muchas = await _sentencias(db_session, c, d)
 
         assert (pocas, muchas) == (2, 6)
+        assert con_muchas == con_pocas
+
+
+async def _stroke_play_completados(db_session, campo: GolfCourse, a: UserId, b: UserId, veces: int):
+    """`veces` stroke play COMPLETADOS con a y b en grupos distintos, con golpes validados."""
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    for _ in range(veces):
+        competition = await _competicion(db_session, a, TournamentType.STABLEFORD)
+        round_ = Round.create(
+            competition_id=competition.id,
+            golf_course_id=campo.id,
+            round_date=BASE_DATE,
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        await uow.rounds.add(round_)
+        await db_session.commit()
+        grupos = []
+        for numero, (user_id, golpes) in enumerate(((a, 4), (b, 5)), start=1):
+            grupo = Partida.crear(competition.id, round_.id, numero, [_jugador(user_id)])
+            await uow.partidas.anadir([grupo])
+            await db_session.commit()
+            for hoyo in range(1, 19):
+                golpe = GolpeDePartida.crear(
+                    grupo.id, round_.id, competition.id, user_id, hoyo, AHORA
+                )
+                golpe.anotar_propio(golpes, True, user_id, AHORA)
+                golpe.anotar_del_marcador(golpes, True, user_id, AHORA)
+                await uow.golpes_de_partida.guardar(golpe)
+            grupo.cerrar(completas=[user_id])
+            grupos.append(grupo)
+        await uow.partidas.guardar(grupos)
+        competition.activate()
+        competition.close_enrollments()
+        competition.start()
+        competition.complete()
+        await uow.competitions.update(competition)
+        await db_session.commit()
+
+
+class TestSinUnaGeneralPorTorneo:
+    async def test_las_mismas_consultas_con_un_stroke_play_completado_que_con_seis(
+        self,
+        db_session,
+        jugadores,  # noqa: F811
+        campo,
+    ):
+        """
+        Revisión del 22 oct 2026 (J): la general final de los torneos
+        completados se calcula por lotes / Then 1 o 6 cuestan lo mismo.
+        """
+        a, b, c, d = jugadores
+        await _stroke_play_completados(db_session, campo, a, b, veces=1)
+        await _stroke_play_completados(db_session, campo, c, d, veces=6)
+
+        pocas, con_pocas = await _sentencias(db_session, a, b)
+        muchas, con_muchas = await _sentencias(db_session, c, d)
+
+        assert (pocas, muchas) == (1, 6)
         assert con_muchas == con_pocas

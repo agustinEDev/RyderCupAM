@@ -94,6 +94,11 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[Partida]:
         return await self._donde(tee_groups_table.c.competition_id == competition_id)
 
+    async def de_las_competiciones(self, competition_ids: list[CompetitionId]) -> list[Partida]:
+        if not competition_ids:
+            return []
+        return await self._donde(tee_groups_table.c.competition_id.in_(competition_ids))
+
     async def del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> list[Partida]:
         jugadores = tee_group_players_table
         return await self._donde(
@@ -197,6 +202,26 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             traidos={fila.user_id for fila in filas if fila.brought_in},
             jugaron={fila.user_id for fila in filas if fila.played},
         )
+
+    async def competiciones_con_los_dos(
+        self, user_id: UserId, other_id: UserId
+    ) -> list[CompetitionId]:
+        grupos, jugadores = tee_groups_table, tee_group_players_table
+
+        def de(uid: UserId):
+            return (
+                select(grupos.c.competition_id)
+                .join(jugadores, jugadores.c.group_id == grupos.c.id)
+                .where(jugadores.c.user_id == uid)
+            )
+
+        resultado = await self._session.execute(
+            select(grupos.c.competition_id)
+            .where(grupos.c.competition_id.in_(de(user_id)))
+            .where(grupos.c.competition_id.in_(de(other_id)))
+            .distinct()
+        )
+        return list(resultado.scalars().all())
 
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
         jugadores = tee_group_players_table

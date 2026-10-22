@@ -62,6 +62,16 @@ class HoleScoreRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_matches_and_player(
+        self, match_ids: list[MatchId], player_user_id: UserId
+    ) -> list[HoleScore]:
+        """
+        Los hole scores de un jugador en varios partidos, en una sola lectura y
+        no una por partido (el panel de estadísticas, tabla del 22 oct 2026, M).
+        """
+        pass
+
+    @abstractmethod
     async def delete_by_match(self, match_id: MatchId) -> int:
         """Elimina todos los hole scores de un partido. Retorna la cantidad eliminada."""
         pass

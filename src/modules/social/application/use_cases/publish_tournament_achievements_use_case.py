@@ -67,7 +67,8 @@ class _TournamentRound:
     # Con la publicacion apagada el logro se guarda solo para el
     visible_to_friends: bool
     # Lo que el logro necesita para abrir su tarjeta o la ficha del torneo:
-    # `kind` (MATCH o TEE_GROUP), `competition_id` y, en stroke play, `group_id`
+    # `kind` (MATCH o TEE_GROUP), `competition_id`, en stroke play `group_id`,
+    # y `player_ids`: quien jugo ese partido o grupo puede abrir la tarjeta
     link: dict = field(default_factory=dict)
 
 
@@ -420,6 +421,7 @@ class PublishTournamentAchievementsUseCase:
                 "kind": "TEE_GROUP",
                 "group_id": str(grupo.id.value),
                 "competition_id": str(grupo.competition_id.value),
+                "player_ids": _ids(grupo.user_ids),
             },
         )
 
@@ -448,7 +450,13 @@ class PublishTournamentAchievementsUseCase:
             return None
         return replace(
             vuelta,
-            link={"kind": "MATCH", "competition_id": str(ronda.competition_id.value)},
+            link={
+                "kind": "MATCH",
+                "competition_id": str(ronda.competition_id.value),
+                "player_ids": _ids(
+                    p.user_id for p in (*partido.team_a_players, *partido.team_b_players)
+                ),
+            },
         )
 
     async def _vuelta_de(
@@ -543,9 +551,10 @@ class PublishTournamentAchievementsUseCase:
             "holes_played": len(vuelta.holes),
             # Distingue en el feed una vuelta de torneo de una entre amigos
             "from_tournament": True,
-            # `kind` (MATCH o TEE_GROUP), `competition_id` y, en stroke play,
-            # `group_id`: el logro abre la tarjeta o, a quien no la jugo, la
-            # ficha del torneo
+            # `kind` (MATCH o TEE_GROUP), `competition_id`, en stroke play
+            # `group_id`, y `player_ids` (todos los del partido o grupo, el
+            # autor incluido, ordenados): el logro abre la tarjeta a quien la
+            # jugo y, a los demas, la ficha del torneo (Agustin, 22 oct 2026)
             **vuelta.link,
         }
         if logro.count > 1:
@@ -557,3 +566,8 @@ class PublishTournamentAchievementsUseCase:
         if logro.type == ActivityEventType.FIRST_TOURNAMENT:
             payload.pop("holes", None)
         return payload
+
+
+def _ids(user_ids) -> list[str]:
+    """Los ids de los jugadores, como texto y ordenados: el payload sale igual siempre."""
+    return sorted({str(user_id.value) for user_id in user_ids})

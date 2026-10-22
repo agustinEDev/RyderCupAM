@@ -21,6 +21,11 @@ Las partidas que dos jugadores terminaron juntos, y quien gano cada una (BE-3).
 | Grupo con uno retirado                                   | Sale, sin resultado              |
 | Cada partida trae fecha, campo, formato y enlace         | Caso 11                          |
 | Jugadores y campos en bloque (caso 19)                   | Sin una consulta por partida     |
+| Torneo stroke play COMPLETADO (J, 22 oct 2026)           | UNA entrada por torneo con los   |
+|   grupos distintos, varias rondas                        | dos puestos de la general final  |
+| J: empate a valor, distinto hándicap / mismo hándicap    | Gana el de menos / empate        |
+| J: retirado (NR) / no presentado (NP)                    | Sale sin resultado / fuera       |
+| J: torneo sin completar                                  | Por grupo, como antes            |
 """
 
 from datetime import date, datetime, time, timedelta
@@ -29,6 +34,12 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.application.services.participantes_de_la_clasificacion import (
+    generales_netas,
+)
+from src.modules.competition.application.use_cases.clasificaciones_use_case import (
+    ClasificacionGeneralUseCase,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.match import Match
@@ -43,6 +54,7 @@ from src.modules.competition.domain.value_objects.estado_partida import EstadoPa
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
@@ -71,6 +83,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
 )
+from src.modules.social.application.games_together import head_to_head_of, page_of
 from src.modules.social.application.ports.shared_games_interface import SharedGameKind
 from src.modules.social.domain.services.head_to_head import Outcome, Relation
 from src.modules.social.infrastructure.adapters.shared_games_adapter import SharedGamesAdapter
@@ -195,7 +208,10 @@ class _Mundo:
         return match
 
     async def competicion(
-        self, creador: User, tipo: TournamentType = TournamentType.RYDER_CUP
+        self,
+        creador: User,
+        tipo: TournamentType = TournamentType.RYDER_CUP,
+        regla: OverallStanding | None = None,
     ) -> Competition:
         competition = Competition.create(
             id=CompetitionId(uuid4()),
@@ -208,6 +224,7 @@ class _Mundo:
             team_2_name="Team B" if tipo.has_teams else None,
             team_assignment=TeamAssignment.MANUAL if tipo.has_teams else None,
             tournament_type=tipo,
+            overall_standing=regla,
         )
         async with self.comp:
             await self.comp.competitions.add(competition)
@@ -394,7 +411,11 @@ class TestPartidaRapidaStrokePlay:
 
         assert partida.outcome == Outcome.WON
 
-    async def test_mismos_golpes_sin_handicap_es_empate(self, mundo):
+    async def test_mismos_golpes_en_scratch_desempata_el_indice(self, mundo):
+        """
+        H (22 oct 2026): a igual neto gana el de menos índice, también en una
+        partida scratch, como lo cuenta su aviso.
+        """
         yo = await mundo.jugador("Yo", handicap=12)
         el = await mundo.jugador("El", handicap=3)
         course = await mundo.campo(yo)
@@ -409,12 +430,93 @@ class TestPartidaRapidaStrokePlay:
 
         (partida,) = await _entre(mundo, yo, el)
 
+        assert partida.outcome == Outcome.LOST
+
+    async def test_mismos_golpes_y_el_mismo_indice_es_empate(self, mundo):
+        yo = await mundo.jugador("Yo", handicap=12.4)
+        el = await mundo.jugador("El", handicap=12.4)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 4],
+            scoring_format=ScoringFormat.MEDAL,
+            play_mode=PlayMode.SCRATCH,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
         assert partida.outcome == Outcome.HALVED
 
-    async def test_si_uno_no_tiene_handicap_sale_pero_no_cuenta(self, mundo):
+    async def test_h_desempata_el_indice_con_el_que_se_jugo(self, mundo):
         """
-        Partida con hándicap y él sin hándicap: se le repartiría como scratch,
-        que no es su juego real. La partida sale en la lista, sin resultado.
+        Ana empezó con 19.0 fijado y hoy su perfil dice 2.0; Eva, 10.5. Las dos
+        36 puntos: con el índice de la partida gana Eva, como en el aviso.
+        """
+        ana = await mundo.jugador("Ana", handicap=2.0)
+        eva = await mundo.jugador("Eva", handicap=10.5)
+        course = await mundo.campo(ana)
+        match = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=ana.id,
+            golf_course_id=course.id,
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+        match.add_participant(QuickMatchParticipant.for_user(eva.id))
+        ids = [p.participant_id for p in match.participants]
+        match.start(scorer_ids=[ids[0]])
+        match.freeze_handicaps({ana.id: 19.0, eva.id: 10.5})
+        match.complete()
+        tarjetas = {
+            ids[0]: dict.fromkeys(HOLES, 5),
+            ids[1]: {h: 5 if h <= 10 else 4 for h in HOLES},
+        }
+        async with mundo.qm:
+            await mundo.qm.quick_matches.add(match)
+            for pid, tarjeta in tarjetas.items():
+                for hoyo, golpes in tarjeta.items():
+                    await mundo.qm.quick_match_hole_scores.add(
+                        QuickMatchHoleScore(
+                            id=QuickMatchHoleScoreId.generate(),
+                            quick_match_id=match.id,
+                            hole_number=hoyo,
+                            participant_id=pid,
+                            score=golpes,
+                            recorded_by_participant_id=ids[0],
+                        )
+                    )
+            await mundo.qm.commit()
+
+        (de_ana,) = await _entre(mundo, ana, eva)
+
+        assert de_ana.outcome == Outcome.LOST
+
+    async def test_h_empate_a_puntos_sin_handicap_cuenta_como_cero(self, mundo):
+        """
+        Revisión del 22 oct: Ana sin hándicap y Eva con 19.0 hacen 36. El aviso
+        pone a Ana 1.ª (0 < 19.0): el cara a cara tiene que decir lo mismo.
+        """
+        ana = await mundo.jugador("Ana", handicap=None)
+        eva = await mundo.jugador("Eva", handicap=19.0)
+        course = await mundo.campo(ana)
+        await mundo.partida_rapida(
+            course,
+            ana,
+            [QuickMatchParticipant.for_user(eva.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+
+        (de_ana,) = await _entre(mundo, ana, eva)
+        (de_eva,) = await _entre(mundo, eva, ana)
+
+        assert (de_ana.outcome, de_eva.outcome) == (Outcome.WON, Outcome.LOST)
+
+    async def test_si_uno_no_tiene_handicap_cuenta_como_cero(self, mundo):
+        """
+        Partida con hándicap y él sin hándicap: juega con 0, como en la propia
+        partida y en su aviso (Agustín, 22 oct 2026). Se juzga.
         """
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
@@ -429,7 +531,9 @@ class TestPartidaRapidaStrokePlay:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
+        (suya,) = await _entre(mundo, el, yo)
+        assert suya.outcome == Outcome.LOST
 
     async def test_en_una_partida_scratch_el_handicap_no_hace_falta(self, mundo):
         """Nadie recibe golpes: que él no tenga hándicap no cambia nada."""
@@ -592,8 +696,8 @@ class TestPartidaRapidaMatchPlay:
         assert partida.relation == Relation.AGAINST
         assert partida.outcome == Outcome.LOST
 
-    async def test_singles_con_handicap_si_el_no_tiene_sale_pero_no_cuenta(self, mundo):
-        """Sin su hándicap se le repartiría como scratch: no es su partido real."""
+    async def test_singles_con_handicap_si_el_no_tiene_juega_con_cero(self, mundo):
+        """Sin su hándicap juega con 0, como en la partida y su aviso (22 oct 2026)."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
         course = await mundo.campo(yo)
@@ -608,10 +712,10 @@ class TestPartidaRapidaMatchPlay:
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.relation == Relation.AGAINST
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
 
-    async def test_fourball_si_cualquiera_de_los_cuatro_no_tiene_handicap_no_cuenta(self, mundo):
-        """Un rival sin hándicap ya tuerce el reparto de todos: conservador."""
+    async def test_fourball_un_rival_sin_handicap_juega_con_cero_y_cuenta(self, mundo):
+        """Un rival sin hándicap juega con 0: el partido se juzga (22 oct 2026)."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=12)
         rival1 = await mundo.jugador("Rival1", handicap=None)
@@ -632,7 +736,7 @@ class TestPartidaRapidaMatchPlay:
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.relation == Relation.WITH
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
 
     async def test_match_play_scratch_sin_handicap_si_cuenta(self, mundo):
         yo = await mundo.jugador("Yo", handicap=None)
@@ -824,6 +928,35 @@ class TestGruposDeStrokePlay:
         assert partida.relation == Relation.AGAINST
         assert partida.outcome == Outcome.WON
         assert partida.format == "STABLEFORD"
+
+    async def test_h_empate_a_puntos_en_un_grupo_desempata_el_indice(self, mundo):
+        """Torneo sin completar: el grupo desempata con el hándicap de su foto (H)."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        competition = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        round_ = await mundo.ronda(competition, course)
+        # 36 los dos: yo sin golpes (0.0) con 4; él con 18 y 5
+        await mundo.grupo(
+            competition, round_, {yo: [4] * 18, el: [5] * 18}, golpes_recibidos={el: 1}
+        )
+
+        (mia,) = await _entre(mundo, yo, el)
+        (suya,) = await _entre(mundo, el, yo)
+
+        assert (mia.outcome, suya.outcome) == (Outcome.WON, Outcome.LOST)
+
+    async def test_h_empate_a_puntos_con_el_mismo_handicap_es_empate(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        competition = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        round_ = await mundo.ronda(competition, course)
+        await mundo.grupo(competition, round_, {yo: [4] * 18, el: [4] * 18})
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.HALVED
 
     async def test_medal_por_golpes_netos(self, mundo):
         """Mi bruto (90) es peor que el suyo (73), pero con mis 18 golpes hago 72 netos: gano."""
@@ -1022,6 +1155,10 @@ class TestLoQueTraeCadaPartida:
             await mundo.ronda(stableford, course),
             {yo: [4] * 18, el: [4] * 18},
         )
+        # Y uno ya completado, que sale entero (J)
+        cerrado = await mundo.competicion(yo, TournamentType.MEDAL)
+        await mundo.grupo(cerrado, await mundo.ronda(cerrado, course), {yo: [4] * 18, el: [5] * 18})
+        await _completar(mundo, cerrado)
 
         partidas = await _entre(mundo, yo, el)
 
@@ -1252,8 +1389,8 @@ class TestTablaAStrokePlayRapidoDesdeNueveHoyos:
 
         assert partida.unfinished is True
 
-    async def test_sin_handicap_y_contando_sigue_sin_resultado_pero_no_sin_terminar(self, mundo):
-        """El hándicap que falta no es una tarjeta a medias: sale sin resultado, como hoy."""
+    async def test_sin_handicap_y_contando_se_juzga_con_cero(self, mundo):
+        """Sin hándicap juega con 0 (22 oct 2026): cuenta y se juzga, sin marcarse a medias."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
         course = await mundo.campo(yo)
@@ -1268,7 +1405,7 @@ class TestTablaAStrokePlayRapidoDesdeNueveHoyos:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
         assert partida.unfinished is False
 
 
@@ -1408,8 +1545,8 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
 
         assert (partida.unfinished, partida.outcome) == (True, None)
 
-    async def test_sin_handicap_sigue_sin_resultado(self, mundo):
-        """Sin el hándicap de alguien no se juzga, como hoy; tampoco se marca a medias."""
+    async def test_sin_handicap_juega_con_cero_y_se_juzga(self, mundo):
+        """Sin hándicap juega con 0 (22 oct 2026): se juzga y no se marca a medias."""
         yo = await mundo.jugador("Yo", handicap=10)
         el = await mundo.jugador("El", handicap=None)
         course = await mundo.campo(yo)
@@ -1423,7 +1560,7 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.outcome is None
+        assert partida.outcome == Outcome.WON
         assert partida.unfinished is False
 
 
@@ -1494,3 +1631,319 @@ class TestTablaAMatchPlaySinHoyoAdjudicableYFoursomes:
         (partida,) = await _entre(mundo, yo, el)
 
         assert (partida.outcome, partida.unfinished) == (None, True)
+
+
+async def _completar(mundo: _Mundo, competition: Competition) -> None:
+    """La lleva hasta COMPLETED, como el organizador al cerrarla."""
+    competition.activate()
+    competition.close_enrollments()
+    competition.start()
+    competition.complete()
+    async with mundo.comp:
+        await mundo.comp.competitions.update(competition)
+
+
+class TestTablaJTorneoStrokePlayCompletado:
+    """
+    Tabla del 22 oct 2026, J: en un stroke play COMPLETADO el cara a cara se
+    decide por la general final (con el desempate por hándicap), una vez por
+    torneo, aunque haya varias rondas o grupos distintos.
+    """
+
+    async def test_j11_grupos_distintos_del_mismo_torneo_cuenta_por_la_general(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(comp, ronda, {yo: [4] * 18}, numero=1)
+        await mundo.grupo(comp, ronda, {el: [5] * 18}, numero=2)
+        await _completar(mundo, comp)
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.kind == SharedGameKind.TOURNAMENT_STROKE_PLAY
+        assert partida.game_id == str(comp.id.value)
+        assert partida.competition_id == str(comp.id.value)
+        assert partida.relation == Relation.AGAINST
+        assert partida.outcome == Outcome.WON
+        assert partida.format == "STABLEFORD"
+        assert partida.played_on == comp.dates.end_date
+        assert partida.standing is not None
+        assert (partida.standing.my_position, partida.standing.my_tied) == (1, False)
+        assert (partida.standing.their_position, partida.standing.their_tied) == (2, False)
+        assert partida.standing.total_players == 2
+        (suya,) = await _entre(mundo, el, yo)
+        assert suya.outcome == Outcome.LOST
+        assert (suya.standing.my_position, suya.standing.their_position) == (2, 1)
+
+    async def test_j11_varias_rondas_y_grupos_una_sola_entrada(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.MEDAL)
+        manana = await mundo.ronda(comp, course)
+        tarde = await mundo.ronda(comp, course, session_type=SessionType.AFTERNOON)
+        # Mañana juntos y él gana el grupo; tarde separados. En la general
+        # acumulada gano yo: 145 contra 147
+        await mundo.grupo(comp, manana, {yo: [4] * 17 + [5], el: [4] * 17 + [3]})
+        await mundo.grupo(comp, tarde, {yo: [4] * 18}, numero=1)
+        await mundo.grupo(comp, tarde, {el: [4] * 16 + [6, 6]}, numero=2)
+        await _completar(mundo, comp)
+
+        juntas = await _entre(mundo, yo, el)
+
+        assert [p.kind for p in juntas] == [SharedGameKind.TOURNAMENT_STROKE_PLAY]
+        assert juntas[0].outcome == Outcome.WON
+
+    async def test_j11_empate_a_puntos_desempata_el_de_menos_handicap(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        # 36 los dos: yo sin golpes con 4; él con uno por hoyo (18) y 5
+        await mundo.grupo(comp, ronda, {yo: [4] * 18, el: [5] * 18}, golpes_recibidos={el: 1})
+        await _completar(mundo, comp)
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.WON
+        assert (partida.standing.my_position, partida.standing.their_position) == (1, 2)
+
+    async def test_j11_si_comparten_puesto_es_empate(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(comp, ronda, {yo: [4] * 18}, numero=1)
+        await mundo.grupo(comp, ronda, {el: [4] * 18}, numero=2)
+        await _completar(mundo, comp)
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.HALVED
+        assert (partida.standing.my_position, partida.standing.my_tied) == (1, True)
+        assert (partida.standing.their_position, partida.standing.their_tied) == (1, True)
+
+    async def test_j12_el_retirado_no_esta_clasificado_y_no_cuenta(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.MEDAL)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(
+            comp,
+            ronda,
+            {yo: [4] * 18, el: [4] * 9},
+            estados={el: EstadoDeTarjeta.RETIRADO},
+        )
+        await _completar(mundo, comp)
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.kind == SharedGameKind.TOURNAMENT_STROKE_PLAY
+        assert partida.outcome is None
+        assert partida.standing.my_position == 1
+        assert partida.standing.their_position is None
+
+    async def test_j12_el_no_presentado_no_jugo_el_torneo(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(comp, ronda, {yo: [4] * 18}, numero=1)
+        await mundo.grupo(
+            comp, ronda, {el: []}, estados={el: EstadoDeTarjeta.NO_PRESENTADO}, numero=2
+        )
+        await _completar(mundo, comp)
+
+        assert await _entre(mundo, yo, el) == []
+
+    async def test_j_sin_completar_sigue_contando_por_grupo(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(comp, ronda, {yo: [4] * 18, el: [5] * 18})
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.kind == SharedGameKind.TOURNAMENT_GROUP
+        assert partida.standing is None
+
+    async def test_j13_la_ryder_sigue_partido_a_partido(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.partido(ronda, [yo], [el], numero=1)
+        await mundo.partido(ronda, [yo], [el], ganador="B", numero=2)
+        await _completar(mundo, comp)
+
+        juntas = await _entre(mundo, yo, el)
+
+        assert sorted(p.outcome for p in juntas) == sorted([Outcome.WON, Outcome.LOST])
+        assert {p.kind for p in juntas} == {SharedGameKind.TOURNAMENT_MATCH}
+
+    async def test_j11_cuenta_una_vez_en_el_cara_a_cara_y_en_la_lista(self, mundo):
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        r1 = await mundo.ronda(comp, course)
+        r2 = await mundo.ronda(comp, course, session_type=SessionType.AFTERNOON)
+        await mundo.grupo(comp, r1, {yo: [4] * 18, el: [5] * 18})
+        await mundo.grupo(comp, r2, {yo: [4] * 18, el: [5] * 18})
+        await _completar(mundo, comp)
+
+        juntas = await _entre(mundo, yo, el)
+        cara = head_to_head_of(juntas)
+        (dto,) = page_of(juntas, None).games
+
+        assert cara is not None and cara.against is not None
+        assert (cara.against.won, cara.against.halved, cara.against.lost) == (1, 0, 0)
+        assert dto.kind == "TOURNAMENT_STROKE_PLAY"
+        assert dto.id == dto.competition_id == str(comp.id.value)
+        assert dto.match_id is None
+        assert dto.result == "WON"
+        assert (dto.my_position, dto.my_tied, dto.their_position, dto.their_tied) == (
+            1,
+            False,
+            2,
+            False,
+        )
+        assert dto.total_players == 2
+
+
+def _todas_las_consultas(mundo: _Mundo) -> list[str]:
+    """Apunta cada llamada a cualquier repositorio de competicion o de usuarios."""
+    llamadas: list[str] = []
+    repos = [
+        getattr(mundo.comp, nombre)
+        for nombre in (
+            "competitions",
+            "rounds",
+            "matches",
+            "partidas",
+            "golpes_de_partida",
+            "enrollments",
+            "hole_scores",
+        )
+    ] + [mundo.users.users]
+    for repo in repos:
+        for metodo in dir(type(repo)):
+            original = getattr(repo, metodo)
+            if metodo.startswith("_") or not callable(original):
+                continue
+
+            def _envuelto(original=original, nombre=f"{type(repo).__name__}.{metodo}"):
+                async def _llamada(*args, **kwargs):
+                    llamadas.append(nombre)
+                    return await original(*args, **kwargs)
+
+                return _llamada
+
+            setattr(repo, metodo, _envuelto())
+    return llamadas
+
+
+class TestTablaJSinUnaGeneralPorTorneo:
+    """
+    Revisión del 22 oct 2026: la general final de los stroke play completados
+    se calcula por lotes. Las consultas no crecen con los torneos.
+    """
+
+    async def _consultas(self, cuantos: int) -> tuple[int, int]:
+        mundo = _Mundo()
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        for i in range(cuantos):
+            tipo = TournamentType.STABLEFORD if i % 2 else TournamentType.MEDAL
+            comp = await mundo.competicion(yo, tipo)
+            ronda = await mundo.ronda(comp, course)
+            await mundo.grupo(comp, ronda, {yo: [4] * 18}, numero=1)
+            await mundo.grupo(comp, ronda, {el: [5] * 18}, numero=2)
+            await _completar(mundo, comp)
+        llamadas = _todas_las_consultas(mundo)
+
+        partidas = await _entre(mundo, yo, el)
+
+        assert [p.outcome for p in partidas] == [Outcome.WON] * cuantos
+        return len(partidas), len(llamadas)
+
+    async def test_las_mismas_consultas_con_un_torneo_que_con_cinco(self):
+        uno, con_uno = await self._consultas(1)
+        cinco, con_cinco = await self._consultas(5)
+
+        assert (uno, cinco) == (1, 5)
+        assert con_cinco == con_uno
+
+    async def test_la_general_por_lotes_es_la_oficial(self, mundo):
+        """
+        La general por lotes y la de la ficha (`ClasificacionGeneralUseCase`)
+        dan los mismos puestos: empates por hándicap, retirado y no presentado.
+        """
+        yo, el, ella, otro, nadie = [
+            await mundo.jugador(n) for n in ("Yo", "El", "Ella", "Otro", "Nadie")
+        ]
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(
+            comp, ronda, {yo: [4] * 18, el: [5] * 18}, golpes_recibidos={el: 1}, numero=1
+        )
+        await mundo.grupo(
+            comp,
+            ronda,
+            {ella: [4] * 18, otro: [4] * 9, nadie: []},
+            estados={otro: EstadoDeTarjeta.RETIRADO, nadie: EstadoDeTarjeta.NO_PRESENTADO},
+            numero=2,
+        )
+        await _completar(mundo, comp)
+
+        oficial = await ClasificacionGeneralUseCase(
+            uow=mundo.comp, user_repository=mundo.users.users
+        ).execute(comp.id.value)
+        async with mundo.comp:
+            por_lotes = (await generales_netas(mundo.comp, [comp]))[comp.id]
+
+        assert [(f.user_id.value, f.puesto, f.empatado, f.estado.value) for f in por_lotes] == [
+            (f.user_id, f.position, f.tied, f.status) for f in oficial.rows
+        ]
+
+    async def test_cada_torneo_con_su_general(self, mundo):
+        """Por lotes, pero cada torneo con lo suyo: gano uno y pierdo el otro."""
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        resultados = {}
+        for mio, suyo in ((4, 6), (5, 4)):
+            comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+            ronda = await mundo.ronda(comp, course)
+            await mundo.grupo(comp, ronda, {yo: [mio] * 18}, numero=1)
+            await mundo.grupo(comp, ronda, {el: [suyo] * 18}, numero=2)
+            await _completar(mundo, comp)
+            resultados[str(comp.id.value)] = Outcome.WON if mio < suyo else Outcome.LOST
+
+        partidas = await _entre(mundo, yo, el)
+
+        assert {p.game_id: p.outcome for p in partidas} == resultados
+
+    async def test_cada_torneo_con_su_regla_de_la_general(self, mundo):
+        """
+        Medal en dos jornadas: yo 0 y +10, él +3 y +3. Acumulado gana él (+6
+        contra +10); a mejor tarjeta gano yo (0 contra +3). Cada torneo, la suya.
+        """
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        esperado = {}
+        for regla, resultado in (
+            (OverallStanding.ACCUMULATED, Outcome.LOST),
+            (OverallStanding.BEST_CARD, Outcome.WON),
+        ):
+            comp = await mundo.competicion(yo, TournamentType.MEDAL, regla=regla)
+            for numero, sesion in enumerate((SessionType.MORNING, SessionType.AFTERNOON), 1):
+                ronda = await mundo.ronda(comp, course, session_type=sesion)
+                mio = [4] * 18 if numero == 1 else [4] * 8 + [5] * 10
+                await mundo.grupo(comp, ronda, {yo: mio, el: [4] * 15 + [5] * 3})
+            await _completar(mundo, comp)
+            esperado[str(comp.id.value)] = resultado
+
+        partidas = await _entre(mundo, yo, el)
+
+        assert {p.game_id: p.outcome for p in partidas} == esperado

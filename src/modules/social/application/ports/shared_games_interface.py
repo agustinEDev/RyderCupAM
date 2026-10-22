@@ -15,6 +15,23 @@ class SharedGameKind(StrEnum):
     QUICK_MATCH = "QUICK_MATCH"
     TOURNAMENT_MATCH = "TOURNAMENT_MATCH"
     TOURNAMENT_GROUP = "TOURNAMENT_GROUP"
+    # Un torneo stroke play COMPLETADO, entero: una sola entrada por torneo,
+    # con los dos puestos de la general final (tabla del 22 oct 2026, J)
+    TOURNAMENT_STROKE_PLAY = "TOURNAMENT_STROKE_PLAY"
+
+
+@dataclass(frozen=True)
+class StrokePlayStanding:
+    """
+    Los dos puestos en la general final de un stroke play (J): «4.º y 7.º de
+    16». Sin puesto (None) quien no quedo clasificado (retirado, NR).
+    """
+
+    my_position: int | None
+    my_tied: bool
+    their_position: int | None
+    their_tied: bool
+    total_players: int
 
 
 @dataclass(frozen=True)
@@ -47,6 +64,8 @@ class SharedGame:
     competition_name: str | None = None
     played_at: datetime | None = None
     unfinished: bool = False
+    # Solo en TOURNAMENT_STROKE_PLAY
+    standing: StrokePlayStanding | None = None
 
 
 class SharedGamesInterface(ABC):

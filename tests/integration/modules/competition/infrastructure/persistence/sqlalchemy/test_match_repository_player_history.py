@@ -17,6 +17,7 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -27,6 +28,9 @@ from src.modules.competition.domain.value_objects.match_player import MatchPlaye
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.sqlalchemy.competition_repository import (
     SQLAlchemyCompetitionRepository,
+)
+from src.modules.competition.infrastructure.persistence.sqlalchemy.hole_score_repository import (
+    SQLAlchemyHoleScoreRepository,
 )
 from src.modules.competition.infrastructure.persistence.sqlalchemy.match_repository import (
     SQLAlchemyMatchRepository,
@@ -275,3 +279,39 @@ async def test_limit_keeps_the_most_recent_ones(db_session, player_id, rival_id,
     )
 
     assert [m.id for m in found] == [late_match.id]
+
+
+async def test_m_the_player_scorecards_of_several_matches_in_one_read(
+    db_session, player_id, rival_id, golf_course_id
+):
+    """Tabla del 22 oct 2026, M: la tarjeta del jugador en varios partidos, de una vez."""
+    competition = await _create_competition(db_session, player_id)
+    round_ = await _create_round(db_session, competition, golf_course_id, BASE_DATE)
+    uno = await _create_match(db_session, round_, [player_id], [rival_id], match_number=1)
+    otro = await _create_match(db_session, round_, [player_id], [rival_id], match_number=2)
+    fuera = await _create_match(db_session, round_, [player_id], [rival_id], match_number=3)
+    repo = SQLAlchemyHoleScoreRepository(db_session)
+    for match in (uno, otro, fuera):
+        for user_id, team in ((player_id, "A"), (rival_id, "B")):
+            for hole in (2, 1):
+                score = HoleScore.create(
+                    match_id=match.id,
+                    hole_number=hole,
+                    player_user_id=user_id,
+                    team=team,
+                    strokes_received=0,
+                )
+                score.set_own_score(4)
+                await repo.add(score)
+    await db_session.commit()
+
+    leidos = await repo.find_by_matches_and_player([uno.id, otro.id], player_id)
+
+    assert sorted((s.match_id == uno.id, s.hole_number) for s in leidos) == [
+        (False, 1),
+        (False, 2),
+        (True, 1),
+        (True, 2),
+    ]
+    assert {s.player_user_id for s in leidos} == {player_id}
+    assert await repo.find_by_matches_and_player([], player_id) == []

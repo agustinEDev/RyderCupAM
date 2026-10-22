@@ -50,12 +50,25 @@ class PartidaRepositoryInterface(ABC):
         """Todas las partidas de la competición, por franja y número de salida."""
 
     @abstractmethod
+    async def de_las_competiciones(self, competition_ids: list[CompetitionId]) -> list[Partida]:
+        """Las partidas de varias competiciones en una lectura (generales por lotes, J)."""
+
+    @abstractmethod
     async def del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> list[Partida]:
         """Las partidas de la competición en las que juega, por franja y número."""
 
     @abstractmethod
     async def existe_con_jugador(self, user_id: UserId) -> bool:
         """Si juega en alguna partida, de cualquier competición (antes de borrar al usuario)."""
+
+    @abstractmethod
+    async def competiciones_con_los_dos(
+        self, user_id: UserId, other_id: UserId
+    ) -> list[CompetitionId]:
+        """
+        Las competiciones en las que los dos tienen alguna partida, sea o no la
+        misma (el cara a cara por la general final, tabla del 22 oct 2026, J).
+        """
 
     @abstractmethod
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:

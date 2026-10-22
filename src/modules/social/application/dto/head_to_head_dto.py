@@ -40,8 +40,19 @@ class HeadToHeadDTO(BaseModel):
 class GameTogetherDTO(BaseModel):
     """Una partida terminada que jugasteis los dos."""
 
-    kind: str = Field(description="QUICK_MATCH, TOURNAMENT_MATCH o TOURNAMENT_GROUP")
-    id: str = Field(description="Id de la partida rapida, del partido o del grupo")
+    kind: str = Field(
+        description=(
+            "QUICK_MATCH, TOURNAMENT_MATCH, TOURNAMENT_GROUP o TOURNAMENT_STROKE_PLAY "
+            "(un stroke play COMPLETADO entero, una sola entrada por torneo con los dos "
+            "puestos de la general final; sus grupos ya no salen sueltos)"
+        )
+    )
+    id: str = Field(
+        description=(
+            "Id de la partida rapida, del partido o del grupo; en TOURNAMENT_STROKE_PLAY, "
+            "el del torneo"
+        )
+    )
     played_on: date
     golf_course_id: str | None = None
     golf_course_name: str | None = None
@@ -56,24 +67,48 @@ class GameTogetherDTO(BaseModel):
             "por sus hoyos (la referencia es el maximo de hoyos anotados por alguien "
             "de la partida; cuentan quienes tienen exactamente esos hoyos y al menos "
             "9; con conjuntos distintos del mismo tamaño maximo no cuenta nadie). "
-            "Si los dos cuentan, None cuando no se puede juzgar: sin campo, sin "
-            "modalidad, o en una partida con hándicap sin el de alguno de los dos. "
-            "PARTIDA RAPIDA MATCH PLAY: None si no se puede juzgar (sin campo, o en "
-            "una partida con hándicap sin el de cualquiera de los participantes). Si "
+            "Si los dos cuentan, None cuando no se puede juzgar: sin campo o sin "
+            "modalidad. Quien no tiene hándicap juega con 0, como en la propia "
+            "partida y en su aviso: la falta de hándicap ya no da None. "
+            "PARTIDA RAPIDA MATCH PLAY: None si no se puede juzgar (sin campo; la "
+            "falta de hándicap tampoco da None: juega con 0). Si "
             "se puede, UNFINISHED salvo que se decidiera antes de tiempo (un 3&2) o "
             "que los dos bandos entregaran los mismos hoyos, al menos 9; un hoyo es "
             "del bando en cuanto lo anota uno de sus jugadores, tambien en fourball. "
             "Incluye la partida sin ningun hoyo adjudicable. "
             "TORNEO: nunca UNFINISHED; None si el partido no tiene ganador o, en un "
-            "grupo de stroke play, si alguna de las dos tarjetas no esta entregada "
-            "con los 18 hoyos validados"
+            "grupo de stroke play de un torneo sin completar, si alguna de las dos "
+            "tarjetas no esta entregada con los 18 hoyos validados. "
+            "TOURNAMENT_STROKE_PLAY: por la general final, con el desempate por menor "
+            "hándicap: delante gana, mismo puesto empata; None si alguno no quedo "
+            "clasificado (retirado, NR)"
         ),
     )
     quick_match_id: str | None = Field(default=None, description="Para abrir la partida rapida")
     competition_id: str | None = Field(default=None, description="Para abrir el torneo")
     competition_name: str | None = None
     match_id: str | None = Field(
-        default=None, description="El partido o el grupo dentro del torneo"
+        default=None,
+        description="El partido o el grupo dentro del torneo; None en TOURNAMENT_STROKE_PLAY",
+    )
+    # Solo en TOURNAMENT_STROKE_PLAY (tabla del 22 oct 2026, J): «4.º y 7.º de 16»
+    my_position: int | None = Field(
+        default=None,
+        description="Mi puesto en la general final; None si no quede clasificado (NR)",
+    )
+    my_tied: bool | None = Field(
+        default=None, description="Si comparto el puesto (mismo valor y mismo hándicap)"
+    )
+    their_position: int | None = Field(
+        default=None, description="Su puesto en la general final; None si no quedo clasificado"
+    )
+    their_tied: bool | None = Field(default=None, description="Si comparte su puesto")
+    total_players: int | None = Field(
+        default=None,
+        description=(
+            "Filas de la general final: todos los que tienen tarjeta en el torneo, "
+            "con los NP, NR y SIN_EMPEZAR; el mismo total que el aviso de clasificación final"
+        ),
     )
 
 

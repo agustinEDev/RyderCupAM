@@ -9,6 +9,7 @@ partida entera.
 
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import ClassVar
 from uuid import uuid4
 
 import pytest
@@ -1851,3 +1852,209 @@ class TestScoringBreakdown:
         assert breakdown.holes_counted == 9
         assert breakdown.front_nine.holes == 9
         assert breakdown.back_nine is None
+
+
+class _Consultas:
+    """
+    Cuenta cada llamada a un repositorio de las cuatro unidades de trabajo:
+    una llamada a un repositorio es una consulta a la base de datos.
+    """
+
+    REPOSITORIOS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "user": ("users",),
+        "competition": (
+            "competitions",
+            "rounds",
+            "matches",
+            "hole_scores",
+            "enrollments",
+            "partidas",
+            "golpes_de_partida",
+        ),
+        "quick_match": ("quick_matches", "quick_match_hole_scores"),
+        "golf_course": ("golf_courses",),
+    }
+
+    def __init__(self, **uows):
+        self.llamadas: list[str] = []
+        for clave, uow in uows.items():
+            for nombre in self.REPOSITORIOS[clave]:
+                repo = getattr(uow, nombre)
+                for metodo in dir(type(repo)):
+                    if metodo.startswith("_"):
+                        continue
+                    original = getattr(repo, metodo)
+                    if callable(original):
+                        setattr(repo, metodo, self._contando(f"{nombre}.{metodo}", original))
+
+    def _contando(self, nombre, original):
+        async def _llamada(*args, **kwargs):
+            self.llamadas.append(nombre)
+            return await original(*args, **kwargs)
+
+        return _llamada
+
+
+async def _historial(user_uow, competition_uow, qm_uow, golf_course_uow, cuantas: int):
+    """`cuantas` partidas rápidas y otros tantos partidos de torneo, cada uno en su campo."""
+    user = await create_user(user_uow, unique_email("lotes"), handicap=14.2)
+    rival = await create_user(user_uow, unique_email("rival"))
+    campos = []
+    for i in range(cuantas):
+        campo = await create_golf_course(golf_course_uow, user.id)
+        campos.append(campo)
+        await _played_quick_match(
+            qm_uow,
+            campo,
+            user,
+            strokes_per_hole=4 + i % 2,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+        )
+        await _played_competition_match(
+            competition_uow,
+            campo,
+            user,
+            rival,
+            strokes_per_hole=5 - i % 2,
+            round_date=date(2026, 6, 1) + timedelta(days=i),
+            play_mode=PlayMode.HANDICAP if i % 2 else PlayMode.SCRATCH,
+        )
+    return user, campos
+
+
+@pytest.mark.asyncio
+class TestConsultasPorLotes:
+    """
+    Tabla del 22 oct 2026, M: el panel lee por lotes. El número de consultas
+    no crece con el número de partidas, y lo que devuelve no cambia.
+    """
+
+    async def _cuenta(self, cuantas: int, metodo: str = "execute") -> int:
+        uows = {
+            "user": InMemoryUserUnitOfWork(),
+            "competition": InMemoryCompetitionUnitOfWork(),
+            "quick_match": InMemoryQuickMatchUnitOfWork(),
+            "golf_course": InMemoryGolfCourseUnitOfWork(),
+        }
+        user, _ = await _historial(
+            uows["user"], uows["competition"], uows["quick_match"], uows["golf_course"], cuantas
+        )
+        consultas = _Consultas(**uows)
+        caso = _use_case(
+            uows["user"], uows["competition"], uows["quick_match"], uows["golf_course"]
+        )
+        await getattr(caso, metodo)(user.id)
+        return len(consultas.llamadas)
+
+    @pytest.mark.parametrize("metodo", ["execute", "execute_breakdown"])
+    async def test_m16_las_consultas_no_crecen_con_las_partidas(self, metodo):
+        assert await self._cuenta(1, metodo) == await self._cuenta(6, metodo)
+
+    async def test_m16_la_tarjeta_del_rival_no_se_mezcla_con_la_suya(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Leer varios partidos de una vez trae solo los hoyos del jugador, no los del rival."""
+        user = await create_user(user_uow, unique_email("solo"))
+        rival = await create_user(user_uow, unique_email("rival"))
+        campo = await create_golf_course(golf_course_uow, user.id)
+        match = await _played_competition_match(competition_uow, campo, user, rival)
+        async with competition_uow:
+            for hole_number in range(1, 19):
+                del_rival = HoleScore.create(
+                    match_id=match.id,
+                    hole_number=hole_number,
+                    player_user_id=rival.id,
+                    team="B",
+                    strokes_received=0,
+                )
+                del_rival.set_own_score(9)
+                await competition_uow.hole_scores.add(del_rival)
+            await competition_uow.commit()
+
+        resumen = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            user.id
+        )
+
+        assert (resumen.rounds_played, resumen.scoring_avg) == (1, 0.0)
+
+    async def test_m16_el_resultado_no_cambia(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Foto del resumen calculada con la lectura de antes (una consulta por partida)."""
+        user, campos = await _historial(user_uow, competition_uow, qm_uow, golf_course_uow, 4)
+        caso = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+        indice = {str(c.id): i for i, c in enumerate(campos)}
+
+        resumen = await caso.execute(user.id)
+        desglose = await caso.execute_breakdown(user.id)
+        por_campo = await caso.execute_breakdown(user.id, campos[1].id)
+
+        assert resumen.model_dump() == FOTO_DEL_RESUMEN
+        foto = desglose.model_dump(mode="json")
+        for fila in foto["by_course"]:
+            fila["golf_course_id"] = indice[fila["golf_course_id"]]
+        assert foto == FOTO_DEL_DESGLOSE
+        assert por_campo.rounds_counted == 2
+
+
+FOTO_DEL_RESUMEN = {
+    "handicap": 14.2,
+    "handicap_trend": None,
+    "scoring_avg": -1.5,
+    "rounds_played": 8,
+    "tournaments_total": 0,
+    "tournaments_active": 0,
+    "estimated_index": 1.8,
+    "playing_avg": 10.0,
+    "best_differential": 1.8,
+    "rounds_with_differential": 8,
+    "differentials": [18.1, 1.8, 18.1, 1.8, 1.8, 18.1, 1.8, 18.1],
+}
+FOTO_DEL_DESGLOSE = {
+    "holes_counted": 144,
+    "rounds_counted": 8,
+    "gross_distribution": {
+        "birdie_or_better": 0,
+        "par": 72,
+        "bogey": 72,
+        "double_or_worse": 0,
+        "holes": 144,
+    },
+    "net_distribution": {
+        "birdie_or_better": 56,
+        "par": 44,
+        "bogey": 44,
+        "double_or_worse": 0,
+        "holes": 144,
+    },
+    "by_par": [{"par": 4, "holes": 144, "average_to_par": -0.08}],
+    "front_nine": {"holes": 72, "average_to_par": -0.25},
+    "back_nine": {"holes": 72, "average_to_par": 0.08},
+    "by_course": [
+        {
+            "golf_course_id": 3,
+            "golf_course_name": "Test Golf Club",
+            "rounds": 2,
+            "average_to_par": -5.0,
+        },
+        {
+            "golf_course_id": 1,
+            "golf_course_name": "Test Golf Club",
+            "rounds": 2,
+            "average_to_par": -5.0,
+        },
+        {
+            "golf_course_id": 2,
+            "golf_course_name": "Test Golf Club",
+            "rounds": 2,
+            "average_to_par": 2.0,
+        },
+        {
+            "golf_course_id": 0,
+            "golf_course_name": "Test Golf Club",
+            "rounds": 2,
+            "average_to_par": 2.0,
+        },
+    ],
+}

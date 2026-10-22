@@ -461,3 +461,40 @@ class TestPersonalBestEndToEnd:
         record = next(e for e in await _feed(social_uow, ana) if e.type == T.PERSONAL_BEST)
         assert record.source_match_id == str(partida.id.value)
         assert record.payload["kind"] == "TEE_GROUP"
+
+
+# ==================== player_ids: quien jugo puede ir a la tarjeta ====================
+
+
+class TestPlayerIdsOfTheGroup:
+    """
+    Agustín, 22 oct 2026: quien JUGÓ el grupo de un logro de torneo de otro
+    puede ir a su tarjeta. El payload lleva `player_ids`: todos los del grupo,
+    también el autor, ordenados para que salga siempre igual.
+    """
+
+    async def test_every_achievement_carries_the_players_of_its_group(self, world, social_uow):
+        ana, bea, cris = [await world.user() for _ in range(3)]
+        competition, _, _ = await _torneo(
+            world, {ana: tarjeta(h4=3), bea: tarjeta(), cris: tarjeta()}
+        )
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        esperado = sorted(str(u.id.value) for u in (ana, bea, cris))
+        eventos = await _feed(social_uow, ana)
+        assert eventos
+        assert all(e.payload["player_ids"] == esperado for e in eventos)
+
+    async def test_the_players_of_another_group_are_not_there(self, world, social_uow):
+        ana, bea, otro = [await world.user() for _ in range(3)]
+        competition = await world.competition(ana, enrolled=[ana, bea, otro])
+        course = await world.course(ana)
+        round_ = await world.round(competition, course)
+        await world.group(competition, round_, {ana: tarjeta(h4=3), bea: tarjeta()}, numero=1)
+        await world.group(competition, round_, {otro: tarjeta()}, numero=2)
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        birdie = next(e for e in await _feed(social_uow, ana) if e.type == T.BIRDIE)
+        assert birdie.payload["player_ids"] == sorted(str(u.id.value) for u in (ana, bea))

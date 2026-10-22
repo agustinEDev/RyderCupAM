@@ -52,7 +52,7 @@ from src.shared.domain.value_objects.match_format import MatchFormat
 
 # Tope de partidas que se agregan para la media, por cada fuente. Sin él, una
 # cuenta con años de historial cargaría todos sus scores para calcular un único
-# número, y en torneo cada partido añade además una consulta de tarjeta.
+# número. Las consultas no crecen con él: todo se lee por lotes (M).
 MAX_ROUNDS_AGGREGATED = 100
 
 # El Score Differential se calcula con el Course Handicap, que es el Playing
@@ -244,12 +244,7 @@ class GetPlayerStatsUseCase:
                     for match in competition_matches
                     if self._match_course(match, rounds_by_match) == golf_course_id
                 ]
-            scorecards = {
-                match.id: await self._competition_uow.hole_scores.find_by_match_and_player(
-                    match.id, user_id
-                )
-                for match in competition_matches
-            }
+            scorecards = await self._scorecards(competition_matches, user_id)
 
         competition_rounds = await self._collect_competition_rounds(
             user_id,
@@ -356,23 +351,25 @@ class GetPlayerStatsUseCase:
             matches = await self._quick_match_uow.quick_matches.list_for_stats(
                 user_id, status=QuickMatchStatus.COMPLETED, limit=MAX_ROUNDS_AGGREGATED
             )
+            candidates = [
+                (match, participant)
+                for match in matches
+                if (golf_course_id is None or match.golf_course_id == golf_course_id)
+                and match.match_format != MatchFormat.FOURSOMES
+                and (participant := self._find_participant(match, user_id)) is not None
+            ]
+            # Campos y golpes de todas de una vez: un número fijo de consultas
+            # por mucho historial que tenga (tabla del 22 oct 2026, M)
+            courses, scores_by_match = await self._quick_match_courses_and_scores(
+                [match for match, _ in candidates]
+            )
 
-            for match in matches:
-                if golf_course_id is not None and match.golf_course_id != golf_course_id:
-                    continue
-
-                if match.match_format == MatchFormat.FOURSOMES:
-                    continue
-
-                participant = self._find_participant(match, user_id)
-                if participant is None:
-                    continue
-
-                course = await self._golf_course_uow.golf_courses.find_by_id(match.golf_course_id)
+            for match, participant in candidates:
+                course = courses.get(match.golf_course_id)
                 if course is None:
                     continue
 
-                scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(match.id)
+                scores = scores_by_match.get(match.id, [])
                 # El score nulo (la raya: hoyo recogido) NO se filtra, a
                 # diferencia del camino de competicion de mas abajo: en partida
                 # rapida es un hoyo jugado, y el calculador lo computa como
@@ -470,9 +467,15 @@ class GetPlayerStatsUseCase:
         rápidas entran con su hándicap de juego al 100 %.
         """
         results: list[_ComputableRound] = []
-        courses: dict = {}
 
         async with self._golf_course_uow:
+            courses = await self._courses_by_id(
+                {
+                    course_id
+                    for match in matches
+                    if (course_id := self._match_course(match, rounds_by_match)) is not None
+                }
+            )
             for match in matches:
                 round_ = rounds_by_match.get(match.id)
                 course_id = self._match_course(match, rounds_by_match)
@@ -480,11 +483,7 @@ class GetPlayerStatsUseCase:
                     continue
                 if round_.match_format == MatchFormat.FOURSOMES:
                     continue
-                if course_id not in courses:
-                    courses[course_id] = await self._golf_course_uow.golf_courses.find_by_id(
-                        course_id
-                    )
-                course = courses[course_id]
+                course = courses.get(course_id)
                 if course is None:
                     continue
 
@@ -737,31 +736,62 @@ class GetPlayerStatsUseCase:
         """
         return value * 2 if holes_played == HALF_ROUND_HOLES else value
 
+    # ==================== Lectura por lotes (M) ====================
+    #
+    # Cada fuente se lee de una vez y no una por partida: el panel hace un
+    # número fijo de consultas, tenga el historial que tenga (tabla del 22 oct
+    # 2026, M). Lo que se calcula con lo leído no cambia.
+
+    async def _quick_match_courses_and_scores(self, matches: list) -> tuple[dict, dict]:
+        """Los campos y los golpes de esas partidas rápidas, en dos consultas."""
+        if not matches:
+            return {}, {}
+        courses = await self._courses_by_id({match.golf_course_id for match in matches})
+        scores_by_match: dict = {}
+        for score in await self._quick_match_uow.quick_match_hole_scores.find_by_matches(
+            [match.id for match in matches]
+        ):
+            scores_by_match.setdefault(score.quick_match_id, []).append(score)
+        return courses, scores_by_match
+
+    async def _courses_by_id(self, course_ids: set) -> dict:
+        """Los campos de una vez; uno borrado no está, y quien lo pida recibe None."""
+        if not course_ids:
+            return {}
+        courses = await self._golf_course_uow.golf_courses.find_by_ids(list(course_ids))
+        return {course.id: course for course in courses}
+
+    async def _scorecards(self, matches: list, user_id: UserId) -> dict:
+        """La tarjeta del jugador en cada partido, en una consulta."""
+        if not matches:
+            return {}
+        by_match: dict = {match.id: [] for match in matches}
+        for hole_score in await self._competition_uow.hole_scores.find_by_matches_and_player(
+            [match.id for match in matches], user_id
+        ):
+            by_match.setdefault(hole_score.match_id, []).append(hole_score)
+        return by_match
+
     async def _rounds_by_match(self, matches: list) -> dict:
         """
-        La ronda de cada partido, una consulta por ronda distinta.
+        La ronda de cada partido, todas en una consulta.
 
         Hace falta para tres cosas que el partido no sabe por sí solo: en qué
         campo se jugó, con qué pares se compara su tarjeta y qué día fue.
         """
-        rounds: dict = {}
-        by_match: dict = {}
-        for match in matches:
-            if match.round_id not in rounds:
-                rounds[match.round_id] = await self._competition_uow.rounds.find_by_id(
-                    match.round_id
-                )
-            by_match[match.id] = rounds[match.round_id]
-        return by_match
+        if not matches:
+            return {}
+        round_ids = list({match.round_id for match in matches})
+        rounds = {r.id: r for r in await self._competition_uow.rounds.find_by_ids(round_ids)}
+        return {match.id: rounds.get(match.round_id) for match in matches}
 
     async def _scratch_competitions(self, rounds_by_match: dict) -> set:
         """Las competiciones scratch de esas rondas: ahí la vuelta propia va sin golpes."""
-        scratch = set()
-        for competition_id in {r.competition_id for r in rounds_by_match.values() if r}:
-            competition = await self._competition_uow.competitions.find_by_id(competition_id)
-            if is_scratch(competition):
-                scratch.add(competition_id)
-        return scratch
+        competition_ids = list({r.competition_id for r in rounds_by_match.values() if r})
+        if not competition_ids:
+            return set()
+        competitions = await self._competition_uow.competitions.find_by_ids(competition_ids)
+        return {c.id for c in competitions if is_scratch(c)}
 
     @staticmethod
     def _match_course(match, rounds_by_match: dict) -> GolfCourseId | None:
