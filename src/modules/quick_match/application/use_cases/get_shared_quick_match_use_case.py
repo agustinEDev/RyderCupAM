@@ -36,7 +36,8 @@ class GetSharedQuickMatchUseCase:
     """
     La partida rapida de un amigo, en solo lectura (tabla K, 22 oct 2026).
 
-    **Quien entra**: quien la jugo, siempre que este terminada; o el amigo de
+    **Quien entra**: quien la juega, en cualquier estado (el cliente lo lleva a
+    su anotacion con `viewer_is_participant`); o, si esta terminada, el amigo de
     al menos uno de sus jugadores con cuenta que cumpla todo esto a la vez: la
     cuenta de ese jugador esta activa y publica su actividad, no hay bloqueo
     entre los dos —una amistad aceptada ya lo excluye— y el no la tiene en su
@@ -81,7 +82,10 @@ class GetSharedQuickMatchUseCase:
             quick_match = await self._uow.quick_matches.find_by_id(QuickMatchId(quick_match_id_raw))
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {quick_match_id_raw}")
-            if quick_match.status != QuickMatchStatus.COMPLETED:
+            is_participant = quick_match.is_participant(ParticipantId(viewer_id.value))
+            # Al participante se le responde en cualquier estado: el cliente lo
+            # lleva a su anotacion con `viewer_is_participant` (22 oct)
+            if not is_participant and quick_match.status != QuickMatchStatus.COMPLETED:
                 raise QuickMatchNotSharedError("Only finished quick matches can be viewed.")
             hole_scores = await self._uow.quick_match_hole_scores.find_by_match(quick_match.id)
 
@@ -89,7 +93,6 @@ class GetSharedQuickMatchUseCase:
         async with self._user_uow:
             users = {u.id: u for u in await self._user_uow.users.find_by_ids(registered)}
 
-        is_participant = quick_match.is_participant(ParticipantId(viewer_id.value))
         hidden_names: set[UserId] = set()
         if not is_participant:
             async with self._social_uow:

@@ -153,6 +153,20 @@ async def test_a_match_in_progress_gets_403(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_a_participant_of_a_match_in_progress_gets_200(client: AsyncClient):
+    """Arreglo del 22 oct: el cliente lo lleva a su anotacion con `viewer_is_participant`."""
+    ana, match_id = await _match(client, "qms_live_part", complete=False)
+
+    set_auth_cookies(client, ana["cookies"])
+    response = await client.get(f"/api/v1/quick-matches/{match_id}/shared")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["viewer_is_participant"] is True
+    assert body["status"] == "IN_PROGRESS"
+
+
+@pytest.mark.asyncio
 async def test_sharing_off_gets_403(client: AsyncClient):
     ana, match_id = await _match(client, "qms_off")
     viewer = await _user(client, "qms_off_viewer@test.com", "Viewer")
