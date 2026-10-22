@@ -12,7 +12,8 @@ Decidido con Agustín (22 oct, 00:45), sustituye a «Clasificación / En bruto»
   mismo grupo de salida de un torneo). Jugar la misma ronda de un torneo en
   grupos distintos no cuenta: es lo que respondió Agustín, y lo conservador.
 - **Quién gana, según la modalidad, nunca en bruto**: Stableford, más puntos;
-  match play, quien ganó el partido; Medal, menos golpes netos. Igualdad, empate.
+  match play, quien ganó el partido; Medal, menos golpes netos. A igual valor,
+  el de menos índice (tabla H; sin hándicap cuenta 0); solo con el mismo, empate.
 - **Sin nada que contar, no hay cara a cara**: el apartado llega vacío (None) y
   el cliente lo oculta; un 0-0-0 se leería como «nunca os ganáis».
 
@@ -22,8 +23,10 @@ oficiales de cada módulo.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 
+from src.shared.domain.services.handicap_tiebreak import handicap_tiebreak_key
 from src.shared.domain.value_objects.scoring_format import ScoringFormat
 
 # Como guardan los partidos el ganador: un bando o el empate
@@ -54,6 +57,8 @@ class CardResult:
     complete: bool
     points: int
     net_to_par: int
+    # El índice con el que jugó: desempata a igual valor (H). None cuenta como 0
+    handicap: Decimal | float | None = None
 
 
 @dataclass(frozen=True)
@@ -94,7 +99,18 @@ def stroke_play_outcome(
     else:
         # Una modalidad que no sea ninguna de las dos no se adivina: no cuenta
         return None
+    if diferencia == 0:
+        # Empate a valor: gana el de menos índice, como en el aviso y en la
+        # clasificación (tabla del 22 oct 2026, H). Solo con el mismo, empate
+        return _por_handicap(mine.handicap, theirs.handicap)
     return _por_diferencia(diferencia)
+
+
+def _por_handicap(mine: Decimal | float | None, theirs: Decimal | float | None) -> Outcome:
+    mia, suya = handicap_tiebreak_key(mine), handicap_tiebreak_key(theirs)
+    if mia == suya:
+        return Outcome.HALVED
+    return Outcome.WON if mia < suya else Outcome.LOST
 
 
 def team_outcome(winner: str | None, my_team: str) -> Outcome | None:

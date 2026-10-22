@@ -400,7 +400,11 @@ class TestPartidaRapidaStrokePlay:
 
         assert partida.outcome == Outcome.WON
 
-    async def test_mismos_golpes_sin_handicap_es_empate(self, mundo):
+    async def test_mismos_golpes_en_scratch_desempata_el_indice(self, mundo):
+        """
+        H (22 oct 2026): a igual neto gana el de menos índice, también en una
+        partida scratch, como lo cuenta su aviso.
+        """
         yo = await mundo.jugador("Yo", handicap=12)
         el = await mundo.jugador("El", handicap=3)
         course = await mundo.campo(yo)
@@ -415,7 +419,88 @@ class TestPartidaRapidaStrokePlay:
 
         (partida,) = await _entre(mundo, yo, el)
 
+        assert partida.outcome == Outcome.LOST
+
+    async def test_mismos_golpes_y_el_mismo_indice_es_empate(self, mundo):
+        yo = await mundo.jugador("Yo", handicap=12.4)
+        el = await mundo.jugador("El", handicap=12.4)
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 4],
+            scoring_format=ScoringFormat.MEDAL,
+            play_mode=PlayMode.SCRATCH,
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
         assert partida.outcome == Outcome.HALVED
+
+    async def test_h_desempata_el_indice_con_el_que_se_jugo(self, mundo):
+        """
+        Ana empezó con 19.0 fijado y hoy su perfil dice 2.0; Eva, 10.5. Las dos
+        36 puntos: con el índice de la partida gana Eva, como en el aviso.
+        """
+        ana = await mundo.jugador("Ana", handicap=2.0)
+        eva = await mundo.jugador("Eva", handicap=10.5)
+        course = await mundo.campo(ana)
+        match = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=ana.id,
+            golf_course_id=course.id,
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+        match.add_participant(QuickMatchParticipant.for_user(eva.id))
+        ids = [p.participant_id for p in match.participants]
+        match.start(scorer_ids=[ids[0]])
+        match.freeze_handicaps({ana.id: 19.0, eva.id: 10.5})
+        match.complete()
+        tarjetas = {
+            ids[0]: dict.fromkeys(HOLES, 5),
+            ids[1]: {h: 5 if h <= 10 else 4 for h in HOLES},
+        }
+        async with mundo.qm:
+            await mundo.qm.quick_matches.add(match)
+            for pid, tarjeta in tarjetas.items():
+                for hoyo, golpes in tarjeta.items():
+                    await mundo.qm.quick_match_hole_scores.add(
+                        QuickMatchHoleScore(
+                            id=QuickMatchHoleScoreId.generate(),
+                            quick_match_id=match.id,
+                            hole_number=hoyo,
+                            participant_id=pid,
+                            score=golpes,
+                            recorded_by_participant_id=ids[0],
+                        )
+                    )
+            await mundo.qm.commit()
+
+        (de_ana,) = await _entre(mundo, ana, eva)
+
+        assert de_ana.outcome == Outcome.LOST
+
+    async def test_h_empate_a_puntos_sin_handicap_cuenta_como_cero(self, mundo):
+        """
+        Revisión del 22 oct: Ana sin hándicap y Eva con 19.0 hacen 36. El aviso
+        pone a Ana 1.ª (0 < 19.0): el cara a cara tiene que decir lo mismo.
+        """
+        ana = await mundo.jugador("Ana", handicap=None)
+        eva = await mundo.jugador("Eva", handicap=19.0)
+        course = await mundo.campo(ana)
+        await mundo.partida_rapida(
+            course,
+            ana,
+            [QuickMatchParticipant.for_user(eva.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+
+        (de_ana,) = await _entre(mundo, ana, eva)
+        (de_eva,) = await _entre(mundo, eva, ana)
+
+        assert (de_ana.outcome, de_eva.outcome) == (Outcome.WON, Outcome.LOST)
 
     async def test_si_uno_no_tiene_handicap_cuenta_como_cero(self, mundo):
         """
@@ -832,6 +917,35 @@ class TestGruposDeStrokePlay:
         assert partida.relation == Relation.AGAINST
         assert partida.outcome == Outcome.WON
         assert partida.format == "STABLEFORD"
+
+    async def test_h_empate_a_puntos_en_un_grupo_desempata_el_indice(self, mundo):
+        """Torneo sin completar: el grupo desempata con el hándicap de su foto (H)."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        competition = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        round_ = await mundo.ronda(competition, course)
+        # 36 los dos: yo sin golpes (0.0) con 4; él con 18 y 5
+        await mundo.grupo(
+            competition, round_, {yo: [4] * 18, el: [5] * 18}, golpes_recibidos={el: 1}
+        )
+
+        (mia,) = await _entre(mundo, yo, el)
+        (suya,) = await _entre(mundo, el, yo)
+
+        assert (mia.outcome, suya.outcome) == (Outcome.WON, Outcome.LOST)
+
+    async def test_h_empate_a_puntos_con_el_mismo_handicap_es_empate(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        competition = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        round_ = await mundo.ronda(competition, course)
+        await mundo.grupo(competition, round_, {yo: [4] * 18, el: [4] * 18})
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert partida.outcome == Outcome.HALVED
 
     async def test_medal_por_golpes_netos(self, mundo):
         """Mi bruto (90) es peor que el suyo (73), pero con mis 18 golpes hago 72 netos: gano."""

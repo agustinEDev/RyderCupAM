@@ -104,7 +104,11 @@ class GameTogetherDTO(BaseModel):
     )
     their_tied: bool | None = Field(default=None, description="Si comparte su puesto")
     total_players: int | None = Field(
-        default=None, description="Filas de la general final (todos los inscritos que jugaron)"
+        default=None,
+        description=(
+            "Filas de la general final: todos los que tienen tarjeta en el torneo, "
+            "con los NP, NR y SIN_EMPEZAR; el mismo total que el aviso de clasificación final"
+        ),
     )
 
 

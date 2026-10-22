@@ -311,8 +311,8 @@ class SharedGamesAdapter(SharedGamesInterface):
                     match, course, usuarios, self._stroke_allocation
                 )
                 outcome = stroke_play_outcome(
-                    self._tarjeta(course, yo, golpes, golpes_recibidos),
-                    self._tarjeta(course, el, golpes, golpes_recibidos),
+                    self._tarjeta(course, yo, golpes, golpes_recibidos, usuarios),
+                    self._tarjeta(course, el, golpes, golpes_recibidos, usuarios),
                     match.scoring_format,
                 )
             formato = match.scoring_format.value if match.scoring_format else ""
@@ -383,6 +383,7 @@ class SharedGamesAdapter(SharedGamesInterface):
         participant: QuickMatchParticipant,
         golpes: dict,
         golpes_recibidos: dict[ParticipantId, ParticipantStrokes],
+        usuarios: dict[UserId, User],
     ) -> CardResult | None:
         """
         Sus puntos y sus netos con los golpes que le dio la partida (su barra y
@@ -405,10 +406,15 @@ class SharedGamesAdapter(SharedGamesInterface):
         )
         # Ya se sabe que cuentan los dos (`counting_units`): con los mismos
         # hoyos, sus totales se comparan
+        # El índice con el que jugó la partida, el mismo que desempata su aviso
+        user = usuarios.get(participant.user_id) if participant.user_id else None
         return CardResult(
             complete=True,
             points=totales.stableford_points,
             net_to_par=totales.to_par,
+            handicap=participant.effective_handicap(
+                user.handicap.value if user and user.handicap else None
+            ),
         )
 
     # ==================== Torneo ====================
@@ -483,6 +489,8 @@ class SharedGamesAdapter(SharedGamesInterface):
             complete=entregada and tarjeta.completa,
             points=tarjeta.puntos,
             net_to_par=tarjeta.al_par_neto,
+            # El de su inscripción, el mismo que desempata la clasificación (H)
+            handicap=foto.handicap,
         )
 
     async def _de_torneo_cerrado(

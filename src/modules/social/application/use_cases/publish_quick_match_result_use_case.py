@@ -96,10 +96,11 @@ class PublishQuickMatchResultUseCase:
     mismas reglas por hoyo, que estan portadas con paridad en
     `StrokePlayScoring`. Un empate a puntos (o a netos en Medal) lo deshace el
     menor hándicap índice con el que jugó cada uno; solo con el mismo exacto
-    comparten puesto, y sin hándicap se queda detrás (tabla del 22 oct 2026,
+    comparten puesto, y sin hándicap cuenta como 0 (tabla del 22 oct 2026,
     H). No lo desempatan los golpes. El orden lo fija el arnés de paridad
-    (`scripts/generate_parity_fixtures.py`) para que el cliente no se separe. El match play sale del
-    mismo motor que el historial de partidas (`MatchPlayScoring`).
+    (`scripts/generate_parity_fixtures.py`) para que el cliente no se separe.
+    El match play sale del mismo motor que el historial de partidas
+    (`MatchPlayScoring`).
 
     Los invitados cuentan en la clasificacion, pero no tienen donde publicar.
 
