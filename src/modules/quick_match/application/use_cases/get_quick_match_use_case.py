@@ -86,11 +86,25 @@ class GetQuickMatchUseCase:
                 if user:
                     users_by_id[user_id] = user
 
+        return await self.build_detail(
+            quick_match, hole_scores, users_by_id, UserId(current_user_id_raw)
+        )
+
+    async def build_detail(
+        self, quick_match, hole_scores, users_by_id: dict, requester_id: UserId
+    ) -> QuickMatchDetailResponseDTO:
+        """
+        El detalle de una partida ya leida: datos, scores, standing y reparto.
+
+        Aparte de `execute` para que la vista de solo lectura de un amigo
+        (bloque K) pinte exactamente lo mismo sin copiar el calculo: decide
+        quien entra por su cuenta y luego pide esto.
+        """
         base_dto = await QuickMatchDTOMapper.to_response_dto(
             quick_match,
             self._user_uow,
             users_by_id=users_by_id,
-            requester_id=UserId(current_user_id_raw),
+            requester_id=requester_id,
         )
 
         hole_scores_dto = [

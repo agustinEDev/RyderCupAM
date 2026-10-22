@@ -21,6 +21,7 @@ from src.config.dependencies import (
     get_current_user,
     get_exclude_quick_match_from_stats_use_case,
     get_get_quick_match_use_case,
+    get_get_shared_quick_match_use_case,
     get_hide_quick_match_use_case,
     get_include_quick_match_in_stats_use_case,
     get_list_my_quick_matches_use_case,
@@ -50,6 +51,7 @@ from src.modules.quick_match.application.dto.quick_match_dto import (
     QuickStartPlayerDTO,
     RemoveParticipantRequestDTO,
     SetParticipantHandicapRequestDTO,
+    SharedQuickMatchDetailResponseDTO,
     StartQuickMatchRequestDTO,
     SubmitHoleScoreRequestDTO,
     SubmitProxyHoleScoreRequestDTO,
@@ -68,6 +70,7 @@ from src.modules.quick_match.application.exceptions import (
     NotQuickMatchParticipantError,
     QuickMatchIdTakenError,
     QuickMatchNotFoundError,
+    QuickMatchNotSharedError,
     TargetParticipantNotFoundError,
 )
 from src.modules.quick_match.application.use_cases.add_friend_to_quick_match_use_case import (
@@ -93,6 +96,9 @@ from src.modules.quick_match.application.use_cases.exclude_quick_match_from_stat
 )
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
+)
+from src.modules.quick_match.application.use_cases.get_shared_quick_match_use_case import (
+    GetSharedQuickMatchUseCase,
 )
 from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
     HideQuickMatchUseCase,
@@ -849,4 +855,30 @@ async def get_quick_match(
     except QuickMatchNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotQuickMatchParticipantError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+
+
+@router.get(
+    "/quick-matches/{quick_match_id}/shared",
+    response_model=SharedQuickMatchDetailResponseDTO,
+    summary="View a friend's finished quick match (read-only)",
+    description=(
+        "Read-only view of a FINISHED quick match: same fields as the detail, plus "
+        "`read_only` and `viewer_is_participant`. Open to its players and to the friends "
+        "of any registered player who shares activity, is active, has no block with the "
+        "viewer and has not hidden the match. For non-players, the `name` of guests and of "
+        "players blocked with the viewer or deactivated comes as null. Anyone else gets 403."
+    ),
+)
+async def get_shared_quick_match(
+    quick_match_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: GetSharedQuickMatchUseCase = Depends(get_get_shared_quick_match_use_case),
+):
+    try:
+        return await use_case.execute(str(quick_match_id), str(current_user.id))
+
+    except QuickMatchNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except QuickMatchNotSharedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
