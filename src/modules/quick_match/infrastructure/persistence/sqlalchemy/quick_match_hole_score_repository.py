@@ -1,6 +1,6 @@
 """QuickMatchHoleScore Repository - SQLAlchemy Implementation."""
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
@@ -12,6 +12,9 @@ from src.modules.quick_match.domain.value_objects.quick_match_hole_score_id impo
     QuickMatchHoleScoreId,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
+from src.modules.quick_match.infrastructure.persistence.mappers.quick_match_mapper import (
+    quick_match_hole_scores_table,
+)
 
 
 class SQLAlchemyQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInterface):
@@ -63,3 +66,16 @@ class SQLAlchemyQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInter
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def played_holes(
+        self, quick_match_ids: list[QuickMatchId]
+    ) -> dict[tuple[QuickMatchId, ParticipantId], int]:
+        if not quick_match_ids:
+            return {}
+        tabla = quick_match_hole_scores_table.c
+        filas = await self._session.execute(
+            select(tabla.quick_match_id, tabla.participant_id, func.count())
+            .where(tabla.quick_match_id.in_(quick_match_ids))
+            .group_by(tabla.quick_match_id, tabla.participant_id)
+        )
+        return {(fila[0], fila[1]): int(fila[2]) for fila in filas.all()}

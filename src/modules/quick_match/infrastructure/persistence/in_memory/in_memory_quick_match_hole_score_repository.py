@@ -51,3 +51,14 @@ class InMemoryQuickMatchHoleScoreRepository(QuickMatchHoleScoreRepositoryInterfa
         results = [hs for hs in self._hole_scores.values() if hs.quick_match_id in wanted]
         results.sort(key=lambda x: x.hole_number)
         return results
+
+    async def played_holes(
+        self, quick_match_ids: list[QuickMatchId]
+    ) -> dict[tuple[QuickMatchId, ParticipantId], int]:
+        wanted = set(quick_match_ids)
+        jugados: dict[tuple[QuickMatchId, ParticipantId], int] = {}
+        for hs in self._hole_scores.values():
+            if hs.quick_match_id in wanted:
+                clave = (hs.quick_match_id, hs.participant_id)
+                jugados[clave] = jugados.get(clave, 0) + 1
+        return jugados

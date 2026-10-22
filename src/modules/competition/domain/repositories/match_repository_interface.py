@@ -87,3 +87,12 @@ class MatchRepositoryInterface(ABC):
     ) -> list[Match]:
         """Los partidos en esos estados donde juegan los dos, en cualquier bando."""
         pass
+
+    @abstractmethod
+    async def find_completed_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+        """
+        Todos los partidos terminados en los que jugo alguno de ellos, sin tope
+        ni orden, en una sola lectura: el historial de campos tiene que ver
+        hasta lo mas antiguo (logros exclusivos, 22 oct 2026). Sin jugadores,
+        ninguno.
+        """

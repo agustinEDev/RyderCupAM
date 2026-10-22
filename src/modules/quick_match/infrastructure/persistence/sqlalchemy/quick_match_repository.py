@@ -1,6 +1,6 @@
 """QuickMatch Repository - SQLAlchemy Implementation."""
 
-from sqlalchemy import and_, cast, func, select
+from sqlalchemy import and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -169,5 +169,15 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
             QuickMatch._status == status,
         ]
         stmt = select(QuickMatch).where(and_(*conditions)).order_by(QuickMatch._created_at.desc())
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_completed_for_users(self, user_ids: list[UserId]) -> list[QuickMatch]:
+        if not user_ids:
+            return []
+        stmt = select(QuickMatch).where(
+            QuickMatch._status == QuickMatchStatus.COMPLETED,
+            or_(*[self._participant_filter(user_id) for user_id in set(user_ids)]),
+        )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

@@ -43,3 +43,13 @@ class QuickMatchHoleScoreRepositoryInterface(ABC):
     ) -> list[QuickMatchHoleScore]:
         """Los scores de varias partidas en una sola lectura, no una por partida."""
         pass
+
+    @abstractmethod
+    async def played_holes(
+        self, quick_match_ids: list[QuickMatchId]
+    ) -> dict[tuple[QuickMatchId, ParticipantId], int]:
+        """
+        Cuantos hoyos tiene anotados cada participante en esas partidas (la
+        raya tambien: tener fila es haber jugado el hoyo). En una sola lectura.
+        """
+        pass

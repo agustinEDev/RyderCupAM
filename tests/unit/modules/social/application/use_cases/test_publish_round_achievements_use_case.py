@@ -11,6 +11,9 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork as InMemoryCompetitionUnitOfWork,
+)
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.golf_course.domain.entities.hole import Hole
 from src.modules.golf_course.domain.entities.tee import Tee
@@ -32,7 +35,7 @@ from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quic
     InMemoryQuickMatchUnitOfWork,
 )
 from src.modules.social.application.ports.player_course_history_interface import (
-    CourseRound,
+    PlayedRound,
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
@@ -45,6 +48,9 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
     ActivitySlice,
 )
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
+    PlayerCourseHistoryAdapter,
+)
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
 )
@@ -87,20 +93,27 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
 
     def __init__(self):
         self._vueltas: set = set()
+        # El historial de verdad sobre las uows del test: devuelve tambien la
+        # vuelta que se publica, que es de donde cuelga el logro (22 oct 2026)
+        self.real: PlayerCourseHistoryInterface | None = None
 
     def registra(self, user_id, golf_course_id: str, match_id: str) -> None:
-        self._vueltas.add((str(user_id.value), golf_course_id, match_id))
+        self._vueltas.add((user_id, golf_course_id, match_id))
 
-    async def first_round_on_course(self, user_id, golf_course_id: str, timezone):
+    async def played_rounds(self, user_ids):
+        reales = await self.real.played_rounds(user_ids) if self.real else []
         # Lo registrado se jugo hace mucho: es lo mas antiguo
-        return next(
-            (
-                CourseRound(instant=datetime(2000, 1, 1), source_id=partida)
-                for usuario, campo, partida in sorted(self._vueltas)
-                if usuario == str(user_id.value) and campo == golf_course_id
-            ),
-            None,
-        )
+        return reales + [
+            PlayedRound(
+                user_id=usuario,
+                golf_course_id=campo,
+                instant=datetime(2000, 1, 1),
+                source_id=partida,
+                holes_played=18,
+            )
+            for usuario, campo, partida in self._vueltas
+            if usuario in set(user_ids)
+        ]
 
 
 @pytest.fixture
@@ -224,8 +237,16 @@ def _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials=None,
         golf_course_uow=golf_course_uow,
         user_uow=user_uow,
         differentials=differentials or _DifferentialsStub(),
-        history=history or _CourseHistoryFake(),
+        history=_con_historial_real(history or _CourseHistoryFake(), qm_uow, golf_course_uow),
     )
+
+
+def _con_historial_real(history, qm_uow, golf_course_uow):
+    if isinstance(history, _CourseHistoryFake) and history.real is None:
+        history.real = PlayerCourseHistoryAdapter(
+            qm_uow, InMemoryCompetitionUnitOfWork(), golf_course_uow
+        )
+    return history
 
 
 async def _feed_de(social_uow, user):
@@ -463,7 +484,8 @@ class TestQueNoSePublica:
     ):
         """
         Given una vuelta abandonada a los 12 hoyos / When se publica / Then no
-        se publica nada: si no vale para la media, no vale para presumir.
+        se publica el birdie: si no vale para la media, no vale para presumir.
+        Si el «campo nuevo»: piso el campo (Agustin, 22 oct 2026).
         """
         user = await _create_user(user_uow)
         course = await _create_course(golf_course_uow, user.id)
@@ -475,7 +497,8 @@ class TestQueNoSePublica:
             str(match.id.value)
         )
 
-        assert publicados == 0
+        assert publicados == 1
+        assert [e.type for e in await _feed_de(social_uow, user)] == [ActivityEventType.NEW_COURSE]
 
     async def test_media_vuelta_limpia_si_cuenta(
         self, social_uow, qm_uow, golf_course_uow, user_uow
@@ -626,9 +649,9 @@ class _ApagaAlJuzgar(_CourseHistoryFake):
         super().__init__()
         self._user = user
 
-    async def first_round_on_course(self, user_id, golf_course_id, timezone):
+    async def played_rounds(self, user_ids):
         self._user.set_activity_sharing(False)
-        return await super().first_round_on_course(user_id, golf_course_id, timezone)
+        return await super().played_rounds(user_ids)
 
 
 class TestCarrerasYFechas:

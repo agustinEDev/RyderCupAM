@@ -12,15 +12,23 @@ ISO) y con eso se compara lo publicado sin mas consultas:
 Asi el estado final no depende del orden de cierre, del dia ni del origen.
 Solo cuenta lo publicado: lo que sigue en juego no ha publicado nada, y lo que
 se cancela nunca lo hara.
+
+Que vuelta es la mas antigua lo dice el historial (`PlayedRound`), con UN solo
+criterio de «jugo» para el historial y para quien publica (Agustin, 22 oct):
+pisaste el campo si jugaste al menos un hoyo, sea o no una vuelta computable
+para los demas logros (un 4&3, una retirada con hoyos, una partida rapida de
+12 hoyos). No cuentan los no presentados, las vueltas sin hoyos, los torneos
+sin cerrar ni las partidas rapidas sin terminar.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 
 from src.modules.competition.domain.services.scoring_opening_service import (
     OPENING_HOUR_BY_SESSION,
-    ScoringOpeningService,
 )
+from src.modules.competition.domain.services.zona_horaria import zona_del_campo
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
@@ -50,21 +58,73 @@ def round_instant(
     """
     Cuando se jugo una ronda de torneo, en UTC y sin zona: la hora a la que abre
     su sesion (6, 12 o 18 locales) en la zona del campo, la misma que usa la
-    anotacion.
+    anotacion. Una ronda sin sesion, a mediodia local.
 
     Sin zona (decision de este arreglo, 22 oct 2026): el dia y esa hora local
     tomados como UTC. Ordena bien las sesiones del mismo campo, que comparten
     zona, y frente a una partida rapida se equivoca como mucho en el desfase.
     """
-    abre = ScoringOpeningService.opens_at(round_date, session_type, timezone)
-    if abre is not None:
-        return abre.astimezone(UTC).replace(tzinfo=None)
     hora = (
         OPENING_HOUR_BY_SESSION.get(session_type, _HORA_SIN_SESION)
         if session_type is not None
         else _HORA_SIN_SESION
     )
-    return datetime.combine(round_date, time(hora))
+    local = datetime.combine(round_date, time(hora))
+    zona = zona_del_campo(timezone)
+    if zona is None:
+        return local
+    return local.replace(tzinfo=zona).astimezone(UTC).replace(tzinfo=None)
+
+
+@dataclass(frozen=True)
+class PlayedRound:
+    """
+    Una vuelta en la que el jugador piso un campo (al menos un hoyo jugado).
+
+    - `instant`: en UTC y sin zona; una ronda de torneo, `round_instant`; una
+      partida rapida, su creacion.
+    - `source_id`: el partido de la Ryder, el grupo de stroke play o la partida
+      rapida; `competition_id`, el torneo, o None si es una partida rapida.
+    - `kind`: MATCH, TEE_GROUP o QUICK_MATCH. `player_ids`: quienes jugaron ese
+      partido o grupo, para que el logro abra su tarjeta.
+    - `round_date`: el dia de la ronda de torneo (fecha del logro en el feed).
+    """
+
+    user_id: UserId
+    golf_course_id: str
+    instant: datetime
+    source_id: str
+    holes_played: int
+    competition_id: str | None = None
+    kind: str = "QUICK_MATCH"
+    player_ids: tuple[str, ...] = ()
+    round_date: date | None = None
+
+    @property
+    def key(self) -> "PlayedKey":
+        """La misma clave con la que se comparan los logros publicados (`event_key`)."""
+        return played_key(self.instant, self.competition_id, self.source_id)
+
+
+def first_on_each_course(rondas: Iterable[PlayedRound]) -> dict[tuple[UserId, str], PlayedRound]:
+    """Por jugador y campo, la primera vez que lo piso: su «campo nuevo»."""
+    primeras: dict[tuple[UserId, str], PlayedRound] = {}
+    for ronda in rondas:
+        clave = (ronda.user_id, ronda.golf_course_id)
+        if clave not in primeras or ronda.key < primeras[clave].key:
+            primeras[clave] = ronda
+    return primeras
+
+
+def first_tournament_of_each(rondas: Iterable[PlayedRound]) -> dict[UserId, PlayedRound]:
+    """Por jugador, su primera vuelta de torneo: de ella cuelga su «primer torneo»."""
+    primeras: dict[UserId, PlayedRound] = {}
+    for ronda in rondas:
+        if ronda.competition_id is None:
+            continue
+        if ronda.user_id not in primeras or ronda.key < primeras[ronda.user_id].key:
+            primeras[ronda.user_id] = ronda
+    return primeras
 
 
 def utc_naive(instante: datetime) -> datetime:

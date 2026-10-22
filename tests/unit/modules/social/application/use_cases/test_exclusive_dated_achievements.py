@@ -20,6 +20,7 @@ import pytest
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryCompetitionUnitOfWork,
 )
@@ -109,7 +110,7 @@ class Escena:
     # --- piezas ---
 
     def _history(self):
-        return PlayerCourseHistoryAdapter(self.qm, self.world.comp)
+        return PlayerCourseHistoryAdapter(self.qm, self.world.comp, self.world.golf)
 
     def _differentials(self):
         return StatsPlayerDifferentialsAdapter(
@@ -162,7 +163,25 @@ class Escena:
         )
         return torneo, grupo
 
-    async def rapida(self, creada: datetime, course=None) -> QuickMatch:
+    async def ryder(self, dia: date, sesion: SessionType, golpes: dict):
+        """Una Ryder en juego con un partido acabado de Ana con esos hoyos (4&3: 15)."""
+        rival = await self.world.user()
+        torneo = await self.world.competition(
+            self.ana, tipo=TournamentType.RYDER_CUP, enrolled=[self.ana, rival], completed=False
+        )
+        partido = await self.world.match(
+            await self.world.round(torneo, self.course, dia, sesion), self.ana, rival, golpes
+        )
+        return torneo, partido
+
+    async def quitar_hoyos(self, partida: QuickMatch, desde: int) -> None:
+        """Deja la partida rapida con los hoyos anteriores a `desde`: no computable."""
+        repo = self.qm.quick_match_hole_scores
+        for golpe in await repo.find_by_match(partida.id):
+            if golpe.hole_number >= desde:
+                del repo._hole_scores[golpe.id]
+
+    async def rapida(self, creada: datetime, course=None, *, terminada=True) -> QuickMatch:
         """Una partida rapida terminada en el campo, creada en `creada` (UTC sin zona)."""
         nueva = QuickMatch.create(
             id=QuickMatchId.generate(),
@@ -174,7 +193,8 @@ class Escena:
         )
         participante = nueva.participants[0].participant_id
         nueva.start(scorer_ids=[participante])
-        nueva.complete()
+        if terminada:
+            nueva.complete()
         partida = QuickMatch.reconstruct(
             id=nueva.id,
             creator_id=nueva.creator_id,
@@ -662,6 +682,147 @@ class TestReopeningTheEarlierOne:
             assert await e.de(T.FIRST_TOURNAMENT) == [_id(grupo_posterior)]
 
 
+# ==================== 5b. Pisar el campo (Agustin, 22 oct, tras la revision) ====================
+
+
+class TestSteppingOnTheCourse:
+    """
+    «Campo nuevo» es la primera vez que pisaste el campo: la vuelta mas antigua
+    con al menos un hoyo jugado, computable o no. «Primer torneo», el primero
+    en que jugaste un hoyo. Nunca se quedan sin dueno.
+    """
+
+    async def test_a_withdrawn_first_round_in_the_same_tournament(self):
+        """Revisor: retirado en la ronda 1 y entrega la 2, mismo torneo y campo."""
+        e = await _escena()
+        torneo, entregada = await e.torneo(DIA, TARDE)
+        retirada = await e.world.group(
+            torneo,
+            await e.world.round(torneo, e.course, AYER, MANANA),
+            {e.ana: tarjeta(h10=None, h11=None)},
+            estados={e.ana: EstadoDeTarjeta.RETIRADO},
+            numero=2,
+        )
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(retirada)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(retirada)]
+        assert _id(entregada) != _id(retirada)
+
+    async def test_a_round_without_any_hole_does_not_count(self):
+        """Retirado sin jugar ni un hoyo: no piso el campo, se lo lleva la siguiente."""
+        e = await _escena()
+        torneo, entregada = await e.torneo(DIA, TARDE)
+        await e.world.group(
+            torneo,
+            await e.world.round(torneo, e.course, AYER, MANANA),
+            {e.ana: {}},
+            estados={e.ana: EstadoDeTarjeta.RETIRADO},
+            numero=2,
+        )
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(entregada)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(entregada)]
+
+    async def test_a_tournament_where_he_only_withdrew_is_his_first(self):
+        e = await _escena()
+        torneo = await e.world.competition(e.ana, enrolled=[e.ana], completed=False)
+        retirada = await e.world.group(
+            torneo,
+            await e.world.round(torneo, e.course, DIA, MANANA),
+            {e.ana: {1: 5, 2: 4, 3: None}},
+            estados={e.ana: EstadoDeTarjeta.RETIRADO},
+        )
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(retirada)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(retirada)]
+        assert [x.payload["holes_played"] for x in await e.eventos(T.NEW_COURSE)] == [3]
+
+    async def test_a_ryder_match_won_4_and_3_takes_both(self):
+        e = await _escena()
+        torneo, partido = await e.ryder(DIA, MANANA, dict.fromkeys(range(1, 16), PAR))
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(partido)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(partido)]
+        (evento,) = await e.eventos(T.NEW_COURSE)
+        assert evento.payload["holes_played"] == 15
+        assert evento.payload["kind"] == "MATCH"
+
+    @pytest.mark.parametrize("rapida_primero", [True, False])
+    async def test_an_incomplete_quick_match_before_the_tournament_takes_it(self, rapida_primero):
+        """Revisor: una partida rapida de 12 hoyos, terminada, antes del torneo."""
+        e = await _escena()
+        partida = await e.rapida(_a_las(AYER, 9))
+        await e.quitar_hoyos(partida, desde=13)
+        torneo, _ = await e.torneo(DIA, MANANA)
+
+        if rapida_primero:
+            await e.publicar_rapida(partida)
+            await e.cerrar(torneo)
+        else:
+            await e.cerrar(torneo)
+            await e.publicar_rapida(partida)
+
+        assert await e.de(T.NEW_COURSE) == [_id(partida)]
+        (evento,) = await e.eventos(T.NEW_COURSE)
+        assert evento.payload["holes_played"] == 12
+
+    async def test_a_quick_match_still_in_play_does_not_count(self):
+        e = await _escena()
+        await e.rapida(_a_las(AYER, 9), terminada=False)
+        torneo, grupo = await e.torneo(DIA, MANANA)
+
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(grupo)]
+
+    async def test_a_stale_computation_does_not_overwrite_the_inheritance(self, monkeypatch):
+        """
+        Revisor: B calcula con A cerrado (sin exclusivos); entretanto A se
+        reabre y B hereda; luego B escribe lo que calculo.
+        """
+        e = await _escena()
+        anterior, _ = await e.torneo(AYER, TARDE)
+        posterior, grupo = await e.torneo(DIA, MANANA)
+        await e.cerrar(anterior)
+        original = PublishTournamentAchievementsUseCase._calcular
+        hecho: list[bool] = []
+
+        async def _calcular_y_reabrir(self, competition_id_raw):
+            calculado = await original(self, competition_id_raw)
+            if competition_id_raw == _id(posterior) and not hecho:
+                hecho.append(True)
+                await e.reabrir(anterior)
+                assert await e.de(T.NEW_COURSE) == [_id(grupo)]
+            return calculado
+
+        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "_calcular", _calcular_y_reabrir)
+
+        await e.cerrar(posterior)
+
+        assert await e.de(T.NEW_COURSE) == [_id(grupo)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(grupo)]
+
+    async def test_a_trashed_quick_match_inherits_too(self):
+        """La papelera no cambia que piso el campo: tambien hereda al reabrir."""
+        e = await _escena()
+        torneo, grupo = await e.torneo(DIA, MANANA)
+        partida = await e.rapida(_a_las(DIA, 20))
+        await e.cerrar(torneo)
+        await e.publicar_rapida(partida)
+        partida.hide_for(partida.participants[0].participant_id)
+        async with e.qm:
+            await e.qm.quick_matches.update(partida)
+        assert await e.de(T.NEW_COURSE) == [_id(grupo)]
+
+        await e.reabrir(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(partida)]
+
+
 # ==================== 6. La papelera del autor ====================
 
 
@@ -756,21 +917,26 @@ class TestPayloadAndWhatIsPublished:
         (evento,) = await e.eventos(T.FIRST_TOURNAMENT)
         assert evento.payload["played_at"] == "2026-05-31T04:00:00Z"
 
-    async def test_a_withdrawn_first_round_dates_the_first_tournament(self):
-        """Se retiro en su primera vuelta: el torneo empezo ahi, aunque el logro cuelgue de otra."""
+    async def test_a_withdrawn_first_round_takes_both(self):
+        """
+        Se retiro en su primera vuelta, con hoyos jugados: ahi piso el campo y
+        empezo el torneo, asi que esa vuelta se lleva los dos (Agustin, 22 oct).
+        """
         e = await _escena()
-        torneo, grupo = await e.torneo(DIA, TARDE)
-        await e.world.group(
+        torneo, _ = await e.torneo(DIA, TARDE)
+        retirada = await e.world.group(
             torneo,
             await e.world.round(torneo, e.course, AYER, MANANA),
             {e.ana: tarjeta()},
             estados={e.ana: EstadoDeTarjeta.RETIRADO},
+            numero=2,
         )
         await e.cerrar(torneo)
 
-        (evento,) = await e.eventos(T.FIRST_TOURNAMENT)
-        assert evento.source_match_id == _id(grupo)
-        assert evento.payload["played_at"] == "2026-05-31T04:00:00Z"
+        for tipo in EXCLUSIVOS:
+            (evento,) = await e.eventos(tipo)
+            assert evento.source_match_id == _id(retirada)
+            assert evento.payload["played_at"] == "2026-05-31T04:00:00Z"
 
     async def test_republishing_keeps_the_same_event(self):
         """Idempotente: lo que ya estaba igual conserva su id y su fecha."""
@@ -806,6 +972,27 @@ class TestPayloadAndWhatIsPublished:
         await e.publicar_rapida(partida)
 
         assert await e.de(T.NEW_COURSE) == [_id(partida)]
+
+    async def test_an_older_published_one_without_history_blocks_a_new_one(self):
+        """
+        Uno publicado y anterior cuya vuelta ya no esta en el historial (de
+        antes de esta regla, o de un torneo borrado) sigue mandando.
+        """
+        e = await _escena()
+        viejo = ActivityEvent.create(
+            user_id=e.ana.id,
+            type=T.NEW_COURSE,
+            occurred_at=_a_las(AYER, 12),
+            source_match_id="torneo-borrado",
+            payload={"golf_course_id": str(e.course.id.value), "played_at": "2026-05-31T08:00:00Z"},
+        )
+        async with e.social:
+            await e.social.activity_events.add_many([viejo])
+        partida = await e.rapida(_a_las(DIA, 9))
+
+        await e.publicar_rapida(partida)
+
+        assert await e.de(T.NEW_COURSE) == ["torneo-borrado"]
 
     async def test_another_course_is_another_new_course(self):
         e = await _escena()
@@ -849,6 +1036,39 @@ class TestLocks:
         jugadores = sorted(f"player:{_id(u)}" for u in (e.ana, bea))
         assert candados == [_id(torneo), *jugadores]
 
+    async def test_reopening_locks_the_tournament_and_then_its_players(self, monkeypatch):
+        e = await _escena()
+        bea = await e.world.user()
+        torneo = await e.world.competition(e.ana, enrolled=[e.ana, bea], completed=False)
+        await e.world.group(
+            torneo,
+            await e.world.round(torneo, e.course, DIA, MANANA),
+            {e.ana: tarjeta(), bea: tarjeta()},
+        )
+        await e.cerrar(torneo)
+        llamadas: list[tuple[str, str]] = []
+        clase = type(e.social.activity_events)
+        borrar = clase.delete_for_competition
+
+        async def _candado(self, scope_id):
+            llamadas.append(("lock", scope_id))
+
+        async def _borra(self, *args, **kwargs):
+            llamadas.append(("delete", ""))
+            return await borrar(self, *args, **kwargs)
+
+        monkeypatch.setattr(clase, "lock_scope", _candado)
+        monkeypatch.setattr(clase, "delete_for_competition", _borra)
+
+        await e.reabrir(torneo)
+
+        jugadores = sorted(f"player:{_id(u)}" for u in (e.ana, bea))
+        assert llamadas[:4] == [
+            ("lock", _id(torneo)),
+            *[("lock", j) for j in jugadores],
+            ("delete", ""),
+        ]
+
     async def test_a_quick_match_locks_its_players(self, monkeypatch):
         e = await _escena()
         partida = await e.rapida(_a_las(DIA, 7))
@@ -862,3 +1082,68 @@ class TestLocks:
         await e.publicar_rapida(partida)
 
         assert candados == [f"player:{_id(e.ana)}"]
+
+
+# ==================== 9. Lo que cuesta reabrir ====================
+
+
+def _contar_lecturas(monkeypatch, e: Escena) -> list[str]:
+    """Cada llamada a un repositorio de competicion, partidas rapidas o campos."""
+    llamadas: list[str] = []
+    for uow in (e.world.comp, e.qm, e.world.golf):
+        for repo in vars(uow).values():
+            if not type(repo).__name__.endswith("Repository"):
+                continue
+            for nombre in dir(type(repo)):
+                metodo = getattr(repo, nombre)
+                if nombre.startswith("_") or not callable(metodo):
+                    continue
+
+                def _envolver(nombre=nombre, metodo=metodo, repo=repo):
+                    async def _contada(*args, **kwargs):
+                        llamadas.append(f"{type(repo).__name__}.{nombre}")
+                        return await metodo(*args, **kwargs)
+
+                    return _contada
+
+                monkeypatch.setattr(repo, nombre, _envolver())
+    return llamadas
+
+
+class TestTheCostOfReopening:
+    """Quien hereda se busca por lotes: las consultas no crecen con jugadores ni campos."""
+
+    async def _lecturas(self, monkeypatch, jugadores: int, campos: int) -> int:
+        e = await _escena()
+        otros = [await e.world.user() for _ in range(jugadores - 1)]
+        todos = [e.ana, *otros]
+        torneo = await e.world.competition(e.ana, enrolled=todos, completed=False)
+        for numero in range(campos):
+            campo = await e.world.course(e.ana, timezone=MADRID)
+            await e.world.group(
+                torneo,
+                await e.world.round(torneo, campo, DIA - timedelta(days=numero), MANANA),
+                {u: tarjeta() for u in todos},
+                numero=numero + 1,
+            )
+            partida_previa = await e.world.competition(e.ana, enrolled=todos)
+            await e.world.group(
+                partida_previa,
+                await e.world.round(partida_previa, campo, DIA + timedelta(days=5), TARDE),
+                {u: tarjeta() for u in todos},
+            )
+        await e.cerrar(torneo)
+        torneo.revert_to_in_progress()
+        await e.world.save_competition(torneo)
+        llamadas = _contar_lecturas(monkeypatch, e)
+
+        herederos = await e.torneos().heirs_of(_id(torneo))
+
+        assert herederos.tournaments
+        return len(llamadas)
+
+    async def test_the_same_reads_for_one_player_and_one_course_as_for_many(self, monkeypatch):
+        pocas = await self._lecturas(monkeypatch, jugadores=1, campos=1)
+        muchas = await self._lecturas(monkeypatch, jugadores=4, campos=3)
+
+        assert muchas == pocas

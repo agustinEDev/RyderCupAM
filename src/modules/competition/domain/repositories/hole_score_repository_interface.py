@@ -86,3 +86,11 @@ class HoleScoreRepositoryInterface(ABC):
         un jugador con historial de scores fallaria con un IntegrityError si no se bloquea antes.
         """
         pass
+
+    @abstractmethod
+    async def played_holes(self, match_ids: list[MatchId]) -> dict[tuple[MatchId, UserId], int]:
+        """
+        Cuantos hoyos jugo cada jugador en esos partidos: los que el o su
+        marcador apuntaron (la raya tambien). Solo salen las parejas con algun
+        hoyo. En una sola lectura; sin partidos, nada.
+        """

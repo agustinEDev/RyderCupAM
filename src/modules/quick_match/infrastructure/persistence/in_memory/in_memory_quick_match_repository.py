@@ -107,3 +107,12 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         ]
         results.sort(key=lambda x: x.created_at, reverse=True)
         return results
+
+    async def list_completed_for_users(self, user_ids: list[UserId]) -> list[QuickMatch]:
+        participantes = {ParticipantId(u.value) for u in user_ids}
+        return [
+            qm
+            for qm in self._quick_matches.values()
+            if qm.status == QuickMatchStatus.COMPLETED
+            and any(qm.is_participant(p) for p in participantes)
+        ]

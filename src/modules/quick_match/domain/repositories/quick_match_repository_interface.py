@@ -96,3 +96,12 @@ class QuickMatchRepositoryInterface(ABC):
         de ser «de los dos»: es lo que se enseña en el perfil del otro (BE-3).
         """
         pass
+
+    @abstractmethod
+    async def list_completed_for_users(self, user_ids: list[UserId]) -> list[QuickMatch]:
+        """
+        Todas las partidas terminadas en las que participa alguno de ellos,
+        tambien las que tenga en su papelera, sin tope ni orden: el historial
+        de campos tiene que ver hasta lo mas antiguo (22 oct 2026).
+        """
+        pass

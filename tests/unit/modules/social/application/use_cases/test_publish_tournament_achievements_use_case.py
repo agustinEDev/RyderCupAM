@@ -34,8 +34,11 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
+    InMemoryQuickMatchUnitOfWork,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
-    CourseRound,
+    PlayedRound,
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
@@ -48,6 +51,9 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
     ActivitySlice,
 )
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
+    PlayerCourseHistoryAdapter,
+)
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
 )
@@ -88,20 +94,27 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
 
     def __init__(self):
         self._vueltas: set = set()
+        # El historial de verdad sobre las uows del test: devuelve tambien la
+        # vuelta que se publica, que es de donde cuelga el logro (22 oct 2026)
+        self.real: PlayerCourseHistoryInterface | None = None
 
     def registra(self, user_id, golf_course_id: str, match_id: str) -> None:
-        self._vueltas.add((str(user_id.value), golf_course_id, match_id))
+        self._vueltas.add((user_id, golf_course_id, match_id))
 
-    async def first_round_on_course(self, user_id, golf_course_id: str, timezone):
+    async def played_rounds(self, user_ids):
+        reales = await self.real.played_rounds(user_ids) if self.real else []
         # Lo registrado se jugo hace mucho: es lo mas antiguo
-        return next(
-            (
-                CourseRound(instant=datetime(2000, 1, 1), source_id=partida)
-                for usuario, campo, partida in sorted(self._vueltas)
-                if usuario == str(user_id.value) and campo == golf_course_id
-            ),
-            None,
-        )
+        return reales + [
+            PlayedRound(
+                user_id=usuario,
+                golf_course_id=campo,
+                instant=datetime(2000, 1, 1),
+                source_id=partida,
+                holes_played=18,
+            )
+            for usuario, campo, partida in self._vueltas
+            if usuario in set(user_ids)
+        ]
 
 
 @pytest.fixture
@@ -266,8 +279,18 @@ def _use_case(
         golf_course_uow=golf_course_uow,
         user_uow=user_uow,
         differentials=differentials or _DifferentialsStub(),
-        history=history or _CourseHistoryFake(),
+        history=_con_historial_real(
+            history or _CourseHistoryFake(), competition_uow, golf_course_uow
+        ),
     )
+
+
+def _con_historial_real(history, competition_uow, golf_course_uow):
+    if isinstance(history, _CourseHistoryFake) and history.real is None:
+        history.real = PlayerCourseHistoryAdapter(
+            InMemoryQuickMatchUnitOfWork(), competition_uow, golf_course_uow
+        )
+    return history
 
 
 async def _feed_de(social_uow, user):
@@ -424,7 +447,11 @@ async def test_un_torneo_sin_cerrar_no_publica(
 async def test_una_tarjeta_incompleta_no_llega_al_feed(
     social_uow, competition_uow, golf_course_uow, user_uow
 ):
-    """Given una tarjeta con huecos / When se cierra / Then esa vuelta no cuenta."""
+    """
+    Given una tarjeta con huecos / When se cierra / Then esa vuelta no cuenta
+    para el birdie, pero piso el campo: «campo nuevo» y «primer torneo» si
+    (Agustin, 22 oct 2026).
+    """
     player = await _create_user(user_uow)
     rival = await _create_user(user_uow)
     course = await _create_course(golf_course_uow, player.id)
@@ -434,11 +461,13 @@ async def test_una_tarjeta_incompleta_no_llega_al_feed(
         competition_uow, course, player, rival, scores_by_hole=tarjeta
     )
 
-    publicados = await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
         str(competition.id.value)
     )
 
-    assert publicados == 0
+    assert sorted(e.type for e in await _feed_de(social_uow, player)) == sorted(
+        [ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT]
+    )
 
 
 async def test_un_torneo_que_no_existe_no_rompe(
@@ -521,9 +550,9 @@ class _ApagaAlJuzgar(_CourseHistoryFake):
         super().__init__()
         self._user = user
 
-    async def first_round_on_course(self, user_id, golf_course_id, timezone):
+    async def played_rounds(self, user_ids):
         self._user.set_activity_sharing(False)
-        return await super().first_round_on_course(user_id, golf_course_id, timezone)
+        return await super().played_rounds(user_ids)
 
 
 async def test_apagar_la_publicacion_antes_de_guardar_deja_el_logro_oculto(

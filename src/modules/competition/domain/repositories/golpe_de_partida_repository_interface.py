@@ -6,6 +6,7 @@ from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePart
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class GolpeDePartidaRepositoryInterface(ABC):
@@ -30,3 +31,12 @@ class GolpeDePartidaRepositoryInterface(ABC):
     @abstractmethod
     async def de_las_partidas(self, partida_ids: list[PartidaId]) -> list[GolpeDePartida]:
         """Los de varias partidas en una sola lectura, no una por partida (BE-3)."""
+
+    @abstractmethod
+    async def hoyos_jugados(
+        self, partida_ids: list[PartidaId]
+    ) -> dict[tuple[PartidaId, UserId], int]:
+        """
+        Cuantos hoyos tiene apuntados cada jugador en esas partidas (la raya
+        tambien), solo los que tienen alguno. En una sola lectura.
+        """

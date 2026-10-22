@@ -42,3 +42,14 @@ class InMemoryGolpeDePartidaRepository(GolpeDePartidaRepositoryInterface):
     async def de_las_partidas(self, partida_ids: list[PartidaId]) -> list[GolpeDePartida]:
         buscadas = set(partida_ids)
         return self._donde(lambda g: g.partida_id in buscadas)
+
+    async def hoyos_jugados(
+        self, partida_ids: list[PartidaId]
+    ) -> dict[tuple[PartidaId, UserId], int]:
+        buscadas = set(partida_ids)
+        jugados: dict[tuple[PartidaId, UserId], int] = {}
+        for golpe in self._golpes.values():
+            if golpe.partida_id in buscadas and golpe.apuntado:
+                clave = (golpe.partida_id, golpe.user_id)
+                jugados[clave] = jugados.get(clave, 0) + 1
+        return jugados

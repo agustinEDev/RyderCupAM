@@ -35,6 +35,10 @@ from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf
     InMemoryGolfCourseUnitOfWork,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
+from src.modules.quick_match.domain.entities.quick_match_hole_score import QuickMatchHoleScore
+from src.modules.quick_match.domain.value_objects.quick_match_hole_score_id import (
+    QuickMatchHoleScoreId,
+)
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
@@ -105,7 +109,9 @@ def _publisher(world, social_uow, qm_uow=None) -> PublishTournamentAchievementsU
         golf_course_uow=world.golf,
         user_uow=world.users,
         differentials=StatsPlayerDifferentialsAdapter(stats),
-        history=PlayerCourseHistoryAdapter(qm_uow or InMemoryQuickMatchUnitOfWork(), world.comp),
+        history=PlayerCourseHistoryAdapter(
+            qm_uow or InMemoryQuickMatchUnitOfWork(), world.comp, world.golf
+        ),
     )
 
 
@@ -503,6 +509,17 @@ async def _partida_rapida(qm_uow, user, course, creada: datetime | None = None) 
         )
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
+        # Con un hoyo jugado: sin ninguno no habria pisado el campo (22 oct 2026)
+        await qm_uow.quick_match_hole_scores.add(
+            QuickMatchHoleScore(
+                id=QuickMatchHoleScoreId.generate(),
+                quick_match_id=match.id,
+                hole_number=1,
+                participant_id=match.creator_participant_id,
+                score=4,
+                recorded_by_participant_id=match.creator_participant_id,
+            )
+        )
 
 
 # ==================== El mismo dia, por hora real (prueba de punta a punta, 22 oct) ====================
@@ -817,7 +834,7 @@ class TestFirstTournamentOnTheSameDay:
         """
         A: tarde entregada. B: manana retirado y noche entregada. B empezo antes
         para el jugador (el retirado jugo), asi que el logro es de B, colgado de
-        su primera vuelta entregada.
+        esa primera vuelta, aunque se retirara (Agustin, 22 oct 2026).
         """
         ana = await world.user()
         course = await world.course(ana)
@@ -826,13 +843,13 @@ class TestFirstTournamentOnTheSameDay:
         # B, el de id mayor: si decidiera el id, se lo llevaria A
         a, b = sorted((uno, otro), key=lambda c: str(c.id.value))
         await world.group(a, await world.round(a, course, DIA, TARDE), {ana: tarjeta()})
-        await world.group(
+        retirada = await world.group(
             b,
             await world.round(b, course, DIA, MANANA),
             {ana: tarjeta()},
             estados={ana: EstadoDeTarjeta.RETIRADO},
         )
-        noche = await world.group(
+        await world.group(
             b, await world.round(b, course, DIA, SessionType.EVENING), {ana: tarjeta()}, numero=2
         )
 
@@ -841,7 +858,7 @@ class TestFirstTournamentOnTheSameDay:
 
         primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
         assert [(e.payload["competition_id"], e.source_match_id) for e in primeros] == [
-            (str(b.id.value), str(noche.id.value))
+            (str(b.id.value), str(retirada.id.value))
         ]
 
     async def test_the_first_round_played_wins_not_the_start_date(self, world, social_uow):

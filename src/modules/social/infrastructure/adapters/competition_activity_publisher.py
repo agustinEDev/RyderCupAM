@@ -221,7 +221,9 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
     async def reopened(self, competition_id: CompetitionId) -> None:
         # Retira sus logros y, despues, los exclusivos los hereda lo que pasa a
         # ser lo mas antiguo. Al volver a cerrarlo se los vuelve a llevar
-        await self._notices.reopened(str(competition_id.value))
+        async with self._competition_uow:
+            inscritos = await self._competition_uow.enrollments.find_by_competition(competition_id)
+        await self._notices.reopened(str(competition_id.value), [e.user_id for e in inscritos])
         await self._ceder_los_exclusivos(competition_id)
 
     async def _ceder_los_exclusivos(self, competition_id: CompetitionId) -> None:

@@ -1794,7 +1794,7 @@ class ActivityUnitsOfWork:
 
     @property
     def history(self) -> PlayerCourseHistoryInterface:
-        return PlayerCourseHistoryAdapter(self.quick_match, self.competition)
+        return PlayerCourseHistoryAdapter(self.quick_match, self.competition, self.golf_course)
 
 
 def get_activity_units_of_work(
