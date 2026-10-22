@@ -23,7 +23,13 @@ from src.modules.social.application.feed_scope import (
     pending_requests,
     resolve_feed_scope,
 )
-from src.modules.social.application.feed_visibility import sin_apuntados_a_privados
+from src.modules.social.application.feed_visibility import (
+    sin_apuntados_a_privados,
+    sin_invitaciones_cerradas,
+)
+from src.modules.social.application.ports.invitation_availability_interface import (
+    InvitationAvailabilityInterface,
+)
 from src.modules.social.application.ports.tournament_visibility_interface import (
     TournamentVisibilityInterface,
 )
@@ -80,9 +86,11 @@ class GetFriendsFeedUseCase:
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         reloj: Callable[[], datetime] = utc_now,
         tournaments: TournamentVisibilityInterface | None = None,
+        invitations: InvitationAvailabilityInterface | None = None,
     ):
         self._social_uow = social_uow
         self._tournaments = tournaments
+        self._invitations = invitations
         self._user_uow = user_uow
         self._golf_course_uow = golf_course_uow
         self._reloj = reloj
@@ -119,6 +127,7 @@ class GetFriendsFeedUseCase:
         # pagina queda corta pero no se pierde ni se repite nada (E, 22 oct)
         siguiente = build_cursor(eventos, limit)
         eventos = await sin_apuntados_a_privados(eventos, self._tournaments)
+        eventos = await sin_invitaciones_cerradas(eventos, self._invitations)
 
         autores = await autores_de(
             self._social_uow,

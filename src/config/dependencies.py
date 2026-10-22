@@ -411,6 +411,9 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.invitation_availability_interface import (
+    InvitationAvailabilityInterface,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
     PlayerCourseHistoryInterface,
 )
@@ -488,6 +491,9 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
 )
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
     CompetitionActivityPublisher,
+)
+from src.modules.social.infrastructure.adapters.invitation_availability_adapter import (
+    InvitationAvailabilityAdapter,
 )
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
@@ -1667,14 +1673,24 @@ def get_tournament_visibility(
     return TournamentVisibilityAdapter(competition_uow)
 
 
+def get_invitation_availability(
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> InvitationAvailabilityInterface:
+    """Proveedor del puerto de invitaciones abiertas del feed (revision final, 22 oct)."""
+    return InvitationAvailabilityAdapter(competition_uow)
+
+
 def get_player_activity_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     tournaments: TournamentVisibilityInterface = Depends(get_tournament_visibility),
+    invitations: InvitationAvailabilityInterface = Depends(get_invitation_availability),
 ) -> GetPlayerActivityUseCase:
     """Proveedor del caso de uso GetPlayerActivityUseCase."""
-    return GetPlayerActivityUseCase(social_uow, user_uow, golf_course_uow, tournaments=tournaments)
+    return GetPlayerActivityUseCase(
+        social_uow, user_uow, golf_course_uow, tournaments=tournaments, invitations=invitations
+    )
 
 
 def get_friends_feed_use_case(
@@ -1682,9 +1698,12 @@ def get_friends_feed_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     tournaments: TournamentVisibilityInterface = Depends(get_tournament_visibility),
+    invitations: InvitationAvailabilityInterface = Depends(get_invitation_availability),
 ) -> GetFriendsFeedUseCase:
     """Proveedor del caso de uso GetFriendsFeedUseCase."""
-    return GetFriendsFeedUseCase(social_uow, user_uow, golf_course_uow, tournaments=tournaments)
+    return GetFriendsFeedUseCase(
+        social_uow, user_uow, golf_course_uow, tournaments=tournaments, invitations=invitations
+    )
 
 
 def get_feed_unseen_count_use_case(

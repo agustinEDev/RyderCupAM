@@ -18,9 +18,11 @@ from tests.conftest import (
     set_auth_cookies,
 )
 from tests.integration.api.v1.helpers.feed_helper import (
+    caducar_invitacion,
     hacer_privada,
     hacerse_amigos,
     insertar_eventos,
+    rechazar_sin_avisar,
 )
 from tests.integration.api.v1.test_quick_match_endpoints import _create_approved_golf_course
 
@@ -274,3 +276,32 @@ async def test_e_el_contador_cuenta_lo_mismo_que_se_ve(client: AsyncClient):
     assert contador == {"unseen_count": 3}
     assert feed["unseen_count"] == 3
     assert len(feed["events"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_una_invitacion_caducada_sin_tocar_no_sale_ni_cuenta(client: AsyncClient):
+    """
+    Revision final (22 oct). Given una invitacion avisada que caduca sin que
+    nadie la toque / When pido el feed y el contador / Then ni sale ni cuenta.
+    """
+    yo, invitacion = await _invitado(client, "be2cad")
+    set_auth_cookies(client, yo["cookies"])
+    assert (await client.get(CONTADOR)).json() == {"unseen_count": 1}
+
+    await caducar_invitacion(invitacion)
+
+    set_auth_cookies(client, yo["cookies"])
+    assert (await client.get(CONTADOR)).json() == {"unseen_count": 0}
+    assert await _tipos_del_feed(client, yo) == []
+
+
+@pytest.mark.asyncio
+async def test_una_invitacion_ya_no_pendiente_no_sale_ni_cuenta(client: AsyncClient):
+    """Revision final. Given su aviso se quedo al rechazarla / Then ni sale ni cuenta."""
+    yo, invitacion = await _invitado(client, "be2dec")
+
+    await rechazar_sin_avisar(invitacion)
+
+    set_auth_cookies(client, yo["cookies"])
+    assert (await client.get(CONTADOR)).json() == {"unseen_count": 0}
+    assert await _tipos_del_feed(client, yo) == []

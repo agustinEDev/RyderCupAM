@@ -163,8 +163,14 @@ async def count_unseen(
     """
     # Sin los apuntados a torneos que ahora son privados: el feed no los enseña
     # (regla E), y el numero tiene que decir lo mismo que la pantalla
+    # Ni las invitaciones que ya no se pueden aceptar, con el reloj de la propia
+    # invitacion (`Invitation.is_expired`, hora local sin zona)
     tarjetas = await events.count_in(
-        scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP, skip_private_enrollments=True
+        scope.slices,
+        since=scope.last_seen_at,
+        cap=UNSEEN_CAP,
+        skip_private_enrollments=True,
+        open_invitations_at=datetime.now(),
     )
     solicitudes = sum(
         1

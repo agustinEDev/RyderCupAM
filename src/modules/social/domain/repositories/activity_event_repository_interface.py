@@ -78,6 +78,7 @@ class ActivityEventRepositoryInterface(ABC):
         since: datetime | None,
         cap: int | None = None,
         skip_private_enrollments: bool = False,
+        open_invitations_at: datetime | None = None,
     ) -> int:
         """
         Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
@@ -90,6 +91,10 @@ class ActivityEventRepositoryInterface(ABC):
         Con `skip_private_enrollments` no cuenta los ENROLLED_IN_TOURNAMENT de
         torneos que ahora son privados: el feed no los enseña (regla E, 22 oct
         2026), y el numero tiene que decir lo mismo que la pantalla.
+
+        Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT de
+        invitaciones que en ese instante ya no se pueden aceptar (no pendientes,
+        caducadas o borradas), que el feed tampoco enseña.
         """
 
     @abstractmethod

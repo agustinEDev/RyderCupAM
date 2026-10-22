@@ -90,3 +90,32 @@ async def hacer_privada(competition_id: str) -> None:
             )
     finally:
         await engine.dispose()
+
+
+async def caducar_invitacion(invitation_id: str) -> None:
+    """La deja caducada por fecha sin pasar por la API: sigue PENDING en la tabla."""
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "UPDATE invitations SET expires_at = now() - interval '1 day', "
+                    "created_at = now() - interval '2 days' WHERE id = :id"
+                ),
+                {"id": invitation_id},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def rechazar_sin_avisar(invitation_id: str) -> None:
+    """La deja DECLINED sin pasar por la API: su aviso se queda, como si fallara retirarlo."""
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("UPDATE invitations SET status = 'DECLINED' WHERE id = :id"),
+                {"id": invitation_id},
+            )
+    finally:
+        await engine.dispose()

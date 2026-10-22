@@ -21,6 +21,9 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         # En memoria no hay tabla de competiciones: los tests dicen aqui que
         # torneos son privados para `skip_private_enrollments`
         self.private_competition_ids: set[str] = set()
+        # Ni las invitaciones: las que siguen abiertas, para `open_invitations_at`
+        # (None = no se filtra)
+        self.open_invitation_ids: set[str] | None = None
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -59,6 +62,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         since: datetime | None,
         cap: int | None = None,
         skip_private_enrollments: bool = False,
+        open_invitations_at: datetime | None = None,
     ) -> int:
         # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
@@ -68,9 +72,17 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
                 if self._entra(e, slices)
                 and (since is None or e.published_at > since)
                 and not (skip_private_enrollments and self._apuntado_a_privado(e))
+                and not (open_invitations_at is not None and self._invitacion_cerrada(e))
             }
         )
         return cuenta if cap is None else min(cuenta, cap)
+
+    def _invitacion_cerrada(self, event: ActivityEvent) -> bool:
+        return (
+            event.type == ActivityEventType.INVITED_TO_TOURNAMENT
+            and self.open_invitation_ids is not None
+            and event.source_match_id not in self.open_invitation_ids
+        )
 
     def _apuntado_a_privado(self, event: ActivityEvent) -> bool:
         return (
