@@ -103,6 +103,10 @@ class _Grupos:
     otros_torneos: dict = field(default_factory=dict)
     # (grupo, jugador) -> hoyo -> golpes validados
     validados: dict = field(default_factory=dict)
+    # Por jugador, las rondas de este torneo en las que jugo su grupo con
+    # cualquier tarjeta salvo NO_PRESENTADO: deciden cuando empezo el torneo
+    # para el, con el mismo criterio que los otros torneos
+    rondas_jugadas: dict = field(default_factory=dict)
 
 
 class PublishTournamentAchievementsUseCase:
@@ -295,7 +299,12 @@ class PublishTournamentAchievementsUseCase:
 
                 user_id_raw = str(enrollment.user_id.value)
                 otros_por_jugador[user_id_raw] = otros_torneos
-                jugadas = [r for _, r in del_torneo] + [rounds.get(g.round_id) for g in sus_grupos]
+                # Cuando empezo este torneo para el: con el mismo criterio que
+                # los otros (todo menos NO_PRESENTADO), aunque el logro cuelgue
+                # de su primera vuelta entregada (revisor sin contexto, 22 oct)
+                jugadas = [r for _, r in del_torneo] + [
+                    rounds.get(r) for r in grupos.rondas_jugadas.get(enrollment.user_id, ())
+                ]
                 primera_propia[user_id_raw] = min(
                     (_orden_de_ronda(r) for r in jugadas if r is not None),
                     default=(date.max, _SIN_HORA),
@@ -450,18 +459,14 @@ class PublishTournamentAchievementsUseCase:
             return leidos
 
         for partida in partidas:
-            tarjetas = partida.estados_de_tarjeta
             for user_id in buscados & set(partida.user_ids):
-                estado = tarjetas[user_id]
-                if partida.competition_id != competition_id:
-                    if estado != EstadoDeTarjeta.NO_PRESENTADO:
-                        leidos.otros_torneos.setdefault(user_id, {}).setdefault(
-                            str(partida.competition_id.value), set()
-                        ).add(partida.round_id)
-                elif estado == EstadoDeTarjeta.ENTREGADA:
-                    # Ni los no presentados ni los retirados cuentan (L8)
-                    leidos.del_torneo.setdefault(user_id, []).append(partida)
+                _apuntar_grupo(leidos, partida, user_id, competition_id)
 
+        jugadas = {r for rondas in leidos.rondas_jugadas.values() for r in rondas}
+        faltan = jugadas - set(rounds)
+        if faltan:
+            for ronda in await self._competition_uow.rounds.find_by_ids(list(faltan)):
+                rounds[ronda.id] = ronda
         del_torneo = {p.id: p for grupos in leidos.del_torneo.values() for p in grupos}
         if not del_torneo:
             return leidos
@@ -474,10 +479,6 @@ class PublishTournamentAchievementsUseCase:
                 leidos.validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (
                     golpe.golpes_validados
                 )
-        faltan = {p.round_id for p in del_torneo.values()} - set(rounds)
-        if faltan:
-            for ronda in await self._competition_uow.rounds.find_by_ids(list(faltan)):
-                rounds[ronda.id] = ronda
         return leidos
 
     async def _grupo_a_vuelta(
@@ -660,6 +661,26 @@ class PublishTournamentAchievementsUseCase:
         if logro.type == ActivityEventType.FIRST_TOURNAMENT:
             payload.pop("holes", None)
         return payload
+
+
+def _apuntar_grupo(leidos: _Grupos, partida, user_id: UserId, competition_id) -> None:
+    """
+    Donde va un grupo terminado de un inscrito: en otro torneo, que ya lo jugo
+    (salvo NO_PRESENTADO); en este, la ronda en que jugo (salvo NO_PRESENTADO)
+    y, si entrego la tarjeta, el grupo del que salen sus logros.
+    """
+    estado = partida.estados_de_tarjeta[user_id]
+    if estado == EstadoDeTarjeta.NO_PRESENTADO:
+        return
+    if partida.competition_id != competition_id:
+        leidos.otros_torneos.setdefault(user_id, {}).setdefault(
+            str(partida.competition_id.value), set()
+        ).add(partida.round_id)
+        return
+    leidos.rondas_jugadas.setdefault(user_id, set()).add(partida.round_id)
+    if estado == EstadoDeTarjeta.ENTREGADA:
+        # Ni los no presentados ni los retirados cuentan (L8)
+        leidos.del_torneo.setdefault(user_id, []).append(partida)
 
 
 def _momento_de_la_ronda(ronda, timezone: str | None) -> PlayedBefore:

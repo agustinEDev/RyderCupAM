@@ -23,6 +23,7 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
@@ -795,6 +796,37 @@ class TestFirstTournamentOnTheSameDay:
         await _publisher(world, social_uow).execute(str(tarde.id.value))
 
         assert await self._primeros(social_uow, ana) == [str(tarde.id.value)]
+
+    async def test_a_withdrawn_round_counts_to_decide_who_was_first(self, world, social_uow):
+        """
+        A: tarde entregada. B: manana retirado y noche entregada. B empezo antes
+        para el jugador (el retirado jugo), asi que el logro es de B, colgado de
+        su primera vuelta entregada.
+        """
+        ana = await world.user()
+        course = await world.course(ana)
+        uno = await world.competition(ana, enrolled=[ana])
+        otro = await world.competition(ana, enrolled=[ana])
+        # B, el de id mayor: si decidiera el id, se lo llevaria A
+        a, b = sorted((uno, otro), key=lambda c: str(c.id.value))
+        await world.group(a, await world.round(a, course, DIA, TARDE), {ana: tarjeta()})
+        await world.group(
+            b,
+            await world.round(b, course, DIA, MANANA),
+            {ana: tarjeta()},
+            estados={ana: EstadoDeTarjeta.RETIRADO},
+        )
+        noche = await world.group(
+            b, await world.round(b, course, DIA, SessionType.EVENING), {ana: tarjeta()}, numero=2
+        )
+
+        await _publisher(world, social_uow).execute(str(a.id.value))
+        await _publisher(world, social_uow).execute(str(b.id.value))
+
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        assert [(e.payload["competition_id"], e.source_match_id) for e in primeros] == [
+            (str(b.id.value), str(noche.id.value))
+        ]
 
     async def test_a_tournament_that_started_earlier_still_wins(self, world, social_uow):
         """El dia de inicio sigue mandando: la hora solo desempata el mismo dia."""
