@@ -1,7 +1,7 @@
 """Caso de Uso: Publicar en el feed los logros de un torneo terminado."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time
 from decimal import Decimal
 
@@ -10,6 +10,7 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -59,6 +60,21 @@ class _TournamentRound:
     holes: list[PlayedHole]
     # Con la publicacion apagada el logro se guarda solo para el
     visible_to_friends: bool
+    # Lo que el logro necesita para abrir su tarjeta, si no es un partido de
+    # Ryder: el grupo de stroke play y su torneo (bloque L)
+    link: dict = field(default_factory=dict)
+
+
+@dataclass
+class _Grupos:
+    """Lo leido de los grupos de stroke play de los inscritos (bloque L)."""
+
+    # Por jugador, sus grupos de este torneo con la tarjeta entregada
+    del_torneo: dict = field(default_factory=dict)
+    # Por jugador, los otros torneos de stroke play en los que jugo
+    otros_torneos: dict = field(default_factory=dict)
+    # (grupo, jugador) -> hoyo -> golpes validados
+    validados: dict = field(default_factory=dict)
 
 
 class PublishTournamentAchievementsUseCase:
@@ -151,6 +167,9 @@ class PublishTournamentAchievementsUseCase:
         """
         Las vueltas publicables del torneo, agrupadas por jugador, y quien
         estrena torneo con este.
+
+        Salen de los partidos de la Ryder y de los grupos de salida del stroke
+        play (bloque L): un torneo tiene unos u otros, y aqui da igual cuales.
         """
         vueltas: dict[str, list[_TournamentRound]] = {}
         estrena_torneo: dict[str, bool] = {}
@@ -166,6 +185,7 @@ class PublishTournamentAchievementsUseCase:
             )
             courses: dict = {}
             rounds: dict = {}
+            grupos = await self._grupos(competition_id, [e.user_id for e in enrollments], rounds)
 
             for enrollment in enrollments:
                 # Con la publicacion apagada tambien se publica, pero solo para
@@ -174,26 +194,13 @@ class PublishTournamentAchievementsUseCase:
                 if user is None:
                     continue
 
-                partidos = await self._competition_uow.matches.find_completed_for_player(
-                    enrollment.user_id, limit=MAX_HISTORY_LOOKUP
+                otros_torneos = set(grupos.otros_torneos.get(enrollment.user_id, set()))
+                del_torneo = await self._partidos(
+                    enrollment.user_id, competition_id, rounds, otros_torneos
                 )
 
-                del_torneo = []
-                otros_torneos = set()
-                for partido in partidos:
-                    if partido.round_id not in rounds:
-                        rounds[partido.round_id] = await self._competition_uow.rounds.find_by_id(
-                            partido.round_id
-                        )
-                    ronda = rounds[partido.round_id]
-                    if ronda is None:
-                        continue
-                    if ronda.competition_id == competition_id:
-                        del_torneo.append((partido, ronda))
-                    else:
-                        otros_torneos.add(str(ronda.competition_id.value))
-
-                if not del_torneo:
+                sus_grupos = grupos.del_torneo.get(enrollment.user_id, [])
+                if not del_torneo and not sus_grupos:
                     continue
 
                 user_id_raw = str(enrollment.user_id.value)
@@ -206,13 +213,169 @@ class PublishTournamentAchievementsUseCase:
                     if vuelta is not None:
                         vueltas.setdefault(user_id_raw, []).append(vuelta)
 
+                for grupo in sus_grupos:
+                    vuelta = await self._grupo_a_vuelta(
+                        grupo,
+                        rounds.get(grupo.round_id),
+                        enrollment.user_id,
+                        courses,
+                        grupos.validados,
+                        user.share_activity,
+                    )
+                    if vuelta is not None:
+                        vueltas.setdefault(user_id_raw, []).append(vuelta)
+
         return vueltas, estrena_torneo
+
+    async def _partidos(
+        self, user_id: UserId, competition_id: CompetitionId, rounds: dict, otros_torneos: set
+    ) -> list:
+        """
+        Sus partidos de la Ryder en este torneo, con su ronda. Los de otros
+        torneos solo dicen que ya los jugo: se apuntan en `otros_torneos`.
+        """
+        partidos = await self._competition_uow.matches.find_completed_for_player(
+            user_id, limit=MAX_HISTORY_LOOKUP
+        )
+        del_torneo = []
+        for partido in partidos:
+            if partido.round_id not in rounds:
+                rounds[partido.round_id] = await self._competition_uow.rounds.find_by_id(
+                    partido.round_id
+                )
+            ronda = rounds[partido.round_id]
+            if ronda is None:
+                continue
+            if ronda.competition_id == competition_id:
+                del_torneo.append((partido, ronda))
+            else:
+                otros_torneos.add(str(ronda.competition_id.value))
+        return del_torneo
+
+    async def _grupos(
+        self, competition_id: CompetitionId, user_ids: list[UserId], rounds: dict
+    ) -> "_Grupos":
+        """
+        Los grupos de stroke play que importan para publicar, leidos de una vez
+        para todos los inscritos: los de este torneo, con sus golpes validados,
+        y en que otros torneos jugo ya cada uno (para el primer torneo).
+
+        Un no presentado no jugo ese torneo, asi que no le quita el estreno a
+        nadie; quien se retiro si lo jugo. Las rondas se guardan en `rounds`
+        para no volver a leerlas.
+        """
+        leidos = _Grupos()
+        if not user_ids:
+            return leidos
+        buscados = set(user_ids)
+        partidas = await self._competition_uow.partidas.completadas_de_jugadores(user_ids)
+        if not partidas:
+            return leidos
+
+        for partida in partidas:
+            tarjetas = partida.estados_de_tarjeta
+            for user_id in buscados & set(partida.user_ids):
+                estado = tarjetas[user_id]
+                if partida.competition_id != competition_id:
+                    if estado != EstadoDeTarjeta.NO_PRESENTADO:
+                        leidos.otros_torneos.setdefault(user_id, set()).add(
+                            str(partida.competition_id.value)
+                        )
+                elif estado == EstadoDeTarjeta.ENTREGADA:
+                    # Ni los no presentados ni los retirados cuentan (L8)
+                    leidos.del_torneo.setdefault(user_id, []).append(partida)
+
+        del_torneo = {p.id: p for grupos in leidos.del_torneo.values() for p in grupos}
+        if not del_torneo:
+            return leidos
+        for golpe in await self._competition_uow.golpes_de_partida.de_las_partidas(
+            list(del_torneo)
+        ):
+            # Solo lo validado (jugador y marcador coinciden) y con numero: la
+            # raya deja el hoyo sin golpes, como en la Ryder (`own_score`)
+            if golpe.validado and golpe.golpes_validados is not None:
+                leidos.validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (
+                    golpe.golpes_validados
+                )
+        faltan = {p.round_id for p in del_torneo.values()} - set(rounds)
+        if faltan:
+            for ronda in await self._competition_uow.rounds.find_by_ids(list(faltan)):
+                rounds[ronda.id] = ronda
+        return leidos
+
+    async def _grupo_a_vuelta(
+        self,
+        grupo,
+        ronda,
+        user_id: UserId,
+        courses: dict,
+        validados: dict,
+        visible_to_friends: bool,
+    ) -> _TournamentRound | None:
+        """
+        La vuelta de un jugador en su grupo de stroke play, o None si su
+        tarjeta no cuenta: la misma regla que un partido (`countable_holes`
+        sobre la tarjeta de su barra), con los golpes validados del grupo.
+        """
+        if ronda is None:
+            return None
+        jugador = next((j for j in grupo.jugadores if j.user_id == user_id), None)
+        vuelta = await self._vuelta_de(
+            ronda,
+            courses,
+            validados.get((grupo.id, user_id), {}),
+            jugador,
+            match_id=str(grupo.id.value),
+            user_id=user_id,
+            visible_to_friends=visible_to_friends,
+        )
+        if vuelta is None:
+            return None
+        return replace(
+            vuelta,
+            link={
+                "kind": "TEE_GROUP",
+                "group_id": str(grupo.id.value),
+                "competition_id": str(grupo.competition_id.value),
+            },
+        )
 
     async def _a_vuelta(
         self, partido, ronda, user_id: UserId, courses: dict, visible_to_friends: bool
     ) -> _TournamentRound | None:
+        """La vuelta de un jugador en un partido, o None si su tarjeta no cuenta."""
+        hole_scores = await self._competition_uow.hole_scores.find_by_match_and_player(
+            partido.id, user_id
+        )
+        scores_by_hole = {
+            hole_score.hole_number: hole_score.own_score
+            for hole_score in hole_scores
+            if hole_score.own_score is not None
+        }
+        return await self._vuelta_de(
+            ronda,
+            courses,
+            scores_by_hole,
+            partido.find_player(user_id),
+            match_id=str(partido.id.value),
+            user_id=user_id,
+            visible_to_friends=visible_to_friends,
+        )
+
+    async def _vuelta_de(
+        self,
+        ronda,
+        courses: dict,
+        scores_by_hole: dict,
+        jugador,
+        *,
+        match_id: str,
+        user_id: UserId,
+        visible_to_friends: bool,
+    ) -> _TournamentRound | None:
         """
-        La vuelta de un jugador en un partido, o None si su tarjeta no cuenta.
+        Una tarjeta convertida en vuelta, o None si no forma una: la comparten
+        el partido de la Ryder y el grupo de stroke play.
 
         `courses` cachea los campos entre partidos: un torneo entero suele
         jugarse en uno o dos, y sin esto se consultaria el mismo por cada
@@ -226,17 +389,8 @@ class PublishTournamentAchievementsUseCase:
         if course is None:
             return None
 
-        hole_scores = await self._competition_uow.hole_scores.find_by_match_and_player(
-            partido.id, user_id
-        )
-        scores_by_hole = {
-            hole_score.hole_number: hole_score.own_score
-            for hole_score in hole_scores
-            if hole_score.own_score is not None
-        }
         # El par y el índice son de la barra que juega: un birdie se mide
         # contra el par de su tarjeta, no contra el del campo
-        jugador = partido.find_player(user_id)
         jugados = countable_holes(
             scores_by_hole,
             course.hole_card_for(jugador.tee_color, jugador.tee_gender)
@@ -248,7 +402,7 @@ class PublishTournamentAchievementsUseCase:
 
         return _TournamentRound(
             user_id=user_id,
-            match_id=str(partido.id.value),
+            match_id=match_id,
             golf_course_id=str(ronda.golf_course_id.value),
             occurred_at=datetime.combine(ronda.round_date, _MEDIODIA_UTC),
             visible_to_friends=visible_to_friends,
@@ -300,6 +454,9 @@ class PublishTournamentAchievementsUseCase:
             "holes_played": len(vuelta.holes),
             # Distingue en el feed una vuelta de torneo de una entre amigos
             "from_tournament": True,
+            # En stroke play, `kind` TEE_GROUP, `group_id` y `competition_id`:
+            # el logro abre la tarjeta del grupo, no la de un partido
+            **vuelta.link,
         }
         if logro.count > 1:
             payload["count"] = logro.count

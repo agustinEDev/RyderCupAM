@@ -7,6 +7,8 @@ from decimal import Decimal
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
@@ -78,6 +80,28 @@ class _ComputableRound:
     holes: list[HoleOutcome] = field(default_factory=list)
     golf_course_id: str | None = None
     golf_course_name: str | None = None
+
+
+@dataclass(frozen=True)
+class _ValidatedHole:
+    """
+    Un hoyo validado de un grupo de stroke play, con la forma de la tarjeta de
+    un partido (`HoleScore`): asi la vuelta se mide con el mismo recorrido.
+    `own_score` nulo es una raya validada.
+    """
+
+    hole_number: int
+    own_score: int | None
+    own_submitted: bool = True
+
+
+@dataclass(frozen=True)
+class _GroupPlayer:
+    """El jugador en su grupo, con la forma del jugador de un partido (`MatchPlayer`)."""
+
+    player_handicap: Decimal
+    tee_color: object
+    tee_gender: object
 
 
 class GetPlayerStatsUseCase:
@@ -221,10 +245,16 @@ class GetPlayerStatsUseCase:
             scratch_competitions,
         )
 
-        # Las dos fuentes llegan ordenadas por su cuenta; el registro del WHS es
+        stroke_play_rounds = await self._collect_stroke_play_rounds(
+            user_id, golf_course_id, handicap
+        )
+
+        # Las fuentes llegan ordenadas por su cuenta; el registro del WHS es
         # cronológico y no distingue de dónde salió cada vuelta
         return sorted(
-            quick_rounds + competition_rounds, key=lambda item: item.played_on, reverse=True
+            quick_rounds + competition_rounds + stroke_play_rounds,
+            key=lambda item: item.played_on,
+            reverse=True,
         )
 
     async def execute(
@@ -434,56 +464,165 @@ class GetPlayerStatsUseCase:
                 if course is None:
                     continue
 
-                hole_scores = scorecards.get(match.id, [])
-                player = self._find_match_player(match, user_id)
-                hole_card = self._hole_card(course, player)
-                playing_handicap = tournament_personal_handicap(
-                    course,
-                    player,
-                    profile_handicap,
+                tournament_round = self._tournament_round(
+                    course=course,
+                    round_=round_,
+                    player=self._find_match_player(match, user_id),
+                    hole_scores=scorecards.get(match.id, []),
+                    profile_handicap=profile_handicap,
                     scratch=round_.competition_id in scratch_competitions,
                 )
-                outcomes = self._competition_hole_outcomes(hole_scores, hole_card, playing_handicap)
-                if outcomes is None:
-                    continue
-                to_par = self._to_eighteen(
-                    sum(outcome.net_to_par for outcome in outcomes), len(outcomes)
+                if tournament_round is not None:
+                    results.append(tournament_round)
+
+        return results
+
+    def _tournament_round(
+        self,
+        course,
+        round_,
+        player,
+        hole_scores: list,
+        profile_handicap: float | None,
+        scratch: bool,
+    ) -> _ComputableRound | None:
+        """
+        La vuelta de un jugador en un torneo, o None si su tarjeta no forma una.
+
+        La comparten el partido de la Ryder y el grupo de stroke play (L10): las
+        dos se miden igual —la vuelta propia, con el índice que guardó el torneo
+        y su barra— y no puede haber dos copias de esa cuenta.
+        """
+        hole_card = self._hole_card(course, player)
+        playing_handicap = tournament_personal_handicap(
+            course, player, profile_handicap, scratch=scratch
+        )
+        outcomes = self._competition_hole_outcomes(hole_scores, hole_card, playing_handicap)
+        if outcomes is None:
+            return None
+        to_par = self._to_eighteen(sum(outcome.net_to_par for outcome in outcomes), len(outcomes))
+
+        # Por `own_submitted`, no por si hay número: la raya (hoyo recogido)
+        # está anotada y sin número, y el calculador la cuenta como doble
+        # bogey. Filtrándola, un solo hoyo recogido dejaba la vuelta entera
+        # fuera de la media y del diferencial.
+        scores_by_hole = {
+            hole_score.hole_number: hole_score.own_score
+            for hole_score in hole_scores
+            if hole_score.own_submitted
+        }
+        # El diferencial mide los mismos hoyos que la media, no el campo
+        # entero: en media vuelta, los otros nueve no se jugaron
+        played = self._computable_holes(scores_by_hole, hole_card) or []
+        holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
+        return _ComputableRound(
+            played_on=round_.round_date,
+            to_par=to_par,
+            played_round=self._to_played_round(
+                course=course,
+                holes=holes,
+                scores_by_hole=scores_by_hole,
+                # El torneo guardó el hándicap del jugador cuando se generó: una
+                # vuelta de hace meses se mide con el hándicap que tenía
+                # entonces, no con el de hoy
+                handicap=self._match_player_handicap(player, profile_handicap),
+                tee_color=player.tee_color if player else None,
+                tee_gender=player.tee_gender if player else None,
+            ),
+            holes=outcomes,
+            golf_course_id=str(course.id) if course is not None else None,
+            golf_course_name=str(course.name) if course is not None else None,
+        )
+
+    async def _collect_stroke_play_rounds(
+        self,
+        user_id: UserId,
+        golf_course_id: GolfCourseId | None,
+        profile_handicap: float | None,
+    ) -> list[_ComputableRound]:
+        """
+        Vueltas de stroke play de torneo (grupos de salida) computables (L10).
+
+        Cuenta su tarjeta ENTREGADA de un grupo acabado, con los hoyos
+        VALIDADOS (jugador y marcador coinciden), de un torneo ya cerrado:
+
+        - Ni el no presentado ni el retirado: no entregaron vuelta.
+        - El torneo, cerrado: hasta entonces el organizador aún puede corregir
+          tarjetas, y la «mejor marca» del cierre se mide contra el mejor
+          diferencial de justo antes de cerrar. Si las tarjetas contaran desde
+          que acaba el grupo, esa marca previa ya las incluiría y el récord no
+          saldría nunca.
+
+        Todo por lotes: grupos, golpes, rondas, torneos y campos, una consulta
+        de cada, sean cuantos sean los grupos.
+        """
+        async with self._competition_uow:
+            uow = self._competition_uow
+            groups = [
+                group
+                for group in await uow.partidas.completadas_de_jugadores([user_id])
+                if group.estados_de_tarjeta.get(user_id) == EstadoDeTarjeta.ENTREGADA
+            ]
+            if not groups:
+                return []
+            rounds = {
+                r.id: r for r in await uow.rounds.find_by_ids(list({g.round_id for g in groups}))
+            }
+            competitions = {
+                c.id: c
+                for c in await uow.competitions.find_by_ids(
+                    list({g.competition_id for g in groups})
+                )
+            }
+            strokes = await uow.golpes_de_partida.de_las_partidas([g.id for g in groups])
+
+        validated: dict = {}
+        for stroke in strokes:
+            if stroke.user_id == user_id and stroke.validado:
+                validated.setdefault(stroke.partida_id, []).append(
+                    _ValidatedHole(stroke.hoyo, stroke.golpes_validados)
                 )
 
-                # Por `own_submitted`, no por si hay número: la raya (hoyo
-                # recogido) está anotada y sin número, y el calculador la cuenta
-                # como doble bogey. Filtrándola, un solo hoyo recogido dejaba
-                # la vuelta entera fuera de la media y del diferencial.
-                scores_by_hole = {
-                    hole_score.hole_number: hole_score.own_score
-                    for hole_score in hole_scores
-                    if hole_score.own_submitted
-                }
-                # El diferencial mide los mismos hoyos que la media, no el campo
-                # entero: en media vuelta, los otros nueve no se jugaron
-                played = self._computable_holes(scores_by_hole, hole_card) or []
-                holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
-                results.append(
-                    _ComputableRound(
-                        played_on=round_.round_date,
-                        to_par=to_par,
-                        played_round=self._to_played_round(
-                            course=course,
-                            holes=holes,
-                            scores_by_hole=scores_by_hole,
-                            # El partido guardó el hándicap del jugador cuando
-                            # se generó: una vuelta de hace meses se mide con el
-                            # hándicap que tenía entonces, no con el de hoy
-                            handicap=self._match_player_handicap(player, profile_handicap),
-                            tee_color=player.tee_color if player else None,
-                            tee_gender=player.tee_gender if player else None,
-                        ),
-                        holes=outcomes,
-                        golf_course_id=str(course.id) if course is not None else None,
-                        golf_course_name=str(course.name) if course is not None else None,
-                    )
-                )
+        countable = []
+        for group in groups:
+            round_ = rounds.get(group.round_id)
+            competition = competitions.get(group.competition_id)
+            if round_ is None or competition is None:
+                continue
+            if competition.status != CompetitionStatus.COMPLETED:
+                continue
+            if golf_course_id is not None and round_.golf_course_id != golf_course_id:
+                continue
+            countable.append((group, round_, competition))
+        countable.sort(key=lambda item: item[1].round_date, reverse=True)
+        countable = countable[:MAX_ROUNDS_AGGREGATED]
+        if not countable:
+            return []
 
+        async with self._golf_course_uow:
+            courses = {
+                c.id: c
+                for c in await self._golf_course_uow.golf_courses.find_by_ids(
+                    list({round_.golf_course_id for _, round_, _ in countable})
+                )
+            }
+
+        results = []
+        for group, round_, competition in countable:
+            course = courses.get(round_.golf_course_id)
+            snapshot = next((j for j in group.jugadores if j.user_id == user_id), None)
+            if course is None or snapshot is None:
+                continue
+            tournament_round = self._tournament_round(
+                course=course,
+                round_=round_,
+                player=_GroupPlayer(snapshot.handicap, snapshot.tee_color, snapshot.tee_gender),
+                hole_scores=validated.get(group.id, []),
+                profile_handicap=profile_handicap,
+                scratch=is_scratch(competition),
+            )
+            if tournament_round is not None:
+                results.append(tournament_round)
         return results
 
     # ==================== Diferenciales ====================

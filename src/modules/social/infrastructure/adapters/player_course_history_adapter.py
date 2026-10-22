@@ -3,6 +3,7 @@
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
@@ -19,7 +20,8 @@ MAX_HISTORY_LOOKUP = 200
 
 class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
     """
-    Junta las dos fuentes de vueltas para decidir si un campo es nuevo.
+    Junta las fuentes de vueltas para decidir si un campo es nuevo: partidas
+    rapidas, partidos de la Ryder y grupos de stroke play de torneo (L9).
 
     Un campo se estrena una sola vez en la vida del jugador, y da igual si fue
     jugando con amigos o en un torneo. Preguntar solo a las partidas rapidas
@@ -39,7 +41,9 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
     ) -> bool:
         if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id):
             return True
-        return await self._jugo_en_torneo(user_id, golf_course_id, excluding_match_id)
+        if await self._jugo_en_torneo(user_id, golf_course_id, excluding_match_id):
+            return True
+        return await self._jugo_en_stroke_play(user_id, golf_course_id, excluding_match_id)
 
     async def _jugo_en_partida_rapida(
         self, user_id: UserId, golf_course_id: str, excluding_match_id: str
@@ -73,3 +77,26 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
                 if ronda is not None and str(ronda.golf_course_id.value) == golf_course_id:
                     return True
         return False
+
+    async def _jugo_en_stroke_play(
+        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
+    ) -> bool:
+        """
+        Un grupo de stroke play acabado en ese campo. Quien no se presento no
+        piso el campo; quien se retiro, si. Grupos y rondas, en dos consultas.
+        """
+        async with self._competition_uow:
+            grupos = [
+                grupo
+                for grupo in await self._competition_uow.partidas.completadas_de_jugadores(
+                    [user_id]
+                )
+                if str(grupo.id.value) != excluding_match_id
+                and grupo.estados_de_tarjeta.get(user_id) != EstadoDeTarjeta.NO_PRESENTADO
+            ]
+            if not grupos:
+                return False
+            rondas = await self._competition_uow.rounds.find_by_ids(
+                list({grupo.round_id for grupo in grupos})
+            )
+        return any(str(ronda.golf_course_id.value) == golf_course_id for ronda in rondas)

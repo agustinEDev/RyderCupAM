@@ -60,3 +60,12 @@ class PartidaRepositoryInterface(ABC):
     @abstractmethod
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
         """Las partidas, de cualquier competición, donde juegan los dos (BE-3)."""
+
+    @abstractmethod
+    async def completadas_de_jugadores(self, user_ids: Sequence[UserId]) -> list[Partida]:
+        """
+        Las partidas ya acabadas, de cualquier competición, en las que juega
+        alguno de ellos (bloque L): en una sola consulta para todos, no una por
+        jugador. Sin jugadores, ninguna. El estado de cada tarjeta lo mira quien
+        llama: un no presentado sigue en su partida.
+        """

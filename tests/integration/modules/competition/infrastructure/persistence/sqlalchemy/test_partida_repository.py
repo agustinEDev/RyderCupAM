@@ -442,3 +442,42 @@ async def test_find_for_update(db_session, ronda, jugadores):  # noqa: F811
     uow, partida, _, _ = await _con_partida(db_session, ronda, jugadores)
 
     assert (await uow.partidas.find_by_id_for_update(partida.id)).id == partida.id
+
+
+def _acabada(franja: Round, numero: int, user_ids: list[UserId]) -> Partida:
+    partida = _partida(franja, numero, user_ids)
+    partida.empezar()
+    partida.cerrar(completas=user_ids)
+    return partida
+
+
+async def test_finished_groups_of_several_players_in_one_read(
+    db_session,
+    ronda,  # noqa: F811
+    otra_franja,
+    jugadores,  # noqa: F811
+):
+    """
+    Bloque L: los grupos acabados de varios jugadores, de cualquier
+    competición, en una lectura. Uno sin acabar no sale; uno sin ellos, tampoco.
+    """
+    a, b, c, d = jugadores
+    ajena = await _franja_de_otra_competicion(db_session, ronda, a)
+    de_a = _acabada(ronda, 1, [a, b])
+    de_c = _acabada(otra_franja, 1, [c])
+    sin_acabar = _partida(otra_franja, 2, [a, d])
+    de_otra_competicion = _acabada(ajena, 1, [a])
+    sin_ellos = _acabada(ronda, 2, [d])
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    await uow.partidas.reemplazar_franja(ronda.id, [de_a, sin_ellos])
+    await uow.partidas.reemplazar_franja(otra_franja.id, [de_c, sin_acabar])
+    await uow.partidas.reemplazar_franja(ajena.id, [de_otra_competicion])
+    uow = await _releer(db_session)
+
+    leidas = await uow.partidas.completadas_de_jugadores([a, c])
+
+    assert {p.id for p in leidas} == {de_a.id, de_c.id, de_otra_competicion.id}
+    assert all(p.estado == EstadoPartida.COMPLETED for p in leidas)
+    leida = next(p for p in leidas if p.id == de_a.id)
+    assert leida.estados_de_tarjeta == {a: EstadoDeTarjeta.ENTREGADA, b: EstadoDeTarjeta.ENTREGADA}
+    assert await uow.partidas.completadas_de_jugadores([]) == []
