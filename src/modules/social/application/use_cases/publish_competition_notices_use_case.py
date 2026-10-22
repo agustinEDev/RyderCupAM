@@ -455,6 +455,21 @@ class PublishCompetitionNoticesUseCase:
 
     # === Salidas ===
 
+    async def round_deleted(self, competition_id: str, round_id: str) -> None:
+        """
+        Se borra una ronda: fuera sus avisos de salida, si quedaba alguno, y lo
+        apuntado de quien perdio el suyo por un cambio en ella; si no, se
+        quedaria huerfano (revisor sin contexto, 22 oct 2026). Con el candado
+        del torneo, como las publicaciones de salidas.
+        """
+        async with self._social_uow:
+            eventos = self._social_uow.activity_events
+            await eventos.lock_scope(competition_id)
+            await eventos.delete_from_source(round_id, [_SALIDA])
+            retirados = await eventos.withdrawn_tee_times(round_id)
+            if retirados:
+                await eventos.forget_withdrawn_tee_times(round_id, retirados)
+
     async def tee_times(
         self,
         tournament: TournamentRef,

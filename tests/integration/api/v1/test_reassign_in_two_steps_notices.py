@@ -148,3 +148,49 @@ async def test_who_was_left_without_a_match_gets_a_changed_notice(client: AsyncC
     (despues,) = await _aviso_de(client, sin_partido)
     assert despues["payload"]["changed"] is True
     assert despues["payload"]["opponent_ids"] == a_de_m2
+
+
+async def _anotaciones_de_la_ronda(round_id: str, apuntar: tuple[str, str] | None = None) -> int:
+    """Cuantas anotaciones de avisos retirados tiene la ronda; antes apunta una si se pide."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from tests.conftest import _URL_DE_LA_BD_DE_TEST
+
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            if apuntar is not None:
+                user_id, competition_id = apuntar
+                await conn.execute(
+                    text(
+                        "INSERT INTO withdrawn_tee_time_notices (user_id, round_id, competition_id)"
+                        " VALUES (:u, :r, :c)"
+                    ),
+                    {"u": user_id, "r": round_id, "c": competition_id},
+                )
+            fila = await conn.execute(
+                text("SELECT count(*) FROM withdrawn_tee_time_notices WHERE round_id = :r"),
+                {"r": round_id},
+            )
+            return int(fila.scalar_one())
+    finally:
+        await engine.dispose()
+
+
+async def test_deleting_the_round_forgets_its_withdrawn_notices(client: AsyncClient):
+    """Revisor sin contexto (22 oct): borrar la ronda no deja anotaciones huerfanas."""
+    from tests.integration.api.v1.test_generate_matches_block import _fourball_de_uno_contra_uno
+
+    montaje = await _fourball_de_uno_contra_uno(client)
+    round_id = montaje["round_id"]
+    creador = montaje["creador"]
+    assert (
+        await _anotaciones_de_la_ronda(round_id, (creador["user"]["id"], montaje["comp_id"])) == 1
+    )
+
+    set_auth_cookies(client, creador["cookies"])
+    respuesta = await client.delete(f"/api/v1/competitions/rounds/{round_id}")
+    assert respuesta.status_code == 200, respuesta.text
+
+    assert await _anotaciones_de_la_ronda(round_id) == 0

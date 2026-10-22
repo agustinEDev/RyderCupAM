@@ -2824,9 +2824,10 @@ def get_update_round_use_case(
 
 def get_delete_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DeleteRoundUseCase:
-    """Proveedor del caso de uso DeleteRoundUseCase."""
-    return DeleteRoundUseCase(uow)
+    """Proveedor del caso de uso DeleteRoundUseCase (olvida en Actividad lo de la ronda)."""
+    return DeleteRoundUseCase(uow, actividad=actividad)
 
 
 def get_get_schedule_use_case(

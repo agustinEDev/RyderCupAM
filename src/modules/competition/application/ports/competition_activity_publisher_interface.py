@@ -128,6 +128,13 @@ class CompetitionActivityPublisherInterface(ABC):
         """La competicion se borra."""
 
     @abstractmethod
+    async def round_deleted(self, competition_id: CompetitionId, round_id: RoundId) -> None:
+        """
+        Una ronda se borra: lo que Actividad guardaba de ella (sus avisos de
+        salida y los que se retiraron por un cambio) ya no sirve.
+        """
+
+    @abstractmethod
     async def tee_times(
         self,
         competition: Competition,

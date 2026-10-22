@@ -209,6 +209,9 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
     async def deleted(self, competition_id: CompetitionId) -> None:
         await self._notices.tournament_deleted(str(competition_id.value))
 
+    async def round_deleted(self, competition_id: CompetitionId, round_id: RoundId) -> None:
+        await self._notices.round_deleted(str(competition_id.value), str(round_id.value))
+
     async def tee_times(
         self,
         competition: Competition,

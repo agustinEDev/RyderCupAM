@@ -563,6 +563,30 @@ class TestReassigningInTwoSteps:
         (de_b,) = await _guardados(social_uow, b)
         assert de_b.payload["changed"] is True
 
+    async def test_deleting_the_round_forgets_only_that_round(
+        self, avisos, social_uow, user_uow, monkeypatch
+    ):
+        """Revisor sin contexto: borrar la ronda no deja anotaciones huerfanas."""
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+        otra = str(uuid4())
+        await avisos.tee_times(torneo, otra, _vigentes(_salida(b, None, partido="m9")))
+        await avisos.tee_times(torneo, otra, _vigentes())
+        orden = _con_candado_espiado(social_uow, monkeypatch)
+
+        await avisos.round_deleted(torneo.competition_id, ronda)
+
+        assert orden[0] == ("candado", torneo.competition_id)
+        async with social_uow:
+            assert await social_uow.activity_events.withdrawn_tee_times(ronda) == set()
+            assert await social_uow.activity_events.withdrawn_tee_times(otra) == {b.id}
+        # Y sus avisos de salida, si quedaba alguno, se van con ella
+        for jugador in (a, c, d):
+            assert [
+                e for e in await _guardados(social_uow, jugador) if e.source_match_id == ronda
+            ] == []
+        assert [e.source_match_id for e in await _guardados(social_uow, b)] == []
+
     async def test_out_of_play_is_not_remembered(self, avisos, social_uow, user_uow):
         """El no presentado conserva su aviso: no se ha quedado sin partido."""
         a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)

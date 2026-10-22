@@ -110,6 +110,9 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
     async def deleted(self, competition_id: CompetitionId) -> None:
         await self._avisar("deleted", lambda p: p.deleted(competition_id))
 
+    async def round_deleted(self, competition_id: CompetitionId, round_id: RoundId) -> None:
+        await self._avisar("round_deleted", lambda p: p.round_deleted(competition_id, round_id))
+
     async def tee_times(
         self,
         competition: Competition,
