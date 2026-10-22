@@ -787,6 +787,25 @@ class TestPartidasRapidasQueNoSalen:
 
         assert await _entre(mundo, yo, el) == []
 
+    async def test_sacada_de_la_papelera_vuelve_a_salir(self, mundo):
+        """La papelera del autor la oculta; al sacarla, vuelve (22 oct 2026)."""
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        match = await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 5],
+            scoring_format=ScoringFormat.STABLEFORD,
+        )
+        match.hide_for(ParticipantId(el.id.value))
+        assert await _entre(mundo, yo, el) == []
+
+        match.unhide_for(ParticipantId(el.id.value))
+
+        assert len(await _entre(mundo, yo, el)) == 1
+
     async def test_sin_terminar_no_sale(self, mundo):
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")

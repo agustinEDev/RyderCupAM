@@ -18,9 +18,13 @@ from src.modules.social.application.feed_scope import payload_for
 from src.modules.social.application.feed_visibility import (
     sin_apuntados_a_privados,
     sin_invitaciones_cerradas,
+    sin_partidas_en_la_papelera,
 )
 from src.modules.social.application.ports.invitation_availability_interface import (
     InvitationAvailabilityInterface,
+)
+from src.modules.social.application.ports.quick_match_trash_interface import (
+    QuickMatchTrashInterface,
 )
 from src.modules.social.application.ports.tournament_visibility_interface import (
     TournamentVisibilityInterface,
@@ -68,10 +72,12 @@ class GetPlayerActivityUseCase:
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         tournaments: TournamentVisibilityInterface | None = None,
         invitations: InvitationAvailabilityInterface | None = None,
+        quick_match_trash: QuickMatchTrashInterface | None = None,
     ):
         self._social_uow = social_uow
         self._tournaments = tournaments
         self._invitations = invitations
+        self._quick_match_trash = quick_match_trash
         self._user_uow = user_uow
         self._golf_course_uow = golf_course_uow
 
@@ -134,6 +140,7 @@ class GetPlayerActivityUseCase:
         siguiente = build_cursor(eventos, limit)
         eventos = await sin_apuntados_a_privados(eventos, self._tournaments)
         eventos = await sin_invitaciones_cerradas(eventos, self._invitations)
+        eventos = await sin_partidas_en_la_papelera(eventos, self._quick_match_trash, viewer_id)
 
         # Quien sale con nombre y en que campo, con la misma regla que el feed:
         # son las mismas tarjetas, y el perfil no puede enseñar a quien el feed

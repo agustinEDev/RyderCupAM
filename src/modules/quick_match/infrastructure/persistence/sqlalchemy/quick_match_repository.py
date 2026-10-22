@@ -38,6 +38,13 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
     async def find_by_id(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return await self._session.get(QuickMatch, quick_match_id)
 
+    async def find_by_ids(self, quick_match_ids: list[QuickMatchId]) -> list[QuickMatch]:
+        if not quick_match_ids:
+            return []
+        stmt = select(QuickMatch).where(QuickMatch._id.in_(list(set(quick_match_ids))))
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return await self._session.get(
             QuickMatch, quick_match_id, with_for_update=True, populate_existing=True

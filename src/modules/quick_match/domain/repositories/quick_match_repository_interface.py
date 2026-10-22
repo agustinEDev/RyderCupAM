@@ -27,6 +27,11 @@ class QuickMatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_ids(self, quick_match_ids: list[QuickMatchId]) -> list[QuickMatch]:
+        """Las que existan de esas, en una sola lectura; sin ids, ninguna."""
+        pass
+
+    @abstractmethod
     async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         """
         Como `find_by_id`, pero bloqueando la fila (row-level lock) hasta el

@@ -24,6 +24,9 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         # Ni las invitaciones: las que siguen abiertas, para `open_invitations_at`
         # (None = no se filtra)
         self.open_invitation_ids: set[str] | None = None
+        # Ni las partidas rapidas: las (partida, autor) que el autor tiene en su
+        # papelera, para `hide_trashed_quick_matches_from`
+        self.trashed_quick_matches: set[tuple[str, UserId]] = set()
         # Avisos de salida retirados por un cambio: (ronda, jugador) -> torneo
         self._salidas_retiradas: dict[tuple[str, UserId], str] = {}
 
@@ -65,6 +68,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         cap: int | None = None,
         skip_private_enrollments: bool = False,
         open_invitations_at: datetime | None = None,
+        hide_trashed_quick_matches_from: UserId | None = None,
     ) -> int:
         # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
@@ -75,9 +79,20 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
                 and (since is None or e.published_at > since)
                 and not (skip_private_enrollments and self._apuntado_a_privado(e))
                 and not (open_invitations_at is not None and self._invitacion_cerrada(e))
+                and not (
+                    hide_trashed_quick_matches_from is not None
+                    and self._en_la_papelera_de_otro(e, hide_trashed_quick_matches_from)
+                )
             }
         )
         return cuenta if cap is None else min(cuenta, cap)
+
+    def _en_la_papelera_de_otro(self, event: ActivityEvent, viewer_id: UserId) -> bool:
+        return (
+            event.user_id != viewer_id
+            and event.comes_from_a_quick_match
+            and (event.source_match_id, event.user_id) in self.trashed_quick_matches
+        )
 
     def _invitacion_cerrada(self, event: ActivityEvent) -> bool:
         return (

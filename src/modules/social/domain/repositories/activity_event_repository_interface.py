@@ -79,6 +79,7 @@ class ActivityEventRepositoryInterface(ABC):
         cap: int | None = None,
         skip_private_enrollments: bool = False,
         open_invitations_at: datetime | None = None,
+        hide_trashed_quick_matches_from: UserId | None = None,
     ) -> int:
         """
         Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
@@ -95,6 +96,10 @@ class ActivityEventRepositoryInterface(ABC):
         Con `open_invitations_at` tampoco cuenta los INVITED_TO_TOURNAMENT de
         invitaciones que en ese instante ya no se pueden aceptar (no pendientes,
         caducadas o borradas), que el feed tampoco enseña.
+
+        Con `hide_trashed_quick_matches_from` (quien mira) tampoco cuenta lo
+        que salio de una partida rapida que su autor tiene en la papelera
+        (`ActivityEvent.comes_from_a_quick_match`), salvo lo de quien mira.
         """
 
     @abstractmethod

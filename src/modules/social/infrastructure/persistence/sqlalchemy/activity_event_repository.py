@@ -22,7 +22,10 @@ from sqlalchemy import (
     tuple_,
     update,
 )
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import (
+    JSONB,
+    insert as pg_insert,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
@@ -102,6 +105,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         cap: int | None = None,
         skip_private_enrollments: bool = False,
         open_invitations_at: datetime | None = None,
+        hide_trashed_quick_matches_from: UserId | None = None,
     ) -> int:
         condicion = self._condicion(slices)
         if condicion is None:
@@ -110,6 +114,11 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             condicion = and_(condicion, not_(self._apuntado_a_privado()))
         if open_invitations_at is not None:
             condicion = and_(condicion, not_(self._invitacion_cerrada(open_invitations_at)))
+        if hide_trashed_quick_matches_from is not None:
+            condicion = and_(
+                condicion,
+                not_(self._en_la_papelera_de_otro(hide_trashed_quick_matches_from)),
+            )
 
         # Una fila por tarjeta: los logros de una vuelta de un jugador comparten
         # tarjeta (`ActivityEvent.card_key`); cada aviso va en la suya
@@ -133,6 +142,30 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         stmt = select(func.count()).select_from(filas.subquery())
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
+
+    @staticmethod
+    def _en_la_papelera_de_otro(viewer_id: UserId) -> ColumnElement[bool]:
+        """
+        Lo de otro que salio de una partida rapida que el tiene en su papelera
+        (`ActivityEvent.comes_from_a_quick_match`): su origen es el id de la
+        partida y su autor esta en `hidden_by_participant_ids`, donde un
+        jugador con cuenta va con el id de su usuario. Como con los torneos, se
+        mira la tabla `quick_matches` por su nombre y el id como texto.
+        """
+        tabla = activity_events_table.c
+        partidas = table("quick_matches", column("id"), column("hidden_by_participant_ids", JSONB))
+        tipos = sorted(t for t in ActivityEventType if t.may_come_from_a_quick_match)
+        return and_(
+            tabla.user_id != viewer_id,
+            tabla.type.in_(tipos),
+            tabla.payload["from_tournament"].astext.is_distinct_from("true"),
+            exists().where(
+                cast(partidas.c.id, String) == tabla.source_match_id,
+                partidas.c.hidden_by_participant_ids.op("@>")(
+                    func.jsonb_build_array(cast(tabla.user_id, String))
+                ),
+            ),
+        )
 
     @staticmethod
     def _invitacion_cerrada(ahora: datetime) -> ColumnElement[bool]:

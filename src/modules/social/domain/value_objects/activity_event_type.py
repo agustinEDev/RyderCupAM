@@ -49,6 +49,15 @@ class ActivityEventType(StrEnum):
         """Si es un logro de una vuelta: los de una misma vuelta van en una tarjeta."""
         return self in _ACHIEVEMENTS
 
+    @property
+    def may_come_from_a_quick_match(self) -> bool:
+        """
+        Si un evento de este tipo puede salir de una partida rapida: su «como
+        acabo» y los logros (que tambien publica un torneo, con
+        `from_tournament` en su `payload`).
+        """
+        return self is ActivityEventType.QUICK_MATCH_FINISHED or self.is_achievement
+
     @classmethod
     def from_string(cls, value: str) -> "ActivityEventType":
         try:
