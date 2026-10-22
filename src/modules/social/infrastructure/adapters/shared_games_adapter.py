@@ -2,11 +2,9 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol
-from uuid import UUID
 
-from src.modules.competition.application.use_cases.clasificaciones_use_case import (
-    ClasificacionGeneralUseCase,
+from src.modules.competition.application.services.participantes_de_la_clasificacion import (
+    generales_netas,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
@@ -15,6 +13,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.services.clasificacion import EstadoEnClasificacion
 from src.modules.competition.domain.services.scoring_opening_service import (
     ScoringOpeningService,
 )
@@ -84,16 +83,6 @@ _SCORING_BY_TOURNAMENT = {
 }
 
 
-# Quien no se presento a ninguna jornada no jugo el torneo con nadie
-_NO_PRESENTADO = "NP"
-
-
-class OfficialStandings(Protocol):
-    """La general oficial de un stroke play (`ClasificacionGeneralUseCase`)."""
-
-    async def execute(self, competition_id: UUID, categoria: int | None = None): ...
-
-
 @dataclass
 class _Leido:
     """Todo lo leido de las tres fuentes antes de resolver campos y jugadores."""
@@ -105,8 +94,10 @@ class _Leido:
     validados: dict = field(default_factory=dict)
     rondas: dict = field(default_factory=dict)
     competiciones: dict = field(default_factory=dict)
-    # Los stroke play COMPLETADOS que jugaron los dos, en cualquier grupo (J)
+    # Los stroke play COMPLETADOS que jugaron los dos, en cualquier grupo (J),
+    # y su general final, calculada para todos de una vez
     torneos_cerrados: list[Competition] = field(default_factory=list)
+    generales: dict = field(default_factory=dict)
 
 
 class SharedGamesAdapter(SharedGamesInterface):
@@ -131,17 +122,12 @@ class SharedGamesAdapter(SharedGamesInterface):
         stroke_allocation_service: StrokeAllocationService | None = None,
         scoring_service: MatchPlayScoring | None = None,
         stroke_play_scoring: StrokePlayScoring | None = None,
-        standings: OfficialStandings | None = None,
     ):
         self._quick_match_uow = quick_match_uow
         self._competition_uow = competition_uow
         self._golf_course_uow = golf_course_uow
         self._user_uow = user_uow
-        # La general final de un stroke play decide su cara a cara (J): la
-        # oficial, la misma que se ve en la ficha, con su desempate
-        self._standings = standings or ClasificacionGeneralUseCase(
-            uow=competition_uow, user_repository=user_uow.users
-        )
+
         self._stroke_allocation = stroke_allocation_service or StrokeAllocationService()
         self._scoring = scoring_service or MatchPlayScoring()
         self._stroke_play = stroke_play_scoring or StrokePlayScoring()
@@ -155,7 +141,7 @@ class SharedGamesAdapter(SharedGamesInterface):
         torneos = [
             juego
             for competicion in leido.torneos_cerrados
-            if (juego := await self._de_torneo_cerrado(competicion, viewer_id, other_id))
+            if (juego := self._de_torneo_cerrado(competicion, leido, viewer_id, other_id))
         ]
 
         return (
@@ -231,6 +217,9 @@ class SharedGamesAdapter(SharedGamesInterface):
                 for g in grupos
                 if not _stroke_play_completado(leido.competiciones.get(g.competition_id))
             ]
+            # La general final de todos, por lotes: las mismas consultas con
+            # uno que con veinte (revision del 22 oct 2026)
+            leido.generales = await generales_netas(uow, leido.torneos_cerrados)
             if leido.grupos:
                 for golpe in await uow.golpes_de_partida.de_las_partidas(
                     [g.id for g in leido.grupos]
@@ -493,8 +482,9 @@ class SharedGamesAdapter(SharedGamesInterface):
             handicap=foto.handicap,
         )
 
-    async def _de_torneo_cerrado(
-        self, competicion: Competition, viewer_id: UserId, other_id: UserId
+    @staticmethod
+    def _de_torneo_cerrado(
+        competicion: Competition, leido: _Leido, viewer_id: UserId, other_id: UserId
     ) -> SharedGame | None:
         """
         Un stroke play COMPLETADO, entero (tabla del 22 oct 2026, J): quien
@@ -505,17 +495,18 @@ class SharedGamesAdapter(SharedGamesInterface):
         Quien no se presento a nada (NP) no jugo el torneo: no sale. Quien no
         quedo clasificado (retirado, NR) sale sin puesto y no cuenta.
         """
-        general = await self._standings.execute(competicion.id.value, None)
-        filas = {fila.user_id: fila for fila in general.rows}
-        mia, suya = filas.get(viewer_id.value), filas.get(other_id.value)
-        if mia is None or suya is None or _NO_PRESENTADO in (mia.status, suya.status):
+        general = leido.generales.get(competicion.id, [])
+        filas = {fila.user_id: fila for fila in general}
+        mia, suya = filas.get(viewer_id), filas.get(other_id)
+        no_presentado = EstadoEnClasificacion.NP
+        if mia is None or suya is None or no_presentado in (mia.estado, suya.estado):
             return None
         outcome = None
-        if mia.position is not None and suya.position is not None:
-            if mia.position == suya.position:
+        if mia.puesto is not None and suya.puesto is not None:
+            if mia.puesto == suya.puesto:
                 outcome = Outcome.HALVED
             else:
-                outcome = Outcome.WON if mia.position < suya.position else Outcome.LOST
+                outcome = Outcome.WON if mia.puesto < suya.puesto else Outcome.LOST
         return SharedGame(
             kind=SharedGameKind.TOURNAMENT_STROKE_PLAY,
             game_id=str(competicion.id.value),
@@ -529,11 +520,11 @@ class SharedGamesAdapter(SharedGamesInterface):
             competition_id=str(competicion.id.value),
             competition_name=competicion.name.value,
             standing=StrokePlayStanding(
-                my_position=mia.position,
-                my_tied=mia.tied,
-                their_position=suya.position,
-                their_tied=suya.tied,
-                total_players=len(general.rows),
+                my_position=mia.puesto,
+                my_tied=mia.empatado,
+                their_position=suya.puesto,
+                their_tied=suya.empatado,
+                total_players=len(general),
             ),
         )
 

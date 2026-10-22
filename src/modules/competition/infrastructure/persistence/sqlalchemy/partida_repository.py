@@ -94,6 +94,11 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[Partida]:
         return await self._donde(tee_groups_table.c.competition_id == competition_id)
 
+    async def de_las_competiciones(self, competition_ids: list[CompetitionId]) -> list[Partida]:
+        if not competition_ids:
+            return []
+        return await self._donde(tee_groups_table.c.competition_id.in_(competition_ids))
+
     async def del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> list[Partida]:
         jugadores = tee_group_players_table
         return await self._donde(

@@ -14,7 +14,6 @@ Las ve cualquiera con sesión, como las partidas (D8).
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, time
 from uuid import UUID
 
 from src.modules.competition.application.dto.partidas_dto import (
@@ -22,6 +21,9 @@ from src.modules.competition.application.dto.partidas_dto import (
     StandingsResponseDTO,
 )
 from src.modules.competition.application.exceptions import PartidasError
+from src.modules.competition.application.services.participantes_de_la_clasificacion import (
+    participantes_de,
+)
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
@@ -33,10 +35,7 @@ from src.modules.competition.domain.services.clasificacion import (
     Clasificacion,
     Escala,
     Fila,
-    Participante,
-    TarjetaDeJornada,
 )
-from src.modules.competition.domain.services.tarjeta_de_stroke_play import TarjetaDeStrokePlay
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -93,12 +92,6 @@ class _Clasificaciones:
         regla: OverallStanding,
         categoria: int | None,
     ) -> tuple[list[Fila], _Personas]:
-        validados: dict[tuple, dict[int, int | None]] = {}
-        for golpe in golpes:
-            if golpe.validado:
-                validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (
-                    golpe.golpes_validados
-                )
         user_ids = list({u for p in partidas for u in p.user_ids})
         categorias = {
             e.user_id: e.fixed_category
@@ -106,34 +99,8 @@ class _Clasificaciones:
                 user_ids, competicion.id
             )
         }
-        tarjetas: dict[UserId, list[TarjetaDeJornada]] = {}
-        handicaps = {}
-        generos: dict[UserId, str | None] = {}
-        # Por calendario: el hándicap que desempata (P5) es el de su última
-        # jornada, y se queda el de la última partida recorrida; y las
-        # tarjetas llegan en ese orden a la clasificación (el «tras»)
         franjas = {f.id: f for f in await self._uow.rounds.find_by_competition(competicion.id)}
-
-        def cuando(partida: Partida) -> tuple[date, time]:
-            franja = franjas[partida.round_id]
-            hoja = franja.hoja_de_salidas
-            return franja.round_date, hoja.hora_de(partida.numero) if hoja else time.min
-
-        for partida in sorted(partidas, key=cuando):
-            for foto in partida.jugadores:
-                tarjeta = TarjetaDeStrokePlay.de(
-                    foto, validados.get((partida.id, foto.user_id), {})
-                )
-                estado = partida.estados_de_tarjeta[foto.user_id]
-                tarjetas.setdefault(foto.user_id, []).append(TarjetaDeJornada(tarjeta, estado))
-                handicaps[foto.user_id] = foto.handicap
-                # El de su última partida, como el hándicap (#856); sin dato en
-                # ella, el último que se supo (/code-review)
-                if foto.tee_gender is not None:
-                    generos[foto.user_id] = foto.tee_gender.value
-        participantes = [
-            Participante(u, handicaps[u], categorias.get(u), tuple(tarjetas[u])) for u in user_ids
-        ]
+        participantes, generos = participantes_de(partidas, golpes, franjas, categorias)
         filas = Clasificacion.de(
             participantes, competicion.tournament_type, escala, regla, categoria
         )

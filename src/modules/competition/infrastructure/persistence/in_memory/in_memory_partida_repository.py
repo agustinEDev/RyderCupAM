@@ -54,6 +54,10 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[Partida]:
         return self._donde(lambda p: p.competition_id == competition_id)
 
+    async def de_las_competiciones(self, competition_ids: list[CompetitionId]) -> list[Partida]:
+        pedidas = set(competition_ids)
+        return self._donde(lambda p: p.competition_id in pedidas)
+
     async def del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> list[Partida]:
         return self._donde(lambda p: p.competition_id == competition_id and user_id in p.user_ids)
 

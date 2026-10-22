@@ -34,6 +34,12 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.application.services.participantes_de_la_clasificacion import (
+    generales_netas,
+)
+from src.modules.competition.application.use_cases.clasificaciones_use_case import (
+    ClasificacionGeneralUseCase,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.entities.match import Match
@@ -48,6 +54,7 @@ from src.modules.competition.domain.value_objects.estado_partida import EstadoPa
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
 from src.modules.competition.domain.value_objects.location import Location
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.team_assignment import TeamAssignment
@@ -201,7 +208,10 @@ class _Mundo:
         return match
 
     async def competicion(
-        self, creador: User, tipo: TournamentType = TournamentType.RYDER_CUP
+        self,
+        creador: User,
+        tipo: TournamentType = TournamentType.RYDER_CUP,
+        regla: OverallStanding | None = None,
     ) -> Competition:
         competition = Competition.create(
             id=CompetitionId(uuid4()),
@@ -214,6 +224,7 @@ class _Mundo:
             team_2_name="Team B" if tipo.has_teams else None,
             team_assignment=TeamAssignment.MANUAL if tipo.has_teams else None,
             tournament_type=tipo,
+            overall_standing=regla,
         )
         async with self.comp:
             await self.comp.competitions.add(competition)
@@ -1798,3 +1809,141 @@ class TestTablaJTorneoStrokePlayCompletado:
             False,
         )
         assert dto.total_players == 2
+
+
+def _todas_las_consultas(mundo: _Mundo) -> list[str]:
+    """Apunta cada llamada a cualquier repositorio de competicion o de usuarios."""
+    llamadas: list[str] = []
+    repos = [
+        getattr(mundo.comp, nombre)
+        for nombre in (
+            "competitions",
+            "rounds",
+            "matches",
+            "partidas",
+            "golpes_de_partida",
+            "enrollments",
+            "hole_scores",
+        )
+    ] + [mundo.users.users]
+    for repo in repos:
+        for metodo in dir(type(repo)):
+            original = getattr(repo, metodo)
+            if metodo.startswith("_") or not callable(original):
+                continue
+
+            def _envuelto(original=original, nombre=f"{type(repo).__name__}.{metodo}"):
+                async def _llamada(*args, **kwargs):
+                    llamadas.append(nombre)
+                    return await original(*args, **kwargs)
+
+                return _llamada
+
+            setattr(repo, metodo, _envuelto())
+    return llamadas
+
+
+class TestTablaJSinUnaGeneralPorTorneo:
+    """
+    Revisión del 22 oct 2026: la general final de los stroke play completados
+    se calcula por lotes. Las consultas no crecen con los torneos.
+    """
+
+    async def _consultas(self, cuantos: int) -> tuple[int, int]:
+        mundo = _Mundo()
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        for i in range(cuantos):
+            tipo = TournamentType.STABLEFORD if i % 2 else TournamentType.MEDAL
+            comp = await mundo.competicion(yo, tipo)
+            ronda = await mundo.ronda(comp, course)
+            await mundo.grupo(comp, ronda, {yo: [4] * 18}, numero=1)
+            await mundo.grupo(comp, ronda, {el: [5] * 18}, numero=2)
+            await _completar(mundo, comp)
+        llamadas = _todas_las_consultas(mundo)
+
+        partidas = await _entre(mundo, yo, el)
+
+        assert [p.outcome for p in partidas] == [Outcome.WON] * cuantos
+        return len(partidas), len(llamadas)
+
+    async def test_las_mismas_consultas_con_un_torneo_que_con_cinco(self):
+        uno, con_uno = await self._consultas(1)
+        cinco, con_cinco = await self._consultas(5)
+
+        assert (uno, cinco) == (1, 5)
+        assert con_cinco == con_uno
+
+    async def test_la_general_por_lotes_es_la_oficial(self, mundo):
+        """
+        La general por lotes y la de la ficha (`ClasificacionGeneralUseCase`)
+        dan los mismos puestos: empates por hándicap, retirado y no presentado.
+        """
+        yo, el, ella, otro, nadie = [
+            await mundo.jugador(n) for n in ("Yo", "El", "Ella", "Otro", "Nadie")
+        ]
+        course = await mundo.campo(yo)
+        comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+        ronda = await mundo.ronda(comp, course)
+        await mundo.grupo(
+            comp, ronda, {yo: [4] * 18, el: [5] * 18}, golpes_recibidos={el: 1}, numero=1
+        )
+        await mundo.grupo(
+            comp,
+            ronda,
+            {ella: [4] * 18, otro: [4] * 9, nadie: []},
+            estados={otro: EstadoDeTarjeta.RETIRADO, nadie: EstadoDeTarjeta.NO_PRESENTADO},
+            numero=2,
+        )
+        await _completar(mundo, comp)
+
+        oficial = await ClasificacionGeneralUseCase(
+            uow=mundo.comp, user_repository=mundo.users.users
+        ).execute(comp.id.value)
+        async with mundo.comp:
+            por_lotes = (await generales_netas(mundo.comp, [comp]))[comp.id]
+
+        assert [(f.user_id.value, f.puesto, f.empatado, f.estado.value) for f in por_lotes] == [
+            (f.user_id, f.position, f.tied, f.status) for f in oficial.rows
+        ]
+
+    async def test_cada_torneo_con_su_general(self, mundo):
+        """Por lotes, pero cada torneo con lo suyo: gano uno y pierdo el otro."""
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        resultados = {}
+        for mio, suyo in ((4, 6), (5, 4)):
+            comp = await mundo.competicion(yo, TournamentType.STABLEFORD)
+            ronda = await mundo.ronda(comp, course)
+            await mundo.grupo(comp, ronda, {yo: [mio] * 18}, numero=1)
+            await mundo.grupo(comp, ronda, {el: [suyo] * 18}, numero=2)
+            await _completar(mundo, comp)
+            resultados[str(comp.id.value)] = Outcome.WON if mio < suyo else Outcome.LOST
+
+        partidas = await _entre(mundo, yo, el)
+
+        assert {p.game_id: p.outcome for p in partidas} == resultados
+
+    async def test_cada_torneo_con_su_regla_de_la_general(self, mundo):
+        """
+        Medal en dos jornadas: yo 0 y +10, él +3 y +3. Acumulado gana él (+6
+        contra +10); a mejor tarjeta gano yo (0 contra +3). Cada torneo, la suya.
+        """
+        yo, el = await mundo.jugador("Yo"), await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        esperado = {}
+        for regla, resultado in (
+            (OverallStanding.ACCUMULATED, Outcome.LOST),
+            (OverallStanding.BEST_CARD, Outcome.WON),
+        ):
+            comp = await mundo.competicion(yo, TournamentType.MEDAL, regla=regla)
+            for numero, sesion in enumerate((SessionType.MORNING, SessionType.AFTERNOON), 1):
+                ronda = await mundo.ronda(comp, course, session_type=sesion)
+                mio = [4] * 18 if numero == 1 else [4] * 8 + [5] * 10
+                await mundo.grupo(comp, ronda, {yo: mio, el: [4] * 15 + [5] * 3})
+            await _completar(mundo, comp)
+            esperado[str(comp.id.value)] = resultado
+
+        partidas = await _entre(mundo, yo, el)
+
+        assert {p.game_id: p.outcome for p in partidas} == esperado
