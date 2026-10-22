@@ -17,7 +17,11 @@ from tests.conftest import (
     create_competition,
     set_auth_cookies,
 )
-from tests.integration.api.v1.helpers.feed_helper import hacerse_amigos, insertar_eventos
+from tests.integration.api.v1.helpers.feed_helper import (
+    hacer_privada,
+    hacerse_amigos,
+    insertar_eventos,
+)
 from tests.integration.api.v1.test_quick_match_endpoints import _create_approved_golf_course
 
 FEED = "/api/v1/users/me/feed"
@@ -171,3 +175,37 @@ async def test_e22_cada_evento_lleva_su_clave_de_tarjeta(client: AsyncClient):
     (evento,) = (await client.get(FEED)).json()["events"]
 
     assert evento["group_key"] == f"{yo['user']['id']}:{evento['source_match_id']}"
+
+
+@pytest.mark.asyncio
+async def test_e_un_torneo_que_ahora_es_privado_no_sale_aunque_quede_su_aviso(
+    client: AsyncClient,
+):
+    """
+    E (22 oct). Given mi amigo apuntado a dos torneos publicos y uno pasa a
+    privado sin que se borre su aviso / When pido el feed y su actividad /
+    Then solo sale el del que sigue publico.
+    """
+    org = await create_authenticated_user(client, "be2e_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(client, "be2e_yo@test.com", PASSWORD, "Juan", "Lopez")
+    amigo = await create_authenticated_user(client, "be2e_am@test.com", PASSWORD, "Eva", "Ruiz")
+    await hacerse_amigos(client, yo, amigo)
+    privada = await create_competition(client, org["cookies"])
+    publica = await create_competition(client, org["cookies"])
+    ahora = datetime.now().replace(microsecond=0)
+    for minuto, comp in ((1, privada), (2, publica)):
+        await insertar_eventos(
+            amigo["user"]["id"],
+            [ahora + timedelta(minutes=minuto)],
+            tipo="ENROLLED_IN_TOURNAMENT",
+            payload={"competition_id": comp["id"], "competition_name": comp["name"]},
+            source_match_id=comp["id"],
+        )
+    await hacer_privada(privada["id"])
+
+    set_auth_cookies(client, yo["cookies"])
+    feed = (await client.get(FEED)).json()["events"]
+    actividad = (await client.get(f"/api/v1/users/{amigo['user']['id']}/activity")).json()
+
+    assert [e["payload"]["competition_id"] for e in feed] == [publica["id"]]
+    assert [e["payload"]["competition_id"] for e in actividad["events"]] == [publica["id"]]

@@ -36,6 +36,8 @@ async def insertar_eventos(
     publicados: list[datetime],
     tipo: str = "BIRDIE",
     visible_to_friends: bool = True,
+    payload: dict | None = None,
+    source_match_id: str | None = None,
 ) -> None:
     """Un logro por fecha de publicacion, cada uno de una partida distinta."""
     engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
@@ -56,8 +58,8 @@ async def insertar_eventos(
                         "occurred_at": publicado,
                         "published_at": publicado,
                         "visible": visible_to_friends,
-                        "payload": json.dumps({}),
-                        "match": str(uuid.uuid4()),
+                        "payload": json.dumps(payload or {}),
+                        "match": source_match_id or str(uuid.uuid4()),
                     },
                 )
     finally:
@@ -72,6 +74,19 @@ async def marcar_visto(user_id: str, visto: datetime) -> None:
             await conn.execute(
                 text("UPDATE users SET feed_last_seen_at = :visto WHERE id = :id"),
                 {"visto": visto, "id": user_id},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def hacer_privada(competition_id: str) -> None:
+    """Pasa una competicion a privada sin pasar por la API: sus avisos se quedan."""
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("UPDATE competitions SET visibility = 'PRIVATE' WHERE id = :id"),
+                {"id": competition_id},
             )
     finally:
         await engine.dispose()

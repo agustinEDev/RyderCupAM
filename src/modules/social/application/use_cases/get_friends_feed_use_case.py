@@ -23,6 +23,10 @@ from src.modules.social.application.feed_scope import (
     pending_requests,
     resolve_feed_scope,
 )
+from src.modules.social.application.feed_visibility import sin_apuntados_a_privados
+from src.modules.social.application.ports.tournament_visibility_interface import (
+    TournamentVisibilityInterface,
+)
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
@@ -75,8 +79,10 @@ class GetFriendsFeedUseCase:
         user_uow: UserUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         reloj: Callable[[], datetime] = utc_now,
+        tournaments: TournamentVisibilityInterface | None = None,
     ):
         self._social_uow = social_uow
+        self._tournaments = tournaments
         self._user_uow = user_uow
         self._golf_course_uow = golf_course_uow
         self._reloj = reloj
@@ -109,6 +115,11 @@ class GetFriendsFeedUseCase:
                 solicitudes = await pending_requests(self._social_uow.friendships, viewer_id)
                 no_vistos = await count_unseen(self._social_uow.activity_events, scope, solicitudes)
 
+        # El cursor, con la pagina tal cual se leyo: si se oculta algo, la
+        # pagina queda corta pero no se pierde ni se repite nada (E, 22 oct)
+        siguiente = build_cursor(eventos, limit)
+        eventos = await sin_apuntados_a_privados(eventos, self._tournaments)
+
         autores = await autores_de(
             self._social_uow,
             self._user_uow,
@@ -122,7 +133,7 @@ class GetFriendsFeedUseCase:
             events=[self._a_dto(e, viewer_id) for e in eventos],
             authors=autores,
             courses=campos,
-            next_cursor=build_cursor(eventos, limit),
+            next_cursor=siguiente,
             unseen_count=no_vistos,
             pending_friend_requests=[
                 FriendRequestNoticeDTO(

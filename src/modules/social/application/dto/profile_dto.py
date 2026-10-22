@@ -191,7 +191,15 @@ class FeedResponseDTO(BaseModel):
     dejaria fuera los que aun no se han enseñado de esa vuelta.
     """
 
-    events: list[ActivityEventDTO] = Field(default_factory=list)
+    events: list[ActivityEventDTO] = Field(
+        default_factory=list,
+        description=(
+            "Las entradas de la pagina, de la mas reciente a la mas antigua. Un "
+            "ENROLLED_IN_TOURNAMENT de un torneo que ahora es privado no sale aunque "
+            "siga guardado, asi que una pagina puede venir con menos de `limit` "
+            "entradas y aun asi traer `next_cursor`: sigue pidiendo mientras lo traiga"
+        ),
+    )
     authors: dict[str, FeedAuthorDTO] = Field(
         default_factory=dict, description="Autores de esta pagina, indexados por id"
     )
