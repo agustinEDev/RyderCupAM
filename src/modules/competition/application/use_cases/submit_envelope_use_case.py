@@ -116,4 +116,7 @@ class SubmitEnvelopeUseCase:
             # dispara la apertura
             sobres_de_la_sesion[team] = sobre
             await self._desk.revelar_si_toca(ronda, competition, sobres_de_la_sesion)
-            return envelope_to_dto(sobre)
+            entregado = envelope_to_dto(sobre)
+        # Ya guardado: los avisos de los partidos que haya creado abrirlos (G2)
+        await self._desk.avisar_salidas()
+        return entregado

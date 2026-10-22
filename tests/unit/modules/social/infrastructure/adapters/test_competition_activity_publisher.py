@@ -4,18 +4,25 @@ traduce bien y que la clasificacion final sale de la general oficial, sin
 recalcularla.
 """
 
-from datetime import date
+from datetime import date, time
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    TeeTimeAssignment,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
     MatchOutcome,
     StandingRef,
+    TeeTimeRef,
     TournamentRef,
 )
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
@@ -96,6 +103,74 @@ def avisos():
 
 
 class TestTraduccion:
+    async def test_g_las_salidas_de_una_ronda(self, avisos):
+        """G. La hora va «HH:MM», el partido y la ronda por su id, la sesion por su nombre."""
+        competicion = _competicion()
+        ronda = RoundId.generate()
+        yo, pedro, juan, sale = (UserId(uuid4()) for _ in range(4))
+        partido = MatchId.generate()
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
+
+        await adaptador.tee_times(
+            competicion,
+            ronda,
+            [
+                TeeTimeAssignment(
+                    user_id=yo,
+                    round_date=date(2027, 3, 3),
+                    session_type=SessionType.AFTERNOON,
+                    tee_time=time(9, 5),
+                    partner_ids=(pedro,),
+                    opponent_ids=(),
+                    changed=True,
+                ),
+                TeeTimeAssignment(
+                    user_id=pedro,
+                    round_date=date(2027, 3, 3),
+                    session_type=SessionType.MORNING,
+                    tee_time=None,
+                    partner_ids=(),
+                    opponent_ids=(juan,),
+                    match_id=partido,
+                ),
+            ],
+            [sale],
+        )
+
+        assert avisos.llamadas == [
+            (
+                "tee_times",
+                (
+                    _ref(competicion),
+                    str(ronda.value),
+                    [
+                        TeeTimeRef(
+                            user_id=yo,
+                            round_date=date(2027, 3, 3),
+                            session_type="AFTERNOON",
+                            tee_time="09:05",
+                            partner_ids=(pedro,),
+                            opponent_ids=(),
+                            match_id=None,
+                            changed=True,
+                        ),
+                        TeeTimeRef(
+                            user_id=pedro,
+                            round_date=date(2027, 3, 3),
+                            session_type="MORNING",
+                            tee_time=None,
+                            partner_ids=(),
+                            opponent_ids=(juan,),
+                            match_id=str(partido.value),
+                            changed=False,
+                        ),
+                    ],
+                    [sale],
+                ),
+                {},
+            )
+        ]
+
     async def test_inscrito_en_un_publico(self, avisos):
         competicion = _competicion()
         inscripcion = SimpleNamespace(id=SimpleNamespace(value=uuid4()), user_id=UserId(uuid4()))

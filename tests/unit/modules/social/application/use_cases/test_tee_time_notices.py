@@ -1,0 +1,357 @@
+"""
+El aviso de horario en Actividad: `TEE_TIME_ASSIGNED` (G, tabla del 22 oct 2026).
+
+| #   | Caso                                              | Resultado                                |
+|-----|---------------------------------------------------|------------------------------------------|
+| G1  | Salida de stroke play                             | Aviso con torneo, ronda, dia, sesion,    |
+|     |                                                   | hora «HH:MM» y compañeros                |
+| G2  | Partido de Ryder                                  | Sin hora, con compañero, rivales y       |
+|     |                                                   | `match_id`                               |
+| G3  | Cambia                                            | El viejo de esa ronda se va, uno nuevo   |
+|     |                                                   | con `changed`; los de otros, intactos    |
+| G3  | Sale de la ronda                                  | Pierde el suyo, solo el de esa ronda     |
+| G6  | Solo Actividad, solo para el                      | Sus amigos no lo ven                     |
+| G7  | Lleva al torneo                                   | `competition_id` en el payload           |
+| G9  | Se retira / se cancela / se borra el torneo       | Se va                                    |
+| G9  | El torneo pasa a privado                          | Se queda: es suyo                        |
+| G10 | Uno por (jugador, ronda)                          | Origen = la ronda                        |
+| G11 | Compañero que me bloqueo                          | Sin nombre en el feed                    |
+|     | Un lote                                           | Una lectura de usuarios y una escritura  |
+"""
+
+from datetime import date
+from uuid import uuid4
+
+import pytest
+
+from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
+    InMemoryGolfCourseUnitOfWork,
+)
+from src.modules.social.application.use_cases.get_friends_feed_use_case import (
+    GetFriendsFeedUseCase,
+)
+from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
+    PublishCompetitionNoticesUseCase,
+    TeeTimeRef,
+    TournamentRef,
+)
+from src.modules.social.domain.entities.friendship import Friendship
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.domain.value_objects.friendship_id import FriendshipId
+from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
+    InMemorySocialUnitOfWork,
+)
+from src.modules.user.domain.entities.user import User
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork as InMemoryUserUnitOfWork,
+)
+
+pytestmark = pytest.mark.asyncio
+
+T = ActivityEventType
+SABADO = date(2026, 10, 25)
+
+
+@pytest.fixture
+def social_uow():
+    return InMemorySocialUnitOfWork()
+
+
+@pytest.fixture
+def user_uow():
+    return InMemoryUserUnitOfWork()
+
+
+@pytest.fixture
+def avisos(social_uow, user_uow):
+    return PublishCompetitionNoticesUseCase(social_uow, user_uow)
+
+
+def _torneo(competition_id: str | None = None, is_public: bool = True) -> TournamentRef:
+    return TournamentRef(
+        competition_id=competition_id or str(uuid4()),
+        name="Medal de otoño",
+        start_date=SABADO,
+        end_date=date(2026, 10, 26),
+        is_public=is_public,
+    )
+
+
+async def _user(user_uow, nombre: str = "Pedro") -> User:
+    user = User.create(
+        first_name=nombre,
+        last_name="Lopez",
+        email_str=f"salida_{uuid4().hex[:8]}@test.com",
+        plain_password="SecureP@ssw0rd123",
+    )
+    async with user_uow:
+        await user_uow.users.save(user)
+    return user
+
+
+def _salida(
+    user: User,
+    hora: str | None = "09:10",
+    con=(),
+    contra=(),
+    partido: str | None = None,
+    changed: bool = False,
+    sesion: str = "MORNING",
+) -> TeeTimeRef:
+    return TeeTimeRef(
+        user_id=user.id,
+        round_date=SABADO,
+        session_type=sesion,
+        tee_time=hora,
+        partner_ids=tuple(u.id for u in con),
+        opponent_ids=tuple(u.id for u in contra),
+        match_id=partido,
+        changed=changed,
+    )
+
+
+async def _guardados(social_uow, user: User):
+    async with social_uow:
+        return await social_uow.activity_events.find_in(
+            [ActivitySlice(user_ids=(user.id,), types=frozenset(ActivityEventType))], limit=100
+        )
+
+
+async def _feed(social_uow, user_uow, viewer: User):
+    return await GetFriendsFeedUseCase(
+        social_uow, user_uow, InMemoryGolfCourseUnitOfWork()
+    ).execute(str(viewer.id.value))
+
+
+async def _amistad(social_uow, a: User, b: User, bloqueo: bool = False) -> None:
+    amistad = Friendship.create(id=FriendshipId(uuid4()), requester_id=a.id, addressee_id=b.id)
+    if bloqueo:
+        amistad.block(a.id)
+    else:
+        amistad.accept()
+    async with social_uow:
+        await social_uow.friendships.add(amistad)
+
+
+class TestG1yG2:
+    async def test_g1_stroke_play_payload(self, avisos, social_uow, user_uow):
+        yo, pedro, juan = [await _user(user_uow) for _ in range(3)]
+        torneo = _torneo()
+        ronda = str(uuid4())
+
+        await avisos.tee_times(torneo, ronda, [_salida(yo, con=[pedro, juan])], [])
+
+        (evento,) = await _guardados(social_uow, yo)
+        assert evento.type == T.TEE_TIME_ASSIGNED
+        assert evento.source_match_id == ronda
+        assert evento.payload == {
+            "competition_id": torneo.competition_id,
+            "competition_name": "Medal de otoño",
+            "start_date": "2026-10-25",
+            "end_date": "2026-10-26",
+            "round_id": ronda,
+            "round_date": "2026-10-25",
+            "session_type": "MORNING",
+            "kind": "TEE_GROUP",
+            "tee_time": "09:10",
+            "partner_ids": [str(pedro.id.value), str(juan.id.value)],
+            "opponent_ids": [],
+            "match_id": None,
+            "changed": False,
+        }
+
+    async def test_g2_ryder_payload(self, avisos, social_uow, user_uow):
+        yo, pedro, juan, luis = [await _user(user_uow) for _ in range(4)]
+        ronda = str(uuid4())
+        partido = str(uuid4())
+
+        await avisos.tee_times(
+            _torneo(),
+            ronda,
+            [_salida(yo, hora=None, con=[pedro], contra=[juan, luis], partido=partido)],
+            [],
+        )
+
+        (evento,) = await _guardados(social_uow, yo)
+        assert evento.payload["kind"] == "MATCH"
+        assert evento.payload["tee_time"] is None
+        assert evento.payload["match_id"] == partido
+        assert evento.payload["partner_ids"] == [str(pedro.id.value)]
+        assert evento.payload["opponent_ids"] == [str(juan.id.value), str(luis.id.value)]
+
+    async def test_every_player_of_the_batch_gets_its_own(self, avisos, social_uow, user_uow):
+        a, b = [await _user(user_uow) for _ in range(2)]
+
+        await avisos.tee_times(
+            _torneo(), str(uuid4()), [_salida(a, con=[b]), _salida(b, con=[a])], []
+        )
+
+        (de_a,) = await _guardados(social_uow, a)
+        (de_b,) = await _guardados(social_uow, b)
+        assert de_a.payload["partner_ids"] == [str(b.id.value)]
+        assert de_b.payload["partner_ids"] == [str(a.id.value)]
+
+    async def test_one_user_read_and_one_write_per_batch(
+        self, avisos, social_uow, user_uow, monkeypatch
+    ):
+        jugadores = [await _user(user_uow) for _ in range(4)]
+        lecturas, escrituras = [], []
+        leer = user_uow.users.find_by_ids
+        escribir = social_uow.activity_events.add_many
+
+        async def _lee(ids):
+            lecturas.append(ids)
+            return await leer(ids)
+
+        async def _escribe(eventos):
+            escrituras.append(eventos)
+            return await escribir(eventos)
+
+        monkeypatch.setattr(user_uow.users, "find_by_ids", _lee)
+        monkeypatch.setattr(social_uow.activity_events, "add_many", _escribe)
+
+        await avisos.tee_times(
+            _torneo(), str(uuid4()), [_salida(j) for j in jugadores], [jugadores[0]]
+        )
+
+        assert len(lecturas) == 1
+        assert len(escrituras) == 1
+        assert len(escrituras[0]) == 4
+
+
+class TestG3Cambios:
+    async def test_a_change_replaces_the_notice_of_that_round_only(
+        self, avisos, social_uow, user_uow
+    ):
+        yo, otro = [await _user(user_uow) for _ in range(2)]
+        torneo = _torneo()
+        ronda, otra_ronda = str(uuid4()), str(uuid4())
+        await avisos.tee_times(torneo, ronda, [_salida(yo), _salida(otro)], [])
+        await avisos.tee_times(torneo, otra_ronda, [_salida(yo, hora="15:00")], [])
+
+        await avisos.tee_times(torneo, ronda, [_salida(yo, hora="09:20", changed=True)], [])
+
+        mios = {e.source_match_id: e.payload for e in await _guardados(social_uow, yo)}
+        assert set(mios) == {ronda, otra_ronda}
+        assert (mios[ronda]["tee_time"], mios[ronda]["changed"]) == ("09:20", True)
+        assert mios[otra_ronda]["tee_time"] == "15:00"
+        (del_otro,) = await _guardados(social_uow, otro)
+        assert (del_otro.payload["tee_time"], del_otro.payload["changed"]) == ("09:10", False)
+
+    async def test_a_change_is_a_new_notice(self, avisos, social_uow, user_uow):
+        """Sale de nuevo: otra id y otra fecha de publicacion, para que cuente como novedad."""
+        yo = await _user(user_uow)
+        ronda = str(uuid4())
+        await avisos.tee_times(_torneo(), ronda, [_salida(yo)], [])
+        (viejo,) = await _guardados(social_uow, yo)
+
+        await avisos.tee_times(_torneo(), ronda, [_salida(yo, hora="10:00", changed=True)], [])
+
+        (nuevo,) = await _guardados(social_uow, yo)
+        assert nuevo.id != viejo.id
+
+    async def test_leaving_the_round_withdraws_only_his_notice_of_that_round(
+        self, avisos, social_uow, user_uow
+    ):
+        yo, otro = [await _user(user_uow) for _ in range(2)]
+        torneo = _torneo()
+        ronda, otra_ronda = str(uuid4()), str(uuid4())
+        await avisos.tee_times(torneo, ronda, [_salida(yo), _salida(otro)], [])
+        await avisos.tee_times(torneo, otra_ronda, [_salida(yo)], [])
+
+        await avisos.tee_times(torneo, ronda, [], [yo.id])
+
+        assert [e.source_match_id for e in await _guardados(social_uow, yo)] == [otra_ronda]
+        assert len(await _guardados(social_uow, otro)) == 1
+
+    async def test_nothing_to_do_touches_nothing(self, avisos, social_uow, user_uow):
+        yo = await _user(user_uow)
+        ronda = str(uuid4())
+        await avisos.tee_times(_torneo(), ronda, [_salida(yo)], [])
+
+        await avisos.tee_times(_torneo(), ronda, [], [])
+
+        assert len(await _guardados(social_uow, yo)) == 1
+
+
+class TestG6G7yG11:
+    async def test_g6_only_for_him_his_friends_do_not_see_it(self, avisos, social_uow, user_uow):
+        yo, amigo = [await _user(user_uow) for _ in range(2)]
+        await _amistad(social_uow, yo, amigo)
+        torneo = _torneo()
+
+        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
+
+        assert (await _feed(social_uow, user_uow, amigo)).events == []
+        (propio,) = (await _feed(social_uow, user_uow, yo)).events
+        assert propio.type == "TEE_TIME_ASSIGNED"
+        assert propio.payload["competition_id"] == torneo.competition_id
+
+    async def test_g11_a_partner_with_a_block_is_not_named(self, avisos, social_uow, user_uow):
+        yo = await _user(user_uow, "Yo")
+        pedro = await _user(user_uow, "Pedro")
+        bloqueado = await _user(user_uow, "Juan")
+        await _amistad(social_uow, bloqueado, yo, bloqueo=True)
+
+        await avisos.tee_times(
+            _torneo(), str(uuid4()), [_salida(yo, con=[pedro], contra=[bloqueado])], []
+        )
+
+        feed = await _feed(social_uow, user_uow, yo)
+        assert str(pedro.id.value) in feed.authors
+        assert str(bloqueado.id.value) not in feed.authors
+
+
+class TestG9Limpieza:
+    async def test_withdrawing_from_the_tournament_takes_his_notices(
+        self, avisos, social_uow, user_uow
+    ):
+        yo, otro = [await _user(user_uow) for _ in range(2)]
+        torneo, otro_torneo = _torneo(), _torneo()
+        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo), _salida(otro)], [])
+        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(otro_torneo, str(uuid4()), [_salida(yo)], [])
+
+        await avisos.left(yo.id, torneo.competition_id)
+
+        assert [e.payload["competition_id"] for e in await _guardados(social_uow, yo)] == [
+            otro_torneo.competition_id
+        ]
+        assert len(await _guardados(social_uow, otro)) == 1
+
+    async def test_cancelling_takes_everyones(self, avisos, social_uow, user_uow):
+        yo, otro = [await _user(user_uow) for _ in range(2)]
+        torneo, otro_torneo = _torneo(), _torneo()
+        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo), _salida(otro)], [])
+        await avisos.tee_times(otro_torneo, str(uuid4()), [_salida(yo)], [])
+
+        await avisos.tournament_cancelled(torneo.competition_id)
+
+        assert [e.payload["competition_id"] for e in await _guardados(social_uow, yo)] == [
+            otro_torneo.competition_id
+        ]
+        assert await _guardados(social_uow, otro) == []
+
+    async def test_deleting_takes_everyones(self, avisos, social_uow, user_uow):
+        yo = await _user(user_uow)
+        torneo, otro_torneo = _torneo(), _torneo()
+        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(otro_torneo, str(uuid4()), [_salida(yo)], [])
+
+        await avisos.tournament_deleted(torneo.competition_id)
+
+        assert [e.payload["competition_id"] for e in await _guardados(social_uow, yo)] == [
+            otro_torneo.competition_id
+        ]
+
+    async def test_made_private_keeps_it(self, avisos, social_uow, user_uow):
+        yo = await _user(user_uow)
+        torneo = _torneo()
+        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
+
+        await avisos.tournament_made_private(torneo.competition_id)
+
+        assert [e.type for e in await _guardados(social_uow, yo)] == [T.TEE_TIME_ASSIGNED]

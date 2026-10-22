@@ -138,13 +138,24 @@ class ActivityEventDTO(BaseModel):
     )
     payload: dict = Field(
         default_factory=dict,
-        description="El detalle propio de cada tipo: cuantos birdies, en que hoyos, que campo",
+        description=(
+            "El detalle propio de cada tipo: cuantos birdies, en que hoyos, que campo. "
+            "En `TEE_TIME_ASSIGNED` (tu salida o tu partido en una ronda): "
+            "`competition_id`, `competition_name`, `start_date`, `end_date`, `round_id`, "
+            "`round_date` (AAAA-MM-DD), `session_type` (MORNING, AFTERNOON, EVENING), "
+            "`kind` (TEE_GROUP en stroke play, MATCH en una Ryder), `tee_time` («HH:MM» "
+            "en stroke play, null en una Ryder), `partner_ids` (compañeros de grupo o de "
+            "pareja), `opponent_ids` (rivales; vacio en stroke play), `match_id` (null en "
+            "stroke play) y `changed` (true si sustituye a una salida anterior de esa "
+            "ronda). Los nombres salen de `authors`: quien falte se pinta «un jugador»"
+        ),
     )
     source_match_id: str = Field(
         description=(
             "De donde sale, para enlazar y para no duplicar: la partida en los logros "
             "y resultados; en los avisos de torneo, la inscripcion, la invitacion o el "
-            "torneo (su id va en `payload.competition_id`)"
+            "torneo (su id va en `payload.competition_id`); en el aviso de salida, la "
+            "ronda: hay uno por jugador y ronda"
         )
     )
     group_key: str | None = Field(

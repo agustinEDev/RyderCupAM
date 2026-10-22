@@ -223,6 +223,10 @@ class GetScheduleUseCase:
                 created_at=team_assignment.created_at,
             )
 
+        # Ya guardado: los avisos de los partidos que haya creado abrir los sobres (G2)
+        if self._sobres is not None:
+            await self._sobres.avisar_salidas()
+
         return GetScheduleResponseDTO(
             competition_id=request.competition_id,
             days=days,

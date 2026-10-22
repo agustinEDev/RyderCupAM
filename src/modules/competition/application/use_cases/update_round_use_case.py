@@ -15,7 +15,11 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     RoundNotModifiableError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -39,6 +43,7 @@ from src.modules.competition.application.services.partidas_de_la_franja import (
 from src.modules.competition.application.services.partidas_del_jugador import (
     salidas_por_hora,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
@@ -84,16 +89,19 @@ class UpdateRoundUseCase:
         jugadores: JugadoresDeLaPartida | None = None,
         zonas: ICompetitionTimezone | None = None,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
             jugadores: Para rehacer las fotos de las partidas si una franja cambia
                 de campo (#251). Sin él, ese cambio con partidas se rechaza
+            actividad: Los avisos de salida en Actividad (G); sin el, no se avisa
         """
         self._uow = uow
         self._jugadores = jugadores
         self._zonas = zonas
         self._reloj = reloj
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool = False
@@ -186,6 +194,8 @@ class UpdateRoundUseCase:
             # Y que sus partidas quepan en la hoja nueva (D9, #251)
             partidas = await self._partidas_que_caben(round_entity, hoja)
             campo_anterior = round_entity.golf_course_id
+            # Las salidas de cada uno antes del cambio: la hoja o el dia mueven horas
+            antes = de_las_partidas(round_entity, partidas)
 
             # 7. Actualizar la ronda (validación de estado dentro del dominio)
             session_type = SessionType(request.session_type) if request.session_type else None
@@ -225,6 +235,11 @@ class UpdateRoundUseCase:
             # Si la franja creció, sus nuevas plazas para los que esperan (#251); si
             # no hay sitio libre o no es una franja, no hace nada
             await self._listas_al_dia(competition, round_entity, request)
+
+        # Solo a quien le cambia la hora o el dia (G3)
+        await self._actividad.salidas_cambiadas(
+            competition, round_entity.id, antes, de_las_partidas(round_entity, partidas)
+        )
 
         return UpdateRoundResponseDTO(
             id=round_entity.id.value,

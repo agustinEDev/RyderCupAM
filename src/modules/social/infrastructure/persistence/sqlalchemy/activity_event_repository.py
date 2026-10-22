@@ -209,8 +209,27 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 
+    async def delete_from_source_for_users(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_ids: Collection[UserId],
+    ) -> int:
+        if not types or not user_ids:
+            return 0
+        stmt = delete(activity_events_table).where(
+            activity_events_table.c.source_match_id == source_id,
+            activity_events_table.c.type.in_(sorted(types)),
+            activity_events_table.c.user_id.in_(list(user_ids)),
+        )
+        result = await self._session.execute(stmt)
+        return result.rowcount or 0
+
     async def delete_for_competition(
-        self, competition_id: str, types: Collection[ActivityEventType]
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
     ) -> int:
         if not types:
             return 0
@@ -218,6 +237,8 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             activity_events_table.c.payload["competition_id"].astext == competition_id,
             activity_events_table.c.type.in_(sorted(types)),
         )
+        if user_id is not None:
+            stmt = stmt.where(activity_events_table.c.user_id == user_id)
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 

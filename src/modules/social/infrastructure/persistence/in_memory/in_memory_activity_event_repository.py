@@ -128,14 +128,36 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return antes - len(self._events)
 
+    async def delete_from_source_for_users(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_ids: Collection[UserId],
+    ) -> int:
+        quienes = set(user_ids)
+        antes = len(self._events)
+        self._events = [
+            e
+            for e in self._events
+            if not (e.source_match_id == source_id and e.type in types and e.user_id in quienes)
+        ]
+        return antes - len(self._events)
+
     async def delete_for_competition(
-        self, competition_id: str, types: Collection[ActivityEventType]
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
     ) -> int:
         antes = len(self._events)
         self._events = [
             e
             for e in self._events
-            if not (e.type in types and e.payload.get("competition_id") == competition_id)
+            if not (
+                e.type in types
+                and e.payload.get("competition_id") == competition_id
+                and (user_id is None or e.user_id == user_id)
+            )
         ]
         return antes - len(self._events)
 

@@ -20,7 +20,11 @@ from src.modules.competition.application.exceptions import (
     PlazaEnFranjaError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -85,13 +89,16 @@ class CogerPlazaUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
             zonas: Para no sacar a nadie de una partida que ya salió por su hora (#251)
+            actividad: Para retirarle el aviso de salida de la franja que deja (G3)
         """
         self._uow = uow
         self._zonas = zonas
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -148,11 +155,17 @@ class CogerPlazaUseCase:
                 and p.vista is None
                 for p in plazas
             )
+            deja_su_salida = False
             if en_lugar_de is not None:
+                tenia = await self._con_partida(competicion, jugador, en_lugar_de)
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
                 # Y de su partida en esa franja: en la nueva queda sin partida (D3)
                 await sacar_de_sus_partidas(
                     self._uow, competicion.id, jugador, en_lugar_de, self._zonas, ahora
+                )
+                # De una que ya salió no sale: entonces su aviso sigue siendo cierto
+                deja_su_salida = tenia and not await self._con_partida(
+                    competicion, jugador, en_lugar_de
                 )
             plaza = PlazaEnFranja.crear(
                 competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
@@ -163,7 +176,19 @@ class CogerPlazaUseCase:
             await esperas.tras_coger(competicion, jugador)
             if en_lugar_de is not None:
                 await esperas.rellenar(competicion, en_lugar_de, ahora)
+        # Sin partida en la franja que deja, su aviso de salida de ella se va (G3)
+        if deja_su_salida and en_lugar_de is not None:
+            await self._actividad.tee_times(competicion, en_lugar_de, [], [jugador])
         return plaza
+
+    async def _con_partida(
+        self, competicion: Competition, jugador: UserId, round_id: RoundId
+    ) -> bool:
+        """Si juega en alguna partida de esa franja."""
+        return any(
+            p.round_id == round_id
+            for p in await self._uow.partidas.del_jugador(competicion.id, jugador)
+        )
 
 
 class SoltarPlazaUseCase:

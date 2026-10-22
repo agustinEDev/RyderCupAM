@@ -8,9 +8,14 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.jugadores_del_partido import (
     JugadoresDelPartido,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import de_los_partidos
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -66,9 +71,14 @@ class ReassignMatchPlayersUseCase:
         user_repository: UserRepositoryInterface,
         handicap_calculator: PlayingHandicapCalculator | None = None,
         scoring_service: ScoringService | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
-        """Recibe el reparto de golpes del partido y el sorteo de marcadores (BE #520)."""
+        """
+        Recibe el reparto de golpes del partido y el sorteo de marcadores (BE #520),
+        y los avisos de partido en Actividad (G); sin ellos, no se avisa.
+        """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
         self._scoring_service = scoring_service or ScoringService()
         self._jugadores = JugadoresDelPartido(
             golf_course_repository, user_repository, handicap_calculator
@@ -117,6 +127,11 @@ class ReassignMatchPlayersUseCase:
                 [UserId(uid) for uid in request.team_b_player_ids],
             )
 
+            # Las salidas de la sesion antes de tocarla (G3)
+            antes = de_los_partidos(
+                round_entity, await self._uow.matches.find_by_round(round_entity.id)
+            )
+
             # 8. Eliminar partido viejo y crear nuevo
             await self._uow.matches.delete(match.id)
             await self._uow.flush()  # Flush DELETE before INSERT (unique constraint)
@@ -137,14 +152,19 @@ class ReassignMatchPlayersUseCase:
                 )
             )
             await self._uow.matches.add(new_match)
-
-            return ReassignMatchPlayersResponseDTO(
-                match_id=new_match.id.value,
-                new_status=new_match.status.value,
-                handicap_strokes_given=new_match.handicap_strokes_given,
-                strokes_given_to_team=new_match.strokes_given_to_team or "",
-                updated_at=new_match.updated_at,
+            despues = de_los_partidos(
+                round_entity, await self._uow.matches.find_by_round(round_entity.id)
             )
+
+        # Ya guardado: los del partido que cambian, y fuera quien sale (G3)
+        await self._actividad.salidas_cambiadas(competition, round_entity.id, antes, despues)
+        return ReassignMatchPlayersResponseDTO(
+            match_id=new_match.id.value,
+            new_status=new_match.status.value,
+            handicap_strokes_given=new_match.handicap_strokes_given,
+            strokes_given_to_team=new_match.strokes_given_to_team or "",
+            updated_at=new_match.updated_at,
+        )
 
     async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""

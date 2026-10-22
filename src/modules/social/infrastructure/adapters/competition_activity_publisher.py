@@ -6,6 +6,7 @@ from uuid import UUID
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
+    TeeTimeAssignment,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -17,11 +18,13 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
     MatchOutcome,
     PublishCompetitionNoticesUseCase,
     StandingRef,
+    TeeTimeRef,
     TournamentRef,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -143,6 +146,32 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
 
     async def deleted(self, competition_id: CompetitionId) -> None:
         await self._notices.tournament_deleted(str(competition_id.value))
+
+    async def tee_times(
+        self,
+        competition: Competition,
+        round_id: RoundId,
+        assigned: Sequence[TeeTimeAssignment],
+        withdrawn: Sequence[UserId],
+    ) -> None:
+        await self._notices.tee_times(
+            _ref(competition),
+            str(round_id.value),
+            [
+                TeeTimeRef(
+                    user_id=salida.user_id,
+                    round_date=salida.round_date,
+                    session_type=salida.session_type.value,
+                    tee_time=salida.tee_time.strftime("%H:%M") if salida.tee_time else None,
+                    partner_ids=salida.partner_ids,
+                    opponent_ids=salida.opponent_ids,
+                    match_id=str(salida.match_id.value) if salida.match_id else None,
+                    changed=salida.changed,
+                )
+                for salida in assigned
+            ],
+            list(withdrawn),
+        )
 
 
 def _ref(competition: Competition) -> TournamentRef:

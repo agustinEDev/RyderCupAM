@@ -31,8 +31,17 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.ENROLLED_IN_TOURNAMENT,
         ActivityEventType.TOURNAMENT_MATCH_RESULT,
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
+        ActivityEventType.TEE_TIME_ASSIGNED,
     }
 )
+
+# Lo que se va cuando ya no estas en el torneo: que estas apuntado y tus salidas
+_DE_ESTAR_APUNTADO = (ActivityEventType.ENROLLED_IN_TOURNAMENT,)
+_SALIDA = ActivityEventType.TEE_TIME_ASSIGNED
+
+# Que clase de salida es, para que el cliente no lo deduzca de los nulos
+_GRUPO = "TEE_GROUP"
+_PARTIDO = "MATCH"
 
 # Lo que dice `Match.result["winner"]`
 _EMPATE = "HALVED"
@@ -61,6 +70,21 @@ class MatchOutcome:
     winner: str | None
     # "3&2", "2UP", "AS", "CONCEDED", "W/O"...
     score: str | None
+
+
+@dataclass(frozen=True)
+class TeeTimeRef:
+    """La salida de un jugador en una ronda, tal como se le cuenta."""
+
+    user_id: UserId
+    round_date: date
+    session_type: str
+    # "HH:MM" en stroke play; None en una Ryder, que sale por sesiones
+    tee_time: str | None
+    partner_ids: tuple[UserId, ...]
+    opponent_ids: tuple[UserId, ...]
+    match_id: str | None
+    changed: bool
 
 
 @dataclass(frozen=True)
@@ -127,12 +151,25 @@ class PublishCompetitionNoticesUseCase:
         await self._publicar(eventos)
 
     async def left(self, user_id: UserId, competition_id: str) -> None:
-        """Se retira: sus amigos dejan de ver que esta apuntado (B11)."""
-        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT], user_id)
+        """
+        Se retira: sus amigos dejan de ver que esta apuntado (B11), y sus
+        salidas de ese torneo se van (G9): ya no sale en ninguna.
+        """
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source(
+                competition_id, _DE_ESTAR_APUNTADO, user_id
+            )
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [_SALIDA], user_id
+            )
 
     async def tournament_cancelled(self, competition_id: str) -> None:
-        """Torneo cancelado: nadie esta ya apuntado a el (B11)."""
-        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT])
+        """Torneo cancelado: nadie esta ya apuntado a el (B11) ni tiene salida (G9)."""
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source(
+                competition_id, _DE_ESTAR_APUNTADO
+            )
+            await self._social_uow.activity_events.delete_for_competition(competition_id, [_SALIDA])
 
     async def invited(self, user_id: UserId, tournament: TournamentRef, invitation_id: str) -> None:
         """Le invitan (A3). Uno por invitacion: si se retira, se retira ese."""
@@ -264,6 +301,57 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_for_competition(
                 competition_id, _AVISOS_DE_TORNEO
             )
+
+    # === Salidas ===
+
+    async def tee_times(
+        self,
+        tournament: TournamentRef,
+        round_id: str,
+        assigned: Sequence[TeeTimeRef],
+        withdrawn: Sequence[UserId],
+    ) -> None:
+        """
+        Las salidas de una ronda (G1-G4): cada una sustituye a la que tuviera
+        ese jugador en esa ronda, y quien sale de ella pierde la suya.
+
+        **Uno por (jugador, ronda)** (G10): el origen es la ronda, y la clave
+        unica (jugador, origen, tipo) no admite dos. Sustituir es borrar el
+        viejo y publicar el nuevo en la misma transaccion: sale como aviso
+        nuevo, con su fecha, y cuenta como novedad. Todo el lote de una vez:
+        una lectura de usuarios, un borrado y una escritura.
+        """
+        quitar = [s.user_id for s in assigned] + list(withdrawn)
+        if not quitar:
+            return
+        nuevos = [
+            ActivityEvent.create(
+                user_id=salida.user_id,
+                type=_SALIDA,
+                occurred_at=utc_now(),
+                source_match_id=round_id,
+                payload={
+                    **self._del_torneo(tournament),
+                    "round_id": round_id,
+                    "round_date": salida.round_date.isoformat(),
+                    "session_type": salida.session_type,
+                    "kind": _GRUPO if salida.match_id is None else _PARTIDO,
+                    "tee_time": salida.tee_time,
+                    "partner_ids": [str(u.value) for u in salida.partner_ids],
+                    "opponent_ids": [str(u.value) for u in salida.opponent_ids],
+                    "match_id": salida.match_id,
+                    "changed": salida.changed,
+                },
+            )
+            for salida in assigned
+        ]
+        nuevos = await stamp_for_publication(self._user_uow, nuevos)
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source_for_users(
+                round_id, [_SALIDA], quitar
+            )
+            if nuevos:
+                await self._social_uow.activity_events.add_many(nuevos)
 
     # === Ayudas ===
 

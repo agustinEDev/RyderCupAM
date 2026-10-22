@@ -77,7 +77,7 @@ async def test_los_tipos_nuevos_caben_y_no_se_duplican(db_session):
         await repository.add_many([_evento(user, t, "origen-1") for t in nuevos])
         await db_session.commit()
 
-    assert len(await _tipos(repository, user)) == len(nuevos) == 8
+    assert len(await _tipos(repository, user)) == len(nuevos) == 9
 
 
 async def test_borrar_desde_un_origen_de_un_jugador(db_session):
@@ -169,3 +169,73 @@ async def test_2_borrar_por_competicion_mira_el_payload(db_session):
     assert await _tipos(repository, user) == sorted(
         [(T.ENROLLED_IN_TOURNAMENT, "torneo-2"), (T.BIRDIE, "torneo-1")]
     )
+
+
+def _salida(user: User, ronda: str, torneo: str) -> ActivityEvent:
+    return ActivityEvent.create(
+        user_id=user.id,
+        type=T.TEE_TIME_ASSIGNED,
+        occurred_at=CUANDO,
+        source_match_id=ronda,
+        payload={"competition_id": torneo, "round_id": ronda},
+    )
+
+
+async def test_g3_borrar_desde_un_origen_de_varios_jugadores(db_session):
+    """G3. Given salidas de tres jugadores en dos rondas / When se retiran dos de una / Then solo esos."""
+    ana, eva, luz = [await _user(db_session) for _ in range(3)]
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.add_many(
+        [
+            _salida(ana, "ronda-1", "torneo-1"),
+            _salida(eva, "ronda-1", "torneo-1"),
+            _salida(luz, "ronda-1", "torneo-1"),
+            _salida(ana, "ronda-2", "torneo-1"),
+            _evento(eva, T.ENROLLED_IN_TOURNAMENT, "ronda-1"),
+        ]
+    )
+    await db_session.commit()
+
+    borrados = await repository.delete_from_source_for_users(
+        "ronda-1", [T.TEE_TIME_ASSIGNED], [ana.id, eva.id]
+    )
+    await db_session.commit()
+
+    assert borrados == 2
+    assert await _tipos(repository, ana) == [(T.TEE_TIME_ASSIGNED, "ronda-2")]
+    assert await _tipos(repository, eva) == [(T.ENROLLED_IN_TOURNAMENT, "ronda-1")]
+    assert await _tipos(repository, luz) == [(T.TEE_TIME_ASSIGNED, "ronda-1")]
+
+
+async def test_g3_sin_jugadores_no_borra_nada(db_session):
+    user = await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.add_many([_salida(user, "ronda-1", "torneo-1")])
+    await db_session.commit()
+
+    assert await repository.delete_from_source_for_users("ronda-1", [T.TEE_TIME_ASSIGNED], []) == 0
+    assert len(await _tipos(repository, user)) == 1
+
+
+async def test_g9_borrar_por_competicion_de_un_jugador(db_session):
+    """G9. Given salidas de dos jugadores en dos torneos / When uno se retira de uno / Then solo las suyas de ese."""
+    ana, eva = [await _user(db_session) for _ in range(2)]
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.add_many(
+        [
+            _salida(ana, "ronda-1", "torneo-1"),
+            _salida(ana, "ronda-2", "torneo-1"),
+            _salida(ana, "ronda-3", "torneo-2"),
+            _salida(eva, "ronda-1", "torneo-1"),
+        ]
+    )
+    await db_session.commit()
+
+    borrados = await repository.delete_for_competition(
+        "torneo-1", [T.TEE_TIME_ASSIGNED], user_id=ana.id
+    )
+    await db_session.commit()
+
+    assert borrados == 2
+    assert await _tipos(repository, ana) == [(T.TEE_TIME_ASSIGNED, "ronda-3")]
+    assert await _tipos(repository, eva) == [(T.TEE_TIME_ASSIGNED, "ronda-1")]

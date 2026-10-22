@@ -116,13 +116,30 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def delete_from_source_for_users(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_ids: Collection[UserId],
+    ) -> int:
+        """
+        Como `delete_from_source`, pero de varios jugadores de una vez: las
+        salidas de una ronda se sustituyen por lotes (G3), y uno por jugador
+        serian tantas consultas como jugadores. Sin jugadores no borra nada.
+        """
+
+    @abstractmethod
     async def delete_for_competition(
-        self, competition_id: str, types: Collection[ActivityEventType]
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
     ) -> int:
         """
         Borra los eventos de esos tipos que cuentan algo de esa competicion
-        (`payload.competition_id`), sea cual sea su origen. Para cuando la
-        competicion se borra. Devuelve cuantos borro.
+        (`payload.competition_id`), sea cual sea su origen: de un jugador, o de
+        todos si no se dice. Para cuando la competicion se borra o se cancela,
+        o un jugador se retira de ella. Devuelve cuantos borro.
         """
 
     @abstractmethod
