@@ -808,6 +808,128 @@ class TestTablaACuandoCuentaElStrokePlay:
             assert (evento.payload["position"], evento.payload["tied"]) == (1, True)
 
 
+class TestTablaDMejorBruto:
+    async def test_d_si_empata_con_el_primero_nadie_lo_lleva(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        D. Given Eva gana a puntos con 72 golpes y Ana hace tambien 72 / When se
+        publica / Then nadie lleva el mejor bruto.
+        """
+        ana = await _user(user_uow, "Ana")
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            # Eva y Ana 72 golpes; Eva con hcp 18 gana a puntos; Luz 90
+            [_tarjeta(4), _tarjeta(4), _tarjeta(5)],
+            otros=[
+                QuickMatchParticipant.for_user(eva.id).with_handicap(18),
+                QuickMatchParticipant.for_user(luz.id),
+            ],
+        )
+
+        await publicar(match)
+
+        de_eva = await _uno_de(social_uow, eva)
+        de_ana = await _uno_de(social_uow, ana)
+        assert de_eva.payload["position"] == 1
+        assert de_ana.payload["position"] == 2
+        assert de_ana.payload["gross_strokes"] == de_eva.payload["gross_strokes"] == 72
+        for user in (ana, eva, luz):
+            evento = await _uno_de(social_uow, user)
+            assert evento.payload["best_gross_in_group"] is False
+            assert evento.payload["best_gross_tied"] is False
+
+    async def test_d_compartido_por_dos_que_no_ganan_lo_llevan_los_dos_empatados(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        D. Given Luz gana a puntos con 90 golpes y Ana y Eva hacen 73 / When se
+        publica / Then Ana y Eva llevan el mejor bruto, marcado como empate.
+        """
+        ana = await _user(user_uow, "Ana")
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4, h1=5), _tarjeta(4, h2=5), _tarjeta(5)],
+            otros=[
+                QuickMatchParticipant.for_user(eva.id),
+                QuickMatchParticipant.for_user(luz.id).with_handicap(36),
+            ],
+        )
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, luz)).payload["position"] == 1
+        for user in (ana, eva):
+            evento = await _uno_de(social_uow, user)
+            assert evento.payload["best_gross_in_group"] is True
+            assert evento.payload["best_gross_tied"] is True
+        de_luz = await _uno_de(social_uow, luz)
+        assert de_luz.payload["best_gross_in_group"] is False
+        assert de_luz.payload["best_gross_tied"] is False
+
+    async def test_d_unico_y_no_primero_como_hoy(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _user(user_uow, "Ana")
+        eva = await _user(user_uow, "Eva")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4, h1=5), _tarjeta(5)],
+            otros=[QuickMatchParticipant.for_user(eva.id).with_handicap(36)],
+        )
+
+        await publicar(match)
+
+        de_ana = await _uno_de(social_uow, ana)
+        assert de_ana.payload["best_gross_in_group"] is True
+        assert de_ana.payload["best_gross_tied"] is False
+
+    async def test_d_quien_no_cuenta_no_compite_por_el_mejor_bruto(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        D. Given Luz gana, Ana 73 golpes con los 18 y Eva 60 golpes en 17 hoyos /
+        When se publica / Then el mejor bruto es de Ana: Eva no cuenta.
+        """
+        ana = await _user(user_uow, "Ana")
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4, h1=5), _hoyos(range(1, 18)), _tarjeta(5)],
+            otros=[
+                QuickMatchParticipant.for_user(eva.id),
+                QuickMatchParticipant.for_user(luz.id).with_handicap(36),
+            ],
+        )
+
+        await publicar(match)
+
+        de_ana = await _uno_de(social_uow, ana)
+        de_eva = await _uno_de(social_uow, eva)
+        assert de_eva.payload["gross_strokes"] == 68
+        assert de_eva.payload["unfinished"] is True
+        assert de_eva.payload["best_gross_in_group"] is False
+        assert de_ana.payload["best_gross_in_group"] is True
+        assert de_ana.payload["best_gross_tied"] is False
+
+
 class TestTablaACuandoCuentaElMatchPlay:
     async def _singles(self, qm_uow, golf_course_uow, user_uow, tarjetas):
         ana = await _user(user_uow, "Ana")

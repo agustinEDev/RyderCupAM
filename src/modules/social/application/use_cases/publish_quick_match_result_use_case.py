@@ -233,8 +233,10 @@ class PublishQuickMatchResultUseCase:
                 "tied": puesto.tied if puesto and hay_puesto else False,
                 "unfinished": puesto is None,
                 # La etiqueta «mejor bruto del grupo», solo si no gano: quien
-                # gano ya tiene su titular
+                # gano ya tiene su titular. Si el 1.º tiene ese mismo bruto, nadie
+                # la lleva; si la comparten varios, todos, con la marca (D)
                 "best_gross_in_group": pid in con_mejor_bruto,
+                "best_gross_tied": pid in con_mejor_bruto and len(con_mejor_bruto) > 1,
             }
             if es_medal:
                 payload["net_strokes"] = vuelta.net
@@ -247,16 +249,15 @@ class PublishQuickMatchResultUseCase:
     @staticmethod
     def _mejor_bruto(cuentan: list[_Totales], puestos: dict) -> set[ParticipantId]:
         """
-        Quien lleva la etiqueta de mejor bruto: el menor bruto de los que
-        cuentan, si no gano. Todos los que cuentan tienen los mismos hoyos,
-        asi que se comparan.
+        Quien lleva la etiqueta de mejor bruto (tabla del 22 oct, D): nadie si
+        el mejor bruto es tambien de un 1.º; si no, todos los que lo comparten.
+        Todos los que cuentan tienen los mismos hoyos, asi que se comparan.
         """
         mejor = min(v.gross for v in cuentan)
-        return {
-            v.participant.participant_id
-            for v in cuentan
-            if v.gross == mejor and puestos[v.participant.participant_id].position != 1
-        }
+        con_el = [v for v in cuentan if v.gross == mejor]
+        if any(puestos[v.participant.participant_id].position == 1 for v in con_el):
+            return set()
+        return {v.participant.participant_id for v in con_el}
 
     def _totales(self, lectura: _Lectura, p: QuickMatchParticipant) -> _Totales | None:
         """
