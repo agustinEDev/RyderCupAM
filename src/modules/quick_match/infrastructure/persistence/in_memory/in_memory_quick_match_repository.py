@@ -91,3 +91,14 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
     async def exists_created_by(self, creator_id: UserId) -> bool:
         """True si el usuario ha creado alguna partida rapida."""
         return any(qm.creator_id == creator_id for qm in self._quick_matches.values())
+
+    async def list_shared_by(
+        self, user_id: UserId, other_id: UserId, status: QuickMatchStatus
+    ) -> list[QuickMatch]:
+        results = [
+            qm
+            for qm in self._quick_matches.values()
+            if self._matches_user(qm, user_id, status) and self._matches_user(qm, other_id, status)
+        ]
+        results.sort(key=lambda x: x.created_at, reverse=True)
+        return results

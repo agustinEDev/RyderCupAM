@@ -56,3 +56,7 @@ class PartidaRepositoryInterface(ABC):
     @abstractmethod
     async def existe_con_jugador(self, user_id: UserId) -> bool:
         """Si juega en alguna partida, de cualquier competición (antes de borrar al usuario)."""
+
+    @abstractmethod
+    async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
+        """Las partidas, de cualquier competición, donde juegan los dos (BE-3)."""

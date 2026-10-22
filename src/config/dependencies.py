@@ -413,6 +413,9 @@ from src.modules.social.application.ports.player_course_history_interface import
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.application.ports.shared_games_interface import (
+    SharedGamesInterface,
+)
 from src.modules.social.application.ports.social_email_service_interface import (
     ISocialEmailService,
 )
@@ -425,6 +428,9 @@ from src.modules.social.application.use_cases.get_feed_unseen_count_use_case imp
 )
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
+)
+from src.modules.social.application.use_cases.get_games_together_use_case import (
+    GetGamesTogetherUseCase,
 )
 from src.modules.social.application.use_cases.get_player_activity_use_case import (
     GetPlayerActivityUseCase,
@@ -475,6 +481,9 @@ from src.modules.social.infrastructure.adapters.player_differentials_adapter imp
 )
 from src.modules.social.infrastructure.adapters.quick_match_achievements_publisher import (
     QuickMatchAchievementsPublisher,
+)
+from src.modules.social.infrastructure.adapters.shared_games_adapter import (
+    SharedGamesAdapter,
 )
 from src.modules.social.infrastructure.adapters.tournament_achievements_publisher import (
     TournamentAchievementsPublisher,
@@ -1610,13 +1619,33 @@ def get_delete_profile_photo_use_case(
     return DeleteProfilePhotoUseCase(social_uow)
 
 
+def get_shared_games(
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SharedGamesInterface:
+    """Proveedor del puerto de las partidas jugadas juntos (BE-3)."""
+    return SharedGamesAdapter(quick_match_uow, competition_uow, golf_course_uow, user_uow)
+
+
 def get_player_profile_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     stats_use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+    shared_games: SharedGamesInterface = Depends(get_shared_games),
 ) -> GetPlayerProfileUseCase:
     """Proveedor del caso de uso GetPlayerProfileUseCase."""
-    return GetPlayerProfileUseCase(social_uow, user_uow, stats_use_case)
+    return GetPlayerProfileUseCase(social_uow, user_uow, stats_use_case, shared_games)
+
+
+def get_games_together_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    shared_games: SharedGamesInterface = Depends(get_shared_games),
+) -> GetGamesTogetherUseCase:
+    """Proveedor del caso de uso GetGamesTogetherUseCase."""
+    return GetGamesTogetherUseCase(social_uow, user_uow, shared_games)
 
 
 def get_player_activity_use_case(

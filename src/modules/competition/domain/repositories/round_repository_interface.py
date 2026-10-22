@@ -51,3 +51,8 @@ class RoundRepositoryInterface(ABC):
     async def delete(self, round_id: RoundId) -> bool:
         """Elimina una ronda. Retorna True si existia."""
         pass
+
+    @abstractmethod
+    async def find_by_ids(self, round_ids: list[RoundId]) -> list[Round]:
+        """Esas rondas en una sola lectura, no una por ronda (BE-3)."""
+        pass

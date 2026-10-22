@@ -69,7 +69,8 @@ class TestPerfil:
     async def test_un_desconocido_ve_la_ficha_pero_no_lo_privado(self, client: AsyncClient):
         """
         Given dos usuarios sin amistad / When uno pide el perfil / Then 200 con
-        nombre, apellidos y foto, pero sin handicap ni estadisticas.
+        nombre, apellidos, foto y handicap (publico entre usuarios con sesion
+        desde BE-3), pero sin estadisticas.
         """
         ana = await create_authenticated_user(
             client, "perfil_c@test.com", "P@ssw0rd123!", "Ana", "Garcia"
@@ -77,6 +78,12 @@ class TestPerfil:
         luis = await create_authenticated_user(
             client, "perfil_d@test.com", "P@ssw0rd123!", "Luis", "Perez"
         )
+        set_auth_cookies(client, luis["cookies"])
+        puesto = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": luis["user"]["id"], "handicap": 14.2},
+        )
+        assert puesto.status_code == 200, puesto.text
 
         set_auth_cookies(client, ana["cookies"])
         respuesta = await client.get(f"/api/v1/users/{luis['user']['id']}/profile")
@@ -87,7 +94,7 @@ class TestPerfil:
         assert datos["is_friend"] is False
         assert datos["friendship"]["status"] == "NONE"
         assert datos["stats"] is None
-        assert datos["handicap"] is None
+        assert abs(datos["handicap"] - 14.2) < 0.01
         # El correo es de los campos privados: llega en None, no ausente
         assert datos["email"] is None
         assert luis["user"]["email"] not in respuesta.text

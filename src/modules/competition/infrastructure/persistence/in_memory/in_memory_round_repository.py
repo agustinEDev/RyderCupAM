@@ -47,3 +47,6 @@ class InMemoryRoundRepository(RoundRepositoryInterface):
             del self._rounds[round_id]
             return True
         return False
+
+    async def find_by_ids(self, round_ids: list[RoundId]) -> list[Round]:
+        return [self._rounds[i] for i in dict.fromkeys(round_ids) if i in self._rounds]

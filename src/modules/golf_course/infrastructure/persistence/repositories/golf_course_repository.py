@@ -329,3 +329,15 @@ class GolfCourseRepository(IGolfCourseRepository):
         if golf_course:
             await self._session.delete(golf_course)
             await self._session.flush()
+
+    async def find_by_ids(self, golf_course_ids: list[GolfCourseId]) -> list[GolfCourse]:
+        """Esos campos con sus salidas, en una sola consulta (como `find_by_id`)."""
+        if not golf_course_ids:
+            return []
+        stmt = (
+            select(GolfCourse)
+            .where(golf_courses_table.c.id.in_(golf_course_ids))
+            .options(joinedload(GolfCourse._tees))
+        )
+        result = await self._session.execute(stmt)
+        return list(result.unique().scalars().all())

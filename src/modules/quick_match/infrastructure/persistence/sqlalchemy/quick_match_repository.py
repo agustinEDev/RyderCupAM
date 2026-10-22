@@ -150,3 +150,17 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return (result.scalar() or 0) > 0
+
+    async def list_shared_by(
+        self, user_id: UserId, other_id: UserId, status: QuickMatchStatus
+    ) -> list[QuickMatch]:
+        conditions = [
+            self._participant_filter(user_id),
+            self._participant_filter(other_id),
+            self._not_hidden_filter(user_id),
+            self._not_hidden_filter(other_id),
+            QuickMatch._status == status,
+        ]
+        stmt = select(QuickMatch).where(and_(*conditions)).order_by(QuickMatch._created_at.desc())
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

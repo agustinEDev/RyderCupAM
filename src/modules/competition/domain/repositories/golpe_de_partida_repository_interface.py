@@ -26,3 +26,7 @@ class GolpeDePartidaRepositoryInterface(ABC):
     @abstractmethod
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[GolpeDePartida]:
         """Los de toda la competición (la general)."""
+
+    @abstractmethod
+    async def de_las_partidas(self, partida_ids: list[PartidaId]) -> list[GolpeDePartida]:
+        """Los de varias partidas en una sola lectura, no una por partida (BE-3)."""
