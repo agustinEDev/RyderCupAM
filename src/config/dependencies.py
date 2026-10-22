@@ -1657,9 +1657,10 @@ def get_games_together_use_case(
 def get_player_activity_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
 ) -> GetPlayerActivityUseCase:
     """Proveedor del caso de uso GetPlayerActivityUseCase."""
-    return GetPlayerActivityUseCase(social_uow, user_uow)
+    return GetPlayerActivityUseCase(social_uow, user_uow, golf_course_uow)
 
 
 def get_friends_feed_use_case(
