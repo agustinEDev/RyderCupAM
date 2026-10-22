@@ -4,12 +4,13 @@ los grupos de stroke play de sus torneos, no solo en partidas rapidas y partidos
 de la Ryder.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryCompetitionUnitOfWork,
@@ -22,6 +23,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMat
 from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
     InMemoryQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.player_course_history_interface import PlayedBefore
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
 )
@@ -174,10 +176,10 @@ async def test_only_rounds_before_the_cut_count(world):
     ana, _, course, _ = await _jugado(world)  # ronda del 1 jun 2026, torneo cerrado
 
     assert not await _adapter(world).has_played_course_before(
-        ana.id, str(course.id.value), "otra-vuelta", before=DIA
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(DIA)
     )
     assert await _adapter(world).has_played_course_before(
-        ana.id, str(course.id.value), "otra-vuelta", before=DIA + timedelta(days=1)
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(DIA + timedelta(days=1))
     )
 
 
@@ -199,8 +201,149 @@ async def test_only_quick_matches_before_the_cut_count(world):
     hoy = match.created_at.date()
 
     assert not await adapter.has_played_course_before(
-        ana.id, str(course.id.value), "otra-vuelta", before=hoy
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(hoy)
     )
     assert await adapter.has_played_course_before(
-        ana.id, str(course.id.value), "otra-vuelta", before=hoy + timedelta(days=1)
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(hoy + timedelta(days=1))
+    )
+
+
+# ==================== El mismo dia, por hora real (22 oct, prueba de punta a punta) ====================
+
+# La vuelta que se juzga: la sesion de la tarde (12:00 locales), que en Madrid en
+# junio son las 10:00 UTC
+TARDE = PlayedBefore(DIA, local_hour=12, utc_instant=datetime(2026, 6, 1, 10, 0))
+
+
+async def _rapida_creada(world, ana, course, creada: datetime) -> PlayerCourseHistoryAdapter:
+    qm_uow = InMemoryQuickMatchUnitOfWork()
+    match = QuickMatch.create(
+        id=QuickMatchId.generate(),
+        creator_id=ana.id,
+        golf_course_id=course.id,
+        scoring_format=ScoringFormat.STABLEFORD,
+    )
+    match.start([match.creator_participant_id])
+    match.complete()
+    match = QuickMatch.reconstruct(
+        id=match.id,
+        creator_id=match.creator_id,
+        golf_course_id=match.golf_course_id,
+        match_format=match.match_format,
+        status=match.status,
+        participants=list(match.participants),
+        scoring_format=match.scoring_format,
+        created_at=creada,
+        updated_at=creada,
+    )
+    async with qm_uow:
+        await qm_uow.quick_matches.add(match)
+    return PlayerCourseHistoryAdapter(qm_uow, world.comp)
+
+
+@pytest.mark.parametrize(
+    ("creada", "cuenta"),
+    [
+        (datetime(2026, 6, 1, 9, 59), True),  # antes de la sesion, el mismo dia
+        (datetime(2026, 6, 1, 10, 0), False),  # a la vez: no es ANTES
+        (datetime(2026, 6, 1, 10, 1), False),  # despues
+        (datetime(2026, 5, 31, 23, 0), True),  # el dia anterior
+    ],
+)
+async def test_a_quick_match_counts_by_its_creation_instant(world, creada, cuenta):
+    ana = await world.user()
+    course = await world.course(ana)
+    adapter = await _rapida_creada(world, ana, course, creada)
+
+    assert (
+        await adapter.has_played_course_before(
+            ana.id, str(course.id.value), "otra-vuelta", before=TARDE
+        )
+        is cuenta
+    )
+
+
+async def test_without_the_instant_a_quick_match_that_day_does_not_count(world):
+    ana = await world.user()
+    course = await world.course(ana)
+    adapter = await _rapida_creada(world, ana, course, datetime(2026, 6, 1, 0, 1))
+
+    assert not await adapter.has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(DIA, local_hour=12)
+    )
+
+
+async def test_a_quick_match_with_a_zone_is_compared_in_utc(world):
+    """Un instante con zona se pasa a UTC antes de comparar."""
+    from zoneinfo import ZoneInfo
+
+    ana = await world.user()
+    course = await world.course(ana)
+    # 11:30 en Madrid = 9:30 UTC, antes de las 10:00 UTC
+    adapter = await _rapida_creada(
+        world, ana, course, datetime(2026, 6, 1, 11, 30, tzinfo=ZoneInfo("Europe/Madrid"))
+    )
+
+    assert await adapter.has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=TARDE
+    )
+
+
+async def _grupo_en_sesion(world, session: SessionType):
+    ana = await world.user()
+    competition = await world.competition(ana, enrolled=[ana])
+    course = await world.course(ana)
+    await world.group(
+        competition, await world.round(competition, course, DIA, session), {ana: tarjeta()}
+    )
+    return ana, course
+
+
+@pytest.mark.parametrize(
+    ("sesion", "cuenta"),
+    [
+        (SessionType.MORNING, True),
+        (SessionType.AFTERNOON, False),
+        (SessionType.EVENING, False),
+    ],
+)
+async def test_another_tournament_that_day_counts_by_its_session(world, sesion, cuenta):
+    ana, course = await _grupo_en_sesion(world, sesion)
+
+    assert (
+        await _adapter(world).has_played_course_before(
+            ana.id, str(course.id.value), "otra-vuelta", before=TARDE
+        )
+        is cuenta
+    )
+
+
+async def test_without_the_session_hour_another_tournament_that_day_does_not_count(world):
+    ana, course = await _grupo_en_sesion(world, SessionType.MORNING)
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(DIA)
+    )
+
+
+async def test_the_session_hour_is_enough_without_the_zone(world):
+    """En el mismo campo la zona es la misma: el orden de las sesiones basta."""
+    ana, course = await _grupo_en_sesion(world, SessionType.MORNING)
+
+    assert await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=PlayedBefore(DIA, local_hour=12)
+    )
+
+
+async def test_a_ryder_match_that_morning_counts(world):
+    ana = await world.user()
+    rival = await world.user()
+    competition = await world.competition(ana, tipo=TournamentType.RYDER_CUP, enrolled=[ana, rival])
+    course = await world.course(ana)
+    await world.match(
+        await world.round(competition, course, DIA, SessionType.MORNING), ana, rival, tarjeta()
+    )
+
+    assert await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=TARDE
     )

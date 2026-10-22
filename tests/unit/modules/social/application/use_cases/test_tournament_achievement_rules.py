@@ -12,7 +12,8 @@ play:
 6. Reabrir y publicar se serializan con el candado del torneo.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from uuid import UUID
 
 import pytest
 
@@ -22,6 +23,8 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryCompetitionUnitOfWork,
@@ -457,8 +460,8 @@ class TestOnlyWhatWasPlayedBefore:
         assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
 
 
-async def _partida_rapida(qm_uow, user, course) -> None:
-    """Una partida rapida terminada en ese campo, creada hoy."""
+async def _partida_rapida(qm_uow, user, course, creada: datetime | None = None) -> None:
+    """Una partida rapida terminada en ese campo, creada hoy o en `creada` (UTC sin zona)."""
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
         creator_id=user.id,
@@ -467,8 +470,293 @@ async def _partida_rapida(qm_uow, user, course) -> None:
     )
     match.start([match.creator_participant_id])
     match.complete()
+    if creada is not None:
+        match = QuickMatch.reconstruct(
+            id=match.id,
+            creator_id=match.creator_id,
+            golf_course_id=match.golf_course_id,
+            match_format=match.match_format,
+            status=match.status,
+            participants=list(match.participants),
+            scoring_format=match.scoring_format,
+            allowance_percentage=match.allowance_percentage,
+            play_mode=match.play_mode,
+            scorer_ids=list(match.scorer_ids),
+            created_at=creada,
+            updated_at=creada,
+        )
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
+
+
+# ==================== El mismo dia, por hora real (prueba de punta a punta, 22 oct) ====================
+
+MADRID = "Europe/Madrid"  # en junio, UTC+2: la sesion de manana abre a las 4:00 UTC
+MANANA = SessionType.MORNING  # 6:00 locales
+TARDE = SessionType.AFTERNOON  # 12:00 locales = 10:00 UTC en junio en Madrid
+
+
+class TestNewCourseOnTheSameDay:
+    """
+    «Campo nuevo»: lo jugado ANTES de la primera vuelta del torneo en el campo
+    cuenta como ya jugado aunque sea el mismo dia. La vuelta del torneo se fecha
+    con la hora de apertura de su sesion en la zona del campo; la partida
+    rapida, con su instante de creacion. Sin zona, por fecha: el mismo dia no
+    cuenta.
+    """
+
+    async def test_a_quick_match_that_morning_takes_away_the_afternoon_round(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        course = await world.course(ana, timezone=MADRID)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        await _partida_rapida(qm_uow, ana, course, datetime.combine(DIA, datetime.min.time()))
+        competition = await world.competition(ana, enrolled=[ana])
+        ronda = await world.round(competition, course, DIA, TARDE)
+        await world.group(competition, ronda, {ana: tarjeta()})
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
+
+    async def test_a_quick_match_after_the_morning_round_does_not_take_it_away(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        course = await world.course(ana, timezone=MADRID)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        await _partida_rapida(qm_uow, ana, course, datetime(DIA.year, DIA.month, DIA.day, 9, 0))
+        competition = await world.competition(ana, enrolled=[ana])
+        ronda = await world.round(competition, course, DIA, MANANA)
+        await world.group(competition, ronda, {ana: tarjeta()})
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+
+    async def test_the_instant_is_the_session_in_the_course_zone_not_in_utc(
+        self, world, social_uow
+    ):
+        """A las 11:00 UTC ya han pasado las 12:00 de Madrid (10:00 UTC): es despues."""
+        ana = await world.user()
+        course = await world.course(ana, timezone=MADRID)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        await _partida_rapida(qm_uow, ana, course, datetime(DIA.year, DIA.month, DIA.day, 11, 0))
+        competition = await world.competition(ana, enrolled=[ana])
+        ronda = await world.round(competition, course, DIA, TARDE)
+        await world.group(competition, ronda, {ana: tarjeta()})
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+
+    async def test_without_the_course_zone_the_same_day_does_not_count(self, world, social_uow):
+        ana = await world.user()
+        course = await world.course(ana)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        await _partida_rapida(qm_uow, ana, course, datetime.combine(DIA, datetime.min.time()))
+        competition = await world.competition(ana, enrolled=[ana])
+        ronda = await world.round(competition, course, DIA, TARDE)
+        await world.group(competition, ronda, {ana: tarjeta()})
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+
+    async def test_the_day_before_still_counts_without_the_zone(self, world, social_uow):
+        ana = await world.user()
+        course = await world.course(ana)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        ayer = DIA - timedelta(days=1)
+        await _partida_rapida(qm_uow, ana, course, datetime(ayer.year, ayer.month, ayer.day, 23))
+        competition = await world.competition(ana, enrolled=[ana])
+        await world.group(
+            competition, await world.round(competition, course, DIA, TARDE), {ana: tarjeta()}
+        )
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
+
+    async def test_a_closed_tournament_that_morning_on_the_course_takes_it_away(
+        self, world, social_uow
+    ):
+        """En el mismo campo la zona es la misma: basta el orden de las sesiones."""
+        ana = await world.user()
+        course = await world.course(ana)
+        manana = await world.competition(ana, enrolled=[ana])
+        await world.group(manana, await world.round(manana, course, DIA, MANANA), {ana: tarjeta()})
+        tarde = await world.competition(ana, enrolled=[ana])
+        await world.group(tarde, await world.round(tarde, course, DIA, TARDE), {ana: tarjeta()})
+
+        await _publisher(world, social_uow).execute(str(tarde.id.value))
+
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
+
+    async def test_a_closed_tournament_that_afternoon_does_not_take_it_away(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        course = await world.course(ana, timezone=MADRID)
+        manana = await world.competition(ana, enrolled=[ana])
+        await world.group(manana, await world.round(manana, course, DIA, MANANA), {ana: tarjeta()})
+        tarde = await world.competition(ana, enrolled=[ana])
+        await world.group(tarde, await world.round(tarde, course, DIA, TARDE), {ana: tarjeta()})
+
+        await _publisher(world, social_uow).execute(str(manana.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+
+    async def test_the_same_session_of_another_tournament_does_not_take_it_away(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        course = await world.course(ana)
+        uno = await world.competition(ana, enrolled=[ana])
+        await world.group(uno, await world.round(uno, course, DIA, MANANA), {ana: tarjeta()})
+        otro = await world.competition(ana, enrolled=[ana])
+        await world.group(otro, await world.round(otro, course, DIA, MANANA), {ana: tarjeta()})
+
+        await _publisher(world, social_uow).execute(str(otro.id.value))
+
+        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+
+    async def test_the_morning_round_of_the_tournament_is_the_first_one(
+        self, world, social_uow, monkeypatch
+    ):
+        """Dos rondas el mismo dia: el campo se estrena en la de la manana."""
+        # La de la tarde con el id menor: si el orden fuera por id, ganaria ella
+        ids = iter([PartidaId(UUID(int=1)), PartidaId(UUID(int=2))])
+        monkeypatch.setattr(PartidaId, "generate", classmethod(lambda cls: next(ids)))
+        ana = await world.user()
+        course = await world.course(ana, timezone=MADRID)
+        qm_uow = InMemoryQuickMatchUnitOfWork()
+        # Entre las dos: despues de las 4:00 UTC y antes de las 10:00 UTC
+        await _partida_rapida(qm_uow, ana, course, datetime(DIA.year, DIA.month, DIA.day, 7, 0))
+        competition = await world.competition(ana, enrolled=[ana])
+        tarde = await world.group(
+            competition, await world.round(competition, course, DIA, TARDE), {ana: tarjeta()}
+        )
+        manana = await world.group(
+            competition, await world.round(competition, course, DIA, MANANA), {ana: tarjeta()}
+        )
+        assert tarde.id != manana.id
+
+        await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
+
+        nuevos = await _de_tipo(social_uow, ana, T.NEW_COURSE)
+        assert [e.source_match_id for e in nuevos] == [str(manana.id.value)]
+
+
+class TestFirstTournamentOnTheSameDay:
+    """
+    «Primer torneo» con dos torneos que empiezan el mismo dia: solo lo da uno.
+    Criterio (decision de este arreglo): el que empieza antes; si empiezan el
+    mismo dia, aquel en el que el jugador jugo antes su primera vuelta (fecha y
+    hora local de la sesion); y si tambien coinciden, el de id menor.
+    """
+
+    async def _dos_torneos(self, world, sesion_a, sesion_b):
+        """
+        Dos torneos que empiezan el mismo dia. `a` es SIEMPRE el de id mayor:
+        asi, si la hora no decidiera, el desempate por id daria el otro.
+        """
+        ana = await world.user()
+        course = await world.course(ana)
+        uno = await world.competition(ana, enrolled=[ana])
+        otro = await world.competition(ana, enrolled=[ana])
+        b, a = sorted((uno, otro), key=lambda c: str(c.id.value))
+        await world.group(a, await world.round(a, course, DIA, sesion_a), {ana: tarjeta()})
+        await world.group(b, await world.round(b, course, DIA, sesion_b), {ana: tarjeta()})
+        return ana, a, b
+
+    async def test_only_the_one_played_first_that_day_is_the_first(self, world, social_uow):
+        ana, manana, tarde = await self._dos_torneos(world, MANANA, TARDE)
+
+        await _publisher(world, social_uow).execute(str(tarde.id.value))
+        await _publisher(world, social_uow).execute(str(manana.id.value))
+
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        assert [e.payload["competition_id"] for e in primeros] == [str(manana.id.value)]
+
+    async def test_in_the_same_session_the_lower_id_wins(self, world, social_uow):
+        ana, a, b = await self._dos_torneos(world, MANANA, MANANA)
+
+        await _publisher(world, social_uow).execute(str(a.id.value))
+        await _publisher(world, social_uow).execute(str(b.id.value))
+
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        menor = min(str(a.id.value), str(b.id.value))
+        assert [e.payload["competition_id"] for e in primeros] == [menor]
+
+    async def test_reopening_and_closing_both_again_gives_the_same(self, world, social_uow):
+        ana, manana, tarde = await self._dos_torneos(world, MANANA, TARDE)
+        for torneo in (tarde, manana):
+            await _publisher(world, social_uow).execute(str(torneo.id.value))
+
+        for torneo in (manana, tarde):
+            await _reabrir(world, social_uow, torneo)
+            torneo.complete()
+            await world.save_competition(torneo)
+            await _publisher(world, social_uow).execute(str(torneo.id.value))
+
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        assert [e.payload["competition_id"] for e in primeros] == [str(manana.id.value)]
+        nuevos = await _de_tipo(social_uow, ana, T.NEW_COURSE)
+        assert [e.payload["competition_id"] for e in nuevos] == [str(manana.id.value)]
+
+    async def test_it_is_the_first_round_of_the_player_that_decides(self, world, social_uow):
+        """Manana y noche en uno, tarde en el otro: gana el de la manana."""
+        ana, a, b = await self._dos_torneos(world, SessionType.MORNING, TARDE)
+        course = await world.course(ana)
+        noche = await world.round(a, course, DIA, SessionType.EVENING)
+        await world.group(a, noche, {ana: tarjeta()}, numero=2)
+
+        await _publisher(world, social_uow).execute(str(a.id.value))
+        await _publisher(world, social_uow).execute(str(b.id.value))
+
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        assert [e.payload["competition_id"] for e in primeros] == [str(a.id.value)]
+
+    async def test_a_ryder_the_same_day_is_tied_by_its_match(self, world, social_uow):
+        """El otro torneo es una Ryder: su primera vuelta sale de sus partidos."""
+        ana = await world.user()
+        rival = await world.user()
+        course = await world.course(ana)
+        uno = await world.competition(ana, tipo=RYDER, enrolled=[ana, rival])
+        otro = await world.competition(ana, enrolled=[ana])
+        # El de id mayor juega por la manana: sin la hora, el id daria el otro
+        if str(uno.id.value) > str(otro.id.value):
+            await world.match(await world.round(uno, course, DIA, MANANA), ana, rival, tarjeta())
+            await world.group(otro, await world.round(otro, course, DIA, TARDE), {ana: tarjeta()})
+            primero = uno
+        else:
+            await world.match(await world.round(uno, course, DIA, TARDE), ana, rival, tarjeta())
+            await world.group(otro, await world.round(otro, course, DIA, MANANA), {ana: tarjeta()})
+            primero = otro
+
+        await _publisher(world, social_uow).execute(str(uno.id.value))
+        await _publisher(world, social_uow).execute(str(otro.id.value))
+
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        assert [e.payload["competition_id"] for e in primeros] == [str(primero.id.value)]
+
+    async def test_a_tournament_that_started_earlier_still_wins(self, world, social_uow):
+        """El dia de inicio sigue mandando: la hora solo desempata el mismo dia."""
+        ana = await world.user()
+        course = await world.course(ana)
+        antes = await world.competition(ana, enrolled=[ana], start=DIA - timedelta(days=1))
+        # Su vuelta, por la tarde del dia siguiente: el torneo empezo antes
+        await world.group(antes, await world.round(antes, course, DIA, TARDE), {ana: tarjeta()})
+        despues = await world.competition(ana, enrolled=[ana])
+        await world.group(
+            despues, await world.round(despues, course, DIA, MANANA), {ana: tarjeta()}
+        )
+
+        await _publisher(world, social_uow).execute(str(despues.id.value))
+
+        assert await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT) == []
 
 
 class TestPlayerIdsOfTheMatch:
