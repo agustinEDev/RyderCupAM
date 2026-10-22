@@ -24,6 +24,7 @@ las unidades de trabajo en memoria: es el puesto que el backend publica.
 
     PYTHONPATH=. python scripts/generate_parity_fixtures.py                # los dos
     PYTHONPATH=. python scripts/generate_parity_fixtures.py --standings    # solo el orden
+    ... --standings --out RUTA.json   # el orden, en otra ruta (p. ej. otro worktree)
 """
 
 import asyncio
@@ -213,7 +214,10 @@ def run(
 def main() -> None:
     if "--standings" not in sys.argv:
         _allocation()
-    asyncio.run(_standings())
+    salida = STANDINGS_OUTPUT
+    if "--out" in sys.argv:
+        salida = Path(sys.argv[sys.argv.index("--out") + 1]).resolve()
+    asyncio.run(_standings(salida))
 
 
 def _allocation() -> None:
@@ -480,7 +484,12 @@ async def _esperado(social, formato, jugadores, cuentas) -> dict:
 
 
 async def _escenario(
-    escenarios: list[dict], name: str, formato, jugadores: list[tuple[str, float | None, dict]]
+    escenarios: list[dict],
+    name: str,
+    formato,
+    jugadores: list[tuple[str, float | None, dict]],
+    play_mode: PlayMode = PlayMode.HANDICAP,
+    escritos: dict[str, str] | None = None,
 ) -> None:
     """`jugadores`: (etiqueta, indice o None, tarjeta). El primero crea la partida."""
     social, qm, gc, users = (
@@ -514,6 +523,7 @@ async def _escenario(
         golf_course_id=course.id,
         scoring_format=formato,
         match_format=None,
+        play_mode=play_mode,
     )
     for (_, indice, _), user in zip(jugadores[1:], cuentas[1:], strict=True):
         participante = QuickMatchParticipant.for_user(user.id)
@@ -569,6 +579,12 @@ async def _escenario(
                     "handicap": indice,
                     "color": p.tee_color.value if p.tee_color else None,
                     "teeGender": p.tee_gender.value if p.tee_gender else None,
+                    # Como lo tecleo quien lo puso, si se escribio distinto
+                    **(
+                        {"handicapText": escritos[etiquetas[p.participant_id]]}
+                        if escritos and etiquetas[p.participant_id] in escritos
+                        else {}
+                    ),
                 }
                 for p, (_, indice, _) in zip(match.participants, jugadores, strict=True)
             ],
@@ -581,7 +597,7 @@ async def _escenario(
     )
 
 
-async def _standings() -> None:
+async def _standings(salida: Path) -> None:
     stableford, medal = ScoringFormat.STABLEFORD, ScoringFormat.MEDAL
     escenarios: list[dict] = []
 
@@ -691,9 +707,45 @@ async def _standings() -> None:
             ("c", 0.0, _hoyos(3, range(1, 10))),
         ],
     )
+    await _escenario(
+        escenarios,
+        "stableford el mismo indice escrito distinto (12.4 y 12.40): comparten",
+        stableford,
+        [("a", 12.4, _con(5, 1, 12)), ("b", 12.40, _con(5, 7, 18)), ("c", 30.0, _card(6))],
+        escritos={"a": "12.4", "b": "12.40"},
+    )
 
-    STANDINGS_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with STANDINGS_OUTPUT.open("w", encoding="utf-8") as handle:
+    # --- Scratch: nadie recibe golpes, pero el empate lo sigue deshaciendo
+    # el indice con el que se jugo (H) ---
+    await _escenario(
+        escenarios,
+        "stableford scratch empate a puntos, delante el de menos indice",
+        stableford,
+        [("a", 19.0, _card(4)), ("b", 0.0, _card(4)), ("c", 5.0, _card(5))],
+        play_mode=PlayMode.SCRATCH,
+    )
+    await _escenario(
+        escenarios,
+        "stableford scratch sin handicap empata con un 0.0",
+        stableford,
+        [("a", None, _card(4)), ("b", 0.0, _card(4)), ("c", -1.0, _card(4))],
+        play_mode=PlayMode.SCRATCH,
+    )
+    await _escenario(
+        escenarios,
+        "medal scratch golpes brutos y el empate por indice",
+        medal,
+        [
+            ("a", 20.0, _card(4)),
+            ("b", 3.0, _card(4)),
+            ("c", 3.0, _card(4)),
+            ("d", 0.0, _card(5)),
+        ],
+        play_mode=PlayMode.SCRATCH,
+    )
+
+    salida.parent.mkdir(parents=True, exist_ok=True)
+    with salida.open("w", encoding="utf-8") as handle:
         json.dump(
             {
                 "generatedBy": "RyderCupAm PublishQuickMatchResultUseCase",
@@ -705,7 +757,7 @@ async def _standings() -> None:
         )
         handle.write("\n")
 
-    print(f"{len(escenarios)} escenarios de clasificacion escritos en {STANDINGS_OUTPUT}")
+    print(f"{len(escenarios)} escenarios de clasificacion escritos en {salida}")
 
 
 if __name__ == "__main__":
