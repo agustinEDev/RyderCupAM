@@ -32,7 +32,7 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.domain.utc_clock import utc_now
 
 # Tope duro por pagina. El cliente puede pedir menos, nunca mas: el feed carga
@@ -253,6 +253,6 @@ def _nombrados(payload: dict) -> set[UserId]:
             continue
         try:
             nombrados.add(UserId(crudo))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, InvalidUserIdError):
             continue
     return nombrados
