@@ -347,3 +347,59 @@ async def test_a_ryder_match_that_morning_counts(world):
     assert await _adapter(world).has_played_course_before(
         ana.id, str(course.id.value), "otra-vuelta", before=TARDE
     )
+
+
+# ==================== Los del mismo dia, aunque sigan en juego (revision final de bugs) ====================
+
+
+async def _torneo_con_vuelta(world, ana, course, *, completed: bool, start=DIA):
+    competition = await world.competition(ana, enrolled=[ana], completed=completed, start=start)
+    await world.group(
+        competition,
+        await world.round(competition, course, start, SessionType.MORNING),
+        {ana: tarjeta()},
+    )
+    return competition
+
+
+async def test_a_same_day_tournament_still_in_play_counts(world):
+    ana = await world.user()
+    course = await world.course(ana)
+    await _torneo_con_vuelta(world, ana, course, completed=False)
+
+    assert await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=TARDE, tournament_start=DIA
+    )
+
+
+async def test_without_the_start_a_tournament_in_play_does_not_count(world):
+    ana = await world.user()
+    course = await world.course(ana)
+    await _torneo_con_vuelta(world, ana, course, completed=False)
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=TARDE
+    )
+
+
+async def test_a_tournament_in_play_of_another_day_does_not_count(world):
+    ana = await world.user()
+    course = await world.course(ana)
+    ayer = DIA - timedelta(days=1)
+    await _torneo_con_vuelta(world, ana, course, completed=False, start=ayer)
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=TARDE, tournament_start=DIA
+    )
+
+
+async def test_a_cancelled_same_day_tournament_does_not_count(world):
+    ana = await world.user()
+    course = await world.course(ana)
+    competition = await _torneo_con_vuelta(world, ana, course, completed=False)
+    competition.cancel()
+    await world.save_competition(competition)
+
+    assert not await _adapter(world).has_played_course_before(
+        ana.id, str(course.id.value), "otra-vuelta", before=TARDE, tournament_start=DIA
+    )

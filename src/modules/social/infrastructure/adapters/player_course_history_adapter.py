@@ -1,6 +1,6 @@
 """Adaptador: el historial de campos sale de las partidas rapidas y los torneos."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -50,11 +50,17 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         excluding_match_id: str,
         excluding_competition_id: str | None = None,
         before: PlayedBefore | None = None,
+        tournament_start: date | None = None,
     ) -> bool:
         if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id, before):
             return True
         return await self._jugo_en_torneo_cerrado(
-            user_id, golf_course_id, excluding_match_id, excluding_competition_id, before
+            user_id,
+            golf_course_id,
+            excluding_match_id,
+            excluding_competition_id,
+            before,
+            tournament_start,
         )
 
     async def _jugo_en_partida_rapida(
@@ -82,6 +88,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         excluding_match_id: str,
         excluding_competition_id: str | None,
         before: PlayedBefore | None,
+        tournament_start: date | None = None,
     ) -> bool:
         """
         Un partido de la Ryder o un grupo de stroke play en ese campo, de un
@@ -122,10 +129,24 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
                 list({r.competition_id for r in en_el_campo})
             )
         return any(
-            torneo.status == CompetitionStatus.COMPLETED
-            and str(torneo.id.value) != excluding_competition_id
+            str(torneo.id.value) != excluding_competition_id and _cuenta(torneo, tournament_start)
             for torneo in torneos
         )
+
+
+def _cuenta(torneo, tournament_start: date | None) -> bool:
+    """
+    Si lo jugado en ese torneo cuenta como ya jugado: cerrado, o del mismo dia
+    que el que se juzga aunque siga en juego, salvo cancelado (revision final
+    de bugs, 22 oct 2026). El mismo criterio que «primer torneo».
+    """
+    if torneo.status == CompetitionStatus.COMPLETED:
+        return True
+    return (
+        tournament_start is not None
+        and torneo.dates.start_date == tournament_start
+        and torneo.status != CompetitionStatus.CANCELLED
+    )
 
 
 def _rapida_antes(creada: datetime, before: PlayedBefore) -> bool:

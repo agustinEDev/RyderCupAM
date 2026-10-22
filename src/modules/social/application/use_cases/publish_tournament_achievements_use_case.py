@@ -192,9 +192,75 @@ class PublishTournamentAchievementsUseCase:
         )
         return 0
 
+    async def republish_same_day(self, competition_id_raw: str) -> int:
+        """
+        Vuelve a publicar los logros de los torneos YA CERRADOS que empiezan el
+        mismo dia que este y comparten jugadores con el (revision final de
+        bugs, 22 oct 2026). Se llama cuando este se cierra o se cancela (al
+        reabrirlo sigue contando igual para los demas): «campo nuevo» y «primer torneo» del otro dependen de este, y
+        asi el resultado no depende del orden de cierre ni de las
+        cancelaciones. Devuelve cuantos se publicaron.
+
+        Cada publicacion ya sustituye bajo el candado de su torneo y es
+        idempotente. Con fallo seguro: lo que falle en uno se queda en un
+        WARNING y no impide los demas.
+        """
+        vecinos = await self._del_mismo_dia(CompetitionId(competition_id_raw))
+        for vecino in vecinos:
+            try:
+                await self.execute(vecino)
+            except Exception:
+                logger.warning(
+                    "Could not republish the achievements of tournament %s", vecino, exc_info=True
+                )
+        return len(vecinos)
+
+    async def _del_mismo_dia(self, competition_id: CompetitionId) -> list[str]:
+        """
+        Los otros torneos cerrados que empiezan el mismo dia que este y en los
+        que algun inscrito de este tiene vueltas terminadas. Por lotes: los
+        grupos de todos de una vez, una lectura de rondas y una de torneos; los
+        partidos de la Ryder, uno por inscrito, como al publicar.
+        """
+        async with self._competition_uow:
+            uow = self._competition_uow
+            competition = await uow.competitions.find_by_id(competition_id)
+            if competition is None:
+                return []
+            user_ids = [
+                e.user_id for e in await uow.enrollments.find_by_competition(competition_id)
+            ]
+            if not user_ids:
+                return []
+            otros = {
+                str(partida.competition_id.value)
+                for partida in await uow.partidas.completadas_de_jugadores(user_ids)
+            }
+            round_ids = set()
+            for user_id in user_ids:
+                for partido in await uow.matches.find_completed_for_player(
+                    user_id, limit=MAX_HISTORY_LOOKUP
+                ):
+                    round_ids.add(partido.round_id)
+            if round_ids:
+                otros |= {
+                    str(ronda.competition_id.value)
+                    for ronda in await uow.rounds.find_by_ids(list(round_ids))
+                }
+            otros.discard(str(competition_id.value))
+            if not otros:
+                return []
+            torneos = await uow.competitions.find_by_ids([CompetitionId(c) for c in otros])
+        empieza = competition.dates.start_date
+        return sorted(
+            str(torneo.id.value)
+            for torneo in torneos
+            if torneo.status == CompetitionStatus.COMPLETED and torneo.dates.start_date == empieza
+        )
+
     async def _calcular(self, competition_id_raw: str) -> list[ActivityEvent]:
         """Los logros del torneo tal como esta ahora, sin publicar."""
-        vueltas_por_jugador, estrena_torneo = await self._leer_vueltas(competition_id_raw)
+        vueltas_por_jugador, estrena_torneo, empieza = await self._leer_vueltas(competition_id_raw)
         if not vueltas_por_jugador:
             return []
 
@@ -238,6 +304,8 @@ class PublishTournamentAchievementsUseCase:
                         # Lo jugado ANTES de esta vuelta, la primera del torneo
                         # en el campo, por hora real si se sabe (22 oct 2026)
                         before=vuelta.played,
+                        # Los del mismo dia cuentan aunque sigan en juego
+                        tournament_start=empieza,
                     ),
                     # Colgado del primer partido para que se publique una vez
                     is_first_tournament=indice == 0 and estrena_torneo.get(user_id_raw, False),
@@ -251,7 +319,7 @@ class PublishTournamentAchievementsUseCase:
 
     async def _leer_vueltas(
         self, competition_id_raw: str
-    ) -> tuple[dict[str, list[_TournamentRound]], dict[str, bool]]:
+    ) -> tuple[dict[str, list[_TournamentRound]], dict[str, bool], date | None]:
         """
         Las vueltas publicables del torneo, agrupadas por jugador, y quien
         estrena torneo con este.
@@ -266,7 +334,7 @@ class PublishTournamentAchievementsUseCase:
             competition_id = CompetitionId(competition_id_raw)
             competition = await self._competition_uow.competitions.find_by_id(competition_id)
             if competition is None or competition.status != CompetitionStatus.COMPLETED:
-                return {}, {}
+                return {}, {}, None
 
             enrollments = await self._competition_uow.enrollments.find_by_competition(
                 competition_id
@@ -343,7 +411,7 @@ class PublishTournamentAchievementsUseCase:
                     if torneo in anteriores
                 )
 
-        return vueltas, estrena_torneo
+        return vueltas, estrena_torneo, competition.dates.start_date
 
     async def _primeras_vueltas_el_mismo_dia(
         self,

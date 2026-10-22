@@ -96,6 +96,7 @@ class _History(PlayerCourseHistoryInterface):
         excluding_match_id,
         excluding_competition_id=None,
         before=None,
+        tournament_start=None,
     ):
         self.preguntas.append((user_id, golf_course_id, excluding_match_id))
         return any(

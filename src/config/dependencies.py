@@ -1879,6 +1879,9 @@ def get_publish_competition_notices_use_case(
 def get_competition_activity_publisher(
     notices: PublishCompetitionNoticesUseCase = Depends(get_publish_competition_notices_use_case),
     uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
+    achievements: PublishTournamentAchievementsUseCase = Depends(
+        get_publish_tournament_achievements_use_case
+    ),
 ) -> CompetitionActivityPublisherInterface:
     """
     Proveedor del adaptador que lleva a Actividad lo de `competition` (BE-2).
@@ -1892,6 +1895,7 @@ def get_competition_activity_publisher(
         ClasificacionGeneralUseCase(uow=uows.competition, user_repository=uows.user.users),
         uows.competition,
         ryder_scoreboard=GetLeaderboardUseCase(uows.competition, uows.user.users, ScoringService()),
+        achievements=achievements,
     )
 
 

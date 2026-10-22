@@ -48,6 +48,7 @@ class PlayerCourseHistoryInterface(ABC):
         excluding_match_id: str,
         excluding_competition_id: str | None = None,
         before: PlayedBefore | None = None,
+        tournament_start: date | None = None,
     ) -> bool:
         """
         Si el jugador ya habia terminado otra vuelta en ese campo.
@@ -67,4 +68,10 @@ class PlayerCourseHistoryInterface(ABC):
         partida rapida—, nunca a la vez ni despues. Asi un torneo reabierto y
         vuelto a cerrar no pierde su «campo nuevo» por lo que se jugo luego.
         Ver `PlayedBefore` para lo que se compara cuando falta la zona.
+
+        `tournament_start` es el dia en que empieza el torneo que se juzga
+        (revision final de bugs, 22 oct 2026): los otros torneos que empiezan
+        ESE dia cuentan aunque no esten cerrados —sus vueltas terminadas ya se
+        jugaron—, salvo los cancelados. Asi «campo nuevo» no depende de que
+        torneo se cierre antes. Los que empiezan otro dia, solo cerrados.
         """

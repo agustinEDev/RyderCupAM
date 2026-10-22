@@ -1,11 +1,15 @@
 """Adaptador: `competition` publica sus logros a traves del modulo social."""
 
+import logging
+
 from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
     TournamentAchievementsPublisherInterface,
 )
 from src.modules.social.application.use_cases.publish_tournament_achievements_use_case import (
     PublishTournamentAchievementsUseCase,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TournamentAchievementsPublisher(TournamentAchievementsPublisherInterface):
@@ -21,4 +25,13 @@ class TournamentAchievementsPublisher(TournamentAchievementsPublisherInterface):
         self._publish = publish_use_case
 
     async def publish(self, competition_id: str) -> int:
-        return await self._publish.execute(competition_id)
+        publicados = await self._publish.execute(competition_id)
+        # Y los del mismo dia ya cerrados, que dependen de este (revision final
+        # de bugs, 22 oct 2026). Con fallo seguro: lo propio ya esta publicado
+        try:
+            await self._publish.republish_same_day(competition_id)
+        except Exception:
+            logger.warning(
+                "Could not republish the same-day tournaments of %s", competition_id, exc_info=True
+            )
+        return publicados

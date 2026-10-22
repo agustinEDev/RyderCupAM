@@ -48,6 +48,9 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
     ActivitySlice,
 )
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
+    CompetitionActivityPublisher,
+)
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
 )
@@ -203,7 +206,8 @@ class TestNewCourseOncePerTournament:
             ana, tipo=RYDER, enrolled=[ana, rival], completed=False
         )
         await world.match(await world.round(ryder_abierta, course), ana, rival, tarjeta())
-        competition = await world.competition(ana, enrolled=[ana])
+        # Empieza otro dia: los del mismo dia cuentan aunque sigan en juego
+        competition = await world.competition(ana, enrolled=[ana], start=DIA + timedelta(days=30))
         ronda = await world.round(competition, course, DIA + timedelta(days=30))
         await world.group(competition, ronda, {ana: tarjeta()})
 
@@ -293,7 +297,7 @@ class TestPersonalBestAgainstBeforeTheTournament:
         anterior = await world.competition(ana, tipo=RYDER, enrolled=[ana, rival])
         await world.match(await world.round(anterior, course), ana, rival, tarjeta())
         competition = await world.competition(
-            ana, tipo=RYDER, enrolled=[ana, rival], completed=False
+            ana, tipo=RYDER, enrolled=[ana, rival], completed=False, start=DIA + timedelta(days=30)
         )
         ronda = await world.round(competition, course, DIA + timedelta(days=30))
         await world.match(ronda, ana, rival, tarjeta(par=5))
@@ -863,3 +867,162 @@ class TestPlayerIdsOfTheMatch:
         eventos = await _feed(social_uow, ana)
         assert eventos
         assert all(e.payload["player_ids"] == esperado for e in eventos)
+
+
+class TestSameDayInAnyOrder:
+    """
+    Revision final de bugs (22 oct 2026): con dos torneos del mismo dia en el
+    mismo campo —A por la manana, B por la tarde— «campo nuevo» y «primer
+    torneo» salen UNA vez, la de A, cierre quien cierre antes; si A se
+    cancela, la de B. Cerrar o cancelar un torneo vuelve a publicar los del
+    mismo dia ya cerrados con los que comparte jugadores; reabrirlo no hace
+    falta, porque en juego sigue contando igual.
+    """
+
+    async def _escena(self, world):
+        """A (manana) y B (tarde), los dos en juego. A es el de id mayor: el id no decide."""
+        ana = await world.user()
+        course = await world.course(ana)
+        uno = await world.competition(ana, enrolled=[ana], completed=False)
+        otro = await world.competition(ana, enrolled=[ana], completed=False)
+        b, a = sorted((uno, otro), key=lambda c: str(c.id.value))
+        await world.group(a, await world.round(a, course, DIA, MANANA), {ana: tarjeta()})
+        await world.group(b, await world.round(b, course, DIA, TARDE), {ana: tarjeta()})
+        return ana, a, b
+
+    @staticmethod
+    def _actividad(world, social_uow) -> CompetitionActivityPublisher:
+        return CompetitionActivityPublisher(
+            PublishCompetitionNoticesUseCase(social_uow, world.users),
+            None,
+            world.comp,
+            achievements=_publisher(world, social_uow),
+        )
+
+    async def _reabrir(self, world, social_uow, torneo) -> None:
+        torneo.revert_to_in_progress()
+        await world.save_competition(torneo)
+        await self._actividad(world, social_uow).reopened(torneo.id)
+
+    async def _cancelar(self, world, social_uow, torneo) -> None:
+        torneo.cancel()
+        await world.save_competition(torneo)
+        await self._actividad(world, social_uow).cancelled(torneo.id)
+
+    @staticmethod
+    async def _de(social_uow, ana) -> tuple[list[str], list[str]]:
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        nuevos = await _de_tipo(social_uow, ana, T.NEW_COURSE)
+        return (
+            sorted(e.payload["competition_id"] for e in primeros),
+            sorted(e.payload["competition_id"] for e in nuevos),
+        )
+
+    async def test_closing_b_then_a(self, world, social_uow):
+        ana, a, b = await self._escena(world)
+
+        await _cerrar(world, social_uow, b, ana)
+        await _cerrar(world, social_uow, a, ana)
+
+        crudo = str(a.id.value)
+        assert await self._de(social_uow, ana) == ([crudo], [crudo])
+
+    async def test_closing_a_then_b(self, world, social_uow):
+        ana, a, b = await self._escena(world)
+
+        await _cerrar(world, social_uow, a, ana)
+        await _cerrar(world, social_uow, b, ana)
+
+        crudo = str(a.id.value)
+        assert await self._de(social_uow, ana) == ([crudo], [crudo])
+
+    async def test_cancelling_a_after_closing_b(self, world, social_uow):
+        ana, a, b = await self._escena(world)
+
+        await _cerrar(world, social_uow, b, ana)
+        await self._cancelar(world, social_uow, a)
+
+        crudo = str(b.id.value)
+        assert await self._de(social_uow, ana) == ([crudo], [crudo])
+
+    async def test_reopening_a_and_closing_it_again(self, world, social_uow):
+        ana, a, b = await self._escena(world)
+        await _cerrar(world, social_uow, a, ana)
+        await _cerrar(world, social_uow, b, ana)
+
+        await self._reabrir(world, social_uow, a)
+        # A en juego sigue yendo antes: B no se lo queda mientras tanto
+        assert await self._de(social_uow, ana) == ([], [])
+        await _cerrar(world, social_uow, a, ana)
+
+        crudo = str(a.id.value)
+        assert await self._de(social_uow, ana) == ([crudo], [crudo])
+
+    async def test_a_tournament_of_another_day_is_not_republished(
+        self, world, social_uow, monkeypatch
+    ):
+        ana, a, b = await self._escena(world)
+        otro_dia = await world.competition(ana, enrolled=[ana], start=DIA + timedelta(days=10))
+        await world.group(
+            otro_dia,
+            await world.round(otro_dia, await world.course(ana), DIA + timedelta(days=10)),
+            {ana: tarjeta()},
+        )
+        publicados: list[str] = []
+        original = PublishTournamentAchievementsUseCase.execute
+
+        async def _apunta(self, competition_id_raw):
+            publicados.append(competition_id_raw)
+            return await original(self, competition_id_raw)
+
+        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "execute", _apunta)
+
+        await _cerrar(world, social_uow, b, ana)
+        await _cerrar(world, social_uow, a, ana)
+
+        assert str(otro_dia.id.value) not in publicados
+        assert publicados == [str(b.id.value), str(a.id.value), str(b.id.value)]
+
+    async def test_a_failing_republication_does_not_break_the_action(
+        self, world, social_uow, monkeypatch
+    ):
+        """Con fallo seguro: cerrar y cancelar siguen, y lo propio se publica."""
+        ana, a, b = await self._escena(world)
+
+        async def _rompe(self, competition_id_raw):
+            raise RuntimeError("feed caido")
+
+        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "republish_same_day", _rompe)
+
+        await _cerrar(world, social_uow, a, ana)
+        await self._cancelar(world, social_uow, b)
+
+        crudo = str(a.id.value)
+        assert await self._de(social_uow, ana) == ([crudo], [crudo])
+
+    async def test_one_failing_neighbour_does_not_stop_the_others(
+        self, world, social_uow, monkeypatch
+    ):
+        ana, a, b = await self._escena(world)
+        otro = await world.competition(ana, enrolled=[ana])
+        await world.group(
+            otro, await world.round(otro, await world.course(ana), DIA, TARDE), {ana: tarjeta()}
+        )
+        b.complete()
+        await world.save_competition(b)
+        publicados: list[str] = []
+        roto = min(str(b.id.value), str(otro.id.value))
+        original = PublishTournamentAchievementsUseCase.execute
+
+        async def _uno_roto(self, competition_id_raw):
+            if competition_id_raw == roto:
+                raise RuntimeError("feed caido")
+            publicados.append(competition_id_raw)
+            return await original(self, competition_id_raw)
+
+        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "execute", _uno_roto)
+
+        total = await _publisher(world, social_uow).republish_same_day(str(a.id.value))
+
+        assert total == 2
+        assert publicados == [max(str(b.id.value), str(otro.id.value))]
