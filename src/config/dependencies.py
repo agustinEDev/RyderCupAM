@@ -2381,6 +2381,7 @@ def get_close_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CloseEnrollmentsUseCase:
     """
     Proveedor del caso de uso CloseEnrollmentsUseCase.
@@ -2392,7 +2393,7 @@ def get_close_enrollments_use_case(
     """
     # Los usuarios, para el hándicap de cada inscrito en un stroke play; y el
     # refresco con la RFEG en segundo plano, solo en producción (#251)
-    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador)
+    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador, actividad=actividad)
 
 
 def get_actualizar_handicaps_use_case(
@@ -2455,9 +2456,10 @@ def get_handicap_update_status_use_case(
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> NameCaptainsUseCase:
     """Proveedor del caso de uso NameCaptainsUseCase (BE #320), con el refresco (#251)."""
-    return NameCaptainsUseCase(uow, lanzador)
+    return NameCaptainsUseCase(uow, lanzador, actividad=actividad)
 
 
 def get_name_vice_captain_use_case(
@@ -3048,9 +3050,10 @@ def get_cancel_invitation_use_case(
 def get_list_competition_invitations_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ListCompetitionInvitationsUseCase:
     """Proveedor del caso de uso ListCompetitionInvitationsUseCase."""
-    return ListCompetitionInvitationsUseCase(uow, user_uow)
+    return ListCompetitionInvitationsUseCase(uow, user_uow, actividad=actividad)
 
 
 # ======================================================================================

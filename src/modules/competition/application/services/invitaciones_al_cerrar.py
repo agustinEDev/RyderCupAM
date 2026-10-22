@@ -7,6 +7,7 @@ partidos. La inscripción se cierra por dos caminos —cerrarla a mano y nombrar
 los capitanes—, así que la regla vive aquí y la llaman los dos.
 """
 
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -15,17 +16,23 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 
 async def sin_plaza_para_las_pendientes(
     uow: CompetitionUnitOfWorkInterface, competition_id: CompetitionId
-) -> None:
+) -> list[Invitation]:
     """Rechaza por falta de plazas las pendientes; las ya caducadas, caducadas.
 
     Una que caducó sin que nadie la pasara a EXPIRED no se quedó sin plaza: se
     quedó sin respuesta, y así debe constar.
+
+    Devuelve las que ha cerrado: quien llama, ya guardado, retira su aviso de
+    invitado en Actividad (Agustín, 22 oct 2026).
     """
+    cerradas = []
     for invitacion in await uow.invitations.find_pending_by_competition(competition_id):
         invitacion.check_expiration()
         if invitacion.is_pending():
             invitacion.reject_for_no_room()
         await uow.invitations.update(invitacion)
+        cerradas.append(invitacion)
+    return cerradas
 
 
 async def al_ocupar_una_plaza(
@@ -33,7 +40,7 @@ async def al_ocupar_una_plaza(
     competition_id: CompetitionId,
     aprobadas_antes: int,
     max_players: int,
-) -> None:
+) -> list[Invitation]:
     """Si esa plaza era la última, las pendientes se quedan sin plaza ya (BE #359).
 
     Quien llega tarde se entera en el momento, no al aceptar. Una sola regla para
@@ -43,4 +50,5 @@ async def al_ocupar_una_plaza(
     bloqueada de la competición: entra el primero.
     """
     if aprobadas_antes + 1 >= max_players:
-        await sin_plaza_para_las_pendientes(uow, competition_id)
+        return await sin_plaza_para_las_pendientes(uow, competition_id)
+    return []

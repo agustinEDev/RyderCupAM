@@ -49,6 +49,13 @@ class CompetitionActivityPublisherInterface(ABC):
         """El invitado acepta o rechaza la invitacion."""
 
     @abstractmethod
+    async def invitations_closed(self, invitations: Sequence[Invitation]) -> None:
+        """
+        Invitaciones que dejaron de estar pendientes solas, sin que respondan el
+        invitado ni el organizador: sin plaza (NO_ROOM) o caducadas (EXPIRED).
+        """
+
+    @abstractmethod
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

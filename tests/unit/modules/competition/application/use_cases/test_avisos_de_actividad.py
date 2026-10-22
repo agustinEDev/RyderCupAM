@@ -172,6 +172,9 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def invitation_answered(self, invitation):
         self.avisos.append(("invitation_answered", invitation.id, invitation.invitee_user_id))
 
+    async def invitations_closed(self, invitations):
+        self.avisos.append(("invitations_closed", [(i.id, i.invitee_user_id) for i in invitations]))
+
     async def requests_closed(self, competition, enrollments):
         self.avisos.append(
             ("requests_closed", competition.id, sorted(str(e.user_id) for e in enrollments))
@@ -203,7 +206,7 @@ class _Roto(CompetitionActivityPublisherInterface):
         raise RuntimeError("feed caido")
 
     enrolled = left = cancelled = invited = invitation_withdrawn = _falla  # type: ignore[assignment]
-    invitation_answered = _falla  # type: ignore[assignment]
+    invitation_answered = invitations_closed = _falla  # type: ignore[assignment]
     requests_closed = request_rejected = match_finished = completed = reopened = _falla  # type: ignore[assignment]
     made_private = deleted = _falla  # type: ignore[assignment]
 

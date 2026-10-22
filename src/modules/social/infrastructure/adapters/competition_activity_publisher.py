@@ -96,6 +96,15 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             invitation.invitee_user_id, str(invitation.id.value)
         )
 
+    async def invitations_closed(self, invitations: Sequence[Invitation]) -> None:
+        await self._notices.invitations_closed(
+            [
+                (i.invitee_user_id, str(i.id.value))
+                for i in invitations
+                if i.invitee_user_id is not None
+            ]
+        )
+
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

@@ -680,3 +680,30 @@ class TestTablaCInscripcionConfirmada:
 
         assert [e.source_match_id for e in await _guardados(social_uow, yo)] == ["inv-2"]
         assert [e.source_match_id for e in await _guardados(social_uow, otro)] == ["inv-1"]
+
+
+class TestInvitacionesCerradasSolas:
+    async def test_cerradas_solas_retiran_cada_una_su_aviso(self, avisos, social_uow, user_uow):
+        """
+        Given tres invitaciones avisadas / When se cierran solas dos (sin plaza o
+        caducadas) / Then sus avisos desaparecen; la tercera y las de otros siguen.
+        """
+        ana = await _user(user_uow)
+        eva = await _user(user_uow)
+        await avisos.invited(ana.id, _torneo(), "inv-a")
+        await avisos.invited(eva.id, _torneo(), "inv-e")
+        await avisos.invited(ana.id, _torneo(), "inv-otra")
+        await avisos.invited(eva.id, _torneo(), "inv-a")
+
+        await avisos.invitations_closed([(ana.id, "inv-a"), (eva.id, "inv-e")])
+
+        assert [e.source_match_id for e in await _guardados(social_uow, ana)] == ["inv-otra"]
+        assert [e.source_match_id for e in await _guardados(social_uow, eva)] == ["inv-a"]
+
+    async def test_sin_ninguna_no_hace_nada(self, avisos, social_uow, user_uow):
+        ana = await _user(user_uow)
+        await avisos.invited(ana.id, _torneo(), "inv-a")
+
+        await avisos.invitations_closed([])
+
+        assert len(await _guardados(social_uow, ana)) == 1

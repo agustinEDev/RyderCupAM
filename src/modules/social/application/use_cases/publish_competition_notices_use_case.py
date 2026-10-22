@@ -176,6 +176,20 @@ class PublishCompetitionNoticesUseCase:
         """
         await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
 
+    async def invitations_closed(self, invitations: Sequence[tuple[UserId, str]]) -> None:
+        """
+        Invitaciones que se cerraron solas (sin plaza o caducadas): su aviso de
+        invitado ya no pide nada y desaparece (Agustin, 22 oct 2026). Todas en
+        la misma transaccion.
+        """
+        if not invitations:
+            return
+        async with self._social_uow:
+            for user_id, invitation_id in invitations:
+                await self._social_uow.activity_events.delete_from_source(
+                    invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id
+                )
+
     async def requests_closed(
         self, tournament: TournamentRef, requests: Sequence[tuple[UserId, str]]
     ) -> None:

@@ -14,12 +14,16 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.lanzador_de_actualizaciones import (
     LanzadorDeActualizaciones,
 )
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
 )
@@ -47,6 +51,7 @@ class NameCaptainsUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         lanzador: LanzadorDeActualizaciones | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
@@ -55,6 +60,8 @@ class NameCaptainsUseCase:
             uow: Unit of Work para gestionar transacciones
         """
         self._uow = uow
+        # Los avisos de Actividad: las invitaciones que se cierran (22 oct 2026)
+        self._actividad = AvisosDeActividad(actividad)
         # Nombrarlos con las inscripciones abiertas las cierra: también se
         # pregunta a la RFEG, como al cerrar con el botón (#251)
         self._actualizaciones = ActualizacionesDeHandicaps(uow, lanzador)
@@ -111,11 +118,13 @@ class NameCaptainsUseCase:
             # Nombrarlos cierra la inscripción: las pendientes, sin plaza (#710), y
             # la actualización de hándicaps con la RFEG (#251)
             actualizacion = None
+            sin_plaza = []
             if estaba != competition.status:
-                await sin_plaza_para_las_pendientes(self._uow, competition_id)
+                sin_plaza = await sin_plaza_para_las_pendientes(self._uow, competition_id)
                 actualizacion = await self._actualizaciones.al_cerrar(competition_id)
 
         self._actualizaciones.lanzar(actualizacion)
+        await self._actividad.invitations_closed(sin_plaza)
 
         return NameCaptainsResponseDTO(
             id=competition.id.value,

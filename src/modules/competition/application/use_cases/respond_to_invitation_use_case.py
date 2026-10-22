@@ -76,30 +76,9 @@ class RespondToInvitationUseCase:
             current_user_email = str(current_user.email)
 
         # Fase 1: Verificar expiracion y persistir si cambio
-        non_pending_status = None
-        sin_plaza = False
-        async with self._uow:
-            invitation = await self._uow.invitations.find_by_id(invitation_id)
-            if not invitation:
-                raise InvitationNotFoundError(f"Invitation not found: {request.invitation_id}")
-
-            invitation.check_expiration()
-
-            if not invitation.is_pending():
-                # Persistir el cambio de estado (ej: PENDING -> EXPIRED)
-                await self._uow.invitations.update(invitation)
-                non_pending_status = invitation.status.value
-            elif (
-                action == "ACCEPT"
-                # Solo el invitado: con el id de otra no se le cambia nada
-                and self._es_el_invitado(invitation, current_user_id, current_user_email)
-                and await self._inscripcion_cerrada(invitation)
-            ):
-                # Una pendiente de antes de que el cierre las rechazara (#710):
-                # se queda sin plaza, guardado, y no se entra
-                invitation.reject_for_no_room()
-                await self._uow.invitations.update(invitation)
-                sin_plaza = True
+        non_pending_status, sin_plaza = await self._cerrar_si_toca(
+            invitation_id, action, current_user_id, current_user_email
+        )
 
         if sin_plaza:
             raise InvitationNoRoomViolation()
@@ -117,6 +96,7 @@ class RespondToInvitationUseCase:
         enrollment_id = None
         competition_name = None
         inscrito: tuple[Competition, Enrollment] | None = None
+        sin_plaza_ya: list[Invitation] = []
 
         async with self._uow:
             # Re-fetch para tener la entidad en la sesion actual
@@ -136,8 +116,10 @@ class RespondToInvitationUseCase:
 
             # Ejecutar accion
             if action == "ACCEPT":
-                inscrito = await self._handle_accept(invitation, current_user_id)
-                competition, enrollment = inscrito
+                competition, enrollment, sin_plaza_ya = await self._handle_accept(
+                    invitation, current_user_id
+                )
+                inscrito = (competition, enrollment)
                 enrollment_id, competition_name = enrollment.id.value, str(competition.name)
             else:
                 await self._handle_decline(invitation)
@@ -146,9 +128,63 @@ class RespondToInvitationUseCase:
         # del 22 oct 2026, C). Luego, si entro, lo de inscrito
         await self._actividad.invitation_answered(invitation)
         await self._avisar_si_entro(inscrito)
+        # Si ocupo la ultima plaza, las demas pendientes se cerraron solas
+        await self._actividad.invitations_closed(sin_plaza_ya)
 
         # Construir respuesta enriquecida
         return await self._build_response(invitation, enrollment_id, competition_name)
+
+    async def _cerrar_si_toca(
+        self,
+        invitation_id: InvitationId,
+        action: str,
+        current_user_id: UserId,
+        current_user_email: str,
+    ) -> tuple[str | None, bool]:
+        """
+        La fase 1: si ya no esta pendiente (o caduco) se guarda tal cual, y si
+        se acepta con la inscripcion cerrada se queda sin plaza. Devuelve el
+        estado no pendiente y si se quedo sin plaza ahora.
+
+        La que se cierra sola aqui se guarda y retira su aviso de invitado
+        aunque la respuesta acabe en error (Agustin, 22 oct 2026).
+        """
+        non_pending_status = None
+        sin_plaza = False
+        # La que se cierra sola aqui (caducada o sin plaza): se guarda, y su
+        # aviso de invitado se retira aunque la respuesta acabe en error
+        cerrada_ahora: Invitation | None = None
+        async with self._uow:
+            invitation = await self._uow.invitations.find_by_id(invitation_id)
+            if not invitation:
+                raise InvitationNotFoundError(f"Invitation not found: {invitation_id.value}")
+
+            estaba_pendiente = invitation.is_pending()
+            invitation.check_expiration()
+
+            if not invitation.is_pending():
+                # Persistir el cambio de estado (ej: PENDING -> EXPIRED)
+                await self._uow.invitations.update(invitation)
+                non_pending_status = invitation.status.value
+                if estaba_pendiente:
+                    cerrada_ahora = invitation
+            elif (
+                action == "ACCEPT"
+                # Solo el invitado: con el id de otra no se le cambia nada
+                and self._es_el_invitado(invitation, current_user_id, current_user_email)
+                and await self._inscripcion_cerrada(invitation)
+            ):
+                # Una pendiente de antes de que el cierre las rechazara (#710):
+                # se queda sin plaza, guardado, y no se entra
+                invitation.reject_for_no_room()
+                await self._uow.invitations.update(invitation)
+                sin_plaza = True
+                cerrada_ahora = invitation
+
+        # Ya guardada: fuera su aviso de invitado (Agustin, 22 oct 2026)
+        if cerrada_ahora is not None:
+            await self._actividad.invitations_closed([cerrada_ahora])
+        return non_pending_status, sin_plaza
 
     async def _avisar_si_entro(self, inscrito: tuple[Competition, Enrollment] | None) -> None:
         """
@@ -192,8 +228,11 @@ class RespondToInvitationUseCase:
 
     async def _handle_accept(
         self, invitation, current_user_id: UserId
-    ) -> tuple[Competition, Enrollment]:
-        """Procesa la aceptacion de una invitacion. Retorna la competicion y la inscripcion."""
+    ) -> tuple[Competition, Enrollment, list[Invitation]]:
+        """
+        Procesa la aceptacion de una invitacion. Retorna la competicion, la
+        inscripcion y las demas pendientes que se quedaron sin plaza.
+        """
         # Con la fila bloqueada: si se cierra a la vez, uno espera al otro y aquí
         # se lee el estado de verdad, no un «abierta» de antes del cierre (#710)
         competition = await self._uow.competitions.find_by_id_for_update(invitation.competition_id)
@@ -236,11 +275,11 @@ class RespondToInvitationUseCase:
         await self._uow.enrollments.add(enrollment)
         await self._uow.invitations.update(invitation)
 
-        await al_ocupar_una_plaza(
+        cerradas = await al_ocupar_una_plaza(
             self._uow, invitation.competition_id, approved_count, competition.max_players
         )
 
-        return competition, enrollment
+        return competition, enrollment, cerradas
 
     async def _handle_decline(self, invitation):
         """Procesa el rechazo de una invitacion."""

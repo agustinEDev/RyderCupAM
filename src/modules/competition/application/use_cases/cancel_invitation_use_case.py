@@ -46,6 +46,7 @@ class CancelInvitationUseCase:
                 quien la envio ni un admin
             InvalidInvitationStatusViolation: Si ya no esta pendiente
         """
+        caducada_ahora = False
         async with self._uow:
             id_ = InvitationId(invitation_id)
             invitation = await self._uow.invitations.find_by_id(id_)
@@ -72,16 +73,21 @@ class CancelInvitationUseCase:
 
             # Una que caduco sin que nadie la pasara a EXPIRED no se retira: se
             # quedo sin respuesta, y asi debe constar
+            estaba_pendiente = invitation.is_pending()
             invitation.check_expiration()
             if not invitation.is_pending():
                 await self._uow.invitations.update(invitation)
                 no_pendiente = invitation.status.value
+                caducada_ahora = estaba_pendiente
             else:
                 invitation.cancel()
                 await self._uow.invitations.update(invitation)
                 no_pendiente = None
 
-        # Fuera del `async with`: el paso a EXPIRED se guarda, y luego se dice
+        # Fuera del `async with`: el paso a EXPIRED se guarda, se retira su aviso
+        # de invitado (22 oct 2026) y luego se dice
+        if no_pendiente and caducada_ahora:
+            await self._actividad.invitations_closed([invitation])
         if no_pendiente:
             raise InvalidInvitationStatusViolation(
                 f"Invitation is in status {no_pendiente}. Only PENDING invitations can be cancelled."

@@ -209,3 +209,28 @@ async def test_e_un_torneo_que_ahora_es_privado_no_sale_aunque_quede_su_aviso(
 
     assert [e["payload"]["competition_id"] for e in feed] == [publica["id"]]
     assert [e["payload"]["competition_id"] for e in actividad["events"]] == [publica["id"]]
+
+
+@pytest.mark.asyncio
+async def test_cerrar_la_inscripcion_retira_el_aviso_de_invitado(client: AsyncClient):
+    """
+    Agustin, 22 oct. Given una invitacion avisada / When el organizador cierra
+    la inscripcion y la invitacion se queda sin plaza / Then su aviso desaparece.
+    """
+    org = await create_authenticated_user(client, "be2nr_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(client, "be2nr_yo@test.com", PASSWORD, "Juan", "Lopez")
+    comp = await create_competition(client, org["cookies"])
+    await activate_competition(client, org["cookies"], comp["id"])
+    set_auth_cookies(client, org["cookies"])
+    invitada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": yo["user"]["id"]},
+    )
+    assert invitada.status_code == 201, invitada.text
+    assert await _tipos_del_feed(client, yo) == ["INVITED_TO_TOURNAMENT"]
+
+    set_auth_cookies(client, org["cookies"])
+    cerrada = await client.post(f"/api/v1/competitions/{comp['id']}/close-enrollments")
+    assert cerrada.status_code == 200, cerrada.text
+
+    assert await _tipos_del_feed(client, yo) == []
