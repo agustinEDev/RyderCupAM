@@ -232,3 +232,14 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             )
 
         return await self._donde(de(user_id) & de(other_id))
+
+    async def completadas_de_jugadores(self, user_ids: Sequence[UserId]) -> list[Partida]:
+        if not user_ids:
+            return []
+        jugadores = tee_group_players_table
+        return await self._donde(
+            (tee_groups_table.c.status == EstadoPartida.COMPLETED.value)
+            & tee_groups_table.c.id.in_(
+                select(jugadores.c.group_id).where(jugadores.c.user_id.in_(list(user_ids)))
+            )
+        )

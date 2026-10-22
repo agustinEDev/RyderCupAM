@@ -23,6 +23,10 @@ class StatsPlayerDifferentialsAdapter(PlayerDifferentialsInterface):
     def __init__(self, stats_use_case: GetPlayerStatsUseCase):
         self._stats = stats_use_case
 
-    async def best_differential(self, user_id: UserId) -> float | None:
-        stats = await self._stats.execute(user_id)
+    async def best_differential(
+        self, user_id: UserId, excluding_competition_id: str | None = None
+    ) -> float | None:
+        stats = await self._stats.execute(
+            user_id, excluding_competition_id=excluding_competition_id
+        )
         return stats.best_differential

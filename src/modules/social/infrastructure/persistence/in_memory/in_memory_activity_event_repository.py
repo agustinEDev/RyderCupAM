@@ -209,6 +209,27 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return antes - len(self._events)
 
+    async def replace_for_competition(
+        self,
+        competition_id: str,
+        types: Collection[ActivityEventType],
+        events: list[ActivityEvent],
+    ) -> None:
+        nuevos = {(e.user_id, e.source_match_id, e.type): e for e in events}
+
+        def _sobra(e: ActivityEvent) -> bool:
+            if e.type not in types or e.payload.get("competition_id") != competition_id:
+                return False
+            nuevo = nuevos.get((e.user_id, e.source_match_id, e.type))
+            return (
+                nuevo is None
+                or nuevo.payload != e.payload
+                or nuevo.visible_to_friends != e.visible_to_friends
+            )
+
+        self._events = [e for e in self._events if not _sobra(e)]
+        await self.add_many(events)
+
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
         ocultos = 0
         for e in self._events:

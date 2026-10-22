@@ -8,6 +8,7 @@ from src.modules.competition.domain.repositories.partida_repository_interface im
     PartidaRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -81,3 +82,9 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
 
     async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
         return self._donde(lambda p: user_id in p.user_ids and other_id in p.user_ids)
+
+    async def completadas_de_jugadores(self, user_ids: Sequence[UserId]) -> list[Partida]:
+        buscados = set(user_ids)
+        return self._donde(
+            lambda p: p.estado == EstadoPartida.COMPLETED and bool(buscados & set(p.user_ids))
+        )

@@ -346,4 +346,70 @@ class QuickMatchDetailResponseDTO(QuickMatchResponseDTO):
     participant_strokes: list[ParticipantStrokesDTO] = Field(default_factory=list)
 
 
+class SharedQuickMatchParticipantDTO(BaseModel):
+    """
+    Un participante en la vista de solo lectura (bloque K).
+
+    `name` nulo: quien mira no puede ver su nombre. Con `is_guest`, el cliente
+    pinta «un invitado»; sin el, «un jugador» (bloqueo o cuenta desactivada),
+    igual que en Actividad.
+    """
+
+    participant_id: UUID
+    user_id: UUID | None = None
+    name: str | None = None
+    handicap: float | None = None
+    team: str | None = None
+    is_guest: bool = False
+    tee_color: str | None = None
+    tee_gender: str | None = None
+
+
+class SharedScoringAssignmentDTO(BaseModel):
+    """El reparto de anotacion en solo lectura: `scorer_name` nulo, como `name`."""
+
+    scorer_participant_id: UUID
+    scorer_name: str | None = None
+    covered_participant_ids: list[UUID]
+
+
+class SharedQuickMatchDetailResponseDTO(BaseModel):
+    """
+    La partida rapida de un amigo, en solo lectura (bloque K, 22 oct 2026).
+
+    Lleva los mismos campos que `QuickMatchDetailResponseDTO` —la pantalla de
+    la partida la pinta sin cambios— salvo que los nombres pueden venir nulos.
+    Es un contrato aparte, y no el detalle con los nombres opcionales, para no
+    tocar el de quien anota: ahi el nombre sigue siendo obligatorio.
+    """
+
+    id: UUID
+    creator_id: UUID
+    golf_course_id: UUID
+    match_format: str | None = None
+    scoring_format: str | None = None
+    status: str
+    name: str | None = None
+    allowance_percentage: int | None = None
+    effective_allowance: int
+    play_mode: str = "HANDICAP"
+    participants: list[SharedQuickMatchParticipantDTO]
+    scorer_ids: list[UUID]
+    excluded_from_stats: bool = False
+    created_at: datetime
+    updated_at: datetime
+    hole_scores: list[HoleScoreResponseDTO]
+    standing: QuickMatchStandingResponseDTO | None = None
+    scoring_assignments: list[SharedScoringAssignmentDTO] = Field(default_factory=list)
+    participant_strokes: list[ParticipantStrokesDTO] = Field(default_factory=list)
+    read_only: bool = Field(
+        default=True,
+        description="Siempre True: esta vista no deja anotar ni tocar nada.",
+    )
+    viewer_is_participant: bool = Field(
+        default=False,
+        description="Si quien mira jugo la partida: entonces ve todos los nombres.",
+    )
+
+
 CreateAndStartQuickMatchResponseDTO.model_rebuild()
