@@ -142,6 +142,9 @@ class RespondToInvitationUseCase:
             else:
                 await self._handle_decline(invitation)
 
+        # Ya respondida, su aviso de invitado no pide nada: se retira (tabla
+        # del 22 oct 2026, C). Luego, si entro, lo de inscrito
+        await self._actividad.invitation_answered(invitation)
         await self._avisar_si_entro(inscrito)
 
         # Construir respuesta enriquecida

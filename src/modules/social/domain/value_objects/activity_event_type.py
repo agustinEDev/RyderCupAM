@@ -38,6 +38,9 @@ class ActivityEventType(StrEnum):
     TOURNAMENT_MATCH_RESULT = "TOURNAMENT_MATCH_RESULT"
     TOURNAMENT_FINAL_STANDING = "TOURNAMENT_FINAL_STANDING"
     QUICK_MATCH_FINISHED = "QUICK_MATCH_FINISHED"
+    # «Ya estás inscrito»: entraste sin solicitud, aceptando una invitacion o
+    # inscrito por el organizador (tabla del 22 oct 2026, C)
+    ENROLLMENT_CONFIRMED = "ENROLLMENT_CONFIRMED"
 
     @property
     def is_achievement(self) -> bool:

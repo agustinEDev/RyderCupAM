@@ -131,14 +131,17 @@ class TestAvisosDeInscripcion:
         self, avisos, social_uow, user_uow
     ):
         """
-        A2. Given una inscripcion directa en un torneo publico / When se avisa /
-        Then no hay aviso de aceptacion: solo el de los amigos (B8).
+        A2 y C (22 oct). Given una inscripcion directa en un torneo publico /
+        When se avisa / Then no hay aviso de aceptacion: «ya estas inscrito»
+        para mi y el de los amigos (B8).
         """
         yo = await _user(user_uow)
 
         await avisos.enrolled(yo.id, _torneo(), "enr-1", accepted_request=False)
 
-        assert await _tipos(social_uow, yo) == [T.ENROLLED_IN_TOURNAMENT]
+        assert await _tipos(social_uow, yo) == sorted(
+            [T.ENROLLMENT_CONFIRMED, T.ENROLLED_IN_TOURNAMENT]
+        )
 
     async def test_a3_una_invitacion_te_avisa(self, avisos, social_uow, user_uow):
         """A3. Given una invitacion / When se avisa / Then INVITED_TO_TOURNAMENT."""
@@ -252,7 +255,8 @@ class TestAmigoApuntado:
 
         await avisos.enrolled(yo.id, _torneo(is_public=False), "enr-1", accepted_request=False)
 
-        assert await _tipos(social_uow, yo) == []
+        # Solo mi «ya estas inscrito» (C, 22 oct): nada de amigos
+        assert await _tipos(social_uow, yo) == [T.ENROLLMENT_CONFIRMED]
 
     async def test_b10_quien_no_es_amigo_no_lo_ve(self, avisos, social_uow, user_uow):
         """B10. Given me apunto a uno publico / When un no amigo pide su feed / Then nada."""
@@ -280,6 +284,7 @@ class TestAmigoApuntado:
             [
                 (T.ENROLLMENT_APPROVED, "enr-1"),
                 (T.ENROLLED_IN_TOURNAMENT, otro.competition_id),
+                (T.ENROLLMENT_CONFIRMED, otro.competition_id),
             ]
         )
 
@@ -294,7 +299,9 @@ class TestAmigoApuntado:
         await avisos.left(ana.id, torneo.competition_id)
 
         assert await _tipos(social_uow, ana) == []
-        assert await _tipos(social_uow, eva) == [T.ENROLLED_IN_TOURNAMENT]
+        assert await _tipos(social_uow, eva) == sorted(
+            [T.ENROLLMENT_CONFIRMED, T.ENROLLED_IN_TOURNAMENT]
+        )
 
     async def test_b11_cancelar_el_torneo_borra_los_avisos_de_todos(
         self, avisos, social_uow, user_uow
@@ -326,9 +333,16 @@ class TestAmigoApuntado:
         await avisos.tournament_made_private(torneo.competition_id)
 
         assert await _tipos(social_uow, ana) == [T.ENROLLMENT_APPROVED]
-        assert [(e.type, e.source_match_id) for e in await _guardados(social_uow, eva)] == [
-            (T.ENROLLED_IN_TOURNAMENT, otro.competition_id)
-        ]
+        # Su «ya estas inscrito» es solo suyo: pasar a privado no lo toca
+        assert sorted(
+            (e.type, e.source_match_id) for e in await _guardados(social_uow, eva)
+        ) == sorted(
+            [
+                (T.ENROLLMENT_CONFIRMED, torneo.competition_id),
+                (T.ENROLLMENT_CONFIRMED, otro.competition_id),
+                (T.ENROLLED_IN_TOURNAMENT, otro.competition_id),
+            ]
+        )
 
     async def test_2_borrar_el_torneo_borra_todos_sus_avisos(self, avisos, social_uow, user_uow):
         """
@@ -340,6 +354,7 @@ class TestAmigoApuntado:
         torneo = _torneo()
         otro = _torneo()
         await avisos.enrolled(yo.id, torneo, "enr-1", accepted_request=True)
+        await avisos.enrolled(yo.id, torneo, "enr-4", accepted_request=False)
         await avisos.invited(yo.id, torneo, "inv-1")
         await avisos.request_rejected(yo.id, torneo, "enr-2")
         await avisos.requests_closed(torneo, [(yo.id, "enr-3")])
@@ -374,7 +389,9 @@ class TestAmigoApuntado:
             str(yo.id.value), enabled=True
         )
         assert (await _feed(social_uow, user_uow, amigo)).events == []
-        (guardado,) = await _guardados(social_uow, yo)
+        guardado = next(
+            e for e in await _guardados(social_uow, yo) if e.type == T.ENROLLED_IN_TOURNAMENT
+        )
         assert guardado.visible_to_friends is False
 
 
@@ -547,4 +564,119 @@ class TestResultadosDeTorneo:
 
         await avisos.reopened(torneo.competition_id)
 
-        assert await _tipos(social_uow, yo) == [T.ENROLLED_IN_TOURNAMENT]
+        assert await _tipos(social_uow, yo) == sorted(
+            [T.ENROLLMENT_CONFIRMED, T.ENROLLED_IN_TOURNAMENT]
+        )
+
+
+class TestTablaCInscripcionConfirmada:
+    async def test_c_aceptar_una_invitacion_o_ser_inscrito_te_confirma(
+        self, avisos, social_uow, user_uow
+    ):
+        """
+        C. Given me inscriben sin solicitud (invitacion aceptada o el organizador)
+        / When se avisa / Then ENROLLMENT_CONFIRMED con el torneo, por el torneo.
+        """
+        yo = await _user(user_uow)
+        torneo = _torneo(is_public=False)
+
+        await avisos.enrolled(yo.id, torneo, "enr-1", accepted_request=False)
+
+        (evento,) = await _guardados(social_uow, yo)
+        assert evento.type == T.ENROLLMENT_CONFIRMED
+        assert evento.source_match_id == torneo.competition_id
+        assert evento.payload == {
+            "competition_id": torneo.competition_id,
+            "competition_name": "Torneo RyderCup Atlantica",
+            "start_date": "2027-03-03",
+            "end_date": "2027-03-04",
+        }
+
+    async def test_c_aprobar_tu_solicitud_no_duplica_con_confirmada(
+        self, avisos, social_uow, user_uow
+    ):
+        """C. Given el organizador aprueba mi solicitud / Then ENROLLMENT_APPROVED, sin CONFIRMED."""
+        yo = await _user(user_uow)
+
+        await avisos.enrolled(yo.id, _torneo(is_public=False), "enr-1", accepted_request=True)
+
+        assert await _tipos(social_uow, yo) == [T.ENROLLMENT_APPROVED]
+
+    async def test_c_confirmada_es_solo_tuya(self, avisos, social_uow, user_uow):
+        """C. Given me inscriben en uno privado / When mi amigo y yo miramos / Then solo yo."""
+        yo = await _user(user_uow)
+        amigo = await _user(user_uow)
+        await _amigos(social_uow, yo, amigo)
+
+        await avisos.enrolled(yo.id, _torneo(is_public=False), "enr-1", accepted_request=False)
+
+        assert (await _feed(social_uow, user_uow, amigo)).events == []
+        assert [e.type for e in (await _feed(social_uow, user_uow, yo)).events] == [
+            T.ENROLLMENT_CONFIRMED.value
+        ]
+
+    async def test_c_repetir_no_duplica(self, avisos, social_uow, user_uow):
+        yo = await _user(user_uow)
+        torneo = _torneo(is_public=False)
+
+        for _ in range(2):
+            await avisos.enrolled(yo.id, torneo, "enr-1", accepted_request=False)
+
+        assert await _tipos(social_uow, yo) == [T.ENROLLMENT_CONFIRMED]
+
+    async def test_c_retirarte_borra_tu_confirmada_y_no_la_de_otros(
+        self, avisos, social_uow, user_uow
+    ):
+        ana = await _user(user_uow)
+        eva = await _user(user_uow)
+        torneo, otro = _torneo(is_public=False), _torneo(is_public=False)
+        await avisos.enrolled(ana.id, torneo, "enr-a", accepted_request=False)
+        await avisos.enrolled(ana.id, otro, "enr-o", accepted_request=False)
+        await avisos.enrolled(eva.id, torneo, "enr-e", accepted_request=False)
+
+        await avisos.left(ana.id, torneo.competition_id)
+
+        assert [(e.type, e.source_match_id) for e in await _guardados(social_uow, ana)] == [
+            (T.ENROLLMENT_CONFIRMED, otro.competition_id)
+        ]
+        assert await _tipos(social_uow, eva) == [T.ENROLLMENT_CONFIRMED]
+
+    async def test_c_cancelar_borra_las_confirmadas_de_todos(self, avisos, social_uow, user_uow):
+        ana = await _user(user_uow)
+        eva = await _user(user_uow)
+        torneo = _torneo(is_public=False)
+        await avisos.enrolled(ana.id, torneo, "enr-a", accepted_request=False)
+        await avisos.enrolled(eva.id, torneo, "enr-e", accepted_request=False)
+
+        await avisos.tournament_cancelled(torneo.competition_id)
+
+        assert await _tipos(social_uow, ana) == []
+        assert await _tipos(social_uow, eva) == []
+
+    async def test_c_volver_a_inscribirte_tras_retirarte_te_confirma_otra_vez(
+        self, avisos, social_uow, user_uow
+    ):
+        yo = await _user(user_uow)
+        torneo = _torneo(is_public=False)
+        await avisos.enrolled(yo.id, torneo, "enr-1", accepted_request=False)
+        await avisos.left(yo.id, torneo.competition_id)
+
+        await avisos.enrolled(yo.id, torneo, "enr-2", accepted_request=False)
+
+        assert await _tipos(social_uow, yo) == [T.ENROLLMENT_CONFIRMED]
+
+    async def test_c_responder_la_invitacion_borra_su_aviso(self, avisos, social_uow, user_uow):
+        """
+        C. Given dos invitaciones avisadas / When respondo a una (aceptar o
+        rechazar) / Then desaparece su aviso de invitado y el otro sigue.
+        """
+        yo = await _user(user_uow)
+        otro = await _user(user_uow)
+        await avisos.invited(yo.id, _torneo(), "inv-1")
+        await avisos.invited(yo.id, _torneo(), "inv-2")
+        await avisos.invited(otro.id, _torneo(), "inv-1")
+
+        await avisos.invitation_answered(yo.id, "inv-1")
+
+        assert [e.source_match_id for e in await _guardados(social_uow, yo)] == ["inv-2"]
+        assert [e.source_match_id for e in await _guardados(social_uow, otro)] == ["inv-1"]

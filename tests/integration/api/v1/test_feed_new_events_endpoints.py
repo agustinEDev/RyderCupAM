@@ -53,6 +53,56 @@ async def test_b8_la_inscripcion_directa_en_un_publico_la_ven_los_amigos(client:
     assert respuesta.status_code == 201, respuesta.text
 
     assert await _tipos_del_feed(client, amigo) == ["ENROLLED_IN_TOURNAMENT"]
+    # C (22 oct): yo, «ya estas inscrito»
+    assert await _tipos_del_feed(client, yo) == ["ENROLLMENT_CONFIRMED"]
+
+
+async def _invitado(client: AsyncClient, prefijo: str) -> tuple[dict, str]:
+    """Una competicion activa y una invitacion para mi; el id de la invitacion."""
+    org = await create_authenticated_user(client, f"{prefijo}_org@test.com", PASSWORD, "Org", "Uno")
+    yo = await create_authenticated_user(
+        client, f"{prefijo}_yo@test.com", PASSWORD, "Juan", "Lopez"
+    )
+    comp = await create_competition(client, org["cookies"])
+    await activate_competition(client, org["cookies"], comp["id"])
+    set_auth_cookies(client, org["cookies"])
+    invitada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": yo["user"]["id"]},
+    )
+    assert invitada.status_code == 201, invitada.text
+    assert await _tipos_del_feed(client, yo) == ["INVITED_TO_TOURNAMENT"]
+    set_auth_cookies(client, yo["cookies"])
+    (suya,) = (await client.get("/api/v1/invitations/me")).json()["invitations"]
+    return yo, suya["id"]
+
+
+@pytest.mark.asyncio
+async def test_c_aceptar_la_invitacion_la_retira_y_confirma(client: AsyncClient):
+    """
+    C (22 oct). Given una invitacion avisada / When la acepto / Then su aviso
+    desaparece y llega «ya estas inscrito».
+    """
+    yo, invitacion = await _invitado(client, "be2c_ok")
+
+    respuesta = await client.post(
+        f"/api/v1/invitations/{invitacion}/respond", json={"action": "ACCEPT"}
+    )
+    assert respuesta.status_code == 200, respuesta.text
+
+    assert await _tipos_del_feed(client, yo) == ["ENROLLMENT_CONFIRMED"]
+
+
+@pytest.mark.asyncio
+async def test_c_rechazar_la_invitacion_la_retira(client: AsyncClient):
+    """C (22 oct). Given una invitacion avisada / When la rechazo / Then el feed queda vacio."""
+    yo, invitacion = await _invitado(client, "be2c_no")
+
+    respuesta = await client.post(
+        f"/api/v1/invitations/{invitacion}/respond", json={"action": "DECLINE"}
+    )
+    assert respuesta.status_code == 200, respuesta.text
+
     assert await _tipos_del_feed(client, yo) == []
 
 

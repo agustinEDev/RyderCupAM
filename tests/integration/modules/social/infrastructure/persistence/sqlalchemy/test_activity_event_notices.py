@@ -77,7 +77,8 @@ async def test_los_tipos_nuevos_caben_y_no_se_duplican(db_session):
         await repository.add_many([_evento(user, t, "origen-1") for t in nuevos])
         await db_session.commit()
 
-    assert len(await _tipos(repository, user)) == len(nuevos) == 8
+    # Los ocho avisos de BE-2 y ENROLLMENT_CONFIRMED (tabla del 22 oct, C)
+    assert len(await _tipos(repository, user)) == len(nuevos) == 9
 
 
 async def test_borrar_desde_un_origen_de_un_jugador(db_session):

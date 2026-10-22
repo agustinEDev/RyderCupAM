@@ -45,6 +45,10 @@ class CompetitionActivityPublisherInterface(ABC):
         """El organizador retira una invitacion pendiente."""
 
     @abstractmethod
+    async def invitation_answered(self, invitation: Invitation) -> None:
+        """El invitado acepta o rechaza la invitacion."""
+
+    @abstractmethod
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

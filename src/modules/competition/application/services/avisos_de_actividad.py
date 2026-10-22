@@ -67,6 +67,12 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             return
         await self._avisar("invitation_withdrawn", lambda p: p.invitation_withdrawn(invitation))
 
+    async def invitation_answered(self, invitation: Invitation) -> None:
+        # Sin cuenta al invitarle no hubo aviso que retirar
+        if invitation.invitee_user_id is None:
+            return
+        await self._avisar("invitation_answered", lambda p: p.invitation_answered(invitation))
+
     async def requests_closed(
         self, competition: Competition, enrollments: Sequence[Enrollment]
     ) -> None:

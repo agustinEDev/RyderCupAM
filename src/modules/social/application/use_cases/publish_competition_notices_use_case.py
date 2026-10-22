@@ -31,8 +31,16 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.ENROLLED_IN_TOURNAMENT,
         ActivityEventType.TOURNAMENT_MATCH_RESULT,
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
+        ActivityEventType.ENROLLMENT_CONFIRMED,
     }
 )
+
+# Lo que se retira cuando uno deja de estar inscrito: al retirarse o al
+# cancelarse el torneo (B11 y tabla del 22 oct, C)
+_DE_INSCRITO = [
+    ActivityEventType.ENROLLED_IN_TOURNAMENT,
+    ActivityEventType.ENROLLMENT_CONFIRMED,
+]
 
 # Lo que dice `Match.result["winner"]`
 _EMPATE = "HALVED"
@@ -106,13 +114,23 @@ class PublishCompetitionNoticesUseCase:
         Queda inscrito: «te han aceptado» si fue aprobando su solicitud (A1), y
         «X se ha apuntado» para sus amigos si el torneo es publico (B8, B9).
         Inscrito directamente o aceptando una invitacion no hay nada que
-        aceptarle, asi que solo sale lo de los amigos (A2).
+        aceptarle: le llega «ya estas inscrito» (ENROLLMENT_CONFIRMED, tabla del
+        22 oct 2026, C), uno por torneo, para retirarlo al irse.
         """
         eventos = []
         if accepted_request:
             eventos.append(
                 self._aviso(
                     user_id, ActivityEventType.ENROLLMENT_APPROVED, enrollment_id, tournament
+                )
+            )
+        else:
+            eventos.append(
+                self._aviso(
+                    user_id,
+                    ActivityEventType.ENROLLMENT_CONFIRMED,
+                    tournament.competition_id,
+                    tournament,
                 )
             )
         if tournament.is_public:
@@ -127,12 +145,15 @@ class PublishCompetitionNoticesUseCase:
         await self._publicar(eventos)
 
     async def left(self, user_id: UserId, competition_id: str) -> None:
-        """Se retira: sus amigos dejan de ver que esta apuntado (B11)."""
-        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT], user_id)
+        """
+        Se retira: sus amigos dejan de ver que esta apuntado (B11) y el deja de
+        ver «ya estas inscrito» (C).
+        """
+        await self._retirar(competition_id, _DE_INSCRITO, user_id)
 
     async def tournament_cancelled(self, competition_id: str) -> None:
-        """Torneo cancelado: nadie esta ya apuntado a el (B11)."""
-        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT])
+        """Torneo cancelado: nadie esta ya apuntado a el (B11, C)."""
+        await self._retirar(competition_id, _DE_INSCRITO)
 
     async def invited(self, user_id: UserId, tournament: TournamentRef, invitation_id: str) -> None:
         """Le invitan (A3). Uno por invitacion: si se retira, se retira ese."""
@@ -146,6 +167,13 @@ class PublishCompetitionNoticesUseCase:
 
     async def invitation_withdrawn(self, user_id: UserId, invitation_id: str) -> None:
         """El organizador retira la invitacion: su aviso desaparece (A4)."""
+        await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
+
+    async def invitation_answered(self, user_id: UserId, invitation_id: str) -> None:
+        """
+        El invitado la acepta o la rechaza: su aviso de invitado ya no pide nada
+        y desaparece (tabla del 22 oct 2026, C).
+        """
         await self._retirar(invitation_id, [ActivityEventType.INVITED_TO_TOURNAMENT], user_id)
 
     async def requests_closed(

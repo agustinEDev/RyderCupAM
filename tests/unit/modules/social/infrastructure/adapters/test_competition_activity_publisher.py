@@ -168,11 +168,13 @@ class TestTraduccion:
 
         await adaptador.invited(competicion, invitacion)
         await adaptador.invitation_withdrawn(invitacion)
+        await adaptador.invitation_answered(invitacion)
 
         crudo = str(invitacion.id.value)
         assert avisos.llamadas == [
             ("invited", (invitacion.invitee_user_id, _ref(competicion), crudo), {}),
             ("invitation_withdrawn", (invitacion.invitee_user_id, crudo), {}),
+            ("invitation_answered", (invitacion.invitee_user_id, crudo), {}),
         ]
 
     async def test_solicitudes_cerradas_y_rechazada(self, avisos):
