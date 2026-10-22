@@ -17,6 +17,7 @@ Tabla aprobada por Agustin (G1-G4, G11):
 | Sale de la ronda                                  | Pierde el aviso                            |
 """
 
+from dataclasses import replace
 from datetime import date, time
 from decimal import Decimal
 from uuid import uuid4
@@ -151,8 +152,12 @@ class TestFotoDeStrokePlay:
 
         assert salidas[a].tee_time == time(8, 8)
 
-    def test_a_no_show_has_no_tee_time_and_is_nobodys_partner(self):
-        """Quien no se presento ya no juega en el grupo: ni recibe aviso ni se le nombra."""
+    def test_a_no_show_stays_in_the_group_but_out_of_play(self):
+        """
+        Revision final del 22 oct: que alguien falte no cambia la salida de
+        nadie. El grupo es el asignado, falte quien falte; el que falta queda
+        marcado fuera de juego, y su aviso no se toca.
+        """
         franja = _franja()
         falta, a, b = _ids(3)
         partida = _partida(franja, 1, [falta, a, b])
@@ -160,8 +165,9 @@ class TestFotoDeStrokePlay:
 
         salidas = de_las_partidas(franja, [partida])
 
-        assert set(salidas) == {a, b}
-        assert salidas[a].partner_ids == (b,)
+        assert set(salidas) == {falta, a, b}
+        assert set(salidas[a].partner_ids) == {falta, b}
+        assert (salidas[falta].out_of_play, salidas[a].out_of_play) == (True, False)
 
 
 class TestFotoDeRyder:
@@ -256,6 +262,23 @@ class TestCambios:
         )
 
         assert avisos == []
+
+    def test_someone_out_of_play_is_never_notified(self):
+        """Ni al marcarlo, ni aunque su grupo cambie mientras esta fuera."""
+        falta, a, b = _ids(3)
+        fuera = replace(_salida(falta, con=[a, b]), out_of_play=True)
+
+        avisos, retirados = cambios(
+            {falta: _salida(falta, con=[a]), a: _salida(a, con=[falta])},
+            {falta: fuera, a: _salida(a, con=[falta])},
+        )
+
+        assert (avisos, retirados) == ([], [])
+
+    def test_being_out_of_play_does_not_count_as_a_change(self):
+        a = UserId(uuid4())
+
+        assert _salida(a).same_slot_as(replace(_salida(a), out_of_play=True))
 
     def test_whoever_leaves_the_round_loses_the_notice(self):
         a, b = _ids(2)

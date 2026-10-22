@@ -116,11 +116,12 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
-    async def lock_source(self, source_id: str) -> None:
+    async def lock_scope(self, scope_id: str) -> None:
         """
-        Bloquea ese origen hasta el final de la transaccion: dos publicaciones
-        de la misma ronda no se cruzan, y la segunda lee lo que dejo la
-        primera (G3, revision del 22 oct 2026).
+        Bloquea ese ambito (un torneo) hasta el final de la transaccion: dos
+        publicaciones de salidas del torneo, o una publicacion y la baja o la
+        cancelacion que borran sus avisos, no se cruzan, y la segunda ve lo
+        que dejo la primera (G3, revision del 22 oct 2026).
         """
 
     @abstractmethod

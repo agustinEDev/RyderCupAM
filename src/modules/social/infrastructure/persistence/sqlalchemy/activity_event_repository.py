@@ -210,7 +210,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return result.rowcount or 0
 
-    async def lock_source(self, source_id: str) -> None:
+    async def lock_scope(self, scope_id: str) -> None:
         """
         `pg_advisory_xact_lock`: lo suelta el propio Postgres al acabar la
         transaccion, pase lo que pase. La clave lleva un prefijo para no
@@ -218,7 +218,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         """
         await self._session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
-            {"clave": f"activity-source:{source_id}"},
+            {"clave": f"activity-scope:{scope_id}"},
         )
 
     async def find_from_source(

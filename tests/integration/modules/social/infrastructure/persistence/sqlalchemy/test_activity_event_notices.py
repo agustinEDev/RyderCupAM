@@ -243,10 +243,10 @@ async def test_g9_borrar_por_competicion_de_un_jugador(db_session):
     assert await _tipos(repository, eva) == [(T.TEE_TIME_ASSIGNED, "ronda-1")]
 
 
-async def test_g3_el_candado_de_un_origen_dura_lo_que_su_transaccion(db_session):
+async def test_g3_el_candado_de_un_torneo_dura_lo_que_su_transaccion(db_session):
     """
-    G3. Mientras una publicacion tiene la ronda bloqueada, otra no la coge; la
-    de otra ronda, si. Al confirmar se suelta sola.
+    G3. Mientras una publicacion tiene el torneo bloqueado, otra no lo coge; la
+    de otro torneo, si. Al confirmar se suelta solo.
     """
 
     async def _la_coge(origen: str) -> bool:
@@ -254,19 +254,19 @@ async def test_g3_el_candado_de_un_origen_dura_lo_que_su_transaccion(db_session)
             cogido = (
                 await otra.execute(
                     text("SELECT pg_try_advisory_xact_lock(hashtextextended(:clave, 0))"),
-                    {"clave": f"activity-source:{origen}"},
+                    {"clave": f"activity-scope:{origen}"},
                 )
             ).scalar()
             await otra.rollback()
             return bool(cogido)
 
     repository = SQLAlchemyActivityEventRepository(db_session)
-    await repository.lock_source("ronda-1")
+    await repository.lock_scope("torneo-1")
 
-    assert await _la_coge("ronda-1") is False
-    assert await _la_coge("ronda-2") is True
+    assert await _la_coge("torneo-1") is False
+    assert await _la_coge("torneo-2") is True
     await db_session.commit()
-    assert await _la_coge("ronda-1") is True
+    assert await _la_coge("torneo-1") is True
 
 
 async def test_g3_lo_publicado_desde_un_origen(db_session):

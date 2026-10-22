@@ -606,7 +606,8 @@ class TestG3Recolocados:
 
         assert set(salidas.avisados) == {queda, viene, *cuatro.user_ids[:-1]}
         assert salidas.avisados[viene].tee_time == time(9, 0)
-        assert set(salidas.avisados[queda].partner_ids) == {viene}
+        # El grupo asignado: quien falta sigue en el, y no recibe nada
+        assert set(salidas.avisados[queda].partner_ids) == {falta, viene}
         assert falta not in salidas.avisados
         assert not set(salidas.avisados) & set(ultima.user_ids)
         assert all(s.changed for s in salidas.avisados.values())
@@ -624,6 +625,92 @@ class TestG3Recolocados:
         ).execute(sola.id.value, sola.user_ids[0].value, escenario.creador, False)
 
         assert salidas.llamadas == []
+
+
+def _actividad_de_verdad(uow):
+    """El adaptador y el caso de uso social de verdad, en memoria."""
+    social_uow = InMemorySocialUnitOfWork()
+    actividad = CompetitionActivityPublisher(
+        PublishCompetitionNoticesUseCase(social_uow, InMemoryUserUnitOfWork()),
+        standings=None,
+        competition_uow=uow,
+    )
+    return actividad, social_uow
+
+
+async def _publicados(social_uow, jugadores) -> dict:
+    async with social_uow:
+        return {
+            e.user_id: e
+            for e in await social_uow.activity_events.find_in(
+                [ActivitySlice(user_ids=tuple(jugadores), types=frozenset(ActivityEventType))],
+                limit=100,
+            )
+        }
+
+
+class TestRevisionFinalSoloBugs:
+    """Revision final del 22 oct: dos fallos con la publicacion de verdad."""
+
+    async def test_a_no_show_never_turns_into_a_change_later(self):
+        """
+        Marcar a C no presentado no publica nada, y cuando otra accion publica
+        la ronda, a sus compañeros no les ha cambiado nada y a C no se le quita
+        su aviso.
+        """
+        escenario, _ = await _con_plazas(7)
+        actividad, social_uow = _actividad_de_verdad(escenario.uow)
+        await _generar(escenario, actividad)
+        primera, segunda = await _partidas(escenario)
+        jugadores = [*primera.user_ids, *segunda.user_ids]
+        antes = await _publicados(social_uow, jugadores)
+        falta = primera.user_ids[0]
+        escenario.ahora = A_LAS_NUEVE_Y_CINCO
+        await MarcarNoPresentadoUseCase(
+            uow=escenario.uow,
+            zonas=escenario.zonas,
+            reloj=lambda: escenario.ahora,
+            actividad=actividad,
+        ).execute(primera.id.value, falta.value, escenario.creador, False)
+
+        # Otra accion publica la ronda: la reconciliacion la relee entera
+        await actividad.tee_times(escenario.competicion, escenario.manana.id, [], [])
+
+        despues = await _publicados(social_uow, jugadores)
+        assert {u: e.id for u, e in despues.items()} == {u: e.id for u, e in antes.items()}
+
+    async def test_a_withdrawn_ryder_player_does_not_get_his_match_back(self):
+        """
+        Se da de baja con los partidos ya hechos: sigue en su partido, pero
+        reasignar otro de la sesion no le devuelve el «ya tienes partido».
+        """
+        ryder = await _Ryder(MatchFormat.SINGLES, 3).guardar()
+        (a1, a2, a3), (b1, b2, _) = ryder.equipo_a, ryder.equipo_b
+        actividad, social_uow = _actividad_de_verdad(ryder.uow)
+        await ryder.generar(actividad, emparejamientos=[([a1], [b1]), ([a2], [b2])])
+        _, segundo = await ryder.partidos()
+        (inscripcion,) = await ryder.uow.enrollments.find_by_user_ids_and_competition(
+            [a1], ryder.competicion.id
+        )
+        await WithdrawEnrollmentUseCase(ryder.uow, actividad=actividad).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), a1
+        )
+        assert a1 not in await _publicados(social_uow, [a1])
+
+        await ReassignMatchPlayersUseCase(
+            ryder.uow, ryder.campos, ryder.usuarios, actividad=actividad
+        ).execute(
+            ReassignMatchPlayersRequestDTO(
+                match_id=segundo.id.value,
+                team_a_player_ids=[a3.value],
+                team_b_player_ids=[b2.value],
+            ),
+            ryder.organizador,
+        )
+
+        publicados = await _publicados(social_uow, [a1, a3, b1])
+        assert a1 not in publicados
+        assert {a3, b1} <= set(publicados)
 
 
 class TestG3OrdenDeLasPublicaciones:

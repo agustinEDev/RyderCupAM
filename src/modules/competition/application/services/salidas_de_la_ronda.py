@@ -18,6 +18,7 @@ from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -40,17 +41,19 @@ def de_las_partidas(
     salidas: Salidas = {}
     for partida in partidas:
         hora = hoja.hora_de(partida.numero) if hoja else None
-        # Solo quien sigue en el grupo: un no presentado o un retirado ya no
-        # sale con nadie, ni se le nombra (22 oct 2026)
-        juegan = partida.quedan
-        for jugador in juegan:
+        # El grupo asignado, falte quien falte: que alguien no se presente o se
+        # retire no cambia la salida de nadie (revision final del 22 oct). El
+        # que falta queda fuera de juego: su aviso no se toca
+        juegan = set(partida.quedan)
+        for jugador in partida.user_ids:
             salidas[jugador] = TeeTimeAssignment(
                 user_id=jugador,
                 round_date=franja.round_date,
                 session_type=franja.session_type,
                 tee_time=hora,
-                partner_ids=tuple(u for u in juegan if u != jugador),
+                partner_ids=tuple(u for u in partida.user_ids if u != jugador),
                 opponent_ids=(),
+                out_of_play=jugador not in juegan,
             )
     return salidas
 
@@ -84,12 +87,14 @@ def cambios(
     Returns:
         Las de quien entra en la ronda (`changed` False) o cambia de verdad
         (`changed` True), y quienes ya no estan en ella. A quien le queda lo
-        mismo no se le dice nada
+        mismo no se le dice nada, ni a quien esta fuera de juego (no se
+        presento o se retiro): lo suyo ya no es una salida que avisar
     """
     avisos = [
         replace(salida, changed=True) if jugador in antes else salida
         for jugador, salida in despues.items()
-        if jugador not in antes or not salida.same_slot_as(antes[jugador])
+        if not salida.out_of_play
+        and (jugador not in antes or not salida.same_slot_as(antes[jugador]))
     ]
     fuera = [jugador for jugador in antes if jugador not in despues]
     return avisos, fuera
@@ -99,7 +104,7 @@ async def salidas_vigentes(uow: CompetitionUnitOfWorkInterface, round_id: RoundI
     """
     Las salidas que hay AHORA en la ronda, leidas en la transaccion abierta de
     quien llama (no abre ni confirma la suya): quien publica los avisos las
-    relee con la ronda bloqueada, en vez de fiarse de la foto de una accion
+    relee con el torneo bloqueado, en vez de fiarse de la foto de una accion
     que puede llegar tarde (G3, revision del 22 oct 2026).
 
     Sin ronda —se borro— no hay salida para nadie.
@@ -108,5 +113,16 @@ async def salidas_vigentes(uow: CompetitionUnitOfWorkInterface, round_id: RoundI
     if ronda is None:
         return {}
     if ronda.hoja_de_salidas is not None:
-        return de_las_partidas(ronda, await uow.partidas.de_la_franja(round_id))
-    return de_los_partidos(ronda, await uow.matches.find_by_round(round_id))
+        salidas = de_las_partidas(ronda, await uow.partidas.de_la_franja(round_id))
+    else:
+        salidas = de_los_partidos(ronda, await uow.matches.find_by_round(round_id))
+    # Solo quien sigue inscrito: quien se dio de baja de una Ryder sigue en su
+    # partido hasta que lo reasignen, y no puede recuperar su aviso (revision
+    # final del 22 oct). Una lectura para toda la ronda
+    inscritos = {
+        i.user_id
+        for i in await uow.enrollments.find_by_competition_and_status(
+            ronda.competition_id, EnrollmentStatus.APPROVED
+        )
+    }
+    return {u: s for u, s in salidas.items() if u in inscritos}

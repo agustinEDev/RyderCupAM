@@ -11,10 +11,12 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.jugador_de_partida import JugadorDePartida
@@ -129,6 +131,19 @@ def _en_partida(user_id: UserId) -> JugadorDePartida:
     )
 
 
+async def _inscritos(uow, competicion, jugadores, estado=EnrollmentStatus.APPROVED) -> None:
+    async with uow:
+        for jugador in jugadores:
+            await uow.enrollments.add(
+                Enrollment(
+                    id=EnrollmentId.generate(),
+                    competition_id=competicion.id,
+                    user_id=jugador,
+                    status=estado,
+                )
+            )
+
+
 @pytest.fixture
 def avisos():
     return _Avisos()
@@ -160,6 +175,7 @@ class TestTraduccion:
         async with uow:
             await uow.rounds.add(sesion)
             await uow.matches.add(partido)
+        await _inscritos(uow, competicion, [yo, pedro, juan, luis])
         adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
 
         # Lo que trae la accion no cuenta: puede ser viejo
@@ -225,6 +241,7 @@ class TestTraduccion:
             await uow.partidas.anadir(
                 [Partida.crear(competicion.id, franja.id, 2, [_en_partida(yo), _en_partida(pedro)])]
             )
+        await _inscritos(uow, competicion, [yo, pedro])
         adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
 
         await adaptador.tee_times(competicion, franja.id, [], [])
@@ -233,6 +250,64 @@ class TestTraduccion:
         assert [
             (r.tee_time, r.partner_ids, r.match_id) for r in await releer() if r.user_id == yo
         ] == [("09:05", (pedro,), None)]
+
+    async def test_g_quien_ya_no_esta_inscrito_no_tiene_salida(self, avisos):
+        """
+        Revision final del 22 oct: quien se dio de baja sigue en su partido
+        hasta que lo reasignen, pero no recupera su aviso.
+        """
+        competicion = _competicion()
+        uow = InMemoryUnitOfWork()
+        yo, baja = UserId(uuid4()), UserId(uuid4())
+        sesion = Round.create(
+            competition_id=competicion.id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2027, 3, 3),
+            session_type=SessionType.MORNING,
+            match_format=MatchFormat.SINGLES,
+        )
+        async with uow:
+            await uow.rounds.add(sesion)
+            await uow.matches.add(
+                Match.create(
+                    round_id=sesion.id,
+                    match_number=1,
+                    team_a_players=[_en_partido(yo)],
+                    team_b_players=[_en_partido(baja)],
+                )
+            )
+        await _inscritos(uow, competicion, [yo])
+        await _inscritos(uow, competicion, [baja], EnrollmentStatus.WITHDRAWN)
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
+
+        await adaptador.tee_times(competicion, sesion.id, [], [])
+
+        ((_, (_, _, releer), _),) = avisos.llamadas
+        assert [r.user_id for r in await releer()] == [yo]
+
+    async def test_g_el_no_presentado_va_fuera_de_juego(self, avisos):
+        competicion = _competicion()
+        uow = InMemoryUnitOfWork()
+        falta, yo = UserId(uuid4()), UserId(uuid4())
+        franja = Round.create_franja(
+            competition_id=competicion.id,
+            golf_course_id=GolfCourseId.generate(),
+            round_date=date(2027, 3, 3),
+            session_type=SessionType.MORNING,
+            hoja_de_salidas=HojaDeSalidas(time(9, 0), time(10, 0), 5, 4),
+        )
+        partida = Partida.crear(competicion.id, franja.id, 1, [_en_partida(falta), _en_partida(yo)])
+        partida.no_presentado(falta, [])
+        async with uow:
+            await uow.rounds.add(franja)
+            await uow.partidas.anadir([partida])
+        await _inscritos(uow, competicion, [falta, yo])
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), uow)
+
+        await adaptador.tee_times(competicion, franja.id, [], [])
+
+        ((_, (_, _, releer), _),) = avisos.llamadas
+        assert {r.user_id: r.out_of_play for r in await releer()} == {falta: True, yo: False}
 
     async def test_g_una_ronda_que_ya_no_existe_no_tiene_salidas(self, avisos):
         adaptador = CompetitionActivityPublisher(avisos, _General([]), InMemoryUnitOfWork())

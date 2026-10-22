@@ -27,6 +27,8 @@ class TeeTimeAssignment:
     compañero si lo hay y sus rivales.
 
     `changed` dice si sustituye a una salida que ya tenia en esa ronda.
+    `out_of_play`: no se presento o se retiro; sigue en su grupo, que es el
+    asignado, pero su aviso no se toca ni se le manda otro.
     `match_id` no cuenta para saber si cambio: regenerar los mismos
     emparejamientos crea partidos nuevos y, para el jugador, nada cambia.
     """
@@ -39,6 +41,7 @@ class TeeTimeAssignment:
     opponent_ids: tuple[UserId, ...]
     match_id: MatchId | None = None
     changed: bool = False
+    out_of_play: bool = False
 
     def same_slot_as(self, other: "TeeTimeAssignment") -> bool:
         """Si para el jugador es la misma salida: dia, sesion, hora, compañeros y rivales."""

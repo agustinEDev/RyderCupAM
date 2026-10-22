@@ -128,7 +128,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return antes - len(self._events)
 
-    async def lock_source(self, source_id: str) -> None:
+    async def lock_scope(self, scope_id: str) -> None:
         """En memoria no hay nada a la vez: no hay nada que bloquear."""
         return
 

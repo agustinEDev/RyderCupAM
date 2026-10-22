@@ -156,7 +156,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         withdrawn: Sequence[UserId],
     ) -> None:
         # Lo que trae la accion (`assigned`, `withdrawn`) solo dice que la ronda
-        # cambio: se publica lo que hay ahora, releido con la ronda bloqueada.
+        # cambio: se publica lo que hay ahora, releido con el torneo bloqueado.
         # Dos publicaciones de la misma ronda pueden llegar en cualquier orden
         # (cada una tras su commit, en su sesion), y la ultima en llegar podria
         # ser la de una foto vieja (revision del 22 oct 2026)
@@ -171,6 +171,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
                     partner_ids=salida.partner_ids,
                     opponent_ids=salida.opponent_ids,
                     match_id=str(salida.match_id.value) if salida.match_id else None,
+                    out_of_play=salida.out_of_play,
                 )
                 for salida in salidas.values()
             ]

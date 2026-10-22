@@ -101,6 +101,7 @@ def _salida(
     contra=(),
     partido: str | None = None,
     sesion: str = "MORNING",
+    fuera: bool = False,
 ) -> TeeTimeRef:
     return TeeTimeRef(
         user_id=user.id,
@@ -110,7 +111,21 @@ def _salida(
         partner_ids=tuple(u.id for u in con),
         opponent_ids=tuple(u.id for u in contra),
         match_id=partido,
+        out_of_play=fuera,
     )
+
+
+def _con_candado_espiado(social_uow, monkeypatch) -> list:
+    """Apunta cada candado que se toma, en orden."""
+    orden: list = []
+    bloquear = social_uow.activity_events.lock_scope
+
+    async def _bloquea(clave):
+        orden.append(("candado", clave))
+        return await bloquear(clave)
+
+    monkeypatch.setattr(social_uow.activity_events, "lock_scope", _bloquea)
+    return orden
 
 
 def _vigentes(*salidas: TeeTimeRef):
@@ -335,29 +350,54 @@ class TestG3Cambios:
         (despues,) = await _guardados(social_uow, yo)
         assert despues.id == antes.id
 
-    async def test_the_round_is_locked_before_it_is_read(
+    async def test_the_tournament_is_locked_before_the_round_is_read(
         self, avisos, social_uow, user_uow, monkeypatch
     ):
-        """G3. Leer la ronda con el candado puesto: si no, dos publicaciones se cruzan."""
+        """
+        G3. Leer la ronda con el candado puesto: si no, dos publicaciones se
+        cruzan. El candado es del torneo, el mismo que toman la baja y la
+        cancelacion al borrar (revision final del 22 oct).
+        """
         yo = await _user(user_uow)
-        orden = []
-        bloquear = social_uow.activity_events.lock_source
-
-        async def _bloquea(origen):
-            orden.append(("candado", origen))
-            return await bloquear(origen)
-
-        monkeypatch.setattr(social_uow.activity_events, "lock_source", _bloquea)
+        orden = _con_candado_espiado(social_uow, monkeypatch)
         leer = _vigentes(_salida(yo))
 
         async def _lee():
             orden.append(("leer", None))
             return await leer()
 
-        ronda = str(uuid4())
-        await avisos.tee_times(_torneo(), ronda, _lee)
+        torneo = _torneo()
+        await avisos.tee_times(torneo, str(uuid4()), _lee)
 
-        assert orden == [("candado", ronda), ("leer", None)]
+        assert orden == [("candado", torneo.competition_id), ("leer", None)]
+
+    async def test_out_of_play_keeps_his_notice_and_never_gets_a_new_one(
+        self, avisos, social_uow, user_uow
+    ):
+        """
+        Revision final: un no presentado o un retirado sigue en el grupo, fuera
+        de juego. Su aviso no se toca, ni se le crea uno, ni se le quita.
+        """
+        yo, falta, nuevo = [await _user(user_uow) for _ in range(3)]
+        torneo, ronda = _torneo(), str(uuid4())
+        await avisos.tee_times(
+            torneo, ronda, _vigentes(_salida(yo, con=[falta]), _salida(falta, con=[yo]))
+        )
+        (de_falta,) = await _guardados(social_uow, falta)
+
+        await avisos.tee_times(
+            torneo,
+            ronda,
+            _vigentes(
+                _salida(yo, con=[falta]),
+                _salida(falta, con=[yo, nuevo], fuera=True),
+                _salida(nuevo, hora="10:00", fuera=True),
+            ),
+        )
+
+        (sigue,) = await _guardados(social_uow, falta)
+        assert sigue.id == de_falta.id
+        assert await _guardados(social_uow, nuevo) == []
 
     async def test_an_empty_round_without_notices_touches_nothing(
         self, avisos, social_uow, user_uow
@@ -399,6 +439,40 @@ class TestG6G7yG11:
 
 
 class TestG9Limpieza:
+    @pytest.mark.parametrize(
+        "limpiar",
+        [
+            lambda avisos, yo, torneo: avisos.left(yo.id, torneo.competition_id),
+            lambda avisos, yo, torneo: avisos.tournament_cancelled(torneo.competition_id),
+            lambda avisos, yo, torneo: avisos.tournament_deleted(torneo.competition_id),
+        ],
+        ids=["baja", "cancelado", "borrado"],
+    )
+    async def test_cleaning_takes_the_tournament_lock_first(
+        self, avisos, social_uow, user_uow, monkeypatch, limpiar
+    ):
+        """
+        Revision final: el borrado va en fila con las publicaciones del torneo;
+        si no, una publicacion que leyo antes de la baja podria escribir
+        despues de ella.
+        """
+        yo = await _user(user_uow)
+        torneo = _torneo()
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo)))
+        orden = _con_candado_espiado(social_uow, monkeypatch)
+        borrar_de = social_uow.activity_events.delete_for_competition
+
+        async def _borra(*args, **kwargs):
+            orden.append(("borrar", None))
+            return await borrar_de(*args, **kwargs)
+
+        monkeypatch.setattr(social_uow.activity_events, "delete_for_competition", _borra)
+
+        await limpiar(avisos, yo, torneo)
+
+        assert orden[0] == ("candado", torneo.competition_id)
+        assert ("borrar", None) in orden
+
     async def test_withdrawing_from_the_tournament_takes_his_notices(
         self, avisos, social_uow, user_uow
     ):

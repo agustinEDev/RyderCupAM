@@ -84,6 +84,8 @@ class TeeTimeRef:
     partner_ids: tuple[UserId, ...]
     opponent_ids: tuple[UserId, ...]
     match_id: str | None
+    # No presentado o retirado: sigue en su grupo, pero su aviso no se toca
+    out_of_play: bool = False
 
 
 def _misma_salida(payload: dict, salida: TeeTimeRef) -> bool:
@@ -170,6 +172,9 @@ class PublishCompetitionNoticesUseCase:
         salidas de ese torneo se van (G9): ya no sale en ninguna.
         """
         async with self._social_uow:
+            # En fila con las publicaciones de salidas del torneo: una que leyo
+            # antes de la baja no puede escribir despues de este borrado
+            await self._social_uow.activity_events.lock_scope(competition_id)
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO, user_id
             )
@@ -180,6 +185,7 @@ class PublishCompetitionNoticesUseCase:
     async def tournament_cancelled(self, competition_id: str) -> None:
         """Torneo cancelado: nadie esta ya apuntado a el (B11) ni tiene salida (G9)."""
         async with self._social_uow:
+            await self._social_uow.activity_events.lock_scope(competition_id)
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO
             )
@@ -312,6 +318,7 @@ class PublishCompetitionNoticesUseCase:
         `competition_id` que lleva cada uno en el `payload`.
         """
         async with self._social_uow:
+            await self._social_uow.activity_events.lock_scope(competition_id)
             await self._social_uow.activity_events.delete_for_competition(
                 competition_id, _AVISOS_DE_TORNEO
             )
@@ -331,8 +338,9 @@ class PublishCompetitionNoticesUseCase:
         quien sale, se le retira; a quien le queda igual, nada.
 
         **Se compara con lo publicado, no con la foto de la accion**, y lo que
-        hay se relee (`vigentes`) con la ronda bloqueada, en la misma
-        transaccion que escribe: dos publicaciones de la ronda se ponen en fila
+        hay se relee (`vigentes`) con el torneo bloqueado, en la misma
+        transaccion que escribe: dos publicaciones del torneo —y la baja o la
+        cancelacion, que toman el mismo candado— se ponen en fila
         y la ultima siempre deja lo de ahora, lleguen en el orden que lleguen
         (revision del 22 oct 2026). Repetirla no cambia nada.
 
@@ -347,13 +355,17 @@ class PublishCompetitionNoticesUseCase:
         """
         async with self._social_uow:
             eventos = self._social_uow.activity_events
-            await eventos.lock_source(round_id)
-            ahora = {salida.user_id: salida for salida in await vigentes()}
+            await eventos.lock_scope(tournament.competition_id)
+            leidas = await vigentes()
+            # Fuera de juego (no presentado, retirado): su aviso, como este
+            fuera = {s.user_id for s in leidas if s.out_of_play}
+            ahora = {s.user_id: s for s in leidas if not s.out_of_play}
             publicados = {e.user_id: e for e in await eventos.find_from_source(round_id, [_SALIDA])}
             quitar = [
                 user_id
                 for user_id, evento in publicados.items()
-                if user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id])
+                if user_id not in fuera
+                and (user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id]))
             ]
             nuevos = [
                 self._salida(tournament, round_id, salida, changed=user_id in publicados)
