@@ -51,10 +51,44 @@ class TestPublico:
         assert audience_of(tipo) is ActivityAudience.BOTH
 
 
+# Los avisos de BE-2 (tabla aprobada el 21 oct 2026)
+SOLO_EL_AUTOR = [
+    ActivityEventType.ENROLLMENT_APPROVED,
+    ActivityEventType.INVITED_TO_TOURNAMENT,
+    ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
+    ActivityEventType.ENROLLMENT_REJECTED,
+    ActivityEventType.TOURNAMENT_MATCH_RESULT,
+    ActivityEventType.TOURNAMENT_FINAL_STANDING,
+]
+
+
+class TestPublicoDeLosAvisos:
+    @pytest.mark.parametrize("tipo", SOLO_EL_AUTOR)
+    def test_los_avisos_de_inscripcion_y_resultados_son_solo_tuyos(self, tipo):
+        """A y C. Given un aviso de inscripcion o de resultado / Then SELF."""
+        assert audience_of(tipo) is ActivityAudience.SELF
+
+    def test_el_amigo_apuntado_lo_ven_solo_sus_amigos(self):
+        """B. Given «X se ha apuntado a Y» / Then FRIENDS: el autor tiene su propio aviso."""
+        assert audience_of(ActivityEventType.ENROLLED_IN_TOURNAMENT) is ActivityAudience.FRIENDS
+
+    def test_la_partida_rapida_la_vemos_tu_y_tus_amigos(self):
+        """D. Given una partida rapida terminada / Then BOTH."""
+        assert audience_of(ActivityEventType.QUICK_MATCH_FINISHED) is ActivityAudience.BOTH
+
+
 class TestTiposVisibles:
-    def test_con_el_mapa_real_autor_y_amigos_ven_los_seis(self):
-        assert types_seen_by_author() == frozenset(LOGROS)
-        assert types_seen_by_friends() == frozenset(LOGROS)
+    def test_con_el_mapa_real_autor_y_amigos_ven_lo_suyo(self):
+        assert types_seen_by_author() == frozenset(
+            [*LOGROS, *SOLO_EL_AUTOR, ActivityEventType.QUICK_MATCH_FINISHED]
+        )
+        assert types_seen_by_friends() == frozenset(
+            [
+                *LOGROS,
+                ActivityEventType.ENROLLED_IN_TOURNAMENT,
+                ActivityEventType.QUICK_MATCH_FINISHED,
+            ]
+        )
 
     def test_se_calculan_desde_el_mapa(self, monkeypatch):
         """

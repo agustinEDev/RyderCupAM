@@ -39,7 +39,11 @@ from src.modules.competition.application.exceptions import (
     PartidaNotFoundError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.partidas_del_jugador import (
     que_no_se_quede_solo,
 )
@@ -51,6 +55,7 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     comprobar_que_se_juega,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.golpe_de_partida import (
     PRIMER_HOYO,
     ULTIMO_HOYO,
@@ -120,10 +125,13 @@ class CorregirHoyoDePartidaUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -143,6 +151,7 @@ class CorregirHoyoDePartidaUseCase:
         llegada = self._reloj()
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
             raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
+        cerradas: list[Enrollment] = []
         async with self._uow:
             partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
             jugador = _del_jugador(partida, user_id)
@@ -154,7 +163,7 @@ class CorregirHoyoDePartidaUseCase:
                     GolpeDePartida.comprobar(getattr(body, campo), acepta_raya)
 
             if competicion.status == CompetitionStatus.CLOSED:
-                await arrancar_la_competicion(self._uow, competicion)
+                cerradas = await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await _bloqueada(self._uow, partida)
             # Otra vez, ya bloqueada: pudieron moverlo mientras tanto
             jugador = _del_jugador(bloqueada, user_id)
@@ -184,6 +193,9 @@ class CorregirHoyoDePartidaUseCase:
                     bloqueada.marcar_que_jugo(quien)
                     await self._uow.partidas.guardar([bloqueada])
             await self._uow.golpes_de_partida.guardar(golpe)
+
+        # Si este hoyo la arrancó, ya guardado: «tu solicitud se cerró sin plaza»
+        await self._actividad.requests_closed(competicion, cerradas)
 
 
 # Qué lado borrar de un hoyo: el del jugador, el del marcador o los dos

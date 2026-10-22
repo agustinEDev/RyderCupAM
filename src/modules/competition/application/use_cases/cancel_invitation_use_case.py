@@ -12,6 +12,10 @@ from src.modules.competition.application.exceptions import (
     InvitationNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.exceptions.competition_violations import (
     InvalidInvitationStatusViolation,
 )
@@ -25,8 +29,14 @@ from src.modules.user.domain.value_objects.user_id import UserId
 class CancelInvitationUseCase:
     """Retira una invitacion pendiente."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface) -> None:
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ) -> None:
         self._uow = uow
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(self, invitation_id: UUID, user_id: UUID, is_admin: bool = False) -> None:
         """
@@ -76,3 +86,6 @@ class CancelInvitationUseCase:
             raise InvalidInvitationStatusViolation(
                 f"Invitation is in status {no_pendiente}. Only PENDING invitations can be cancelled."
             )
+
+        # Retirada y guardada: su aviso desaparece de Actividad (BE-2)
+        await self._actividad.invitation_withdrawn(invitation)

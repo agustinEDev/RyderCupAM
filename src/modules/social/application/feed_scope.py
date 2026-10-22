@@ -6,13 +6,18 @@ del boton y el de la pantalla tienen que salir de la misma regla, o acabarian
 discrepando en cuanto una de las dos cambiara.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivityEventRepositoryInterface,
     ActivitySlice,
+)
+from src.modules.social.domain.repositories.friendship_repository_interface import (
+    FriendshipRepositoryInterface,
 )
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -30,6 +35,10 @@ from src.shared.domain.utc_clock import utc_now
 # Tope del contador de novedades. El cliente pinta «9+», asi que pasado el 10
 # el numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
 UNSEEN_CAP = 10
+
+# Cuantas solicitudes de amistad pendientes se leen para el feed. Nadie tiene
+# tantas sin responder, y el contador no necesita mas que su tope
+MAX_PENDING_REQUESTS = 50
 
 
 @dataclass(frozen=True)
@@ -101,10 +110,49 @@ async def resolve_feed_scope(
     )
 
 
-async def count_unseen(events: ActivityEventRepositoryInterface, scope: FeedScope) -> int:
+def payload_for(evento: ActivityEvent, viewer_id: UserId) -> dict:
     """
-    Cuanto de lo que veria en el feed se ha publicado desde mi ultima visita,
-    con el tope de `UNSEEN_CAP`.
+    El detalle de un evento tal como lo puede ver quien mira.
+
+    El nombre de un invitado (sin cuenta) lo escribio el autor en su partida:
+    solo lo ve el. A cualquier otro le llega sin nombre y el cliente pinta «un
+    invitado» (revision de BE-2).
+    """
+    payload = evento.payload
+    if evento.user_id == viewer_id:
+        return payload
+    for clave in ("opponents", "partners"):
+        personas = payload.get(clave)
+        if isinstance(personas, list):
+            payload[clave] = [
+                {**p, "name": None} if isinstance(p, dict) and not p.get("user_id") else p
+                for p in personas
+            ]
+    return payload
+
+
+async def pending_requests(
+    friendships: FriendshipRepositoryInterface, viewer_id: UserId
+) -> list[Friendship]:
+    """
+    Las solicitudes de amistad que me han hecho y siguen sin respuesta (F23).
+
+    No son eventos: se leen en vivo de las amistades, asi que aceptarla o
+    rechazarla en otro sitio la quita sola (F24), y un bloqueo —que cambia esa
+    misma fila— tambien (F25). Solo las recibidas, nunca las enviadas (F26).
+    """
+    return await friendships.list_pending_received(viewer_id, limit=MAX_PENDING_REQUESTS)
+
+
+async def count_unseen(
+    events: ActivityEventRepositoryInterface,
+    scope: FeedScope,
+    requests: Sequence[Friendship] = (),
+) -> int:
+    """
+    Cuanto de lo que veria en el feed ha llegado desde mi ultima visita, con el
+    tope de `UNSEEN_CAP`: las tarjetas publicadas y las solicitudes de amistad
+    recibidas.
 
     Cuenta **tambien lo propio** (decision de producto, 21 oct 2026): el numero
     anuncia todo lo nuevo de Actividad, y ahi salen tambien los avisos que son
@@ -113,4 +161,10 @@ async def count_unseen(events: ActivityEventRepositoryInterface, scope: FeedScop
     Recibe el repositorio y no la unidad de trabajo para contar dentro de la
     misma que ya tenga abierta quien llama.
     """
-    return await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)
+    tarjetas = await events.count_in(scope.slices, since=scope.last_seen_at, cap=UNSEEN_CAP)
+    solicitudes = sum(
+        1
+        for solicitud in requests
+        if scope.last_seen_at is None or solicitud.created_at > scope.last_seen_at
+    )
+    return min(tarjetas + solicitudes, UNSEEN_CAP)

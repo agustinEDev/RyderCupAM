@@ -11,17 +11,28 @@ from src.modules.social.application.dto.profile_dto import (
     ActivityEventDTO,
     FeedAuthorDTO,
     FeedResponseDTO,
+    FriendRequestNoticeDTO,
 )
-from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
-from src.modules.social.application.feed_scope import count_unseen, resolve_feed_scope
+from src.modules.social.application.feed_cursor import (
+    build_cursor,
+    parse_cursor,
+    sin_partir_tarjetas,
+)
+from src.modules.social.application.feed_scope import (
+    count_unseen,
+    payload_for,
+    pending_requests,
+    resolve_feed_scope,
+)
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.domain.utc_clock import utc_now
 
 # Tope duro por pagina. El cliente puede pedir menos, nunca mas: el feed carga
@@ -85,37 +96,76 @@ class GetFriendsFeedUseCase:
             eventos = await self._social_uow.activity_events.find_in(
                 scope.slices, limit=limit, before=before, before_id=before_id
             )
-            # El mismo recuento que da `GET /users/me/feed/unseen-count`: el
-            # numero del boton y el de la pantalla no pueden discrepar. Solo en
-            # la primera pagina: las siguientes no lo pintan
-            no_vistos = (
-                await count_unseen(self._social_uow.activity_events, scope) if before is None else 0
+            # Ninguna tarjeta partida entre dos paginas
+            eventos = await sin_partir_tarjetas(
+                self._social_uow.activity_events, scope.slices, eventos, limit
             )
+            # Las solicitudes de amistad y el mismo recuento que da `GET
+            # /users/me/feed/unseen-count`: el numero del boton y el de la
+            # pantalla no pueden discrepar. Solo en la primera pagina: las
+            # siguientes no los pintan
+            solicitudes: list[Friendship] = []
+            no_vistos = 0
+            if before is None:
+                solicitudes = await pending_requests(self._social_uow.friendships, viewer_id)
+                no_vistos = await count_unseen(self._social_uow.activity_events, scope, solicitudes)
 
-        autores = await self._autores(eventos)
+        autores = await self._autores(eventos, viewer_id, [s.requester_id for s in solicitudes])
         campos = await self._campos(eventos)
 
         return FeedResponseDTO(
-            events=[self._a_dto(e) for e in eventos],
+            events=[self._a_dto(e, viewer_id) for e in eventos],
             authors=autores,
             courses=campos,
             next_cursor=build_cursor(eventos, limit),
             unseen_count=no_vistos,
+            pending_friend_requests=[
+                FriendRequestNoticeDTO(
+                    friendship_id=str(s.id.value),
+                    requester=autores[str(s.requester_id.value)],
+                    created_at=s.created_at,
+                )
+                for s in solicitudes
+                # Sin su cuenta no hay a quien aceptar
+                if str(s.requester_id.value) in autores
+            ],
         )
 
-    async def _autores(self, eventos: list[ActivityEvent]) -> dict[str, FeedAuthorDTO]:
+    async def _autores(
+        self,
+        eventos: list[ActivityEvent],
+        viewer_id: UserId,
+        otros: list[UserId] | None = None,
+    ) -> dict[str, FeedAuthorDTO]:
         """
-        Quien publico cada entrada de esta pagina.
+        Quien publico cada entrada de esta pagina, y las demas personas que
+        nombra: rivales y compañeros de un resultado, quien pide amistad.
 
         Van en la respuesta para que pintar el feed no exija una peticion de
         perfil por entrada. Se leen todos de una vez, no uno por autor.
+
+        **De los nombrados solo vienen los que quien mira puede ver**: nadie
+        con quien tenga un bloqueo, lo pusiera quien lo pusiera, ni una cuenta
+        desactivada. Sin sus datos, el cliente pinta «un jugador».
         """
-        ids = {e.user_id for e in eventos}
+        propios = {e.user_id for e in eventos} | set(otros or [])
+        nombrados: set[UserId] = set()
+        for evento in eventos:
+            nombrados.update(_nombrados(evento.payload))
+        nombrados -= propios
+        if nombrados:
+            async with self._social_uow:
+                nombrados -= set(await self._social_uow.friendships.find_blocked_ids(viewer_id))
+        ids = propios | nombrados
         if not ids:
             return {}
 
         async with self._user_uow:
-            usuarios = await self._user_uow.users.find_by_ids(list(ids))
+            usuarios = [
+                u
+                for u in await self._user_uow.users.find_by_ids(list(ids))
+                if u.id in propios or u.is_active
+            ]
 
         return {
             str(user.id.value): FeedAuthorDTO(
@@ -167,13 +217,42 @@ class GetFriendsFeedUseCase:
         return campos
 
     @staticmethod
-    def _a_dto(evento: ActivityEvent) -> ActivityEventDTO:
+    def _a_dto(evento: ActivityEvent, viewer_id: UserId) -> ActivityEventDTO:
         return ActivityEventDTO(
             id=str(evento.id),
             user_id=str(evento.user_id.value),
             type=evento.type.value,
             occurred_at=evento.occurred_at,
             published_at=evento.published_at,
-            payload=evento.payload,
+            payload=payload_for(evento, viewer_id),
             source_match_id=evento.source_match_id,
+            group_key=evento.card_key,
         )
+
+
+def _nombrados(payload: dict) -> set[UserId]:
+    """
+    Los jugadores con cuenta que nombra un resultado: `opponent_ids` y
+    `partner_ids` en los de torneo, `opponents` y `partners` en los de partida
+    rapida (el invitado va por su nombre). Lo ilegible se ignora: el `payload`
+    es JSONB y nada garantiza su forma con los años.
+    """
+    crudos: list = []
+    for clave in ("opponent_ids", "partner_ids"):
+        valor = payload.get(clave)
+        if isinstance(valor, list):
+            crudos.extend(valor)
+    for clave in ("opponents", "partners"):
+        valor = payload.get(clave)
+        if isinstance(valor, list):
+            crudos.extend(p.get("user_id") for p in valor if isinstance(p, dict))
+
+    nombrados = set()
+    for crudo in crudos:
+        if not crudo:
+            continue
+        try:
+            nombrados.add(UserId(crudo))
+        except (TypeError, ValueError, InvalidUserIdError):
+            continue
+    return nombrados

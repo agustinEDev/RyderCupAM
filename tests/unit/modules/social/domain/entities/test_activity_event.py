@@ -200,11 +200,13 @@ class TestTipos:
         with pytest.raises(ValueError, match="Unknown activity event type"):
             ActivityEventType.from_string("JUGO_MUY_MAL")
 
-    def test_no_existe_ningun_tipo_que_delate_una_vuelta_mala(self):
+    def test_la_lista_de_tipos_es_la_aprobada(self):
         """
-        La lista es corta a proposito. Si alguien anade aqui un ROUND_PLAYED o
-        similar, el feed empezara a publicar los dias malos y la gente dejara de
-        anotar sus tarjetas (ver BE #173).
+        La lista es corta a proposito: cada tipo nuevo es una decision de
+        producto. Los seis logros (BE #175) y los avisos de BE-2 (tabla del 21
+        oct 2026). `QUICK_MATCH_FINISHED` publica tambien una vuelta mala —el
+        ultimo puesto sale— porque asi lo decidio Agustin: las partidas rapidas
+        de los amigos, todas, con puesto y puntos.
         """
         assert {t.value for t in ActivityEventType} == {
             "HOLE_IN_ONE",
@@ -213,4 +215,12 @@ class TestTipos:
             "NEW_COURSE",
             "PERSONAL_BEST",
             "FIRST_TOURNAMENT",
+            "ENROLLMENT_APPROVED",
+            "INVITED_TO_TOURNAMENT",
+            "ENROLLMENT_REQUEST_CLOSED",
+            "ENROLLMENT_REJECTED",
+            "ENROLLED_IN_TOURNAMENT",
+            "TOURNAMENT_MATCH_RESULT",
+            "TOURNAMENT_FINAL_STANDING",
+            "QUICK_MATCH_FINISHED",
         }

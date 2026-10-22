@@ -13,9 +13,13 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.services.actualizaciones_de_handicaps import (
     ActualizacionesDeHandicaps,
 )
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas_al_cerrar import FranjasAlCerrar
 from src.modules.competition.application.services.solicitudes_al_empezar import (
     rechazar_las_solicitudes_pendientes,
@@ -56,6 +60,7 @@ class StartCompetitionUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
@@ -63,9 +68,11 @@ class StartCompetitionUseCase:
         Args:
             uow: Unit of Work para gestionar transacciones
             user_repository: Para nombrar a quien no tenga franja en un stroke play
+            actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
         """
         self._uow = uow
         self._users = user_repository
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: StartCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -129,10 +136,13 @@ class StartCompetitionUseCase:
             await ActualizacionesDeHandicaps(self._uow, None).cortar(competition.id)
 
             # 4c. Una solicitud que siga pendiente ya no cabe (21 oct)
-            await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
+            cerradas = await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
 
             # 5. Persistir cambios
             await self._uow.competitions.update(competition)
+
+        # 5b. Ya guardado: a cada uno, «tu solicitud se cerró sin plaza» (BE-2)
+        await self._actividad.requests_closed(competition, cerradas)
 
         # 6. Retornar DTO de respuesta
         return StartCompetitionResponseDTO(

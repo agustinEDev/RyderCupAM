@@ -15,13 +15,23 @@ juego (`occurred_at`) con el mismo formato; las filas de entonces se rellenaron
 con esa misma fecha, asi que un cursor viejo sigue cayendo en su sitio.
 """
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivityEventRepositoryInterface,
+    ActivitySlice,
+)
 
 # La fecha en ISO no contiene '|', asi que parte el cursor sin ambiguedad
 CURSOR_SEPARATOR = "|"
+
+# Cuanto se mira tras una pagina llena para completar sus tarjetas. Una tarjeta
+# son los logros de una vuelta (seis tipos como mucho), pero los de un torneo
+# se publican a la vez para todos sus jugadores y se intercalan por id
+VENTANA_DE_TARJETAS = 200
 
 
 def parse_cursor(cursor: str | None) -> tuple[datetime | None, UUID | None]:
@@ -61,3 +71,36 @@ def build_cursor(eventos: list[ActivityEvent], limit: int) -> str | None:
         return None
     ultimo = eventos[-1]
     return f"{ultimo.published_at.isoformat()}{CURSOR_SEPARATOR}{ultimo.id}"
+
+
+async def sin_partir_tarjetas(
+    events: ActivityEventRepositoryInterface,
+    slices: Sequence[ActivitySlice],
+    eventos: list[ActivityEvent],
+    limit: int,
+) -> list[ActivityEvent]:
+    """
+    La pagina, alargada para que ninguna tarjeta quede partida (E22).
+
+    Si la pagina vino llena, puede que una tarjeta —los logros de una vuelta—
+    siga en la siguiente. Se trae lo que viene detras y se añade hasta la
+    ultima fila de las tarjetas que ya estan en la pagina, con lo que haya en
+    medio: saltarselo lo perderia, porque el cursor sigue tras la ultima fila
+    añadida. Lo añadido puede traer tarjetas nuevas partidas, asi que se repite
+    hasta que no quede ninguna.
+    """
+    if len(eventos) < limit:
+        return eventos
+    ultimo = eventos[-1]
+    siguientes = await events.find_in(
+        slices, limit=VENTANA_DE_TARJETAS, before=ultimo.published_at, before_id=ultimo.id
+    )
+    pagina = list(eventos)
+    while siguientes:
+        abiertas = {e.card_key for e in pagina if e.type.is_achievement}
+        hasta = max((i for i, e in enumerate(siguientes) if e.card_key in abiertas), default=None)
+        if hasta is None:
+            break
+        pagina.extend(siguientes[: hasta + 1])
+        siguientes = siguientes[hasta + 1 :]
+    return pagina

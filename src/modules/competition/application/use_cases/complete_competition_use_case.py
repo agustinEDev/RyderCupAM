@@ -15,9 +15,13 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.tournament_achievements_publisher_interface import (
     TournamentAchievementsPublisherInterface,
 )
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -51,6 +55,7 @@ class CompleteCompetitionUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         achievements: TournamentAchievementsPublisherInterface | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
@@ -59,9 +64,12 @@ class CompleteCompetitionUseCase:
             uow: Unit of Work para gestionar transacciones
             achievements: Publicador del feed de logros (BE #175). Opcional:
                 sin el, cerrar el torneo sigue funcionando y no se publica nada.
+            actividad: Los avisos de Actividad (BE-2): la clasificacion final
+                de cada uno. Sin el, no se avisa
         """
         self._uow = uow
         self._achievements = achievements
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: CompleteCompetitionRequestDTO, user_id: UserId, is_admin: bool = False
@@ -123,6 +131,9 @@ class CompleteCompetitionUseCase:
 
         # 7. Publicar los logros del torneo en el feed de los amigos
         await self._publicar_logros(request.competition_id, marca_previa)
+
+        # 7b. Y la clasificacion final de cada inscrito (BE-2)
+        await self._actividad.completed(competition)
 
         # 8. Retornar DTO de respuesta
         return CompleteCompetitionResponseDTO(

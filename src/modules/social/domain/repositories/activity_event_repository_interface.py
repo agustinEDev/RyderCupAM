@@ -76,8 +76,12 @@ class ActivityEventRepositoryInterface(ABC):
         self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
     ) -> int:
         """
-        Cuantos eventos de esos trozos se publicaron despues de `since` (todos
+        Cuantas tarjetas de esos trozos se publicaron despues de `since` (todas
         si es None), sin pasar de `cap`. Alimenta el aviso de novedades.
+
+        Cuenta tarjetas y no filas (`ActivityEvent.card_key`): tres logros de
+        una vuelta se ven como una tarjeta, y el numero tiene que decir lo que
+        hay en la pantalla.
         """
 
     @abstractmethod
@@ -93,6 +97,32 @@ class ActivityEventRepositoryInterface(ABC):
 
         Hace falta al apagar la publicacion de actividad: lo que solo era para
         sus amigos debe desaparecer, no solo dejar de crecer.
+        """
+
+    @abstractmethod
+    async def delete_from_source(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
+    ) -> int:
+        """
+        Borra lo publicado desde ese origen (`source_match_id`) de esos tipos:
+        de un jugador, o de todos si no se dice. Devuelve cuantos borro.
+
+        Es como se retira un aviso que deja de ser cierto: la invitacion
+        retirada, el amigo que se borra del torneo, la clasificacion de un
+        torneo que se reabre. Una lista de tipos vacia no borra nada.
+        """
+
+    @abstractmethod
+    async def delete_for_competition(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> int:
+        """
+        Borra los eventos de esos tipos que cuentan algo de esa competicion
+        (`payload.competition_id`), sea cual sea su origen. Para cuando la
+        competicion se borra. Devuelve cuantos borro.
         """
 
     @abstractmethod

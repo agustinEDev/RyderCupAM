@@ -41,6 +41,17 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.NEW_COURSE: ActivityAudience.BOTH,
     ActivityEventType.PERSONAL_BEST: ActivityAudience.BOTH,
     ActivityEventType.FIRST_TOURNAMENT: ActivityAudience.BOTH,
+    # Avisos de inscripcion y resultados de torneo: asunto de cada uno
+    ActivityEventType.ENROLLMENT_APPROVED: ActivityAudience.SELF,
+    ActivityEventType.INVITED_TO_TOURNAMENT: ActivityAudience.SELF,
+    ActivityEventType.ENROLLMENT_REQUEST_CLOSED: ActivityAudience.SELF,
+    ActivityEventType.ENROLLMENT_REJECTED: ActivityAudience.SELF,
+    ActivityEventType.TOURNAMENT_MATCH_RESULT: ActivityAudience.SELF,
+    ActivityEventType.TOURNAMENT_FINAL_STANDING: ActivityAudience.SELF,
+    # «X se ha apuntado a Y»: el autor ya tiene su aviso, o se apunto el
+    ActivityEventType.ENROLLED_IN_TOURNAMENT: ActivityAudience.FRIENDS,
+    # Como acabo cada uno la partida rapida: uno se ve y le ven sus amigos
+    ActivityEventType.QUICK_MATCH_FINISHED: ActivityAudience.BOTH,
 }
 
 

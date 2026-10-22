@@ -127,6 +127,19 @@ class ActivityEvent:
     def source_match_id(self) -> str:
         return self._source_match_id
 
+    @property
+    def card_key(self) -> str:
+        """
+        La tarjeta del feed en la que va (E22, BE-2).
+
+        Los logros de una misma vuelta de un jugador van en una sola tarjeta con
+        sus cuentas; cada aviso, en la suya. Se guardan uno por fila como
+        siempre: se agrupan al leer.
+        """
+        if self._type.is_achievement:
+            return f"{self._user_id.value}:{self._source_match_id}"
+        return str(self._id)
+
     # === Business Rules ===
 
     def is_from(self, match_id: str) -> bool:

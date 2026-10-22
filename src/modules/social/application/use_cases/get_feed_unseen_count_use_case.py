@@ -4,7 +4,11 @@ from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.social.application.dto.profile_dto import FeedUnseenCountResponseDTO
-from src.modules.social.application.feed_scope import count_unseen, resolve_feed_scope
+from src.modules.social.application.feed_scope import (
+    count_unseen,
+    pending_requests,
+    resolve_feed_scope,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
@@ -40,5 +44,8 @@ class GetFeedUnseenCountUseCase:
             self._social_uow, self._user_uow, UserId(viewer_id_raw), self._reloj
         )
         async with self._social_uow:
-            no_vistos = await count_unseen(self._social_uow.activity_events, scope)
+            solicitudes = await pending_requests(
+                self._social_uow.friendships, UserId(viewer_id_raw)
+            )
+            no_vistos = await count_unseen(self._social_uow.activity_events, scope, solicitudes)
         return FeedUnseenCountResponseDTO(unseen_count=no_vistos)

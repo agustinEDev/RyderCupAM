@@ -140,7 +140,21 @@ class ActivityEventDTO(BaseModel):
         default_factory=dict,
         description="El detalle propio de cada tipo: cuantos birdies, en que hoyos, que campo",
     )
-    source_match_id: str = Field(description="La partida de la que sale, para enlazar al detalle")
+    source_match_id: str = Field(
+        description=(
+            "De donde sale, para enlazar y para no duplicar: la partida en los logros "
+            "y resultados; en los avisos de torneo, la inscripcion, la invitacion o el "
+            "torneo (su id va en `payload.competition_id`)"
+        )
+    )
+    group_key: str | None = Field(
+        default=None,
+        description=(
+            "La tarjeta en la que se pinta: los logros de una misma vuelta de un "
+            "jugador comparten clave y van en una sola tarjeta con sus cuentas; cada "
+            "aviso lleva la suya. El contador de novedades cuenta tarjetas"
+        ),
+    )
 
 
 class FeedAuthorDTO(BaseModel):
@@ -158,6 +172,14 @@ class FeedAuthorDTO(BaseModel):
     )
     avatar_source: str
     avatar_preset_id: int | None = None
+
+
+class FriendRequestNoticeDTO(BaseModel):
+    """Una solicitud de amistad recibida y sin responder, para aceptarla desde Actividad."""
+
+    friendship_id: str
+    requester: FeedAuthorDTO
+    created_at: UtcDatetime = Field(description="Cuando se envio")
 
 
 class FeedResponseDTO(BaseModel):
@@ -189,11 +211,20 @@ class FeedResponseDTO(BaseModel):
     unseen_count: int = Field(
         default=0,
         description=(
-            "Cuantas entradas de este feed se han publicado desde la ultima visita, "
-            "las propias incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
+            "Cuantas tarjetas de este feed se han publicado desde la ultima visita, "
+            "las propias y las solicitudes de amistad recibidas incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
             "visita previa cuenta todo. Es el mismo numero que da "
             "`GET /users/me/feed/unseen-count`. Solo se calcula en la primera pagina: "
             "con `cursor` llega a 0"
+        ),
+    )
+    pending_friend_requests: list[FriendRequestNoticeDTO] = Field(
+        default_factory=list,
+        description=(
+            "Solicitudes de amistad recibidas y sin responder, de la mas reciente a la "
+            "mas antigua. No son eventos: se leen en vivo, asi que al responderlas en "
+            "otro sitio desaparecen. Cuentan en `unseen_count` las llegadas tras la "
+            "ultima visita. Solo en la primera pagina"
         ),
     )
 

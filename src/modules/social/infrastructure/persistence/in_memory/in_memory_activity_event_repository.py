@@ -53,12 +53,13 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     async def count_in(
         self, slices: Sequence[ActivitySlice], since: datetime | None, cap: int | None = None
     ) -> int:
+        # Por tarjetas, como el SQL: los logros de una vuelta son una
         cuenta = len(
-            [
-                e
+            {
+                e.card_key
                 for e in self._events
                 if self._entra(e, slices) and (since is None or e.published_at > since)
-            ]
+            }
         )
         return cuenta if cap is None else min(cuenta, cap)
 
@@ -106,6 +107,35 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
             e
             for e in self._events
             if not (e.user_id == user_id and (types is None or e.type in types))
+        ]
+        return antes - len(self._events)
+
+    async def delete_from_source(
+        self,
+        source_id: str,
+        types: Collection[ActivityEventType],
+        user_id: UserId | None = None,
+    ) -> int:
+        antes = len(self._events)
+        self._events = [
+            e
+            for e in self._events
+            if not (
+                e.source_match_id == source_id
+                and e.type in types
+                and (user_id is None or e.user_id == user_id)
+            )
+        ]
+        return antes - len(self._events)
+
+    async def delete_for_competition(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> int:
+        antes = len(self._events)
+        self._events = [
+            e
+            for e in self._events
+            if not (e.type in types and e.payload.get("competition_id") == competition_id)
         ]
         return antes - len(self._events)
 
