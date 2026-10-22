@@ -90,16 +90,6 @@ class TestLogrosPorHoyo:
 
 
 class TestLogrosDeVuelta:
-    def test_estrenar_campo_se_publica(self, detector):
-        logros = detector.detect(hoyos((4, 4)), RoundContext(is_first_round_on_course=True))
-
-        assert [logro.type for logro in logros] == [ActivityEventType.NEW_COURSE]
-
-    def test_el_primer_torneo_se_publica(self, detector):
-        logros = detector.detect(hoyos((4, 4)), RoundContext(is_first_tournament=True))
-
-        assert [logro.type for logro in logros] == [ActivityEventType.FIRST_TOURNAMENT]
-
     def test_batir_la_mejor_vuelta_se_publica(self, detector):
         logros = detector.detect(
             hoyos((4, 4)),
@@ -143,7 +133,6 @@ class TestLogrosDeVuelta:
         logros = detector.detect(
             hoyos((4, 3), (5, 3)),
             RoundContext(
-                is_first_round_on_course=True,
                 differential=Decimal("10.0"),
                 previous_best_differential=Decimal("12.0"),
             ),
@@ -152,6 +141,5 @@ class TestLogrosDeVuelta:
         assert {logro.type for logro in logros} == {
             ActivityEventType.EAGLE_OR_BETTER,
             ActivityEventType.BIRDIE,
-            ActivityEventType.NEW_COURSE,
             ActivityEventType.PERSONAL_BEST,
         }

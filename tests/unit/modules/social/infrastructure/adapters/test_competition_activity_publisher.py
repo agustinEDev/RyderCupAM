@@ -73,8 +73,9 @@ class _General:
 class _Inscripciones:
     """La UoW de competition, solo para releer una inscripcion; aprobada si no se dice."""
 
-    def __init__(self, estado: EnrollmentStatus | None = EnrollmentStatus.APPROVED):
+    def __init__(self, estado: EnrollmentStatus | None = EnrollmentStatus.APPROVED, inscritos=()):
         self._estado = estado
+        self._inscritos = list(inscritos)
         self.enrollments = self
 
     async def __aenter__(self):
@@ -87,6 +88,9 @@ class _Inscripciones:
         if self._estado is None:
             return None
         return SimpleNamespace(id=enrollment_id, status=self._estado)
+
+    async def find_by_competition(self, competition_id):
+        return [SimpleNamespace(user_id=user_id) for user_id in self._inscritos]
 
 
 def _competicion(visibility=Visibility.PUBLIC, stroke_play=None):
@@ -363,7 +367,9 @@ class TestTraduccion:
     async def test_retirar_cancelar_y_reabrir_van_por_el_id(self, avisos):
         competicion = _competicion()
         jugador = UserId(uuid4())
-        adaptador = CompetitionActivityPublisher(avisos, _General([]), _Inscripciones())
+        adaptador = CompetitionActivityPublisher(
+            avisos, _General([]), _Inscripciones(inscritos=[jugador])
+        )
 
         await adaptador.left(competicion.id, jugador)
         await adaptador.cancelled(competicion.id)
@@ -375,7 +381,8 @@ class TestTraduccion:
         assert avisos.llamadas == [
             ("left", (jugador, crudo), {}),
             ("tournament_cancelled", (crudo,), {}),
-            ("reopened", (crudo,), {}),
+            # Con sus inscritos: se bloquean tras el torneo (22 oct 2026)
+            ("reopened", (crudo, [jugador]), {}),
             ("tournament_made_private", (crudo,), {}),
             ("tournament_deleted", (crudo,), {}),
         ]

@@ -1,6 +1,6 @@
 """HoleScore Repository - SQLAlchemy Implementation."""
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.competition.domain.entities.hole_score import HoleScore
@@ -8,6 +8,7 @@ from src.modules.competition.domain.repositories.hole_score_repository_interface
     HoleScoreRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import hole_scores_table
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -110,3 +111,17 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return result.scalar_one() > 0
+
+    async def played_holes(self, match_ids: list[MatchId]) -> dict[tuple[MatchId, UserId], int]:
+        if not match_ids:
+            return {}
+        tabla = hole_scores_table.c
+        filas = await self._session.execute(
+            select(tabla.match_id, tabla.player_user_id, func.count())
+            .where(
+                tabla.match_id.in_(match_ids),
+                or_(tabla.own_submitted.is_(True), tabla.marker_submitted.is_(True)),
+            )
+            .group_by(tabla.match_id, tabla.player_user_id)
+        )
+        return {(fila[0], fila[1]): int(fila[2]) for fila in filas.all()}

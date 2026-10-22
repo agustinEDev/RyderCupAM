@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers import (
     tee_group_hole_scores_table,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 tabla = tee_group_hole_scores_table
 
@@ -89,3 +90,18 @@ class SQLAlchemyGolpeDePartidaRepository(GolpeDePartidaRepositoryInterface):
         if not partida_ids:
             return []
         return await self._donde(tabla.c.group_id.in_([str(p) for p in partida_ids]))
+
+    async def hoyos_jugados(
+        self, partida_ids: list[PartidaId]
+    ) -> dict[tuple[PartidaId, UserId], int]:
+        if not partida_ids:
+            return {}
+        filas = await self._session.execute(
+            select(tabla.c.group_id, tabla.c.user_id, func.count())
+            .where(
+                tabla.c.group_id.in_([str(p) for p in partida_ids]),
+                or_(tabla.c.own_submitted.is_(True), tabla.c.marker_submitted.is_(True)),
+            )
+            .group_by(tabla.c.group_id, tabla.c.user_id)
+        )
+        return {(PartidaId(uuid.UUID(f[0])), f[1]): int(f[2]) for f in filas.all()}

@@ -159,6 +159,26 @@ class ActivityEventRepositoryInterface(ABC):
         """Lo publicado desde ese origen de esos tipos, de todos los jugadores."""
 
     @abstractmethod
+    async def last_published_at(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> datetime | None:
+        """
+        Cuando se publico lo ultimo de esos tipos para esa competicion
+        (`payload.competition_id`), o None si no hay nada. Dice si otra
+        publicacion del torneo escribio mientras se calculaba la propia.
+        """
+
+    @abstractmethod
+    async def find_for_users(
+        self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        """
+        Lo publicado por esos jugadores de esos tipos, sea cual sea su origen:
+        con esto se comparan los logros exclusivos por fecha (22 oct 2026).
+        Sin jugadores o sin tipos no devuelve nada.
+        """
+
+    @abstractmethod
     async def delete_from_source_for_users(
         self,
         source_id: str,

@@ -83,11 +83,11 @@ class _Hueco(PlayerCourseHistoryInterface):
         self._real = real
         self._en_el_hueco = en_el_hueco
 
-    async def has_played_course_before(self, *args, **kwargs) -> bool:
+    async def played_rounds(self, *args, **kwargs):
         if self._en_el_hueco is not None:
             accion, self._en_el_hueco = self._en_el_hueco, None
             await accion()
-        return await self._real.has_played_course_before(*args, **kwargs)
+        return await self._real.played_rounds(*args, **kwargs)
 
 
 def _publisher(world, social_uow, en_el_hueco=None) -> PublishTournamentAchievementsUseCase:
@@ -97,7 +97,7 @@ def _publisher(world, social_uow, en_el_hueco=None) -> PublishTournamentAchievem
         quick_match_uow=InMemoryQuickMatchUnitOfWork(),
         golf_course_uow=world.golf,
     )
-    history = PlayerCourseHistoryAdapter(InMemoryQuickMatchUnitOfWork(), world.comp)
+    history = PlayerCourseHistoryAdapter(InMemoryQuickMatchUnitOfWork(), world.comp, world.golf)
     return PublishTournamentAchievementsUseCase(
         social_uow=social_uow,
         competition_uow=world.comp,

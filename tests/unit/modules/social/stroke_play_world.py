@@ -241,8 +241,12 @@ class StrokePlayWorld:
         golpes: dict[int, int | None],
         *,
         numero: int = 1,
+        concedido: bool = False,
     ) -> Match:
-        """Un partido individual de Ryder acabado, con la tarjeta propia de `player`."""
+        """
+        Un partido individual de Ryder acabado, con la tarjeta propia de
+        `player`; con `concedido`, lo concede el rival a mitad.
+        """
 
         def jugador(user: User) -> MatchPlayer:
             return MatchPlayer(
@@ -260,7 +264,10 @@ class StrokePlayWorld:
             team_b_players=[jugador(rival)],
         )
         match.start()
-        match.complete({"winner": "A", "score": "2UP"})
+        if concedido:
+            match.concede("B")
+        else:
+            match.complete({"winner": "A", "score": "2UP"})
         async with self.comp:
             await self.comp.matches.add(match)
             for hoyo, valor in golpes.items():

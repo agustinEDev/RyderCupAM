@@ -30,6 +30,9 @@ from src.modules.social.application.use_cases.publish_competition_notices_use_ca
     TeeTimeRef,
     TournamentRef,
 )
+from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
+    PublishRoundAchievementsUseCase,
+)
 from src.modules.social.application.use_cases.publish_tournament_achievements_use_case import (
     PublishTournamentAchievementsUseCase,
 )
@@ -70,11 +73,14 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         competition_uow: CompetitionUnitOfWorkInterface,
         ryder_scoreboard: RyderScoreboard | None = None,
         achievements: PublishTournamentAchievementsUseCase | None = None,
+        round_achievements: PublishRoundAchievementsUseCase | None = None,
     ):
         self._notices = notices
-        # Para volver a publicar los torneos del mismo dia que dependen de uno
-        # que se cancela (revision final de bugs, 22 oct 2026)
+        # Para que hereden «campo nuevo» y «primer torneo» de un torneo que se
+        # reabre el torneo cerrado o la partida rapida que pasa a ser lo mas
+        # antiguo (22 oct 2026)
         self._achievements = achievements
+        self._round_achievements = round_achievements
         self._standings = standings
         self._ryder_scoreboard = ryder_scoreboard
         # Para releer la inscripcion justo antes de avisar de ella
@@ -97,8 +103,9 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         await self._notices.left(user_id, str(competition_id.value))
 
     async def cancelled(self, competition_id: CompetitionId) -> None:
+        # Sus logros no hay que moverlos: uno cancelado no se cerro nunca, o
+        # se reabrio antes y ya los cedio entonces
         await self._notices.tournament_cancelled(str(competition_id.value))
-        await self._republicar_los_del_mismo_dia(competition_id)
 
     async def invited(self, competition: Competition, invitation: Invitation) -> None:
         if invitation.invitee_user_id is None:
@@ -212,25 +219,51 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         )
 
     async def reopened(self, competition_id: CompetitionId) -> None:
-        # No hace falta volver a publicar los del mismo dia: uno reabierto sigue
-        # contando para ellos como cuando estaba cerrado. Lo que se corrija
-        # mientras, lo recogen el nuevo cierre o la cancelacion
-        await self._notices.reopened(str(competition_id.value))
+        # Retira sus logros y, despues, los exclusivos los hereda lo que pasa a
+        # ser lo mas antiguo. Al volver a cerrarlo se los vuelve a llevar
+        async with self._competition_uow:
+            inscritos = await self._competition_uow.enrollments.find_by_competition(competition_id)
+        jugadores = [e.user_id for e in inscritos]
+        await self._notices.reopened(str(competition_id.value), jugadores)
+        await self._ceder_los_exclusivos(competition_id, jugadores)
 
-    async def _republicar_los_del_mismo_dia(self, competition_id: CompetitionId) -> None:
+    async def _ceder_los_exclusivos(
+        self, competition_id: CompetitionId, jugadores: list[UserId]
+    ) -> None:
         """
-        «Campo nuevo» y «primer torneo» de los torneos cerrados del mismo dia
-        dependen de este: al cancelarlo deja de contar y se vuelven a publicar. Con fallo seguro: el aviso
-        propio ya salio y la accion no falla por esto.
+        Publica en los herederos SOLO «campo nuevo» y «primer torneo», y solo
+        para los jugadores del torneo reabierto
+        (`PublishTournamentAchievementsUseCase.heirs_of`): nunca se reejecuta
+        ni se sustituye lo demas de otro torneo (revision final, 22 oct 2026).
+        Cada uno en su transaccion y bajo los candados de siempre. Con fallo
+        seguro: la reapertura ya esta hecha, y lo que falle en uno no para a
+        los demas.
         """
         if self._achievements is None:
             return
         try:
-            await self._achievements.republish_same_day(str(competition_id.value))
+            herederos = await self._achievements.heirs_of(str(competition_id.value))
         except Exception:
             logger.warning(
-                "Could not republish the same-day tournaments of %s", competition_id, exc_info=True
+                "Could not find who inherits the achievements of %s", competition_id, exc_info=True
             )
+            return
+        for torneo in herederos.tournaments:
+            try:
+                await self._achievements.republish_exclusive(torneo, jugadores)
+            except Exception:
+                logger.warning(
+                    "Could not republish the achievements of tournament %s", torneo, exc_info=True
+                )
+        if self._round_achievements is None:
+            return
+        for partida in herederos.quick_matches:
+            try:
+                await self._round_achievements.republish_new_course(partida)
+            except Exception:
+                logger.warning(
+                    "Could not republish the new course of quick match %s", partida, exc_info=True
+                )
 
     async def made_private(self, competition_id: CompetitionId) -> None:
         await self._notices.tournament_made_private(str(competition_id.value))

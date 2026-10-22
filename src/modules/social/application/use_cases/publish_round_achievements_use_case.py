@@ -12,6 +12,15 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.social.application.exclusive_achievements import (
+    EXCLUSIVE_TYPES,
+    PLAYED_AT,
+    as_iso,
+    first_on_each_course,
+    keep_only_the_oldest,
+    lock_players,
+    utc_naive,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
     PlayerCourseHistoryInterface,
 )
@@ -29,6 +38,7 @@ from src.modules.social.domain.services.achievement_detector import (
     PlayedHole,
     RoundContext,
 )
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -102,6 +112,7 @@ class PublishRoundAchievementsUseCase:
         self,
         quick_match_id_raw: str,
         best_differential_before: dict[str, float | None] | None = None,
+        only_new_course: bool = False,
     ) -> int:
         """
         Publica lo que merezca publicarse y devuelve cuántos eventos creó.
@@ -112,14 +123,25 @@ class PublishRoundAchievementsUseCase:
         solo miran partidas terminadas y esta ya lo está. Comparando aquel valor
         con el de ahora se sabe si la vuelta batió el récord, sin recalcular por
         segunda vez un diferencial que el módulo de estadísticas ya sabe hacer.
+
+        `only_new_course` publica solo su «campo nuevo»: es como hereda una
+        partida rapida el de un torneo que se reabre, sin volver a publicar el
+        resto de sus logros.
+
+        «Campo nuevo» es exclusivo por fecha real (22 oct 2026): sale si esta
+        partida es la primera vez que el jugador piso el campo (al menos un
+        hoyo, aunque la tarjeta no valga para los demas logros) y, bajo el
+        candado del jugador, solo si no hay otro publicado anterior; los
+        posteriores se retiran (`keep_only_the_oldest`).
         """
         best_before = best_differential_before or {}
 
         # Fase 1: leer. Todo lo que hace falta de la partida, en un solo paso y
         # con las unidades de trabajo abiertas lo justo
-        vueltas = await self._leer_vueltas(quick_match_id_raw)
-        if not vueltas:
-            return 0
+        vueltas, visibles = await self._leer_vueltas(quick_match_id_raw)
+        if only_new_course:
+            # Solo lo exclusivo: no se juzgan las tarjetas
+            vueltas = []
 
         # Fase 2: juzgar. Fuera de cualquier unidad de trabajo abierta, porque
         # preguntar por el diferencial vuelve a entrar en estas mismas —el puerto
@@ -129,12 +151,6 @@ class PublishRoundAchievementsUseCase:
         eventos: list[ActivityEvent] = []
         for vuelta in vueltas:
             contexto = RoundContext(
-                is_first_round_on_course=not await self._history.has_played_course_before(
-                    vuelta.user_id, vuelta.golf_course_id, vuelta.match_id
-                ),
-                # Esto es una partida rápida: estrenar torneo se publica desde
-                # el cierre de la competición
-                is_first_tournament=False,
                 previous_best_differential=self._como_decimal(
                     best_before.get(str(vuelta.user_id.value))
                 ),
@@ -155,6 +171,7 @@ class PublishRoundAchievementsUseCase:
                 )
             )
 
+        eventos.extend(await self._campo_nuevo(quick_match_id_raw, visibles))
         if not eventos:
             return 0
 
@@ -162,14 +179,53 @@ class PublishRoundAchievementsUseCase:
         # Una fecha para toda la publicacion y el interruptor de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
-            await self._social_uow.activity_events.add_many(eventos)
+            repo = self._social_uow.activity_events
+            await lock_players(repo, [e.user_id for e in eventos if e.type in EXCLUSIVE_TYPES])
+            eventos = await keep_only_the_oldest(
+                repo, eventos, is_own=lambda e: e.source_match_id == quick_match_id_raw
+            )
+            await repo.add_many(eventos)
 
         return len(eventos)
 
-    async def _leer_vueltas(self, quick_match_id_raw: str) -> list["_RoundToJudge"]:
+    async def republish_new_course(self, quick_match_id_raw: str) -> int:
+        """Vuelve a publicar solo su «campo nuevo»: hereda el de un torneo reabierto."""
+        return await self.execute(quick_match_id_raw, only_new_course=True)
+
+    async def _campo_nuevo(
+        self, quick_match_id_raw: str, visibles: dict[UserId, bool]
+    ) -> list[ActivityEvent]:
         """
-        Las vueltas publicables de la partida, ya reducidas a lo que hay que
-        juzgar.
+        El «campo nuevo» de quien piso el campo por primera vez en esta partida,
+        segun el historial: el mismo criterio que los torneos (al menos un
+        hoyo), asi que vale tambien una tarjeta incompleta.
+        """
+        if not visibles:
+            return []
+        rondas = await self._history.played_rounds(list(visibles))
+        return [
+            ActivityEvent.create(
+                user_id=user_id,
+                type=ActivityEventType.NEW_COURSE,
+                occurred_at=primera.instant,
+                source_match_id=primera.source_id,
+                payload={
+                    "golf_course_id": primera.golf_course_id,
+                    "holes_played": primera.holes_played,
+                    PLAYED_AT: as_iso(primera.instant),
+                },
+                visible_to_friends=visibles[user_id],
+            )
+            for (user_id, _), primera in first_on_each_course(rondas).items()
+            if primera.source_id == quick_match_id_raw and user_id in visibles
+        ]
+
+    async def _leer_vueltas(
+        self, quick_match_id_raw: str
+    ) -> tuple[list["_RoundToJudge"], dict[UserId, bool]]:
+        """
+        Las vueltas computables de la partida, ya reducidas a lo que hay que
+        juzgar, y si cada participante con cuenta publica para sus amigos.
 
         Deja resuelto aquí todo lo que necesita base de datos —quién publica, qué
         hoyos cuentan, quién estrena campo— para que juzgar no tenga que volver.
@@ -179,15 +235,16 @@ class PublishRoundAchievementsUseCase:
                 QuickMatchId(quick_match_id_raw)
             )
             if match is None or match.status != QuickMatchStatus.COMPLETED:
-                return []
+                return [], {}
 
             course = await self._golf_course_uow.golf_courses.find_by_id(match.golf_course_id)
             if course is None:
-                return []
+                return [], {}
 
             scores = await self._quick_match_uow.quick_match_hole_scores.find_by_match(match.id)
 
             vueltas: list[_RoundToJudge] = []
+            visibles: dict[UserId, bool] = {}
             for participant in match.participants:
                 if participant.is_guest or participant.user_id is None:
                     continue
@@ -198,6 +255,7 @@ class PublishRoundAchievementsUseCase:
                 user = await self._user_uow.users.find_by_id(participant.user_id)
                 if user is None:
                     continue
+                visibles[participant.user_id] = user.share_activity
 
                 scores_by_hole = {
                     score.hole_number: score.score
@@ -212,7 +270,8 @@ class PublishRoundAchievementsUseCase:
                 )
                 if jugados is None:
                     # Tarjeta incompleta: si no vale para la media, no vale para
-                    # presumir (BE #173)
+                    # presumir (BE #173). Su «campo nuevo» si, que lo decide
+                    # el historial
                     continue
 
                 vueltas.append(
@@ -220,7 +279,7 @@ class PublishRoundAchievementsUseCase:
                         user_id=participant.user_id,
                         match_id=str(match.id.value),
                         golf_course_id=str(match.golf_course_id.value),
-                        occurred_at=match.created_at,
+                        occurred_at=utc_naive(match.created_at),
                         visible_to_friends=user.share_activity,
                         holes=[
                             PlayedHole(
@@ -245,7 +304,7 @@ class PublishRoundAchievementsUseCase:
                     )
                 )
 
-        return vueltas
+        return vueltas, visibles
 
     async def _diferencial_si_es_record(
         self, user_id: UserId, best_before: float | None

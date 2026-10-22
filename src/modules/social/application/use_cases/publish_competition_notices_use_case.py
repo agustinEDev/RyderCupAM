@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
+from src.modules.social.application.exclusive_achievements import lock_players
 from src.modules.social.application.publication import stamp_for_publication
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
@@ -407,7 +408,7 @@ class PublishCompetitionNoticesUseCase:
             tournament.competition_id, ActivityEventType.TOURNAMENT_FINAL_STANDING, eventos
         )
 
-    async def reopened(self, competition_id: str) -> None:
+    async def reopened(self, competition_id: str, player_ids: Sequence[UserId] = ()) -> None:
         """
         Se reabre un torneo terminado: su clasificacion final ya no vale (C15).
         Se borra, y al volver a cerrarlo sale la nueva: con la clave unica, la
@@ -418,12 +419,18 @@ class PublishCompetitionNoticesUseCase:
         el birdie que ya no existe no debe quedarse en el feed. Se encuentran
         por el `competition_id` de su `payload`; los publicados antes de que lo
         llevaran no se pueden encontrar y se quedan.
+
+        `player_ids` son sus inscritos: se bloquean despues del torneo, como
+        al publicar, para que nadie compare a medias con lo que se retira.
         """
         async with self._social_uow:
             # En fila con la publicacion de logros del torneo, que toma el
             # mismo candado: un cierre a medio publicar no escribe despues de
             # este borrado (revision del 22 oct 2026)
             await self._social_uow.activity_events.lock_scope(competition_id)
+            # Y los de sus jugadores, en el mismo orden que al publicar: retira
+            # logros exclusivos que otras publicaciones comparan (22 oct 2026)
+            await lock_players(self._social_uow.activity_events, player_ids)
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, [ActivityEventType.TOURNAMENT_FINAL_STANDING]
             )

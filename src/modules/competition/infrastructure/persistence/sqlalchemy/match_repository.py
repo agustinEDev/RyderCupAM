@@ -154,3 +154,18 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
         )
         result = await self._session.execute(statement)
         return list(result.scalars().all())
+
+    async def find_finished_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+        if not user_ids:
+            return []
+        alguno = or_(
+            *[
+                columna.op("@>")(cast([{"user_id": str(user_id.value)}], JSONB))
+                for user_id in set(user_ids)
+                for columna in (matches_table.c.team_a_players, matches_table.c.team_b_players)
+            ]
+        )
+        acabados = [s for s in MatchStatus if s.is_finished()]
+        statement = select(Match).where(alguno).where(matches_table.c.status.in_(acabados))
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())

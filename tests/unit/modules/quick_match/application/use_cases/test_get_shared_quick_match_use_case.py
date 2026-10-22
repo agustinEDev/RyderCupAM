@@ -339,6 +339,24 @@ class TestWhoCannotViewIt:
         with pytest.raises(QuickMatchNotSharedError):
             await escena.ver()
 
+    async def test_the_message_does_not_tell_the_state_of_the_match(
+        self, qm_uow, user_uow, social_uow, golf_course_uow
+    ):
+        """
+        A quien no participa, el 403 le dice lo mismo este o no terminada la
+        partida: si no, deduciria su estado (22 oct 2026).
+        """
+        terminada = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar()
+        with pytest.raises(QuickMatchNotSharedError) as de_la_terminada:
+            await terminada.ver()
+        en_juego = await _Escena(qm_uow, user_uow, social_uow, golf_course_uow).montar(
+            completar=False
+        )
+        with pytest.raises(QuickMatchNotSharedError) as de_la_que_sigue:
+            await en_juego.ver()
+
+        assert str(de_la_terminada.value) == str(de_la_que_sigue.value)
+
     async def test_unknown_match_is_not_found(self, escena):
         with pytest.raises(QuickMatchNotFoundError):
             await escena.caso_de_uso().execute(str(uuid4()), str(escena.viewer.id.value))

@@ -10,7 +10,7 @@ Logros de un torneo de stroke play (bloque L, tabla del 22 oct 2026).
 - L12: idempotente por la clave de origen (el grupo).
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -33,6 +33,7 @@ from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quic
     InMemoryQuickMatchUnitOfWork,
 )
 from src.modules.social.application.ports.player_course_history_interface import (
+    PlayedRound,
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
@@ -48,6 +49,9 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
     ActivitySlice,
 )
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
+    PlayerCourseHistoryAdapter,
+)
 from src.modules.social.infrastructure.adapters.player_differentials_adapter import (
     StatsPlayerDifferentialsAdapter,
 )
@@ -88,21 +92,23 @@ class _History(PlayerCourseHistoryInterface):
     def __init__(self):
         self.vueltas: set = set()
         self.preguntas: list = []
+        self.real: PlayerCourseHistoryInterface | None = None
 
-    async def has_played_course_before(
-        self,
-        user_id,
-        golf_course_id,
-        excluding_match_id,
-        excluding_competition_id=None,
-        before=None,
-        tournament_start=None,
-    ):
-        self.preguntas.append((user_id, golf_course_id, excluding_match_id))
-        return any(
-            u == str(user_id.value) and c == golf_course_id and m != excluding_match_id
+    async def played_rounds(self, user_ids):
+        self.preguntas.append(sorted(str(u.value) for u in user_ids))
+        reales = await self.real.played_rounds(user_ids) if self.real else []
+        # Lo registrado se jugo hace mucho: es lo mas antiguo
+        return reales + [
+            PlayedRound(
+                user_id=u,
+                golf_course_id=c,
+                instant=datetime(2000, 1, 1),
+                source_id=m,
+                holes_played=18,
+            )
             for u, c, m in self.vueltas
-        )
+            if u in set(user_ids)
+        ]
 
 
 @pytest.fixture
@@ -124,8 +130,16 @@ def _publisher(world, social_uow, differentials=None, history=None):
         golf_course_uow=world.golf,
         user_uow=world.users,
         differentials=differentials or _Differentials(),
-        history=history or _History(),
+        history=_con_historial_real(history or _History(), world),
     )
+
+
+def _con_historial_real(history, world):
+    if isinstance(history, _History) and history.real is None:
+        history.real = PlayerCourseHistoryAdapter(
+            InMemoryQuickMatchUnitOfWork(), world.comp, world.golf
+        )
+    return history
 
 
 async def _feed(social_uow, user):
@@ -198,19 +212,19 @@ class TestStrokePlayAchievements:
 
     async def test_new_course_asks_the_history_for_the_group(self, world, social_uow):
         ana = await world.user()
-        competition, course, partida = await _torneo(world, {ana: tarjeta()})
+        competition, _, _ = await _torneo(world, {ana: tarjeta()})
         history = _History()
 
         await _publisher(world, social_uow, history=history).execute(str(competition.id.value))
 
         assert T.NEW_COURSE in await _tipos(social_uow, ana)
-        assert (ana.id, str(course.id.value), str(partida.id.value)) in history.preguntas
+        assert [str(ana.id.value)] in history.preguntas
 
     async def test_course_already_played_is_not_new(self, world, social_uow):
         ana = await world.user()
         competition, course, _ = await _torneo(world, {ana: tarjeta()})
         history = _History()
-        history.vueltas.add((str(ana.id.value), str(course.id.value), "otra-vuelta"))
+        history.vueltas.add((ana.id, str(course.id.value), "otra-vuelta"))
 
         await _publisher(world, social_uow, history=history).execute(str(competition.id.value))
 
@@ -269,7 +283,8 @@ class TestCardsThatDoNotCount:
 
         assert await _tipos(social_uow, bea) == []
 
-    async def test_a_withdrawn_player_publishes_nothing(self, world, social_uow):
+    async def test_a_withdrawn_player_publishes_only_that_he_stepped_on_it(self, world, social_uow):
+        """Ni su birdie; si su campo nuevo y su primer torneo (Agustin, 22 oct 2026)."""
         ana = await world.user()
         bea = await world.user()
         competition, _, _ = await _torneo(
@@ -280,7 +295,7 @@ class TestCardsThatDoNotCount:
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 
-        assert await _tipos(social_uow, bea) == []
+        assert sorted(await _tipos(social_uow, bea)) == sorted([T.NEW_COURSE, T.FIRST_TOURNAMENT])
         assert T.FIRST_TOURNAMENT in await _tipos(social_uow, ana)
 
     async def test_an_unvalidated_birdie_does_not_count(self, world, social_uow):
@@ -292,7 +307,8 @@ class TestCardsThatDoNotCount:
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 
-        assert await _tipos(social_uow, ana) == []
+        # Piso el campo, asi que si sus dos exclusivos (22 oct 2026)
+        assert sorted(await _tipos(social_uow, ana)) == sorted([T.NEW_COURSE, T.FIRST_TOURNAMENT])
 
     async def test_a_group_still_on_the_course_does_not_count(self, world, social_uow):
         ana = await world.user()

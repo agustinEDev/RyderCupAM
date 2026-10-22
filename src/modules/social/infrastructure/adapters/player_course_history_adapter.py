@@ -1,34 +1,34 @@
 """Adaptador: el historial de campos sale de las partidas rapidas y los torneos."""
 
-from datetime import UTC, date, datetime
+from collections.abc import Collection
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.scoring_opening_service import (
-    OPENING_HOUR_BY_SESSION,
-)
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
-from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
+from src.modules.social.application.exclusive_achievements import (
+    PlayedRound,
+    round_instant,
+    utc_naive,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
-    PlayedBefore,
     PlayerCourseHistoryInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# Cuantas vueltas del jugador se miran hacia atras. Quien tenga mas historia que
-# esto ya no estrena nada que merezca contarse.
-MAX_HISTORY_LOOKUP = 200
-
 
 class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
     """
-    Junta las fuentes de vueltas para decidir si un campo es nuevo: partidas
-    rapidas, partidos de la Ryder y grupos de stroke play de torneo (L9).
+    Junta las fuentes de vueltas: partidas rapidas, partidos de la Ryder y
+    grupos de stroke play de torneo (L9).
 
     Un campo se estrena una sola vez en la vida del jugador, y da igual si fue
     jugando con amigos o en un torneo. Preguntar solo a las partidas rapidas
@@ -39,142 +39,132 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         self,
         quick_match_uow: QuickMatchUnitOfWorkInterface,
         competition_uow: CompetitionUnitOfWorkInterface,
+        golf_course_uow: GolfCourseUnitOfWorkInterface,
     ):
         self._quick_match_uow = quick_match_uow
         self._competition_uow = competition_uow
+        self._golf_course_uow = golf_course_uow
 
-    async def has_played_course_before(
-        self,
-        user_id: UserId,
-        golf_course_id: str,
-        excluding_match_id: str,
-        excluding_competition_id: str | None = None,
-        before: PlayedBefore | None = None,
-        tournament_start: date | None = None,
-    ) -> bool:
-        if await self._jugo_en_partida_rapida(user_id, golf_course_id, excluding_match_id, before):
-            return True
-        return await self._jugo_en_torneo_cerrado(
-            user_id,
-            golf_course_id,
-            excluding_match_id,
-            excluding_competition_id,
-            before,
-            tournament_start,
-        )
+    async def played_rounds(self, user_ids: Collection[UserId]) -> list[PlayedRound]:
+        usuarios = list(set(user_ids))
+        if not usuarios:
+            return []
+        return [
+            *await self._partidas_rapidas(usuarios),
+            *await self._de_torneos_cerrados(usuarios),
+        ]
 
-    async def _jugo_en_partida_rapida(
-        self,
-        user_id: UserId,
-        golf_course_id: str,
-        excluding_match_id: str,
-        before: PlayedBefore | None,
-    ) -> bool:
+    async def _partidas_rapidas(self, usuarios: list[UserId]) -> list[PlayedRound]:
+        """Las partidas rapidas terminadas con algun hoyo suyo, por su creacion."""
         async with self._quick_match_uow:
-            partidas = await self._quick_match_uow.quick_matches.list_for_user(
-                user_id, status=QuickMatchStatus.COMPLETED, limit=MAX_HISTORY_LOOKUP
+            partidas = await self._quick_match_uow.quick_matches.list_completed_for_users(usuarios)
+            hoyos = await self._quick_match_uow.quick_match_hole_scores.played_holes(
+                [p.id for p in partidas]
             )
-        return any(
-            str(partida.id.value) != excluding_match_id
-            and str(partida.golf_course_id.value) == golf_course_id
-            and (before is None or _rapida_antes(partida.created_at, before))
-            for partida in partidas
-        )
+        rondas = []
+        for partida in partidas:
+            for user_id in usuarios:
+                # Un participante con cuenta lleva el id de su usuario
+                jugados = hoyos.get((partida.id, ParticipantId(user_id.value)), 0)
+                if jugados:
+                    rondas.append(
+                        PlayedRound(
+                            user_id=user_id,
+                            golf_course_id=str(partida.golf_course_id.value),
+                            instant=utc_naive(partida.created_at),
+                            source_id=str(partida.id.value),
+                            holes_played=jugados,
+                        )
+                    )
+        return rondas
 
-    async def _jugo_en_torneo_cerrado(
-        self,
-        user_id: UserId,
-        golf_course_id: str,
-        excluding_match_id: str,
-        excluding_competition_id: str | None,
-        before: PlayedBefore | None,
-        tournament_start: date | None = None,
-    ) -> bool:
+    async def _de_torneos_cerrados(self, usuarios: list[UserId]) -> list[PlayedRound]:
         """
-        Un partido de la Ryder o un grupo de stroke play en ese campo, de un
-        torneo YA CERRADO que no sea el que se juzga: un torneo en juego o
-        cancelado todavia no se ha jugado (revision del 22 oct 2026). En el
-        grupo, quien no se presento no piso el campo; quien se retiro, si.
-
-        Todo por lotes: partidos, grupos, rondas y torneos, una lectura de cada.
+        Los partidos de la Ryder y los grupos de stroke play terminados, de
+        torneos CERRADOS, con algun hoyo suyo. En el grupo, el no presentado
+        no piso el campo. Por lotes: una lectura de cada cosa para todos.
         """
+        buscados = set(usuarios)
         async with self._competition_uow:
             uow = self._competition_uow
-            partidos = [
-                partido
-                for partido in await uow.matches.find_completed_for_player(
-                    user_id, limit=MAX_HISTORY_LOOKUP
+            partidos = await uow.matches.find_finished_for_players(usuarios)
+            grupos = await uow.partidas.completadas_de_jugadores(usuarios)
+            hoyos_partido = await uow.hole_scores.played_holes([p.id for p in partidos])
+            hoyos_grupo = await uow.golpes_de_partida.hoyos_jugados([g.id for g in grupos])
+
+            # (jugador, ronda, origen, tipo, quienes jugaron, hoyos)
+            vueltas = []
+            for partido in partidos:
+                jugadores = [p.user_id for p in (*partido.team_a_players, *partido.team_b_players)]
+                for user_id in buscados.intersection(jugadores):
+                    jugados = hoyos_partido.get((partido.id, user_id), 0)
+                    if jugados:
+                        vueltas.append(
+                            (
+                                user_id,
+                                partido.round_id,
+                                str(partido.id.value),
+                                "MATCH",
+                                jugadores,
+                                jugados,
+                            )
+                        )
+            for grupo in grupos:
+                for user_id in buscados.intersection(grupo.user_ids):
+                    if grupo.estados_de_tarjeta.get(user_id) == EstadoDeTarjeta.NO_PRESENTADO:
+                        continue
+                    jugados = hoyos_grupo.get((grupo.id, user_id), 0)
+                    if jugados:
+                        vueltas.append(
+                            (
+                                user_id,
+                                grupo.round_id,
+                                str(grupo.id.value),
+                                "TEE_GROUP",
+                                grupo.user_ids,
+                                jugados,
+                            )
+                        )
+            if not vueltas:
+                return []
+            rondas = {
+                ronda.id: ronda
+                for ronda in await uow.rounds.find_by_ids(list({v[1] for v in vueltas}))
+            }
+            cerrados = {
+                torneo.id
+                for torneo in await uow.competitions.find_by_ids(
+                    list({r.competition_id for r in rondas.values()})
                 )
-                if str(partido.id.value) != excluding_match_id
-            ]
-            grupos = [
-                grupo
-                for grupo in await uow.partidas.completadas_de_jugadores([user_id])
-                if str(grupo.id.value) != excluding_match_id
-                and grupo.estados_de_tarjeta.get(user_id) != EstadoDeTarjeta.NO_PRESENTADO
-            ]
-            round_ids = {p.round_id for p in partidos} | {g.round_id for g in grupos}
-            if not round_ids:
-                return False
-            rondas = await uow.rounds.find_by_ids(list(round_ids))
-            en_el_campo = [
-                r
-                for r in rondas
-                if str(r.golf_course_id.value) == golf_course_id
-                and (before is None or _ronda_antes(r, before))
-            ]
-            if not en_el_campo:
-                return False
-            torneos = await uow.competitions.find_by_ids(
-                list({r.competition_id for r in en_el_campo})
+                if torneo.status == CompetitionStatus.COMPLETED
+            }
+        async with self._golf_course_uow:
+            campos = {
+                campo.id: campo
+                for campo in await self._golf_course_uow.golf_courses.find_by_ids(
+                    list({r.golf_course_id for r in rondas.values()})
+                )
+            }
+
+        resultado = []
+        for user_id, round_id, origen, tipo, jugadores, jugados in vueltas:
+            ronda = rondas.get(round_id)
+            if ronda is None or ronda.competition_id not in cerrados:
+                continue
+            campo = campos.get(ronda.golf_course_id)
+            resultado.append(
+                PlayedRound(
+                    user_id=user_id,
+                    golf_course_id=str(ronda.golf_course_id.value),
+                    instant=round_instant(
+                        ronda.round_date, ronda.session_type, campo.timezone if campo else None
+                    ),
+                    source_id=origen,
+                    holes_played=jugados,
+                    competition_id=str(ronda.competition_id.value),
+                    kind=tipo,
+                    player_ids=tuple(sorted({str(u.value) for u in jugadores})),
+                    round_date=ronda.round_date,
+                )
             )
-        return any(
-            str(torneo.id.value) != excluding_competition_id and _cuenta(torneo, tournament_start)
-            for torneo in torneos
-        )
-
-
-def _cuenta(torneo, tournament_start: date | None) -> bool:
-    """
-    Si lo jugado en ese torneo cuenta como ya jugado: cerrado, o del mismo dia
-    que el que se juzga aunque siga en juego, salvo cancelado (revision final
-    de bugs, 22 oct 2026). El mismo criterio que «primer torneo».
-    """
-    if torneo.status == CompetitionStatus.COMPLETED:
-        return True
-    return (
-        tournament_start is not None
-        and torneo.dates.start_date == tournament_start
-        and torneo.status != CompetitionStatus.CANCELLED
-    )
-
-
-def _rapida_antes(creada: datetime, before: PlayedBefore) -> bool:
-    """
-    Si una partida rapida se jugo ANTES del corte. No guarda cuando se jugo,
-    solo cuando se creo, y se juega del tiron: ese instante vale. Con el
-    instante del corte (el campo tiene zona) se compara en UTC; sin el, por
-    fecha, y el mismo dia no cuenta.
-    """
-    if before.utc_instant is None:
-        return creada.date() < before.day
-    return _utc_sin_zona(creada) < before.utc_instant
-
-
-def _ronda_antes(ronda, before: PlayedBefore) -> bool:
-    """
-    Si una ronda de otro torneo EN EL MISMO CAMPO se jugo antes del corte: misma
-    zona, asi que basta la fecha y la hora local de su sesion. Sin la hora del
-    corte, por fecha: el mismo dia no cuenta.
-    """
-    hora = OPENING_HOUR_BY_SESSION.get(ronda.session_type)
-    if before.local_hour is None or hora is None:
-        return ronda.round_date < before.day
-    return (ronda.round_date, hora) < (before.day, before.local_hour)
-
-
-def _utc_sin_zona(instante: datetime) -> datetime:
-    """En UTC y sin zona, como `shared_games_adapter`: las fechas sin zona ya son UTC."""
-    if instante.tzinfo is None:
-        return instante
-    return instante.astimezone(UTC).replace(tzinfo=None)
+        return resultado

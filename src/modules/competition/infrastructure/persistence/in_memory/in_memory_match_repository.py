@@ -88,3 +88,15 @@ class InMemoryMatchRepository(MatchRepositoryInterface):
             and m.find_player(user_id) is not None
             and m.find_player(other_id) is not None
         ]
+
+    async def find_finished_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+        buscados = set(user_ids)
+        return [
+            match
+            for match in self._matches.values()
+            if match.status.is_finished()
+            and any(
+                player.user_id in buscados
+                for player in (*match.team_a_players, *match.team_b_players)
+            )
+        ]

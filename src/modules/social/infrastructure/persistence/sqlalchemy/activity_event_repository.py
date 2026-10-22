@@ -335,6 +335,32 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def last_published_at(
+        self, competition_id: str, types: Collection[ActivityEventType]
+    ) -> datetime | None:
+        if not types:
+            return None
+        tabla = activity_events_table.c
+        result = await self._session.execute(
+            select(func.max(tabla.published_at)).where(
+                tabla.payload["competition_id"].astext == competition_id,
+                tabla.type.in_(sorted(types)),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def find_for_users(
+        self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        if not user_ids or not types:
+            return []
+        stmt = select(ActivityEvent).where(
+            activity_events_table.c.user_id.in_(list(user_ids)),
+            activity_events_table.c.type.in_(sorted(types)),
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def delete_from_source_for_users(
         self,
         source_id: str,

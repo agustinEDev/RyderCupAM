@@ -1794,7 +1794,7 @@ class ActivityUnitsOfWork:
 
     @property
     def history(self) -> PlayerCourseHistoryInterface:
-        return PlayerCourseHistoryAdapter(self.quick_match, self.competition)
+        return PlayerCourseHistoryAdapter(self.quick_match, self.competition, self.golf_course)
 
 
 def get_activity_units_of_work(
@@ -1882,6 +1882,9 @@ def get_competition_activity_publisher(
     achievements: PublishTournamentAchievementsUseCase = Depends(
         get_publish_tournament_achievements_use_case
     ),
+    round_achievements: PublishRoundAchievementsUseCase = Depends(
+        get_publish_round_achievements_use_case
+    ),
 ) -> CompetitionActivityPublisherInterface:
     """
     Proveedor del adaptador que lleva a Actividad lo de `competition` (BE-2).
@@ -1896,6 +1899,7 @@ def get_competition_activity_publisher(
         uows.competition,
         ryder_scoreboard=GetLeaderboardUseCase(uows.competition, uows.user.users, ScoringService()),
         achievements=achievements,
+        round_achievements=round_achievements,
     )
 
 

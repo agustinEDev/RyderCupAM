@@ -7,6 +7,9 @@ Aquí vive la única regla que gobierna el feed: **se publican logros, no
 actividad**. Nada de lo que salga de aquí puede delatar una vuelta mala, porque
 un feed que publica los días malos empuja a no anotarlos, y las tarjetas sin
 terminar ya sesgan las estadísticas de por sí (BE #173).
+
+«Campo nuevo» y «primer torneo» no salen de aquí: dependen de todo lo que el
+jugador ha jugado, no de esta vuelta (`exclusive_achievements`, 22 oct 2026).
 """
 
 from dataclasses import dataclass
@@ -38,8 +41,6 @@ class RoundContext:
     sigue siendo puro y se puede probar sin base de datos.
     """
 
-    is_first_round_on_course: bool = False
-    is_first_tournament: bool = False
     previous_best_differential: Decimal | None = None
     differential: Decimal | None = None
 
@@ -119,12 +120,6 @@ class AchievementDetector:
     def _round_achievements(context: RoundContext) -> list[DetectedAchievement]:
         """Los logros que dependen del pasado del jugador, no de un hoyo."""
         achievements: list[DetectedAchievement] = []
-
-        if context.is_first_round_on_course:
-            achievements.append(DetectedAchievement(type=ActivityEventType.NEW_COURSE))
-
-        if context.is_first_tournament:
-            achievements.append(DetectedAchievement(type=ActivityEventType.FIRST_TOURNAMENT))
 
         # Récord personal: hace falta un diferencial que batir y uno anterior con
         # el que compararlo. La primera vuelta con diferencial no es un récord,
