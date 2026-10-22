@@ -33,6 +33,7 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
     activity_events_table,
+    withdrawn_tee_time_notices_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -385,3 +386,47 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return result.rowcount or 0
+
+    async def remember_withdrawn_tee_times(
+        self, round_id: str, competition_id: str, user_ids: Collection[UserId]
+    ) -> None:
+        if not user_ids:
+            return
+        stmt = (
+            pg_insert(withdrawn_tee_time_notices_table)
+            .values(
+                [
+                    {"user_id": user_id, "round_id": round_id, "competition_id": competition_id}
+                    for user_id in user_ids
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["user_id", "round_id"])
+        )
+        await self._session.execute(stmt)
+
+    async def withdrawn_tee_times(self, round_id: str) -> set[UserId]:
+        stmt = select(withdrawn_tee_time_notices_table.c.user_id).where(
+            withdrawn_tee_time_notices_table.c.round_id == round_id
+        )
+        result = await self._session.execute(stmt)
+        return set(result.scalars().all())
+
+    async def forget_withdrawn_tee_times(self, round_id: str, user_ids: Collection[UserId]) -> None:
+        if not user_ids:
+            return
+        await self._session.execute(
+            delete(withdrawn_tee_time_notices_table).where(
+                withdrawn_tee_time_notices_table.c.round_id == round_id,
+                withdrawn_tee_time_notices_table.c.user_id.in_(list(user_ids)),
+            )
+        )
+
+    async def forget_withdrawn_tee_times_of_competition(
+        self, competition_id: str, user_id: UserId | None = None
+    ) -> None:
+        stmt = delete(withdrawn_tee_time_notices_table).where(
+            withdrawn_tee_time_notices_table.c.competition_id == competition_id
+        )
+        if user_id is not None:
+            stmt = stmt.where(withdrawn_tee_time_notices_table.c.user_id == user_id)
+        await self._session.execute(stmt)

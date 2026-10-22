@@ -167,6 +167,35 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def remember_withdrawn_tee_times(
+        self, round_id: str, competition_id: str, user_ids: Collection[UserId]
+    ) -> None:
+        """
+        Apunta que esos jugadores perdieron su aviso de salida de esa ronda por
+        un cambio en ella —se quedaron sin partido o sin grupo—, no por una
+        baja ni una cancelacion. Si luego vuelven a tener salida en la ronda,
+        su aviso nuevo es un cambio (`changed`), no el primero (prueba de punta
+        a punta del 22 oct 2026: reasignar en dos pasos). Repetirlo no duplica.
+        """
+
+    @abstractmethod
+    async def withdrawn_tee_times(self, round_id: str) -> set[UserId]:
+        """Quien perdio su aviso de salida de esa ronda por un cambio y aun no lo recupero."""
+
+    @abstractmethod
+    async def forget_withdrawn_tee_times(self, round_id: str, user_ids: Collection[UserId]) -> None:
+        """Olvida esos apuntes de la ronda: esos jugadores ya tienen salida otra vez."""
+
+    @abstractmethod
+    async def forget_withdrawn_tee_times_of_competition(
+        self, competition_id: str, user_id: UserId | None = None
+    ) -> None:
+        """
+        Olvida los apuntes de ese torneo, de un jugador o de todos: tras una
+        baja o una cancelacion, la siguiente salida es nueva de verdad.
+        """
+
+    @abstractmethod
     async def delete_for_competition(
         self,
         competition_id: str,

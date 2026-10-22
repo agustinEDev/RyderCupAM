@@ -24,6 +24,8 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         # Ni las invitaciones: las que siguen abiertas, para `open_invitations_at`
         # (None = no se filtra)
         self.open_invitation_ids: set[str] | None = None
+        # Avisos de salida retirados por un cambio: (ronda, jugador) -> torneo
+        self._salidas_retiradas: dict[tuple[str, UserId], str] = {}
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -237,3 +239,25 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
                 e.hide_from_friends()
                 ocultos += 1
         return ocultos
+
+    async def remember_withdrawn_tee_times(
+        self, round_id: str, competition_id: str, user_ids: Collection[UserId]
+    ) -> None:
+        for user_id in user_ids:
+            self._salidas_retiradas[(round_id, user_id)] = competition_id
+
+    async def withdrawn_tee_times(self, round_id: str) -> set[UserId]:
+        return {user_id for ronda, user_id in self._salidas_retiradas if ronda == round_id}
+
+    async def forget_withdrawn_tee_times(self, round_id: str, user_ids: Collection[UserId]) -> None:
+        for user_id in user_ids:
+            self._salidas_retiradas.pop((round_id, user_id), None)
+
+    async def forget_withdrawn_tee_times_of_competition(
+        self, competition_id: str, user_id: UserId | None = None
+    ) -> None:
+        self._salidas_retiradas = {
+            clave: torneo
+            for clave, torneo in self._salidas_retiradas.items()
+            if torneo != competition_id or (user_id is not None and clave[1] != user_id)
+        }

@@ -410,6 +410,178 @@ class TestG3Cambios:
         assert len(await _guardados(social_uow, yo)) == 1
 
 
+class TestReassigningInTwoSteps:
+    """
+    Prueba de punta a punta del 22 oct: reasignar rivales de la Ryder son dos
+    `PUT matches/{id}/players`. Entre los dos, quien se queda sin partido pierde
+    su aviso; en el segundo le vuelve a nacer uno, y debe decir «te han
+    cambiado» (`changed: true`), no «ya tienes partido». Si su aviso se fue por
+    una baja o una cancelacion, el nuevo es nuevo de verdad.
+    """
+
+    async def _dos_partidos(self, avisos, user_uow):
+        """A contra B en m1 y C contra D en m2, publicados."""
+        a, b, c, d = [await _user(user_uow, n) for n in ("Ana", "Bea", "Cris", "Dani")]
+        torneo, ronda = _torneo(), str(uuid4())
+        await avisos.tee_times(
+            torneo,
+            ronda,
+            _vigentes(
+                _salida(a, None, contra=[b], partido="m1"),
+                _salida(b, None, contra=[a], partido="m1"),
+                _salida(c, None, contra=[d], partido="m2"),
+                _salida(d, None, contra=[c], partido="m2"),
+            ),
+        )
+        return a, b, c, d, torneo, ronda
+
+    @staticmethod
+    def _cruzados(a, b, c, d, *, con_b: bool = True):
+        """Segundo paso: A contra D en m1 y C contra B en m2 (sin B, el primer paso)."""
+        salidas = [
+            _salida(a, None, contra=[d], partido="m1b"),
+            _salida(d, None, contra=[a], partido="m1b"),
+            _salida(c, None, contra=[b] if con_b else [d], partido="m2b"),
+        ]
+        if con_b:
+            salidas.append(_salida(b, None, contra=[c], partido="m2b"))
+        return _vigentes(*salidas)
+
+    async def test_who_was_left_without_a_match_gets_it_back_as_changed(
+        self, avisos, social_uow, user_uow
+    ):
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+        assert await _guardados(social_uow, b) == []
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d))
+
+        (de_b,) = await _guardados(social_uow, b)
+        assert de_b.payload["changed"] is True
+        assert de_b.payload["opponent_ids"] == [str(c.id.value)]
+
+    async def test_in_one_step_everybody_changed_is_changed(self, avisos, social_uow, user_uow):
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d))
+
+        for jugador in (a, b, c, d):
+            (evento,) = await _guardados(social_uow, jugador)
+            assert evento.payload["changed"] is True
+
+    async def test_a_newcomer_to_the_round_is_not_changed(self, avisos, social_uow, user_uow):
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+        nuevo = await _user(user_uow, "Eva")
+
+        await avisos.tee_times(
+            torneo,
+            ronda,
+            _vigentes(
+                _salida(a, None, contra=[d], partido="m1b"),
+                _salida(d, None, contra=[a], partido="m1b"),
+                _salida(c, None, contra=[nuevo], partido="m2b"),
+                _salida(nuevo, None, contra=[c], partido="m2b"),
+            ),
+        )
+
+        (del_nuevo,) = await _guardados(social_uow, nuevo)
+        assert del_nuevo.payload["changed"] is False
+
+    async def test_it_is_remembered_only_for_that_round(self, avisos, social_uow, user_uow):
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+
+        otra_ronda = str(uuid4())
+        await avisos.tee_times(torneo, otra_ronda, _vigentes(_salida(b, None, partido="m9")))
+
+        (de_b,) = await _guardados(social_uow, b)
+        assert de_b.payload["changed"] is False
+
+    async def test_once_back_it_is_forgotten(self, avisos, social_uow, user_uow):
+        """Vuelve con `changed`; si luego se queda igual, nada cambia ni se repite."""
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d))
+        (antes,) = await _guardados(social_uow, b)
+
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d))
+
+        (despues,) = await _guardados(social_uow, b)
+        assert despues.id == antes.id
+        async with social_uow:
+            assert await social_uow.activity_events.withdrawn_tee_times(ronda) == set()
+
+    @pytest.mark.parametrize(
+        "limpiar",
+        [
+            lambda avisos, b, torneo: avisos.left(b.id, torneo.competition_id),
+            lambda avisos, b, torneo: avisos.tournament_cancelled(torneo.competition_id),
+            lambda avisos, b, torneo: avisos.tournament_deleted(torneo.competition_id),
+        ],
+        ids=["baja", "cancelado", "borrado"],
+    )
+    async def test_after_leaving_or_cancelling_the_next_one_is_new(
+        self, avisos, social_uow, user_uow, limpiar
+    ):
+        """Su aviso se fue por la baja o la cancelacion, no por un cambio."""
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+
+        await limpiar(avisos, b, torneo)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d))
+
+        (de_b,) = await _guardados(social_uow, b)
+        assert de_b.payload["changed"] is False
+
+    async def test_leaving_forgets_only_his_own(self, avisos, social_uow, user_uow):
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        # Sin B ni C: los dos se quedan sin partido
+        await avisos.tee_times(
+            torneo,
+            ronda,
+            _vigentes(
+                _salida(a, None, contra=[d], partido="m1b"),
+                _salida(d, None, contra=[a], partido="m1b"),
+            ),
+        )
+
+        await avisos.left(b.id, torneo.competition_id)
+
+        async with social_uow:
+            assert await social_uow.activity_events.withdrawn_tee_times(ronda) == {c.id}
+
+    async def test_cancelling_another_tournament_does_not_forget_it(
+        self, avisos, social_uow, user_uow
+    ):
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d, con_b=False))
+
+        await avisos.tournament_cancelled(_torneo().competition_id)
+        await avisos.tee_times(torneo, ronda, self._cruzados(a, b, c, d))
+
+        (de_b,) = await _guardados(social_uow, b)
+        assert de_b.payload["changed"] is True
+
+    async def test_out_of_play_is_not_remembered(self, avisos, social_uow, user_uow):
+        """El no presentado conserva su aviso: no se ha quedado sin partido."""
+        a, b, c, d, torneo, ronda = await self._dos_partidos(avisos, user_uow)
+
+        await avisos.tee_times(
+            torneo,
+            ronda,
+            _vigentes(
+                _salida(a, None, contra=[b], partido="m1"),
+                _salida(b, None, contra=[a], partido="m1", fuera=True),
+                _salida(c, None, contra=[d], partido="m2"),
+                _salida(d, None, contra=[c], partido="m2"),
+            ),
+        )
+
+        async with social_uow:
+            assert await social_uow.activity_events.withdrawn_tee_times(ronda) == set()
+
+
 class TestG6G7yG11:
     async def test_g6_only_for_him_his_friends_do_not_see_it(self, avisos, social_uow, user_uow):
         yo, amigo = [await _user(user_uow) for _ in range(2)]

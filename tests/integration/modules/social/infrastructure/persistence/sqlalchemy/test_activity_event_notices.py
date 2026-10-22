@@ -377,3 +377,65 @@ async def test_replacing_a_tournaments_achievements_keeps_what_did_not_change(db
     }
     assert quedan[(T.FIRST_TOURNAMENT, "grupo-1")][0] == igual.id
     assert quedan[(T.BIRDIE, "grupo-1")][1]["holes"] == [5]
+
+
+# ==================== Avisos de salida retirados por un cambio (22 oct) ====================
+
+
+async def test_withdrawn_tee_times_are_remembered_per_round_without_duplicates(db_session):
+    ana, eva = await _user(db_session), await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+
+    await repository.remember_withdrawn_tee_times("ronda-1", "torneo-1", [ana.id, eva.id])
+    await repository.remember_withdrawn_tee_times("ronda-1", "torneo-1", [ana.id])
+    await repository.remember_withdrawn_tee_times("ronda-2", "torneo-1", [ana.id])
+    await repository.remember_withdrawn_tee_times("ronda-3", "torneo-1", [])
+    await db_session.commit()
+
+    assert await repository.withdrawn_tee_times("ronda-1") == {ana.id, eva.id}
+    assert await repository.withdrawn_tee_times("ronda-2") == {ana.id}
+    assert await repository.withdrawn_tee_times("ronda-3") == set()
+
+
+async def test_forgetting_withdrawn_tee_times_of_a_round(db_session):
+    ana, eva = await _user(db_session), await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.remember_withdrawn_tee_times("ronda-1", "torneo-1", [ana.id, eva.id])
+    await repository.remember_withdrawn_tee_times("ronda-2", "torneo-1", [ana.id])
+
+    await repository.forget_withdrawn_tee_times("ronda-1", [ana.id])
+    await repository.forget_withdrawn_tee_times("ronda-1", [])
+    await db_session.commit()
+
+    assert await repository.withdrawn_tee_times("ronda-1") == {eva.id}
+    assert await repository.withdrawn_tee_times("ronda-2") == {ana.id}
+
+
+async def test_forgetting_withdrawn_tee_times_of_a_competition(db_session):
+    ana, eva = await _user(db_session), await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.remember_withdrawn_tee_times("ronda-1", "torneo-1", [ana.id, eva.id])
+    await repository.remember_withdrawn_tee_times("ronda-2", "torneo-1", [ana.id])
+    await repository.remember_withdrawn_tee_times("ronda-9", "torneo-2", [ana.id])
+
+    await repository.forget_withdrawn_tee_times_of_competition("torneo-1", ana.id)
+    await db_session.commit()
+    assert await repository.withdrawn_tee_times("ronda-1") == {eva.id}
+    assert await repository.withdrawn_tee_times("ronda-2") == set()
+
+    await repository.forget_withdrawn_tee_times_of_competition("torneo-1")
+    await db_session.commit()
+    assert await repository.withdrawn_tee_times("ronda-1") == set()
+    assert await repository.withdrawn_tee_times("ronda-9") == {ana.id}
+
+
+async def test_deleting_the_account_forgets_its_withdrawn_tee_times(db_session):
+    ana = await _user(db_session)
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.remember_withdrawn_tee_times("ronda-1", "torneo-1", [ana.id])
+    await db_session.commit()
+
+    await db_session.execute(text("DELETE FROM users WHERE id = :id"), {"id": str(ana.id.value)})
+    await db_session.commit()
+
+    assert await repository.withdrawn_tee_times("ronda-1") == set()
