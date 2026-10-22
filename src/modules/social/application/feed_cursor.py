@@ -51,12 +51,30 @@ def parse_cursor(cursor: str | None) -> tuple[datetime | None, UUID | None]:
         return None, None
     try:
         fecha, id_raw = cursor.split(CURSOR_SEPARATOR, 1)
-        parsed = datetime.fromisoformat(fecha)
-        if parsed.tzinfo is not None:
-            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+        parsed = parse_instant(fecha)
+        if parsed is None:
+            return None, None
         return parsed, UUID(id_raw)
     except (ValueError, AttributeError):
         return None, None
+
+
+def parse_instant(texto: str) -> datetime | None:
+    """
+    La fecha de un cursor, sin zona y en UTC, o None si no vale.
+
+    Una fecha con zona se pasa a UTC. Las del borde del calendario
+    (`0001-01-01T00:00:00+01:00`, `9999-12-31T23:59:59-01:00`) son validas
+    como texto pero se salen al pasarlas, y `astimezone` lanza
+    `OverflowError`: tambien cuentan como cursor corrupto, no como un 500.
+    """
+    try:
+        parsed = datetime.fromisoformat(texto)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return parsed
 
 
 def build_cursor(eventos: list[ActivityEvent], limit: int) -> str | None:
