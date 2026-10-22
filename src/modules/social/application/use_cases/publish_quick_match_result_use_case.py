@@ -300,15 +300,18 @@ class PublishQuickMatchResultUseCase:
 
         # El mismo calculo que el historial de partidas y el cara a cara
         resultado = match_play_reading(match, lectura.scores, lectura.strokes, self._match_play)
-        if resultado.winner is None:
+        hoyos_a = holes_delivered(lectura.scores, bando_a, match.match_format)
+        hoyos_b = holes_delivered(lectura.scores, bando_b, match.match_format)
+        # Sin un solo hoyo de ningun bando no hay nada que contar. Con hoyos
+        # pero ninguno adjudicable (la ida frente a la vuelta, o un rival sin
+        # anotar) si hay aviso: sin terminar, como lo cuenta «Partidas juntos»
+        if not hoyos_a and not hoyos_b:
             return []
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla del 22 oct, A). Si no, «sin
         # terminar» y sin tanteo: un 1UP tras un hoyo no es una victoria
-        cuenta = match_play_counts(
-            holes_delivered(lectura.scores, bando_a, match.match_format),
-            holes_delivered(lectura.scores, bando_b, match.match_format),
-            resultado.decided_early,
+        cuenta = resultado.winner is not None and match_play_counts(
+            hoyos_a, hoyos_b, resultado.decided_early
         )
 
         eventos = []
@@ -322,7 +325,7 @@ class PublishQuickMatchResultUseCase:
                 "holes_played": resultado.holes_played,
                 "outcome": (
                     self._lado(resultado.winner, "A" if mio is bando_a else "B")
-                    if cuenta
+                    if cuenta and resultado.winner is not None
                     else _SIN_TERMINAR
                 ),
                 "score": resultado.score if cuenta else None,

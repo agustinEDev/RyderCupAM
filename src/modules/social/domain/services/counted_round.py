@@ -13,7 +13,7 @@ como acabo cada uno.
 - **Con menos de 9 de referencia no cuenta nadie.**
 - **Si varios conjuntos distintos llegan al maximo** (la ida frente a la
   vuelta), no hay una referencia y no cuenta nadie: no se compara lo que no se
-  jugo igual. Decision conservadora, no esta en la tabla.
+  jugo igual. Lo confirmo Agustin el 22 oct 2026.
 - **Un match play decidido antes de tiempo («3&2») cuenta siempre.**
 
 Puro, sin IO: recibe los hoyos ya leidos.

@@ -1079,3 +1079,105 @@ class TestTablaACuandoCuentaElMatchPlay:
         de_pepa = await _uno_de(social_uow, pepa)
         assert (de_pepa.payload["outcome"], de_pepa.payload["score"]) == ("WON", "9UP")
         assert (await _uno_de(social_uow, luz)).payload["outcome"] == "LOST"
+
+
+class TestTablaASinHoyoAdjudicable:
+    """Revision: sin ningun hoyo que adjudicar tambien hay aviso, sin terminar."""
+
+    async def _partida_de(self, qm_uow, golf_course_uow, user_uow, tarjetas, formato, equipos):
+        jugadores = [await _user(user_uow, f"J{i}") for i in range(len(tarjetas))]
+        course = await _campo(golf_course_uow, jugadores[0].id)
+        otros = [
+            QuickMatchParticipant.for_user(j.id, team=equipo)
+            if equipo
+            else QuickMatchParticipant.for_user(j.id)
+            for j, equipo in zip(jugadores[1:], equipos, strict=True)
+        ]
+        match = await _partida(
+            qm_uow,
+            course,
+            jugadores[0],
+            tarjetas,
+            otros=otros,
+            scoring_format=None,
+            match_format=formato,
+        )
+        return jugadores, match
+
+    async def test_ida_frente_a_vuelta_sin_terminar(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        (ana, eva), match = await self._partida_de(
+            qm_uow,
+            golf_course_uow,
+            user_uow,
+            [_hoyos(IDA), _hoyos(VUELTA)],
+            MatchFormat.SINGLES,
+            [None],
+        )
+
+        assert await publicar(match) == 2
+
+        for user in (ana, eva):
+            evento = await _uno_de(social_uow, user)
+            assert evento.payload["outcome"] == "UNFINISHED"
+            assert evento.payload["score"] is None
+            assert evento.payload["unfinished"] is True
+            assert evento.payload["holes_played"] == 0
+
+    async def test_el_rival_sin_ningun_hoyo_sin_terminar(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        (ana, eva), match = await self._partida_de(
+            qm_uow, golf_course_uow, user_uow, [_tarjeta(4), {}], MatchFormat.SINGLES, [None]
+        )
+
+        assert await publicar(match) == 2
+
+        assert (await _uno_de(social_uow, ana)).payload["outcome"] == "UNFINISHED"
+        assert (await _uno_de(social_uow, eva)).payload["outcome"] == "UNFINISHED"
+
+    async def test_sin_ningun_hoyo_de_nadie_no_hay_aviso(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        _, match = await self._partida_de(
+            qm_uow, golf_course_uow, user_uow, [{}, {}], MatchFormat.SINGLES, [None]
+        )
+
+        assert await publicar(match) == 0
+
+    async def test_foursomes_una_bola_por_bando_nueve_hoyos_cuenta(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """La bola del bando la lleva uno de los dos: basta con la suya."""
+        (_ana, pepa, _eva, luz), match = await self._partida_de(
+            qm_uow,
+            golf_course_uow,
+            user_uow,
+            [_hoyos(IDA, 3), {}, _hoyos(IDA), {}],
+            MatchFormat.FOURSOMES,
+            ["A", "B", "B"],
+        )
+
+        await publicar(match)
+
+        de_pepa = await _uno_de(social_uow, pepa)
+        assert (de_pepa.payload["outcome"], de_pepa.payload["score"]) == ("WON", "9UP")
+        assert de_pepa.payload["unfinished"] is False
+        assert (await _uno_de(social_uow, luz)).payload["outcome"] == "LOST"
+
+    async def test_foursomes_un_bando_con_un_hoyo_menos_sin_terminar(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        (ana, _pepa, _eva, _luz), match = await self._partida_de(
+            qm_uow,
+            golf_course_uow,
+            user_uow,
+            [_hoyos(IDA), {}, _hoyos(range(1, 9)), {}],
+            MatchFormat.FOURSOMES,
+            ["A", "B", "B"],
+        )
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, ana)).payload["outcome"] == "UNFINISHED"

@@ -1371,3 +1371,72 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
 
         assert partida.outcome is None
         assert partida.unfinished is False
+
+
+class TestTablaAMatchPlaySinHoyoAdjudicableYFoursomes:
+    async def test_ida_frente_a_vuelta_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        el = await mundo.jugador("El")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [QuickMatchParticipant.for_user(el.id)],
+            [4, 4],
+            match_format=MatchFormat.SINGLES,
+            jugados=[IDA, VUELTA],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.outcome, partida.unfinished) == (None, True)
+
+    async def test_foursomes_una_bola_por_bando_nueve_hoyos_cuenta(self, mundo):
+        yo = await mundo.jugador("Yo")
+        companero = await mundo.jugador("Companero")
+        el = await mundo.jugador("El")
+        suyo = await mundo.jugador("Suyo")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(companero.id, team="A"),
+                QuickMatchParticipant.for_user(el.id, team="B"),
+                QuickMatchParticipant.for_user(suyo.id, team="B"),
+            ],
+            [3, 0, 4, 0],
+            match_format=MatchFormat.FOURSOMES,
+            jugados=[IDA, [], IDA, []],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.relation, partida.outcome, partida.unfinished) == (
+            Relation.AGAINST,
+            Outcome.WON,
+            False,
+        )
+
+    async def test_foursomes_un_bando_corto_sin_terminar(self, mundo):
+        yo = await mundo.jugador("Yo")
+        companero = await mundo.jugador("Companero")
+        el = await mundo.jugador("El")
+        suyo = await mundo.jugador("Suyo")
+        course = await mundo.campo(yo)
+        await mundo.partida_rapida(
+            course,
+            yo,
+            [
+                QuickMatchParticipant.for_user(companero.id, team="A"),
+                QuickMatchParticipant.for_user(el.id, team="B"),
+                QuickMatchParticipant.for_user(suyo.id, team="B"),
+            ],
+            [4, 0, 4, 0],
+            match_format=MatchFormat.FOURSOMES,
+            jugados=[IDA, [], range(1, 9), []],
+        )
+
+        (partida,) = await _entre(mundo, yo, el)
+
+        assert (partida.outcome, partida.unfinished) == (None, True)
