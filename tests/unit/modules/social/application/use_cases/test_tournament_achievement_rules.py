@@ -218,10 +218,12 @@ class TestFirstTournamentCountsClosedOnes:
     async def test_a_stroke_play_tournament_still_open_is_not_a_previous_one(
         self, world, social_uow
     ):
+        """Uno que empezo antes y sigue en juego (el del mismo dia desempata aparte)."""
         ana = await world.user()
         course = await world.course(ana)
-        abierto = await world.competition(ana, enrolled=[ana], completed=False)
-        await world.group(abierto, await world.round(abierto, course), {ana: tarjeta()})
+        ayer = DIA - timedelta(days=1)
+        abierto = await world.competition(ana, enrolled=[ana], completed=False, start=ayer)
+        await world.group(abierto, await world.round(abierto, course, ayer), {ana: tarjeta()})
         competition = await world.competition(ana, enrolled=[ana])
         await world.group(competition, await world.round(competition, course), {ana: tarjeta()})
 
@@ -233,8 +235,11 @@ class TestFirstTournamentCountsClosedOnes:
         ana = await world.user()
         rival = await world.user()
         course = await world.course(ana)
-        abierta = await world.competition(ana, tipo=RYDER, enrolled=[ana, rival], completed=False)
-        await world.match(await world.round(abierta, course), ana, rival, tarjeta())
+        ayer = DIA - timedelta(days=1)
+        abierta = await world.competition(
+            ana, tipo=RYDER, enrolled=[ana, rival], completed=False, start=ayer
+        )
+        await world.match(await world.round(abierta, course, ayer), ana, rival, tarjeta())
         competition = await world.competition(ana, tipo=RYDER, enrolled=[ana, rival])
         await world.match(await world.round(competition, course), ana, rival, tarjeta())
 
@@ -741,6 +746,55 @@ class TestFirstTournamentOnTheSameDay:
 
         primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
         assert [e.payload["competition_id"] for e in primeros] == [str(primero.id.value)]
+
+    # --- Revisor sin contexto (22 oct): el orden de cierre no puede cambiar nada ---
+
+    async def _primeros(self, social_uow, ana) -> list[str]:
+        return [
+            e.payload["competition_id"] for e in await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        ]
+
+    async def test_closing_the_later_one_first_does_not_duplicate(self, world, social_uow):
+        """A (manana) sigue en juego cuando se cierra B (tarde): B ya sabe que A fue antes."""
+        ana, manana, tarde = await self._dos_torneos(world, MANANA, TARDE)
+        manana.revert_to_in_progress()
+        await world.save_competition(manana)
+
+        await _publisher(world, social_uow).execute(str(tarde.id.value))
+        manana.complete()
+        await world.save_competition(manana)
+        await _publisher(world, social_uow).execute(str(manana.id.value))
+
+        assert await self._primeros(social_uow, ana) == [str(manana.id.value)]
+
+    async def test_interleaved_reopenings_give_the_same(self, world, social_uow):
+        ana, manana, tarde = await self._dos_torneos(world, MANANA, TARDE)
+        await _publisher(world, social_uow).execute(str(manana.id.value))
+        await _publisher(world, social_uow).execute(str(tarde.id.value))
+
+        # Se reabre A; con A en juego se reabre y se vuelve a cerrar B
+        await _reabrir(world, social_uow, manana)
+        await _reabrir(world, social_uow, tarde)
+        tarde.complete()
+        await world.save_competition(tarde)
+        await _publisher(world, social_uow).execute(str(tarde.id.value))
+        assert await self._primeros(social_uow, ana) == []
+        manana.complete()
+        await world.save_competition(manana)
+        await _publisher(world, social_uow).execute(str(manana.id.value))
+
+        assert await self._primeros(social_uow, ana) == [str(manana.id.value)]
+
+    async def test_a_cancelled_tournament_that_day_takes_nothing(self, world, social_uow):
+        """Uno cancelado nunca lo da, asi que tampoco se lo quita al otro."""
+        ana, manana, tarde = await self._dos_torneos(world, MANANA, TARDE)
+        manana.revert_to_in_progress()
+        manana.cancel()
+        await world.save_competition(manana)
+
+        await _publisher(world, social_uow).execute(str(tarde.id.value))
+
+        assert await self._primeros(social_uow, ana) == [str(tarde.id.value)]
 
     async def test_a_tournament_that_started_earlier_still_wins(self, world, social_uow):
         """El dia de inicio sigue mandando: la hora solo desempata el mismo dia."""

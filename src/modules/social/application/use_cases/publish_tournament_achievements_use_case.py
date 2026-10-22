@@ -321,17 +321,17 @@ class PublishTournamentAchievementsUseCase:
                         vueltas.setdefault(user_id_raw, []).append(vuelta)
 
             empieza = competition.dates.start_date
-            cerrados = await self._torneos_cerrados(otros_por_jugador, empieza)
+            anteriores = await self._torneos_anteriores(otros_por_jugador, empieza)
             primeras_otras = await self._primeras_vueltas_el_mismo_dia(
-                otros_por_jugador, cerrados, empieza, rounds
+                otros_por_jugador, anteriores, empieza, rounds
             )
             for user_id_raw, otros in otros_por_jugador.items():
                 propia = (primera_propia[user_id_raw], competition_id_raw)
                 estrena_torneo[user_id_raw] = not any(
-                    cerrados[torneo] < empieza
+                    anteriores[torneo] < empieza
                     or (primeras_otras[(user_id_raw, torneo)], torneo) < propia
                     for torneo in otros
-                    if torneo in cerrados
+                    if torneo in anteriores
                 )
 
         return vueltas, estrena_torneo
@@ -339,7 +339,7 @@ class PublishTournamentAchievementsUseCase:
     async def _primeras_vueltas_el_mismo_dia(
         self,
         otros_por_jugador: dict[str, dict[str, set]],
-        cerrados: dict[str, date],
+        anteriores: dict[str, date],
         empieza: date,
         rounds: dict,
     ) -> dict[tuple[str, str], tuple[date, int]]:
@@ -348,7 +348,9 @@ class PublishTournamentAchievementsUseCase:
         punta a punta, 22 oct 2026): solo lo da uno. Decide la primera vuelta
         del jugador en cada uno —su dia y la hora local de su sesion— y, si
         tambien coincide, el id de torneo menor. Es determinista y no depende
-        del orden de cierre, asi que reabrir y volver a cerrar da lo mismo.
+        del orden de cierre, asi que reabrir y volver a cerrar da lo mismo:
+        por eso aqui cuenta tambien el otro torneo aunque siga en juego
+        (`_torneos_anteriores`).
 
         Devuelve, por (jugador, torneo) de esos, su primera vuelta. Las rondas
         que falten se leen de una vez.
@@ -357,7 +359,7 @@ class PublishTournamentAchievementsUseCase:
             (user_id_raw, torneo): rondas
             for user_id_raw, otros in otros_por_jugador.items()
             for torneo, rondas in otros.items()
-            if cerrados.get(torneo) == empieza
+            if anteriores.get(torneo) == empieza
         }
         faltan = {r for rondas in mismo_dia.values() for r in rondas} - set(rounds)
         if faltan:
@@ -371,16 +373,22 @@ class PublishTournamentAchievementsUseCase:
             for clave, rondas in mismo_dia.items()
         }
 
-    async def _torneos_cerrados(
+    async def _torneos_anteriores(
         self, otros_por_jugador: dict[str, dict[str, set]], empieza: date
     ) -> dict[str, date]:
         """
-        De los otros torneos de los inscritos, los ya cerrados que empezaron
-        ANTES que este o el mismo dia, con su dia de inicio, en una lectura
-        (revision final del 22 oct 2026): uno en juego o cancelado no se ha
-        jugado todavia, y uno posterior no le quita el estreno a este aunque se
-        cerrara antes de reabrirlo y volver a cerrarlo. Los del mismo dia los
-        desempata `_primeras_vueltas_el_mismo_dia`.
+        De los otros torneos de los inscritos, los que pueden quitarle el
+        estreno a este, con su dia de inicio, en una lectura:
+
+        - Los que empezaron ANTES, solo si ya estan cerrados (revision final
+          del 22 oct 2026): uno en juego aun no se ha jugado. Uno posterior
+          nunca se lo quita.
+        - Los que empiezan EL MISMO DIA, cerrados o no, salvo los cancelados
+          (revisor sin contexto, 22 oct 2026): los desempata
+          `_primeras_vueltas_el_mismo_dia` con las vueltas que el jugador ya
+          tiene en ellos. Si solo contaran los cerrados, cerrar primero el que
+          va despues se lo daria a los dos. Uno cancelado nunca lo da, asi que
+          tampoco lo quita.
         """
         ids = {crudo for otros in otros_por_jugador.values() for crudo in otros}
         if not ids:
@@ -391,7 +399,8 @@ class PublishTournamentAchievementsUseCase:
         return {
             str(torneo.id.value): torneo.dates.start_date
             for torneo in torneos
-            if torneo.status == CompetitionStatus.COMPLETED and torneo.dates.start_date <= empieza
+            if (torneo.dates.start_date < empieza and torneo.status == CompetitionStatus.COMPLETED)
+            or (torneo.dates.start_date == empieza and torneo.status != CompetitionStatus.CANCELLED)
         }
 
     async def _partidos(
