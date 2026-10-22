@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     ColumnElement,
+    Delete,
     String,
     and_,
     case,
@@ -36,6 +37,7 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
     activity_events_table,
+    withdrawn_hidden_achievements_table,
     withdrawn_tee_time_notices_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -63,9 +65,12 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         No pasa por la sesion de la ORM a proposito: `session.add_all()` no
         admite ON CONFLICT, y aqui el evento ya nace completo y no se vuelve a
         tocar, asi que no se pierde nada por no tenerlo en el identity map.
+
+        Un logro que se retiro oculto vuelve oculto (`_volver_a_ocultar`).
         """
         if not events:
             return
+        await self._volver_a_ocultar(events)
 
         filas = [
             {
@@ -85,6 +90,55 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         await self._session.execute(
             stmt.on_conflict_do_nothing(constraint=UQ_ACTIVITY_EVENTS_MATCH_TYPE)
         )
+
+    async def _volver_a_ocultar(self, events: list[ActivityEvent]) -> None:
+        """
+        Oculta los logros que se retiraron ocultos y gasta su apunte: desde
+        aqui, lo oculto lo guarda el propio logro. Si el alta se salta por la
+        clave unica, el logro que ya estaba se queda como estaba.
+        """
+        claves = [(e.user_id, e.type, e.source_match_id) for e in events if e.type.is_achievement]
+        if not claves:
+            return
+        apuntes = withdrawn_hidden_achievements_table.c
+        gastados = (
+            await self._session.execute(
+                delete(withdrawn_hidden_achievements_table)
+                .where(tuple_(apuntes.user_id, apuntes.type, apuntes.source_match_id).in_(claves))
+                .returning(apuntes.user_id, apuntes.type, apuntes.source_match_id)
+            )
+        ).all()
+        ocultos = {(f.user_id, f.type, f.source_match_id) for f in gastados}
+        for event in events:
+            if (event.user_id, event.type, event.source_match_id) in ocultos:
+                event.hide_from_friends()
+
+    async def _borrar(self, stmt: Delete) -> int:
+        """
+        Borra y apunta los logros ocultos que se van: si se vuelven a publicar,
+        vuelven ocultos (fallo del probador, 23 oct 2026). Los avisos no se
+        apuntan: apuntarse otra vez a un torneo es un aviso nuevo.
+        """
+        tabla = activity_events_table.c
+        filas = (
+            await self._session.execute(
+                stmt.returning(
+                    tabla.user_id, tabla.type, tabla.source_match_id, tabla.visible_to_friends
+                )
+            )
+        ).all()
+        ocultos = [
+            {"user_id": f.user_id, "type": f.type, "source_match_id": f.source_match_id}
+            for f in filas
+            if not f.visible_to_friends and f.type.is_achievement
+        ]
+        if ocultos:
+            await self._session.execute(
+                pg_insert(withdrawn_hidden_achievements_table)
+                .values(ocultos)
+                .on_conflict_do_nothing()
+            )
+        return len(filas)
 
     async def find_in(
         self,
@@ -296,8 +350,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         if user_id is not None:
             stmt = stmt.where(activity_events_table.c.user_id == user_id)
-        result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return await self._borrar(stmt)
 
     async def delete_pairs(
         self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
@@ -309,8 +362,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             tabla.type == type,
             tuple_(tabla.user_id, tabla.source_match_id).in_(list(pairs)),
         )
-        result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return await self._borrar(stmt)
 
     async def lock_scope(self, scope_id: str) -> None:
         """
@@ -374,8 +426,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             activity_events_table.c.type.in_(sorted(types)),
             activity_events_table.c.user_id.in_(list(user_ids)),
         )
-        result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return await self._borrar(stmt)
 
     async def delete_for_competition(
         self,
@@ -391,8 +442,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         if user_id is not None:
             stmt = stmt.where(activity_events_table.c.user_id == user_id)
-        result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return await self._borrar(stmt)
 
     async def replace_for_competition(
         self,
@@ -423,12 +473,12 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 for fila in filas
                 if (nuevo := nuevos.get((fila.user_id, fila.source_match_id, fila.type))) is None
                 or nuevo.payload != fila.payload
-                or nuevo.visible_to_friends != fila.visible_to_friends
+                # Lo oculto no se destapa: solo sobra lo visible que ahora se
+                # publica oculto
+                or (fila.visible_to_friends and not nuevo.visible_to_friends)
             ]
             if sobran:
-                await self._session.execute(
-                    delete(activity_events_table).where(tabla.id.in_(sobran))
-                )
+                await self._borrar(delete(activity_events_table).where(tabla.id.in_(sobran)))
         await self.add_many(events)
 
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:

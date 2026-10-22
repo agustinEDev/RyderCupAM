@@ -22,6 +22,11 @@ async def stamp_for_publication(
     partida y guardar sus logros se juzga cada vuelta, y eso tarda: si el
     jugador apaga la publicacion en ese rato, sus logros no pueden salir
     visibles. Basta con que uno de los dos momentos lo tenga apagado.
+
+    **Lo que ya se publico oculto no se destapa**, aunque ahora este encendido:
+    eso lo pone el repositorio al guardar, que sabe que estaba oculto (el
+    logro, o el apunte que dejo al retirarlo). Aqui solo se oculta, nunca se
+    destapa.
     """
     if not eventos:
         return []

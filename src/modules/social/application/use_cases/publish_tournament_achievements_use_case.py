@@ -161,7 +161,9 @@ class PublishTournamentAchievementsUseCase:
           lo calculado es viejo y se recalcula, hasta `MAX_INTENTOS`.
         - Igual: se sustituye lo publicado del torneo por lo calculado. Lo que
           ya estaba igual no se toca; lo que sobra se borra, aunque una
-          reapertura anterior no llegara a borrarlo.
+          reapertura anterior no llegara a borrarlo. Lo que se publico oculto
+          vuelve oculto aunque se haya encendido la publicacion (lo apunta el
+          repositorio al retirarlo, fallo del probador del 23 oct 2026).
 
         Tambien se recalcula si, mientras, otra publicacion de este mismo
         torneo escribio logros (revisor, 22 oct 2026): la herencia de un torneo
@@ -258,7 +260,8 @@ class PublishTournamentAchievementsUseCase:
         logros —un record de entonces se recalcularia hoy con marcas de despues,
         y lo oculto se destaparia—, ni toca a otros jugadores. Lo que ya estaba
         publicado igual se queda como estaba; lo nuevo sale con el interruptor
-        de ahora. Devuelve cuantos publico.
+        de ahora, salvo lo que se retiro oculto, que vuelve oculto. Devuelve
+        cuantos publico.
         """
         competition_id = CompetitionId(competition_id_raw)
         if not user_ids:

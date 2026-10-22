@@ -1,6 +1,6 @@
 """In-Memory Activity Event Repository para testing."""
 
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -29,6 +29,8 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         self.trashed_quick_matches: set[tuple[str, UserId]] = set()
         # Avisos de salida retirados por un cambio: (ronda, jugador) -> torneo
         self._salidas_retiradas: dict[tuple[str, UserId], str] = {}
+        # Logros retirados ocultos: (jugador, tipo, origen)
+        self._ocultos_retirados: set[tuple[UserId, ActivityEventType, str]] = set()
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -40,8 +42,22 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         idempotencia que en produccion depende de la base de datos.
         """
         for event in events:
+            # Un logro que se retiro oculto vuelve oculto, y el apunte se gasta
+            clave = (event.user_id, event.type, event.source_match_id)
+            if clave in self._ocultos_retirados:
+                self._ocultos_retirados.discard(clave)
+                event.hide_from_friends()
             if not self._existe(event):
                 self._events.append(event)
+
+    def _borrar(self, se_borra: Callable[[ActivityEvent], bool]) -> int:
+        """Borra y apunta los logros ocultos que se van, como en SQL."""
+        antes = len(self._events)
+        for e in self._events:
+            if se_borra(e) and e.type.is_achievement and not e.visible_to_friends:
+                self._ocultos_retirados.add((e.user_id, e.type, e.source_match_id))
+        self._events = [e for e in self._events if not se_borra(e)]
+        return antes - len(self._events)
 
     def _existe(self, event: ActivityEvent) -> bool:
         return any(
@@ -158,13 +174,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         self, type: ActivityEventType, pairs: Sequence[tuple[UserId, str]]
     ) -> int:
         parejas = set(pairs)
-        antes = len(self._events)
-        self._events = [
-            e
-            for e in self._events
-            if not (e.type == type and (e.user_id, e.source_match_id) in parejas)
-        ]
-        return antes - len(self._events)
+        return self._borrar(lambda e: e.type == type and (e.user_id, e.source_match_id) in parejas)
 
     async def delete_from_source(
         self,
@@ -172,17 +182,13 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         types: Collection[ActivityEventType],
         user_id: UserId | None = None,
     ) -> int:
-        antes = len(self._events)
-        self._events = [
-            e
-            for e in self._events
-            if not (
+        return self._borrar(
+            lambda e: (
                 e.source_match_id == source_id
                 and e.type in types
                 and (user_id is None or e.user_id == user_id)
             )
-        ]
-        return antes - len(self._events)
+        )
 
     async def lock_scope(self, scope_id: str) -> None:
         """En memoria no hay nada a la vez: no hay nada que bloquear."""
@@ -216,13 +222,9 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         user_ids: Collection[UserId],
     ) -> int:
         quienes = set(user_ids)
-        antes = len(self._events)
-        self._events = [
-            e
-            for e in self._events
-            if not (e.source_match_id == source_id and e.type in types and e.user_id in quienes)
-        ]
-        return antes - len(self._events)
+        return self._borrar(
+            lambda e: e.source_match_id == source_id and e.type in types and e.user_id in quienes
+        )
 
     async def delete_for_competition(
         self,
@@ -230,17 +232,13 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         types: Collection[ActivityEventType],
         user_id: UserId | None = None,
     ) -> int:
-        antes = len(self._events)
-        self._events = [
-            e
-            for e in self._events
-            if not (
+        return self._borrar(
+            lambda e: (
                 e.type in types
                 and e.payload.get("competition_id") == competition_id
                 and (user_id is None or e.user_id == user_id)
             )
-        ]
-        return antes - len(self._events)
+        )
 
     async def replace_for_competition(
         self,
@@ -257,10 +255,12 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
             return (
                 nuevo is None
                 or nuevo.payload != e.payload
-                or nuevo.visible_to_friends != e.visible_to_friends
+                # Lo oculto no se destapa: solo sobra lo visible que ahora se
+                # publica oculto
+                or (e.visible_to_friends and not nuevo.visible_to_friends)
             )
 
-        self._events = [e for e in self._events if not _sobra(e)]
+        self._borrar(_sobra)
         await self.add_many(events)
 
     async def hide_from_friends(self, user_id: UserId, types: Collection[ActivityEventType]) -> int:
