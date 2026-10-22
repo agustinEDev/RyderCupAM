@@ -213,6 +213,25 @@ async def test_a_ryder_match_won_4_and_3_counts_its_15_holes(world):
     )
 
 
+async def test_a_conceded_ryder_match_with_holes_counts(world):
+    """Agustin, 22 oct: concedido con hoyos jugados piso el campo; sin hoyos, no."""
+    ana = await world.user()
+    rival = await world.user()
+    competition = await world.competition(ana, tipo=TournamentType.RYDER_CUP, enrolled=[ana, rival])
+    course = await world.course(ana)
+    otro = await world.course(ana)
+    partido = await world.match(
+        await world.round(competition, course), ana, rival, {1: 4, 2: 5}, concedido=True
+    )
+    await world.match(await world.round(competition, otro), ana, rival, {}, concedido=True)
+
+    primera = await _primera(world, ana, course)
+
+    assert primera is not None
+    assert (primera.source_id, primera.holes_played) == (str(partido.id.value), 2)
+    assert await _primera(world, ana, otro) is None
+
+
 async def test_a_ryder_match_without_any_hole_of_his_does_not_count(world):
     ana = await world.user()
     rival = await world.user()

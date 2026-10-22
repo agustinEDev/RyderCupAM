@@ -89,10 +89,11 @@ class MatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def find_completed_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+    async def find_finished_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
         """
-        Todos los partidos terminados en los que jugo alguno de ellos, sin tope
-        ni orden, en una sola lectura: el historial de campos tiene que ver
-        hasta lo mas antiguo (logros exclusivos, 22 oct 2026). Sin jugadores,
-        ninguno.
+        Todos los partidos acabados (terminados, concedidos o por
+        incomparecencia) en los que jugo alguno de ellos, sin tope ni orden,
+        en una sola lectura: el historial de campos tiene que ver hasta lo mas
+        antiguo, y un concedido con hoyos jugados tambien piso el campo
+        (logros exclusivos, 22 oct 2026). Sin jugadores, ninguno.
         """

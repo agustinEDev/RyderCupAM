@@ -163,14 +163,18 @@ class Escena:
         )
         return torneo, grupo
 
-    async def ryder(self, dia: date, sesion: SessionType, golpes: dict):
+    async def ryder(self, dia: date, sesion: SessionType, golpes: dict, *, concedido=False):
         """Una Ryder en juego con un partido acabado de Ana con esos hoyos (4&3: 15)."""
         rival = await self.world.user()
         torneo = await self.world.competition(
             self.ana, tipo=TournamentType.RYDER_CUP, enrolled=[self.ana, rival], completed=False
         )
         partido = await self.world.match(
-            await self.world.round(torneo, self.course, dia, sesion), self.ana, rival, golpes
+            await self.world.round(torneo, self.course, dia, sesion),
+            self.ana,
+            rival,
+            golpes,
+            concedido=concedido,
         )
         return torneo, partido
 
@@ -663,14 +667,14 @@ class TestReopeningTheEarlierOne:
         for torneo in (anterior, posterior, otro):
             await e.cerrar(torneo)
         roto = min(_id(posterior), _id(otro)) if rompe_el_menor else max(_id(posterior), _id(otro))
-        original = PublishTournamentAchievementsUseCase.execute
+        original = PublishTournamentAchievementsUseCase.republish_exclusive
 
-        async def _uno_roto(self, competition_id_raw):
+        async def _uno_roto(self, competition_id_raw, user_ids):
             if competition_id_raw == roto:
                 raise RuntimeError("feed caido")
-            return await original(self, competition_id_raw)
+            return await original(self, competition_id_raw, user_ids)
 
-        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "execute", _uno_roto)
+        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "republish_exclusive", _uno_roto)
 
         await e.reabrir(anterior)
 
@@ -751,6 +755,27 @@ class TestSteppingOnTheCourse:
         assert evento.payload["holes_played"] == 15
         assert evento.payload["kind"] == "MATCH"
 
+    async def test_a_conceded_ryder_match_with_holes_takes_both(self):
+        """Agustin, 22 oct: un partido concedido con hoyos jugados piso el campo."""
+        e = await _escena()
+        torneo, partido = await e.ryder(
+            DIA, MANANA, dict.fromkeys(range(1, 8), PAR), concedido=True
+        )
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(partido)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(partido)]
+
+    async def test_a_conceded_match_without_holes_does_not_count(self):
+        e = await _escena()
+        concedido, _ = await e.ryder(AYER, MANANA, {}, concedido=True)
+        torneo, grupo = await e.torneo(DIA, MANANA)
+        await e.cerrar(concedido)
+        await e.cerrar(torneo)
+
+        assert await e.de(T.NEW_COURSE) == [_id(grupo)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(grupo)]
+
     @pytest.mark.parametrize("rapida_primero", [True, False])
     async def test_an_incomplete_quick_match_before_the_tournament_takes_it(self, rapida_primero):
         """Revisor: una partida rapida de 12 hoyos, terminada, antes del torneo."""
@@ -821,6 +846,200 @@ class TestSteppingOnTheCourse:
         await e.reabrir(torneo)
 
         assert await e.de(T.NEW_COURSE) == [_id(partida)]
+
+
+# ==================== 5c. Heredar solo lo exclusivo (revision final, 22 oct) ====================
+
+
+class TestInheritingOnlyTheExclusiveOnes:
+    """
+    Heredar publica SOLO «campo nuevo» y «primer torneo» del heredero, con el
+    interruptor de ahora: nunca recalcula ni sustituye sus demas logros.
+    """
+
+    async def _escena_con_heredero(self):
+        """A (ayer) se reabrira; C (hoy) hereda. C tiene un birdie y un record."""
+        e = await _escena()
+        anterior, _ = await e.torneo(AYER, TARDE)
+        heredero = await e.world.competition(e.ana, enrolled=[e.ana], completed=False)
+        grupo = await e.world.group(
+            heredero,
+            await e.world.round(heredero, e.course, DIA, MANANA),
+            {e.ana: tarjeta(h4=3)},
+        )
+        await e.cerrar(anterior)
+        await e.cerrar(heredero)
+        # Un record de entonces, que hoy ya no se recalcularia igual
+        record = ActivityEvent.create(
+            user_id=e.ana.id,
+            type=T.PERSONAL_BEST,
+            occurred_at=_a_las(DIA, 12),
+            source_match_id=_id(grupo),
+            payload={"competition_id": _id(heredero), "from_tournament": True},
+        )
+        async with e.social:
+            await e.social.activity_events.add_many([record])
+        return e, anterior, heredero, grupo
+
+    async def _no_exclusivos(self, e, torneo) -> list[tuple]:
+        async with e.social:
+            todos = await e.social.activity_events.find_for_users(
+                [e.ana.id], [t for t in ActivityEventType if t.is_achievement]
+            )
+        return sorted(
+            (str(x.id), x.type, x.published_at, x.visible_to_friends, str(x.payload))
+            for x in todos
+            if x.payload.get("competition_id") == _id(torneo) and x.type not in EXCLUSIVOS
+        )
+
+    async def test_an_old_record_and_the_rest_stay_untouched(self):
+        e, anterior, heredero, grupo = await self._escena_con_heredero()
+        antes = await self._no_exclusivos(e, heredero)
+        assert {t for _, t, *_ in antes} == {T.BIRDIE, T.PERSONAL_BEST}
+
+        await e.reabrir(anterior)
+
+        assert await self._no_exclusivos(e, heredero) == antes
+        assert await e.de(T.NEW_COURSE) == [_id(grupo)]
+        assert await e.de(T.FIRST_TOURNAMENT) == [_id(grupo)]
+
+    async def test_hidden_achievements_stay_hidden(self):
+        e, anterior, heredero, _ = await self._escena_con_heredero()
+        async with e.social:
+            await e.social.activity_events.hide_from_friends(e.ana.id, [T.BIRDIE])
+        antes = await self._no_exclusivos(e, heredero)
+
+        await e.reabrir(anterior)
+
+        assert await self._no_exclusivos(e, heredero) == antes
+        (birdie,) = await e.eventos(T.BIRDIE)
+        assert birdie.visible_to_friends is False
+
+    async def test_the_inherited_one_follows_the_current_switch(self):
+        e, anterior, _, _ = await self._escena_con_heredero()
+        e.ana.set_activity_sharing(False)
+        async with e.world.users:
+            await e.world.users.users.save(e.ana)
+
+        await e.reabrir(anterior)
+
+        for tipo in EXCLUSIVOS:
+            (heredado,) = await e.eventos(tipo)
+            assert heredado.visible_to_friends is False
+
+    async def test_inheriting_never_replaces_the_heirs_achievements(self, monkeypatch):
+        e, anterior, heredero, _ = await self._escena_con_heredero()
+        sustituidos: list[str] = []
+        clase = type(e.social.activity_events)
+        original = clase.replace_for_competition
+
+        async def _apunta(self, competition_id, *args, **kwargs):
+            sustituidos.append(competition_id)
+            return await original(self, competition_id, *args, **kwargs)
+
+        monkeypatch.setattr(clase, "replace_for_competition", _apunta)
+
+        await e.reabrir(anterior)
+
+        assert _id(heredero) not in sustituidos
+
+    async def test_the_heir_keeps_its_own_and_retires_a_later_double(self):
+        """
+        Lo que el heredero ya tenia publicado se queda tal cual (su campo nuevo
+        en otro campo), y un doble posterior que hubiera en el campo heredado
+        se retira: la herencia pasa por la misma regla.
+        """
+        e, anterior, heredero, grupo = await self._escena_con_heredero()
+        otro_campo = await e.world.course(e.ana, timezone=MADRID)
+        await e.world.group(
+            heredero,
+            await e.world.round(heredero, otro_campo, DIA, TARDE),
+            {e.ana: tarjeta()},
+            numero=2,
+        )
+        heredero.revert_to_in_progress()
+        await e.world.save_competition(heredero)
+        await e.cerrar(heredero)
+        (propio,) = [
+            x
+            for x in await e.eventos(T.NEW_COURSE)
+            if x.payload["golf_course_id"] == str(otro_campo.id.value)
+        ]
+        doble = ActivityEvent.create(
+            user_id=e.ana.id,
+            type=T.NEW_COURSE,
+            occurred_at=_a_las(DIA, 20),
+            source_match_id="doble-posterior",
+            payload={"golf_course_id": str(e.course.id.value), "played_at": "2026-06-01T20:00:00Z"},
+        )
+        async with e.social:
+            await e.social.activity_events.add_many([doble])
+
+        await e.reabrir(anterior)
+
+        nuevos = {x.source_match_id: x.id for x in await e.eventos(T.NEW_COURSE)}
+        assert nuevos[propio.source_match_id] == propio.id
+        assert _id(grupo) in nuevos
+        assert "doble-posterior" not in nuevos
+
+    async def test_a_heir_reopened_meanwhile_publishes_nothing(self, monkeypatch):
+        e, anterior, heredero, _ = await self._escena_con_heredero()
+        original = PublishTournamentAchievementsUseCase._exclusivos
+
+        async def _y_se_reabre(self, competition_id_raw, visibles):
+            calculados = await original(self, competition_id_raw, visibles)
+            if competition_id_raw == _id(heredero):
+                heredero.revert_to_in_progress()
+                await e.world.save_competition(heredero)
+            return calculados
+
+        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "_exclusivos", _y_se_reabre)
+
+        await e.reabrir(anterior)
+
+        assert await e.de(T.NEW_COURSE) == []
+        assert await e.de(T.FIRST_TOURNAMENT) == []
+
+    async def test_the_heir_locks_itself_and_then_the_players(self, monkeypatch):
+        e, anterior, heredero, _ = await self._escena_con_heredero()
+        candados: list[str] = []
+        clase = type(e.social.activity_events)
+        original = clase.add_many
+
+        async def _candado(self, scope_id):
+            candados.append(scope_id)
+
+        async def _escribe(self, eventos):
+            candados.append("escribe")
+            return await original(self, eventos)
+
+        monkeypatch.setattr(clase, "lock_scope", _candado)
+        monkeypatch.setattr(clase, "add_many", _escribe)
+
+        await e.reabrir(anterior)
+
+        i = candados.index(_id(heredero))
+        assert candados[i : i + 3] == [_id(heredero), f"player:{_id(e.ana)}", "escribe"]
+
+    async def test_only_the_players_of_the_reopened_tournament(self):
+        """A otro jugador del heredero no se le toca nada."""
+        e, anterior, heredero, _ = await self._escena_con_heredero()
+        bea = await e.world.user()
+        async with e.social:
+            ajeno = ActivityEvent.create(
+                user_id=bea.id,
+                type=T.NEW_COURSE,
+                occurred_at=_a_las(DIA, 12),
+                source_match_id="grupo-de-bea",
+                payload={"competition_id": _id(heredero), "golf_course_id": "otro"},
+            )
+            await e.social.activity_events.add_many([ajeno])
+
+        await e.reabrir(anterior)
+
+        async with e.social:
+            de_bea = await e.social.activity_events.find_for_users([bea.id], EXCLUSIVOS)
+        assert [x.id for x in de_bea] == [ajeno.id]
 
 
 # ==================== 6. La papelera del autor ====================

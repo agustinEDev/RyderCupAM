@@ -223,15 +223,21 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         # ser lo mas antiguo. Al volver a cerrarlo se los vuelve a llevar
         async with self._competition_uow:
             inscritos = await self._competition_uow.enrollments.find_by_competition(competition_id)
-        await self._notices.reopened(str(competition_id.value), [e.user_id for e in inscritos])
-        await self._ceder_los_exclusivos(competition_id)
+        jugadores = [e.user_id for e in inscritos]
+        await self._notices.reopened(str(competition_id.value), jugadores)
+        await self._ceder_los_exclusivos(competition_id, jugadores)
 
-    async def _ceder_los_exclusivos(self, competition_id: CompetitionId) -> None:
+    async def _ceder_los_exclusivos(
+        self, competition_id: CompetitionId, jugadores: list[UserId]
+    ) -> None:
         """
-        Vuelve a publicar a los herederos de «campo nuevo» y «primer torneo»
-        (`PublishTournamentAchievementsUseCase.heirs_of`), cada uno en su
-        transaccion y bajo los candados de siempre. Con fallo seguro: la
-        reapertura ya esta hecha, y lo que falle en uno no para a los demas.
+        Publica en los herederos SOLO «campo nuevo» y «primer torneo», y solo
+        para los jugadores del torneo reabierto
+        (`PublishTournamentAchievementsUseCase.heirs_of`): nunca se reejecuta
+        ni se sustituye lo demas de otro torneo (revision final, 22 oct 2026).
+        Cada uno en su transaccion y bajo los candados de siempre. Con fallo
+        seguro: la reapertura ya esta hecha, y lo que falle en uno no para a
+        los demas.
         """
         if self._achievements is None:
             return
@@ -244,7 +250,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             return
         for torneo in herederos.tournaments:
             try:
-                await self._achievements.execute(torneo)
+                await self._achievements.republish_exclusive(torneo, jugadores)
             except Exception:
                 logger.warning(
                     "Could not republish the achievements of tournament %s", torneo, exc_info=True

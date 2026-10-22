@@ -97,7 +97,13 @@ async def _ronda_de_torneo_cerrado(db_session, curso, creador: UserId, tipo: Tou
 
 
 async def _ryder_de(
-    db_session, curso, a: UserId, b: UserId, hoyos: int, terminar: bool = True
+    db_session,
+    curso,
+    a: UserId,
+    b: UserId,
+    hoyos: int,
+    terminar: bool = True,
+    conceder: bool = False,
 ) -> Match:
     """Un partido acabado de a contra b, con `hoyos` hoyos apuntados por a."""
     _, round_ = await _ronda_de_torneo_cerrado(db_session, curso, a, TournamentType.RYDER_CUP)
@@ -109,7 +115,9 @@ async def _ryder_de(
         team_b_players=[_jugador_de_partido(b)],
     )
     match.start()
-    if terminar:
+    if conceder:
+        match.concede("B")
+    elif terminar:
         match.complete({"winner": "A", "score": "4&3"})
     await uow.matches.add(match)
     await db_session.commit()
@@ -183,6 +191,7 @@ class TestWhoSteppedOnTheCourse:
         sin_hoyos = await _ryder_de(db_session, campo, c, b, hoyos=0)
         grupo = await _grupo_de(db_session, campo, a, b, c)
         sin_terminar_ryder = await _ryder_de(db_session, campo, a, b, hoyos=10, terminar=False)
+        concedido = await _ryder_de(db_session, campo, a, b, hoyos=6, conceder=True)
         en_la_papelera = await _rapida(db_session, campo, a, [], oculta_por=a)
         await _hoyos_de_rapida(db_session, en_la_papelera, a, 12)
         sin_terminar = await _rapida(db_session, campo, a, [], terminar=False)
@@ -193,6 +202,7 @@ class TestWhoSteppedOnTheCourse:
         assert sorted((r.source_id, r.kind, r.holes_played) for r in rondas) == sorted(
             [
                 (str(partido.id.value), "MATCH", 15),
+                (str(concedido.id.value), "MATCH", 6),
                 (str(grupo.id), "TEE_GROUP", 3),
                 (str(en_la_papelera.id.value), "QUICK_MATCH", 12),
             ]

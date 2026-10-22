@@ -87,7 +87,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         buscados = set(usuarios)
         async with self._competition_uow:
             uow = self._competition_uow
-            partidos = await uow.matches.find_completed_for_players(usuarios)
+            partidos = await uow.matches.find_finished_for_players(usuarios)
             grupos = await uow.partidas.completadas_de_jugadores(usuarios)
             hoyos_partido = await uow.hole_scores.played_holes([p.id for p in partidos])
             hoyos_grupo = await uow.golpes_de_partida.hoyos_jugados([g.id for g in grupos])

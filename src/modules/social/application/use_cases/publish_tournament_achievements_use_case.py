@@ -250,6 +250,46 @@ class PublishTournamentAchievementsUseCase:
             quick_matches=sorted(rapidas),
         )
 
+    async def republish_exclusive(self, competition_id_raw: str, user_ids: list[UserId]) -> int:
+        """
+        Publica SOLO «campo nuevo» y «primer torneo» de este torneo para esos
+        jugadores: es como hereda un torneo cerrado los de otro que se reabre
+        (revision final, 22 oct 2026). Nunca recalcula ni sustituye sus demas
+        logros —un record de entonces se recalcularia hoy con marcas de despues,
+        y lo oculto se destaparia—, ni toca a otros jugadores. Lo que ya estaba
+        publicado igual se queda como estaba; lo nuevo sale con el interruptor
+        de ahora. Devuelve cuantos publico.
+        """
+        competition_id = CompetitionId(competition_id_raw)
+        if not user_ids:
+            return 0
+        # Sin mirar antes si esta cerrado: el historial solo da vueltas de
+        # torneos cerrados, y con el candado se vuelve a comprobar
+        async with self._user_uow:
+            visibles = {
+                u.id: u.share_activity for u in await self._user_uow.users.find_by_ids(user_ids)
+            }
+        eventos = await self._exclusivos(competition_id_raw, visibles)
+        if not eventos:
+            return 0
+        eventos = await stamp_for_publication(self._user_uow, eventos)
+
+        async with self._social_uow:
+            repo = self._social_uow.activity_events
+            # Los mismos candados, en el mismo orden, que una publicacion
+            await repo.lock_scope(competition_id_raw)
+            ahora = await self._competition_uow.competitions.find_status_mark(competition_id)
+            if ahora is None or ahora[0] != CompetitionStatus.COMPLETED:
+                return 0
+            await lock_players(repo, list(visibles))
+            eventos = await keep_only_the_oldest(
+                repo,
+                eventos,
+                is_own=lambda e: e.payload.get("competition_id") == competition_id_raw,
+            )
+            await repo.add_many(eventos)
+        return len(eventos)
+
     async def _calcular(self, competition_id_raw: str) -> tuple[list[ActivityEvent], list[UserId]]:
         """Los logros del torneo tal como esta ahora, sin publicar, y sus inscritos."""
         vueltas_por_jugador, visibles, jugadores = await self._leer_vueltas(competition_id_raw)
