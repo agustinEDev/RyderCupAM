@@ -83,11 +83,11 @@ class _Hueco(PlayerCourseHistoryInterface):
         self._real = real
         self._en_el_hueco = en_el_hueco
 
-    async def has_played_course_before(self, *args, **kwargs) -> bool:
+    async def first_round_on_course(self, *args, **kwargs):
         if self._en_el_hueco is not None:
             accion, self._en_el_hueco = self._en_el_hueco, None
             await accion()
-        return await self._real.has_played_course_before(*args, **kwargs)
+        return await self._real.first_round_on_course(*args, **kwargs)
 
 
 def _publisher(world, social_uow, en_el_hueco=None) -> PublishTournamentAchievementsUseCase:

@@ -193,6 +193,12 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     ) -> list[ActivityEvent]:
         return [e for e in self._events if e.source_match_id == source_id and e.type in types]
 
+    async def find_for_users(
+        self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        quienes = set(user_ids)
+        return [e for e in self._events if e.user_id in quienes and e.type in types]
+
     async def delete_from_source_for_users(
         self,
         source_id: str,

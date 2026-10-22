@@ -10,7 +10,7 @@ Logros de un torneo de stroke play (bloque L, tabla del 22 oct 2026).
 - L12: idempotente por la clave de origen (el grupo).
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -33,6 +33,7 @@ from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quic
     InMemoryQuickMatchUnitOfWork,
 )
 from src.modules.social.application.ports.player_course_history_interface import (
+    CourseRound,
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
@@ -89,19 +90,16 @@ class _History(PlayerCourseHistoryInterface):
         self.vueltas: set = set()
         self.preguntas: list = []
 
-    async def has_played_course_before(
-        self,
-        user_id,
-        golf_course_id,
-        excluding_match_id,
-        excluding_competition_id=None,
-        before=None,
-        tournament_start=None,
-    ):
-        self.preguntas.append((user_id, golf_course_id, excluding_match_id))
-        return any(
-            u == str(user_id.value) and c == golf_course_id and m != excluding_match_id
-            for u, c, m in self.vueltas
+    async def first_round_on_course(self, user_id, golf_course_id, timezone):
+        self.preguntas.append((user_id, golf_course_id))
+        # Lo registrado se jugo hace mucho: es lo mas antiguo
+        return next(
+            (
+                CourseRound(instant=datetime(2000, 1, 1), source_id=m)
+                for u, c, m in sorted(self.vueltas)
+                if u == str(user_id.value) and c == golf_course_id
+            ),
+            None,
         )
 
 
@@ -198,13 +196,13 @@ class TestStrokePlayAchievements:
 
     async def test_new_course_asks_the_history_for_the_group(self, world, social_uow):
         ana = await world.user()
-        competition, course, partida = await _torneo(world, {ana: tarjeta()})
+        competition, course, _ = await _torneo(world, {ana: tarjeta()})
         history = _History()
 
         await _publisher(world, social_uow, history=history).execute(str(competition.id.value))
 
         assert T.NEW_COURSE in await _tipos(social_uow, ana)
-        assert (ana.id, str(course.id.value), str(partida.id.value)) in history.preguntas
+        assert (ana.id, str(course.id.value)) in history.preguntas
 
     async def test_course_already_played_is_not_new(self, world, social_uow):
         ana = await world.user()

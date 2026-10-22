@@ -3,12 +3,13 @@ Reglas de los logros de torneo decididas por Agustin el 22 oct 2026, con las
 piezas de verdad (historial de campos y estadisticas), en la Ryder y en stroke
 play:
 
-1. «Campo nuevo»: no lo habias jugado ANTES de ese torneo. Sale una vez, con la
-   primera vuelta del torneo en ese campo; las demas no lo bloquean ni lo repiten.
+1. «Campo nuevo»: es de tu vuelta mas antigua en el campo (exclusivo por fecha
+   real, 22 oct 2026). Sale una vez, con la primera vuelta del torneo en ese
+   campo; las demas no lo bloquean ni lo repiten.
 2. «Mejor marca»: contra la marca de antes del torneo, sin ninguna de sus vueltas.
 3. Reabrir una Ryder retira sus logros y cerrarla otra vez los vuelve a publicar.
 4. Todo logro de torneo lleva `competition_id`.
-5. Solo cuenta como jugado un torneo CERRADO, y nunca el que se esta juzgando.
+5. Solo cuenta como jugado un torneo CERRADO.
 6. Reabrir y publicar se serializan con el candado del torneo.
 """
 
@@ -398,7 +399,12 @@ class TestTournamentLock:
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 
-        assert llamadas[:2] == [("lock_scope", str(competition.id.value)), ("add_many", None)]
+        # El del torneo, el de su jugador (logros exclusivos, 22 oct) y luego escribe
+        assert llamadas[:3] == [
+            ("lock_scope", str(competition.id.value)),
+            ("lock_scope", f"player:{ana.id.value}"),
+            ("add_many", None),
+        ]
 
 
 # ==================== Corte por fecha: ANTES del torneo (revision final) ====================
@@ -561,7 +567,10 @@ class TestNewCourseOnTheSameDay:
 
         assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
 
-    async def test_without_the_course_zone_the_same_day_does_not_count(self, world, social_uow):
+    async def test_without_the_course_zone_the_session_hour_is_taken_as_utc(
+        self, world, social_uow
+    ):
+        """Decision del 22 oct 2026: sin zona, las 12:00 de la tarde se toman como UTC."""
         ana = await world.user()
         course = await world.course(ana)
         qm_uow = InMemoryQuickMatchUnitOfWork()
@@ -572,7 +581,7 @@ class TestNewCourseOnTheSameDay:
 
         await _publisher(world, social_uow, qm_uow).execute(str(competition.id.value))
 
-        assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
 
     async def test_the_day_before_still_counts_without_the_zone(self, world, social_uow):
         ana = await world.user()
@@ -618,18 +627,21 @@ class TestNewCourseOnTheSameDay:
 
         assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
 
-    async def test_the_same_session_of_another_tournament_does_not_take_it_away(
+    async def test_in_the_same_session_the_lower_tournament_id_is_the_older(
         self, world, social_uow
     ):
+        """Mismo instante: desempata el id del torneo (22 oct 2026)."""
         ana = await world.user()
         course = await world.course(ana)
         uno = await world.competition(ana, enrolled=[ana])
-        await world.group(uno, await world.round(uno, course, DIA, MANANA), {ana: tarjeta()})
         otro = await world.competition(ana, enrolled=[ana])
-        await world.group(otro, await world.round(otro, course, DIA, MANANA), {ana: tarjeta()})
+        menor, mayor = sorted((uno, otro), key=lambda c: str(c.id.value))
+        await world.group(menor, await world.round(menor, course, DIA, MANANA), {ana: tarjeta()})
+        await world.group(mayor, await world.round(mayor, course, DIA, MANANA), {ana: tarjeta()})
 
-        await _publisher(world, social_uow).execute(str(otro.id.value))
-
+        await _publisher(world, social_uow).execute(str(mayor.id.value))
+        assert await _de_tipo(social_uow, ana, T.NEW_COURSE) == []
+        await _publisher(world, social_uow).execute(str(menor.id.value))
         assert len(await _de_tipo(social_uow, ana, T.NEW_COURSE)) == 1
 
     async def test_the_morning_round_of_the_tournament_is_the_first_one(
@@ -662,9 +674,8 @@ class TestNewCourseOnTheSameDay:
 class TestFirstTournamentOnTheSameDay:
     """
     «Primer torneo» con dos torneos que empiezan el mismo dia: solo lo da uno.
-    Criterio (decision de este arreglo): el que empieza antes; si empiezan el
-    mismo dia, aquel en el que el jugador jugo antes su primera vuelta (fecha y
-    hora local de la sesion); y si tambien coinciden, el de id menor.
+    Criterio (22 oct 2026): aquel en el que el jugador jugo antes su primera
+    vuelta, en hora real; y si tambien coincide, el de id menor.
     """
 
     async def _dos_torneos(self, world, sesion_a, sesion_b):
@@ -782,8 +793,9 @@ class TestFirstTournamentOnTheSameDay:
         await _reabrir(world, social_uow, tarde)
         tarde.complete()
         await world.save_competition(tarde)
+        # Con A en juego, B es lo mas antiguo publicado: se lo lleva hasta que A cierre
         await _publisher(world, social_uow).execute(str(tarde.id.value))
-        assert await self._primeros(social_uow, ana) == []
+        assert await self._primeros(social_uow, ana) == [str(tarde.id.value)]
         manana.complete()
         await world.save_competition(manana)
         await _publisher(world, social_uow).execute(str(manana.id.value))
@@ -832,8 +844,8 @@ class TestFirstTournamentOnTheSameDay:
             (str(b.id.value), str(noche.id.value))
         ]
 
-    async def test_a_tournament_that_started_earlier_still_wins(self, world, social_uow):
-        """El dia de inicio sigue mandando: la hora solo desempata el mismo dia."""
+    async def test_the_first_round_played_wins_not_the_start_date(self, world, social_uow):
+        """Manda la primera vuelta jugada, no el dia de inicio (22 oct 2026)."""
         ana = await world.user()
         course = await world.course(ana)
         antes = await world.competition(ana, enrolled=[ana], start=DIA - timedelta(days=1))
@@ -845,8 +857,10 @@ class TestFirstTournamentOnTheSameDay:
         )
 
         await _publisher(world, social_uow).execute(str(despues.id.value))
+        await _publisher(world, social_uow).execute(str(antes.id.value))
 
-        assert await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT) == []
+        primeros = await _de_tipo(social_uow, ana, T.FIRST_TOURNAMENT)
+        assert [e.payload["competition_id"] for e in primeros] == [str(despues.id.value)]
 
 
 class TestPlayerIdsOfTheMatch:
@@ -871,12 +885,10 @@ class TestPlayerIdsOfTheMatch:
 
 class TestSameDayInAnyOrder:
     """
-    Revision final de bugs (22 oct 2026): con dos torneos del mismo dia en el
-    mismo campo —A por la manana, B por la tarde— «campo nuevo» y «primer
-    torneo» salen UNA vez, la de A, cierre quien cierre antes; si A se
-    cancela, la de B. Cerrar o cancelar un torneo vuelve a publicar los del
-    mismo dia ya cerrados con los que comparte jugadores; reabrirlo no hace
-    falta, porque en juego sigue contando igual.
+    Con dos torneos del mismo dia en el mismo campo —A por la manana, B por la
+    tarde— «campo nuevo» y «primer torneo» salen UNA vez, la de A, cierre
+    quien cierre antes; si A se cancela, la de B. Al reabrir A los hereda B, y
+    al volver a cerrarlo vuelven a A (logros exclusivos, 22 oct 2026).
     """
 
     async def _escena(self, world):
@@ -951,78 +963,9 @@ class TestSameDayInAnyOrder:
         await _cerrar(world, social_uow, b, ana)
 
         await self._reabrir(world, social_uow, a)
-        # A en juego sigue yendo antes: B no se lo queda mientras tanto
-        assert await self._de(social_uow, ana) == ([], [])
+        # Con A en juego, lo hereda B
+        assert await self._de(social_uow, ana) == ([str(b.id.value)], [str(b.id.value)])
         await _cerrar(world, social_uow, a, ana)
 
         crudo = str(a.id.value)
         assert await self._de(social_uow, ana) == ([crudo], [crudo])
-
-    async def test_a_tournament_of_another_day_is_not_republished(
-        self, world, social_uow, monkeypatch
-    ):
-        ana, a, b = await self._escena(world)
-        otro_dia = await world.competition(ana, enrolled=[ana], start=DIA + timedelta(days=10))
-        await world.group(
-            otro_dia,
-            await world.round(otro_dia, await world.course(ana), DIA + timedelta(days=10)),
-            {ana: tarjeta()},
-        )
-        publicados: list[str] = []
-        original = PublishTournamentAchievementsUseCase.execute
-
-        async def _apunta(self, competition_id_raw):
-            publicados.append(competition_id_raw)
-            return await original(self, competition_id_raw)
-
-        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "execute", _apunta)
-
-        await _cerrar(world, social_uow, b, ana)
-        await _cerrar(world, social_uow, a, ana)
-
-        assert str(otro_dia.id.value) not in publicados
-        assert publicados == [str(b.id.value), str(a.id.value), str(b.id.value)]
-
-    async def test_a_failing_republication_does_not_break_the_action(
-        self, world, social_uow, monkeypatch
-    ):
-        """Con fallo seguro: cerrar y cancelar siguen, y lo propio se publica."""
-        ana, a, b = await self._escena(world)
-
-        async def _rompe(self, competition_id_raw):
-            raise RuntimeError("feed caido")
-
-        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "republish_same_day", _rompe)
-
-        await _cerrar(world, social_uow, a, ana)
-        await self._cancelar(world, social_uow, b)
-
-        crudo = str(a.id.value)
-        assert await self._de(social_uow, ana) == ([crudo], [crudo])
-
-    async def test_one_failing_neighbour_does_not_stop_the_others(
-        self, world, social_uow, monkeypatch
-    ):
-        ana, a, b = await self._escena(world)
-        otro = await world.competition(ana, enrolled=[ana])
-        await world.group(
-            otro, await world.round(otro, await world.course(ana), DIA, TARDE), {ana: tarjeta()}
-        )
-        b.complete()
-        await world.save_competition(b)
-        publicados: list[str] = []
-        roto = min(str(b.id.value), str(otro.id.value))
-        original = PublishTournamentAchievementsUseCase.execute
-
-        async def _uno_roto(self, competition_id_raw):
-            if competition_id_raw == roto:
-                raise RuntimeError("feed caido")
-            publicados.append(competition_id_raw)
-            return await original(self, competition_id_raw)
-
-        monkeypatch.setattr(PublishTournamentAchievementsUseCase, "execute", _uno_roto)
-
-        total = await _publisher(world, social_uow).republish_same_day(str(a.id.value))
-
-        assert total == 2
-        assert publicados == [max(str(b.id.value), str(otro.id.value))]

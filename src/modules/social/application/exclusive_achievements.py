@@ -1,0 +1,168 @@
+"""
+Logros exclusivos por fecha real (decision de Agustin, 22 oct 2026).
+
+«Campo nuevo» es SIEMPRE de la vuelta mas antigua del jugador en ese campo,
+sea de un torneo o una partida rapida; «primer torneo», SIEMPRE de su torneo
+mas antiguo. Cada uno lleva en el `payload` cuando se jugo (`played_at`, UTC
+ISO) y con eso se compara lo publicado sin mas consultas:
+
+- si ya hay uno publicado ANTERIOR, el nuevo no sale;
+- si los que hay son POSTERIORES, se retiran y sale el nuevo.
+
+Asi el estado final no depende del orden de cierre, del dia ni del origen.
+Solo cuenta lo publicado: lo que sigue en juego no ha publicado nada, y lo que
+se cancela nunca lo hara.
+"""
+
+from collections.abc import Callable, Sequence
+from datetime import UTC, date, datetime, time
+
+from src.modules.competition.domain.services.scoring_opening_service import (
+    OPENING_HOUR_BY_SESSION,
+    ScoringOpeningService,
+)
+from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.social.domain.entities.activity_event import ActivityEvent
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivityEventRepositoryInterface,
+)
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.user.domain.value_objects.user_id import UserId
+
+EXCLUSIVE_TYPES = frozenset({ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT})
+
+# La clave del payload con el instante en que se jugo
+PLAYED_AT = "played_at"
+
+# Una sesion que no se conoce, a mediodia: el mismo criterio que la fecha de la
+# ronda en el feed
+_HORA_SIN_SESION = 12
+
+# Cuando se jugo, y el desempate con el mismo instante: el torneo (o la
+# partida rapida) y despues el origen. Que el torneo vaya antes que el grupo
+# hace que dos torneos en la misma sesion den los dos logros al mismo
+PlayedKey = tuple[datetime, str, str]
+
+
+def round_instant(
+    round_date: date, session_type: SessionType | None, timezone: str | None
+) -> datetime:
+    """
+    Cuando se jugo una ronda de torneo, en UTC y sin zona: la hora a la que abre
+    su sesion (6, 12 o 18 locales) en la zona del campo, la misma que usa la
+    anotacion.
+
+    Sin zona (decision de este arreglo, 22 oct 2026): el dia y esa hora local
+    tomados como UTC. Ordena bien las sesiones del mismo campo, que comparten
+    zona, y frente a una partida rapida se equivoca como mucho en el desfase.
+    """
+    abre = ScoringOpeningService.opens_at(round_date, session_type, timezone)
+    if abre is not None:
+        return abre.astimezone(UTC).replace(tzinfo=None)
+    hora = (
+        OPENING_HOUR_BY_SESSION.get(session_type, _HORA_SIN_SESION)
+        if session_type is not None
+        else _HORA_SIN_SESION
+    )
+    return datetime.combine(round_date, time(hora))
+
+
+def utc_naive(instante: datetime) -> datetime:
+    """En UTC y sin zona, como el resto de fechas que se guardan: las que no tienen zona ya lo son."""
+    if instante.tzinfo is None:
+        return instante
+    return instante.astimezone(UTC).replace(tzinfo=None)
+
+
+def as_iso(instante: datetime) -> str:
+    """El instante para el payload: UTC ISO con «Z»."""
+    return utc_naive(instante).isoformat() + "Z"
+
+
+def played_key(instante: datetime, competition_id: str | None, source_id: str) -> PlayedKey:
+    """La clave con la que se ordenan las vueltas: la misma al publicar y al leer el historial."""
+    return utc_naive(instante), competition_id or source_id, source_id
+
+
+def event_key(evento: ActivityEvent) -> PlayedKey:
+    """
+    La clave de un logro publicado. Uno de antes de llevar `played_at` se
+    compara por su `occurred_at` (la fecha de la ronda a mediodia o la creacion
+    de la partida rapida).
+    """
+    crudo = evento.payload.get(PLAYED_AT)
+    instante = evento.occurred_at
+    if isinstance(crudo, str):
+        try:
+            instante = datetime.fromisoformat(crudo.removesuffix("Z"))
+        except ValueError:
+            instante = evento.occurred_at
+    return played_key(instante, evento.payload.get("competition_id"), evento.source_match_id)
+
+
+def _ambito(evento: ActivityEvent) -> tuple:
+    """Entre que logros se elige uno: del mismo jugador y tipo y, en «campo nuevo», campo."""
+    campo = (
+        evento.payload.get("golf_course_id")
+        if evento.type == ActivityEventType.NEW_COURSE
+        else None
+    )
+    return evento.user_id, evento.type, campo
+
+
+def player_scope(user_id: UserId) -> str:
+    """El candado de un jugador: no choca con el de un torneo, que es su id a secas."""
+    return f"player:{user_id.value}"
+
+
+async def lock_players(repo: ActivityEventRepositoryInterface, user_ids) -> None:
+    """
+    Bloquea a esos jugadores hasta el final de la transaccion, SIEMPRE en el
+    mismo orden: dos publicaciones que comparten jugadores no se cruzan. El
+    candado de un torneo se toma antes que estos, y nadie toma el de un torneo
+    con el de un jugador ya cogido, asi que no hay ciclos.
+    """
+    for user_id in sorted(set(user_ids), key=lambda u: str(u.value)):
+        await repo.lock_scope(player_scope(user_id))
+
+
+async def keep_only_the_oldest(
+    repo: ActivityEventRepositoryInterface,
+    events: Sequence[ActivityEvent],
+    is_own: Callable[[ActivityEvent], bool],
+) -> list[ActivityEvent]:
+    """
+    Lo que queda por publicar de `events` tras aplicar la regla, y retira lo
+    publicado que sobra. Quien llama ya tiene los candados de los jugadores.
+
+    `is_own` dice que logros publicados son de la misma publicacion (el mismo
+    torneo o la misma partida rapida): esos los sustituye quien llama, no
+    cuentan como otros.
+
+    En cada ambito gana el mas antiguo entre los publicados y el nuevo; los
+    demas publicados se retiran, tambien un doble que quedara de antes.
+    """
+    candidatos = [e for e in events if e.type in EXCLUSIVE_TYPES]
+    if not candidatos:
+        return list(events)
+
+    usuarios = list({e.user_id for e in candidatos})
+    publicados: dict[tuple, list[ActivityEvent]] = {}
+    for evento in await repo.find_for_users(usuarios, EXCLUSIVE_TYPES):
+        if not is_own(evento):
+            publicados.setdefault(_ambito(evento), []).append(evento)
+
+    descartados: set[int] = set()
+    retirar: dict[ActivityEventType, set[tuple[UserId, str]]] = {}
+    for candidato in candidatos:
+        otros = publicados.get(_ambito(candidato), [])
+        ganador = min([candidato, *otros], key=event_key)
+        if ganador is not candidato:
+            descartados.add(id(candidato))
+        for otro in otros:
+            if otro is not ganador:
+                retirar.setdefault(otro.type, set()).add((otro.user_id, otro.source_match_id))
+
+    for tipo, parejas in retirar.items():
+        await repo.delete_pairs(tipo, sorted(parejas, key=lambda p: (str(p[0].value), p[1])))
+    return [e for e in events if id(e) not in descartados]

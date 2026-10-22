@@ -335,6 +335,18 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_for_users(
+        self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        if not user_ids or not types:
+            return []
+        stmt = select(ActivityEvent).where(
+            activity_events_table.c.user_id.in_(list(user_ids)),
+            activity_events_table.c.type.in_(sorted(types)),
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def delete_from_source_for_users(
         self,
         source_id: str,

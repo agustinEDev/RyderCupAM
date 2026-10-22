@@ -6,6 +6,7 @@ que cuentan. Una tarjeta incompleta no llega al feed, igual que no llega a las
 estadisticas (BE #173/#174), y un jugador que apago la publicacion no aparece.
 """
 
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -31,6 +32,7 @@ from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quic
     InMemoryQuickMatchUnitOfWork,
 )
 from src.modules.social.application.ports.player_course_history_interface import (
+    CourseRound,
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
@@ -89,20 +91,15 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
     def registra(self, user_id, golf_course_id: str, match_id: str) -> None:
         self._vueltas.add((str(user_id.value), golf_course_id, match_id))
 
-    async def has_played_course_before(
-        self,
-        user_id,
-        golf_course_id: str,
-        excluding_match_id: str,
-        excluding_competition_id=None,
-        before=None,
-        tournament_start=None,
-    ) -> bool:
-        return any(
-            usuario == str(user_id.value)
-            and campo == golf_course_id
-            and partida != excluding_match_id
-            for usuario, campo, partida in self._vueltas
+    async def first_round_on_course(self, user_id, golf_course_id: str, timezone):
+        # Lo registrado se jugo hace mucho: es lo mas antiguo
+        return next(
+            (
+                CourseRound(instant=datetime(2000, 1, 1), source_id=partida)
+                for usuario, campo, partida in sorted(self._vueltas)
+                if usuario == str(user_id.value) and campo == golf_course_id
+            ),
+            None,
         )
 
 
@@ -629,17 +626,9 @@ class _ApagaAlJuzgar(_CourseHistoryFake):
         super().__init__()
         self._user = user
 
-    async def has_played_course_before(
-        self,
-        user_id,
-        golf_course_id,
-        excluding_match_id,
-        excluding_competition_id=None,
-        before=None,
-        tournament_start=None,
-    ):
+    async def first_round_on_course(self, user_id, golf_course_id, timezone):
         self._user.set_activity_sharing(False)
-        return await super().has_played_course_before(user_id, golf_course_id, excluding_match_id)
+        return await super().first_round_on_course(user_id, golf_course_id, timezone)
 
 
 class TestCarrerasYFechas:

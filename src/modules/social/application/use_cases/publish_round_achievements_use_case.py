@@ -1,5 +1,6 @@
 """Caso de Uso: Publicar en el feed los logros de una vuelta terminada."""
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -12,6 +13,15 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 )
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.social.application.exclusive_achievements import (
+    EXCLUSIVE_TYPES,
+    PLAYED_AT,
+    as_iso,
+    keep_only_the_oldest,
+    lock_players,
+    played_key,
+    utc_naive,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
     PlayerCourseHistoryInterface,
 )
@@ -29,6 +39,7 @@ from src.modules.social.domain.services.achievement_detector import (
     PlayedHole,
     RoundContext,
 )
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -62,6 +73,8 @@ class _RoundToJudge:
     holes: list[PlayedHole]
     # Con la publicacion apagada el logro se guarda solo para el
     visible_to_friends: bool
+    # La zona del campo: situa en el las rondas de torneo del historial
+    timezone: str | None = None
 
 
 class PublishRoundAchievementsUseCase:
@@ -102,6 +115,7 @@ class PublishRoundAchievementsUseCase:
         self,
         quick_match_id_raw: str,
         best_differential_before: dict[str, float | None] | None = None,
+        only_types: Collection[ActivityEventType] | None = None,
     ) -> int:
         """
         Publica lo que merezca publicarse y devuelve cuántos eventos creó.
@@ -112,6 +126,15 @@ class PublishRoundAchievementsUseCase:
         solo miran partidas terminadas y esta ya lo está. Comparando aquel valor
         con el de ahora se sabe si la vuelta batió el récord, sin recalcular por
         segunda vez un diferencial que el módulo de estadísticas ya sabe hacer.
+
+        `only_types` publica solo esos tipos: es como hereda una partida rapida
+        el «campo nuevo» de un torneo que se reabre, sin volver a publicar el
+        resto de sus logros.
+
+        «Campo nuevo» es exclusivo por fecha real (22 oct 2026): sale si esta
+        es la primera vuelta del jugador en el campo y, bajo el candado del
+        jugador, solo si no hay otro publicado anterior; los posteriores se
+        retiran (`keep_only_the_oldest`).
         """
         best_before = best_differential_before or {}
 
@@ -129,9 +152,7 @@ class PublishRoundAchievementsUseCase:
         eventos: list[ActivityEvent] = []
         for vuelta in vueltas:
             contexto = RoundContext(
-                is_first_round_on_course=not await self._history.has_played_course_before(
-                    vuelta.user_id, vuelta.golf_course_id, vuelta.match_id
-                ),
+                is_first_round_on_course=await self._estrena_campo(vuelta),
                 # Esto es una partida rápida: estrenar torneo se publica desde
                 # el cierre de la competición
                 is_first_tournament=False,
@@ -155,6 +176,8 @@ class PublishRoundAchievementsUseCase:
                 )
             )
 
+        if only_types is not None:
+            eventos = [e for e in eventos if e.type in only_types]
         if not eventos:
             return 0
 
@@ -162,9 +185,29 @@ class PublishRoundAchievementsUseCase:
         # Una fecha para toda la publicacion y el interruptor de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
-            await self._social_uow.activity_events.add_many(eventos)
+            repo = self._social_uow.activity_events
+            await lock_players(repo, [e.user_id for e in eventos if e.type in EXCLUSIVE_TYPES])
+            eventos = await keep_only_the_oldest(
+                repo, eventos, is_own=lambda e: e.source_match_id == quick_match_id_raw
+            )
+            await repo.add_many(eventos)
 
         return len(eventos)
+
+    async def republish_new_course(self, quick_match_id_raw: str) -> int:
+        """Vuelve a publicar solo su «campo nuevo»: hereda el de un torneo reabierto."""
+        return await self.execute(
+            quick_match_id_raw, only_types=frozenset({ActivityEventType.NEW_COURSE})
+        )
+
+    async def _estrena_campo(self, vuelta: "_RoundToJudge") -> bool:
+        """Si es la vuelta mas antigua del jugador en el campo (o no hay ninguna mas)."""
+        primera = await self._history.first_round_on_course(
+            vuelta.user_id, vuelta.golf_course_id, vuelta.timezone
+        )
+        return primera is None or primera.key >= played_key(
+            vuelta.occurred_at, None, vuelta.match_id
+        )
 
     async def _leer_vueltas(self, quick_match_id_raw: str) -> list["_RoundToJudge"]:
         """
@@ -220,8 +263,9 @@ class PublishRoundAchievementsUseCase:
                         user_id=participant.user_id,
                         match_id=str(match.id.value),
                         golf_course_id=str(match.golf_course_id.value),
-                        occurred_at=match.created_at,
+                        occurred_at=utc_naive(match.created_at),
                         visible_to_friends=user.share_activity,
+                        timezone=course.timezone,
                         holes=[
                             PlayedHole(
                                 number=hole.number,
@@ -292,14 +336,16 @@ class PublishRoundAchievementsUseCase:
                 # día, igual que asumen las estadísticas
                 occurred_at=occurred_at,
                 source_match_id=match_id,
-                payload=self._payload(logro, golf_course_id, holes_played),
+                payload=self._payload(logro, golf_course_id, holes_played, occurred_at),
                 visible_to_friends=visible_to_friends,
             )
             for logro in logros
         ]
 
     @staticmethod
-    def _payload(logro: DetectedAchievement, golf_course_id: str, holes_played: int) -> dict:
+    def _payload(
+        logro: DetectedAchievement, golf_course_id: str, holes_played: int, played_at: datetime
+    ) -> dict:
         """
         El detalle propio de cada tipo, para que el feed no tenga que ir a
         buscarlo a otras tablas al pintar la entrada.
@@ -314,4 +360,7 @@ class PublishRoundAchievementsUseCase:
             payload["holes"] = list(logro.holes)
         if logro.detail:
             payload.update(logro.detail)
+        if logro.type in EXCLUSIVE_TYPES:
+            # Cuando se jugo, para compararlo con lo publicado (22 oct 2026)
+            payload[PLAYED_AT] = as_iso(played_at)
         return payload
