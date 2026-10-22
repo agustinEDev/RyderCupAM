@@ -116,6 +116,20 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def lock_source(self, source_id: str) -> None:
+        """
+        Bloquea ese origen hasta el final de la transaccion: dos publicaciones
+        de la misma ronda no se cruzan, y la segunda lee lo que dejo la
+        primera (G3, revision del 22 oct 2026).
+        """
+
+    @abstractmethod
+    async def find_from_source(
+        self, source_id: str, types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        """Lo publicado desde ese origen de esos tipos, de todos los jugadores."""
+
+    @abstractmethod
     async def delete_from_source_for_users(
         self,
         source_id: str,

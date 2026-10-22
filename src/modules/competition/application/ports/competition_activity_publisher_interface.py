@@ -123,6 +123,11 @@ class CompetitionActivityPublisherInterface(ABC):
     ) -> None:
         """
         Las salidas de una ronda cambiaron (G1-G4): `assigned`, las nuevas o
-        cambiadas, cada una sustituye a la que tuviera ese jugador en esa ronda;
-        `withdrawn`, quienes se quedan sin salida en ella.
+        cambiadas segun esta accion; `withdrawn`, quienes se quedan sin salida
+        en ella. Se llama solo si a alguien le cambia algo.
+
+        Quien publica no tiene por que fiarse de esa foto: las publicaciones van
+        tras su commit y sin orden garantizado, y la de una accion vieja puede
+        llegar la ultima. El adaptador de Actividad relee la ronda con ella
+        bloqueada y compara con lo ya publicado (revision del 22 oct 2026).
         """

@@ -15,7 +15,11 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
+    CompetitionUnitOfWorkInterface,
+)
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 Salidas = dict[UserId, TeeTimeAssignment]
@@ -36,13 +40,16 @@ def de_las_partidas(
     salidas: Salidas = {}
     for partida in partidas:
         hora = hoja.hora_de(partida.numero) if hoja else None
-        for jugador in partida.user_ids:
+        # Solo quien sigue en el grupo: un no presentado o un retirado ya no
+        # sale con nadie, ni se le nombra (22 oct 2026)
+        juegan = partida.quedan
+        for jugador in juegan:
             salidas[jugador] = TeeTimeAssignment(
                 user_id=jugador,
                 round_date=franja.round_date,
                 session_type=franja.session_type,
                 tee_time=hora,
-                partner_ids=tuple(u for u in partida.user_ids if u != jugador),
+                partner_ids=tuple(u for u in juegan if u != jugador),
                 opponent_ids=(),
             )
     return salidas
@@ -86,3 +93,20 @@ def cambios(
     ]
     fuera = [jugador for jugador in antes if jugador not in despues]
     return avisos, fuera
+
+
+async def salidas_vigentes(uow: CompetitionUnitOfWorkInterface, round_id: RoundId) -> Salidas:
+    """
+    Las salidas que hay AHORA en la ronda, leidas en la transaccion abierta de
+    quien llama (no abre ni confirma la suya): quien publica los avisos las
+    relee con la ronda bloqueada, en vez de fiarse de la foto de una accion
+    que puede llegar tarde (G3, revision del 22 oct 2026).
+
+    Sin ronda —se borro— no hay salida para nadie.
+    """
+    ronda = await uow.rounds.find_by_id(round_id)
+    if ronda is None:
+        return {}
+    if ronda.hoja_de_salidas is not None:
+        return de_las_partidas(ronda, await uow.partidas.de_la_franja(round_id))
+    return de_los_partidos(ronda, await uow.matches.find_by_round(round_id))

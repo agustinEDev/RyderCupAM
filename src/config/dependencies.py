@@ -2131,12 +2131,14 @@ def get_marcar_no_presentado_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MarcarNoPresentadoUseCase:
-    """El organizador marca a alguien como no presentado (#251)."""
+    """El organizador marca a alguien como no presentado (#251); avisa a quien se recoloca (G3)."""
     return MarcarNoPresentadoUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 

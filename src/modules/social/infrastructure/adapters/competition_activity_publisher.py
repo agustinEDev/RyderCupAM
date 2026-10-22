@@ -8,6 +8,7 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
     TeeTimeAssignment,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import salidas_vigentes
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
@@ -154,10 +155,14 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         assigned: Sequence[TeeTimeAssignment],
         withdrawn: Sequence[UserId],
     ) -> None:
-        await self._notices.tee_times(
-            _ref(competition),
-            str(round_id.value),
-            [
+        # Lo que trae la accion (`assigned`, `withdrawn`) solo dice que la ronda
+        # cambio: se publica lo que hay ahora, releido con la ronda bloqueada.
+        # Dos publicaciones de la misma ronda pueden llegar en cualquier orden
+        # (cada una tras su commit, en su sesion), y la ultima en llegar podria
+        # ser la de una foto vieja (revision del 22 oct 2026)
+        async def _vigentes() -> list[TeeTimeRef]:
+            salidas = await salidas_vigentes(self._competition_uow, round_id)
+            return [
                 TeeTimeRef(
                     user_id=salida.user_id,
                     round_date=salida.round_date,
@@ -166,12 +171,11 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
                     partner_ids=salida.partner_ids,
                     opponent_ids=salida.opponent_ids,
                     match_id=str(salida.match_id.value) if salida.match_id else None,
-                    changed=salida.changed,
                 )
-                for salida in assigned
-            ],
-            list(withdrawn),
-        )
+                for salida in salidas.values()
+            ]
+
+        await self._notices.tee_times(_ref(competition), str(round_id.value), _vigentes)
 
 
 def _ref(competition: Competition) -> TournamentRef:

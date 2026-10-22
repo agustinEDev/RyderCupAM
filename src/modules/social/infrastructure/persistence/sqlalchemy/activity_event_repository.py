@@ -14,6 +14,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    text,
     tuple_,
     update,
 )
@@ -208,6 +209,29 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             stmt = stmt.where(activity_events_table.c.user_id == user_id)
         result = await self._session.execute(stmt)
         return result.rowcount or 0
+
+    async def lock_source(self, source_id: str) -> None:
+        """
+        `pg_advisory_xact_lock`: lo suelta el propio Postgres al acabar la
+        transaccion, pase lo que pase. La clave lleva un prefijo para no
+        chocar con otros candados por id.
+        """
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
+            {"clave": f"activity-source:{source_id}"},
+        )
+
+    async def find_from_source(
+        self, source_id: str, types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        if not types:
+            return []
+        stmt = select(ActivityEvent).where(
+            activity_events_table.c.source_match_id == source_id,
+            activity_events_table.c.type.in_(sorted(types)),
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
     async def delete_from_source_for_users(
         self,

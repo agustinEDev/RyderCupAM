@@ -1,6 +1,6 @@
 """Caso de Uso: Los avisos de Actividad que salen de una competicion (BE-2)."""
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
@@ -84,7 +84,21 @@ class TeeTimeRef:
     partner_ids: tuple[UserId, ...]
     opponent_ids: tuple[UserId, ...]
     match_id: str | None
-    changed: bool
+
+
+def _misma_salida(payload: dict, salida: TeeTimeRef) -> bool:
+    """
+    Si lo publicado cuenta la misma salida: dia, sesion, hora, compañeros y
+    rivales. El partido no cuenta: regenerar los mismos emparejamientos crea
+    partidos nuevos y, para el jugador, nada cambia.
+    """
+    return (
+        payload.get("round_date") == salida.round_date.isoformat()
+        and payload.get("session_type") == salida.session_type
+        and payload.get("tee_time") == salida.tee_time
+        and set(payload.get("partner_ids") or []) == {str(u.value) for u in salida.partner_ids}
+        and set(payload.get("opponent_ids") or []) == {str(u.value) for u in salida.opponent_ids}
+    )
 
 
 @dataclass(frozen=True)
@@ -308,50 +322,74 @@ class PublishCompetitionNoticesUseCase:
         self,
         tournament: TournamentRef,
         round_id: str,
-        assigned: Sequence[TeeTimeRef],
-        withdrawn: Sequence[UserId],
+        vigentes: Callable[[], Awaitable[Sequence[TeeTimeRef]]],
     ) -> None:
         """
-        Las salidas de una ronda (G1-G4): cada una sustituye a la que tuviera
-        ese jugador en esa ronda, y quien sale de ella pierde la suya.
+        Pone los avisos de salida de una ronda al dia con lo que hay en ella
+        (G1-G4): a quien entra, «ya tienes salida»; a quien le cambia la hora,
+        el dia, los compañeros o los rivales, el aviso nuevo con `changed`; a
+        quien sale, se le retira; a quien le queda igual, nada.
+
+        **Se compara con lo publicado, no con la foto de la accion**, y lo que
+        hay se relee (`vigentes`) con la ronda bloqueada, en la misma
+        transaccion que escribe: dos publicaciones de la ronda se ponen en fila
+        y la ultima siempre deja lo de ahora, lleguen en el orden que lleguen
+        (revision del 22 oct 2026). Repetirla no cambia nada.
 
         **Uno por (jugador, ronda)** (G10): el origen es la ronda, y la clave
         unica (jugador, origen, tipo) no admite dos. Sustituir es borrar el
-        viejo y publicar el nuevo en la misma transaccion: sale como aviso
-        nuevo, con su fecha, y cuenta como novedad. Todo el lote de una vez:
-        una lectura de usuarios, un borrado y una escritura.
+        viejo y publicar el nuevo: sale como aviso nuevo, con su fecha, y cuenta
+        como novedad. Todo de una vez: un borrado y una escritura.
+
+        **Sin leer usuarios**: es solo suyo, y el interruptor de publicar decide
+        lo que ven los amigos, que aqui es nada. Leerlos abriria otra
+        transaccion y soltaria el candado antes de escribir.
         """
-        quitar = [s.user_id for s in assigned] + list(withdrawn)
-        if not quitar:
-            return
-        nuevos = [
-            ActivityEvent.create(
-                user_id=salida.user_id,
-                type=_SALIDA,
-                occurred_at=utc_now(),
-                source_match_id=round_id,
-                payload={
-                    **self._del_torneo(tournament),
-                    "round_id": round_id,
-                    "round_date": salida.round_date.isoformat(),
-                    "session_type": salida.session_type,
-                    "kind": _GRUPO if salida.match_id is None else _PARTIDO,
-                    "tee_time": salida.tee_time,
-                    "partner_ids": [str(u.value) for u in salida.partner_ids],
-                    "opponent_ids": [str(u.value) for u in salida.opponent_ids],
-                    "match_id": salida.match_id,
-                    "changed": salida.changed,
-                },
-            )
-            for salida in assigned
-        ]
-        nuevos = await stamp_for_publication(self._user_uow, nuevos)
         async with self._social_uow:
-            await self._social_uow.activity_events.delete_from_source_for_users(
-                round_id, [_SALIDA], quitar
-            )
+            eventos = self._social_uow.activity_events
+            await eventos.lock_source(round_id)
+            ahora = {salida.user_id: salida for salida in await vigentes()}
+            publicados = {e.user_id: e for e in await eventos.find_from_source(round_id, [_SALIDA])}
+            quitar = [
+                user_id
+                for user_id, evento in publicados.items()
+                if user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id])
+            ]
+            nuevos = [
+                self._salida(tournament, round_id, salida, changed=user_id in publicados)
+                for user_id, salida in ahora.items()
+                if user_id not in publicados or user_id in quitar
+            ]
+            if quitar:
+                await eventos.delete_from_source_for_users(round_id, [_SALIDA], quitar)
             if nuevos:
-                await self._social_uow.activity_events.add_many(nuevos)
+                await eventos.add_many(nuevos)
+
+    def _salida(
+        self, tournament: TournamentRef, round_id: str, salida: TeeTimeRef, changed: bool
+    ) -> ActivityEvent:
+        momento = utc_now()
+        return ActivityEvent.create(
+            user_id=salida.user_id,
+            type=_SALIDA,
+            occurred_at=momento,
+            source_match_id=round_id,
+            published_at=momento,
+            # Solo suyo (SELF): a los amigos no se les enseña nunca
+            visible_to_friends=False,
+            payload={
+                **self._del_torneo(tournament),
+                "round_id": round_id,
+                "round_date": salida.round_date.isoformat(),
+                "session_type": salida.session_type,
+                "kind": _GRUPO if salida.match_id is None else _PARTIDO,
+                "tee_time": salida.tee_time,
+                "partner_ids": [str(u.value) for u in salida.partner_ids],
+                "opponent_ids": [str(u.value) for u in salida.opponent_ids],
+                "match_id": salida.match_id,
+                "changed": changed,
+            },
+        )
 
     # === Ayudas ===
 

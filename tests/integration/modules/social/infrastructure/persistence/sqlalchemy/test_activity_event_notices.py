@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
@@ -239,3 +241,50 @@ async def test_g9_borrar_por_competicion_de_un_jugador(db_session):
     assert borrados == 2
     assert await _tipos(repository, ana) == [(T.TEE_TIME_ASSIGNED, "ronda-3")]
     assert await _tipos(repository, eva) == [(T.TEE_TIME_ASSIGNED, "ronda-1")]
+
+
+async def test_g3_el_candado_de_un_origen_dura_lo_que_su_transaccion(db_session):
+    """
+    G3. Mientras una publicacion tiene la ronda bloqueada, otra no la coge; la
+    de otra ronda, si. Al confirmar se suelta sola.
+    """
+
+    async def _la_coge(origen: str) -> bool:
+        async with AsyncSession(bind=db_session.bind) as otra:
+            cogido = (
+                await otra.execute(
+                    text("SELECT pg_try_advisory_xact_lock(hashtextextended(:clave, 0))"),
+                    {"clave": f"activity-source:{origen}"},
+                )
+            ).scalar()
+            await otra.rollback()
+            return bool(cogido)
+
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.lock_source("ronda-1")
+
+    assert await _la_coge("ronda-1") is False
+    assert await _la_coge("ronda-2") is True
+    await db_session.commit()
+    assert await _la_coge("ronda-1") is True
+
+
+async def test_g3_lo_publicado_desde_un_origen(db_session):
+    ana, eva = [await _user(db_session) for _ in range(2)]
+    repository = SQLAlchemyActivityEventRepository(db_session)
+    await repository.add_many(
+        [
+            _salida(ana, "ronda-1", "torneo-1"),
+            _salida(eva, "ronda-1", "torneo-1"),
+            _salida(ana, "ronda-2", "torneo-1"),
+            _evento(eva, T.ENROLLED_IN_TOURNAMENT, "ronda-1"),
+        ]
+    )
+    await db_session.commit()
+
+    encontrados = await repository.find_from_source("ronda-1", [T.TEE_TIME_ASSIGNED])
+
+    assert sorted((str(e.user_id.value), e.payload["round_id"]) for e in encontrados) == sorted(
+        [(str(ana.id.value), "ronda-1"), (str(eva.id.value), "ronda-1")]
+    )
+    assert await repository.find_from_source("ronda-1", []) == []

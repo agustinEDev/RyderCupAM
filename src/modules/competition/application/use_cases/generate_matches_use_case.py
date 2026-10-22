@@ -291,12 +291,13 @@ class GenerateMatchesUseCase:
         Returns:
             Los partidos creados, y el error que devolver si no se pudo
         """
+        marca = self.marca_de_salidas()
         try:
             async with self._uow.savepoint():
                 return await self.generar_dentro(round_entity, competition, manual_pairings), None
         except Exception as error:
             # Lo deshecho no se avisa
-            self.descartar_salidas()
+            self.descartar_salidas(desde=marca)
             motivo = bloqueo_por(error, datetime.now(UTC).replace(tzinfo=None))
             if motivo is None:
                 raise
@@ -482,9 +483,17 @@ class GenerateMatchesUseCase:
         for competition, round_id, antes, despues in pendientes:
             await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
 
-    def descartar_salidas(self) -> None:
-        """Lo generado se deshizo: no hay nada que avisar."""
-        self._salidas_por_avisar = []
+    def marca_de_salidas(self) -> int:
+        """Hasta donde llega lo pendiente de avisar: para descartar solo lo que venga despues."""
+        return len(self._salidas_por_avisar)
+
+    def descartar_salidas(self, desde: int) -> None:
+        """
+        Lo generado desde `desde` se deshizo: eso no se avisa. Lo de antes
+        —otra sesion abierta en la misma lectura— sigue en pie (revision del
+        22 oct 2026).
+        """
+        del self._salidas_por_avisar[desde:]
 
     async def _comprobar_inscripciones(self, pairings, enrollment_map, competition) -> None:
         """Todos los emparejados tienen que tener la inscripción aprobada.

@@ -117,7 +117,7 @@ class WithdrawEnrollmentUseCase:
             enrollment.withdraw(request.reason)
 
             # Sale de sus partidas sin salir, también ya iniciada (D2, #251)
-            await sacar_de_sus_partidas(
+            fotos = await sacar_de_sus_partidas(
                 self._uow,
                 enrollment.competition_id,
                 enrollment.user_id,
@@ -153,8 +153,12 @@ class WithdrawEnrollmentUseCase:
             # 5. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
-        # 6. Ya guardado: sus amigos dejan de verlo apuntado (BE-2)
+        # 6. Ya guardado: sus amigos dejan de verlo apuntado (BE-2), y a quien
+        #    se recoloca por su baja se le dice (G3)
         await self._actividad.left(enrollment.competition_id, enrollment.user_id)
+        if competition is not None:
+            for round_id, (antes, despues) in fotos.items():
+                await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
 
         # 7. Retornar DTO
         return WithdrawEnrollmentResponseDTO(

@@ -54,3 +54,36 @@ async def test_deleting_the_groups_withdraws_the_notices(client: AsyncClient):
     assert borradas.status_code == 204, borradas.text
     assert await _avisos_de_salida(client, jugadores[0]) == []
     assert await _avisos_de_salida(client, organizador) == []
+
+
+async def test_reordering_tells_both_groups_their_new_hour(client: AsyncClient):
+    """G3 de punta a punta: la publicacion relee la ronda en Postgres y compara."""
+    organizador, _, franja, jugadores = await _stableford(client, jugadores=7)
+    generadas = await _generar(client, organizador, franja)
+    assert generadas.status_code == 200, generadas.text
+    primera, segunda = generadas.json()["groups"]
+    quien = primera["players"][0]["user_id"]
+    del_jugador = next(j for j in [organizador, *jugadores] if j["user"]["id"] == quien)
+    (antes,) = await _avisos_de_salida(client, del_jugador)
+
+    set_auth_cookies(client, organizador["cookies"])
+    reordenadas = await client.put(
+        f"/api/v1/competitions/rounds/{franja}/groups/order",
+        json={"group_ids": [segunda["id"], primera["id"]]},
+    )
+    assert reordenadas.status_code == 200, reordenadas.text
+
+    (despues,) = await _avisos_de_salida(client, del_jugador)
+    assert despues["id"] != antes["id"]
+    assert (despues["payload"]["tee_time"], despues["payload"]["changed"]) == ("09:10", True)
+
+
+async def test_generating_the_same_groups_again_leaves_the_notices(client: AsyncClient):
+    organizador, _, franja, jugadores = await _stableford(client)
+    assert (await _generar(client, organizador, franja)).status_code == 200
+    (antes,) = await _avisos_de_salida(client, jugadores[0])
+
+    assert (await _generar(client, organizador, franja)).status_code == 200
+
+    (despues,) = await _avisos_de_salida(client, jugadores[0])
+    assert despues["id"] == antes["id"]

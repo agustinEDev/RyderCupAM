@@ -21,6 +21,10 @@ from src.modules.competition.application.services.jornadas_de_la_competicion imp
 from src.modules.competition.application.services.salidas_de_la_franja import (
     salidas_por_hora,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import (
+    Salidas,
+    de_las_partidas,
+)
 from src.modules.competition.application.services.vista_de_la_franja import primera_salida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -42,18 +46,25 @@ async def sacar_de_sus_partidas(
     round_id: RoundId | None = None,
     zonas: ICompetitionTimezone | None = None,
     ahora: datetime | None = None,
-) -> None:
+) -> dict[RoundId, tuple[Salidas, Salidas]]:
     """
     Le saca de sus partidas sin salir: de todas, o solo de la de esa franja.
 
     Si una se vacía, desaparece y las de detrás suben (M3), salvo que alguna de
     la franja ya haya salido; de una que ya salió no sale (lo mira `sacar`).
+
+    Returns:
+        Por franja tocada, las salidas de antes y de después: él sale, y a
+        otros les cambia la hora o el grupo (G3, 22 oct 2026). Quien llama
+        avisa después de guardar
     """
+    fotos: dict[RoundId, tuple[Salidas, Salidas]] = {}
     for partida in await uow.partidas.del_jugador(competition_id, user_id):
         if round_id is not None and partida.round_id != round_id:
             continue
         franja = await uow.rounds.find_by_id(partida.round_id)
         de_la_franja = await uow.partidas.de_la_franja(partida.round_id)
+        antes = de_las_partidas(franja, de_la_franja) if franja else {}
         salidas = await salidas_por_hora(franja, de_la_franja, zonas, ahora) if franja else set()
         cambios = MovimientosDePartidas.sacar(de_la_franja, user_id, salidas)
         await uow.partidas.borrar(cambios.borrar)
@@ -61,6 +72,10 @@ async def sacar_de_sus_partidas(
         # Por número, como se bloquean al cerrar la franja
         for cambiada in sorted(cambios.guardar, key=lambda p: p.numero):
             await que_no_se_quede_solo(uow, zonas, cambiada.id, ahora)
+        if franja is not None:
+            despues = de_las_partidas(franja, await uow.partidas.de_la_franja(franja.id))
+            fotos[franja.id] = (antes, despues)
+    return fotos
 
 
 async def que_no_se_quede_solo(

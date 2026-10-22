@@ -105,3 +105,17 @@ def test_the_schedule_opens_them_with_the_publisher_too():
     caso = d.get_get_schedule_use_case(**_uows(), scoring_service=MagicMock(), actividad=PUBLICADOR)
 
     assert _publicador_de(caso._sobres._generador) is PUBLICADOR
+
+
+def test_no_show_and_withdrawal_tell_who_is_moved():
+    """G3, 22 oct: quien se recoloca por un no presentado o una baja recibe su aviso."""
+    uows = _uows()
+    no_presentado = d.get_marcar_no_presentado_use_case(
+        uow=uows["uow"], gc_uow=uows["gc_uow"], reloj=lambda: None, actividad=PUBLICADOR
+    )
+    baja = d.get_withdraw_enrollment_use_case(
+        uow=uows["uow"], gc_uow=uows["gc_uow"], actividad=PUBLICADOR
+    )
+
+    assert _publicador_de(no_presentado) is PUBLICADOR
+    assert _publicador_de(baja) is PUBLICADOR

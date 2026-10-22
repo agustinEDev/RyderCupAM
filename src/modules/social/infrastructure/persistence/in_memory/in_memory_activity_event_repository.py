@@ -128,6 +128,15 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return antes - len(self._events)
 
+    async def lock_source(self, source_id: str) -> None:
+        """En memoria no hay nada a la vez: no hay nada que bloquear."""
+        return
+
+    async def find_from_source(
+        self, source_id: str, types: Collection[ActivityEventType]
+    ) -> list[ActivityEvent]:
+        return [e for e in self._events if e.source_match_id == source_id and e.type in types]
+
     async def delete_from_source_for_users(
         self,
         source_id: str,

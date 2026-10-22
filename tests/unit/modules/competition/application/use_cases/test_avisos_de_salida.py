@@ -36,6 +36,7 @@ import pytest
 from src.modules.competition.application.dto.competition_dto import (
     ReopenEnrollmentsRequestDTO,
 )
+from src.modules.competition.application.dto.enrollment_dto import WithdrawEnrollmentRequestDTO
 from src.modules.competition.application.dto.partidas_dto import GenerateTeeGroupsRequestDTO
 from src.modules.competition.application.dto.round_match_dto import (
     GenerateMatchesRequestDTO,
@@ -53,11 +54,15 @@ from src.modules.competition.application.services.envelope_desk import EnvelopeD
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
 )
 from src.modules.competition.application.use_cases.get_schedule_use_case import (
     GetScheduleUseCase,
+)
+from src.modules.competition.application.use_cases.organizador_de_partidas_use_case import (
+    MarcarNoPresentadoUseCase,
 )
 from src.modules.competition.application.use_cases.partidas_use_case import (
     BorrarPartidasUseCase,
@@ -84,8 +89,12 @@ from src.modules.competition.application.use_cases.reveal_envelopes_use_case imp
 from src.modules.competition.application.use_cases.update_round_use_case import (
     UpdateRoundUseCase,
 )
+from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
+    WithdrawEnrollmentUseCase,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
@@ -107,10 +116,29 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
+    PublishCompetitionNoticesUseCase,
+)
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
+from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
+    CompetitionActivityPublisher,
+)
+from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
+    InMemorySocialUnitOfWork,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork as InMemoryUserUnitOfWork,
+)
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.match_format import MatchFormat
 from src.shared.domain.value_objects.play_mode import PlayMode
+from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
+    A_LAS_NUEVE_Y_CINCO,
+)
 from tests.unit.modules.competition.application.use_cases.test_generar_partidas_use_case import (
     VIERNES,
     _Escenario,
@@ -462,6 +490,7 @@ class TestG4yG5:
         assert set(salidas.retirados) == set(jugadores)
 
     async def test_g3_changing_someone_to_another_window_withdraws_his_old_notice(self):
+        """Y a los que se quedan sin él en su grupo, «ha cambiado tu salida» (22 oct)."""
         escenario, jugadores = await _generadas(3)
         quien = jugadores[0]
         salidas = _Salidas()
@@ -470,7 +499,11 @@ class TestG4yG5:
             escenario.tarde.id, quien, escenario.creador, en_lugar_de=escenario.manana.id
         )
 
-        assert salidas.llamadas == [(escenario.manana.id, {}, [quien])]
+        (llamada,) = salidas.llamadas
+        assert llamada[0] == escenario.manana.id
+        assert llamada[2] == [quien]
+        assert set(llamada[1]) == set(jugadores[1:])
+        assert all(s.changed and quien not in s.partner_ids for s in llamada[1].values())
 
     async def test_taking_a_place_without_leaving_one_withdraws_nothing(self):
         escenario, _ = await _generadas(3)
@@ -484,6 +517,166 @@ class TestG4yG5:
         )
 
         assert salidas.llamadas == []
+
+
+class TestG3Recolocados:
+    """
+    Decidido por Agustin el 22 oct: quien se ve recolocado por la baja, el
+    cambio de franja o el no presentado de otro recibe «ha cambiado tu salida»,
+    con el mismo criterio de cambio real.
+    """
+
+    @staticmethod
+    async def _en_partidas(*tamanos: int) -> tuple[_Escenario, list[Partida]]:
+        """Partidas de esos tamaños en la mañana, sin salir ninguna."""
+        escenario = _Escenario()
+        await escenario.guardar()
+        for h in range(sum(tamanos), 0, -1):
+            await escenario.con_plaza(f"{h}.0")
+        await escenario.generar()
+        jugadores = [j for p in await _partidas(escenario) for j in p.jugadores]
+        partidas, desde = [], 0
+        for numero, tamano in enumerate(tamanos, start=1):
+            partidas.append(
+                Partida.crear(
+                    escenario.competicion.id,
+                    escenario.manana.id,
+                    numero,
+                    jugadores[desde : desde + tamano],
+                )
+            )
+            desde += tamano
+        await escenario.uow.partidas.reemplazar_franja(escenario.manana.id, partidas)
+        return escenario, partidas
+
+    async def test_leaving_a_lone_group_moves_up_the_ones_behind(self):
+        escenario, (sola, detras) = await self._en_partidas(1, 3)
+        (quien,) = sola.user_ids
+        salidas = _Salidas()
+
+        await CogerPlazaUseCase(escenario.uow, actividad=salidas).execute(
+            escenario.tarde.id, quien, escenario.creador, en_lugar_de=escenario.manana.id
+        )
+
+        assert salidas.retirados == [quien]
+        assert set(salidas.avisados) == set(detras.user_ids)
+        assert {(s.tee_time, s.changed) for s in salidas.avisados.values()} == {(time(9, 0), True)}
+
+    async def test_leaving_a_group_only_tells_its_group(self):
+        escenario, (primera, segunda) = await self._en_partidas(3, 2)
+        quien = primera.user_ids[0]
+        salidas = _Salidas()
+
+        await CogerPlazaUseCase(escenario.uow, actividad=salidas).execute(
+            escenario.tarde.id, quien, escenario.creador, en_lugar_de=escenario.manana.id
+        )
+
+        assert set(salidas.avisados) == set(primera.user_ids[1:])
+        assert not set(salidas.avisados) & set(segunda.user_ids)
+
+    async def test_withdrawing_moves_up_the_ones_behind(self):
+        escenario, (sola, detras) = await self._en_partidas(1, 3)
+        (quien,) = sola.user_ids
+        (inscripcion,) = await escenario.uow.enrollments.find_by_user_ids_and_competition(
+            [quien], escenario.competicion.id
+        )
+        salidas = _Salidas()
+
+        await WithdrawEnrollmentUseCase(escenario.uow, actividad=salidas).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), quien
+        )
+
+        assert quien in salidas.retirados
+        assert set(salidas.avisados) == set(detras.user_ids)
+        assert all(s.tee_time == time(9, 0) and s.changed for s in salidas.avisados.values())
+
+    async def test_a_no_show_brings_company_and_both_groups_are_told(self):
+        escenario, (sola, cuatro, ultima) = await self._en_partidas(2, 4, 4)
+        escenario.ahora = A_LAS_NUEVE_Y_CINCO
+        falta, queda = sola.user_ids
+        viene = cuatro.user_ids[-1]
+        salidas = _Salidas()
+
+        await MarcarNoPresentadoUseCase(
+            uow=escenario.uow,
+            zonas=escenario.zonas,
+            reloj=lambda: escenario.ahora,
+            actividad=salidas,
+        ).execute(sola.id.value, falta.value, escenario.creador, False)
+
+        assert set(salidas.avisados) == {queda, viene, *cuatro.user_ids[:-1]}
+        assert salidas.avisados[viene].tee_time == time(9, 0)
+        assert set(salidas.avisados[queda].partner_ids) == {viene}
+        assert falta not in salidas.avisados
+        assert not set(salidas.avisados) & set(ultima.user_ids)
+        assert all(s.changed for s in salidas.avisados.values())
+
+    async def test_a_no_show_without_anyone_to_bring_tells_nobody(self):
+        escenario, (sola, _) = await self._en_partidas(3, 2)
+        escenario.ahora = A_LAS_NUEVE_Y_CINCO
+        salidas = _Salidas()
+
+        await MarcarNoPresentadoUseCase(
+            uow=escenario.uow,
+            zonas=escenario.zonas,
+            reloj=lambda: escenario.ahora,
+            actividad=salidas,
+        ).execute(sola.id.value, sola.user_ids[0].value, escenario.creador, False)
+
+        assert salidas.llamadas == []
+
+
+class TestG3OrdenDeLasPublicaciones:
+    """
+    Revision del 22 oct: cada publicacion va tras su commit, en su sesion y sin
+    orden garantizado. Si la de una accion vieja llega la ultima, el aviso que
+    queda tiene que ser el de ahora, no el de su foto.
+    """
+
+    async def test_publications_in_reverse_order_leave_the_current_state(self):
+        escenario, _ = await _con_plazas(8)
+        social_uow = InMemorySocialUnitOfWork()
+        actividad = CompetitionActivityPublisher(
+            PublishCompetitionNoticesUseCase(social_uow, InMemoryUserUnitOfWork()),
+            standings=None,
+            competition_uow=escenario.uow,
+        )
+        generar, mover = _Llamadas(), _Llamadas()
+        await _generar(escenario, generar)
+        primera, segunda = await _partidas(escenario)
+        await _mover(escenario, mover, primera.user_ids[0], segunda.id, segunda.user_ids[0])
+
+        # La de mover llega antes que la de generar
+        for llamada in [*mover.llamadas, *generar.llamadas]:
+            await actividad.tee_times(*llamada)
+
+        async with social_uow:
+            guardados = {
+                e.user_id: e.payload
+                for e in await social_uow.activity_events.find_in(
+                    [
+                        ActivitySlice(
+                            user_ids=tuple(u for p in (primera, segunda) for u in p.user_ids),
+                            types=frozenset(ActivityEventType),
+                        )
+                    ],
+                    limit=100,
+                )
+            }
+        ahora = de_las_partidas(escenario.manana, await _partidas(escenario))
+        assert set(guardados) == set(ahora)
+        for jugador, salida in ahora.items():
+            assert guardados[jugador]["tee_time"] == salida.tee_time.strftime("%H:%M")
+            assert set(guardados[jugador]["partner_ids"]) == {
+                str(u.value) for u in salida.partner_ids
+            }
+
+
+class _Llamadas(_Salidas):
+    """Apunta las llamadas tal cual, para repetirlas en otro orden."""
+
+    async def tee_times(self, competition, round_id, assigned, withdrawn):
+        self.llamadas.append((competition, round_id, assigned, withdrawn))
 
 
 # === Ryder ===
@@ -804,6 +997,48 @@ class TestG2AlAbrirLosSobres:
 
         assert (await torneo.ronda()).match_generation_block.reason == "UNEXPECTED"
         assert salidas.llamadas == []
+
+    async def test_a_failing_session_keeps_the_notices_of_the_one_before(self):
+        """
+        Revision del 22 oct: la agenda abre dos sesiones; la primera se genera
+        y la segunda falla en su SAVEPOINT. Descartar lo de la segunda no puede
+        llevarse los avisos de la primera.
+        """
+        ryder = await _Ryder(MatchFormat.SINGLES, 2).guardar()
+        tarde = Round.create(
+            competition_id=ryder.competicion.id,
+            golf_course_id=ryder.ronda.golf_course_id,
+            round_date=date(2026, 10, 25),
+            session_type=SessionType.AFTERNOON,
+            match_format=MatchFormat.SINGLES,
+        )
+        tarde.mark_teams_assigned()
+        async with ryder.uow:
+            await ryder.uow.rounds.add(tarde)
+        salidas = _Salidas()
+        generador = ryder.generador(salidas)
+        mesa = EnvelopeDesk(ryder.uow, ryder.usuarios, generador=generador)
+        await mesa.generar_los_partidos(ryder.ronda, ryder.competicion)
+        original = ryder.uow.savepoint
+
+        @asynccontextmanager
+        async def _savepoint_que_no_cierra():
+            async with original():
+                yield
+            # Lo que haria Postgres al deshacerlo: en memoria no se deshace solo
+            sesion = await ryder.uow.rounds.find_by_id(tarde.id)
+            sesion.reset_to_pending_matches()
+            for partido in await ryder.uow.matches.find_by_round(tarde.id):
+                await ryder.uow.matches.delete(partido.id)
+            raise RuntimeError("el SAVEPOINT no se pudo liberar")
+
+        ryder.uow.savepoint = _savepoint_que_no_cierra
+        await mesa.generar_los_partidos(tarde, ryder.competicion)
+
+        await mesa.avisar_salidas()
+
+        assert [r for r, _, _ in salidas.llamadas] == [ryder.ronda.id]
+        assert set(salidas.avisados) == set(ryder.equipo_a + ryder.equipo_b)
 
     async def test_a_failed_automatic_generation_notifies_nobody(self):
         salidas = _Salidas()

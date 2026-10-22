@@ -451,6 +451,7 @@ class EnvelopeDesk:
         # lo que se toco dentro, y leer un atributo caducado es una carga
         # sincrona que en asincrono revienta (MissingGreenlet)
         round_id = ronda.id
+        marca = self._generador.marca_de_salidas()
         try:
             async with self._uow.savepoint():
                 await self._generador.generar_dentro(
@@ -458,7 +459,7 @@ class EnvelopeDesk:
                 )
         except Exception as error:
             # Lo deshecho no se avisa
-            self._generador.descartar_salidas()
+            self._generador.descartar_salidas(desde=marca)
             motivo = self._motivo(error)
         if motivo is None:
             return

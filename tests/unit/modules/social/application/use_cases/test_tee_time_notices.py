@@ -8,7 +8,9 @@ El aviso de horario en Actividad: `TEE_TIME_ASSIGNED` (G, tabla del 22 oct 2026)
 | G2  | Partido de Ryder                                  | Sin hora, con compañero, rivales y       |
 |     |                                                   | `match_id`                               |
 | G3  | Cambia                                            | El viejo de esa ronda se va, uno nuevo   |
-|     |                                                   | con `changed`; los de otros, intactos    |
+|     |                                                   | con `changed`; los de otros, intactos.   |
+|     |                                                   | Se compara con lo guardado y se relee la |
+|     |                                                   | ronda con candado: el orden no importa   |
 | G3  | Sale de la ronda                                  | Pierde el suyo, solo el de esa ronda     |
 | G6  | Solo Actividad, solo para el                      | Sus amigos no lo ven                     |
 | G7  | Lleva al torneo                                   | `competition_id` en el payload           |
@@ -98,7 +100,6 @@ def _salida(
     con=(),
     contra=(),
     partido: str | None = None,
-    changed: bool = False,
     sesion: str = "MORNING",
 ) -> TeeTimeRef:
     return TeeTimeRef(
@@ -109,8 +110,16 @@ def _salida(
         partner_ids=tuple(u.id for u in con),
         opponent_ids=tuple(u.id for u in contra),
         match_id=partido,
-        changed=changed,
     )
+
+
+def _vigentes(*salidas: TeeTimeRef):
+    """Lo que hay ahora en la ronda, como lo releeria la publicacion."""
+
+    async def _leer():
+        return list(salidas)
+
+    return _leer
 
 
 async def _guardados(social_uow, user: User):
@@ -142,7 +151,7 @@ class TestG1yG2:
         torneo = _torneo()
         ronda = str(uuid4())
 
-        await avisos.tee_times(torneo, ronda, [_salida(yo, con=[pedro, juan])], [])
+        await avisos.tee_times(torneo, ronda, _vigentes(_salida(yo, con=[pedro, juan])))
 
         (evento,) = await _guardados(social_uow, yo)
         assert evento.type == T.TEE_TIME_ASSIGNED
@@ -171,8 +180,7 @@ class TestG1yG2:
         await avisos.tee_times(
             _torneo(),
             ronda,
-            [_salida(yo, hora=None, con=[pedro], contra=[juan, luis], partido=partido)],
-            [],
+            _vigentes(_salida(yo, hora=None, con=[pedro], contra=[juan, luis], partido=partido)),
         )
 
         (evento,) = await _guardados(social_uow, yo)
@@ -186,7 +194,7 @@ class TestG1yG2:
         a, b = [await _user(user_uow) for _ in range(2)]
 
         await avisos.tee_times(
-            _torneo(), str(uuid4()), [_salida(a, con=[b]), _salida(b, con=[a])], []
+            _torneo(), str(uuid4()), _vigentes(_salida(a, con=[b]), _salida(b, con=[a]))
         )
 
         (de_a,) = await _guardados(social_uow, a)
@@ -194,9 +202,14 @@ class TestG1yG2:
         assert de_a.payload["partner_ids"] == [str(b.id.value)]
         assert de_b.payload["partner_ids"] == [str(a.id.value)]
 
-    async def test_one_user_read_and_one_write_per_batch(
+    async def test_no_user_read_and_one_write_per_batch(
         self, avisos, social_uow, user_uow, monkeypatch
     ):
+        """
+        Sin leer usuarios: es solo suyo (SELF) y el interruptor de publicar solo
+        decide lo que ven los amigos. Leerlos abriria otra transaccion y soltaria
+        el candado de la ronda antes de escribir.
+        """
         jugadores = [await _user(user_uow) for _ in range(4)]
         lecturas, escrituras = [], []
         leer = user_uow.users.find_by_ids
@@ -213,45 +226,83 @@ class TestG1yG2:
         monkeypatch.setattr(user_uow.users, "find_by_ids", _lee)
         monkeypatch.setattr(social_uow.activity_events, "add_many", _escribe)
 
-        await avisos.tee_times(
-            _torneo(), str(uuid4()), [_salida(j) for j in jugadores], [jugadores[0]]
-        )
+        await avisos.tee_times(_torneo(), str(uuid4()), _vigentes(*[_salida(j) for j in jugadores]))
 
-        assert len(lecturas) == 1
+        assert lecturas == []
         assert len(escrituras) == 1
         assert len(escrituras[0]) == 4
 
 
 class TestG3Cambios:
+    """La publicacion reconcilia lo guardado con lo que hay ahora en la ronda."""
+
     async def test_a_change_replaces_the_notice_of_that_round_only(
         self, avisos, social_uow, user_uow
     ):
         yo, otro = [await _user(user_uow) for _ in range(2)]
         torneo = _torneo()
         ronda, otra_ronda = str(uuid4()), str(uuid4())
-        await avisos.tee_times(torneo, ronda, [_salida(yo), _salida(otro)], [])
-        await avisos.tee_times(torneo, otra_ronda, [_salida(yo, hora="15:00")], [])
+        await avisos.tee_times(torneo, ronda, _vigentes(_salida(yo), _salida(otro)))
+        await avisos.tee_times(torneo, otra_ronda, _vigentes(_salida(yo, hora="15:00")))
+        (del_otro_antes,) = await _guardados(social_uow, otro)
 
-        await avisos.tee_times(torneo, ronda, [_salida(yo, hora="09:20", changed=True)], [])
+        await avisos.tee_times(torneo, ronda, _vigentes(_salida(yo, hora="09:20"), _salida(otro)))
 
         mios = {e.source_match_id: e.payload for e in await _guardados(social_uow, yo)}
         assert set(mios) == {ronda, otra_ronda}
         assert (mios[ronda]["tee_time"], mios[ronda]["changed"]) == ("09:20", True)
         assert mios[otra_ronda]["tee_time"] == "15:00"
         (del_otro,) = await _guardados(social_uow, otro)
+        assert del_otro.id == del_otro_antes.id
         assert (del_otro.payload["tee_time"], del_otro.payload["changed"]) == ("09:10", False)
 
     async def test_a_change_is_a_new_notice(self, avisos, social_uow, user_uow):
         """Sale de nuevo: otra id y otra fecha de publicacion, para que cuente como novedad."""
         yo = await _user(user_uow)
         ronda = str(uuid4())
-        await avisos.tee_times(_torneo(), ronda, [_salida(yo)], [])
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo)))
         (viejo,) = await _guardados(social_uow, yo)
 
-        await avisos.tee_times(_torneo(), ronda, [_salida(yo, hora="10:00", changed=True)], [])
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, hora="10:00")))
 
         (nuevo,) = await _guardados(social_uow, yo)
         assert nuevo.id != viejo.id
+
+    @pytest.mark.parametrize(
+        "cambio",
+        [
+            {"hora": "09:20"},
+            {"con": "otro"},
+            {"contra": "otro"},
+            {"sesion": "AFTERNOON"},
+        ],
+    )
+    async def test_what_counts_as_a_change(self, avisos, social_uow, user_uow, cambio):
+        yo, pedro, otro = [await _user(user_uow) for _ in range(3)]
+        ronda = str(uuid4())
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, con=[pedro])))
+        argumentos = {"con": [pedro], **cambio}
+        for clave in ("con", "contra"):
+            if argumentos.get(clave) == "otro":
+                argumentos[clave] = [otro]
+
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, **argumentos)))
+
+        (evento,) = await _guardados(social_uow, yo)
+        assert evento.payload["changed"] is True
+
+    async def test_the_same_partners_in_another_order_or_another_match_id_is_no_change(
+        self, avisos, social_uow, user_uow
+    ):
+        yo, a, b = [await _user(user_uow) for _ in range(3)]
+        ronda = str(uuid4())
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, con=[a, b], partido="m1")))
+        (antes,) = await _guardados(social_uow, yo)
+
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, con=[b, a], partido="m2")))
+
+        (despues,) = await _guardados(social_uow, yo)
+        assert despues.id == antes.id
 
     async def test_leaving_the_round_withdraws_only_his_notice_of_that_round(
         self, avisos, social_uow, user_uow
@@ -259,20 +310,62 @@ class TestG3Cambios:
         yo, otro = [await _user(user_uow) for _ in range(2)]
         torneo = _torneo()
         ronda, otra_ronda = str(uuid4()), str(uuid4())
-        await avisos.tee_times(torneo, ronda, [_salida(yo), _salida(otro)], [])
-        await avisos.tee_times(torneo, otra_ronda, [_salida(yo)], [])
+        await avisos.tee_times(torneo, ronda, _vigentes(_salida(yo), _salida(otro)))
+        await avisos.tee_times(torneo, otra_ronda, _vigentes(_salida(yo)))
 
-        await avisos.tee_times(torneo, ronda, [], [yo.id])
+        await avisos.tee_times(torneo, ronda, _vigentes(_salida(otro)))
 
         assert [e.source_match_id for e in await _guardados(social_uow, yo)] == [otra_ronda]
         assert len(await _guardados(social_uow, otro)) == 1
 
-    async def test_nothing_to_do_touches_nothing(self, avisos, social_uow, user_uow):
+    async def test_publishing_twice_the_same_round_changes_nothing(
+        self, avisos, social_uow, user_uow
+    ):
+        """
+        G3. Dos publicaciones de la misma ronda en cualquier orden releen lo que
+        hay: la segunda no tiene nada que hacer, aunque su foto fuera vieja.
+        """
         yo = await _user(user_uow)
         ronda = str(uuid4())
-        await avisos.tee_times(_torneo(), ronda, [_salida(yo)], [])
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, hora="09:20")))
+        (antes,) = await _guardados(social_uow, yo)
 
-        await avisos.tee_times(_torneo(), ronda, [], [])
+        await avisos.tee_times(_torneo(), ronda, _vigentes(_salida(yo, hora="09:20")))
+
+        (despues,) = await _guardados(social_uow, yo)
+        assert despues.id == antes.id
+
+    async def test_the_round_is_locked_before_it_is_read(
+        self, avisos, social_uow, user_uow, monkeypatch
+    ):
+        """G3. Leer la ronda con el candado puesto: si no, dos publicaciones se cruzan."""
+        yo = await _user(user_uow)
+        orden = []
+        bloquear = social_uow.activity_events.lock_source
+
+        async def _bloquea(origen):
+            orden.append(("candado", origen))
+            return await bloquear(origen)
+
+        monkeypatch.setattr(social_uow.activity_events, "lock_source", _bloquea)
+        leer = _vigentes(_salida(yo))
+
+        async def _lee():
+            orden.append(("leer", None))
+            return await leer()
+
+        ronda = str(uuid4())
+        await avisos.tee_times(_torneo(), ronda, _lee)
+
+        assert orden == [("candado", ronda), ("leer", None)]
+
+    async def test_an_empty_round_without_notices_touches_nothing(
+        self, avisos, social_uow, user_uow
+    ):
+        yo = await _user(user_uow)
+        await avisos.tee_times(_torneo(), str(uuid4()), _vigentes(_salida(yo)))
+
+        await avisos.tee_times(_torneo(), str(uuid4()), _vigentes())
 
         assert len(await _guardados(social_uow, yo)) == 1
 
@@ -283,7 +376,7 @@ class TestG6G7yG11:
         await _amistad(social_uow, yo, amigo)
         torneo = _torneo()
 
-        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo)))
 
         assert (await _feed(social_uow, user_uow, amigo)).events == []
         (propio,) = (await _feed(social_uow, user_uow, yo)).events
@@ -297,7 +390,7 @@ class TestG6G7yG11:
         await _amistad(social_uow, bloqueado, yo, bloqueo=True)
 
         await avisos.tee_times(
-            _torneo(), str(uuid4()), [_salida(yo, con=[pedro], contra=[bloqueado])], []
+            _torneo(), str(uuid4()), _vigentes(_salida(yo, con=[pedro], contra=[bloqueado]))
         )
 
         feed = await _feed(social_uow, user_uow, yo)
@@ -311,9 +404,9 @@ class TestG9Limpieza:
     ):
         yo, otro = [await _user(user_uow) for _ in range(2)]
         torneo, otro_torneo = _torneo(), _torneo()
-        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo), _salida(otro)], [])
-        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
-        await avisos.tee_times(otro_torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo), _salida(otro)))
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo)))
+        await avisos.tee_times(otro_torneo, str(uuid4()), _vigentes(_salida(yo)))
 
         await avisos.left(yo.id, torneo.competition_id)
 
@@ -325,8 +418,8 @@ class TestG9Limpieza:
     async def test_cancelling_takes_everyones(self, avisos, social_uow, user_uow):
         yo, otro = [await _user(user_uow) for _ in range(2)]
         torneo, otro_torneo = _torneo(), _torneo()
-        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo), _salida(otro)], [])
-        await avisos.tee_times(otro_torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo), _salida(otro)))
+        await avisos.tee_times(otro_torneo, str(uuid4()), _vigentes(_salida(yo)))
 
         await avisos.tournament_cancelled(torneo.competition_id)
 
@@ -338,8 +431,8 @@ class TestG9Limpieza:
     async def test_deleting_takes_everyones(self, avisos, social_uow, user_uow):
         yo = await _user(user_uow)
         torneo, otro_torneo = _torneo(), _torneo()
-        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
-        await avisos.tee_times(otro_torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo)))
+        await avisos.tee_times(otro_torneo, str(uuid4()), _vigentes(_salida(yo)))
 
         await avisos.tournament_deleted(torneo.competition_id)
 
@@ -350,7 +443,7 @@ class TestG9Limpieza:
     async def test_made_private_keeps_it(self, avisos, social_uow, user_uow):
         yo = await _user(user_uow)
         torneo = _torneo()
-        await avisos.tee_times(torneo, str(uuid4()), [_salida(yo)], [])
+        await avisos.tee_times(torneo, str(uuid4()), _vigentes(_salida(yo)))
 
         await avisos.tournament_made_private(torneo.competition_id)
 

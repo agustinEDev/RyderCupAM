@@ -155,17 +155,12 @@ class CogerPlazaUseCase:
                 and p.vista is None
                 for p in plazas
             )
-            deja_su_salida = False
+            fotos = {}
             if en_lugar_de is not None:
-                tenia = await self._con_partida(competicion, jugador, en_lugar_de)
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
                 # Y de su partida en esa franja: en la nueva queda sin partida (D3)
-                await sacar_de_sus_partidas(
+                fotos = await sacar_de_sus_partidas(
                     self._uow, competicion.id, jugador, en_lugar_de, self._zonas, ahora
-                )
-                # De una que ya salió no sale: entonces su aviso sigue siendo cierto
-                deja_su_salida = tenia and not await self._con_partida(
-                    competicion, jugador, en_lugar_de
                 )
             plaza = PlazaEnFranja.crear(
                 competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
@@ -176,19 +171,11 @@ class CogerPlazaUseCase:
             await esperas.tras_coger(competicion, jugador)
             if en_lugar_de is not None:
                 await esperas.rellenar(competicion, en_lugar_de, ahora)
-        # Sin partida en la franja que deja, su aviso de salida de ella se va (G3)
-        if deja_su_salida and en_lugar_de is not None:
-            await self._actividad.tee_times(competicion, en_lugar_de, [], [jugador])
+        # Ya guardado: pierde su aviso de la franja que deja, y a quien se
+        # recoloca por su salida se le dice (G3)
+        for tocada, (antes, despues) in fotos.items():
+            await self._actividad.salidas_cambiadas(competicion, tocada, antes, despues)
         return plaza
-
-    async def _con_partida(
-        self, competicion: Competition, jugador: UserId, round_id: RoundId
-    ) -> bool:
-        """Si juega en alguna partida de esa franja."""
-        return any(
-            p.round_id == round_id
-            for p in await self._uow.partidas.del_jugador(competicion.id, jugador)
-        )
 
 
 class SoltarPlazaUseCase:

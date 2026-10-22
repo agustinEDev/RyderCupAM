@@ -151,6 +151,18 @@ class TestFotoDeStrokePlay:
 
         assert salidas[a].tee_time == time(8, 8)
 
+    def test_a_no_show_has_no_tee_time_and_is_nobodys_partner(self):
+        """Quien no se presento ya no juega en el grupo: ni recibe aviso ni se le nombra."""
+        franja = _franja()
+        falta, a, b = _ids(3)
+        partida = _partida(franja, 1, [falta, a, b])
+        partida.no_presentado(falta, [])
+
+        salidas = de_las_partidas(franja, [partida])
+
+        assert set(salidas) == {a, b}
+        assert salidas[a].partner_ids == (b,)
+
 
 class TestFotoDeRyder:
     def test_singles_no_hour_no_partner_one_rival(self):
