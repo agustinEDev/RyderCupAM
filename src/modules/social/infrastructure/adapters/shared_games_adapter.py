@@ -1,7 +1,7 @@
 """Adaptador: las partidas jugadas juntos salen de las partidas rapidas y los torneos."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.match import Match
@@ -11,7 +11,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.services.scoring_opening_service import (
-    OPENING_HOUR_BY_SESSION,
     ScoringOpeningService,
 )
 from src.modules.competition.domain.services.tarjeta_de_stroke_play import TarjetaDeStrokePlay
@@ -467,19 +466,16 @@ def _sin_zona(instante: datetime) -> datetime:
     return instante.astimezone(UTC).replace(tzinfo=None)
 
 
-def _instante_de_la_ronda(ronda: Round, course: GolfCourse | None) -> datetime:
+def _instante_de_la_ronda(ronda: Round, course: GolfCourse | None) -> datetime | None:
     """
     Cuando se jugo una ronda: la hora de su sesion (6, 12 o 18 locales), la
     misma con la que se abre su anotacion, pasada a UTC con la zona del campo.
 
-    Sin zona conocida se queda la hora local tal cual: es lo mas cercano que
-    hay, y entre rondas del mismo campo ordena igual. Una sesion desconocida
-    cuenta como el principio del dia.
+    Sin zona conocida no se sabe el instante en UTC: None, y la partida se
+    ordena como el principio de su dia, sin mezclar la hora local con las UTC
+    de las demas (CodeRabbit BE #633).
     """
     abre = ScoringOpeningService.opens_at(
         ronda.round_date, ronda.session_type, course.timezone if course else None
     )
-    if abre is not None:
-        return _sin_zona(abre)
-    hora = OPENING_HOUR_BY_SESSION.get(ronda.session_type, 0)
-    return datetime.combine(ronda.round_date, time(hour=hora))
+    return _sin_zona(abre) if abre is not None else None

@@ -1081,8 +1081,11 @@ class TestElInstanteDeCadaPartida:
 
         assert partida.played_at == datetime.combine(DIA, time(hora_utc))
 
-    async def test_un_grupo_sin_zona_conocida_lleva_la_hora_local_de_su_sesion(self, mundo):
-        """Sin zona del campo no hay conversion: la hora local de la sesion, tal cual."""
+    async def test_un_grupo_sin_zona_conocida_no_tiene_instante(self, mundo):
+        """
+        Sin zona del campo no se sabe el instante en UTC: None, y se ordena como
+        el principio de su dia (CodeRabbit BE #633), sin mezclar escalas.
+        """
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
         course = await mundo.campo(yo)
@@ -1092,7 +1095,7 @@ class TestElInstanteDeCadaPartida:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert partida.played_at == datetime.combine(DIA, time(12))
+        assert partida.played_at is None
 
 
 class TestSinUnaConsultaPorPartida:
