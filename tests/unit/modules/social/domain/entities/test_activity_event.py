@@ -223,4 +223,6 @@ class TestTipos:
             "TOURNAMENT_MATCH_RESULT",
             "TOURNAMENT_FINAL_STANDING",
             "QUICK_MATCH_FINISHED",
+            # Aviso de horario (G, tabla del 22 oct 2026)
+            "TEE_TIME_ASSIGNED",
         }

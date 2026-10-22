@@ -47,6 +47,7 @@ from src.modules.competition.application.services.avisos_de_actividad import Avi
 from src.modules.competition.application.services.partidas_del_jugador import (
     que_no_se_quede_solo,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
 from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     arrancar_la_competicion,
@@ -306,10 +307,17 @@ class MarcarNoPresentadoUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
+        """
+        Args:
+            actividad: Para avisar a quien se recoloca para que nadie se quede
+                solo (G3, 22 oct 2026); sin el, no se avisa
+        """
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
         """
@@ -332,7 +340,19 @@ class MarcarNoPresentadoUseCase:
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
             bloqueada.no_presentado(jugador, golpes)
             await self._uow.partidas.guardar([bloqueada])
+            # La foto despues de marcarlo: que falte no es un cambio de salida
+            # para nadie; que alguien venga a acompañar al que se queda solo, si
+            franja = await self._uow.rounds.find_by_id(bloqueada.round_id)
+            de_la_franja = await self._uow.partidas.de_la_franja(bloqueada.round_id)
+            antes = de_las_partidas(franja, de_la_franja) if franja else {}
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
+            despues = (
+                de_las_partidas(franja, await self._uow.partidas.de_la_franja(franja.id))
+                if franja
+                else {}
+            )
+        # Ya guardado: a quien se recoloca se le dice (G3, 22 oct 2026)
+        await self._actividad.salidas_cambiadas(competicion, bloqueada.round_id, antes, despues)
 
 
 class RetirarJugadorUseCase:

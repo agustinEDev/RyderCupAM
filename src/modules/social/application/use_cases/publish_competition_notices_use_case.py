@@ -1,6 +1,6 @@
 """Caso de Uso: Los avisos de Actividad que salen de una competicion (BE-2)."""
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
@@ -31,8 +31,17 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.ENROLLED_IN_TOURNAMENT,
         ActivityEventType.TOURNAMENT_MATCH_RESULT,
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
+        ActivityEventType.TEE_TIME_ASSIGNED,
     }
 )
+
+# Lo que se va cuando ya no estas en el torneo: que estas apuntado y tus salidas
+_DE_ESTAR_APUNTADO = (ActivityEventType.ENROLLED_IN_TOURNAMENT,)
+_SALIDA = ActivityEventType.TEE_TIME_ASSIGNED
+
+# Que clase de salida es, para que el cliente no lo deduzca de los nulos
+_GRUPO = "TEE_GROUP"
+_PARTIDO = "MATCH"
 
 # Lo que dice `Match.result["winner"]`
 _EMPATE = "HALVED"
@@ -61,6 +70,37 @@ class MatchOutcome:
     winner: str | None
     # "3&2", "2UP", "AS", "CONCEDED", "W/O"...
     score: str | None
+
+
+@dataclass(frozen=True)
+class TeeTimeRef:
+    """La salida de un jugador en una ronda, tal como se le cuenta."""
+
+    user_id: UserId
+    round_date: date
+    session_type: str
+    # "HH:MM" en stroke play; None en una Ryder, que sale por sesiones
+    tee_time: str | None
+    partner_ids: tuple[UserId, ...]
+    opponent_ids: tuple[UserId, ...]
+    match_id: str | None
+    # No presentado o retirado: sigue en su grupo, pero su aviso no se toca
+    out_of_play: bool = False
+
+
+def _misma_salida(payload: dict, salida: TeeTimeRef) -> bool:
+    """
+    Si lo publicado cuenta la misma salida: dia, sesion, hora, compañeros y
+    rivales. El partido no cuenta: regenerar los mismos emparejamientos crea
+    partidos nuevos y, para el jugador, nada cambia.
+    """
+    return (
+        payload.get("round_date") == salida.round_date.isoformat()
+        and payload.get("session_type") == salida.session_type
+        and payload.get("tee_time") == salida.tee_time
+        and set(payload.get("partner_ids") or []) == {str(u.value) for u in salida.partner_ids}
+        and set(payload.get("opponent_ids") or []) == {str(u.value) for u in salida.opponent_ids}
+    )
 
 
 @dataclass(frozen=True)
@@ -127,12 +167,29 @@ class PublishCompetitionNoticesUseCase:
         await self._publicar(eventos)
 
     async def left(self, user_id: UserId, competition_id: str) -> None:
-        """Se retira: sus amigos dejan de ver que esta apuntado (B11)."""
-        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT], user_id)
+        """
+        Se retira: sus amigos dejan de ver que esta apuntado (B11), y sus
+        salidas de ese torneo se van (G9): ya no sale en ninguna.
+        """
+        async with self._social_uow:
+            # En fila con las publicaciones de salidas del torneo: una que leyo
+            # antes de la baja no puede escribir despues de este borrado
+            await self._social_uow.activity_events.lock_scope(competition_id)
+            await self._social_uow.activity_events.delete_from_source(
+                competition_id, _DE_ESTAR_APUNTADO, user_id
+            )
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [_SALIDA], user_id
+            )
 
     async def tournament_cancelled(self, competition_id: str) -> None:
-        """Torneo cancelado: nadie esta ya apuntado a el (B11)."""
-        await self._retirar(competition_id, [ActivityEventType.ENROLLED_IN_TOURNAMENT])
+        """Torneo cancelado: nadie esta ya apuntado a el (B11) ni tiene salida (G9)."""
+        async with self._social_uow:
+            await self._social_uow.activity_events.lock_scope(competition_id)
+            await self._social_uow.activity_events.delete_from_source(
+                competition_id, _DE_ESTAR_APUNTADO
+            )
+            await self._social_uow.activity_events.delete_for_competition(competition_id, [_SALIDA])
 
     async def invited(self, user_id: UserId, tournament: TournamentRef, invitation_id: str) -> None:
         """Le invitan (A3). Uno por invitacion: si se retira, se retira ese."""
@@ -261,9 +318,90 @@ class PublishCompetitionNoticesUseCase:
         `competition_id` que lleva cada uno en el `payload`.
         """
         async with self._social_uow:
+            await self._social_uow.activity_events.lock_scope(competition_id)
             await self._social_uow.activity_events.delete_for_competition(
                 competition_id, _AVISOS_DE_TORNEO
             )
+
+    # === Salidas ===
+
+    async def tee_times(
+        self,
+        tournament: TournamentRef,
+        round_id: str,
+        vigentes: Callable[[], Awaitable[Sequence[TeeTimeRef]]],
+    ) -> None:
+        """
+        Pone los avisos de salida de una ronda al dia con lo que hay en ella
+        (G1-G4): a quien entra, «ya tienes salida»; a quien le cambia la hora,
+        el dia, los compañeros o los rivales, el aviso nuevo con `changed`; a
+        quien sale, se le retira; a quien le queda igual, nada.
+
+        **Se compara con lo publicado, no con la foto de la accion**, y lo que
+        hay se relee (`vigentes`) con el torneo bloqueado, en la misma
+        transaccion que escribe: dos publicaciones del torneo —y la baja o la
+        cancelacion, que toman el mismo candado— se ponen en fila
+        y la ultima siempre deja lo de ahora, lleguen en el orden que lleguen
+        (revision del 22 oct 2026). Repetirla no cambia nada.
+
+        **Uno por (jugador, ronda)** (G10): el origen es la ronda, y la clave
+        unica (jugador, origen, tipo) no admite dos. Sustituir es borrar el
+        viejo y publicar el nuevo: sale como aviso nuevo, con su fecha, y cuenta
+        como novedad. Todo de una vez: un borrado y una escritura.
+
+        **Sin leer usuarios**: es solo suyo, y el interruptor de publicar decide
+        lo que ven los amigos, que aqui es nada. Leerlos abriria otra
+        transaccion y soltaria el candado antes de escribir.
+        """
+        async with self._social_uow:
+            eventos = self._social_uow.activity_events
+            await eventos.lock_scope(tournament.competition_id)
+            leidas = await vigentes()
+            # Fuera de juego (no presentado, retirado): su aviso, como este
+            fuera = {s.user_id for s in leidas if s.out_of_play}
+            ahora = {s.user_id: s for s in leidas if not s.out_of_play}
+            publicados = {e.user_id: e for e in await eventos.find_from_source(round_id, [_SALIDA])}
+            quitar = [
+                user_id
+                for user_id, evento in publicados.items()
+                if user_id not in fuera
+                and (user_id not in ahora or not _misma_salida(evento.payload, ahora[user_id]))
+            ]
+            nuevos = [
+                self._salida(tournament, round_id, salida, changed=user_id in publicados)
+                for user_id, salida in ahora.items()
+                if user_id not in publicados or user_id in quitar
+            ]
+            if quitar:
+                await eventos.delete_from_source_for_users(round_id, [_SALIDA], quitar)
+            if nuevos:
+                await eventos.add_many(nuevos)
+
+    def _salida(
+        self, tournament: TournamentRef, round_id: str, salida: TeeTimeRef, changed: bool
+    ) -> ActivityEvent:
+        momento = utc_now()
+        return ActivityEvent.create(
+            user_id=salida.user_id,
+            type=_SALIDA,
+            occurred_at=momento,
+            source_match_id=round_id,
+            published_at=momento,
+            # Solo suyo (SELF): a los amigos no se les enseña nunca
+            visible_to_friends=False,
+            payload={
+                **self._del_torneo(tournament),
+                "round_id": round_id,
+                "round_date": salida.round_date.isoformat(),
+                "session_type": salida.session_type,
+                "kind": _GRUPO if salida.match_id is None else _PARTIDO,
+                "tee_time": salida.tee_time,
+                "partner_ids": [str(u.value) for u in salida.partner_ids],
+                "opponent_ids": [str(u.value) for u in salida.opponent_ids],
+                "match_id": salida.match_id,
+                "changed": changed,
+            },
+        )
 
     # === Ayudas ===
 

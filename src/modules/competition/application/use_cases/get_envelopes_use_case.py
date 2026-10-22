@@ -110,7 +110,7 @@ class GetEnvelopesUseCase:
             por_fila = Envelope.players_per_row_for(ronda.match_format)
             cuadran = await self._desk.los_equipos_cuadran(competition, por_fila)
 
-            return EnvelopesViewDTO(
+            vista = EnvelopesViewDTO(
                 round_id=ronda.id.value,
                 revealed=abiertos,
                 team_a_submitted=bool(sobre_a and sobre_a.is_submitted()),
@@ -149,3 +149,6 @@ class GetEnvelopesUseCase:
                 player_names={str(uid.value): nombre for uid, nombre in nombres.items()},
                 match_generation_block=block_to_dto(ronda.match_generation_block),
             )
+        # Ya guardado: los avisos de los partidos que haya creado abrirlos (G2)
+        await self._desk.avisar_salidas()
+        return vista

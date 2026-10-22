@@ -7,17 +7,20 @@ Se deja constancia en el log y se sigue.
 """
 
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
+    TeeTimeAssignment,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import cambios
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
@@ -93,3 +96,28 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
 
     async def deleted(self, competition_id: CompetitionId) -> None:
         await self._avisar("deleted", lambda p: p.deleted(competition_id))
+
+    async def tee_times(
+        self,
+        competition: Competition,
+        round_id: RoundId,
+        assigned: Sequence[TeeTimeAssignment],
+        withdrawn: Sequence[UserId],
+    ) -> None:
+        # A quien no le cambia nada no se le dice nada (G3)
+        if not assigned and not withdrawn:
+            return
+        await self._avisar(
+            "tee_times", lambda p: p.tee_times(competition, round_id, assigned, withdrawn)
+        )
+
+    async def salidas_cambiadas(
+        self,
+        competition: Competition,
+        round_id: RoundId,
+        antes: Mapping[UserId, TeeTimeAssignment],
+        despues: Mapping[UserId, TeeTimeAssignment],
+    ) -> None:
+        """Avisa de lo que cambio entre dos fotos de las salidas de una ronda (G1-G4)."""
+        avisos, fuera = cambios(antes, despues)
+        await self.tee_times(competition, round_id, avisos, fuera)

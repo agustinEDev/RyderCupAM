@@ -180,6 +180,16 @@ class _GeneradorQueRevientaAMitad:
         await self._uow.flush()
         raise RuntimeError("se cae a mitad de escribir los partidos")
 
+    def marca_de_salidas(self):
+        """Nada pendiente de avisar (G)."""
+        return 0
+
+    def descartar_salidas(self, desde):
+        """Lo deshecho no se avisa (G): aqui no hay nada que descartar."""
+
+    async def avisar_salidas(self):
+        """Nada que avisar: no llego a crear ningun partido."""
+
 
 async def _dos_sobres_entregados(db_session, ronda, jugadores):
     """Una cerrada con capitanes, equipos y los dos sobres entregados."""

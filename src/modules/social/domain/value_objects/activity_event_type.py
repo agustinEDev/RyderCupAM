@@ -38,6 +38,8 @@ class ActivityEventType(StrEnum):
     TOURNAMENT_MATCH_RESULT = "TOURNAMENT_MATCH_RESULT"
     TOURNAMENT_FINAL_STANDING = "TOURNAMENT_FINAL_STANDING"
     QUICK_MATCH_FINISHED = "QUICK_MATCH_FINISHED"
+    # Tu salida o tu partido en una ronda de torneo (G, tabla del 22 oct 2026)
+    TEE_TIME_ASSIGNED = "TEE_TIME_ASSIGNED"
 
     @property
     def is_achievement(self) -> bool:

@@ -451,12 +451,15 @@ class EnvelopeDesk:
         # lo que se toco dentro, y leer un atributo caducado es una carga
         # sincrona que en asincrono revienta (MissingGreenlet)
         round_id = ronda.id
+        marca = self._generador.marca_de_salidas()
         try:
             async with self._uow.savepoint():
                 await self._generador.generar_dentro(
                     ronda, competition, refrescar_handicap_rfeg=False
                 )
         except Exception as error:
+            # Lo deshecho no se avisa
+            self._generador.descartar_salidas(desde=marca)
             motivo = self._motivo(error)
         if motivo is None:
             return
@@ -465,6 +468,15 @@ class EnvelopeDesk:
         ronda_de_verdad = await self._uow.rounds.find_by_id(round_id) or ronda
         ronda_de_verdad.block_match_generation(motivo)
         await self._uow.rounds.update(ronda_de_verdad)
+
+    async def avisar_salidas(self) -> None:
+        """
+        Los avisos de los partidos que creo la apertura (G2). Se llama DESPUES
+        de guardar: generar va dentro de la transaccion de quien mira o
+        entrega, y hasta confirmarla puede deshacerse.
+        """
+        if self._generador is not None:
+            await self._generador.avisar_salidas()
 
     def _motivo(self, error: Exception) -> MatchGenerationBlock:
         """De la excepcion al motivo que se apunta en la sesion."""

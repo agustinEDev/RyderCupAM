@@ -34,7 +34,11 @@ from src.modules.competition.application.exceptions import (
     PartidasError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
@@ -43,6 +47,7 @@ from src.modules.competition.application.services.salidas_de_la_franja import (
     las_que_salieron,
     numeros_libres,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
 from src.modules.competition.application.services.vista_de_la_franja import (
     con_plaza_y_aprobados,
     partida_dto,
@@ -129,11 +134,17 @@ class _ConLaFranja:
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
+        """
+        Args:
+            actividad: Los avisos de salida en Actividad (G); sin el, no se avisa
+        """
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
         self._reloj = reloj
+        self._actividad = AvisosDeActividad(actividad)
 
     async def _abrir(self, round_id: RoundId, quien: UserId, is_admin: bool) -> _Abierta:
         """
@@ -214,8 +225,9 @@ class GenerarPartidasUseCase(_ConLaFranja):
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
-        super().__init__(uow, zonas, user_repository, reloj)
+        super().__init__(uow, zonas, user_repository, reloj, actividad)
         self._jugadores = jugadores
 
     async def execute(
@@ -233,6 +245,7 @@ class GenerarPartidasUseCase(_ConLaFranja):
         """
         async with self._uow:
             abierta = await self._abrir(RoundId(round_id), quien, is_admin)
+            antes = de_las_partidas(abierta.franja, abierta.partidas)
             plazas = await con_plaza_y_aprobados(self._uow, abierta.franja)
             fotos = await self._jugadores.construir(
                 self._uow, abierta.competicion, abierta.franja, [p.user_id for p in plazas]
@@ -250,7 +263,12 @@ class GenerarPartidasUseCase(_ConLaFranja):
             ]
             await self._uow.partidas.reemplazar_franja(abierta.franja.id, partidas)
             vista = await self._vista(abierta, partidas)
+            despues = de_las_partidas(abierta.franja, partidas)
             await self._uow.commit()
+        # Regenerar con los mismos grupos no avisa a nadie (G3)
+        await self._actividad.salidas_cambiadas(
+            abierta.competicion, abierta.franja.id, antes, despues
+        )
         return vista
 
 
@@ -264,8 +282,9 @@ class MoverJugadorUseCase(_ConLaFranja):
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
-        super().__init__(uow, zonas, user_repository, reloj)
+        super().__init__(uow, zonas, user_repository, reloj, actividad)
         self._jugadores = jugadores
 
     async def execute(
@@ -290,6 +309,8 @@ class MoverJugadorUseCase(_ConLaFranja):
         """
         async with self._uow:
             abierta = await self._abrir_para_tocar(RoundId(round_id), quien, is_admin)
+            # Antes de mover: mover cambia las partidas en su sitio
+            antes = de_las_partidas(abierta.franja, abierta.partidas)
             jugador = UserId(user_id)
             plazas = await con_plaza_y_aprobados(self._uow, abierta.franja)
             if jugador not in {p.user_id for p in plazas}:
@@ -321,7 +342,12 @@ class MoverJugadorUseCase(_ConLaFranja):
             await self._uow.partidas.anadir(cambios.crear)
             quedan = [p for p in abierta.partidas if p not in cambios.borrar] + cambios.crear
             vista = await self._vista(abierta, quedan, plazas)
+            despues = de_las_partidas(abierta.franja, quedan)
             await self._uow.commit()
+        # Solo a quien le cambia algo: los de las partidas tocadas y los que suben (G3)
+        await self._actividad.salidas_cambiadas(
+            abierta.competicion, abierta.franja.id, antes, despues
+        )
         return vista
 
 
@@ -339,12 +365,18 @@ class ReordenarPartidasUseCase(_ConLaFranja):
         """
         async with self._uow:
             abierta = await self._abrir_para_tocar(RoundId(round_id), quien, is_admin)
+            antes = de_las_partidas(abierta.franja, abierta.partidas)
             cambiadas = MovimientosDePartidas.reordenar(
                 abierta.partidas, [PartidaId(g) for g in group_ids], abierta.salidas
             )
             await self._uow.partidas.guardar(cambiadas)
             vista = await self._vista(abierta, abierta.partidas)
+            despues = de_las_partidas(abierta.franja, abierta.partidas)
             await self._uow.commit()
+        # Solo a quien le cambia la hora (G3)
+        await self._actividad.salidas_cambiadas(
+            abierta.competicion, abierta.franja.id, antes, despues
+        )
         return vista
 
 
@@ -402,8 +434,11 @@ class BorrarPartidasUseCase(_ConLaFranja):
         """
         async with self._uow:
             abierta = await self._abrir(RoundId(round_id), quien, is_admin)
+            antes = de_las_partidas(abierta.franja, abierta.partidas)
             await self._uow.partidas.borrar(abierta.partidas)
             await self._uow.commit()
+        # Sin partidas no hay salida: se retiran los avisos de la franja (G4)
+        await self._actividad.salidas_cambiadas(abierta.competicion, abierta.franja.id, antes, {})
 
 
 class VerPartidasUseCase:

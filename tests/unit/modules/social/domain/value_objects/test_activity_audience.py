@@ -59,6 +59,8 @@ SOLO_EL_AUTOR = [
     ActivityEventType.ENROLLMENT_REJECTED,
     ActivityEventType.TOURNAMENT_MATCH_RESULT,
     ActivityEventType.TOURNAMENT_FINAL_STANDING,
+    # G6: tu salida o tu partido, solo tuyo
+    ActivityEventType.TEE_TIME_ASSIGNED,
 ]
 
 

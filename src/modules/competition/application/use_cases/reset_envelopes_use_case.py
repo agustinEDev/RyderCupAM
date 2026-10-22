@@ -15,8 +15,13 @@ from uuid import UUID
 
 from src.modules.competition.application.dto.envelope_dto import ResetEnvelopesResponseDTO
 from src.modules.competition.application.exceptions import NotCompetitionCreatorError
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.services.lo_jugado import LoJugado
+from src.modules.competition.application.services.salidas_de_la_ronda import de_los_partidos
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -40,13 +45,20 @@ class NothingToResetError(Exception):
 class ResetEnvelopesUseCase:
     """Caso de uso para rehacer los sobres de una sesion."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, user_repository):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
         """
         Args:
             uow: Unit of Work del modulo
             user_repository: Lo pide la mesa de sobres
+            actividad: Para retirar los avisos de partido (G4); sin el, no se avisa
         """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
         self._desk = EnvelopeDesk(uow, user_repository)
 
     async def execute(
@@ -93,6 +105,8 @@ class ResetEnvelopesUseCase:
                     "se irían con ellos los partidos y lo anotado"
                 )
 
+            # Sin partidos no hay a quien avisar de ellos: se retiran (G4)
+            antes = de_los_partidos(ronda, partidos)
             for partido in partidos:
                 await self._uow.matches.delete(partido.id)
             await self._uow.envelopes.delete_by_round(ronda.id)
@@ -112,8 +126,10 @@ class ResetEnvelopesUseCase:
                 await self._uow.rounds.update(ronda)
 
             await self._uow.commit()
-            return ResetEnvelopesResponseDTO(
+            respuesta = ResetEnvelopesResponseDTO(
                 round_id=ronda.id.value,
                 envelopes_removed=len(sobres),
                 matches_removed=len(partidos),
             )
+        await self._actividad.salidas_cambiadas(competition, ronda.id, antes, {})
+        return respuesta

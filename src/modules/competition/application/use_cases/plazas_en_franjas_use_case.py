@@ -20,7 +20,11 @@ from src.modules.competition.application.exceptions import (
     PlazaEnFranjaError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -85,13 +89,16 @@ class CogerPlazaUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Args:
             zonas: Para no sacar a nadie de una partida que ya salió por su hora (#251)
+            actividad: Para retirarle el aviso de salida de la franja que deja (G3)
         """
         self._uow = uow
         self._zonas = zonas
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -148,10 +155,11 @@ class CogerPlazaUseCase:
                 and p.vista is None
                 for p in plazas
             )
+            fotos = {}
             if en_lugar_de is not None:
                 await self._uow.plazas.quitar(en_lugar_de, jugador)
                 # Y de su partida en esa franja: en la nueva queda sin partida (D3)
-                await sacar_de_sus_partidas(
+                fotos = await sacar_de_sus_partidas(
                     self._uow, competicion.id, jugador, en_lugar_de, self._zonas, ahora
                 )
             plaza = PlazaEnFranja.crear(
@@ -163,6 +171,10 @@ class CogerPlazaUseCase:
             await esperas.tras_coger(competicion, jugador)
             if en_lugar_de is not None:
                 await esperas.rellenar(competicion, en_lugar_de, ahora)
+        # Ya guardado: pierde su aviso de la franja que deja, y a quien se
+        # recoloca por su salida se le dice (G3)
+        for tocada, (antes, despues) in fotos.items():
+            await self._actividad.salidas_cambiadas(competicion, tocada, antes, despues)
         return plaza
 
 
