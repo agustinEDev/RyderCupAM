@@ -7,6 +7,8 @@ seguia exigiendo los cuatro scores y dejaba **todas** las partidas de foursomes
 sin resultado mientras el detalle ya las puntuaba. Vive aqui una sola vez.
 """
 
+from collections.abc import Mapping
+
 from src.shared.domain.value_objects.match_format import MatchFormat
 
 from ..value_objects.participant_id import ParticipantId
@@ -45,8 +47,45 @@ def hole_is_complete(
         team_b_ids: participantes del bando B
         match_format: formato de la partida, o None en juego libre
     """
+    return side_has_delivered(scored_ids, team_a_ids, match_format) and side_has_delivered(
+        scored_ids, team_b_ids, match_format
+    )
+
+
+def side_has_delivered(
+    scored_ids: set[ParticipantId] | dict[ParticipantId, int],
+    team_ids: set[ParticipantId],
+    match_format: MatchFormat | None,
+) -> bool:
+    """
+    Si un bando ha entregado su bola en un hoyo: en FOURSOMES basta la de
+    cualquiera de los dos; en lo demas, la de todos.
+
+    Es la mitad de `hole_is_complete`, mirada desde un solo bando: el hoyo esta
+    completo cuando los dos la han entregado.
+    """
     if match_format == MatchFormat.FOURSOMES:
-        return any(pid in scored_ids for pid in team_a_ids) and any(
-            pid in scored_ids for pid in team_b_ids
+        return any(pid in scored_ids for pid in team_ids)
+    return all(pid in scored_ids for pid in team_ids)
+
+
+def holes_delivered(
+    scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
+    team_ids: set[ParticipantId],
+    match_format: MatchFormat | None,
+) -> frozenset[int]:
+    """
+    Los hoyos en los que un bando entrego su bola, con la misma regla que
+    `hole_is_complete`. La raya (score nulo) es un hoyo entregado: el jugador
+    recogio la bola, pero el hoyo esta acabado.
+    """
+    hoyos = {hoyo for golpes in scores_by_participant.values() for hoyo in golpes}
+    return frozenset(
+        hoyo
+        for hoyo in hoyos
+        if side_has_delivered(
+            {pid for pid, golpes in scores_by_participant.items() if hoyo in golpes},
+            team_ids,
+            match_format,
         )
-    return all(pid in scored_ids for pid in team_a_ids | team_b_ids)
+    )

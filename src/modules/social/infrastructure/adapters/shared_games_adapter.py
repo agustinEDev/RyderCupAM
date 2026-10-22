@@ -24,14 +24,14 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.services.match_play_result import (
-    TOTAL_HOLES,
-    match_play_result,
+    match_play_reading,
     quick_match_strokes,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
 )
+from src.modules.quick_match.domain.services.hole_completion_service import holes_delivered
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     ParticipantStrokes,
     StrokeAllocationService,
@@ -45,6 +45,10 @@ from src.modules.social.application.ports.shared_games_interface import (
     SharedGame,
     SharedGameKind,
     SharedGamesInterface,
+)
+from src.modules.social.domain.services.counted_round import (
+    counting_units,
+    match_play_counts,
 )
 from src.modules.social.domain.services.head_to_head import (
     CardResult,
@@ -238,12 +242,19 @@ class SharedGamesAdapter(SharedGamesInterface):
         golpes = leido.golpes_rapidas.get(match.id, {})
         yo = match.find_participant(ParticipantId(viewer_id.value))
         el = match.find_participant(ParticipantId(other_id.value))
-        relation, outcome = Relation.AGAINST, None
+        relation, outcome, sin_terminar = Relation.AGAINST, None, False
 
-        # Sin campo no hay reparto de golpes, y a bruto no se juzga
         if match.match_format is None:
+            # Cuentan los que tienen los hoyos de la referencia, 9 o mas: si
+            # alguno de los dos no, la partida sale sin terminar (tabla A)
+            cuentan = counting_units({pid: hoyos.keys() for pid, hoyos in golpes.items() if hoyos})
+            sin_terminar = not (
+                yo and el and yo.participant_id in cuentan and el.participant_id in cuentan
+            )
+            # Sin campo no hay reparto de golpes, y a bruto no se juzga
             if (
-                course is not None
+                not sin_terminar
+                and course is not None
                 and match.scoring_format is not None
                 and yo
                 and el
@@ -259,7 +270,9 @@ class SharedGamesAdapter(SharedGamesInterface):
                 )
             formato = match.scoring_format.value if match.scoring_format else ""
         else:
-            relation, outcome = self._match_play_rapido(match, course, golpes, usuarios, yo, el)
+            relation, outcome, sin_terminar = self._match_play_rapido(
+                match, course, golpes, usuarios, yo, el
+            )
             formato = match.match_format.value
 
         return SharedGame(
@@ -273,6 +286,7 @@ class SharedGamesAdapter(SharedGamesInterface):
             format=formato,
             relation=relation,
             outcome=outcome,
+            unfinished=sin_terminar,
         )
 
     @staticmethod
@@ -302,27 +316,37 @@ class SharedGamesAdapter(SharedGamesInterface):
         usuarios: dict[UserId, User],
         yo: QuickMatchParticipant | None,
         el: QuickMatchParticipant | None,
-    ) -> tuple[Relation, Outcome | None]:
+    ) -> tuple[Relation, Outcome | None, bool]:
+        """La relacion, el resultado desde mi bando y si quedo sin terminar."""
         rosters = match.team_rosters()
         if rosters is None or yo is None or el is None:
-            return Relation.AGAINST, None
-        team_a_ids, _ = rosters
+            return Relation.AGAINST, None, False
+        team_a_ids, team_b_ids = rosters
         mi_bando = "A" if yo.participant_id in team_a_ids else "B"
         su_bando = "A" if el.participant_id in team_a_ids else "B"
         relation = relation_between(mi_bando, su_bando)
         # Un hándicap que falte, de cualquiera de los bandos, tuerce el reparto
-        # de todos: la partida sale, pero no se juzga (conservador)
+        # de todos: la partida sale, pero no se juzga (conservador). Tampoco se
+        # sabe si se decidio antes de tiempo, asi que no se marca a medias
         todos = tuple(match.participants)
         if course is None or not self._con_handicap_conocido(match, todos, usuarios):
-            return relation, None
+            return relation, None, False
 
-        winner, _ = match_play_result(
+        lectura = match_play_reading(
             match,
             golpes,
             quick_match_strokes(match, course, usuarios, self._stroke_allocation),
             self._scoring,
         )
-        return relation, team_outcome(winner, mi_bando)
+        # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
+        # los mismos hoyos, 9 o mas (tabla A)
+        if not match_play_counts(
+            holes_delivered(golpes, team_a_ids, match.match_format),
+            holes_delivered(golpes, team_b_ids, match.match_format),
+            lectura.decided_early,
+        ):
+            return relation, None, True
+        return relation, team_outcome(lectura.winner, mi_bando), False
 
     def _tarjeta(
         self,
@@ -350,8 +374,10 @@ class SharedGamesAdapter(SharedGamesInterface):
             holes=hoyos,
             scores_by_hole=golpes.get(participant.participant_id, {}),
         )
+        # Ya se sabe que cuentan los dos (`counting_units`): con los mismos
+        # hoyos, sus totales se comparan
         return CardResult(
-            complete=totales.holes_played == TOTAL_HOLES,
+            complete=True,
             points=totales.stableford_points,
             net_to_par=totales.to_par,
         )

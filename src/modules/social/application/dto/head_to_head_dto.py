@@ -50,8 +50,13 @@ class GameTogetherDTO(BaseModel):
     result: str | None = Field(
         default=None,
         description=(
-            "WON, HALVED o LOST para quien mira. None si no cuenta para el cara a "
-            "cara: sin resultado o con una tarjeta a medias"
+            "WON, HALVED o LOST para quien mira. UNFINISHED en una partida rapida "
+            "que no cuenta para alguno de los dos por los hoyos anotados: la "
+            "referencia es el maximo de hoyos de la partida, cuentan solo quienes "
+            "tienen exactamente esos hoyos y al menos 9 (un match play decidido "
+            "antes de tiempo, como un 3&2, cuenta siempre). None si no se puede "
+            "juzgar: sin hándicap de alguno, sin campo, o un torneo con una "
+            "tarjeta a medias. Ni UNFINISHED ni None suman en el cara a cara"
         ),
     )
     quick_match_id: str | None = Field(default=None, description="Para abrir la partida rapida")

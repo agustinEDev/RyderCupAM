@@ -7,6 +7,7 @@ escrito dos veces se separarian en cuanto cambiara una de las reglas.
 """
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -65,6 +66,23 @@ def quick_match_strokes(
     )
 
 
+@dataclass(frozen=True)
+class MatchPlayReading:
+    """
+    Lo que dice un match play rapido terminado.
+
+    `winner` es «A», «B» o «HALVED» (None sin ningun hoyo que adjudicar),
+    `score` el tanteo («3&2», «2UP», «AS»), `holes_played` los hoyos que
+    cuentan para el resultado y `decided_early` si se cerro antes de quedarse
+    sin hoyos (un «3&2»).
+    """
+
+    winner: str | None
+    score: str | None
+    holes_played: int
+    decided_early: bool
+
+
 def match_play_result(
     match: QuickMatch,
     scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
@@ -74,6 +92,24 @@ def match_play_result(
     """
     Quien gano («A», «B» o «HALVED») y con que marcador, o `(None, None)`.
 
+    Es `match_play_reading` sin lo demas: lo que siempre ha leido el historial.
+    """
+    lectura = match_play_reading(
+        match, scores_by_participant, strokes_by_participant, scoring_service
+    )
+    return lectura.winner, lectura.score
+
+
+def match_play_reading(
+    match: QuickMatch,
+    scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
+    strokes_by_participant: Mapping[ParticipantId, ParticipantStrokes],
+    scoring_service: MatchPlayScoring,
+) -> MatchPlayReading:
+    """
+    Quien gano, con que marcador, cuantos hoyos cuentan y si se decidio antes
+    de tiempo.
+
     El resultado no esta guardado en ningun sitio: se recalcula hoyo a hoyo con
     el mismo motor que usa el detalle de la partida. Solo cuentan los hoyos
     donde anotaron los dos bandos, porque un hoyo a medias no se puede
@@ -81,9 +117,10 @@ def match_play_result(
     una copia: escrita a mano, exigia los cuatro scores y dejaba sin resultado
     todas las partidas de foursomes mientras la partida abierta ya las puntuaba.
     """
+    sin_resultado = MatchPlayReading(None, None, 0, decided_early=False)
     rosters = match.team_rosters()
     if rosters is None:
-        return None, None
+        return sin_resultado
     team_a_ids, team_b_ids = rosters
 
     hole_results = []
@@ -119,20 +156,28 @@ def match_play_result(
         )
 
     if not hole_results:
-        return None, None
+        return sin_resultado
 
+    jugados = len(hole_results)
     standing = scoring_service.calculate_match_standing(hole_results)
 
     if scoring_service.is_match_decided(standing):
         # Se cerro antes del 18: el resultado va en "3&2", ventaja y hoyos
         # que quedaban
         outcome = scoring_service.format_decided_result(hole_results)
-        return outcome["winner"], outcome["score"]
+        return MatchPlayReading(
+            outcome["winner"],
+            outcome["score"],
+            jugados,
+            decided_early=standing["holes_remaining"] > 0,
+        )
 
     if standing["leading_team"] is None:
-        return HALVED_WINNER, "AS"
+        return MatchPlayReading(HALVED_WINNER, "AS", jugados, decided_early=False)
 
     # Terminado sin decidirse antes de tiempo: la ventaja tal cual ("2UP").
     # No vale `format_decided_result` aqui: inventaria un "2&7" con los hoyos
     # que quedaban sin anotar, como si el partido se hubiera cerrado en ellos
-    return standing["leading_team"], standing["status"]
+    return MatchPlayReading(
+        standing["leading_team"], standing["status"], jugados, decided_early=False
+    )
