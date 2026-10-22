@@ -1862,7 +1862,15 @@ class _Consultas:
 
     REPOSITORIOS: ClassVar[dict[str, tuple[str, ...]]] = {
         "user": ("users",),
-        "competition": ("competitions", "rounds", "matches", "hole_scores", "enrollments"),
+        "competition": (
+            "competitions",
+            "rounds",
+            "matches",
+            "hole_scores",
+            "enrollments",
+            "partidas",
+            "golpes_de_partida",
+        ),
         "quick_match": ("quick_matches", "quick_match_hole_scores"),
         "golf_course": ("golf_courses",),
     }

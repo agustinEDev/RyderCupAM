@@ -34,6 +34,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 )
 from src.shared.domain.value_objects.play_mode import PlayMode
 from tests.unit.modules.social.stroke_play_world import StrokePlayWorld, tarjeta
+from tests.unit.modules.user.application.use_cases.test_get_player_stats_use_case import (
+    _Consultas,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -252,3 +255,43 @@ class TestExcludingOneTournament:
         assert todo.rounds_played == 2
         assert sin_stroke.rounds_played == 1
         assert sin_ryder.rounds_played == 1
+
+
+class TestStrokePlayCardsInBatches:
+    """
+    Tabla del 22 oct 2026, M, tras traer la #640: las tarjetas de stroke play
+    tambien se leen por lotes, con o sin el torneo excluido. Las consultas no
+    crecen con el numero de torneos.
+    """
+
+    async def _consultas(self, cuantos: int, excluir: bool) -> tuple[int, int]:
+        world = StrokePlayWorld(
+            InMemoryCompetitionUnitOfWork(),
+            InMemoryGolfCourseUnitOfWork(),
+            InMemoryUserUnitOfWork(),
+        )
+        ana = await world.user()
+        torneos = [(await _jugada(world, ana))[0] for _ in range(cuantos)]
+        qm = InMemoryQuickMatchUnitOfWork()
+        consultas = _Consultas(
+            user=world.users, competition=world.comp, quick_match=qm, golf_course=world.golf
+        )
+        caso = GetPlayerStatsUseCase(
+            user_uow=world.users,
+            competition_uow=world.comp,
+            quick_match_uow=qm,
+            golf_course_uow=world.golf,
+        )
+        excluido = str(torneos[0].id.value) if excluir else None
+
+        stats = await caso.execute(ana.id, excluding_competition_id=excluido)
+
+        return stats.rounds_played, len(consultas.llamadas)
+
+    @pytest.mark.parametrize("excluir", [False, True])
+    async def test_the_same_queries_with_two_tournaments_as_with_six(self, excluir):
+        dos, con_dos = await self._consultas(2, excluir)
+        seis, con_seis = await self._consultas(6, excluir)
+
+        assert (dos, seis) == ((1, 5) if excluir else (2, 6))
+        assert con_seis == con_dos
