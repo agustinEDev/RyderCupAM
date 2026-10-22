@@ -43,11 +43,25 @@ class ActivityEventRepositoryInterface(ABC):
     diferencia la más simple — el reparto en escritura solo compensa con miles
     de seguidores por cuenta, y a cambio trae duplicación y reconciliación cada
     vez que alguien acepta o deshace una amistad.
+
+    **Lo oculto no se destapa al volver a publicarlo** (fallo del probador, 23
+    oct 2026). Todo borrado de un logro oculto (`visible_to_friends=False`)
+    lo apunta, y si el mismo logro —jugador, tipo y origen— se vuelve a
+    publicar, entra oculto aunque llegue visible; el apunte se gasta entonces.
+    Asi reabrir y volver a cerrar un torneo, o heredar «campo nuevo» o «primer
+    torneo», no destapa lo que se publico con la publicacion apagada. Lo visible
+    que llega oculto entra oculto: apagarla oculta lo publicado. Solo los
+    logros: los avisos que se repiten (apuntarse otra vez) son nuevos y toman
+    el interruptor de ahora. `delete_for_user` no apunta: es el interruptor y
+    la cuenta, no una retirada para volver a publicar.
     """
 
     @abstractmethod
     async def add_many(self, events: list[ActivityEvent]) -> None:
-        """Publica varios eventos de una vez (los de una misma vuelta)."""
+        """
+        Publica varios eventos de una vez (los de una misma vuelta). Lo que ya
+        estaba no se toca, y un logro que se retiro oculto entra oculto.
+        """
 
     @abstractmethod
     async def find_in(
@@ -244,9 +258,10 @@ class ActivityEventRepositoryInterface(ABC):
         """
         Deja de esos tipos, para esa competicion (`payload.competition_id`),
         exactamente `events`: borra lo que ya no esta o ha cambiado (otro
-        `payload` u otra visibilidad) y publica lo que falta. Lo que ya estaba
-        igual no se toca: conserva su id y su fecha de publicacion, asi que
-        repetir la misma publicacion no lo vuelve a dar por nuevo.
+        `payload`, o visible y ahora oculto) y publica lo que falta. Lo que ya
+        estaba igual no se toca: conserva su id y su fecha de publicacion, asi
+        que repetir la misma publicacion no lo vuelve a dar por nuevo. Lo que
+        estaba oculto sigue oculto aunque ahora llegue visible.
 
         Es como se publica el ultimo cierre de un torneo sobre lo del anterior
         (revision final del 22 oct 2026). Quien llama toma antes el candado

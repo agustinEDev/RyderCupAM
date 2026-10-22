@@ -120,6 +120,31 @@ withdrawn_tee_time_notices_table = Table(
     Index("ix_withdrawn_tee_time_notices_competition", "competition_id"),
 )
 
+# Los logros que se publicaron ocultos (con la publicacion apagada) y se
+# retiraron: al reabrir el torneo, o al llevarse otro mas antiguo «campo nuevo»
+# o «primer torneo». Si el mismo logro —jugador, tipo y origen— se vuelve a
+# publicar, vuelve oculto aunque ahora este encendida: encenderla no destapa
+# nada (fallo del probador, 23 oct 2026). La fila se gasta al volver a publicar
+# el logro, que desde entonces guarda el mismo lo oculto
+withdrawn_hidden_achievements_table = Table(
+    "withdrawn_hidden_achievements",
+    metadata,
+    Column(
+        "user_id",
+        SocialUserIdType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("source_match_id", String(36), primary_key=True),
+    Column("type", ActivityEventTypeType, primary_key=True),
+    Column(
+        "withdrawn_at",
+        DateTime,
+        nullable=False,
+        server_default=text("timezone('utc', now())"),
+    ),
+)
+
 # El orden del feed: por publicacion y con el id de desempate, como el cursor.
 # Fuera de la tabla porque las columnas en DESC se declaran sobre la columna
 Index(
