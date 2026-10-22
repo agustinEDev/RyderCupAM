@@ -81,6 +81,15 @@ class PlayerProfileResponseDTO(BaseModel):
         description="En que punto esta tu relacion con el, para saber que boton ofrecer"
     )
     is_friend: bool = Field(default=False, description="Atajo de `friendship.status == ACCEPTED`")
+    blocked_by_me: bool = Field(
+        default=False,
+        description=(
+            "True si quien mira bloqueo a este jugador (puede desbloquearlo). Con "
+            "`friendship.status == BLOCKED` y esto en false, el bloqueo lo puso el otro. "
+            "Con un bloqueo en cualquier sentido el perfil llega sin hándicap y con "
+            "`friends_count` a 0"
+        ),
+    )
     email: str | None = Field(
         default=None,
         description="Solo uno mismo (BE #531). None para cualquier otro, amigos incluidos",

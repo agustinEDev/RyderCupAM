@@ -136,6 +136,9 @@ class TestPerfilSocial:
         assert datos["friendship"]["status"] == "BLOCKED"
         assert datos["handicap"] is None
         assert datos["friends_count"] == 0
+        # F (22 oct): me bloqueo el; desde su lado, lo bloqueo el
+        assert datos["blocked_by_me"] is False
+        assert (await _perfil(client, el, yo))["blocked_by_me"] is True
 
     async def test_un_amigo_ve_el_cara_a_cara_y_las_partidas_juntos(self, client: AsyncClient):
         """Caso 4: gano el singles (4 contra 5, scratch en un hoyo)."""
