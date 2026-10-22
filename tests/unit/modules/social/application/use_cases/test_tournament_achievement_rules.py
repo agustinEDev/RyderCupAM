@@ -469,3 +469,23 @@ async def _partida_rapida(qm_uow, user, course) -> None:
     match.complete()
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
+
+
+class TestPlayerIdsOfTheMatch:
+    """Los logros de la Ryder llevan `player_ids`: los del partido, ordenados (22 oct)."""
+
+    async def test_every_ryder_achievement_carries_the_players_of_its_match(
+        self, world, social_uow
+    ):
+        ana = await world.user()
+        rival = await world.user()
+        competition = await world.competition(ana, tipo=RYDER, enrolled=[ana, rival])
+        course = await world.course(ana)
+        await world.match(await world.round(competition, course), ana, rival, tarjeta(h4=3))
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        esperado = sorted(str(u.id.value) for u in (ana, rival))
+        eventos = await _feed(social_uow, ana)
+        assert eventos
+        assert all(e.payload["player_ids"] == esperado for e in eventos)
