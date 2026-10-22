@@ -53,7 +53,7 @@ class GetFriendsFeedUseCase:
     vacio a quien todavia no tiene amigos. Lo propio se incluye sin mirar el
     interruptor de publicacion: ese decide lo que ven los demas, no lo que uno
     ve de si mismo. El aviso de novedades cuenta tambien lo propio (decision
-    de producto): anuncia todo lo nuevo de Actividad, con tope de 10.
+    de producto): anuncia todo lo nuevo de Actividad, con tope de 99.
 
     **El feed se lee, no se escribe** (fan-out on read): al pedirlo se consultan
     los eventos de mis amigos. No hay una copia por amigo creada al publicar.

@@ -46,8 +46,8 @@ async def test_devuelve_el_numero_de_novedades(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_c12_se_queda_en_diez(client: AsyncClient):
-    """C12. Given 12 novedades / When pido el contador / Then 10."""
+async def test_b_doce_ya_no_se_quedan_en_diez(client: AsyncClient):
+    """B (tabla del 22 oct). Given 12 novedades / When pido el contador / Then 12 (tope 99)."""
     ana = await create_authenticated_user(client, "cnt_c@test.com", PASSWORD, "Ana", "Garcia")
     await marcar_visto(ana["user"]["id"], VISITA)
     await insertar_eventos(
@@ -57,7 +57,7 @@ async def test_c12_se_queda_en_diez(client: AsyncClient):
     set_auth_cookies(client, ana["cookies"])
     respuesta = await client.get(URL)
 
-    assert respuesta.json() == {"unseen_count": 10}
+    assert respuesta.json() == {"unseen_count": 12}
 
 
 @pytest.mark.asyncio

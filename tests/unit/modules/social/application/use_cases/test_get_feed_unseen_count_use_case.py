@@ -2,8 +2,8 @@
 Tests del contador de novedades del feed (el numero del boton de Actividad).
 
 Cuenta todo lo nuevo que el jugador veria en su feed, tambien lo suyo
-(decision de producto), y se queda en 10: el cliente pinta «9+», asi que
-contar mas seria trabajo tirado.
+(decision de producto), y se queda en 99 (tabla del 22 oct 2026, B): el
+cliente decide como pintarlo.
 """
 
 from datetime import datetime, timedelta
@@ -126,24 +126,34 @@ async def test_c11_sin_visita_previa_cuenta_todo_lo_visible(social_uow, user_uow
     assert await _cuenta(social_uow, user_uow, yo) == 3
 
 
-async def test_c12_doce_novedades_se_quedan_en_diez(social_uow, user_uow):
-    """C12. Given 12 novedades / When se cuentan / Then 10: el boton pinta «9+»."""
+async def test_b_ciento_una_novedades_se_quedan_en_99(social_uow, user_uow):
+    """B (tabla del 22 oct). Given 101 novedades / When se cuentan / Then 99, el tope."""
+    yo = await _create_user(user_uow)
+    amigo = await _create_user(user_uow)
+    await _amigos(social_uow, yo, amigo)
+    await _publica(social_uow, amigo, cuantos=101)
+
+    assert await _cuenta(social_uow, user_uow, yo) == 99
+
+
+async def test_b_doce_ya_no_se_recortan(social_uow, user_uow):
+    """B. Given 12 novedades / When se cuentan / Then 12: el tope de 10 ya no existe."""
     yo = await _create_user(user_uow)
     amigo = await _create_user(user_uow)
     await _amigos(social_uow, yo, amigo)
     await _publica(social_uow, amigo, cuantos=12)
 
-    assert await _cuenta(social_uow, user_uow, yo) == 10
+    assert await _cuenta(social_uow, user_uow, yo) == 12
 
 
-async def test_c12_nueve_se_cuentan_enteras(social_uow, user_uow):
-    """Given 9 novedades / When se cuentan / Then 9: el tope no recorta lo que cabe."""
+async def test_b_noventa_y_nueve_se_cuentan_enteras(social_uow, user_uow):
+    """B. Given 99 novedades / When se cuentan / Then 99: el tope no recorta lo que cabe."""
     yo = await _create_user(user_uow)
     amigo = await _create_user(user_uow)
     await _amigos(social_uow, yo, amigo)
-    await _publica(social_uow, amigo, cuantos=9)
+    await _publica(social_uow, amigo, cuantos=99)
 
-    assert await _cuenta(social_uow, user_uow, yo) == 9
+    assert await _cuenta(social_uow, user_uow, yo) == 99
 
 
 async def test_c13_cuenta_lo_mio_y_lo_de_mis_amigos(social_uow, user_uow):
@@ -206,7 +216,9 @@ async def test_cuenta_segun_el_publico_de_cada_tipo(social_uow, user_uow, monkey
     assert await _cuenta(social_uow, user_uow, yo) == 2
 
 
-@pytest.mark.parametrize(("mios", "suyos", "visto"), [(1, 2, VISITA), (4, 8, None), (0, 0, None)])
+@pytest.mark.parametrize(
+    ("mios", "suyos", "visto"), [(1, 2, VISITA), (4, 8, None), (0, 0, None), (60, 50, None)]
+)
 async def test_c16_coincide_con_el_del_feed(social_uow, user_uow, mios, suyos, visto):
     """
     C16. Given distintas mezclas de novedades / When se piden el contador y el
@@ -223,7 +235,7 @@ async def test_c16_coincide_con_el_del_feed(social_uow, user_uow, mios, suyos, v
     contador = await _cuenta(social_uow, user_uow, yo)
     feed = await _feed(social_uow, user_uow, yo)
 
-    assert feed.unseen_count == contador == min(mios + suyos, 10)
+    assert feed.unseen_count == contador == min(mios + suyos, 99)
 
 
 async def test_una_ultima_visita_en_el_futuro_cuenta_como_si_fuera_ahora(social_uow, user_uow):

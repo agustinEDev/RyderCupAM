@@ -212,7 +212,7 @@ class FeedResponseDTO(BaseModel):
         default=0,
         description=(
             "Cuantas tarjetas de este feed se han publicado desde la ultima visita, "
-            "las propias y las solicitudes de amistad recibidas incluidas, con tope de 10 (el cliente pinta «9+»). Sin "
+            "las propias y las solicitudes de amistad recibidas incluidas, con tope de 99. Sin "
             "visita previa cuenta todo. Es el mismo numero que da "
             "`GET /users/me/feed/unseen-count`. Solo se calcula en la primera pagina: "
             "con `cursor` llega a 0"
@@ -235,6 +235,6 @@ class FeedUnseenCountResponseDTO(BaseModel):
     unseen_count: int = Field(
         description=(
             "Cuantas entradas del feed se han publicado desde la ultima visita, "
-            "las propias incluidas, con tope de 10. Sin visita previa cuenta todo"
+            "las propias incluidas, con tope de 99. Sin visita previa cuenta todo"
         ),
     )

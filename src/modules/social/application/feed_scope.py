@@ -32,9 +32,9 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.utc_clock import utc_now
 
-# Tope del contador de novedades. El cliente pinta «9+», asi que pasado el 10
-# el numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
-UNSEEN_CAP = 10
+# Tope del contador de novedades (tabla del 22 oct 2026, B). Mas alla, el
+# numero exacto no cambia nada en la pantalla y contarlo seria trabajo tirado
+UNSEEN_CAP = 99
 
 # Cuantas solicitudes de amistad pendientes se leen para el feed. Nadie tiene
 # tantas sin responder, y el contador no necesita mas que su tope
