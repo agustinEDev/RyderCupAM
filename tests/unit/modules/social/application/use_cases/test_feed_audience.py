@@ -132,9 +132,9 @@ async def _feed_de(social_uow, user_uow, user: User) -> set[str]:
 
 
 async def _actividad(social_uow, user_uow, viewer: User, target: User) -> set[str]:
-    resultado = await GetPlayerActivityUseCase(social_uow, user_uow).execute(
-        str(viewer.id.value), str(target.id.value)
-    )
+    resultado = await GetPlayerActivityUseCase(
+        social_uow, user_uow, InMemoryGolfCourseUnitOfWork()
+    ).execute(str(viewer.id.value), str(target.id.value))
     return {e.source_match_id for e in resultado.events}
 
 

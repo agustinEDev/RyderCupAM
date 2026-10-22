@@ -1,5 +1,8 @@
 """Caso de Uso: La actividad publicada por un jugador."""
 
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 from src.modules.social.application.dto.profile_dto import ActivityEventDTO, FeedResponseDTO
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
@@ -10,6 +13,7 @@ from src.modules.social.application.feed_cursor import (
     parse_cursor,
     sin_partir_tarjetas,
 )
+from src.modules.social.application.feed_references import autores_de, campos_de
 from src.modules.social.application.feed_scope import payload_for
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
@@ -51,9 +55,11 @@ class GetPlayerActivityUseCase:
         self,
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        golf_course_uow: GolfCourseUnitOfWorkInterface,
     ):
         self._social_uow = social_uow
         self._user_uow = user_uow
+        self._golf_course_uow = golf_course_uow
 
     async def execute(
         self,
@@ -109,7 +115,16 @@ class GetPlayerActivityUseCase:
                 self._social_uow.activity_events, [trozo], eventos, limit
             )
 
+        # Quien sale con nombre y en que campo, con la misma regla que el feed:
+        # son las mismas tarjetas, y el perfil no puede enseñar a quien el feed
+        # oculta. Sin esto el cliente pinta al dueño y a sus rivales como «un
+        # jugador»
+        autores = await autores_de(self._social_uow, self._user_uow, eventos, viewer_id)
+        campos = await campos_de(self._golf_course_uow, eventos)
+
         return FeedResponseDTO(
+            authors=autores,
+            courses=campos,
             events=[
                 ActivityEventDTO(
                     id=str(e.id),

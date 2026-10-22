@@ -371,7 +371,7 @@ class TestPaginasSinPartirTarjetas:
         )
         primera = await caso.execute(str(yo.id.value), limit=2)
         segunda = await caso.execute(str(yo.id.value), limit=2, cursor=primera.next_cursor)
-        actividad = GetPlayerActivityUseCase(social_uow, user_uow)
+        actividad = GetPlayerActivityUseCase(social_uow, user_uow, InMemoryGolfCourseUnitOfWork())
         mia = await actividad.execute(str(yo.id.value), str(yo.id.value), limit=2)
 
         assert [e.source_match_id for e in mia.events] == [
@@ -533,9 +533,9 @@ class TestPrivacidadDeLosNombrados:
         (mio,) = (await _feed(social_uow, user_uow, yo)).events
         (suyo,) = (await _feed(social_uow, user_uow, amigo)).events
         (en_mi_perfil,) = (
-            await GetPlayerActivityUseCase(social_uow, user_uow).execute(
-                str(amigo.id.value), str(yo.id.value)
-            )
+            await GetPlayerActivityUseCase(
+                social_uow, user_uow, InMemoryGolfCourseUnitOfWork()
+            ).execute(str(amigo.id.value), str(yo.id.value))
         ).events
 
         assert mio.payload["opponents"][0]["name"] == "Seve Ballesteros"

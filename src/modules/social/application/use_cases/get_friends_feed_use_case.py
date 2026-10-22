@@ -6,10 +6,8 @@ from datetime import datetime
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
 )
-from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.social.application.dto.profile_dto import (
     ActivityEventDTO,
-    FeedAuthorDTO,
     FeedResponseDTO,
     FriendRequestNoticeDTO,
 )
@@ -18,6 +16,7 @@ from src.modules.social.application.feed_cursor import (
     parse_cursor,
     sin_partir_tarjetas,
 )
+from src.modules.social.application.feed_references import autores_de, campos_de
 from src.modules.social.application.feed_scope import (
     count_unseen,
     payload_for,
@@ -32,7 +31,7 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.utc_clock import utc_now
 
 # Tope duro por pagina. El cliente puede pedir menos, nunca mas: el feed carga
@@ -110,8 +109,14 @@ class GetFriendsFeedUseCase:
                 solicitudes = await pending_requests(self._social_uow.friendships, viewer_id)
                 no_vistos = await count_unseen(self._social_uow.activity_events, scope, solicitudes)
 
-        autores = await self._autores(eventos, viewer_id, [s.requester_id for s in solicitudes])
-        campos = await self._campos(eventos)
+        autores = await autores_de(
+            self._social_uow,
+            self._user_uow,
+            eventos,
+            viewer_id,
+            [s.requester_id for s in solicitudes],
+        )
+        campos = await campos_de(self._golf_course_uow, eventos)
 
         return FeedResponseDTO(
             events=[self._a_dto(e, viewer_id) for e in eventos],
@@ -131,91 +136,6 @@ class GetFriendsFeedUseCase:
             ],
         )
 
-    async def _autores(
-        self,
-        eventos: list[ActivityEvent],
-        viewer_id: UserId,
-        otros: list[UserId] | None = None,
-    ) -> dict[str, FeedAuthorDTO]:
-        """
-        Quien publico cada entrada de esta pagina, y las demas personas que
-        nombra: rivales y compañeros de un resultado, quien pide amistad.
-
-        Van en la respuesta para que pintar el feed no exija una peticion de
-        perfil por entrada. Se leen todos de una vez, no uno por autor.
-
-        **De los nombrados solo vienen los que quien mira puede ver**: nadie
-        con quien tenga un bloqueo, lo pusiera quien lo pusiera, ni una cuenta
-        desactivada. Sin sus datos, el cliente pinta «un jugador».
-        """
-        propios = {e.user_id for e in eventos} | set(otros or [])
-        nombrados: set[UserId] = set()
-        for evento in eventos:
-            nombrados.update(_nombrados(evento.payload))
-        nombrados -= propios
-        if nombrados:
-            async with self._social_uow:
-                nombrados -= set(await self._social_uow.friendships.find_blocked_ids(viewer_id))
-        ids = propios | nombrados
-        if not ids:
-            return {}
-
-        async with self._user_uow:
-            usuarios = [
-                u
-                for u in await self._user_uow.users.find_by_ids(list(ids))
-                if u.id in propios or u.is_active
-            ]
-
-        return {
-            str(user.id.value): FeedAuthorDTO(
-                id=str(user.id.value),
-                first_name=user.first_name,
-                last_name=user.last_name,
-                display_name=user.display_name,
-                avatar_source=user.avatar_source.value,
-                avatar_preset_id=user.avatar_preset_id,
-            )
-            for user in usuarios
-        }
-
-    async def _campos(self, eventos: list[ActivityEvent]) -> dict[str, str]:
-        """
-        Como se llama cada campo citado en esta pagina.
-
-        El `payload` solo guarda el `golf_course_id`, asi que el nombre se
-        resuelve al leer. Va en la respuesta por el mismo motivo que los
-        autores: pintar el feed no debe costar una peticion por entrada. Se
-        consulta cada campo una vez aunque salga en varias.
-
-        Un id que no se puede resolver se omite en lugar de romper la pagina: el
-        feed cuenta un logro, y el logro sigue siendo cierto aunque el campo se
-        haya borrado. La entrada se pinta sin el nombre. Eso vale igual para un
-        campo que ya no existe que para un id ilegible — el `payload` es JSONB y
-        nada garantiza su forma anos despues de haberse escrito, asi que un
-        valor con el que no se puede ni construir un `GolfCourseId` no puede
-        costar la peticion entera.
-        """
-        ids = {
-            evento.payload["golf_course_id"]
-            for evento in eventos
-            if evento.payload.get("golf_course_id")
-        }
-        if not ids:
-            return {}
-
-        campos: dict[str, str] = {}
-        async with self._golf_course_uow:
-            for course_id in ids:
-                try:
-                    identificador = GolfCourseId(course_id)
-                except ValueError:
-                    continue
-                campo = await self._golf_course_uow.golf_courses.find_by_id(identificador)
-                if campo is not None:
-                    campos[course_id] = campo.name
-        return campos
-
     @staticmethod
     def _a_dto(evento: ActivityEvent, viewer_id: UserId) -> ActivityEventDTO:
         return ActivityEventDTO(
@@ -228,31 +148,3 @@ class GetFriendsFeedUseCase:
             source_match_id=evento.source_match_id,
             group_key=evento.card_key,
         )
-
-
-def _nombrados(payload: dict) -> set[UserId]:
-    """
-    Los jugadores con cuenta que nombra un resultado: `opponent_ids` y
-    `partner_ids` en los de torneo, `opponents` y `partners` en los de partida
-    rapida (el invitado va por su nombre). Lo ilegible se ignora: el `payload`
-    es JSONB y nada garantiza su forma con los años.
-    """
-    crudos: list = []
-    for clave in ("opponent_ids", "partner_ids"):
-        valor = payload.get(clave)
-        if isinstance(valor, list):
-            crudos.extend(valor)
-    for clave in ("opponents", "partners"):
-        valor = payload.get(clave)
-        if isinstance(valor, list):
-            crudos.extend(p.get("user_id") for p in valor if isinstance(p, dict))
-
-    nombrados = set()
-    for crudo in crudos:
-        if not crudo:
-            continue
-        try:
-            nombrados.add(UserId(crudo))
-        except (TypeError, ValueError, InvalidUserIdError):
-            continue
-    return nombrados

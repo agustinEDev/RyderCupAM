@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from src.modules.social.application.use_cases.get_friends_feed_use_case import _nombrados
+from src.modules.social.application.feed_references import nombrados_en
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -14,4 +14,4 @@ def test_un_id_que_no_es_uuid_se_ignora():
         "opponents": [{"user_id": "tampoco"}, {"name": "Invitado"}],
     }
 
-    assert _nombrados(payload) == {UserId(bueno)}
+    assert nombrados_en(payload) == {UserId(bueno)}

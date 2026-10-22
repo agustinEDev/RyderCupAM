@@ -11,6 +11,9 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
+    InMemoryGolfCourseUnitOfWork,
+)
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
     ProfileNotVisibleError,
@@ -81,7 +84,7 @@ async def _publica(social_uow, user: User, match_id: str, cuando: datetime = CUA
 
 
 def _use_case(social_uow, user_uow):
-    return GetPlayerActivityUseCase(social_uow, user_uow)
+    return GetPlayerActivityUseCase(social_uow, user_uow, InMemoryGolfCourseUnitOfWork())
 
 
 async def test_un_amigo_ve_la_actividad(social_uow, user_uow):
