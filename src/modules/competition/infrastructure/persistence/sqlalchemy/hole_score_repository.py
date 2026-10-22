@@ -81,6 +81,22 @@ class SQLAlchemyHoleScoreRepository(HoleScoreRepositoryInterface):
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def find_by_matches_and_player(
+        self, match_ids: list[MatchId], player_user_id: UserId
+    ) -> list[HoleScore]:
+        if not match_ids:
+            return []
+        statement = (
+            select(HoleScore)
+            .where(
+                HoleScore._match_id.in_(match_ids),
+                HoleScore._player_user_id == player_user_id,
+            )
+            .order_by(HoleScore._hole_number.asc())
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def delete_by_match(self, match_id: MatchId) -> int:
         statement = delete(HoleScore).where(HoleScore._match_id == match_id)
         result = await self._session.execute(statement)
