@@ -44,7 +44,6 @@ from src.shared.domain.services.score_differential_calculator import (
     ScoreDifferentialCalculator,
 )
 from src.shared.domain.services.stroke_play_scoring import (
-    NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
     StrokePlayScoring,
 )
@@ -835,10 +834,9 @@ class GetPlayerStatsUseCase:
             hole_score = scored[hole.number]
             strokes_received = self._calculator.allocate_strokes(strokes_basis, hole.stroke_index)
             if hole_score.own_score is None:
-                # La raya: se anota `par + 2` de bruto —un total de golpes no
-                # puede depender del reparto— y doble bogey NETO en lo computable
-                gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR
-                computable = self._calculator.net_double_bogey(hole.par, strokes_received)
+                # La raya: su doble bogey NETO, `par + 2 + golpes recibidos`,
+                # de bruto y en lo computable (Agustin, 23 oct 2026)
+                gross = computable = self._calculator.net_double_bogey(hole.par, strokes_received)
             else:
                 gross = hole_score.own_score
                 computable = self._calculator.adjusted_gross(
@@ -875,7 +873,8 @@ class GetPlayerStatsUseCase:
         regenerar el JSON de referencia.
 
         La raya —clave presente con valor None, el hoyo recogido— vale doble
-        bogey neto, que es lo que el WHS manda anotar en un hoyo sin terminar.
+        bogey neto, que es lo que el WHS manda anotar en un hoyo sin terminar,
+        también en el bruto.
         Un hoyo que nadie tocó no está en `scores_by_hole` y no entra.
         """
         strokes_basis = None if playing_handicap is None else Decimal(playing_handicap)
@@ -887,12 +886,11 @@ class GetPlayerStatsUseCase:
 
             strokes_received = self._calculator.allocate_strokes(strokes_basis, hole.stroke_index)
             score = scores_by_hole[hole.hole_number]
-            gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR if score is None else score
-            computable = (
-                self._calculator.net_double_bogey(hole.par, strokes_received)
-                if score is None
-                else self._calculator.adjusted_gross(score, hole.par, strokes_received)
-            )
+            if score is None:
+                gross = computable = self._calculator.net_double_bogey(hole.par, strokes_received)
+            else:
+                gross = score
+                computable = self._calculator.adjusted_gross(score, hole.par, strokes_received)
             outcomes.append(
                 HoleOutcome(
                     number=hole.hole_number,

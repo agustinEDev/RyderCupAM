@@ -46,7 +46,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.services.stroke_play_scoring import (
-    NET_DOUBLE_BOGEY_OVER_PAR,
     HoleSetup,
     StrokePlayScoring,
 )
@@ -318,7 +317,9 @@ class GetRecentMatchesUseCase:
         # Leyendo solo lo anotado a nombre de cada uno, el que llevaba la fila
         # salía con una vuelta entera de 72 golpes y su compañero sin nada.
         side_strokes = (
-            self._foursomes_side_strokes(raw, course)
+            self._foursomes_side_strokes(
+                raw, course, self._quick_match_strokes(raw, course, users_by_id)
+            )
             if raw.match.match_format == MatchFormat.FOURSOMES
             else None
         )
@@ -480,7 +481,7 @@ class GetRecentMatchesUseCase:
         return self._result_for_team(winner, own_team), score
 
     def _foursomes_side_strokes(
-        self, raw: _QuickMatchRaw, course: GolfCourse | None
+        self, raw: _QuickMatchRaw, course: GolfCourse | None, strokes: dict
     ) -> tuple[int, int] | None:
         """
         Golpes brutos y hoyos del BANDO en foursomes: una bola por hoyo.
@@ -493,10 +494,10 @@ class GetRecentMatchesUseCase:
         sumarlas, porque comparten bola y eso doblaría la vuelta.
 
         Un hoyo RECOGIDO cuenta: está jugado, y lo decide el resultado del
-        partido igual que cualquier otro. Vale doble bogey BRUTO —`par + 2`, sin
-        golpes recibidos—, porque esta cifra es bruta y meterle un hoyo neto
-        dentro mezclaría dos escalas en el mismo número. Dejarlo fuera daba un
-        total de menos hoyos de los que el partido dice que se jugaron.
+        partido igual que cualquier otro. Vale su doble bogey NETO, `par + 2 +
+        golpes recibidos` (Agustin, 23 oct 2026), con los golpes del bando en el
+        partido (`strokes`): los dos comparten bola y reparto. Dejarlo fuera
+        daba un total de menos hoyos de los que el partido dice que se jugaron.
 
         Devuelve None si no hay bandos resolubles o el bando no anotó nada.
         """
@@ -540,7 +541,9 @@ class GetRecentMatchesUseCase:
             par = par_by_hole.get(hole_number)
             if par is None:
                 continue
-            total_strokes += par + NET_DOUBLE_BOGEY_OVER_PAR
+            del_bando = strokes.get(side_in_order[0])
+            recibe = del_bando.strokes_on_hole(hole_number) if del_bando else 0
+            total_strokes += self._calculator.net_double_bogey(par, recibe)
             holes_played += 1
 
         return (total_strokes, holes_played) if holes_played else None
@@ -624,23 +627,28 @@ class GetRecentMatchesUseCase:
         pars = {hole.number: hole.par for hole in hole_card}
         stroke_index = {hole.number: hole.stroke_index for hole in hole_card}
         basis = None if playing_handicap is None else Decimal(playing_handicap)
+        # Lo que el jugador apuntó, raya incluida: la raya es `own_score` None
+        # con el envío hecho, y vale su doble bogey neto, `par + 2 + golpes
+        # recibidos` (Agustin, 23 oct 2026), sin puntos
         scored = [
             hole_score
             for hole_score in raw.hole_scores
-            if hole_score.own_score is not None and hole_score.hole_number in pars
+            if hole_score.own_submitted and hole_score.hole_number in pars
         ]
         if not scored:
             return None, None, None
 
-        total_strokes = sum(hole_score.own_score for hole_score in scored)
-        points = sum(
-            self._calculator.hole_points(
-                hole_score.own_score,
-                pars[hole_score.hole_number],
-                self._calculator.allocate_strokes(basis, stroke_index[hole_score.hole_number]),
+        total_strokes = points = 0
+        for hole_score in scored:
+            par = pars[hole_score.hole_number]
+            received = self._calculator.allocate_strokes(
+                basis, stroke_index[hole_score.hole_number]
             )
-            for hole_score in scored
-        )
+            if hole_score.own_score is None:
+                total_strokes += self._calculator.net_double_bogey(par, received)
+                continue
+            total_strokes += hole_score.own_score
+            points += self._calculator.hole_points(hole_score.own_score, par, received)
         return total_strokes, len(scored), points
 
     def _quick_match_rivals(

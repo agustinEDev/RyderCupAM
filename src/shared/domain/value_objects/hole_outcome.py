@@ -33,7 +33,8 @@ class HoleOutcome:
     Attributes:
         number: Número del hoyo (1-18), que es lo que separa la ida de la vuelta
         par: Par del hoyo EN LA BARRA que juega este jugador, no el de referencia
-        gross: Golpes dados. En un hoyo recogido, el `par + 2` que se anota
+        gross: Golpes dados. En un hoyo recogido, su doble bogey neto (`par +
+            2 + golpes recibidos`, Agustin, 23 oct 2026)
         adjusted_gross: Golpes computables, topados en el doble bogey neto
         strokes_received: Golpes que recibe en este hoyo por su hándicap
     """

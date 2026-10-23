@@ -10,7 +10,8 @@ par de cada hoyo salen de la foto de su partida (P12).
 | Par 4, recibe 1, hace 5                 | 2 pts netos, 1 bruto; 5 brutos, 4 netos;      |
 |                                         | al par neto, +1 bruto                         |
 | Plus que da 1, par 4, hace 4            | 1 punto                                       |
-| Raya (Stableford)                       | 0 puntos; cuenta en «tras», no en golpes      |
+| Raya (Stableford)                       | 0 puntos; cuenta en «tras» y en golpes como   |
+|                                         | par + 2 + recibidos (23 oct 2026)             |
 | 9 en un par 4                           | 0 puntos, nunca negativos                     |
 | Los 18 validados                        | Completa                                      |
 """
@@ -71,9 +72,23 @@ def test_a_picked_up_ball_scores_nothing_but_counts_as_played():
     tarjeta = TarjetaDeStrokePlay.de(_foto((0,) * 18), {1: None, 2: 4})
 
     assert tarjeta.puntos == 2
+    assert tarjeta.puntos_brutos == 2
     assert tarjeta.tras == 2
-    assert tarjeta.golpes_brutos == 4
     assert tarjeta.con_raya
+
+
+def test_a_picked_up_ball_counts_its_net_double_bogey_in_the_strokes():
+    """
+    «Siempre una raya es par + golpes recibidos + 2» (Agustin, 23 oct 2026):
+    un par 4 recogido con un golpe recibido son 7 brutos y 6 netos, y su par
+    entra en lo jugado.
+    """
+    tarjeta = TarjetaDeStrokePlay.de(_foto((1,) + (0,) * 17), {1: None, 2: 4})
+
+    assert tarjeta.golpes_brutos == 7 + 4
+    assert tarjeta.golpes_netos == 6 + 4
+    assert tarjeta.par_jugado == 8
+    assert (tarjeta.al_par_bruto, tarjeta.al_par_neto) == (3, 2)
 
 
 def test_never_negative_points():
