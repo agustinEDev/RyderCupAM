@@ -26,7 +26,9 @@ from src.modules.competition.domain.value_objects.round_status import RoundStatu
 from src.modules.competition.domain.value_objects.validation_status import (
     ValidationStatus,
 )
+from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.stroke_play_scoring import StrokePlayScoring
 
 
 class SubmitScorecardUseCase:
@@ -37,9 +39,12 @@ class SubmitScorecardUseCase:
         uow: CompetitionUnitOfWorkInterface,
         scoring_service: ScoringService,
         actividad: CompetitionActivityPublisherInterface | None = None,
+        golf_course_repo: IGolfCourseRepository | None = None,
     ):
         self._uow = uow
         self._scoring_service = scoring_service
+        # El par de cada hoyo, para sumar la raya; sin él, la raya no suma
+        self._gc_repo = golf_course_repo
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
@@ -131,7 +136,8 @@ class SubmitScorecardUseCase:
 
         # Calculate player stats using hole results
         player_team = match.get_player_team(user_id) or "A"
-        stats = self._calculate_player_stats(player_scores, player_team, hole_results)
+        pars = await self._pars_del_jugador(round_entity, match.find_player(user_id))
+        stats = self._calculate_player_stats(player_scores, player_team, hole_results, pars)
 
         return SubmitScorecardResponseDTO(
             match_id=str(match.id),
@@ -197,15 +203,40 @@ class SubmitScorecardUseCase:
 
         return hole_results
 
-    def _calculate_player_stats(self, player_scores, player_team, hole_results):
-        """Calcula estadisticas del jugador."""
+    async def _pars_del_jugador(self, round_entity, player) -> dict[int, int]:
+        """El par de cada hoyo en la barra del jugador, o vacío si no se sabe."""
+        if self._gc_repo is None or player is None:
+            return {}
+        course = await self._gc_repo.find_by_id(round_entity.golf_course_id)
+        if course is None:
+            return {}
+        return {
+            hole.number: hole.par
+            for hole in course.hole_card_for(player.tee_color, player.tee_gender)
+        }
+
+    def _calculate_player_stats(self, player_scores, player_team, hole_results, pars=None):
+        """
+        Calcula estadisticas del jugador.
+
+        La raya validada (los dos sin número) suma su doble bogey neto, `par +
+        2 + golpes recibidos` en el partido, y `par + 2` en neto (Agustin, 23
+        oct 2026). Sin el par del hoyo no hay con qué contarla y se deja fuera.
+        """
+        pars = pars or {}
         gross_total = 0
         net_total = 0
         has_gross = False
 
         for hs in player_scores:
-            if hs.own_score is not None and hs.validation_status == ValidationStatus.MATCH:
+            validado = hs.validation_status == ValidationStatus.MATCH
+            if hs.own_score is not None and validado:
                 gross_total += hs.own_score
+                has_gross = True
+            elif validado and hs.own_submitted and hs.hole_number in pars:
+                par = pars[hs.hole_number]
+                gross_total += StrokePlayScoring.net_double_bogey(par, hs.strokes_received)
+                net_total += StrokePlayScoring.net_double_bogey(par, 0)
                 has_gross = True
             if hs.net_score is not None:
                 net_total += hs.net_score

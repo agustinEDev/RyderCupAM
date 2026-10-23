@@ -3187,11 +3187,14 @@ def get_submit_hole_score_use_case(
 
 def get_submit_scorecard_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SubmitScorecardUseCase:
-    """Proveedor del caso de uso SubmitScorecardUseCase."""
-    return SubmitScorecardUseCase(uow, scoring_service, actividad=actividad)
+    """Proveedor del caso de uso SubmitScorecardUseCase (el campo, para el par de la raya)."""
+    return SubmitScorecardUseCase(
+        uow, scoring_service, actividad=actividad, golf_course_repo=gc_uow.golf_courses
+    )
 
 
 def get_get_leaderboard_use_case(

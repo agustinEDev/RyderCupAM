@@ -8,7 +8,9 @@ de hoy.
 - Stableford: puntos netos (con sus golpes) y brutos (sin golpes, el scratch, P13).
 - Medal: golpes brutos (el scratch) y netos, y su resultado respecto al par de
   los hoyos jugados, para comparar a quien va por el 5 con quien va por el 12.
-- La raya (solo en Stableford) vale 0 puntos y cuenta como hoyo jugado.
+- La raya (solo en Stableford) vale 0 puntos y cuenta como hoyo jugado, con su
+  doble bogey neto en los golpes: `par + 2 + golpes recibidos` de bruto y
+  `par + 2` de neto (Agustin, 23 oct 2026).
 """
 
 from collections.abc import Mapping
@@ -60,10 +62,12 @@ class TarjetaDeStrokePlay:
             par = foto.par_por_hoyo[hoyo - 1]
             puntos += StrokePlayScoring.hole_points(golpes, par, recibidos)
             puntos_brutos += StrokePlayScoring.hole_points(golpes, par, 0)
-            if golpes is not None:
-                brutos += golpes
-                netos += golpes - recibidos
-                par_jugado += par
+            hechos = (
+                StrokePlayScoring.net_double_bogey(par, recibidos) if golpes is None else golpes
+            )
+            brutos += hechos
+            netos += hechos - recibidos
+            par_jugado += par
         return Tarjeta(
             puntos=puntos,
             puntos_brutos=puntos_brutos,

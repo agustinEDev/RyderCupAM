@@ -442,6 +442,38 @@ class TestMedal:
         assert evento.payload["to_par"] == evento.payload["net_strokes"] - 72
         assert evento.payload["position"] == 1
 
+    async def test_la_raya_suma_su_doble_bogey_neto_al_bruto(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given un Medal con 36 de hándicap y el 1 (índice 1, 2 golpes) recogido
+        When se publica
+        Then la raya suma `par + 2 + 2` al bruto y `par + 2` al neto
+
+        «Siempre una raya es par + golpes recibidos + 2» (Agustin, 23 oct 2026).
+        """
+        yo = await _user(user_uow)
+        yo.update_handicap(36)
+        async with user_uow:
+            await user_uow.users.save(yo)
+        course = await _campo(golf_course_uow, yo.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            yo,
+            [_tarjeta(5, h1=None), _tarjeta(5)],
+            otros=[QuickMatchParticipant.for_guest("Seve", "Ballesteros", handicap=0)],
+            scoring_format=ScoringFormat.MEDAL,
+        )
+
+        await publicar(match)
+
+        evento = await _uno_de(social_uow, yo)
+        assert evento.payload["gross_strokes"] == 17 * 5 + 8
+        # El 95 % de Medal le deja 34: 2 golpes en los índices 1-16 y 1 en el
+        # 17 y el 18
+        assert evento.payload["net_strokes"] == 15 * 3 + 2 * 4 + 6
+
     async def test_31_empate_en_medal(
         self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
     ):
