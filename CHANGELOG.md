@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.39.0] - 2026-10-24
+
+**La raya cuenta su doble bogey neto y las partidas rápidas se cierran solas.**
+Un hoyo recogido (raya) suma `par + 2 + golpes recibidos` al total de golpes en
+todas partes; las partidas rápidas que nadie termina se cierran solas; y los
+logros conservan su fecha, lo oculto y cuentan la raya en los torneos. Va con
+el frontend **2.52.0**.
+
+**Notas de despliegue.**
+
+- **Dos migraciones**, en cadena desde `d4e6f8a0b2c5`: `e5f7a9b1c3d6`
+  (`published_at`, `hidden`, `hidden_holes` y `golf_course_id` en
+  `withdrawn_hidden_achievements`; `written_at` en `activity_events`, relleno
+  con `published_at`) y `f8a0c2e4b6d7` (`started_at` en `quick_matches`; las
+  que están en juego toman su `updated_at`). Sin variables nuevas.
+- **Contrato aditivo**: el frontend 2.51 funciona con este backend. Aun así,
+  backend y frontend seguidos.
+- **La primera pasada del cierre se hace al arrancar** y cierra lo atrasado de
+  PRO: las 4 partidas en juego con golpes pasan a COMPLETED; tres **sin
+  publicarse** en Actividad (van más de 2 días tarde) y la del 21 oct, que aún
+  está en plazo de publicar, con su resultado (3 hoyos, sin terminar). Las que
+  no tienen golpes y las PENDING de más de 7 días, a CANCELLED.
+- **Volver a la 2.38.0 exige bajar antes `e5f7a9b1c3d6`**: el código viejo
+  leería como oculto todo apunte de logro retirado.
+- Tras desplegar, lanzar `scripts/purge_terms_acceptances.py`.
+
+### Added
+
+- **Cierre automático de partidas rápidas** (#652): en juego, al acabar el día
+  siguiente a su inicio en la hora del campo (UTC si no se sabe), COMPLETED si
+  tiene algún golpe —con sus logros y su resultado en Actividad, salvo que se
+  cierre más de 2 días tarde— y CANCELLED si no; PENDING, a los 7 días de
+  crearse. Una pasada cada hora en el proceso de la API con candado de
+  Postgres (nunca en los tests). La partida guarda cuándo empezó
+  (`started_at`). Finalizar, cancelar y el golpe por delegación bloquean la
+  partida.
+
+### Changed
+
+- **La raya suma su doble bogey neto al bruto** (#651): `par + 2 + golpes
+  recibidos` en vez de `par + 2`, en los totales de la partida rápida, su
+  resultado en Actividad, el historial, las estadísticas, la tarjeta de
+  stroke play de torneo y el resumen al entregar la tarjeta de un partido. El
+  neto sigue en `par + 2` y no da puntos. Cada total con sus golpes; en
+  foursomes, los del bando.
+- **Los logros conservan su fecha y lo oculto al volver a publicarse** (#650):
+  el mismo logro de la misma vuelta no sube ni cuenta como nuevo, una tarjeta
+  no se parte, lo oculto se recuerda por hoyo y lo heredado nace oculto si lo
+  estaba. La mejor marca se mide solo contra días anteriores.
+
+### Fixed
+
+- **La raya de un torneo cuenta como hoyo jugado para los logros** (#653): una
+  vuelta con raya (validada en stroke play, enviada en la Ryder) ya no pierde
+  sus logros. La raya se juzga como doble bogey y nunca da logro.
+
 ## [2.38.0] - 2026-10-23
 
 **Release social 1: Actividad rediseñada y perfil de otro jugador.** La
