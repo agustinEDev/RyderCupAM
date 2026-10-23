@@ -544,7 +544,9 @@ class PublishTournamentAchievementsUseCase:
             partido.id, user_id
         )
         # Lo que el jugador envio, raya incluida (enviada y sin numero): es un
-        # hoyo jugado, como en la partida rapida (Agustin, 23 oct 2026)
+        # hoyo jugado, como en la partida rapida (Agustin, 23 oct 2026). En la
+        # Ryder cuenta lo enviado sin mirar la validacion, igual que los
+        # numeros y que las estadisticas; en stroke play, solo lo validado
         scores_by_hole = {
             hole_score.hole_number: hole_score.own_score
             for hole_score in hole_scores

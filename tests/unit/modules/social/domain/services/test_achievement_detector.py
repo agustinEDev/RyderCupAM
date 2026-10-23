@@ -143,3 +143,13 @@ class TestLogrosDeVuelta:
             ActivityEventType.BIRDIE,
             ActivityEventType.PERSONAL_BEST,
         }
+
+
+class TestThePickedUpHole:
+    """La raya (None) se juzga como doble bogey; con numero, sus golpes (23 oct 2026)."""
+
+    def test_a_raya_is_a_double_bogey(self):
+        assert PlayedHole.of(7, 4, None) == PlayedHole(number=7, par=4, strokes=6)
+
+    def test_a_number_is_its_strokes(self):
+        assert PlayedHole.of(7, 4, 3) == PlayedHole(number=7, par=4, strokes=3)
