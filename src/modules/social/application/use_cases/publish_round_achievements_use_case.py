@@ -48,9 +48,11 @@ from src.shared.domain.services.countable_round import countable_holes
 # con más historia que esto ya no estrena nada que importe recordar.
 MAX_HISTORY_LOOKUP = 200
 
-# Golpes sobre el par con los que se anota un hoyo que no se termino (la raya):
-# doble bogey, el mismo criterio que el `NET_DOUBLE_BOGEY_OVER_PAR` del
-# StrokePlayScoring, aqui a bruto porque el detector juzga contra el par
+# Golpes sobre el par con los que el detector juzga un hoyo que no se termino
+# (la raya): doble bogey, sin golpes recibidos. En los totales la raya vale su
+# doble bogey NETO (`par + 2 + golpes recibidos`, Agustin, 23 oct 2026), pero
+# aqui da igual: el detector solo busca birdies o mejor hoyo a hoyo, y una raya
+# no lo es con ningun reparto realista
 DOUBLE_BOGEY_OVER_PAR = 2
 
 

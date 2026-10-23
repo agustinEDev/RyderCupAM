@@ -157,9 +157,9 @@ class StrokePlayScoring:
         Los hoyos sin score no cuentan: una partida a medias puntúa por lo
         jugado, no por lo que falta. Lo que sí cuenta es la RAYA —la clave
         presente con valor None—, que es un hoyo acabado sin número porque el
-        jugador recogió la bola. Cuenta como doble bogey: `par + 2` de bruto, y
-        doble bogey NETO en lo que puntúa, que es lo que el WHS (Regla 3.1)
-        manda anotar en un hoyo no terminado. En Stableford eso da exactamente
+        jugador recogió la bola. Cuenta como doble bogey NETO —`par + 2 + golpes
+        recibidos`— de bruto y en lo que puntúa, que es lo que el WHS (Regla
+        3.1) manda anotar en un hoyo no terminado. En Stableford eso da exactamente
         los cero puntos que vale recoger, y en el resultado contra el par deja
         una cifra defendible en vez de un hoyo regalado.
 
@@ -194,23 +194,18 @@ class StrokePlayScoring:
             strokes_received = self.allocate_strokes(strokes_basis, hole.stroke_index)
 
             if score is None:
-                # La raya no trae golpes, así que el bruto y el neto se llevan
-                # por separado en vez de derivar uno del otro:
+                # La raya no trae golpes: vale su doble bogey NETO, `par + 2 +
+                # golpes recibidos`, tambien en el bruto (Agustin, 23 oct 2026:
+                # «siempre una raya es par + golpes recibidos + 2»). El neto
+                # queda en `par + 2`, que es lo que hace que valga exactamente
+                # cero puntos Stableford: recoger no puntúa.
                 #
-                # - BRUTO: `par + 2`, el doble bogey que se escribe en la
-                #   tarjeta. No lleva golpes recibidos porque un total de golpes
-                #   no puede depender del reparto —la misma vuelta daba 89 o 90
-                #   según el allowance, y eso es un dato objetivo—.
-                # - NETO: doble bogey NETO, que es lo que el WHS (Regla 3.1)
-                #   manda computar en un hoyo no terminado, y lo que hace que
-                #   valga exactamente cero puntos Stableford.
-                #
-                # Derivar el neto restando los golpes al bruto daría `par + 2 -
-                # golpes`, o sea un punto por hoyo recogido a quien recibe
-                # golpe ahí. Recoger no puntúa.
-                gross = hole.par + NET_DOUBLE_BOGEY_OVER_PAR
+                # El bruto pasa así a depender del reparto —la misma vuelta
+                # puede dar un golpe más o menos según el allowance—, y se
+                # aceptó: es lo que el WHS manda anotar en un hoyo no terminado.
+                gross = self.net_double_bogey(hole.par, strokes_received)
                 total_strokes += gross
-                adjusted_gross_strokes += self.net_double_bogey(hole.par, strokes_received)
+                adjusted_gross_strokes += gross
                 net_strokes += hole.par + NET_DOUBLE_BOGEY_OVER_PAR
                 par_played += hole.par
                 holes_played += 1

@@ -369,12 +369,12 @@ class TestParityWithTheFrontend:
     @pytest.mark.parametrize(
         ("handicap", "points", "gross", "net", "to_par"),
         [
-            # El hoyo 1 es par 4 y su score real era 5. Con raya pasa a valer un
-            # doble bogey: 6 de BRUTO en los dos casos —el bruto no depende del
-            # reparto— y doble bogey NETO en lo que puntua, que es lo que le
-            # quita el punto que el 5 daba.
+            # El hoyo 1 es par 4 (indice 7) y su score real era 5. Con raya pasa
+            # a valer su doble bogey NETO tambien en el bruto (Agustin, 23 oct
+            # 2026): 6 sin golpes y 7 con el que recibe el 12,4. El neto se queda
+            # en el doble bogey, que es lo que le quita el punto que el 5 daba.
             (0, 19, 89, 89, 17),
-            (12.4, 30, 89, 78, 6),
+            (12.4, 30, 90, 78, 6),
         ],
     )
     def test_a_picked_up_hole_matches_the_frontend_too(self, handicap, points, gross, net, to_par):
@@ -455,29 +455,34 @@ class TestPickedUpHole:
         assert totals.total_strokes == 6
         assert totals.net_strokes == 6
 
-    def test_the_gross_charge_does_not_depend_on_the_strokes_received(self):
+    @pytest.mark.parametrize(
+        ("handicap", "gross"),
+        [
+            (0, 6),  # sin golpes: par + 2
+            (18, 7),  # 1 golpe en el indice 1
+            (36, 8),  # 2 golpes
+            (-18, 5),  # plus: cede un golpe en cada hoyo
+        ],
+    )
+    def test_the_gross_charge_is_the_net_double_bogey(self, handicap, gross):
         """
-        Given la misma raya con y sin golpes recibidos
-        When se miran los golpes brutos
-        Then valen lo mismo: el bruto es un dato objetivo
+        Given un par 4 recogido con distintos golpes recibidos
+        When se suman los golpes brutos
+        Then cuenta `par + 2 + golpes recibidos`, y el neto sigue en `par + 2`
 
-        El neto si baja con los golpes —de ahi que siga siendo doble bogey neto
-        y cero puntos—, pero el total de golpes no puede moverse con el
-        allowance: la misma vuelta llegaba a dar 89 o 90 segun con que reparto
-        se mirara.
+        «Siempre una raya es par + golpes recibidos + 2» (Agustin, 23 oct 2026):
+        el 7 que contaba en un par 5 con dos golpes tenia que ser un 9. El
+        bruto pasa asi a depender del reparto, y eso se acepto.
         """
         calculator = StrokePlayScoring()
 
-        scratch = calculator.compute_participant_totals(
-            handicap=0, holes=_course(), scores_by_hole={1: None}
-        )
-        con_golpe = calculator.compute_participant_totals(
-            handicap=18, holes=_course(), scores_by_hole={1: None}
+        totals = calculator.compute_participant_totals(
+            handicap=handicap, holes=_course(), scores_by_hole={1: None}
         )
 
-        assert scratch.total_strokes == con_golpe.total_strokes == 6
-        assert scratch.net_strokes == con_golpe.net_strokes == 6
-        assert con_golpe.stableford_points == 0
+        assert totals.total_strokes == gross
+        assert totals.net_strokes == 6
+        assert totals.stableford_points == 0
 
     def test_a_missing_hole_still_does_not_count(self):
         """
@@ -515,3 +520,17 @@ class TestPickedUpHole:
         )
 
         assert totals.adjusted_gross_strokes == 4 * 17 + 6
+
+    def test_the_adjusted_raya_carries_the_strokes_received(self):
+        """
+        Given la raya de un par 4 con un golpe recibido
+        When se calcula el Adjusted Gross Score
+        Then entra con 7, su doble bogey neto, y no con el 6 del scratch
+        """
+        calculator = StrokePlayScoring()
+
+        totals = calculator.compute_participant_totals(
+            handicap=18, holes=_course(), scores_by_hole={1: None}, cap_at_net_double_bogey=True
+        )
+
+        assert totals.adjusted_gross_strokes == 7

@@ -1816,6 +1816,60 @@ class TestScoringBreakdown:
 
         assert breakdown.gross_distribution.bogey == 18
 
+    async def test_a_plus_players_raya_is_its_net_double_bogey_in_gross(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un +10 sin barra (cede un golpe en los índices 9-18) que firma 4
+            en todo y recoge en el 18
+        When se mira el desglose bruto
+        Then la raya es `par + 2 - 1`, un bogey, y no un doble bogey
+
+        «Siempre una raya es par + golpes recibidos + 2» (Agustin, 23 oct 2026).
+        """
+        user = await create_user(user_uow, unique_email("breakdown-plus"), handicap=-10.0)
+        course = await create_golf_course(golf_course_uow, user.id)
+        scores: dict = dict.fromkeys(range(1, 19), 4)
+        scores[18] = None
+        await _played_quick_match(qm_uow, course, user, scores_by_hole=scores)
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(user.id)
+
+        assert breakdown.gross_distribution.par == 17
+        assert breakdown.gross_distribution.bogey == 1
+        assert breakdown.gross_distribution.double_or_worse == 0
+
+    async def test_a_plus_players_raya_in_a_tournament_too(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Lo mismo con la vuelta de un torneo, desde una barra sin valorar."""
+        player = await create_user(user_uow, unique_email("breakdown-plus-t"))
+        rival = await create_user(user_uow, unique_email("breakdown-plus-r"))
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_competition_match(
+            competition_uow,
+            course,
+            player,
+            rival,
+            strokes_per_hole=4,
+            picked_up_holes=[18],
+            tee_color=TeeColor.RED,
+            player_handicap=-10.0,
+            play_mode=PlayMode.HANDICAP,
+        )
+
+        breakdown = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_breakdown(player.id)
+
+        assert breakdown.gross_distribution.par == 17
+        assert breakdown.gross_distribution.bogey == 1
+        # En neto: +1 en los nueve que cede con 4 (índices 9-17) y +2 en la
+        # raya, su doble bogey neto
+        assert breakdown.by_course[0].average_to_par == 11.0
+
     async def test_separates_the_front_nine_from_the_back_nine(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
