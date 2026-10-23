@@ -656,12 +656,12 @@ class GetRecentMatchesUseCase:
         total_strokes = points = 0
         for hole_score in scored:
             par = pars[hole_score.hole_number]
-            received = self._calculator.allocate_strokes(
-                basis, stroke_index[hole_score.hole_number]
+            received = (
+                hole_score.strokes_received
+                if side_ball
+                else self._calculator.allocate_strokes(basis, stroke_index[hole_score.hole_number])
             )
             if hole_score.own_score is None:
-                if side_ball:
-                    received = hole_score.strokes_received
                 total_strokes += self._calculator.net_double_bogey(par, received)
                 continue
             total_strokes += hole_score.own_score
