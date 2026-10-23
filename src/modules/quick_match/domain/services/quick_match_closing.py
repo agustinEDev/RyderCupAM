@@ -15,11 +15,12 @@ publica su resultado ni cuenta para nada. Se cierra:
 Lo que se cierra más de 2 días después de su plazo no se publica en Actividad:
 saldría como nueva una partida de hace semanas.
 
-Las fechas son UTC sin zona, como las que se guardan.
+Las fechas son UTC sin zona, como las que se guardan: `created_at` y
+`started_at` salen de `datetime.now()` en un servidor en UTC (Render y el Kind).
 """
 
 from datetime import UTC, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..value_objects.quick_match_status import QuickMatchStatus
 
@@ -43,10 +44,23 @@ def closes_at(
 
     # Las de antes no guardan cuándo empezaron: se crean y empiezan el mismo día
     inicio = started_at or created_at
-    zona = ZoneInfo(timezone) if timezone else UTC
+    zona = _zona(timezone)
     dia = inicio.replace(tzinfo=UTC).astimezone(zona).date()
     cierre = datetime.combine(dia + timedelta(days=DAYS_TO_FINISH), time(0), tzinfo=zona)
     return cierre.astimezone(UTC).replace(tzinfo=None)
+
+
+def _zona(timezone: str | None):
+    """
+    La zona del campo, o UTC si no se sabe o no existe: el campo leído de la BD
+    no pasa por su validación, y una zona rara no puede tumbar el cierre.
+    """
+    if not timezone:
+        return UTC
+    try:
+        return ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        return UTC
 
 
 def publishes_when_closed(closing: datetime, now: datetime) -> bool:

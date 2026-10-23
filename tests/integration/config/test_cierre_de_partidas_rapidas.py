@@ -46,7 +46,11 @@ from src.shared.domain.value_objects.match_format import MatchFormat
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
-HACE_TRES_DIAS = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=3)
+AHORA = datetime.now(UTC).replace(tzinfo=None)
+HACE_TRES_DIAS = AHORA - timedelta(days=3)
+# El reloj de la vuelta: ya vencidas las de hace tres días, y todavía no las que
+# otros tests crean ahora en la misma base, que no se tocan
+RELOJ = AHORA - timedelta(hours=12)
 
 
 async def _usuario(sesion: AsyncSession) -> User:
@@ -151,7 +155,7 @@ async def test_a_pass_closes_the_expired_ones(db_session):
         con_raya = await _partida(sesion, con_golpe=True)
         vacia = await _partida(sesion, con_golpe=False)
 
-    resumen = await CierreDePartidasRapidas(fabrica).vuelta()
+    resumen = await CierreDePartidasRapidas(fabrica, reloj=lambda: RELOJ).vuelta()
 
     assert resumen is not None
     assert (await _estado(fabrica, con_raya))[0] == QuickMatchStatus.COMPLETED.value
@@ -165,8 +169,40 @@ async def test_with_the_lock_taken_the_pass_is_skipped(db_session):
 
     async with db_session.bind.connect() as otro_proceso:
         await otro_proceso.scalar(text("SELECT pg_advisory_lock(:k)"), {"k": CANDADO_DEL_CIERRE})
-        resultado = await CierreDePartidasRapidas(fabrica).vuelta()
+        resultado = await CierreDePartidasRapidas(fabrica, reloj=lambda: RELOJ).vuelta()
         await otro_proceso.scalar(text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_CIERRE})
 
     assert resultado is None
     assert (await _estado(fabrica, partida))[0] == QuickMatchStatus.IN_PROGRESS.value
+
+
+async def test_a_match_that_fails_to_close_does_not_stop_the_others(db_session, monkeypatch):
+    """
+    Hallazgo 1 del revisor: el rollback de la que falla caduca lo cargado en la
+    sesión, y leerlo después reventaba la vuelta entera. Las demás se cierran.
+    """
+    fabrica = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    async with fabrica() as sesion:
+        rota = await _partida(sesion, con_golpe=True)
+        buena = await _partida(sesion, con_golpe=True)
+        # La rota, la primera de la vuelta (van de la más antigua a la más nueva)
+        await sesion.execute(
+            text("UPDATE quick_matches SET created_at = :c, started_at = :c WHERE id = :id"),
+            {"c": HACE_TRES_DIAS - timedelta(hours=1), "id": rota.id.value},
+        )
+        await sesion.commit()
+
+    guardar = SQLAlchemyQuickMatchRepository.update
+
+    async def falla_con_la_rota(self, partida):
+        if partida.id == rota.id:
+            await self._session.execute(text("SELECT 1/0"))
+        return await guardar(self, partida)
+
+    monkeypatch.setattr(SQLAlchemyQuickMatchRepository, "update", falla_con_la_rota)
+
+    resumen = await CierreDePartidasRapidas(fabrica, reloj=lambda: RELOJ).vuelta()
+
+    assert resumen is not None
+    assert (await _estado(fabrica, rota))[0] == QuickMatchStatus.IN_PROGRESS.value
+    assert (await _estado(fabrica, buena))[0] == QuickMatchStatus.COMPLETED.value

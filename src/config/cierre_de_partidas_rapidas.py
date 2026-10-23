@@ -16,6 +16,7 @@ después de guardado el cierre y no debe deshacerlo si falla (ver
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -57,9 +58,12 @@ class CierreDePartidasRapidas:
         self,
         fabrica: async_sessionmaker[AsyncSession],
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        reloj: Callable[[], datetime] | None = None,
     ):
         self._fabrica = fabrica
         self._esperar = esperar
+        # Sin reloj, el del caso de uso: ahora en UTC
+        self._reloj = reloj
 
     async def vigilar(self) -> None:
         """Hasta que la app se apague (se cancela la tarea). Una vuelta que falla no para las siguientes."""
@@ -91,8 +95,10 @@ class CierreDePartidasRapidas:
                 get_publish_round_achievements_use_case(uows),
                 get_publish_quick_match_result_use_case(uows),
             )
+            relojes = {"reloj": self._reloj} if self._reloj else {}
             return await CloseExpiredQuickMatchesUseCase(
                 SQLAlchemyQuickMatchUnitOfWork(sesion),
                 SQLAlchemyGolfCourseUnitOfWork(sesion),
                 publicador,
+                **relojes,
             ).execute()

@@ -63,6 +63,12 @@ class TestInProgress:
             2026, 10, 20, 0, 0
         )
 
+    def test_an_unknown_time_zone_closes_in_utc_instead_of_failing(self):
+        """El mapeo desde la BD no valida la zona: una rara no puede tumbar el cierre."""
+        assert _cierra(started_at=datetime(2026, 10, 18, 23, 0), timezone="Mars/Olympus") == (
+            datetime(2026, 10, 20, 0, 0)
+        )
+
 
 class TestTheOthers:
     def test_b4_a_pending_one_after_seven_days(self):

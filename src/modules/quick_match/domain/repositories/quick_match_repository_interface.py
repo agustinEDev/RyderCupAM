@@ -110,6 +110,7 @@ class QuickMatchRepositoryInterface(ABC):
     async def list_open(self) -> list[QuickMatch]:
         """
         Las partidas sin terminar (PENDING o IN_PROGRESS), de todos: las que
-        el proceso periódico mira para cerrarlas solas (23 oct 2026).
+        el proceso periódico mira para cerrarlas solas (23 oct 2026), de la más
+        antigua a la más nueva.
         """
         pass

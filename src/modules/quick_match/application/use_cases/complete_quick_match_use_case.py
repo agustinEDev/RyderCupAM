@@ -47,7 +47,10 @@ class CompleteQuickMatchUseCase:
         requester_id = UserId(requester_id_raw)
 
         async with self._uow:
-            quick_match = await self._uow.quick_matches.find_by_id(QuickMatchId(quick_match_id_raw))
+            # Bloqueada: el cierre automático también la escribe (23 oct 2026)
+            quick_match = await self._uow.quick_matches.find_by_id_for_update(
+                QuickMatchId(quick_match_id_raw)
+            )
             if not quick_match:
                 raise QuickMatchNotFoundError(f"Quick match not found: {quick_match_id_raw}")
 

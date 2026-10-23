@@ -57,7 +57,9 @@ class _Publicador:
         self.publicadas.append(quick_match_id)
         if self._falla:
             raise RuntimeError("Actividad caída")
-        return 1
+        return self.devuelve
+
+    devuelve = 1
 
 
 async def _partida(
@@ -234,3 +236,43 @@ class TestTheFinishedOnes:
         assert await _estado(qm_uow, qm) == T.COMPLETED
         # Se salta sin intentarlo, no porque cerrarla fallara
         assert "Could not close" not in caplog.text
+
+
+class TestTheRaces:
+    async def test_one_started_meanwhile_is_judged_by_its_new_deadline(
+        self, qm_uow, golf_course_uow
+    ):
+        """
+        Hallazgo 3 del revisor: leída PENDING y vencida, el creador la empieza
+        mientras la vuelta va por otras. Bloqueada ya está en juego, sin golpes
+        y con el plazo de mañana: no se cancela.
+        """
+        qm = await _partida(qm_uow, status=T.PENDING, golpes=0)
+        ahora = EMPEZO + timedelta(days=7)
+        abiertas = qm_uow.quick_matches.list_open
+
+        async def y_la_empieza_el_creador():
+            lista = [copy.deepcopy(p) for p in await abiertas()]
+            stored = await qm_uow.quick_matches.find_by_id(qm.id)
+            stored.start([stored.creator_participant_id])
+            stored._started_at = ahora
+            return lista
+
+        qm_uow.quick_matches.list_open = y_la_empieza_el_creador
+
+        resumen, _ = await _cierra(qm_uow, golf_course_uow, ahora)
+
+        assert await _estado(qm_uow, qm) == T.IN_PROGRESS
+        assert resumen.cancelled == 0
+
+
+class TestWhatIsCounted:
+    async def test_published_counts_only_what_activity_took(self, qm_uow, golf_course_uow):
+        """El publicador se traga sus fallos y devuelve cuántos publicó: con 0 no cuenta."""
+        await _partida(qm_uow)
+        publicador = _Publicador()
+        publicador.devuelve = 0
+
+        resumen, _ = await _cierra(qm_uow, golf_course_uow, PLAZO, publicador)
+
+        assert (resumen.completed, resumen.published) == (1, 0)
