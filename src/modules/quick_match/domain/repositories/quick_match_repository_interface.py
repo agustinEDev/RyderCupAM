@@ -105,3 +105,12 @@ class QuickMatchRepositoryInterface(ABC):
         de campos tiene que ver hasta lo mas antiguo (22 oct 2026).
         """
         pass
+
+    @abstractmethod
+    async def list_open(self) -> list[QuickMatch]:
+        """
+        Las partidas sin terminar (PENDING o IN_PROGRESS), de todos: las que
+        el proceso periódico mira para cerrarlas solas (23 oct 2026), de la más
+        antigua a la más nueva.
+        """
+        pass

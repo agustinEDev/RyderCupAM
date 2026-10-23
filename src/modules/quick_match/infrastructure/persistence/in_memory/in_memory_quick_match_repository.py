@@ -116,3 +116,13 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
             if qm.status == QuickMatchStatus.COMPLETED
             and any(qm.is_participant(p) for p in participantes)
         ]
+
+    async def list_open(self) -> list[QuickMatch]:
+        return sorted(
+            (
+                qm
+                for qm in self._quick_matches.values()
+                if qm.status in (QuickMatchStatus.PENDING, QuickMatchStatus.IN_PROGRESS)
+            ),
+            key=lambda qm: qm.created_at,
+        )

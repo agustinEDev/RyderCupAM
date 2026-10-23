@@ -211,3 +211,27 @@ class TestMedalRejectsPickedUpHolesByProxy:
                     score=None,
                 )
             )
+
+
+class TestItLocksTheMatch:
+    async def test_a_proxy_stroke_reads_the_match_locked(self, qm_uow, user_uow):
+        """El cierre automático puede cancelarla «sin golpes» a la vez (23 oct 2026)."""
+        creator = await create_user(user_uow, "lock-proxy@test.com")
+        qm, guest = await _create_in_progress_match_with_guest(qm_uow, creator.id)
+
+        async def sin_bloquear(_quick_match_id):
+            raise AssertionError("se leyó la partida sin bloquearla")
+
+        qm_uow.quick_matches.find_by_id = sin_bloquear
+
+        response = await SubmitProxyHoleScoreUseCase(qm_uow, ScoringCoverageService()).execute(
+            SubmitProxyHoleScoreRequestDTO(
+                quick_match_id=qm.id.value,
+                scorer_user_id=creator.id.value,
+                target_participant_id=guest.participant_id.value,
+                hole_number=1,
+                score=5,
+            )
+        )
+
+        assert response.score == 5
