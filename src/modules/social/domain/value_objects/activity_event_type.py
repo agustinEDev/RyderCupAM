@@ -50,6 +50,20 @@ class ActivityEventType(StrEnum):
         return self in _ACHIEVEMENTS
 
     @property
+    def is_per_hole(self) -> bool:
+        """Si el logro dice en que hoyos fue (`holes`): lo oculto se recuerda por hoyo."""
+        return self in _PER_HOLE
+
+    @property
+    def is_exclusive_by_date(self) -> bool:
+        """
+        «Campo nuevo» y «primer torneo»: uno solo por jugador (y campo), en la
+        vuelta mas antigua, que pasa de una vuelta a otra al reabrir o al
+        cerrarse una anterior (22 oct 2026).
+        """
+        return self in _EXCLUSIVE_BY_DATE
+
+    @property
     def may_come_from_a_quick_match(self) -> bool:
         """
         Si un evento de este tipo puede salir de una partida rapida: su «como
@@ -76,3 +90,9 @@ _ACHIEVEMENTS = frozenset(
         ActivityEventType.FIRST_TOURNAMENT,
     }
 )
+
+_PER_HOLE = frozenset(
+    {ActivityEventType.HOLE_IN_ONE, ActivityEventType.EAGLE_OR_BETTER, ActivityEventType.BIRDIE}
+)
+
+_EXCLUSIVE_BY_DATE = frozenset({ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT})

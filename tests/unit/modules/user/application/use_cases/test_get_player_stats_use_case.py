@@ -1356,6 +1356,49 @@ class TestScoringRecordWindow:
         assert min(stats.differentials) == stats.best_differential
 
 
+class TestRoundDifferentials:
+    """
+    Cada vuelta con su diferencial, su dia y su origen (23 oct 2026): el
+    record del feed se mide solo contra las de dias anteriores.
+    """
+
+    async def test_a_quick_match_with_its_day_and_id(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        player = await create_user(user_uow, unique_email("dated"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        match = await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+        )
+
+        rondas = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_round_differentials(player.id)
+
+        assert [(r.played_on, r.source_id, r.competition_id, r.differential) for r in rondas] == [
+            (match.created_at.date(), str(match.id.value), None, Decimal("18.1"))
+        ]
+
+    async def test_a_round_without_a_known_tee_is_left_out(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Sin barra no hay diferencial: cuenta en la media, pero no hay nada que comparar."""
+        player = await create_user(user_uow, unique_email("notee"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        await _played_quick_match(qm_uow, course, player, strokes_per_hole=5)
+
+        rondas = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_round_differentials(player.id)
+
+        assert rondas == []
+
+
 class TestParPorBarra:
     """
     La media se mide contra el par de la barra jugada.

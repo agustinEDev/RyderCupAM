@@ -9,8 +9,15 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
     ActivityEventRepositoryInterface,
     ActivitySlice,
 )
+from src.modules.social.domain.services.withdrawn_achievement import (
+    WithdrawnAchievement,
+    cards_keep_their_date,
+    exclusive_scope,
+    scope_of,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 
 class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
@@ -29,8 +36,10 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         self.trashed_quick_matches: set[tuple[str, UserId]] = set()
         # Avisos de salida retirados por un cambio: (ronda, jugador) -> torneo
         self._salidas_retiradas: dict[tuple[str, UserId], str] = {}
-        # Logros retirados ocultos: (jugador, tipo, origen)
-        self._ocultos_retirados: set[tuple[UserId, ActivityEventType, str]] = set()
+        # Apuntes de los logros retirados: (jugador, tipo, origen) -> apunte
+        self._apuntes: dict[tuple[UserId, ActivityEventType, str], WithdrawnAchievement] = {}
+        # Cuando se escribio cada evento, por id (`last_written_at`)
+        self._escritos: dict = {}
 
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
@@ -41,21 +50,42 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         aceptara el duplicado, los tests de los casos de uso pasarian con una
         idempotencia que en produccion depende de la base de datos.
         """
+        escrito = utc_now()
+        ocultos_exclusivos = {
+            exclusive_scope(user_id, tipo, apunte.golf_course_id)
+            for (user_id, tipo, _), apunte in self._apuntes.items()
+            if apunte.hidden and tipo.is_exclusive_by_date
+        }
+        publicadas: dict[str, datetime] = {}
+        for e in self._events:
+            if e.type.is_achievement:
+                clave = e.card_key
+                publicadas[clave] = min(publicadas.get(clave, e.published_at), e.published_at)
         for event in events:
-            # Un logro que se retiro oculto vuelve oculto, y el apunte se gasta
-            clave = (event.user_id, event.type, event.source_match_id)
-            if clave in self._ocultos_retirados:
-                self._ocultos_retirados.discard(clave)
-                event.hide_from_friends()
+            # Lo apuntado al retirarlo, como en SQL: los apuntes no se gastan
+            if event.type.is_achievement:
+                apunte = self._apuntes.get((event.user_id, event.type, event.source_match_id))
+                if apunte is not None:
+                    apunte.apply_to(event)
+                if event.type.is_exclusive_by_date and scope_of(event) in ocultos_exclusivos:
+                    event.hide_from_friends()
+        cards_keep_their_date(events, publicadas)
+        for event in events:
             if not self._existe(event):
                 self._events.append(event)
+                self._escritos[event.id] = escrito
 
     def _borrar(self, se_borra: Callable[[ActivityEvent], bool]) -> int:
-        """Borra y apunta los logros ocultos que se van, como en SQL."""
+        """Borra y apunta los logros que se van, como en SQL."""
         antes = len(self._events)
         for e in self._events:
-            if se_borra(e) and e.type.is_achievement and not e.visible_to_friends:
-                self._ocultos_retirados.add((e.user_id, e.type, e.source_match_id))
+            if se_borra(e) and e.type.is_achievement:
+                clave = (e.user_id, e.type, e.source_match_id)
+                nuevo = WithdrawnAchievement.of(
+                    e.type, e.published_at, e.visible_to_friends, e.payload
+                )
+                viejo = self._apuntes.get(clave)
+                self._apuntes[clave] = nuevo if viejo is None else viejo.merged_with(nuevo)
         self._events = [e for e in self._events if not se_borra(e)]
         return antes - len(self._events)
 
@@ -199,11 +229,11 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     ) -> list[ActivityEvent]:
         return [e for e in self._events if e.source_match_id == source_id and e.type in types]
 
-    async def last_published_at(
+    async def last_written_at(
         self, competition_id: str, types: Collection[ActivityEventType]
     ) -> datetime | None:
         fechas = [
-            e.published_at
+            self._escritos[e.id]
             for e in self._events
             if e.type in types and e.payload.get("competition_id") == competition_id
         ]

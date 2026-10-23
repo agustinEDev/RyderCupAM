@@ -6,7 +6,8 @@ que cuentan. Una tarjeta incompleta no llega al feed, igual que no llega a las
 estadisticas (BE #173/#174), y un jugador que apago la publicacion no aparece.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -47,6 +48,7 @@ from src.modules.social.application.use_cases.publish_round_achievements_use_cas
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivitySlice,
 )
+from src.modules.social.domain.services.personal_best import DatedDifferential
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
@@ -73,13 +75,17 @@ def _todos(*user_ids) -> ActivitySlice:
 
 
 class _DifferentialsStub(PlayerDifferentialsInterface):
-    """El mejor diferencial de cada jugador, fijado por el test."""
+    """Las vueltas con diferencial de cada jugador, fijadas por el test."""
 
     def __init__(self, por_jugador: dict | None = None):
         self._por_jugador = por_jugador or {}
 
-    async def best_differential(self, user_id):
-        return self._por_jugador.get(str(user_id.value))
+    async def round_differentials(self, user_id):
+        return self._por_jugador.get(str(user_id.value), [])
+
+
+def _vuelta(dia, diferencial: str, origen: str = "otra") -> DatedDifferential:
+    return DatedDifferential(played_on=dia, differential=Decimal(diferencial), source_id=origen)
 
 
 class _CourseHistoryFake(PlayerCourseHistoryInterface):
@@ -338,16 +344,24 @@ class TestQueSePublica:
         self, social_uow, qm_uow, golf_course_uow, user_uow
     ):
         """
-        Given un jugador cuyo mejor diferencial ha bajado tras esta vuelta /
+        Given una vuelta que mejora la marca de los dias anteriores /
         When se publica / Then sale el record con el anterior y el nuevo.
         """
         user = await _create_user(user_uow)
         course = await _create_course(golf_course_uow, user.id)
         match = await _played_match(qm_uow, course, user)
-        differentials = _DifferentialsStub({str(user.id.value): 12.4})
+        hoy = match.created_at.date()
+        differentials = _DifferentialsStub(
+            {
+                str(user.id.value): [
+                    _vuelta(hoy, "12.4", str(match.id.value)),
+                    _vuelta(hoy - timedelta(days=3), "15.1"),
+                ]
+            }
+        )
 
         await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
-            str(match.id.value), best_differential_before={str(user.id.value): 15.1}
+            str(match.id.value)
         )
 
         records = [
@@ -364,10 +378,18 @@ class TestQueSePublica:
         user = await _create_user(user_uow)
         course = await _create_course(golf_course_uow, user.id)
         match = await _played_match(qm_uow, course, user)
-        differentials = _DifferentialsStub({str(user.id.value): 15.1})
+        hoy = match.created_at.date()
+        differentials = _DifferentialsStub(
+            {
+                str(user.id.value): [
+                    _vuelta(hoy, "15.1", str(match.id.value)),
+                    _vuelta(hoy - timedelta(days=3), "15.1"),
+                ]
+            }
+        )
 
         await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
-            str(match.id.value), best_differential_before={str(user.id.value): 15.1}
+            str(match.id.value)
         )
 
         tipos = [e.type for e in await _feed_de(social_uow, user)]
@@ -383,14 +405,48 @@ class TestQueSePublica:
         user = await _create_user(user_uow)
         course = await _create_course(golf_course_uow, user.id)
         match = await _played_match(qm_uow, course, user)
-        differentials = _DifferentialsStub({str(user.id.value): 15.1})
+        differentials = _DifferentialsStub(
+            {str(user.id.value): [_vuelta(match.created_at.date(), "15.1", str(match.id.value))]}
+        )
 
         await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
-            str(match.id.value), best_differential_before={str(user.id.value): None}
+            str(match.id.value)
         )
 
         tipos = [e.type for e in await _feed_de(social_uow, user)]
         assert ActivityEventType.PERSONAL_BEST not in tipos
+
+    async def test_a_later_round_is_not_the_mark_it_beats(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Given una vuelta de otro dia POSTERIOR mejor que esta, ya cerrada /
+        When se publica esta / Then el record se mide solo con las anteriores
+        (Agustin, 23 oct 2026: «mejorando su 35.6» con un 35.6 de despues).
+        """
+        user = await _create_user(user_uow)
+        course = await _create_course(golf_course_uow, user.id)
+        match = await _played_match(qm_uow, course, user)
+        hoy = match.created_at.date()
+        differentials = _DifferentialsStub(
+            {
+                str(user.id.value): [
+                    _vuelta(hoy + timedelta(days=3), "10.0"),
+                    _vuelta(hoy, "12.4", str(match.id.value)),
+                    _vuelta(hoy - timedelta(days=3), "15.1"),
+                ]
+            }
+        )
+
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow, differentials).execute(
+            str(match.id.value)
+        )
+
+        [record] = [
+            e for e in await _feed_de(social_uow, user) if e.type == ActivityEventType.PERSONAL_BEST
+        ]
+        assert record.payload["previous_best"] == "15.1"
+        assert record.payload["differential"] == "12.4"
 
 
 class TestQuienPublica:

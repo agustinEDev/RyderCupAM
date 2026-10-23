@@ -267,23 +267,28 @@ class TestLastPublished:
                 published_at=cuando,
             )
 
+        # Cuando se escribio, no la fecha de publicacion: el mismo logro que
+        # se vuelve a publicar la conserva (23 oct 2026). Dos transacciones,
+        # y la segunda publica con fechas MAS ANTIGUAS que la primera
+        await repo.add_many([_logro(ActivityEventType.BIRDIE, datetime(2026, 6, 1, 11))])
+        await db_session.commit()
         await repo.add_many(
             [
-                _logro(ActivityEventType.BIRDIE, datetime(2026, 6, 1, 9)),
-                _logro(ActivityEventType.NEW_COURSE, datetime(2026, 6, 1, 10)),
-                _logro(ActivityEventType.BIRDIE, datetime(2026, 6, 1, 11), torneo="t-2"),
+                _logro(ActivityEventType.NEW_COURSE, datetime(2026, 6, 1, 9)),
+                _logro(ActivityEventType.BIRDIE, datetime(2026, 6, 1, 9), torneo="t-2"),
             ]
         )
         await db_session.commit()
 
-        assert await repo.last_published_at("t-1", [ActivityEventType.BIRDIE]) == datetime(
-            2026, 6, 1, 9
-        )
-        assert await repo.last_published_at(
+        solo_birdies = await repo.last_written_at("t-1", [ActivityEventType.BIRDIE])
+        con_el_campo = await repo.last_written_at(
             "t-1", [ActivityEventType.BIRDIE, ActivityEventType.NEW_COURSE]
-        ) == datetime(2026, 6, 1, 10)
-        assert await repo.last_published_at("t-3", [ActivityEventType.BIRDIE]) is None
-        assert await repo.last_published_at("t-1", []) is None
+        )
+        assert solo_birdies is not None
+        assert con_el_campo is not None
+        assert solo_birdies < con_el_campo
+        assert await repo.last_written_at("t-3", [ActivityEventType.BIRDIE]) is None
+        assert await repo.last_written_at("t-1", []) is None
 
 
 class TestPlayerLockAcrossSessions:

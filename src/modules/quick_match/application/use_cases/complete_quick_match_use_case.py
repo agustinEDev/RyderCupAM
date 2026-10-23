@@ -54,45 +54,16 @@ class CompleteQuickMatchUseCase:
             if quick_match.creator_id != requester_id:
                 raise NotQuickMatchCreatorError("Only the creator can complete the quick match.")
 
-            jugadores = [p.user_id for p in quick_match.participants if p.user_id is not None]
-
-        # Fuera de la transaccion a proposito: preguntar por el mejor diferencial
-        # entra en las estadisticas del jugador, que abren esta misma unidad de
-        # trabajo. Anidarla aqui la cerraria antes de que se guarde el cierre.
-        # Y tiene que ser antes de completar: despues, esta vuelta ya cuenta para
-        # sus estadisticas y su marca previa seria imposible de saber
-        marca_previa = await self._marca_previa(jugadores)
-
-        async with self._uow:
-            quick_match = await self._uow.quick_matches.find_by_id(QuickMatchId(quick_match_id_raw))
-            if not quick_match:
-                raise QuickMatchNotFoundError(f"Quick match not found: {quick_match_id_raw}")
-
             quick_match.complete()
             await self._uow.quick_matches.update(quick_match)
 
-        await self._publicar_logros(quick_match_id_raw, marca_previa)
+        await self._publicar_logros(quick_match_id_raw)
 
         return await QuickMatchDTOMapper.to_response_dto(
             quick_match, self._user_uow, requester_id=requester_id
         )
 
-    async def _marca_previa(self, jugadores: list[UserId]) -> dict[str, float | None]:
-        """El mejor diferencial de cada jugador con cuenta, antes de cerrar."""
-        if self._achievements is None:
-            return {}
-
-        try:
-            return await self._achievements.capture_best_differentials(jugadores)
-        except Exception:
-            # Sin marca previa se publica todo menos el record personal, que es
-            # mejor que no publicar nada
-            logger.warning("Could not capture differentials before completing", exc_info=True)
-            return {}
-
-    async def _publicar_logros(
-        self, quick_match_id_raw: str, marca_previa: dict[str, float | None]
-    ) -> None:
+    async def _publicar_logros(self, quick_match_id_raw: str) -> None:
         """
         Publica los logros de la vuelta sin dejar que un fallo tumbe el cierre.
 
@@ -104,7 +75,7 @@ class CompleteQuickMatchUseCase:
             return
 
         try:
-            await self._achievements.publish(quick_match_id_raw, marca_previa)
+            await self._achievements.publish(quick_match_id_raw)
         except Exception:
             logger.warning(
                 "Could not publish achievements for quick match %s",

@@ -3,6 +3,7 @@
 # El DTO expone un campo llamado `date`, que sombrearia al tipo dentro de la
 # clase: de ahi el alias
 from datetime import date as date_type
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -257,3 +258,19 @@ class ScoringBreakdownResponseDTO(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RoundDifferentialDTO(BaseModel):
+    """
+    El diferencial de una vuelta computable, con su día y de dónde sale: la
+    partida rápida, el partido de la Ryder o el grupo de stroke play
+    (`source_id`), y su torneo si lo tiene. Lo usa el récord del feed para
+    medirse solo contra las vueltas de días anteriores (23 oct 2026).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    played_on: date_type
+    differential: Decimal
+    source_id: str | None = None
+    competition_id: str | None = None

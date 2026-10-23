@@ -34,10 +34,11 @@ from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivityEventRepositoryInterface,
 )
+from src.modules.social.domain.services.withdrawn_achievement import scope_of
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
 
-EXCLUSIVE_TYPES = frozenset({ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT})
+EXCLUSIVE_TYPES = frozenset(t for t in ActivityEventType if t.is_exclusive_by_date)
 
 # La clave del payload con el instante en que se jugo
 PLAYED_AT = "played_at"
@@ -160,16 +161,6 @@ def event_key(evento: ActivityEvent) -> PlayedKey:
     return played_key(instante, evento.payload.get("competition_id"), evento.source_match_id)
 
 
-def _ambito(evento: ActivityEvent) -> tuple:
-    """Entre que logros se elige uno: del mismo jugador y tipo y, en «campo nuevo», campo."""
-    campo = (
-        evento.payload.get("golf_course_id")
-        if evento.type == ActivityEventType.NEW_COURSE
-        else None
-    )
-    return evento.user_id, evento.type, campo
-
-
 def player_scope(user_id: UserId) -> str:
     """El candado de un jugador: no choca con el de un torneo, que es su id a secas."""
     return f"player:{user_id.value}"
@@ -210,12 +201,12 @@ async def keep_only_the_oldest(
     publicados: dict[tuple, list[ActivityEvent]] = {}
     for evento in await repo.find_for_users(usuarios, EXCLUSIVE_TYPES):
         if not is_own(evento):
-            publicados.setdefault(_ambito(evento), []).append(evento)
+            publicados.setdefault(scope_of(evento), []).append(evento)
 
     descartados: set[int] = set()
     retirar: dict[ActivityEventType, set[tuple[UserId, str]]] = {}
     for candidato in candidatos:
-        otros = publicados.get(_ambito(candidato), [])
+        otros = publicados.get(scope_of(candidato), [])
         ganador = min([candidato, *otros], key=event_key)
         if ganador is not candidato:
             descartados.add(id(candidato))
