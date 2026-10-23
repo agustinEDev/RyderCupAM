@@ -53,6 +53,11 @@ class TestWhatIsNoted:
         assert apunte.hidden is True
         assert apunte.hidden_holes == (3, 7)
 
+    def test_a_hidden_one_without_valid_holes_hides_every_hole(self):
+        """Una lista vacia, o sin enteros, no puede querer decir «ningun hoyo oculto»."""
+        assert _apunte(_logro(visible=False, holes=[])).hidden_holes is None
+        assert _apunte(_logro(visible=False, holes=["3"])).hidden_holes is None
+
     def test_a_hidden_record_hides_it_whole(self):
         apunte = _apunte(_logro(T.PERSONAL_BEST, visible=False, holes=[3]))
 
@@ -78,6 +83,13 @@ class TestApplyingIt:
         WithdrawnAchievement(published_at=None, hidden=True).apply_to(evento)
 
         assert evento.published_at == DESPUES
+        assert evento.visible_to_friends is False
+
+    def test_a_note_with_no_holes_listed_hides_every_hole(self):
+        evento = _logro(holes=[7])
+
+        WithdrawnAchievement(published_at=PRIMERA, hidden=True, hidden_holes=()).apply_to(evento)
+
         assert evento.visible_to_friends is False
 
     def test_only_a_hidden_hole_coming_back_hides_it(self):

@@ -14,7 +14,9 @@ Decisiones de Agustin del 23 oct 2026, tras la release social 1:
 
 La tabla no se renombra aunque ya no guarde solo lo oculto: el codigo viejo
 sigue escribiendo en ella mientras dura el despliegue. Ese codigo trata todo
-apunte como oculto, asi que en esa ventana a lo sumo oculta de mas.
+apunte como oculto y lo gasta, asi que un logro retirado por el codigo nuevo y
+vuelto a publicar por el viejo en esa ventana de segundos queda oculto para
+siempre y pierde su fecha. Volver a la 2.38.0 exige antes bajar esta migracion.
 
 `activity_events.written_at`: cuando se escribio la fila. Como `published_at`
 ya no es siempre la hora de escritura, quien publica un torneo mira esta para

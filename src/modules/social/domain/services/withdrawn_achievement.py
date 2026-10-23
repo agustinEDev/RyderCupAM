@@ -81,18 +81,20 @@ class WithdrawnAchievement:
 
     def _would_reveal(self, event: ActivityEvent) -> bool:
         """Si publicarlo visible destaparia algo oculto."""
-        if not event.type.is_per_hole or self.hidden_holes is None:
+        # Sin hoyos apuntados, todos: un apunte vacio no destapa nada
+        if not event.type.is_per_hole or not self.hidden_holes:
             return True
         hoyos = _holes(event.payload)
         return hoyos is None or bool(set(hoyos) & set(self.hidden_holes))
 
 
 def _holes(payload: dict) -> tuple[int, ...] | None:
-    """Los hoyos de un logro, o None si no los dice."""
+    """Los hoyos de un logro, o None si no dice ninguno valido."""
     hoyos = payload.get("holes")
     if not isinstance(hoyos, list):
         return None
-    return tuple(sorted({h for h in hoyos if isinstance(h, int)}))
+    validos = tuple(sorted({h for h in hoyos if isinstance(h, int)}))
+    return validos or None
 
 
 def exclusive_scope(user_id, type: ActivityEventType, golf_course_id: str | None) -> tuple:

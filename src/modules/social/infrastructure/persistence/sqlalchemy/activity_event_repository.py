@@ -130,6 +130,14 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 select(withdrawn_hidden_achievements_table).where(
                     apuntes.user_id.in_(list({e.user_id for e in logros})),
                     apuntes.type.in_(sorted({e.type for e in logros})),
+                    # Los apuntes no se borran nunca: solo los de estas vueltas,
+                    # salvo los exclusivos, que se heredan de cualquier vuelta
+                    or_(
+                        apuntes.source_match_id.in_(sorted({e.source_match_id for e in logros})),
+                        apuntes.type.in_(
+                            sorted(t for t in ActivityEventType if t.is_exclusive_by_date)
+                        ),
+                    ),
                 )
             )
         ).all()
