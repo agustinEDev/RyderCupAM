@@ -62,6 +62,19 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
             if hs.match_id == match_id and hs.player_user_id == player_user_id
         ]
 
+    async def find_by_matches_and_player(
+        self, match_ids: list[MatchId], player_user_id: UserId
+    ) -> list[HoleScore]:
+        wanted = set(match_ids)
+        return sorted(
+            (
+                hs
+                for hs in self._scores.values()
+                if hs.match_id in wanted and hs.player_user_id == player_user_id
+            ),
+            key=lambda hs: hs.hole_number,
+        )
+
     async def delete_by_match(self, match_id: MatchId) -> int:
         to_delete = [hs_id for hs_id, hs in self._scores.items() if hs.match_id == match_id]
         for hs_id in to_delete:
@@ -70,3 +83,12 @@ class InMemoryHoleScoreRepository(HoleScoreRepositoryInterface):
 
     async def exists_by_player(self, player_user_id: UserId) -> bool:
         return any(hs.player_user_id == player_user_id for hs in self._scores.values())
+
+    async def played_holes(self, match_ids: list[MatchId]) -> dict[tuple[MatchId, UserId], int]:
+        wanted = set(match_ids)
+        jugados: dict[tuple[MatchId, UserId], int] = {}
+        for hs in self._scores.values():
+            if hs.match_id in wanted and (hs.own_submitted or hs.marker_submitted):
+                clave = (hs.match_id, hs.player_user_id)
+                jugados[clave] = jugados.get(clave, 0) + 1
+        return jugados

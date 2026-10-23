@@ -26,6 +26,11 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
     async def find_by_id(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return self._quick_matches.get(quick_match_id)
 
+    async def find_by_ids(self, quick_match_ids: list[QuickMatchId]) -> list[QuickMatch]:
+        return [
+            qm for qid in dict.fromkeys(quick_match_ids) if (qm := self._quick_matches.get(qid))
+        ]
+
     async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         return self._quick_matches.get(quick_match_id)
 
@@ -91,3 +96,23 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
     async def exists_created_by(self, creator_id: UserId) -> bool:
         """True si el usuario ha creado alguna partida rapida."""
         return any(qm.creator_id == creator_id for qm in self._quick_matches.values())
+
+    async def list_shared_by(
+        self, user_id: UserId, other_id: UserId, status: QuickMatchStatus
+    ) -> list[QuickMatch]:
+        results = [
+            qm
+            for qm in self._quick_matches.values()
+            if self._matches_user(qm, user_id, status) and self._matches_user(qm, other_id, status)
+        ]
+        results.sort(key=lambda x: x.created_at, reverse=True)
+        return results
+
+    async def list_completed_for_users(self, user_ids: list[UserId]) -> list[QuickMatch]:
+        participantes = {ParticipantId(u.value) for u in user_ids}
+        return [
+            qm
+            for qm in self._quick_matches.values()
+            if qm.status == QuickMatchStatus.COMPLETED
+            and any(qm.is_participant(p) for p in participantes)
+        ]

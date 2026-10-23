@@ -6,7 +6,7 @@ partido lleva su propio `source_match_id`, y `FIRST_TOURNAMENT` se publica una
 sola vez aunque el jugador haya jugado cuatro partidos.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -34,7 +34,11 @@ from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.golf_course.infrastructure.persistence.in_memory.in_memory_golf_course_unit_of_work import (
     InMemoryGolfCourseUnitOfWork,
 )
+from src.modules.quick_match.infrastructure.persistence.in_memory.in_memory_quick_match_unit_of_work import (
+    InMemoryQuickMatchUnitOfWork,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
+    PlayedRound,
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
@@ -43,7 +47,13 @@ from src.modules.social.application.ports.player_differentials_interface import 
 from src.modules.social.application.use_cases.publish_tournament_achievements_use_case import (
     PublishTournamentAchievementsUseCase,
 )
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
+from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
+    PlayerCourseHistoryAdapter,
+)
 from src.modules.social.infrastructure.persistence.in_memory.in_memory_social_unit_of_work import (
     InMemorySocialUnitOfWork,
 )
@@ -62,12 +72,21 @@ PAR = 4
 ROUND_DATE = date(2026, 6, 1)
 
 
-class _DifferentialsStub(PlayerDifferentialsInterface):
-    def __init__(self, por_jugador: dict | None = None):
-        self._por_jugador = por_jugador or {}
+def _todos(*user_ids) -> ActivitySlice:
+    """Todo lo de esos jugadores, de cualquier tipo y visibilidad."""
+    return ActivitySlice(user_ids=tuple(user_ids), types=frozenset(ActivityEventType))
 
-    async def best_differential(self, user_id):
-        return self._por_jugador.get(str(user_id.value))
+
+class _DifferentialsStub(PlayerDifferentialsInterface):
+    """`ahora`: el mejor diferencial de hoy; `antes`: el de antes del torneo."""
+
+    def __init__(self, ahora: dict | None = None, antes: dict | None = None):
+        self._ahora = ahora or {}
+        self._antes = antes or {}
+
+    async def best_differential(self, user_id, excluding_competition_id=None):
+        fuente = self._antes if excluding_competition_id else self._ahora
+        return fuente.get(str(user_id.value))
 
 
 class _CourseHistoryFake(PlayerCourseHistoryInterface):
@@ -75,19 +94,27 @@ class _CourseHistoryFake(PlayerCourseHistoryInterface):
 
     def __init__(self):
         self._vueltas: set = set()
+        # El historial de verdad sobre las uows del test: devuelve tambien la
+        # vuelta que se publica, que es de donde cuelga el logro (22 oct 2026)
+        self.real: PlayerCourseHistoryInterface | None = None
 
     def registra(self, user_id, golf_course_id: str, match_id: str) -> None:
-        self._vueltas.add((str(user_id.value), golf_course_id, match_id))
+        self._vueltas.add((user_id, golf_course_id, match_id))
 
-    async def has_played_course_before(
-        self, user_id, golf_course_id: str, excluding_match_id: str
-    ) -> bool:
-        return any(
-            usuario == str(user_id.value)
-            and campo == golf_course_id
-            and partida != excluding_match_id
+    async def played_rounds(self, user_ids):
+        reales = await self.real.played_rounds(user_ids) if self.real else []
+        # Lo registrado se jugo hace mucho: es lo mas antiguo
+        return reales + [
+            PlayedRound(
+                user_id=usuario,
+                golf_course_id=campo,
+                instant=datetime(2000, 1, 1),
+                source_id=partida,
+                holes_played=18,
+            )
             for usuario, campo, partida in self._vueltas
-        )
+            if usuario in set(user_ids)
+        ]
 
 
 @pytest.fixture
@@ -252,13 +279,23 @@ def _use_case(
         golf_course_uow=golf_course_uow,
         user_uow=user_uow,
         differentials=differentials or _DifferentialsStub(),
-        history=history or _CourseHistoryFake(),
+        history=_con_historial_real(
+            history or _CourseHistoryFake(), competition_uow, golf_course_uow
+        ),
     )
+
+
+def _con_historial_real(history, competition_uow, golf_course_uow):
+    if isinstance(history, _CourseHistoryFake) and history.real is None:
+        history.real = PlayerCourseHistoryAdapter(
+            InMemoryQuickMatchUnitOfWork(), competition_uow, golf_course_uow
+        )
+    return history
 
 
 async def _feed_de(social_uow, user):
     async with social_uow:
-        return await social_uow.activity_events.find_for_users([user.id], limit=50)
+        return await social_uow.activity_events.find_in([_todos(user.id)], limit=50)
 
 
 async def test_publica_los_logros_de_la_vuelta_de_torneo(
@@ -350,10 +387,13 @@ async def test_reprocesar_el_cierre_no_duplica(
     assert len(await _feed_de(social_uow, player)) == antes
 
 
-async def test_no_publica_de_quien_lo_tiene_apagado(
+async def test_con_la_publicacion_apagada_publica_solo_para_el(
     social_uow, competition_uow, golf_course_uow, user_uow
 ):
-    """Given un inscrito con la publicacion apagada / When se cierra / Then no aparece."""
+    """
+    D20a. Given un inscrito con la publicacion apagada / When se cierra / Then
+    sus logros se guardan, pero ocultos a sus amigos.
+    """
     player = await _create_user(user_uow, share_activity=False)
     rival = await _create_user(user_uow)
     course = await _create_course(golf_course_uow, player.id)
@@ -363,7 +403,27 @@ async def test_no_publica_de_quien_lo_tiene_apagado(
         str(competition.id.value)
     )
 
-    assert await _feed_de(social_uow, player) == []
+    suyos = await _feed_de(social_uow, player)
+    assert suyos
+    assert all(e.visible_to_friends is False for e in suyos)
+
+
+async def test_con_la_publicacion_encendida_lo_ven_sus_amigos(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """D20c. Given un inscrito que publica / When se cierra / Then sus logros son visibles."""
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival)
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    suyos = await _feed_de(social_uow, player)
+    assert suyos
+    assert all(e.visible_to_friends is True for e in suyos)
 
 
 async def test_un_torneo_sin_cerrar_no_publica(
@@ -387,7 +447,11 @@ async def test_un_torneo_sin_cerrar_no_publica(
 async def test_una_tarjeta_incompleta_no_llega_al_feed(
     social_uow, competition_uow, golf_course_uow, user_uow
 ):
-    """Given una tarjeta con huecos / When se cierra / Then esa vuelta no cuenta."""
+    """
+    Given una tarjeta con huecos / When se cierra / Then esa vuelta no cuenta
+    para el birdie, pero piso el campo: «campo nuevo» y «primer torneo» si
+    (Agustin, 22 oct 2026).
+    """
     player = await _create_user(user_uow)
     rival = await _create_user(user_uow)
     course = await _create_course(golf_course_uow, player.id)
@@ -397,11 +461,13 @@ async def test_una_tarjeta_incompleta_no_llega_al_feed(
         competition_uow, course, player, rival, scores_by_hole=tarjeta
     )
 
-    publicados = await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
         str(competition.id.value)
     )
 
-    assert publicados == 0
+    assert sorted(e.type for e in await _feed_de(social_uow, player)) == sorted(
+        [ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT]
+    )
 
 
 async def test_un_torneo_que_no_existe_no_rompe(
@@ -475,3 +541,76 @@ async def test_el_birdie_de_torneo_se_mide_contra_el_par_de_su_barra(
     birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
     assert len(birdies) == 1
     assert birdies[0].payload["holes"] == [1]
+
+
+class _ApagaAlJuzgar(_CourseHistoryFake):
+    """Apaga la publicacion del jugador mientras se juzgan sus vueltas."""
+
+    def __init__(self, user):
+        super().__init__()
+        self._user = user
+
+    async def played_rounds(self, user_ids):
+        self._user.set_activity_sharing(False)
+        return await super().played_rounds(user_ids)
+
+
+async def test_apagar_la_publicacion_antes_de_guardar_deja_el_logro_oculto(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """
+    Given un inscrito que publica al empezar / When apaga la publicacion antes
+    de que se guarden sus logros / Then se guardan ocultos.
+    """
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival)
+
+    await _use_case(
+        social_uow, competition_uow, golf_course_uow, user_uow, history=_ApagaAlJuzgar(player)
+    ).execute(str(competition.id.value))
+
+    eventos = await _feed_de(social_uow, player)
+    assert eventos
+    assert all(e.visible_to_friends is False for e in eventos)
+
+
+async def test_los_logros_de_un_torneo_comparten_fecha_de_publicacion(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """Given un torneo con varios logros / When se publica / Then un solo `published_at`."""
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival)
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    eventos = await _feed_de(social_uow, player)
+    assert len(eventos) >= 2
+    assert len({e.published_at for e in eventos}) == 1
+
+
+async def test_la_ronda_de_torneo_se_fecha_a_mediodia_utc(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """
+    Given un torneo jugado el 1 de junio / When se publica / Then `occurred_at`
+    es ese dia a las 12:00 UTC: sale con «Z», y a medianoche se veria el dia
+    anterior en cualquier zona al oeste de Greenwich.
+    """
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    competition, _ = await _completed_tournament(competition_uow, course, player, rival)
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    eventos = await _feed_de(social_uow, player)
+    assert eventos
+    assert {e.occurred_at for e in eventos} == {datetime(2026, 6, 1, 12, 0)}

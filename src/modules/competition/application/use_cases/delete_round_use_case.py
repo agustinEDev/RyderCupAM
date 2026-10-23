@@ -12,6 +12,10 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     RoundNotModifiableError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.franjas import (
     comprobar_agenda,
     comprobar_que_esta_vacia,
@@ -37,8 +41,14 @@ class DeleteRoundUseCase:
     - La ronda debe estar en estado modificable (PENDING_TEAMS/PENDING_MATCHES)
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
+        """`actividad` olvida lo que Actividad guardaba de la ronda; sin el, nada."""
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: DeleteRoundRequestDTO, user_id: UserId, is_admin: bool = False
@@ -103,6 +113,10 @@ class DeleteRoundUseCase:
 
             # 7. Eliminar la ronda
             await self._uow.rounds.delete(round_id)
+
+        # Ya borrada: sus avisos de salida retirados se quedarian huerfanos
+        # (revisor sin contexto, 22 oct 2026)
+        await self._actividad.round_deleted(competition.id, round_id)
 
         return DeleteRoundResponseDTO(
             id=request.round_id,

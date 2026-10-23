@@ -1,15 +1,22 @@
 """Adaptador: `quick_match` publica sus logros a traves del modulo social."""
 
+import logging
+
 from src.modules.quick_match.application.ports.round_achievements_publisher_interface import (
     RoundAchievementsPublisherInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.application.use_cases.publish_quick_match_result_use_case import (
+    PublishQuickMatchResultUseCase,
+)
 from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
     PublishRoundAchievementsUseCase,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 
 class QuickMatchAchievementsPublisher(RoundAchievementsPublisherInterface):
@@ -19,15 +26,21 @@ class QuickMatchAchievementsPublisher(RoundAchievementsPublisherInterface):
     `quick_match` conoce solo su puerto; `social` conoce solo su caso de uso.
     Este adaptador vive en infraestructura, que es donde el proyecto permite
     conocer ambos lados.
+
+    Al cerrar la partida publica dos cosas: los logros de cada vuelta y como
+    acabo cada jugador (BE-2). Cada una por su lado: si una falla, la otra sale
+    igual, y ninguna tumba el cierre.
     """
 
     def __init__(
         self,
         publish_use_case: PublishRoundAchievementsUseCase,
         differentials: PlayerDifferentialsInterface,
+        result_use_case: PublishQuickMatchResultUseCase | None = None,
     ):
         self._publish = publish_use_case
         self._differentials = differentials
+        self._result = result_use_case
 
     async def capture_best_differentials(self, user_ids: list[UserId]) -> dict[str, float | None]:
         return {
@@ -38,6 +51,20 @@ class QuickMatchAchievementsPublisher(RoundAchievementsPublisherInterface):
     async def publish(
         self, quick_match_id: str, best_differential_before: dict[str, float | None]
     ) -> int:
-        return await self._publish.execute(
-            quick_match_id, best_differential_before=best_differential_before
-        )
+        publicados = 0
+        try:
+            publicados += await self._publish.execute(
+                quick_match_id, best_differential_before=best_differential_before
+            )
+        except Exception:
+            logger.warning(
+                "Could not publish achievements for quick match %s", quick_match_id, exc_info=True
+            )
+        if self._result is not None:
+            try:
+                publicados += await self._result.execute(quick_match_id)
+            except Exception:
+                logger.warning(
+                    "Could not publish the result of quick match %s", quick_match_id, exc_info=True
+                )
+        return publicados

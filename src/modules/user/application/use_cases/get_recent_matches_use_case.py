@@ -14,16 +14,14 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.quick_match.application.services.course_context import (
-    course_context_for,
-    own_playing_handicap,
+from src.modules.quick_match.application.services.course_context import own_playing_handicap
+from src.modules.quick_match.application.services.match_play_result import (
+    match_play_result,
+    quick_match_strokes,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interface import (
     QuickMatchUnitOfWorkInterface,
-)
-from src.modules.quick_match.domain.services.hole_completion_service import (
-    hole_is_complete,
 )
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
     StrokeAllocationService,
@@ -451,30 +449,7 @@ class GetRecentMatchesUseCase:
         resultado sale a bruto, que es peor que nada pero mejor que no poder
         mostrar el historial.
         """
-        if course is None:
-            return {}
-
-        context = course_context_for(course)
-        handicaps = {}
-        for participant in raw.match.participants:
-            # Lo decide el participante: el fijado al empezar (BE #514) o, en
-            # partidas de antes, el manual, el personalizado o el del perfil
-            user = users_by_id.get(participant.user_id) if participant.user_id else None
-            value = participant.effective_handicap(
-                user.handicap.value if user and user.handicap else None
-            )
-            handicaps[participant.participant_id] = None if value is None else Decimal(str(value))
-
-        return self._stroke_allocation_service.allocate(
-            participants=raw.match.participants,
-            handicaps=handicaps,
-            tee_ratings=context.tee_ratings,
-            holes_by_stroke_index=context.holes_by_stroke_index,
-            holes_by_stroke_index_by_tee=context.holes_by_tee,
-            match_format=raw.match.match_format,
-            allowance_percentage=raw.match.get_effective_allowance(),
-            play_mode=raw.match.play_mode,
-        )
+        return quick_match_strokes(raw.match, course, users_by_id, self._stroke_allocation_service)
 
     def _quick_match_play_outcome(
         self,
@@ -485,79 +460,24 @@ class GetRecentMatchesUseCase:
         """
         Cómo quedó una partida rápida por equipos, desde el lado del jugador.
 
-        El resultado no está guardado en ningún sitio: se recalcula hoyo a hoyo
-        con el mismo motor que usa el detalle de la partida. Solo cuentan los
-        hoyos donde anotaron los dos bandos, porque un hoyo a medias no se puede
-        adjudicar, y con la misma regla que el detalle —`hole_is_complete`— y no
-        con una copia: escrita aquí a mano, exigía los cuatro scores y dejaba el
-        historial sin resultado en todas las partidas de foursomes mientras la
-        partida abierta ya las puntuaba.
-
-        Los golpes se reparten con el mismo servicio que el detalle: si aquí se
-        compararan los brutos, el historial contaría una película distinta de la
-        que muestra la partida abierta.
+        Lo calcula `match_play_result`, la misma pieza que usan las partidas
+        jugadas con un amigo (BE-3), con los golpes repartidos como en el
+        detalle: si aquí se compararan los brutos, el historial contaría una
+        película distinta de la que muestra la partida abierta.
         """
         rosters = raw.match.team_rosters()
         if rosters is None:
             return None, None
-        team_a_ids, team_b_ids = rosters
+        team_a_ids, _ = rosters
 
-        strokes_by_participant = self._quick_match_strokes(raw, course, users_by_id)
-
-        hole_results = []
-        for hole_number in range(1, TOTAL_HOLES + 1):
-            scores = {
-                participant_id: holes[hole_number]
-                for participant_id, holes in raw.scores_by_participant.items()
-                if hole_number in holes
-            }
-            if not hole_is_complete(scores, team_a_ids, team_b_ids, raw.match.match_format):
-                continue
-
-            def net(pid, hole=hole_number, values=scores):
-                # La raya (score nulo) se propaga: `calculate_hole_winner` la lee
-                # como bando que no entrego bola y le da el hoyo al rival, que es
-                # la regla de match play. Convertirla en un numero aqui la haria
-                # competir por el hoyo.
-                if values[pid] is None:
-                    return None
-                allocation = strokes_by_participant.get(pid)
-                if allocation is None:
-                    return values[pid]
-                return allocation.net_score(hole, values[pid])
-
-            # Solo los que anotaron: en foursomes el bando entrega UNA bola, asi
-            # que el companero no tiene score y `values[pid]` reventaria.
-            hole_results.append(
-                self._scoring_service.calculate_hole_winner(
-                    [net(pid) for pid in team_a_ids if pid in scores],
-                    [net(pid) for pid in team_b_ids if pid in scores],
-                    raw.match.match_format,
-                )
-            )
-
-        if not hole_results:
-            return None, None
-
-        own_team = "A" if raw.participant.participant_id in team_a_ids else "B"
-        standing = self._scoring_service.calculate_match_standing(hole_results)
-
-        if self._scoring_service.is_match_decided(standing):
-            # Se cerró antes del 18: el resultado va en "3&2", ventaja y hoyos
-            # que quedaban
-            outcome = self._scoring_service.format_decided_result(hole_results)
-            return self._result_for_team(outcome["winner"], own_team), outcome["score"]
-
-        if standing["leading_team"] is None:
-            return RESULT_HALVED, "AS"
-
-        # Terminado sin decidirse antes de tiempo: la ventaja tal cual ("2UP").
-        # No vale `format_decided_result` aquí: inventaría un "2&7" con los hoyos
-        # que quedaban sin anotar, como si el partido se hubiera cerrado en ellos
-        return (
-            self._result_for_team(standing["leading_team"], own_team),
-            standing["status"],
+        winner, score = match_play_result(
+            raw.match,
+            raw.scores_by_participant,
+            self._quick_match_strokes(raw, course, users_by_id),
+            self._scoring_service,
         )
+        own_team = "A" if raw.participant.participant_id in team_a_ids else "B"
+        return self._result_for_team(winner, own_team), score
 
     def _foursomes_side_strokes(
         self, raw: _QuickMatchRaw, course: GolfCourse | None

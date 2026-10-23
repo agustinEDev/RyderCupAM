@@ -95,6 +95,8 @@ async def _publica(
                     occurred_at=cuando,
                     source_match_id=match_id,
                     payload=payload,
+                    # Publicado cuando se jugo: estos tests hablan de una sola fecha
+                    published_at=cuando,
                 )
             ]
         )
@@ -360,12 +362,10 @@ class TestPaginacion:
 
 
 class TestAvisoDeNovedades:
-    async def test_quien_nunca_ha_abierto_el_feed_no_ve_un_contador_enorme(
-        self, social_uow, user_uow
-    ):
+    async def test_quien_nunca_ha_abierto_el_feed_ve_todo_como_nuevo(self, social_uow, user_uow):
         """
-        Given un jugador que nunca abrio el feed / When lo pide / Then el aviso
-        va a cero: anunciarle 200 novedades el primer dia no ayuda.
+        C11. Given un jugador que nunca abrio el feed / When lo pide / Then el
+        aviso cuenta todo lo que ve, con el tope de 10: el cliente pinta «9+».
         """
         yo = await _create_user(user_uow)
         amigo = await _create_user(user_uow)
@@ -375,12 +375,13 @@ class TestAvisoDeNovedades:
 
         feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
 
-        assert feed.unseen_count == 0
+        assert feed.unseen_count == 3
 
-    async def test_mis_propios_logros_no_cuentan_como_novedad(self, social_uow, user_uow):
+    async def test_mis_propios_logros_tambien_cuentan_como_novedad(self, social_uow, user_uow):
         """
-        Given que acabo de publicar tres logros mios / When pido el feed / Then
-        el aviso sigue a cero: lo que uno acaba de hacer no es noticia para uno.
+        C13. Given tres logros mios publicados despues de mi visita / When pido
+        el feed / Then el aviso los cuenta: el numero cuenta todo lo nuevo,
+        tambien lo propio (decision de producto).
         """
         yo = await _create_user(user_uow)
         amigo = await _create_user(user_uow)
@@ -388,13 +389,24 @@ class TestAvisoDeNovedades:
         yo.mark_feed_as_seen(CUANDO)
         async with user_uow:
             await user_uow.users.save(yo)
-        for i in range(3):
-            await _publica(social_uow, yo, f"mio-{i}", CUANDO + timedelta(hours=i + 1))
+        async with social_uow:
+            await social_uow.activity_events.add_many(
+                [
+                    ActivityEvent.create(
+                        user_id=yo.id,
+                        type=ActivityEventType.BIRDIE,
+                        occurred_at=CUANDO - timedelta(days=1),
+                        source_match_id=f"mio-{i}",
+                        published_at=CUANDO + timedelta(hours=i + 1),
+                    )
+                    for i in range(3)
+                ]
+            )
 
         feed = await _use_case(social_uow, user_uow).execute(str(yo.id.value))
 
         assert len(feed.events) == 3
-        assert feed.unseen_count == 0
+        assert feed.unseen_count == 3
 
     async def test_cuenta_lo_publicado_despues_de_la_ultima_visita(self, social_uow, user_uow):
         """Given una visita anterior / When se publica algo nuevo / Then el aviso lo cuenta."""

@@ -69,7 +69,8 @@ class TestPerfil:
     async def test_un_desconocido_ve_la_ficha_pero_no_lo_privado(self, client: AsyncClient):
         """
         Given dos usuarios sin amistad / When uno pide el perfil / Then 200 con
-        nombre, apellidos y foto, pero sin handicap ni estadisticas.
+        nombre, apellidos, foto y handicap (publico entre usuarios con sesion
+        desde BE-3), pero sin estadisticas.
         """
         ana = await create_authenticated_user(
             client, "perfil_c@test.com", "P@ssw0rd123!", "Ana", "Garcia"
@@ -77,6 +78,12 @@ class TestPerfil:
         luis = await create_authenticated_user(
             client, "perfil_d@test.com", "P@ssw0rd123!", "Luis", "Perez"
         )
+        set_auth_cookies(client, luis["cookies"])
+        puesto = await client.post(
+            "/api/v1/handicaps/update-manual",
+            json={"user_id": luis["user"]["id"], "handicap": 14.2},
+        )
+        assert puesto.status_code == 200, puesto.text
 
         set_auth_cookies(client, ana["cookies"])
         respuesta = await client.get(f"/api/v1/users/{luis['user']['id']}/profile")
@@ -87,7 +94,7 @@ class TestPerfil:
         assert datos["is_friend"] is False
         assert datos["friendship"]["status"] == "NONE"
         assert datos["stats"] is None
-        assert datos["handicap"] is None
+        assert abs(datos["handicap"] - 14.2) < 0.01
         # El correo es de los campos privados: llega en None, no ausente
         assert datos["email"] is None
         assert luis["user"]["email"] not in respuesta.text
@@ -262,3 +269,42 @@ class TestActividad:
 
         assert respuesta.status_code == 200
         assert respuesta.json()["events"] == []
+
+
+# Validas como fecha, fuera del calendario al pasarlas a UTC (revision del 22 oct)
+_CURSORES_EXTREMOS = [
+    "0001-01-01T00:00:00%2B01:00|00000000-0000-0000-0000-000000000000",
+    "9999-12-31T23:59:59-01:00|00000000-0000-0000-0000-000000000000",
+]
+
+
+class TestCursorExtremo:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cursor", _CURSORES_EXTREMOS)
+    async def test_el_feed_no_da_500(self, client: AsyncClient, cursor: str):
+        """Given un cursor que se sale del calendario / When pido el feed / Then 200."""
+        ana = await create_authenticated_user(
+            client, f"cur_f_{uuid4().hex[:6]}@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+
+        set_auth_cookies(client, ana["cookies"])
+        respuesta = await client.get(f"/api/v1/users/me/feed?cursor={cursor}")
+
+        assert respuesta.status_code == 200, respuesta.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cursor", _CURSORES_EXTREMOS)
+    async def test_la_actividad_no_da_500(self, client: AsyncClient, cursor: str):
+        """Given el mismo cursor / When pido la actividad de un amigo / Then 200."""
+        ana = await create_authenticated_user(
+            client, f"cur_a_{uuid4().hex[:6]}@test.com", "P@ssw0rd123!", "Ana", "Garcia"
+        )
+        luis = await create_authenticated_user(
+            client, f"cur_l_{uuid4().hex[:6]}@test.com", "P@ssw0rd123!", "Luis", "Perez"
+        )
+        await _hacerse_amigos(client, ana, luis)
+
+        set_auth_cookies(client, ana["cookies"])
+        respuesta = await client.get(f"/api/v1/users/{luis['user']['id']}/activity?cursor={cursor}")
+
+        assert respuesta.status_code == 200, respuesta.text

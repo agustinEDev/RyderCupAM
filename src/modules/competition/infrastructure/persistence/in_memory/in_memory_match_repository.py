@@ -1,6 +1,6 @@
 """In-Memory Match Repository para testing."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.match_repository_interface import (
@@ -77,3 +77,26 @@ class InMemoryMatchRepository(MatchRepositoryInterface):
             del self._matches[match_id]
             return True
         return False
+
+    async def find_with_both_players(
+        self, user_id: UserId, other_id: UserId, statuses: Collection[MatchStatus]
+    ) -> list[Match]:
+        return [
+            m
+            for m in self._matches.values()
+            if m.status in statuses
+            and m.find_player(user_id) is not None
+            and m.find_player(other_id) is not None
+        ]
+
+    async def find_finished_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+        buscados = set(user_ids)
+        return [
+            match
+            for match in self._matches.values()
+            if match.status.is_finished()
+            and any(
+                player.user_id in buscados
+                for player in (*match.team_a_players, *match.team_b_players)
+            )
+        ]

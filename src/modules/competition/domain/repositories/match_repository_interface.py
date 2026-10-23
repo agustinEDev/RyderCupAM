@@ -1,12 +1,13 @@
 """Match Repository Interface - Domain Layer."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..entities.match import Match
 from ..value_objects.match_id import MatchId
+from ..value_objects.match_status import MatchStatus
 from ..value_objects.round_id import RoundId
 
 
@@ -79,3 +80,20 @@ class MatchRepositoryInterface(ABC):
     async def delete(self, match_id: MatchId) -> bool:
         """Elimina un partido. Retorna True si existia."""
         pass
+
+    @abstractmethod
+    async def find_with_both_players(
+        self, user_id: UserId, other_id: UserId, statuses: Collection[MatchStatus]
+    ) -> list[Match]:
+        """Los partidos en esos estados donde juegan los dos, en cualquier bando."""
+        pass
+
+    @abstractmethod
+    async def find_finished_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+        """
+        Todos los partidos acabados (terminados, concedidos o por
+        incomparecencia) en los que jugo alguno de ellos, sin tope ni orden,
+        en una sola lectura: el historial de campos tiene que ver hasta lo mas
+        antiguo, y un concedido con hoyos jugados tambien piso el campo
+        (logros exclusivos, 22 oct 2026). Sin jugadores, ninguno.
+        """

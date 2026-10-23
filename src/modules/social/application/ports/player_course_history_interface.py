@@ -1,28 +1,34 @@
-"""Puerto: si un jugador ya habia pisado un campo."""
+"""Puerto: las vueltas en que cada jugador piso un campo."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 
+from src.modules.social.application.exclusive_achievements import PlayedRound
 from src.modules.user.domain.value_objects.user_id import UserId
+
+__all__ = ["PlayedRound", "PlayerCourseHistoryInterface"]
 
 
 class PlayerCourseHistoryInterface(ABC):
     """
-    Responde si una vuelta estrena campo, mirando **todo** lo que el jugador ha
-    jugado.
+    Todo lo que han jugado unos jugadores, de partidas rapidas y de torneos.
 
-    Es un puerto y no una consulta directa porque la respuesta cruza dos
-    modulos: un campo se puede estrenar en una partida rapida o en un torneo, y
+    Es un puerto y no una consulta directa porque la respuesta cruza modulos:
+    un campo se puede estrenar en una partida rapida o en un torneo, y
     preguntarle solo a uno haria que el mismo campo se estrenara dos veces.
     """
 
     @abstractmethod
-    async def has_played_course_before(
-        self, user_id: UserId, golf_course_id: str, excluding_match_id: str
-    ) -> bool:
+    async def played_rounds(self, user_ids: Collection[UserId]) -> list[PlayedRound]:
         """
-        Si el jugador ya habia terminado otra vuelta en ese campo.
+        Cada vuelta en la que alguno de ellos jugo al menos un hoyo (la raya
+        tambien), sin tope: hasta lo mas antiguo. Con el mismo criterio para
+        todas las fuentes (Agustin, 22 oct 2026):
 
-        `excluding_match_id` deja fuera la vuelta que se esta juzgando: cuando
-        esto corre ya esta cerrada, asi que contarla haria que nadie estrenara
-        campo nunca.
+        - partidas rapidas TERMINADAS, tambien las de su papelera;
+        - partidos de la Ryder y grupos de stroke play terminados de torneos
+          CERRADOS, salvo NO_PRESENTADO.
+
+        Por lotes: un numero fijo de lecturas, crezca o no el numero de
+        jugadores, campos o vueltas.
         """

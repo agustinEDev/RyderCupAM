@@ -27,6 +27,11 @@ class QuickMatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_ids(self, quick_match_ids: list[QuickMatchId]) -> list[QuickMatch]:
+        """Las que existan de esas, en una sola lectura; sin ids, ninguna."""
+        pass
+
+    @abstractmethod
     async def find_by_id_for_update(self, quick_match_id: QuickMatchId) -> QuickMatch | None:
         """
         Como `find_by_id`, pero bloqueando la fila (row-level lock) hasta el
@@ -77,5 +82,26 @@ class QuickMatchRepositoryInterface(ABC):
         Util para bloquear el borrado definitivo de una cuenta: quick_matches.creator_id
         tiene ON DELETE CASCADE, asi que borrar al creador borraria la partida entera
         (incluyendo a otros participantes) si no se bloquea antes.
+        """
+        pass
+
+    @abstractmethod
+    async def list_shared_by(
+        self, user_id: UserId, other_id: UserId, status: QuickMatchStatus
+    ) -> list[QuickMatch]:
+        """
+        Las partidas en ese estado donde juegan los dos y que ninguno oculto.
+
+        Basta con que uno la haya quitado de su lista (la papelera) para que deje
+        de ser «de los dos»: es lo que se enseña en el perfil del otro (BE-3).
+        """
+        pass
+
+    @abstractmethod
+    async def list_completed_for_users(self, user_ids: list[UserId]) -> list[QuickMatch]:
+        """
+        Todas las partidas terminadas en las que participa alguno de ellos,
+        tambien las que tenga en su papelera, sin tope ni orden: el historial
+        de campos tiene que ver hasta lo mas antiguo (22 oct 2026).
         """
         pass

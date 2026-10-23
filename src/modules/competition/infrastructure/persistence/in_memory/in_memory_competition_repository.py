@@ -1,7 +1,7 @@
 """In-Memory Competition Repository para testing."""
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_repository_interface import (
@@ -17,6 +17,7 @@ from src.modules.competition.domain.value_objects.competition_name import (
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
@@ -161,3 +162,21 @@ class InMemoryCompetitionRepository(CompetitionRepositoryInterface):
     def _date_ranges_overlap(self, start1: date, end1: date, start2: date, end2: date) -> bool:
         """Verifica si dos rangos de fechas se solapan."""
         return start1 <= end2 and end1 >= start2
+
+    async def find_status_mark(
+        self, competition_id: CompetitionId
+    ) -> tuple[CompetitionStatus, datetime] | None:
+        competition = self._competitions.get(competition_id)
+        return None if competition is None else (competition.status, competition.updated_at)
+
+    async def find_visibilities(
+        self, competition_ids: list[CompetitionId]
+    ) -> dict[CompetitionId, Visibility]:
+        return {
+            i: self._competitions[i].visibility for i in competition_ids if i in self._competitions
+        }
+
+    async def find_by_ids(self, competition_ids: list[CompetitionId]) -> list[Competition]:
+        return [
+            self._competitions[i] for i in dict.fromkeys(competition_ids) if i in self._competitions
+        ]

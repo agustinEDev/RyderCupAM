@@ -211,3 +211,48 @@ class TestFriendshipReconstruct:
             status=FriendshipStatus.ACCEPTED,
         )
         assert a == b
+
+
+class TestFechasEnUTC:
+    """Las fechas de la amistad, en UTC sin zona como el resto (BE-2, revision 5)."""
+
+    FIJO = __import__("datetime").datetime(2026, 10, 22, 8, 30)
+
+    @pytest.fixture
+    def reloj(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.modules.social.domain.entities.friendship.utc_now",
+            lambda: self.FIJO,
+            raising=False,
+        )
+
+    def _amistad(self) -> Friendship:
+        from src.modules.user.domain.value_objects.user_id import UserId
+
+        return Friendship.create(
+            id=FriendshipId(uuid4()), requester_id=UserId(uuid4()), addressee_id=UserId(uuid4())
+        )
+
+    @pytest.mark.usefixtures("reloj")
+    def test_crear_la_solicitud_usa_el_reloj_utc(self):
+        amistad = self._amistad()
+        assert amistad.created_at == amistad.updated_at == self.FIJO
+
+    @pytest.mark.usefixtures("reloj")
+    @pytest.mark.parametrize("accion", ["accept", "decline"])
+    def test_responder_usa_el_reloj_utc(self, accion):
+        amistad = self._amistad()
+        getattr(amistad, accion)()
+        assert amistad.responded_at == amistad.updated_at == self.FIJO
+
+    @pytest.mark.usefixtures("reloj")
+    def test_bloquear_usa_el_reloj_utc(self):
+        from src.modules.user.domain.value_objects.user_id import UserId
+
+        amistad = Friendship.create_blocked(
+            id=FriendshipId(uuid4()), blocker_id=UserId(uuid4()), blocked_id=UserId(uuid4())
+        )
+        assert amistad.created_at == self.FIJO
+        otra = self._amistad()
+        otra.block(otra.requester_id)
+        assert otra.updated_at == self.FIJO

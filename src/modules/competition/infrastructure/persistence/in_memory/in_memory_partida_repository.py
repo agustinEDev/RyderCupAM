@@ -8,6 +8,7 @@ from src.modules.competition.domain.repositories.partida_repository_interface im
     PartidaRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -54,6 +55,10 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[Partida]:
         return self._donde(lambda p: p.competition_id == competition_id)
 
+    async def de_las_competiciones(self, competition_ids: list[CompetitionId]) -> list[Partida]:
+        pedidas = set(competition_ids)
+        return self._donde(lambda p: p.competition_id in pedidas)
+
     async def del_jugador(self, competition_id: CompetitionId, user_id: UserId) -> list[Partida]:
         return self._donde(lambda p: p.competition_id == competition_id and user_id in p.user_ids)
 
@@ -67,3 +72,19 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
             for p in sorted(self._partidas.values(), key=lambda p: (str(p.round_id), p.numero))
             if condicion(p)
         ]
+
+    async def competiciones_con_los_dos(
+        self, user_id: UserId, other_id: UserId
+    ) -> list[CompetitionId]:
+        de_uno = {p.competition_id for p in self._donde(lambda p: user_id in p.user_ids)}
+        del_otro = {p.competition_id for p in self._donde(lambda p: other_id in p.user_ids)}
+        return list(de_uno & del_otro)
+
+    async def con_los_dos(self, user_id: UserId, other_id: UserId) -> list[Partida]:
+        return self._donde(lambda p: user_id in p.user_ids and other_id in p.user_ids)
+
+    async def completadas_de_jugadores(self, user_ids: Sequence[UserId]) -> list[Partida]:
+        buscados = set(user_ids)
+        return self._donde(
+            lambda p: p.estado == EstadoPartida.COMPLETED and bool(buscados & set(p.user_ids))
+        )

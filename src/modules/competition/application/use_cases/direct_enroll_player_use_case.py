@@ -14,6 +14,10 @@ from src.modules.competition.application.exceptions import (
     InvalidTeeColorError,
     NotCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
@@ -71,17 +75,22 @@ class DirectEnrollPlayerUseCase:
     """
 
     def __init__(
-        self, uow: CompetitionUnitOfWorkInterface, user_repository: UserRepositoryInterface
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        user_repository: UserRepositoryInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
         """
         self._uow = uow
         # El género es obligatorio para apuntarse (#710)
         self._user_repo = user_repository
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: DirectEnrollPlayerRequestDTO, creator_id: UserId, is_admin: bool = False
@@ -185,11 +194,17 @@ class DirectEnrollPlayerUseCase:
 
             # Si era la última plaza, las invitaciones pendientes se quedan sin
             # ella ya (BE #359)
-            await al_ocupar_una_plaza(
+            sin_plaza = await al_ocupar_una_plaza(
                 self._uow, competition_id, approved_count, competition.max_players
             )
 
-        # 8. Retornar DTO
+        # 8. Ya guardado, a Actividad: sin aviso de aceptado, que no pidió nada;
+        #    sus amigos lo ven si el torneo es público (BE-2). Y las pendientes
+        #    que se quedaron sin plaza retiran su aviso (22 oct 2026)
+        await self._actividad.enrolled(competition, enrollment, accepted_request=False)
+        await self._actividad.invitations_closed(sin_plaza)
+
+        # 9. Retornar DTO
         return DirectEnrollPlayerResponseDTO(
             id=enrollment.id.value,
             competition_id=enrollment.competition_id.value,

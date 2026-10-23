@@ -1,6 +1,6 @@
 """Tests de ActivityEvent (BE #175)."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -125,6 +125,73 @@ class TestIdentidad:
         assert not evento.is_from("match-2")
 
 
+class TestPublicacion:
+    """
+    Cuando se publico, que no es cuando se jugo: un torneo publica al cerrarse
+    vueltas de hace dias, y el aviso de novedades y el orden del feed se rigen
+    por lo primero.
+    """
+
+    def test_sin_fecha_de_publicacion_se_publica_ahora_en_utc(self, user_id):
+        """
+        Given un evento creado sin `published_at` / When se crea / Then lleva
+        el momento actual en UTC y sin zona, como el resto de fechas guardadas.
+        """
+        antes = datetime.now(UTC).replace(tzinfo=None)
+
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=datetime(2026, 8, 1),
+            source_match_id="match-1",
+        )
+
+        despues = datetime.now(UTC).replace(tzinfo=None)
+        assert evento.published_at.tzinfo is None
+        assert antes <= evento.published_at <= despues
+
+    def test_respeta_la_fecha_de_publicacion_dada(self, user_id):
+        """Given un `published_at` explicito / When se crea / Then se conserva."""
+        publicado = datetime(2026, 8, 12, 9, 30)
+
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=publicado - timedelta(days=3),
+            source_match_id="match-1",
+            published_at=publicado,
+        )
+
+        assert evento.published_at == publicado
+        assert evento.occurred_at == publicado - timedelta(days=3)
+
+    def test_por_defecto_lo_ven_los_amigos(self, user_id):
+        """Given un evento sin indicar visibilidad / When se crea / Then es visible a amigos."""
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=datetime(2026, 8, 1),
+            source_match_id="match-1",
+        )
+
+        assert evento.visible_to_friends is True
+
+    def test_se_puede_publicar_solo_para_el_autor(self, user_id):
+        """
+        Given la publicacion apagada / When se crea el evento oculto / Then no
+        es visible a los amigos.
+        """
+        evento = ActivityEvent.create(
+            user_id=user_id,
+            type=ActivityEventType.BIRDIE,
+            occurred_at=datetime(2026, 8, 1),
+            source_match_id="match-1",
+            visible_to_friends=False,
+        )
+
+        assert evento.visible_to_friends is False
+
+
 class TestTipos:
     def test_reconoce_los_tipos_publicables(self):
         assert ActivityEventType.from_string("HOLE_IN_ONE") == ActivityEventType.HOLE_IN_ONE
@@ -133,11 +200,13 @@ class TestTipos:
         with pytest.raises(ValueError, match="Unknown activity event type"):
             ActivityEventType.from_string("JUGO_MUY_MAL")
 
-    def test_no_existe_ningun_tipo_que_delate_una_vuelta_mala(self):
+    def test_la_lista_de_tipos_es_la_aprobada(self):
         """
-        La lista es corta a proposito. Si alguien anade aqui un ROUND_PLAYED o
-        similar, el feed empezara a publicar los dias malos y la gente dejara de
-        anotar sus tarjetas (ver BE #173).
+        La lista es corta a proposito: cada tipo nuevo es una decision de
+        producto. Los seis logros (BE #175) y los avisos de BE-2 (tabla del 21
+        oct 2026). `QUICK_MATCH_FINISHED` publica tambien una vuelta mala —el
+        ultimo puesto sale— porque asi lo decidio Agustin: las partidas rapidas
+        de los amigos, todas, con puesto y puntos.
         """
         assert {t.value for t in ActivityEventType} == {
             "HOLE_IN_ONE",
@@ -146,4 +215,16 @@ class TestTipos:
             "NEW_COURSE",
             "PERSONAL_BEST",
             "FIRST_TOURNAMENT",
+            "ENROLLMENT_APPROVED",
+            "INVITED_TO_TOURNAMENT",
+            "ENROLLMENT_REQUEST_CLOSED",
+            "ENROLLMENT_REJECTED",
+            "ENROLLED_IN_TOURNAMENT",
+            "TOURNAMENT_MATCH_RESULT",
+            "TOURNAMENT_FINAL_STANDING",
+            "QUICK_MATCH_FINISHED",
+            # Tabla del 22 oct 2026, C
+            "ENROLLMENT_CONFIRMED",
+            # Aviso de horario (G, tabla del 22 oct 2026)
+            "TEE_TIME_ASSIGNED",
         }

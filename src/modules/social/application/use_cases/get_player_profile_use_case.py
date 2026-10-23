@@ -5,6 +5,8 @@ from src.modules.social.application.dto.profile_dto import (
     PlayerProfileResponseDTO,
 )
 from src.modules.social.application.exceptions import ProfileNotVisibleError
+from src.modules.social.application.games_together import head_to_head_of, page_of
+from src.modules.social.application.ports.shared_games_interface import SharedGamesInterface
 from src.modules.social.domain.entities.friendship import Friendship
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
@@ -33,8 +35,10 @@ class GetPlayerProfileUseCase:
     y foto. Es lo que permite buscar a alguien por su nombre, reconocerlo y
     mandarle una solicitud, y no dice nada que la propia busqueda no diga ya.
 
-    **Lo de detras es solo para amigos**: handicap, estadisticas y actividad.
-    El correo, ni eso: solo se lo ve uno mismo (BE #531).
+    **Lo de detras es solo para amigos**: estadisticas, actividad, cara a cara
+    y partidas juntos (BE-3). El handicap, desde el 22 oct 2026, lo ve
+    cualquiera con sesion, salvo que haya un bloqueo entre los dos. El correo,
+    ni los amigos: solo se lo ve uno mismo (BE #531).
     Quien no es amigo los recibe en None, no recortados ni a cero: un cero se
     leeria como "juega fatal" en vez de "esto no se puede ver".
 
@@ -54,10 +58,12 @@ class GetPlayerProfileUseCase:
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
         stats_use_case: GetPlayerStatsUseCase,
+        shared_games: SharedGamesInterface | None = None,
     ):
         self._social_uow = social_uow
         self._user_uow = user_uow
         self._stats = stats_use_case
+        self._shared_games = shared_games
 
     async def execute(self, viewer_id_raw: str, target_id_raw: str) -> PlayerProfileResponseDTO:
         viewer_id = UserId(viewer_id_raw)
@@ -81,27 +87,46 @@ class GetPlayerProfileUseCase:
             handicap = float(user.handicap.value) if user.handicap else None
             email = user.email.value
 
-        relacion, amigos = await self._relacion_y_amigos(viewer_id, target_id, propio)
-        puede_ver_todo = propio or relacion.status == FriendshipStatus.ACCEPTED.value
+        relacion, amigos, lo_bloquee = await self._relacion_y_amigos(viewer_id, target_id, propio)
+        amigo = relacion.status == FriendshipStatus.ACCEPTED.value
+        puede_ver_todo = propio or amigo
+        # Con un bloqueo de por medio, de un lado o del otro, solo nombre y foto
+        bloqueado = relacion.status == FriendshipStatus.BLOCKED.value
 
         # Fuera de la unidad de trabajo: las estadisticas abren las suyas, y
         # anidarlas sobre la misma sesion la cerraria antes de tiempo
         stats = await self._stats.execute(target_id) if puede_ver_todo else None
 
+        # Lo jugado juntos, solo entre amigos: de uno mismo no hay cara a cara
+        cara_a_cara = None
+        partidas = None
+        if amigo and not propio and self._shared_games is not None:
+            juntos = await self._shared_games.between(viewer_id, target_id)
+            cara_a_cara = head_to_head_of(juntos)
+            partidas = page_of(juntos, cursor=None)
+
         return PlayerProfileResponseDTO(
             **ficha,
-            friends_count=amigos,
+            # Bloqueado, solo nombre y foto: el campo no admite null sin romper
+            # el contrato, asi que va a 0 y el cliente no lo pinta
+            friends_count=0 if bloqueado else amigos,
             friendship=relacion,
-            is_friend=relacion.status == FriendshipStatus.ACCEPTED.value,
+            is_friend=amigo,
+            # Quien puso el bloqueo: solo quien bloqueo puede deshacerlo (F)
+            blocked_by_me=lo_bloquee,
             # Ni a los amigos: el correo es dato suyo
             email=email if propio else None,
-            handicap=handicap if puede_ver_todo else None,
+            # El handicap ya es publico entre usuarios con sesion (BE-3, 22 oct
+            # 2026): ayuda a decidir con quien jugar. Salvo bloqueo
+            handicap=None if bloqueado else handicap,
             stats=stats,
+            head_to_head=cara_a_cara,
+            games_together=partidas,
         )
 
     async def _relacion_y_amigos(
         self, viewer_id: UserId, target_id: UserId, propio: bool
-    ) -> tuple[FriendshipStateDTO, int]:
+    ) -> tuple[FriendshipStateDTO, int, bool]:
         """
         En que punto esta la relacion y cuantos amigos tiene el otro.
 
@@ -117,12 +142,12 @@ class GetPlayerProfileUseCase:
             amigos = await self._social_uow.friendships.count_friends(target_id)
 
             if propio:
-                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos
+                return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False
 
             friendship = await self._social_uow.friendships.find_by_pair(viewer_id, target_id)
 
         if friendship is None:
-            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos
+            return FriendshipStateDTO(status=NO_RELATIONSHIP), amigos, False
 
         return (
             FriendshipStateDTO(
@@ -130,6 +155,7 @@ class GetPlayerProfileUseCase:
                 friendship_id=str(friendship.id.value),
             ),
             amigos,
+            friendship.is_blocked() and friendship.blocked_by == viewer_id,
         )
 
     @staticmethod

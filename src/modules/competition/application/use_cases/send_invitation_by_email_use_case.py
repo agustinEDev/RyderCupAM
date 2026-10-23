@@ -11,9 +11,13 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -48,10 +52,13 @@ class SendInvitationByEmailUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
         email_service: IInvitationEmailService | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._user_uow = user_uow
         self._email_service = email_service
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: SendInvitationByEmailRequestDTO, is_admin: bool = False
@@ -161,6 +168,9 @@ class SendInvitationByEmailUseCase:
 
             # El nombre que usa en ESTA competición (#710), también en el correo
             legal = bool(await quieren_su_nombre_legal(self._uow, [(competition_id, inviter_id)]))
+
+        # Ya guardada: si tiene cuenta, le sale en Actividad (BE-2)
+        await self._actividad.invited(competition, invitation)
 
         # 9. Retornar DTO enriquecido
         async with self._user_uow:

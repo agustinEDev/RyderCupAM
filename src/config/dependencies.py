@@ -1,8 +1,9 @@
 import logging
 import os
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,6 +14,9 @@ from src.config.database import async_session_maker
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
 from src.config.settings import settings
 from src.config.terms_guard import require_current_terms
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
@@ -371,6 +375,9 @@ from src.modules.quick_match.application.use_cases.exclude_quick_match_from_stat
 from src.modules.quick_match.application.use_cases.get_quick_match_use_case import (
     GetQuickMatchUseCase,
 )
+from src.modules.quick_match.application.use_cases.get_shared_quick_match_use_case import (
+    GetSharedQuickMatchUseCase,
+)
 from src.modules.quick_match.application.use_cases.hide_quick_match_use_case import (
     HideQuickMatchUseCase,
 )
@@ -407,21 +414,39 @@ from src.modules.quick_match.domain.services.scoring_coverage_service import (
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
 )
+from src.modules.social.application.ports.invitation_availability_interface import (
+    InvitationAvailabilityInterface,
+)
 from src.modules.social.application.ports.player_course_history_interface import (
     PlayerCourseHistoryInterface,
 )
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.application.ports.quick_match_trash_interface import (
+    QuickMatchTrashInterface,
+)
+from src.modules.social.application.ports.shared_games_interface import (
+    SharedGamesInterface,
+)
 from src.modules.social.application.ports.social_email_service_interface import (
     ISocialEmailService,
+)
+from src.modules.social.application.ports.tournament_visibility_interface import (
+    TournamentVisibilityInterface,
 )
 from src.modules.social.application.use_cases.block_user_use_case import BlockUserUseCase
 from src.modules.social.application.use_cases.delete_profile_photo_use_case import (
     DeleteProfilePhotoUseCase,
 )
+from src.modules.social.application.use_cases.get_feed_unseen_count_use_case import (
+    GetFeedUnseenCountUseCase,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     GetFriendsFeedUseCase,
+)
+from src.modules.social.application.use_cases.get_games_together_use_case import (
+    GetGamesTogetherUseCase,
 )
 from src.modules.social.application.use_cases.get_player_activity_use_case import (
     GetPlayerActivityUseCase,
@@ -441,6 +466,12 @@ from src.modules.social.application.use_cases.list_pending_requests_use_case imp
 )
 from src.modules.social.application.use_cases.mark_feed_as_seen_use_case import (
     MarkFeedAsSeenUseCase,
+)
+from src.modules.social.application.use_cases.publish_competition_notices_use_case import (
+    PublishCompetitionNoticesUseCase,
+)
+from src.modules.social.application.use_cases.publish_quick_match_result_use_case import (
+    PublishQuickMatchResultUseCase,
 )
 from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
     PublishRoundAchievementsUseCase,
@@ -464,6 +495,12 @@ from src.modules.social.application.use_cases.upload_profile_photo_use_case impo
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
+from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
+    CompetitionActivityPublisher,
+)
+from src.modules.social.infrastructure.adapters.invitation_availability_adapter import (
+    InvitationAvailabilityAdapter,
+)
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
 )
@@ -473,8 +510,17 @@ from src.modules.social.infrastructure.adapters.player_differentials_adapter imp
 from src.modules.social.infrastructure.adapters.quick_match_achievements_publisher import (
     QuickMatchAchievementsPublisher,
 )
+from src.modules.social.infrastructure.adapters.quick_match_trash_adapter import (
+    QuickMatchTrashAdapter,
+)
+from src.modules.social.infrastructure.adapters.shared_games_adapter import (
+    SharedGamesAdapter,
+)
 from src.modules.social.infrastructure.adapters.tournament_achievements_publisher import (
     TournamentAchievementsPublisher,
+)
+from src.modules.social.infrastructure.adapters.tournament_visibility_adapter import (
+    TournamentVisibilityAdapter,
 )
 from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
     SQLAlchemySocialUnitOfWork,
@@ -1569,13 +1615,6 @@ def get_start_quick_match_use_case(
     return StartQuickMatchUseCase(uow, user_uow)
 
 
-def get_player_differentials(
-    stats_use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
-) -> PlayerDifferentialsInterface:
-    """Proveedor del puerto de diferenciales que usa el feed de logros."""
-    return StatsPlayerDifferentialsAdapter(stats_use_case)
-
-
 def get_upload_profile_photo_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
@@ -1607,30 +1646,100 @@ def get_delete_profile_photo_use_case(
     return DeleteProfilePhotoUseCase(social_uow)
 
 
+def get_shared_games(
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> SharedGamesInterface:
+    """Proveedor del puerto de las partidas jugadas juntos (BE-3)."""
+    return SharedGamesAdapter(quick_match_uow, competition_uow, golf_course_uow, user_uow)
+
+
 def get_player_profile_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     stats_use_case: GetPlayerStatsUseCase = Depends(get_get_player_stats_use_case),
+    shared_games: SharedGamesInterface = Depends(get_shared_games),
 ) -> GetPlayerProfileUseCase:
     """Proveedor del caso de uso GetPlayerProfileUseCase."""
-    return GetPlayerProfileUseCase(social_uow, user_uow, stats_use_case)
+    return GetPlayerProfileUseCase(social_uow, user_uow, stats_use_case, shared_games)
+
+
+def get_games_together_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    shared_games: SharedGamesInterface = Depends(get_shared_games),
+) -> GetGamesTogetherUseCase:
+    """Proveedor del caso de uso GetGamesTogetherUseCase."""
+    return GetGamesTogetherUseCase(social_uow, user_uow, shared_games)
+
+
+def get_tournament_visibility(
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> TournamentVisibilityInterface:
+    """Proveedor del puerto de visibilidad de torneos del feed (tabla del 22 oct, E)."""
+    return TournamentVisibilityAdapter(competition_uow)
+
+
+def get_invitation_availability(
+    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> InvitationAvailabilityInterface:
+    """Proveedor del puerto de invitaciones abiertas del feed (revision final, 22 oct)."""
+    return InvitationAvailabilityAdapter(competition_uow)
+
+
+def get_quick_match_trash(
+    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+) -> QuickMatchTrashInterface:
+    """Proveedor del puerto de la papelera de partidas rapidas del feed (22 oct)."""
+    return QuickMatchTrashAdapter(quick_match_uow)
 
 
 def get_player_activity_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    tournaments: TournamentVisibilityInterface = Depends(get_tournament_visibility),
+    invitations: InvitationAvailabilityInterface = Depends(get_invitation_availability),
+    quick_match_trash: QuickMatchTrashInterface = Depends(get_quick_match_trash),
 ) -> GetPlayerActivityUseCase:
     """Proveedor del caso de uso GetPlayerActivityUseCase."""
-    return GetPlayerActivityUseCase(social_uow, user_uow)
+    return GetPlayerActivityUseCase(
+        social_uow,
+        user_uow,
+        golf_course_uow,
+        tournaments=tournaments,
+        invitations=invitations,
+        quick_match_trash=quick_match_trash,
+    )
 
 
 def get_friends_feed_use_case(
     social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    tournaments: TournamentVisibilityInterface = Depends(get_tournament_visibility),
+    invitations: InvitationAvailabilityInterface = Depends(get_invitation_availability),
+    quick_match_trash: QuickMatchTrashInterface = Depends(get_quick_match_trash),
 ) -> GetFriendsFeedUseCase:
     """Proveedor del caso de uso GetFriendsFeedUseCase."""
-    return GetFriendsFeedUseCase(social_uow, user_uow, golf_course_uow)
+    return GetFriendsFeedUseCase(
+        social_uow,
+        user_uow,
+        golf_course_uow,
+        tournaments=tournaments,
+        invitations=invitations,
+        quick_match_trash=quick_match_trash,
+    )
+
+
+def get_feed_unseen_count_use_case(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> GetFeedUnseenCountUseCase:
+    """Proveedor del caso de uso GetFeedUnseenCountUseCase."""
+    return GetFeedUnseenCountUseCase(social_uow, user_uow)
 
 
 def get_mark_feed_as_seen_use_case(
@@ -1648,49 +1757,84 @@ def get_set_activity_sharing_use_case(
     return SetActivitySharingUseCase(user_uow, social_uow)
 
 
-def get_player_course_history(
-    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
-    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-) -> PlayerCourseHistoryInterface:
-    """Proveedor del puerto que dice si un campo ya se habia jugado."""
-    return PlayerCourseHistoryAdapter(quick_match_uow, competition_uow)
+async def get_activity_db_session(
+    session: AsyncSession = Depends(get_db_session),
+) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Una sesion propia para publicar en Actividad, aparte de la de la peticion.
+
+    Todas las unidades de trabajo de una peticion comparten sesion. Actividad
+    publica despues de que la accion se haya guardado, y si fallara en esa
+    misma sesion su `rollback` caducaria todo lo que la accion tiene cargado:
+    al montar la respuesta, la sesion asincrona intentaria recargarlo y la
+    peticion acabaria en 500 con la accion hecha. Con su propia sesion —del
+    mismo motor, otra conexion— un fallo de Actividad no toca nada de la
+    accion. Se crea con el motor de la sesion de la peticion para usar la
+    misma base de datos que ella (tambien en los tests).
+    """
+    async with AsyncSession(bind=session.bind, expire_on_commit=False) as propia:
+        yield propia
+
+
+@dataclass(frozen=True)
+class ActivityUnitsOfWork:
+    """Las unidades de trabajo con las que publica Actividad, sobre su propia sesion."""
+
+    user: UserUnitOfWorkInterface
+    competition: CompetitionUnitOfWorkInterface
+    quick_match: QuickMatchUnitOfWorkInterface
+    golf_course: GolfCourseUnitOfWorkInterface
+    social: SocialUnitOfWorkInterface
+
+    @property
+    def differentials(self) -> PlayerDifferentialsInterface:
+        return StatsPlayerDifferentialsAdapter(
+            GetPlayerStatsUseCase(self.user, self.competition, self.quick_match, self.golf_course)
+        )
+
+    @property
+    def history(self) -> PlayerCourseHistoryInterface:
+        return PlayerCourseHistoryAdapter(self.quick_match, self.competition, self.golf_course)
+
+
+def get_activity_units_of_work(
+    session: AsyncSession = Depends(get_activity_db_session),
+) -> ActivityUnitsOfWork:
+    """Proveedor de las unidades de trabajo de Actividad (su sesion, no la de la peticion)."""
+    return ActivityUnitsOfWork(
+        user=SQLAlchemyUnitOfWork(session),
+        competition=SQLAlchemyCompetitionUnitOfWork(session),
+        quick_match=SQLAlchemyQuickMatchUnitOfWork(session),
+        golf_course=SQLAlchemyGolfCourseUnitOfWork(session),
+        social=SQLAlchemySocialUnitOfWork(session),
+    )
 
 
 def get_publish_round_achievements_use_case(
-    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
-    quick_match_uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
-    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
-    history: PlayerCourseHistoryInterface = Depends(get_player_course_history),
+    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
 ) -> PublishRoundAchievementsUseCase:
     """Proveedor del caso de uso PublishRoundAchievementsUseCase."""
     return PublishRoundAchievementsUseCase(
-        social_uow=social_uow,
-        quick_match_uow=quick_match_uow,
-        golf_course_uow=golf_course_uow,
-        user_uow=user_uow,
-        differentials=differentials,
-        history=history,
+        social_uow=uows.social,
+        quick_match_uow=uows.quick_match,
+        golf_course_uow=uows.golf_course,
+        user_uow=uows.user,
+        differentials=uows.differentials,
+        history=uows.history,
     )
 
 
 def get_publish_tournament_achievements_use_case(
-    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
-    competition_uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
-    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
-    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
-    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
-    history: PlayerCourseHistoryInterface = Depends(get_player_course_history),
+    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
 ) -> PublishTournamentAchievementsUseCase:
     """Proveedor del caso de uso PublishTournamentAchievementsUseCase."""
     return PublishTournamentAchievementsUseCase(
-        social_uow=social_uow,
-        competition_uow=competition_uow,
-        golf_course_uow=golf_course_uow,
-        user_uow=user_uow,
-        differentials=differentials,
-        history=history,
+        social_uow=uows.social,
+        competition_uow=uows.competition,
+        golf_course_uow=uows.golf_course,
+        user_uow=uows.user,
+        differentials=uows.differentials,
+        history=uows.history,
     )
 
 
@@ -1698,20 +1842,65 @@ def get_tournament_achievements_publisher(
     publish_use_case: PublishTournamentAchievementsUseCase = Depends(
         get_publish_tournament_achievements_use_case
     ),
-    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
 ) -> TournamentAchievementsPublisherInterface:
     """Proveedor del adaptador que conecta competition con el feed social."""
-    return TournamentAchievementsPublisher(publish_use_case, differentials)
+    return TournamentAchievementsPublisher(publish_use_case)
+
+
+def get_publish_quick_match_result_use_case(
+    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
+) -> PublishQuickMatchResultUseCase:
+    """Proveedor del caso de uso PublishQuickMatchResultUseCase (BE-2)."""
+    return PublishQuickMatchResultUseCase(
+        uows.social, uows.quick_match, uows.golf_course, uows.user
+    )
 
 
 def get_round_achievements_publisher(
     publish_use_case: PublishRoundAchievementsUseCase = Depends(
         get_publish_round_achievements_use_case
     ),
-    differentials: PlayerDifferentialsInterface = Depends(get_player_differentials),
+    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
+    result_use_case: PublishQuickMatchResultUseCase = Depends(
+        get_publish_quick_match_result_use_case
+    ),
 ) -> RoundAchievementsPublisherInterface:
     """Proveedor del adaptador que conecta quick_match con el feed social."""
-    return QuickMatchAchievementsPublisher(publish_use_case, differentials)
+    return QuickMatchAchievementsPublisher(publish_use_case, uows.differentials, result_use_case)
+
+
+def get_publish_competition_notices_use_case(
+    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
+) -> PublishCompetitionNoticesUseCase:
+    """Proveedor del caso de uso PublishCompetitionNoticesUseCase (BE-2)."""
+    return PublishCompetitionNoticesUseCase(uows.social, uows.user)
+
+
+def get_competition_activity_publisher(
+    notices: PublishCompetitionNoticesUseCase = Depends(get_publish_competition_notices_use_case),
+    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
+    achievements: PublishTournamentAchievementsUseCase = Depends(
+        get_publish_tournament_achievements_use_case
+    ),
+    round_achievements: PublishRoundAchievementsUseCase = Depends(
+        get_publish_round_achievements_use_case
+    ),
+) -> CompetitionActivityPublisherInterface:
+    """
+    Proveedor del adaptador que lleva a Actividad lo de `competition` (BE-2).
+
+    Con la general oficial a mano: la clasificacion final de cada uno sale de
+    ella, no de otra cuenta; la de una Ryder, de su leaderboard oficial (I).
+    Todo sobre la sesion propia de Actividad.
+    """
+    return CompetitionActivityPublisher(
+        notices,
+        ClasificacionGeneralUseCase(uow=uows.competition, user_repository=uows.user.users),
+        uows.competition,
+        ryder_scoreboard=GetLeaderboardUseCase(uows.competition, uows.user.users, ScoringService()),
+        achievements=achievements,
+        round_achievements=round_achievements,
+    )
 
 
 def get_complete_quick_match_use_case(
@@ -1770,6 +1959,20 @@ def get_get_quick_match_use_case(
 ) -> GetQuickMatchUseCase:
     """Proveedor del caso de uso GetQuickMatchUseCase."""
     return GetQuickMatchUseCase(uow, user_uow, scoring_service, coverage_service, golf_course_uow)
+
+
+def get_get_shared_quick_match_use_case(
+    uow: QuickMatchUnitOfWorkInterface = Depends(get_quick_match_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    scoring_service: MatchPlayScoring = Depends(get_match_play_scoring),
+    coverage_service: ScoringCoverageService = Depends(get_scoring_coverage_service),
+    golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+) -> GetSharedQuickMatchUseCase:
+    """Proveedor de la partida rapida de un amigo en solo lectura (bloque K)."""
+    return GetSharedQuickMatchUseCase(
+        uow, user_uow, social_uow, scoring_service, coverage_service, golf_course_uow
+    )
 
 
 def get_list_my_quick_matches_use_case(
@@ -1836,6 +2039,7 @@ def get_update_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     location_builder: LocationBuilder = Depends(get_location_builder),
     golf_course_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> UpdateCompetitionUseCase:
     """
     Proveedor del caso de uso UpdateCompetitionUseCase.
@@ -1846,7 +2050,9 @@ def get_update_competition_use_case(
     3. Crea una instancia de `UpdateCompetitionUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateCompetitionUseCase(uow, location_builder, golf_course_uow.golf_courses)
+    return UpdateCompetitionUseCase(
+        uow, location_builder, golf_course_uow.golf_courses, actividad=actividad
+    )
 
 
 def get_get_competition_use_case(
@@ -1871,6 +2077,7 @@ def get_get_competition_use_case(
 
 def get_delete_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DeleteCompetitionUseCase:
     """
     Proveedor del caso de uso DeleteCompetitionUseCase.
@@ -1880,7 +2087,7 @@ def get_delete_competition_use_case(
     2. Crea una instancia de `DeleteCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return DeleteCompetitionUseCase(uow)
+    return DeleteCompetitionUseCase(uow, actividad=actividad)
 
 
 def get_activate_competition_use_case(
@@ -1920,10 +2127,13 @@ def get_lanzador_de_actualizaciones() -> LanzadorDeActualizaciones | None:
 def get_coger_plaza_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CogerPlazaUseCase:
-    """Coger plaza en una franja de stroke play (#251)."""
+    """Coger plaza en una franja de stroke play (#251); quien deja una pierde su aviso de salida."""
     return CogerPlazaUseCase(
-        uow, zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions)
+        uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        actividad=actividad,
     )
 
 
@@ -1949,12 +2159,14 @@ def get_anotar_hoyo_de_partida_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> AnotarHoyoDePartidaUseCase:
     """Anotar un hoyo en una partida (#251): la zona del campo da la hora de apertura."""
     return AnotarHoyoDePartidaUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 
@@ -1976,12 +2188,14 @@ def get_corregir_hoyo_de_partida_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CorregirHoyoDePartidaUseCase:
     """El organizador corrige un hoyo de una partida (#251)."""
     return CorregirHoyoDePartidaUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 
@@ -2002,12 +2216,14 @@ def get_marcar_no_presentado_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MarcarNoPresentadoUseCase:
-    """El organizador marca a alguien como no presentado (#251)."""
+    """El organizador marca a alguien como no presentado (#251); avisa a quien se recoloca (G3)."""
     return MarcarNoPresentadoUseCase(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 
@@ -2116,6 +2332,7 @@ def get_generar_partidas_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GenerarPartidasUseCase:
     """Generar las partidas de una franja (#251): el campo da barras y zona horaria."""
     return GenerarPartidasUseCase(
@@ -2124,6 +2341,7 @@ def get_generar_partidas_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2132,6 +2350,7 @@ def get_mover_jugador_de_partida_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> MoverJugadorUseCase:
     """Mover a un jugador de partida (#251): quien no tenía, saca su foto con el campo."""
     return MoverJugadorUseCase(
@@ -2140,6 +2359,7 @@ def get_mover_jugador_de_partida_use_case(
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2151,13 +2371,15 @@ def _de_las_partidas(
     uow: CompetitionUnitOfWorkInterface,
     gc_uow: GolfCourseUnitOfWorkInterface,
     user_uow: UserUnitOfWorkInterface,
+    **extra: Any,
 ) -> T:
-    """Los que solo necesitan la zona del campo y los nombres (#251)."""
+    """Los que solo necesitan la zona del campo y los nombres (#251); `extra`, lo de cada uno."""
     return caso_de_uso(
         uow=uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         user_repository=user_uow.users,
         reloj=lambda: datetime.now(UTC),
+        **extra,
     )
 
 
@@ -2165,9 +2387,10 @@ def get_reordenar_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ReordenarPartidasUseCase:
-    """Reordenar las partidas de una franja (#251)."""
-    return _de_las_partidas(ReordenarPartidasUseCase, uow, gc_uow, user_uow)
+    """Reordenar las partidas de una franja (#251): avisa a quien cambia de hora (G3)."""
+    return _de_las_partidas(ReordenarPartidasUseCase, uow, gc_uow, user_uow, actividad=actividad)
 
 
 def get_cambiar_marcadores_use_case(
@@ -2183,9 +2406,10 @@ def get_borrar_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> BorrarPartidasUseCase:
     """Borrar las partidas de una franja (#251)."""
-    return _de_las_partidas(BorrarPartidasUseCase, uow, gc_uow, user_uow)
+    return _de_las_partidas(BorrarPartidasUseCase, uow, gc_uow, user_uow, actividad=actividad)
 
 
 def get_ver_partidas_use_case(
@@ -2240,6 +2464,7 @@ def get_close_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CloseEnrollmentsUseCase:
     """
     Proveedor del caso de uso CloseEnrollmentsUseCase.
@@ -2251,7 +2476,7 @@ def get_close_enrollments_use_case(
     """
     # Los usuarios, para el hándicap de cada inscrito en un stroke play; y el
     # refresco con la RFEG en segundo plano, solo en producción (#251)
-    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador)
+    return CloseEnrollmentsUseCase(uow, user_uow.users, lanzador, actividad=actividad)
 
 
 def get_actualizar_handicaps_use_case(
@@ -2314,9 +2539,10 @@ def get_handicap_update_status_use_case(
 def get_name_captains_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     lanzador: LanzadorDeActualizaciones | None = Depends(get_lanzador_de_actualizaciones),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> NameCaptainsUseCase:
     """Proveedor del caso de uso NameCaptainsUseCase (BE #320), con el refresco (#251)."""
-    return NameCaptainsUseCase(uow, lanzador)
+    return NameCaptainsUseCase(uow, lanzador, actividad=actividad)
 
 
 def get_name_vice_captain_use_case(
@@ -2336,6 +2562,7 @@ def get_fill_captain_use_case(
 def get_start_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> StartCompetitionUseCase:
     """
     Proveedor del caso de uso StartCompetitionUseCase.
@@ -2346,7 +2573,7 @@ def get_start_competition_use_case(
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     # Los usuarios, para nombrar a quien no tenga franja en un stroke play (#251)
-    return StartCompetitionUseCase(uow, user_uow.users)
+    return StartCompetitionUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_complete_competition_use_case(
@@ -2354,6 +2581,7 @@ def get_complete_competition_use_case(
     achievements: TournamentAchievementsPublisherInterface = Depends(
         get_tournament_achievements_publisher
     ),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CompleteCompetitionUseCase:
     """
     Proveedor del caso de uso CompleteCompetitionUseCase.
@@ -2366,11 +2594,12 @@ def get_complete_competition_use_case(
     Cerrar el torneo es lo que dispara el feed de logros (BE #175), de ahí el
     publicador.
     """
-    return CompleteCompetitionUseCase(uow, achievements)
+    return CompleteCompetitionUseCase(uow, achievements, actividad=actividad)
 
 
 def get_cancel_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CancelCompetitionUseCase:
     """
     Proveedor del caso de uso CancelCompetitionUseCase.
@@ -2380,7 +2609,7 @@ def get_cancel_competition_use_case(
     2. Crea una instancia de `CancelCompetitionUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return CancelCompetitionUseCase(uow)
+    return CancelCompetitionUseCase(uow, actividad=actividad)
 
 
 def get_revert_competition_status_use_case(
@@ -2399,6 +2628,7 @@ def get_revert_competition_status_use_case(
 
 def get_revert_competition_to_in_progress_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> RevertCompetitionToInProgressUseCase:
     """
     Proveedor del caso de uso RevertCompetitionToInProgressUseCase.
@@ -2408,12 +2638,13 @@ def get_revert_competition_to_in_progress_use_case(
     2. Crea una instancia de `RevertCompetitionToInProgressUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return RevertCompetitionToInProgressUseCase(uow)
+    return RevertCompetitionToInProgressUseCase(uow, actividad=actividad)
 
 
 def get_reopen_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ReopenEnrollmentsUseCase:
     """
     Proveedor del caso de uso ReopenEnrollmentsUseCase.
@@ -2427,6 +2658,7 @@ def get_reopen_enrollments_use_case(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2490,17 +2722,19 @@ def get_request_enrollment_use_case(
 def get_direct_enroll_player_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DirectEnrollPlayerUseCase:
     """Proveedor del caso de uso DirectEnrollPlayerUseCase."""
-    return DirectEnrollPlayerUseCase(uow, user_uow.users)
+    return DirectEnrollPlayerUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_handle_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> HandleEnrollmentUseCase:
     """Proveedor del caso de uso HandleEnrollmentUseCase."""
-    return HandleEnrollmentUseCase(uow, user_uow.users)
+    return HandleEnrollmentUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_cancel_enrollment_use_case(
@@ -2513,12 +2747,14 @@ def get_cancel_enrollment_use_case(
 def get_withdraw_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> WithdrawEnrollmentUseCase:
     """Proveedor del caso de uso WithdrawEnrollmentUseCase."""
     return WithdrawEnrollmentUseCase(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
     )
 
 
@@ -2582,6 +2818,7 @@ def get_update_round_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     jugadores: JugadoresDeLaPartida = Depends(get_jugadores_de_la_partida),
     reloj: Callable[[], datetime] = Depends(get_reloj_del_servidor),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> UpdateRoundUseCase:
     """Proveedor del caso de uso UpdateRoundUseCase: con el campo, rehace las partidas (#251)."""
     return UpdateRoundUseCase(
@@ -2589,14 +2826,16 @@ def get_update_round_use_case(
         jugadores=jugadores,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=reloj,
+        actividad=actividad,
     )
 
 
 def get_delete_round_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DeleteRoundUseCase:
-    """Proveedor del caso de uso DeleteRoundUseCase."""
-    return DeleteRoundUseCase(uow)
+    """Proveedor del caso de uso DeleteRoundUseCase (olvida en Actividad lo de la ronda)."""
+    return DeleteRoundUseCase(uow, actividad=actividad)
 
 
 def get_get_schedule_use_case(
@@ -2604,6 +2843,7 @@ def get_get_schedule_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GetScheduleUseCase:
     """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse).
 
@@ -2617,7 +2857,7 @@ def get_get_schedule_use_case(
             uow,
             user_uow.users,
             timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-            generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+            generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
         ),
     )
 
@@ -2631,23 +2871,28 @@ def get_get_match_detail_use_case(
 
 def get_update_match_status_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> UpdateMatchStatusUseCase:
     """Proveedor del caso de uso UpdateMatchStatusUseCase."""
-    return UpdateMatchStatusUseCase(uow)
+    return UpdateMatchStatusUseCase(uow, actividad=actividad)
 
 
 def get_declare_walkover_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DeclareWalkoverUseCase:
     """Proveedor del caso de uso DeclareWalkoverUseCase."""
-    return DeclareWalkoverUseCase(uow)
+    return DeclareWalkoverUseCase(uow, actividad=actividad)
 
 
 def get_configure_schedule_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ConfigureScheduleUseCase:
-    """Proveedor del caso de uso ConfigureScheduleUseCase."""
-    return ConfigureScheduleUseCase(uow, schedule_format_service=ScheduleFormatService())
+    """Proveedor del caso de uso ConfigureScheduleUseCase (olvida en Actividad lo sustituido)."""
+    return ConfigureScheduleUseCase(
+        uow, schedule_format_service=ScheduleFormatService(), actividad=actividad
+    )
 
 
 def get_assign_teams_use_case(
@@ -2687,7 +2932,7 @@ def get_make_draft_pick_use_case(
 
 
 def _construir_generador(
-    uow, gc_uow, user_uow, scoring_service, handicap_service=None
+    uow, gc_uow, user_uow, scoring_service, handicap_service=None, actividad=None
 ) -> GenerateMatchesUseCase:
     """El unico sitio que monta GenerateMatchesUseCase.
 
@@ -2702,10 +2947,13 @@ def _construir_generador(
         handicap_calculator=PlayingHandicapCalculator(),
         scoring_service=scoring_service,
         handicap_service=handicap_service,
+        actividad=actividad,
     )
 
 
-def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatchesUseCase:
+def _generador_al_abrir(
+    uow, gc_uow, user_uow, scoring_service, actividad=None
+) -> GenerateMatchesUseCase:
     """Lo que crea los partidos al abrirse los sobres (BE #361).
 
     Sobre la MISMA Unit of Work que el caso de uso de los sobres: abrirlos y
@@ -2713,7 +2961,7 @@ def _generador_al_abrir(uow, gc_uow, user_uow, scoring_service) -> GenerateMatch
     abrir no se pregunta a la RFEG, que seria una llamada de red por jugador
     dentro de la lectura de la pantalla.
     """
-    return _construir_generador(uow, gc_uow, user_uow, scoring_service)
+    return _construir_generador(uow, gc_uow, user_uow, scoring_service, actividad=actividad)
 
 
 def get_list_my_sessions_without_matches_use_case(
@@ -2728,6 +2976,7 @@ def get_submit_envelope_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SubmitEnvelopeUseCase:
     """Proveedor del caso de uso SubmitEnvelopeUseCase (FE #655).
 
@@ -2738,7 +2987,7 @@ def get_submit_envelope_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
     )
 
 
@@ -2747,6 +2996,7 @@ def get_envelopes_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GetEnvelopesUseCase:
     """Proveedor del caso de uso GetEnvelopesUseCase (FE #655).
 
@@ -2757,7 +3007,7 @@ def get_envelopes_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
     )
 
 
@@ -2766,6 +3016,7 @@ def get_reveal_envelopes_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> RevealEnvelopesUseCase:
     """Proveedor del caso de uso RevealEnvelopesUseCase (FE #655).
 
@@ -2780,7 +3031,7 @@ def get_reveal_envelopes_use_case(
         uow,
         user_uow.users,
         timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
-        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service),
+        generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
     )
 
 
@@ -2803,13 +3054,14 @@ def get_list_my_pending_envelopes_use_case(
 def get_reset_envelopes_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ResetEnvelopesUseCase:
     """Proveedor del caso de uso ResetEnvelopesUseCase (FE #655).
 
     Sin zona horaria: rehacer los sobres no mira ningun reloj, solo que no se
     haya jugado nada de esa sesion.
     """
-    return ResetEnvelopesUseCase(uow, user_uow.users)
+    return ResetEnvelopesUseCase(uow, user_uow.users, actividad=actividad)
 
 
 def get_generate_matches_use_case(
@@ -2818,9 +3070,10 @@ def get_generate_matches_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
     handicap_service: HandicapService = Depends(get_handicap_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> GenerateMatchesUseCase:
     """Proveedor del caso de uso GenerateMatchesUseCase (cross-module: Competition + GolfCourse + User)."""
-    return _construir_generador(uow, gc_uow, user_uow, scoring_service, handicap_service)
+    return _construir_generador(uow, gc_uow, user_uow, scoring_service, handicap_service, actividad)
 
 
 def get_reassign_match_players_use_case(
@@ -2828,6 +3081,7 @@ def get_reassign_match_players_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ReassignMatchPlayersUseCase:
     """Proveedor del caso de uso ReassignMatchPlayersUseCase (cross-module: Competition + GolfCourse + User)."""
     return ReassignMatchPlayersUseCase(
@@ -2836,6 +3090,7 @@ def get_reassign_match_players_use_case(
         user_repository=user_uow.users,
         handicap_calculator=PlayingHandicapCalculator(),
         scoring_service=scoring_service,
+        actividad=actividad,
     )
 
 
@@ -2853,18 +3108,20 @@ def get_send_invitation_by_user_id_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IInvitationEmailService = Depends(get_invitation_email_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SendInvitationByUserIdUseCase:
     """Proveedor del caso de uso SendInvitationByUserIdUseCase."""
-    return SendInvitationByUserIdUseCase(uow, user_uow, email_service)
+    return SendInvitationByUserIdUseCase(uow, user_uow, email_service, actividad=actividad)
 
 
 def get_send_invitation_by_email_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IInvitationEmailService = Depends(get_invitation_email_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SendInvitationByEmailUseCase:
     """Proveedor del caso de uso SendInvitationByEmailUseCase."""
-    return SendInvitationByEmailUseCase(uow, user_uow, email_service)
+    return SendInvitationByEmailUseCase(uow, user_uow, email_service, actividad=actividad)
 
 
 def get_list_my_invitations_use_case(
@@ -2878,24 +3135,27 @@ def get_list_my_invitations_use_case(
 def get_respond_to_invitation_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> RespondToInvitationUseCase:
     """Proveedor del caso de uso RespondToInvitationUseCase."""
-    return RespondToInvitationUseCase(uow, user_uow)
+    return RespondToInvitationUseCase(uow, user_uow, actividad=actividad)
 
 
 def get_cancel_invitation_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> CancelInvitationUseCase:
     """Proveedor del caso de uso CancelInvitationUseCase (BE #359)."""
-    return CancelInvitationUseCase(uow)
+    return CancelInvitationUseCase(uow, actividad=actividad)
 
 
 def get_list_competition_invitations_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ListCompetitionInvitationsUseCase:
     """Proveedor del caso de uso ListCompetitionInvitationsUseCase."""
-    return ListCompetitionInvitationsUseCase(uow, user_uow)
+    return ListCompetitionInvitationsUseCase(uow, user_uow, actividad=actividad)
 
 
 # ======================================================================================
@@ -2918,17 +3178,21 @@ def get_submit_hole_score_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SubmitHoleScoreUseCase:
     """Proveedor del caso de uso SubmitHoleScoreUseCase (cross-module: Competition + GolfCourse + User)."""
-    return SubmitHoleScoreUseCase(uow, user_uow.users, scoring_service, gc_uow.golf_courses)
+    return SubmitHoleScoreUseCase(
+        uow, user_uow.users, scoring_service, gc_uow.golf_courses, actividad=actividad
+    )
 
 
 def get_submit_scorecard_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SubmitScorecardUseCase:
     """Proveedor del caso de uso SubmitScorecardUseCase."""
-    return SubmitScorecardUseCase(uow, scoring_service)
+    return SubmitScorecardUseCase(uow, scoring_service, actividad=actividad)
 
 
 def get_get_leaderboard_use_case(
@@ -2943,9 +3207,10 @@ def get_get_leaderboard_use_case(
 def get_concede_match_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> ConcedeMatchUseCase:
     """Proveedor del caso de uso ConcedeMatchUseCase."""
-    return ConcedeMatchUseCase(uow, scoring_service)
+    return ConcedeMatchUseCase(uow, scoring_service, actividad=actividad)
 
 
 # ============================================================================

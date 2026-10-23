@@ -16,10 +16,16 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.application.services.solicitudes_al_empezar import (
     rechazar_las_solicitudes_pendientes,
 )
+from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.hole_score import MAX_HOLE, MIN_HOLE
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -49,6 +55,7 @@ class SubmitHoleScoreUseCase:
         scoring_service: ScoringService,
         golf_course_repo: IGolfCourseRepository | None = None,
         now: Callable[[], datetime] | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._user_repo = user_repo
@@ -57,6 +64,10 @@ class SubmitHoleScoreUseCase:
         # El reloj del SERVIDOR decide si la anotacion ya abrio (BE #305), nunca
         # una hora que mande el cliente. Inyectable solo para poder probarlo
         self._now = now or (lambda: datetime.now(UTC))
+        # Los avisos de Actividad (BE-2); sin el, no se avisa. Si el golpe
+        # arranca la competicion, las solicitudes que cierra se avisan al final
+        self._actividad = AvisosDeActividad(actividad)
+        self._por_avisar: list[tuple[Competition, list[Enrollment]]] = []
 
     async def execute(
         self,
@@ -71,6 +82,7 @@ class SubmitHoleScoreUseCase:
         # (CodeRabbit, PR #307)
         """Anota el hoyo de quien llama y el de su marcado, si es el que le toca (BE #520)."""
         llegada = self._now()
+        self._por_avisar = []
 
         async with self._uow:
             match_id = MatchId(match_id_str)
@@ -148,6 +160,10 @@ class SubmitHoleScoreUseCase:
                     match, match_id, hole_number, body, marked_player_uid, match_format
                 )
             await self._check_decided(match, match_id, match_format)
+
+        # Ya guardado: si este golpe la arrancó, «tu solicitud se cerró sin plaza»
+        for competicion, cerradas in self._por_avisar:
+            await self._actividad.requests_closed(competicion, cerradas)
 
         # Return full scoring view
         from src.modules.competition.application.use_cases.get_scoring_view_use_case import (  # noqa: PLC0415
@@ -241,7 +257,8 @@ class SubmitHoleScoreUseCase:
             )
 
         if not competition.is_in_progress():
-            await self._arranca_la_competicion(competition.id, no_se_puede)
+            cerradas = await self._arranca_la_competicion(competition.id, no_se_puede)
+            self._por_avisar.append((competition, cerradas))
 
         # Con la fila bloqueada, y releyendo el estado: dos jugadores pueden
         # mandar su primer golpe a la vez, y abrirlo dos veces duplicaria los 18
@@ -262,7 +279,7 @@ class SubmitHoleScoreUseCase:
         await self._uow.rounds.update(round_entity)
         return match
 
-    async def _arranca_la_competicion(self, competition_id, no_se_puede) -> None:
+    async def _arranca_la_competicion(self, competition_id, no_se_puede) -> list[Enrollment]:
         """Pone la competición en juego con su fila bloqueada (BE #375).
 
         Dos primeros golpes a la vez la arrancarían dos veces: el segundo espera
@@ -273,13 +290,14 @@ class SubmitHoleScoreUseCase:
         if competition is None:
             raise no_se_puede
         if competition.is_in_progress():
-            return
+            return []
         if competition.status != CompetitionStatus.CLOSED:
             raise no_se_puede
         competition.start()
         await self._uow.competitions.update(competition)
-        # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes
-        await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
+        # Empezar, como iniciarla a mano, rechaza las solicitudes pendientes, y
+        # las devuelve para avisar en Actividad cuando se haya guardado (BE-2)
+        return await rechazar_las_solicitudes_pendientes(self._uow, competition.id)
 
     async def _update_own_scores(self, match, match_id, hole_number, body, user_id, match_format):
         """Actualiza own_score para los jugadores afectados."""

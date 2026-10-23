@@ -1,17 +1,47 @@
 """Caso de Uso: La actividad publicada por un jugador."""
 
+from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
+    GolfCourseUnitOfWorkInterface,
+)
 from src.modules.social.application.dto.profile_dto import ActivityEventDTO, FeedResponseDTO
 from src.modules.social.application.exceptions import (
     ActivityNotVisibleError,
     ProfileNotVisibleError,
 )
-from src.modules.social.application.feed_cursor import build_cursor, parse_cursor
+from src.modules.social.application.feed_cursor import (
+    build_cursor,
+    parse_cursor,
+    sin_partir_tarjetas,
+)
+from src.modules.social.application.feed_references import autores_de, campos_de
+from src.modules.social.application.feed_scope import payload_for
+from src.modules.social.application.feed_visibility import (
+    sin_apuntados_a_privados,
+    sin_invitaciones_cerradas,
+    sin_partidas_en_la_papelera,
+)
+from src.modules.social.application.ports.invitation_availability_interface import (
+    InvitationAvailabilityInterface,
+)
+from src.modules.social.application.ports.quick_match_trash_interface import (
+    QuickMatchTrashInterface,
+)
+from src.modules.social.application.ports.tournament_visibility_interface import (
+    TournamentVisibilityInterface,
+)
 from src.modules.social.application.use_cases.get_friends_feed_use_case import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
 )
+from src.modules.social.domain.repositories.activity_event_repository_interface import (
+    ActivitySlice,
+)
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
+)
+from src.modules.social.domain.value_objects.activity_audience import (
+    types_seen_by_author,
+    types_seen_by_friends,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -39,9 +69,17 @@ class GetPlayerActivityUseCase:
         self,
         social_uow: SocialUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        golf_course_uow: GolfCourseUnitOfWorkInterface,
+        tournaments: TournamentVisibilityInterface | None = None,
+        invitations: InvitationAvailabilityInterface | None = None,
+        quick_match_trash: QuickMatchTrashInterface | None = None,
     ):
         self._social_uow = social_uow
+        self._tournaments = tournaments
+        self._invitations = invitations
+        self._quick_match_trash = quick_match_trash
         self._user_uow = user_uow
+        self._golf_course_uow = golf_course_uow
 
     async def execute(
         self,
@@ -77,22 +115,55 @@ class GetPlayerActivityUseCase:
         if not publica and viewer_id != target_id:
             return FeedResponseDTO()
 
-        async with self._social_uow:
-            eventos = await self._social_uow.activity_events.find_for_users(
-                [target_id], limit=limit, before=before, before_id=before_id
+        # Cada uno ve de si mismo lo SELF y lo BOTH, como en su feed; sus amigos,
+        # lo FRIENDS y lo BOTH que no publico con la publicacion apagada
+        if viewer_id == target_id:
+            trozo = ActivitySlice(user_ids=(target_id,), types=types_seen_by_author())
+        else:
+            trozo = ActivitySlice(
+                user_ids=(target_id,),
+                types=types_seen_by_friends(),
+                only_visible_to_friends=True,
             )
 
+        async with self._social_uow:
+            eventos = await self._social_uow.activity_events.find_in(
+                [trozo], limit=limit, before=before, before_id=before_id
+            )
+            # Ninguna tarjeta partida entre dos paginas, como en el feed
+            eventos = await sin_partir_tarjetas(
+                self._social_uow.activity_events, [trozo], eventos, limit
+            )
+
+        # Como en el feed: el cursor antes de ocultar los apuntados a torneos
+        # que ahora son privados (E, 22 oct)
+        siguiente = build_cursor(eventos, limit)
+        eventos = await sin_apuntados_a_privados(eventos, self._tournaments)
+        eventos = await sin_invitaciones_cerradas(eventos, self._invitations)
+        eventos = await sin_partidas_en_la_papelera(eventos, self._quick_match_trash, viewer_id)
+
+        # Quien sale con nombre y en que campo, con la misma regla que el feed:
+        # son las mismas tarjetas, y el perfil no puede enseñar a quien el feed
+        # oculta. Sin esto el cliente pinta al dueño y a sus rivales como «un
+        # jugador»
+        autores = await autores_de(self._social_uow, self._user_uow, eventos, viewer_id)
+        campos = await campos_de(self._golf_course_uow, eventos)
+
         return FeedResponseDTO(
+            authors=autores,
+            courses=campos,
             events=[
                 ActivityEventDTO(
                     id=str(e.id),
                     user_id=str(e.user_id.value),
                     type=e.type.value,
                     occurred_at=e.occurred_at,
-                    payload=e.payload,
+                    published_at=e.published_at,
+                    payload=payload_for(e, viewer_id),
                     source_match_id=e.source_match_id,
+                    group_key=e.card_key,
                 )
                 for e in eventos
             ],
-            next_cursor=build_cursor(eventos, limit),
+            next_cursor=siguiente,
         )

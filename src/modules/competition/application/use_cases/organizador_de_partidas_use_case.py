@@ -39,10 +39,15 @@ from src.modules.competition.application.exceptions import (
     PartidaNotFoundError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.partidas_del_jugador import (
     que_no_se_quede_solo,
 )
+from src.modules.competition.application.services.salidas_de_la_ronda import de_las_partidas
 from src.modules.competition.application.services.vista_de_la_franja import vista_de_la_franja
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     arrancar_la_competicion,
@@ -51,6 +56,7 @@ from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_ca
     comprobar_que_se_juega,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.golpe_de_partida import (
     PRIMER_HOYO,
     ULTIMO_HOYO,
@@ -120,10 +126,13 @@ class CorregirHoyoDePartidaUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        # Los avisos de Actividad (BE-2); sin el, no se avisa
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -143,6 +152,7 @@ class CorregirHoyoDePartidaUseCase:
         llegada = self._reloj()
         if not PRIMER_HOYO <= hoyo <= ULTIMO_HOYO:
             raise InvalidHoleNumberError(f"Hoyo invalido: {hoyo}")
+        cerradas: list[Enrollment] = []
         async with self._uow:
             partida, competicion = await _del_organizador(self._uow, group_id, quien, is_admin)
             jugador = _del_jugador(partida, user_id)
@@ -154,7 +164,7 @@ class CorregirHoyoDePartidaUseCase:
                     GolpeDePartida.comprobar(getattr(body, campo), acepta_raya)
 
             if competicion.status == CompetitionStatus.CLOSED:
-                await arrancar_la_competicion(self._uow, competicion)
+                cerradas = await arrancar_la_competicion(self._uow, competicion)
             bloqueada = await _bloqueada(self._uow, partida)
             # Otra vez, ya bloqueada: pudieron moverlo mientras tanto
             jugador = _del_jugador(bloqueada, user_id)
@@ -184,6 +194,9 @@ class CorregirHoyoDePartidaUseCase:
                     bloqueada.marcar_que_jugo(quien)
                     await self._uow.partidas.guardar([bloqueada])
             await self._uow.golpes_de_partida.guardar(golpe)
+
+        # Si este hoyo la arrancó, ya guardado: «tu solicitud se cerró sin plaza»
+        await self._actividad.requests_closed(competicion, cerradas)
 
 
 # Qué lado borrar de un hoyo: el del jugador, el del marcador o los dos
@@ -294,10 +307,17 @@ class MarcarNoPresentadoUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
+        """
+        Args:
+            actividad: Para avisar a quien se recoloca para que nadie se quede
+                solo (G3, 22 oct 2026); sin el, no se avisa
+        """
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(self, group_id: UUID, user_id: UUID, quien: UserId, is_admin: bool) -> None:
         """
@@ -320,7 +340,19 @@ class MarcarNoPresentadoUseCase:
             golpes = await self._uow.golpes_de_partida.de_la_partida(bloqueada.id)
             bloqueada.no_presentado(jugador, golpes)
             await self._uow.partidas.guardar([bloqueada])
+            # La foto despues de marcarlo: que falte no es un cambio de salida
+            # para nadie; que alguien venga a acompañar al que se queda solo, si
+            franja = await self._uow.rounds.find_by_id(bloqueada.round_id)
+            de_la_franja = await self._uow.partidas.de_la_franja(bloqueada.round_id)
+            antes = de_las_partidas(franja, de_la_franja) if franja else {}
             await que_no_se_quede_solo(self._uow, self._zonas, bloqueada.id, llegada)
+            despues = (
+                de_las_partidas(franja, await self._uow.partidas.de_la_franja(franja.id))
+                if franja
+                else {}
+            )
+        # Ya guardado: a quien se recoloca se le dice (G3, 22 oct 2026)
+        await self._actividad.salidas_cambiadas(competicion, bloqueada.round_id, antes, despues)
 
 
 class RetirarJugadorUseCase:

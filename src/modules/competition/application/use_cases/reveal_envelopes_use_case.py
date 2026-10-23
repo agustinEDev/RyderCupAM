@@ -147,8 +147,11 @@ class RevealEnvelopesUseCase:
             # Con los enfrentamientos decididos, los partidos salen ya (BE #361)
             await self._desk.generar_los_partidos(ronda, competition)
 
-            return RevealEnvelopesResponseDTO(
+            respuesta = RevealEnvelopesResponseDTO(
                 round_id=ronda.id.value,
                 matchups=matchups_to_dto(sobres["A"], sobres["B"]),
                 filled_automatically=automaticos,
             )
+        # Ya guardado: los avisos de los partidos que acaban de salir (G2)
+        await self._desk.avisar_salidas()
+        return respuesta

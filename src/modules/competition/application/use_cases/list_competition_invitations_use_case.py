@@ -8,6 +8,10 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -30,9 +34,12 @@ class ListCompetitionInvitationsUseCase:
         self,
         uow: CompetitionUnitOfWorkInterface,
         user_uow: UserUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._user_uow = user_uow
+        # Las que caducan al listarlas retiran su aviso de invitado (22 oct 2026)
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self,
@@ -96,6 +103,9 @@ class ListCompetitionInvitationsUseCase:
             legales = await quieren_su_nombre_legal(
                 self._uow, [(inv.competition_id, inv.inviter_id) for inv in invitations]
             )
+
+        # 6b. Guardadas como caducadas: su aviso de invitado se retira
+        await self._actividad.invitations_closed(expired_invitations)
 
         # 7. Enriquecer con nombres en una sola sesion de usuario
         invitation_dtos = []

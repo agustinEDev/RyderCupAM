@@ -1,6 +1,6 @@
 """Match Repository - SQLAlchemy Implementation."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import cast, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -133,3 +133,39 @@ class SQLAlchemyMatchRepository(MatchRepositoryInterface):
             return False
         await self._session.delete(match)
         return True
+
+    async def find_with_both_players(
+        self, user_id: UserId, other_id: UserId, statuses: Collection[MatchStatus]
+    ) -> list[Match]:
+        """Por contención (`@>`) en los dos bandos, como `find_completed_for_player`."""
+
+        def juega(uid: UserId):
+            jugador = cast([{"user_id": str(uid.value)}], JSONB)
+            return or_(
+                matches_table.c.team_a_players.op("@>")(jugador),
+                matches_table.c.team_b_players.op("@>")(jugador),
+            )
+
+        statement = (
+            select(Match)
+            .where(juega(user_id))
+            .where(juega(other_id))
+            .where(matches_table.c.status.in_(list(statuses)))
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def find_finished_for_players(self, user_ids: Collection[UserId]) -> list[Match]:
+        if not user_ids:
+            return []
+        alguno = or_(
+            *[
+                columna.op("@>")(cast([{"user_id": str(user_id.value)}], JSONB))
+                for user_id in set(user_ids)
+                for columna in (matches_table.c.team_a_players, matches_table.c.team_b_players)
+            ]
+        )
+        acabados = [s for s in MatchStatus if s.is_finished()]
+        statement = select(Match).where(alguno).where(matches_table.c.status.in_(acabados))
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())

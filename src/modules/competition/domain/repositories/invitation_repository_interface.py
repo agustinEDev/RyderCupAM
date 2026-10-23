@@ -81,6 +81,18 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_acceptable_ids(
+        self, invitation_ids: list[InvitationId], now: datetime
+    ) -> set[InvitationId]:
+        """
+        De esas, las que aun se pueden aceptar: PENDING y sin caducar en `now`
+        (la misma regla que `Invitation.is_expired`). Una sola lectura ligera,
+        sin cargar las invitaciones: lo usa el feed para no enseñar avisos de
+        invitaciones que ya no valen (22 oct 2026).
+        """
+        pass
+
+    @abstractmethod
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         """TODAS las invitaciones PENDING de una competicion, sin paginar (#710)."""
         pass

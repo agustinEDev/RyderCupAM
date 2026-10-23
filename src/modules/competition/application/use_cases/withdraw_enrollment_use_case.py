@@ -12,7 +12,11 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentResponseDTO,
 )
 from src.modules.competition.application.exceptions import EnrollmentNotFoundError
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
     esta_jugada,
@@ -54,6 +58,7 @@ class WithdrawEnrollmentUseCase:
         uow: CompetitionUnitOfWorkInterface,
         zonas: ICompetitionTimezone | None = None,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         """
         Constructor.
@@ -63,10 +68,12 @@ class WithdrawEnrollmentUseCase:
             zonas: Para saber qué partidas ya salieron por su hora (#251). Sin ellas,
                 solo cuenta el estado de la partida
             reloj: El momento de la retirada
+            actividad: Los avisos de Actividad (BE-2); sin el, no se avisa
         """
         self._uow = uow
         self._zonas = zonas
         self._reloj = reloj
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: WithdrawEnrollmentRequestDTO, user_id: UserId
@@ -110,7 +117,7 @@ class WithdrawEnrollmentUseCase:
             enrollment.withdraw(request.reason)
 
             # Sale de sus partidas sin salir, también ya iniciada (D2, #251)
-            await sacar_de_sus_partidas(
+            fotos = await sacar_de_sus_partidas(
                 self._uow,
                 enrollment.competition_id,
                 enrollment.user_id,
@@ -146,7 +153,14 @@ class WithdrawEnrollmentUseCase:
             # 5. Persistir cambios
             await self._uow.enrollments.update(enrollment)
 
-        # 6. Retornar DTO
+        # 6. Ya guardado: sus amigos dejan de verlo apuntado (BE-2), y a quien
+        #    se recoloca por su baja se le dice (G3)
+        await self._actividad.left(enrollment.competition_id, enrollment.user_id)
+        if competition is not None:
+            for round_id, (antes, despues) in fotos.items():
+                await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
+
+        # 7. Retornar DTO
         return WithdrawEnrollmentResponseDTO(
             id=enrollment.id.value,
             competition_id=enrollment.competition_id.value,

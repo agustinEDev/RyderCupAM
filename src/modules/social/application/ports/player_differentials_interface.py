@@ -17,9 +17,14 @@ class PlayerDifferentialsInterface(ABC):
     """
 
     @abstractmethod
-    async def best_differential(self, user_id: UserId) -> float | None:
+    async def best_differential(
+        self, user_id: UserId, excluding_competition_id: str | None = None
+    ) -> float | None:
         """
         El mejor diferencial del jugador, o None si aún no tiene ninguno.
+
+        Con `excluding_competition_id`, sin ninguna vuelta de ese torneo: la
+        marca de antes de él (decisión del 22 oct 2026).
 
         Devuelve None también cuando ninguna de sus vueltas se jugó desde un tee
         conocido: sin Slope ni Course Rating no hay diferencial que calcular.
