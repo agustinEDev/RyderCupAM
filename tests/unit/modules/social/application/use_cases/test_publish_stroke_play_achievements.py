@@ -11,6 +11,7 @@ Logros de un torneo de stroke play (bloque L, tabla del 22 oct 2026).
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -48,6 +49,7 @@ from src.modules.social.application.use_cases.publish_tournament_achievements_us
 from src.modules.social.domain.repositories.activity_event_repository_interface import (
     ActivitySlice,
 )
+from src.modules.social.domain.services.personal_best import DatedDifferential
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.adapters.player_course_history_adapter import (
     PlayerCourseHistoryAdapter,
@@ -75,15 +77,13 @@ T = ActivityEventType
 
 
 class _Differentials(PlayerDifferentialsInterface):
-    """`ahora`: el mejor diferencial de hoy; `antes`: el de antes del torneo."""
+    """Las vueltas con diferencial de cada jugador, fijadas por el test."""
 
-    def __init__(self, ahora: dict | None = None, antes: dict | None = None):
-        self._ahora = ahora or {}
-        self._antes = antes or {}
+    def __init__(self, por_jugador: dict | None = None):
+        self._por_jugador = por_jugador or {}
 
-    async def best_differential(self, user_id, excluding_competition_id=None):
-        fuente = self._antes if excluding_competition_id else self._ahora
-        return fuente.get(str(user_id.value))
+    async def round_differentials(self, user_id):
+        return self._por_jugador.get(str(user_id.value), [])
 
 
 class _History(PlayerCourseHistoryInterface):
@@ -246,7 +246,21 @@ class TestStrokePlayAchievements:
     async def test_personal_best_hangs_from_the_group(self, world, social_uow):
         ana = await world.user()
         competition, _, partida = await _torneo(world, {ana: tarjeta()})
-        ahora = _Differentials({str(ana.id.value): 5.0}, antes={str(ana.id.value): 9.0})
+        ahora = _Differentials(
+            {
+                str(ana.id.value): [
+                    DatedDifferential(
+                        played_on=DIA,
+                        differential=Decimal("5.0"),
+                        source_id=str(partida.id.value),
+                        competition_id=str(competition.id.value),
+                    ),
+                    DatedDifferential(
+                        played_on=DIA - timedelta(days=9), differential=Decimal("9.0")
+                    ),
+                ]
+            }
+        )
 
         await _publisher(world, social_uow, differentials=ahora).execute(str(competition.id.value))
 
@@ -446,10 +460,9 @@ class TestReopening:
 
 class TestPersonalBestEndToEnd:
     """
-    Cerrar el torneo con las piezas de verdad: la marca previa sale de las
-    estadisticas antes de cerrar y la nueva despues. Las tarjetas de stroke play
-    tienen que contar en las estadisticas, y solo desde el cierre, para que el
-    record salga.
+    Cerrar el torneo con las piezas de verdad: las vueltas fechadas salen de
+    las estadisticas. Las tarjetas de stroke play tienen que contar en ellas, y
+    solo desde el cierre, para que el record salga.
     """
 
     async def test_closing_a_better_stroke_play_round_publishes_the_record(self, world, social_uow):
@@ -478,6 +491,40 @@ class TestPersonalBestEndToEnd:
         record = next(e for e in await _feed(social_uow, ana) if e.type == T.PERSONAL_BEST)
         assert record.source_match_id == str(partida.id.value)
         assert record.payload["kind"] == "TEE_GROUP"
+
+    async def test_a_later_tournament_already_closed_is_not_the_mark(self, world, social_uow):
+        """
+        Agustin, 23 oct 2026: un torneo de un mes DESPUES, cerrado antes, no es
+        la marca que este mejora. Solo cuenta lo jugado antes de su primer dia.
+        """
+        ana = await world.user()
+        antes = await _torneo(world, {ana: tarjeta(par=5)})
+        await _torneo(world, {ana: tarjeta()}, dia=DIA + timedelta(days=60))
+        competition = await world.competition(ana, enrolled=[ana], completed=False)
+        course = await world.course(ana)
+        round_ = await world.round(competition, course, DIA + timedelta(days=30))
+        await world.group(competition, round_, {ana: tarjeta()})
+        stats = GetPlayerStatsUseCase(
+            user_uow=world.users,
+            competition_uow=world.comp,
+            quick_match_uow=InMemoryQuickMatchUnitOfWork(),
+            golf_course_uow=world.golf,
+        )
+        marca_anterior = [
+            r.differential
+            for r in await stats.execute_round_differentials(ana.id)
+            if r.competition_id == str(antes[0].id.value)
+        ]
+        publisher = TournamentAchievementsPublisher(
+            _publisher(world, social_uow, differentials=StatsPlayerDifferentialsAdapter(stats))
+        )
+
+        await CompleteCompetitionUseCase(world.comp, achievements=publisher).execute(
+            CompleteCompetitionRequestDTO(competition_id=competition.id.value), ana.id
+        )
+
+        record = next(e for e in await _feed(social_uow, ana) if e.type == T.PERSONAL_BEST)
+        assert record.payload["previous_best"] == str(marca_anterior[0])
 
 
 # ==================== player_ids: quien jugo puede ir a la tarjeta ====================

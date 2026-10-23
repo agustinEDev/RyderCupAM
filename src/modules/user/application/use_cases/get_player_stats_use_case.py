@@ -21,6 +21,7 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
 from src.modules.user.application.dto.player_stats_dto import (
     PlayerStatsResponseDTO,
+    RoundDifferentialDTO,
     ScoringBreakdownResponseDTO,
 )
 from src.modules.user.application.services.tournament_round import (
@@ -80,6 +81,10 @@ class _ComputableRound:
     holes: list[HoleOutcome] = field(default_factory=list)
     golf_course_id: str | None = None
     golf_course_name: str | None = None
+    # De donde sale: la partida rapida, el partido de la Ryder o el grupo de
+    # stroke play, y su torneo (23 oct 2026, el record del feed)
+    source_id: str | None = None
+    competition_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -209,7 +214,6 @@ class GetPlayerStatsUseCase:
         user_id: UserId,
         golf_course_id: GolfCourseId | None,
         handicap: float | None,
-        excluding_competition_id: str | None = None,
     ) -> list["_ComputableRound"]:
         """
         Las vueltas computables del jugador, de las fuentes y ya ordenadas.
@@ -218,10 +222,6 @@ class GetPlayerStatsUseCase:
         cada uno recolectara por su cuenta, bastaría con tocar una de las dos
         copias para que la media y el desglose dejaran de hablar de las mismas
         vueltas, sin que ningún test lo viera.
-
-        `excluding_competition_id` deja fuera todas las vueltas de un torneo,
-        de la Ryder o de stroke play: es la marca de ANTES de ese torneo, con
-        la que se mide su «mejor marca» (decisión del 22 oct 2026).
         """
         quick_rounds = await self._collect_quick_match_rounds(user_id, golf_course_id, handicap)
 
@@ -231,13 +231,6 @@ class GetPlayerStatsUseCase:
             )
             rounds_by_match = await self._rounds_by_match(competition_matches)
             scratch_competitions = await self._scratch_competitions(rounds_by_match)
-            if excluding_competition_id is not None:
-                competition_matches = [
-                    match
-                    for match in competition_matches
-                    if (round_ := rounds_by_match.get(match.id)) is None
-                    or str(round_.competition_id.value) != excluding_competition_id
-                ]
             if golf_course_id is not None:
                 competition_matches = [
                     match
@@ -256,7 +249,7 @@ class GetPlayerStatsUseCase:
         )
 
         stroke_play_rounds = await self._collect_stroke_play_rounds(
-            user_id, golf_course_id, handicap, excluding_competition_id
+            user_id, golf_course_id, handicap
         )
 
         # Las fuentes llegan ordenadas por su cuenta; el registro del WHS es
@@ -271,8 +264,6 @@ class GetPlayerStatsUseCase:
         self,
         user_id: UserId,
         golf_course_id: GolfCourseId | None = None,
-        *,
-        excluding_competition_id: str | None = None,
     ) -> PlayerStatsResponseDTO:
         """
         Resumen del jugador, opcionalmente restringido a un campo.
@@ -280,14 +271,9 @@ class GetPlayerStatsUseCase:
         Con `golf_course_id` solo entran las rondas de ese campo, y los
         contadores de torneos se dejan a cero: son globales del jugador y
         repetirlos en un desglose por campo induciría a error.
-
-        Con `excluding_competition_id`, sin ninguna vuelta de ese torneo: la
-        marca de antes de él, para el récord del feed. La API no lo usa.
         """
         handicap = await self._profile_handicap(user_id)
-        computable_rounds = await self._collect_rounds(
-            user_id, golf_course_id, handicap, excluding_competition_id
-        )
+        computable_rounds = await self._collect_rounds(user_id, golf_course_id, handicap)
         tournaments_total, tournaments_active = await self._tournament_counters(
             user_id, golf_course_id
         )
@@ -314,6 +300,25 @@ class GetPlayerStatsUseCase:
                 float(value) for value in self._differentials.scoring_record(differentials)
             ],
         )
+
+    async def execute_round_differentials(self, user_id: UserId) -> list[RoundDifferentialDTO]:
+        """
+        El diferencial de cada vuelta, con su día y su origen, de la más
+        reciente a la más antigua: las mismas vueltas que el resumen. Con esto
+        el récord del feed se mide solo contra las de días anteriores
+        (decisión del 23 oct 2026). La API no lo usa.
+        """
+        handicap = await self._profile_handicap(user_id)
+        return [
+            RoundDifferentialDTO(
+                played_on=item.played_on,
+                differential=self._differentials.differential(item.played_round),
+                source_id=item.source_id,
+                competition_id=item.competition_id,
+            )
+            for item in await self._collect_rounds(user_id, None, handicap)
+            if item.played_round is not None
+        ]
 
     async def _collect_quick_match_rounds(
         self,
@@ -433,6 +438,7 @@ class GetPlayerStatsUseCase:
                         ),
                         golf_course_id=str(course.id) if course is not None else None,
                         golf_course_name=str(course.name) if course is not None else None,
+                        source_id=str(match.id.value),
                     )
                 )
 
@@ -494,6 +500,7 @@ class GetPlayerStatsUseCase:
                     hole_scores=scorecards.get(match.id, []),
                     profile_handicap=profile_handicap,
                     scratch=round_.competition_id in scratch_competitions,
+                    source_id=str(match.id.value),
                 )
                 if tournament_round is not None:
                     results.append(tournament_round)
@@ -508,6 +515,7 @@ class GetPlayerStatsUseCase:
         hole_scores: list,
         profile_handicap: float | None,
         scratch: bool,
+        source_id: str,
     ) -> _ComputableRound | None:
         """
         La vuelta de un jugador en un torneo, o None si su tarjeta no forma una.
@@ -555,6 +563,8 @@ class GetPlayerStatsUseCase:
             holes=outcomes,
             golf_course_id=str(course.id) if course is not None else None,
             golf_course_name=str(course.name) if course is not None else None,
+            source_id=source_id,
+            competition_id=str(round_.competition_id.value),
         )
 
     async def _collect_stroke_play_rounds(
@@ -562,7 +572,6 @@ class GetPlayerStatsUseCase:
         user_id: UserId,
         golf_course_id: GolfCourseId | None,
         profile_handicap: float | None,
-        excluding_competition_id: str | None = None,
     ) -> list[_ComputableRound]:
         """
         Vueltas de stroke play de torneo (grupos de salida) computables (L10).
@@ -613,8 +622,6 @@ class GetPlayerStatsUseCase:
                 continue
             if competition.status != CompetitionStatus.COMPLETED:
                 continue
-            if str(competition.id.value) == excluding_competition_id:
-                continue
             if golf_course_id is not None and round_.golf_course_id != golf_course_id:
                 continue
             countable.append((group, round_, competition))
@@ -644,6 +651,7 @@ class GetPlayerStatsUseCase:
                 hole_scores=validated.get(group.id, []),
                 profile_handicap=profile_handicap,
                 scratch=is_scratch(competition),
+                source_id=str(group.id.value),
             )
             if tournament_round is not None:
                 results.append(tournament_round)

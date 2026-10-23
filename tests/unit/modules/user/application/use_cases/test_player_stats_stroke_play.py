@@ -6,10 +6,10 @@ Sin ellas, la «mejor marca» de un torneo stroke play no saldria nunca: el
 record se mide con el mejor diferencial de estas mismas estadisticas.
 
 Cuenta la tarjeta ENTREGADA de un grupo acabado, con los hoyos validados, de
-un torneo ya cerrado. El cierre es lo que hace que la marca previa (que se
-toma justo antes de cerrar) no la incluya y la de despues si.
+un torneo ya cerrado.
 """
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -33,7 +33,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
 from src.shared.domain.value_objects.play_mode import PlayMode
-from tests.unit.modules.social.stroke_play_world import StrokePlayWorld, tarjeta
+from tests.unit.modules.social.stroke_play_world import DIA, StrokePlayWorld, tarjeta
 from tests.unit.modules.user.application.use_cases.test_get_player_stats_use_case import (
     _Consultas,
 )
@@ -234,27 +234,36 @@ class TestReadsInBulk:
         assert uno_a_uno == []
 
 
-class TestExcludingOneTournament:
-    """La marca de antes de un torneo: sin ninguna de sus vueltas, Ryder o stroke play."""
+class TestRoundDifferentials:
+    """
+    El diferencial de cada vuelta con su dia y su origen (23 oct 2026): con
+    eso el record se mide solo contra las vueltas de dias anteriores.
+    """
 
-    async def test_its_groups_and_matches_are_left_out(self, world):
+    async def test_each_group_and_match_with_its_day_and_source(self, world):
         ana = await world.user()
         rival = await world.user()
-        competition, course, _ = await _jugada(world, ana)
+        competition, course, partida = await _jugada(world, ana)
         ryder = await world.competition(ana, tipo=TournamentType.RYDER_CUP, enrolled=[ana, rival])
-        await world.match(await world.round(ryder, course), ana, rival, tarjeta())
+        ronda = await world.round(ryder, course, dia=date(2026, 5, 20))
+        partido = await world.match(ronda, ana, rival, tarjeta())
 
-        todo = await _stats(world).execute(ana.id)
-        sin_stroke = await _stats(world).execute(
-            ana.id, excluding_competition_id=str(competition.id.value)
-        )
-        sin_ryder = await _stats(world).execute(
-            ana.id, excluding_competition_id=str(ryder.id.value)
-        )
+        rondas = await _stats(world).execute_round_differentials(ana.id)
 
-        assert todo.rounds_played == 2
-        assert sin_stroke.rounds_played == 1
-        assert sin_ryder.rounds_played == 1
+        assert [(r.played_on, r.source_id, r.competition_id, r.differential) for r in rondas] == [
+            (
+                DIA,
+                str(partida.id.value),
+                str(competition.id.value),
+                Decimal(str(DIFFERENTIAL_ALL_PARS)),
+            ),
+            (
+                date(2026, 5, 20),
+                str(partido.id.value),
+                str(ryder.id.value),
+                Decimal(str(DIFFERENTIAL_ALL_PARS)),
+            ),
+        ]
 
 
 class TestStrokePlayCardsInBatches:
@@ -264,14 +273,15 @@ class TestStrokePlayCardsInBatches:
     crecen con el numero de torneos.
     """
 
-    async def _consultas(self, cuantos: int, excluir: bool) -> tuple[int, int]:
+    async def _consultas(self, cuantos: int) -> tuple[int, int]:
         world = StrokePlayWorld(
             InMemoryCompetitionUnitOfWork(),
             InMemoryGolfCourseUnitOfWork(),
             InMemoryUserUnitOfWork(),
         )
         ana = await world.user()
-        torneos = [(await _jugada(world, ana))[0] for _ in range(cuantos)]
+        for _ in range(cuantos):
+            await _jugada(world, ana)
         qm = InMemoryQuickMatchUnitOfWork()
         consultas = _Consultas(
             user=world.users, competition=world.comp, quick_match=qm, golf_course=world.golf
@@ -282,16 +292,14 @@ class TestStrokePlayCardsInBatches:
             quick_match_uow=qm,
             golf_course_uow=world.golf,
         )
-        excluido = str(torneos[0].id.value) if excluir else None
 
-        stats = await caso.execute(ana.id, excluding_competition_id=excluido)
+        rondas = await caso.execute_round_differentials(ana.id)
 
-        return stats.rounds_played, len(consultas.llamadas)
+        return len(rondas), len(consultas.llamadas)
 
-    @pytest.mark.parametrize("excluir", [False, True])
-    async def test_the_same_queries_with_two_tournaments_as_with_six(self, excluir):
-        dos, con_dos = await self._consultas(2, excluir)
-        seis, con_seis = await self._consultas(6, excluir)
+    async def test_the_same_queries_with_two_tournaments_as_with_six(self):
+        dos, con_dos = await self._consultas(2)
+        seis, con_seis = await self._consultas(6)
 
-        assert (dos, seis) == ((1, 5) if excluir else (2, 6))
+        assert (dos, seis) == (2, 6)
         assert con_seis == con_dos

@@ -1860,13 +1860,12 @@ def get_round_achievements_publisher(
     publish_use_case: PublishRoundAchievementsUseCase = Depends(
         get_publish_round_achievements_use_case
     ),
-    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
     result_use_case: PublishQuickMatchResultUseCase = Depends(
         get_publish_quick_match_result_use_case
     ),
 ) -> RoundAchievementsPublisherInterface:
     """Proveedor del adaptador que conecta quick_match con el feed social."""
-    return QuickMatchAchievementsPublisher(publish_use_case, uows.differentials, result_use_case)
+    return QuickMatchAchievementsPublisher(publish_use_case, result_use_case)
 
 
 def get_publish_competition_notices_use_case(

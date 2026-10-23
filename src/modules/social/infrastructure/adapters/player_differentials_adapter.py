@@ -1,8 +1,9 @@
-"""Adaptador: el mejor diferencial sale del modulo de estadisticas."""
+"""Adaptador: los diferenciales salen del modulo de estadisticas."""
 
 from src.modules.social.application.ports.player_differentials_interface import (
     PlayerDifferentialsInterface,
 )
+from src.modules.social.domain.services.personal_best import DatedDifferential
 from src.modules.user.application.use_cases.get_player_stats_use_case import (
     GetPlayerStatsUseCase,
 )
@@ -23,10 +24,13 @@ class StatsPlayerDifferentialsAdapter(PlayerDifferentialsInterface):
     def __init__(self, stats_use_case: GetPlayerStatsUseCase):
         self._stats = stats_use_case
 
-    async def best_differential(
-        self, user_id: UserId, excluding_competition_id: str | None = None
-    ) -> float | None:
-        stats = await self._stats.execute(
-            user_id, excluding_competition_id=excluding_competition_id
-        )
-        return stats.best_differential
+    async def round_differentials(self, user_id: UserId) -> list[DatedDifferential]:
+        return [
+            DatedDifferential(
+                played_on=ronda.played_on,
+                differential=ronda.differential,
+                source_id=ronda.source_id,
+                competition_id=ronda.competition_id,
+            )
+            for ronda in await self._stats.execute_round_differentials(user_id)
+        ]

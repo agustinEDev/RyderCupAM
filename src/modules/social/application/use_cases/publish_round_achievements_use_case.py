@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
 
 from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interface import (
     GolfCourseUnitOfWorkInterface,
@@ -36,8 +35,8 @@ from src.modules.social.domain.services.achievement_detector import (
     AchievementDetector,
     DetectedAchievement,
     PlayedHole,
-    RoundContext,
 )
+from src.modules.social.domain.services.personal_best import record_context
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -111,18 +110,14 @@ class PublishRoundAchievementsUseCase:
     async def execute(
         self,
         quick_match_id_raw: str,
-        best_differential_before: dict[str, float | None] | None = None,
         only_new_course: bool = False,
     ) -> int:
         """
         Publica lo que merezca publicarse y devuelve cuántos eventos creó.
 
-        `best_differential_before` lleva, por jugador, su mejor diferencial
-        **antes** de que esta vuelta contara. Lo captura quien cierra la partida,
-        porque una vez cerrada ya no hay forma de preguntarlo: las estadísticas
-        solo miran partidas terminadas y esta ya lo está. Comparando aquel valor
-        con el de ahora se sabe si la vuelta batió el récord, sin recalcular por
-        segunda vez un diferencial que el módulo de estadísticas ya sabe hacer.
+        El récord se mide contra las vueltas de días ANTERIORES a esta
+        (`record_context`, Agustín, 23 oct 2026): una ya cerrada pero jugada
+        después no es la marca que esta mejora.
 
         `only_new_course` publica solo su «campo nuevo»: es como hereda una
         partida rapida el de un torneo que se reabre, sin volver a publicar el
@@ -134,8 +129,6 @@ class PublishRoundAchievementsUseCase:
         candado del jugador, solo si no hay otro publicado anterior; los
         posteriores se retiran (`keep_only_the_oldest`).
         """
-        best_before = best_differential_before or {}
-
         # Fase 1: leer. Todo lo que hace falta de la partida, en un solo paso y
         # con las unidades de trabajo abiertas lo justo
         vueltas, visibles = await self._leer_vueltas(quick_match_id_raw)
@@ -150,13 +143,9 @@ class PublishRoundAchievementsUseCase:
         # cerraría antes de tiempo
         eventos: list[ActivityEvent] = []
         for vuelta in vueltas:
-            contexto = RoundContext(
-                previous_best_differential=self._como_decimal(
-                    best_before.get(str(vuelta.user_id.value))
-                ),
-                differential=await self._diferencial_si_es_record(
-                    vuelta.user_id, best_before.get(str(vuelta.user_id.value))
-                ),
+            contexto = record_context(
+                await self._differentials.round_differentials(vuelta.user_id),
+                lambda r: r.source_id == quick_match_id_raw,
             )
             logros = self._detector.detect(holes=vuelta.holes, context=contexto)
             eventos.extend(
@@ -305,32 +294,6 @@ class PublishRoundAchievementsUseCase:
                 )
 
         return vueltas, visibles
-
-    async def _diferencial_si_es_record(
-        self, user_id: UserId, best_before: float | None
-    ) -> Decimal | None:
-        """
-        El diferencial de esta vuelta, pero solo cuando ha batido el récord.
-
-        No se recalcula: si el mejor diferencial del jugador ha mejorado desde
-        que se cerró la partida, la única vuelta nueva es esta, así que el nuevo
-        mejor **es** el suyo. Cuando no ha mejorado se devuelve None y el
-        detector no publica récord, que es justo lo que debe pasar.
-
-        Devolver None cuando no hay nada con lo que comparar deja fuera la
-        primera vuelta con diferencial: es el punto de partida, no un récord.
-        """
-        if best_before is None:
-            return None
-
-        ahora = await self._differentials.best_differential(user_id)
-        if ahora is None or ahora >= best_before:
-            return None
-        return self._como_decimal(ahora)
-
-    @staticmethod
-    def _como_decimal(value: float | None) -> Decimal | None:
-        return None if value is None else Decimal(str(value))
 
     def _a_eventos(
         self,

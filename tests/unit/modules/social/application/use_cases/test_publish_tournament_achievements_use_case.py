@@ -78,15 +78,13 @@ def _todos(*user_ids) -> ActivitySlice:
 
 
 class _DifferentialsStub(PlayerDifferentialsInterface):
-    """`ahora`: el mejor diferencial de hoy; `antes`: el de antes del torneo."""
+    """Las vueltas con diferencial de cada jugador, fijadas por el test."""
 
-    def __init__(self, ahora: dict | None = None, antes: dict | None = None):
-        self._ahora = ahora or {}
-        self._antes = antes or {}
+    def __init__(self, por_jugador: dict | None = None):
+        self._por_jugador = por_jugador or {}
 
-    async def best_differential(self, user_id, excluding_competition_id=None):
-        fuente = self._antes if excluding_competition_id else self._ahora
-        return fuente.get(str(user_id.value))
+    async def round_differentials(self, user_id):
+        return self._por_jugador.get(str(user_id.value), [])
 
 
 class _CourseHistoryFake(PlayerCourseHistoryInterface):
