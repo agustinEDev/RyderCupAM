@@ -181,3 +181,10 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_open(self) -> list[QuickMatch]:
+        stmt = select(QuickMatch).where(
+            QuickMatch._status.in_([QuickMatchStatus.PENDING, QuickMatchStatus.IN_PROGRESS])
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

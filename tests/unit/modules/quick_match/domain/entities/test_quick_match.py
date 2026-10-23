@@ -1,5 +1,6 @@
 """Tests para QuickMatch Entity."""
 
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -581,6 +582,33 @@ class TestQuickMatchStart:
         events = qm.get_domain_events()
         assert len(events) == 1
         assert isinstance(events[0], QuickMatchStartedEvent)
+
+    def test_start_notes_when_it_started(self):
+        """Para cerrarla sola al acabar el día siguiente (Agustín, 23 oct 2026)."""
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        qm.add_participant(_registered())
+        assert qm.started_at is None
+
+        qm.start([qm.creator_participant_id])
+
+        assert qm.started_at is not None
+        assert qm.started_at == qm.updated_at
+
+    def test_it_is_rebuilt_with_when_it_started(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        empezada = datetime(2026, 10, 18, 7, 0)
+
+        copia = QuickMatch.reconstruct(
+            id=qm.id,
+            creator_id=qm.creator_id,
+            golf_course_id=qm.golf_course_id,
+            match_format=qm.match_format,
+            status=QuickMatchStatus.IN_PROGRESS,
+            participants=qm.participants,
+            started_at=empezada,
+        )
+
+        assert copia.started_at == empezada
 
     def test_start_with_incomplete_roster_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
