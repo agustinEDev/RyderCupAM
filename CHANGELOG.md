@@ -5,6 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.38.0] - 2026-10-23
+
+**Release social 1: Actividad rediseñada y perfil de otro jugador.** La
+Actividad se ordena por publicación, distingue quién ve cada aviso (solo tú,
+tus amigos o los dos), cuenta las novedades y suma avisos nuevos (inscripción,
+resultados, posición final, salidas, partidas rápidas y logros de los torneos).
+El perfil de un amigo muestra el cara a cara y las partidas jugadas juntos.
+Los empates se rompen por el hándicap exacto más bajo. Va con el frontend
+**2.51.0**.
+
+**Notas de despliegue.**
+
+- **Cuatro migraciones**, en cadena desde `e7f9a1b3c5d7`:
+  `a1f3c5e7b9d2` (`published_at` y `visible_to_friends` en `activity_events`,
+  con relleno desde `occurred_at`; 48 filas en PRO), `b2e4d6f8a0c3` (índice
+  `CONCURRENTLY`), `c3d5e7f9a1b4` (`withdrawn_tee_time_notices`, vacía) y
+  `d4e6f8a0b2c5` (`withdrawn_hidden_achievements`, vacía). Sin variables nuevas.
+- **Contrato: `api-breaking` (#639, #641)**, sin romper el esquema pero con
+  valores nuevos que el frontend 2.50 pinta mal (`UNFINISHED`, posiciones
+  `null`, aviso final de Ryder sin `position`, `ENROLLMENT_CONFIRMED`,
+  `TOURNAMENT_STROKE_PLAY`) y otro orden en las clasificaciones empatadas.
+  **Backend y frontend seguidos.**
+- **Volver atrás solo con el downgrade**: el downgrade de `a1f3c5e7b9d2` borra
+  los eventos ocultos antes de quitar `visible_to_friends`; volver solo el
+  código enseñaría a los amigos lo oculto.
+- Tras desplegar, lanzar `scripts/purge_terms_acceptances.py`.
+
+### Added
+
+- **Actividad por publicación** (#630): orden, cursor y novedades por
+  `published_at`; audiencia por tipo (`SELF` / `FRIENDS` / `BOTH`) y
+  `visible_to_friends`: con «compartir actividad» apagado se publica oculto y
+  no se revela al encenderlo. `GET /api/v1/users/me/feed/unseen-count`
+  (tope 99). Fechas en UTC con `Z`.
+- **Avisos nuevos** (#632, #638, #639, #641): inscripción aprobada o
+  confirmada, invitación (se retira al aceptarla, rechazarla o cerrarse),
+  solicitud cerrada sin plaza, rechazo del organizador, inscripción en un
+  torneo público (para los amigos), resultado de tu partido, posición final
+  (también en Ryder, con los puntos de cada equipo), partida rápida terminada
+  y **tu hora de salida** (`TEE_TIME_ASSIGNED`) con aviso cuando cambia.
+  Las solicitudes de amistad cuentan como novedad.
+- **Perfil de otro jugador** (#631, #639): sin ser amigo, nombre, foto,
+  amigos y hándicap; con bloqueo, solo nombre y foto (`blocked_by_me`).
+  Siendo amigo, también **cara a cara** (en contra y a favor, por modalidad) y
+  **partidas jugadas juntos** (`GET /users/{id}/games-together`), incluidos los
+  torneos stroke play terminados por la general final.
+- **Partida rápida de un amigo en solo lectura** (#640):
+  `GET /api/v1/quick-matches/{id}/shared`.
+- **Logros de los torneos stroke play** (#640): HIO, eagle, birdie, campo
+  nuevo, primer torneo y mejor marca, y las estadísticas del perfil cuentan
+  sus tarjetas.
+
+### Changed
+
+- **Desempate por el hándicap exacto más bajo** (#641) en las clasificaciones
+  de stroke play, las posiciones de los avisos y el cara a cara; solo comparte
+  puesto el mismo índice. En partida rápida, sin hándicap cuenta como 0.
+- **Cuándo cuenta una partida rápida** (#639): desde 9 hoyos, con el que más
+  hoyos hizo como referencia; la que se decide antes (3&2) cuenta siempre.
+- **Campo nuevo y primer torneo, exclusivos por fecha real** (#643, #646):
+  van a la primera vez que pisaste el campo y al primer torneo con un hoyo
+  jugado, se cierre en el orden que se cierre; al reabrir se heredan.
+- Estadísticas del perfil y generales del cara a cara leídas por lotes
+  (#641, #642): número fijo de consultas.
+- **Correos legibles en modo oscuro** (#629): esquema solo claro, colores en
+  cada celda y botones a prueba de Apple Mail.
+
+### Fixed
+
+- La actividad de un jugador ya trae autores y campos; un cursor fuera de
+  rango ya no da 500; las partidas del mismo día se ordenan por hora (#633).
+- Reasignar rivales de Ryder en dos pasos avisa del cambio de salida; la
+  partida que el autor mandó a la papelera deja de verse en la de sus amigos
+  (#643).
+- Reabrir y cerrar un torneo ya no revela los logros publicados con la
+  actividad oculta, tampoco al heredarlos (#647).
+
 ## [2.37.1] - 2026-10-21
 
 **Hotfix: las apps viejas explican cómo aceptar los Términos.** Las PWA
