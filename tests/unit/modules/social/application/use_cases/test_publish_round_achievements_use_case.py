@@ -197,13 +197,14 @@ async def _played_match(
     complete: bool = True,
     tee_color: TeeColor = TeeColor.YELLOW,
     tee_gender: Gender = Gender.MALE,
+    scoring_format: ScoringFormat = ScoringFormat.MEDAL,
 ):
     """Una partida rapida terminada con la vuelta anotada."""
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
         creator_id=user.id,
         golf_course_id=course.id,
-        scoring_format=ScoringFormat.MEDAL,
+        scoring_format=scoring_format,
         creator_tee_color=tee_color,
         creator_tee_gender=tee_gender,
     )
@@ -750,3 +751,27 @@ class TestCarrerasYFechas:
         eventos = await _feed_de(social_uow, user)
         assert len(eventos) >= 2
         assert len({e.published_at for e in eventos}) == 1
+
+
+async def test_una_raya_en_stableford_se_juzga_como_doble_bogey(
+    social_uow, qm_uow, golf_course_uow, user_uow
+):
+    """
+    La raya es un hoyo jugado que no da logro (PlayedHole.of, 23 oct 2026): el
+    birdie de otro hoyo sale, y la raya no se cuenta como nada mejor.
+    """
+    user = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, user.id)
+    tarjeta: dict = dict.fromkeys(range(1, 19), PAR)
+    tarjeta[4] = PAR - 1
+    tarjeta[7] = None
+    match = await _played_match(
+        qm_uow, course, user, scores_by_hole=tarjeta, scoring_format=ScoringFormat.STABLEFORD
+    )
+
+    await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
+
+    async with social_uow:
+        eventos = await social_uow.activity_events.find_in([_todos(user.id)], limit=50)
+    birdies = [e for e in eventos if e.type == ActivityEventType.BIRDIE]
+    assert [e.payload.get("holes") for e in birdies] == [[4]]

@@ -103,7 +103,7 @@ class _Grupos:
 
     # Por jugador, sus grupos de este torneo con la tarjeta entregada
     del_torneo: dict = field(default_factory=dict)
-    # (grupo, jugador) -> hoyo -> golpes validados
+    # (grupo, jugador) -> hoyo -> golpes validados (None, una raya validada)
     validados: dict = field(default_factory=dict)
 
 
@@ -489,9 +489,10 @@ class PublishTournamentAchievementsUseCase:
         for golpe in await self._competition_uow.golpes_de_partida.de_las_partidas(
             list(del_torneo)
         ):
-            # Solo lo validado (jugador y marcador coinciden) y con numero: la
-            # raya deja el hoyo sin golpes, como en la Ryder (`own_score`)
-            if golpe.validado and golpe.golpes_validados is not None:
+            # Solo lo validado (jugador y marcador coinciden). La raya validada
+            # es un hoyo jugado, como en la partida rapida (Agustin, 23 oct
+            # 2026); en Medal no la hay, porque el anotador la rechaza
+            if golpe.validado:
                 leidos.validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (
                     golpe.golpes_validados
                 )
@@ -542,10 +543,14 @@ class PublishTournamentAchievementsUseCase:
         hole_scores = await self._competition_uow.hole_scores.find_by_match_and_player(
             partido.id, user_id
         )
+        # Lo que el jugador envio, raya incluida (enviada y sin numero): es un
+        # hoyo jugado, como en la partida rapida (Agustin, 23 oct 2026). En la
+        # Ryder cuenta lo enviado sin mirar la validacion, igual que los
+        # numeros y que las estadisticas; en stroke play, solo lo validado
         scores_by_hole = {
             hole_score.hole_number: hole_score.own_score
             for hole_score in hole_scores
-            if hole_score.own_score is not None
+            if hole_score.own_submitted
         }
         vuelta = await self._vuelta_de(
             ronda,
@@ -611,11 +616,9 @@ class PublishTournamentAchievementsUseCase:
             instant=round_instant(ronda.round_date, ronda.session_type, course.timezone),
             visible_to_friends=visible_to_friends,
             holes=[
-                PlayedHole(
-                    number=hole.number,
-                    par=hole.par,
-                    strokes=scores_by_hole[hole.number],
-                )
+                # La raya, juzgada como doble bogey, igual que en la partida
+                # rapida: no da ningun logro
+                PlayedHole.of(hole.number, hole.par, scores_by_hole[hole.number])
                 for hole in jugados
             ],
         )

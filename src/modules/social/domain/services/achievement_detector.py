@@ -23,6 +23,14 @@ EAGLE_UNDER_PAR = 2
 HOLE_IN_ONE_STROKES = 1
 
 
+# Golpes sobre el par con los que se juzga un hoyo que no se termino (la raya):
+# doble bogey, sin golpes recibidos. En los totales la raya vale su doble bogey
+# NETO (`par + 2 + golpes recibidos`, Agustin, 23 oct 2026), pero aqui da igual:
+# el detector solo busca birdies o mejor hoyo a hoyo, y una raya no lo es con
+# ningun reparto realista
+PICKED_UP_OVER_PAR = 2
+
+
 @dataclass(frozen=True)
 class PlayedHole:
     """Un hoyo jugado, con lo justo para juzgarlo."""
@@ -30,6 +38,11 @@ class PlayedHole:
     number: int
     par: int
     strokes: int
+
+    @classmethod
+    def of(cls, number: int, par: int, strokes: int | None) -> "PlayedHole":
+        """El hoyo con sus golpes, o la raya (None) juzgada como doble bogey."""
+        return cls(number, par, par + PICKED_UP_OVER_PAR if strokes is None else strokes)
 
 
 @dataclass(frozen=True)
