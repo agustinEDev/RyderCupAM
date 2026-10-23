@@ -44,23 +44,29 @@ class ActivityEventRepositoryInterface(ABC):
     de seguidores por cuenta, y a cambio trae duplicación y reconciliación cada
     vez que alguien acepta o deshace una amistad.
 
-    **Lo oculto no se destapa al volver a publicarlo** (fallo del probador, 23
-    oct 2026). Todo borrado de un logro oculto (`visible_to_friends=False`)
-    lo apunta, y si el mismo logro —jugador, tipo y origen— se vuelve a
-    publicar, entra oculto aunque llegue visible; el apunte se gasta entonces.
-    Asi reabrir y volver a cerrar un torneo, o heredar «campo nuevo» o «primer
-    torneo», no destapa lo que se publico con la publicacion apagada. Lo visible
-    que llega oculto entra oculto: apagarla oculta lo publicado. Solo los
-    logros: los avisos que se repiten (apuntarse otra vez) son nuevos y toman
-    el interruptor de ahora. `delete_for_user` no apunta: es el interruptor y
-    la cuenta, no una retirada para volver a publicar.
+    **Lo que se vuelve a publicar** (decisiones del 23 oct 2026). Todo
+    borrado de un logro lo apunta, y el apunte no se gasta nunca:
+
+    - El mismo logro (jugador, tipo y origen) que se vuelve a publicar
+      conserva su fecha: no sube ni cuenta como nuevo.
+    - Si se retiro oculto, vuelve oculto aunque llegue visible; en birdie,
+      eagle y hoyo en uno, solo si vuelve alguno de sus hoyos ocultos.
+    - «Campo nuevo» y «primer torneo» nacen ocultos si se retiro oculto otro
+      del mismo jugador (y campo): la herencia no destapa.
+
+    Asi reabrir y volver a cerrar un torneo, o heredar, no destapa lo que se
+    publico con la publicacion apagada. Lo visible que llega oculto entra
+    oculto: apagarla oculta lo publicado. Solo los logros: los avisos que se
+    repiten (apuntarse otra vez) son nuevos y toman el interruptor de ahora.
+    `delete_for_user` no apunta: es el interruptor y la cuenta, no una
+    retirada para volver a publicar.
     """
 
     @abstractmethod
     async def add_many(self, events: list[ActivityEvent]) -> None:
         """
         Publica varios eventos de una vez (los de una misma vuelta). Lo que ya
-        estaba no se toca, y un logro que se retiro oculto entra oculto.
+        estaba no se toca, y un logro que se retiro vuelve con lo apuntado.
         """
 
     @abstractmethod
@@ -173,13 +179,15 @@ class ActivityEventRepositoryInterface(ABC):
         """Lo publicado desde ese origen de esos tipos, de todos los jugadores."""
 
     @abstractmethod
-    async def last_published_at(
+    async def last_written_at(
         self, competition_id: str, types: Collection[ActivityEventType]
     ) -> datetime | None:
         """
-        Cuando se publico lo ultimo de esos tipos para esa competicion
+        Cuando se escribio lo ultimo de esos tipos para esa competicion
         (`payload.competition_id`), o None si no hay nada. Dice si otra
-        publicacion del torneo escribio mientras se calculaba la propia.
+        publicacion del torneo escribio mientras se calculaba la propia. No es
+        la fecha de publicacion: el mismo logro que se vuelve a publicar
+        conserva la suya (23 oct 2026).
         """
 
     @abstractmethod

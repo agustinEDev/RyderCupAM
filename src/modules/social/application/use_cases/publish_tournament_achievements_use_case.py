@@ -194,7 +194,7 @@ class PublishTournamentAchievementsUseCase:
                 # Otra publicacion de este torneo escribio despues de que
                 # empezara este calculo (p. ej. la herencia de una reapertura
                 # de otro): lo calculado es viejo y se recalcula
-                ultima = await repo.last_published_at(competition_id_raw, _LOGROS)
+                ultima = await repo.last_written_at(competition_id_raw, _LOGROS)
                 if ahora == marca and (ultima is None or ultima <= calculado_en):
                     # Despues del candado del torneo, los de sus jugadores, en
                     # orden: lo exclusivo se compara y se retira bajo ellos

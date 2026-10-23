@@ -37,7 +37,7 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.value_objects.user_id import UserId
 
-EXCLUSIVE_TYPES = frozenset({ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT})
+EXCLUSIVE_TYPES = frozenset(t for t in ActivityEventType if t.is_exclusive_by_date)
 
 # La clave del payload con el instante en que se jugo
 PLAYED_AT = "played_at"

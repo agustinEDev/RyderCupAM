@@ -188,7 +188,6 @@ async def test_a_retired_visible_one_comes_back_visible(db_session):
     await db_session.commit()
 
     assert await _visibles(repository, diego) == {(T.BIRDIE, "grupo-1"): True}
-    assert await _apuntes(db_session) == 0
 
 
 async def test_only_the_same_identity_is_kept_hidden(db_session):
@@ -230,7 +229,11 @@ async def test_a_notice_is_not_remembered(db_session):
     assert await _apuntes(db_session) == 0
 
 
-async def test_the_note_is_used_once_and_retiring_again_writes_it_again(db_session):
+async def test_the_note_is_kept_and_retiring_again_keeps_it_hidden(db_session):
+    """
+    El apunte no se gasta (23 oct 2026): lo que estuvo oculto se queda oculto
+    aunque se vuelva a publicar muchas veces.
+    """
     diego = await _user(db_session)
     repository = SQLAlchemyActivityEventRepository(db_session)
     await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", visible=False)])
@@ -240,7 +243,7 @@ async def test_the_note_is_used_once_and_retiring_again_writes_it_again(db_sessi
 
     await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1")])
     await db_session.commit()
-    assert await _apuntes(db_session) == 0
+    assert await _apuntes(db_session) == 1
 
     await repository.delete_for_competition("torneo-1", [T.BIRDIE])
     await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1")])
