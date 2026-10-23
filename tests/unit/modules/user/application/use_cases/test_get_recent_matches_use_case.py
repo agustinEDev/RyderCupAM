@@ -231,6 +231,7 @@ async def played_competition_match(
     play_mode: PlayMode = PlayMode.SCRATCH,
     tee_color: TeeColor = TeeColor.YELLOW,
     player_handicaps: dict | None = None,
+    row_strokes_received: int = 0,
 ):
     """
     Un partido de torneo terminado, con su ronda y su competición.
@@ -288,7 +289,7 @@ async def played_competition_match(
                 hole_number=hole_number,
                 player_user_id=user_id,
                 team=team,
-                strokes_received=0,
+                strokes_received=row_strokes_received,
             )
             hole_score.set_own_score(own_score)
             hole_scores.append(hole_score)
@@ -939,6 +940,45 @@ class TestCompetitionMatch:
         assert scorer.total_strokes == companion.total_strokes == 36
         assert scorer.holes_played == companion.holes_played == 9
         assert scorer.score == companion.score == "2UP"
+
+    async def test_a_foursomes_raya_counts_the_same_for_both_partners(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un foursomes de torneo de compañeros con índices muy distintos que
+            recogen en el hoyo 1, donde el bando recibe un golpe en el partido
+        When se lee el historial de cada uno
+        Then los dos suman la raya con los golpes del BANDO (`par + 2 + 1`), y
+            no cada uno con su hándicap: juegan la misma bola
+
+        Hallazgo del revisor (23 oct 2026): con el hándicap de cada uno, la
+        misma bola daba dos totales distintos.
+        """
+        player = await create_user(user_uow, "Alto")
+        partner = await create_user(user_uow, "Bajo")
+        rival_one = await create_user(user_uow, "Rivalone")
+        rival_two = await create_user(user_uow, "Rivaltwo")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id, partner.id],
+            team_b_user_ids=[rival_one.id, rival_two.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "A", "score": "2UP"},
+            match_format=MatchFormat.FOURSOMES,
+            own_scores_by_user_id={player.id: [None] + [4] * 8, partner.id: [None] + [4] * 8},
+            play_mode=PlayMode.HANDICAP,
+            player_handicaps={player.id: 36.0, partner.id: 0.0},
+            row_strokes_received=1,
+        )
+
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        alto = (await use_case.execute(player.id)).matches[0]
+        bajo = (await use_case.execute(partner.id)).matches[0]
+
+        assert alto.total_strokes == bajo.total_strokes == 7 + 8 * 4
 
     async def test_separates_partners_from_opponents_in_fourball(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

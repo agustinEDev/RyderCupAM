@@ -24,6 +24,7 @@ from src.modules.quick_match.domain.repositories.quick_match_unit_of_work_interf
     QuickMatchUnitOfWorkInterface,
 )
 from src.modules.quick_match.domain.services.stroke_allocation_service import (
+    ParticipantStrokes,
     StrokeAllocationService,
 )
 from src.modules.quick_match.domain.value_objects.participant_id import ParticipantId
@@ -312,20 +313,25 @@ class GetRecentMatchesUseCase:
         # Stableford son la única cifra que compara vueltas entre sí, porque 36
         # puntos es jugar a tu hándicap en cualquier campo y cualquier formato
         totals = self._participant_totals(raw, course, profile_handicap)
+        # El reparto del partido, una vez: lo usan el resultado y la raya del
+        # bando en foursomes
+        strokes = (
+            self._quick_match_strokes(raw, course, users_by_id)
+            if match.match_format is not None
+            else {}
+        )
         # En foursomes no hay vuelta propia que enseñar —la pareja juega una
         # bola— pero sí los golpes brutos del bando, y los mismos para los dos.
         # Leyendo solo lo anotado a nombre de cada uno, el que llevaba la fila
         # salía con una vuelta entera de 72 golpes y su compañero sin nada.
         side_strokes = (
-            self._foursomes_side_strokes(
-                raw, course, self._quick_match_strokes(raw, course, users_by_id)
-            )
+            self._foursomes_side_strokes(raw, course, strokes)
             if raw.match.match_format == MatchFormat.FOURSOMES
             else None
         )
 
         if match.match_format is not None:
-            result, score = self._quick_match_play_outcome(raw, course, users_by_id)
+            result, score = self._quick_match_play_outcome(raw, strokes)
         elif totals is not None:
             if match.scoring_format == ScoringFormat.STABLEFORD:
                 score = f"{totals.stableford_points} pts"
@@ -403,15 +409,15 @@ class GetRecentMatchesUseCase:
             user.handicap.value if user and user.handicap else None,
             scratch=raw.scratch,
         )
-        total_strokes, holes_played, points = self._scorecard_totals(
-            raw, hole_card, playing_handicap
-        )
         # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
         # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
         # Los golpes del bando sí se enseñan, y son los mismos para los dos
         # compañeros. Es la misma regla que en partida rápida, donde vive en
         # `_to_quick_match_dto`: aquí se había quedado sin aplicar.
         is_foursomes = raw.round_.match_format == MatchFormat.FOURSOMES
+        total_strokes, holes_played, points = self._scorecard_totals(
+            raw, hole_card, playing_handicap, side_ball=is_foursomes
+        )
 
         return RecentMatchDTO(
             id=str(match.id.value),
@@ -455,8 +461,7 @@ class GetRecentMatchesUseCase:
     def _quick_match_play_outcome(
         self,
         raw: _QuickMatchRaw,
-        course: GolfCourse | None,
-        users_by_id: dict[UserId, User],
+        strokes: dict[ParticipantId, ParticipantStrokes],
     ) -> tuple[str | None, str | None]:
         """
         Cómo quedó una partida rápida por equipos, desde el lado del jugador.
@@ -474,14 +479,17 @@ class GetRecentMatchesUseCase:
         winner, score = match_play_result(
             raw.match,
             raw.scores_by_participant,
-            self._quick_match_strokes(raw, course, users_by_id),
+            strokes,
             self._scoring_service,
         )
         own_team = "A" if raw.participant.participant_id in team_a_ids else "B"
         return self._result_for_team(winner, own_team), score
 
     def _foursomes_side_strokes(
-        self, raw: _QuickMatchRaw, course: GolfCourse | None, strokes: dict
+        self,
+        raw: _QuickMatchRaw,
+        course: GolfCourse | None,
+        strokes: dict[ParticipantId, ParticipantStrokes],
     ) -> tuple[int, int] | None:
         """
         Golpes brutos y hoyos del BANDO en foursomes: una bola por hoyo.
@@ -609,7 +617,11 @@ class GetRecentMatchesUseCase:
         )
 
     def _scorecard_totals(
-        self, raw: _CompetitionMatchRaw, hole_card: list, playing_handicap: int | None
+        self,
+        raw: _CompetitionMatchRaw,
+        hole_card: list,
+        playing_handicap: int | None,
+        side_ball: bool = False,
     ) -> tuple:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
@@ -629,7 +641,10 @@ class GetRecentMatchesUseCase:
         basis = None if playing_handicap is None else Decimal(playing_handicap)
         # Lo que el jugador apuntó, raya incluida: la raya es `own_score` None
         # con el envío hecho, y vale su doble bogey neto, `par + 2 + golpes
-        # recibidos` (Agustin, 23 oct 2026), sin puntos
+        # recibidos` (Agustin, 23 oct 2026), sin puntos. Con la bola del bando
+        # (`side_ball`, foursomes) los golpes son los del bando en el partido,
+        # los guardados en el hoyo: con los de cada uno, la misma bola daba dos
+        # totales distintos
         scored = [
             hole_score
             for hole_score in raw.hole_scores
@@ -645,6 +660,8 @@ class GetRecentMatchesUseCase:
                 basis, stroke_index[hole_score.hole_number]
             )
             if hole_score.own_score is None:
+                if side_ball:
+                    received = hole_score.strokes_received
                 total_strokes += self._calculator.net_double_bogey(par, received)
                 continue
             total_strokes += hole_score.own_score

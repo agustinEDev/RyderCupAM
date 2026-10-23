@@ -112,3 +112,11 @@ def test_the_par_comes_from_the_snapshot():
 
 def test_seventeen_validated_is_not_complete():
     assert not TarjetaDeStrokePlay.de(_foto((0,) * 18), dict.fromkeys(range(1, 18), 4)).completa
+
+
+def test_a_plus_players_picked_up_ball_is_par_plus_one_in_gross():
+    """El plus que cede golpe en el hoyo: su raya son `par + 1` brutos y `par + 2` netos."""
+    tarjeta = TarjetaDeStrokePlay.de(_foto((-1,) + (0,) * 17), {1: None})
+
+    assert (tarjeta.golpes_brutos, tarjeta.golpes_netos) == (5, 6)
+    assert (tarjeta.puntos, tarjeta.puntos_brutos) == (0, 0)

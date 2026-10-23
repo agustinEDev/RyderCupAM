@@ -21,7 +21,8 @@ class HoleOutcome:
     partida rápida los lleva separados:
 
     - `gross` son los golpes de la tarjeta. Un birdie es un birdie, y ese dato
-      no puede depender del reparto de golpes.
+      no puede depender del reparto de golpes. La excepción es la raya, que
+      no trae golpes y vale su doble bogey neto (Agustin, 23 oct 2026).
     - `adjusted_gross` es lo computable, topado en el doble bogey neto (Regla
       WHS 3.1), que es lo que impide que un hoyo desastroso mueva la media de
       una temporada.
@@ -29,6 +30,7 @@ class HoleOutcome:
     Derivar el bruto del topado parecía inofensivo y no lo es: para un jugador
     **plus** los golpes recibidos son negativos, así que el tope cae POR DEBAJO
     de `par + 2` y un doble bogey de verdad se contaría como bogey.
+    En una raya sí coinciden, y es lo buscado: la de un plus es un bogey.
 
     Attributes:
         number: Número del hoyo (1-18), que es lo que separa la ida de la vuelta
