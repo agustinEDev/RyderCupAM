@@ -47,6 +47,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import countable_holes
+from src.shared.domain.services.stroke_play_scoring import NET_DOUBLE_BOGEY_OVER_PAR
 from src.shared.domain.utc_clock import utc_now
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ class _Grupos:
 
     # Por jugador, sus grupos de este torneo con la tarjeta entregada
     del_torneo: dict = field(default_factory=dict)
-    # (grupo, jugador) -> hoyo -> golpes validados
+    # (grupo, jugador) -> hoyo -> golpes validados (None, una raya validada)
     validados: dict = field(default_factory=dict)
 
 
@@ -489,9 +490,10 @@ class PublishTournamentAchievementsUseCase:
         for golpe in await self._competition_uow.golpes_de_partida.de_las_partidas(
             list(del_torneo)
         ):
-            # Solo lo validado (jugador y marcador coinciden) y con numero: la
-            # raya deja el hoyo sin golpes, como en la Ryder (`own_score`)
-            if golpe.validado and golpe.golpes_validados is not None:
+            # Solo lo validado (jugador y marcador coinciden). La raya validada
+            # es un hoyo jugado, como en la partida rapida (Agustin, 23 oct
+            # 2026); en Medal no la hay, porque el anotador la rechaza
+            if golpe.validado:
                 leidos.validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (
                     golpe.golpes_validados
                 )
@@ -542,10 +544,12 @@ class PublishTournamentAchievementsUseCase:
         hole_scores = await self._competition_uow.hole_scores.find_by_match_and_player(
             partido.id, user_id
         )
+        # Lo que el jugador envio, raya incluida (enviada y sin numero): es un
+        # hoyo jugado, como en la partida rapida (Agustin, 23 oct 2026)
         scores_by_hole = {
             hole_score.hole_number: hole_score.own_score
             for hole_score in hole_scores
-            if hole_score.own_score is not None
+            if hole_score.own_submitted
         }
         vuelta = await self._vuelta_de(
             ronda,
@@ -614,7 +618,13 @@ class PublishTournamentAchievementsUseCase:
                 PlayedHole(
                     number=hole.number,
                     par=hole.par,
-                    strokes=scores_by_hole[hole.number],
+                    # La raya se juzga como doble bogey, igual que en la
+                    # partida rapida: no da ningun logro
+                    strokes=(
+                        scores_by_hole[hole.number]
+                        if scores_by_hole[hole.number] is not None
+                        else hole.par + NET_DOUBLE_BOGEY_OVER_PAR
+                    ),
                 )
                 for hole in jugados
             ],

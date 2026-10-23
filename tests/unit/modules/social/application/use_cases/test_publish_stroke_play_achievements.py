@@ -562,3 +562,48 @@ class TestPlayerIdsOfTheGroup:
 
         birdie = next(e for e in await _feed(social_uow, ana) if e.type == T.BIRDIE)
         assert birdie.payload["player_ids"] == sorted(str(u.id.value) for u in (ana, bea))
+
+
+# ==================== La raya cuenta como hoyo jugado (23 oct 2026) ====================
+
+
+class TestARayaIsAPlayedHole:
+    """
+    Agustin, 23 oct 2026: como en la partida rapida, la raya validada es un hoyo
+    jugado y la vuelta cuenta. En Medal no hay raya: el anotador la rechaza.
+    """
+
+    async def test_l2_a_card_with_a_raya_publishes_its_birdie(self, world, social_uow):
+        ana = await world.user()
+        competition, _, _ = await _torneo(world, {ana: tarjeta(h4=3, h7=None)})
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        assert T.BIRDIE in await _tipos(social_uow, ana)
+
+    async def test_l4_the_raya_itself_gives_nothing(self, world, social_uow):
+        ana = await world.user()
+        competition, _, _ = await _torneo(world, {ana: tarjeta(h7=None)})
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        assert sorted(await _tipos(social_uow, ana)) == sorted([T.NEW_COURSE, T.FIRST_TOURNAMENT])
+
+    async def test_l6_half_a_round_with_a_raya(self, world, social_uow):
+        ana = await world.user()
+        ida = {hoyo: golpes for hoyo, golpes in tarjeta(h4=3, h7=None).items() if hoyo <= 9}
+        competition, _, _ = await _torneo(world, {ana: ida})
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        assert T.BIRDIE in await _tipos(social_uow, ana)
+
+    async def test_l5_an_unvalidated_raya_still_does_not_count(self, world, social_uow):
+        ana = await world.user()
+        golpes = tarjeta(h4=3)
+        del golpes[7]
+        competition, _, _ = await _torneo(world, {ana: golpes}, sin_validar={ana: {7: 5}})
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        assert T.BIRDIE not in await _tipos(social_uow, ana)
