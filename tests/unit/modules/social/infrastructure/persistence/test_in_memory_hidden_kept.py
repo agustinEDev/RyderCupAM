@@ -178,3 +178,15 @@ async def test_the_last_write_is_when_it_was_written_not_its_kept_date(repo):
     ultima = await repo.last_written_at("torneo-1", [T.NEW_COURSE])
     assert ultima is not None
     assert ultima >= antes
+
+
+async def test_a_card_already_published_keeps_its_date(repo):
+    """Como en SQL: lo que llega a una vuelta ya publicada entra en su tarjeta."""
+    birdie = _logro(T.BIRDIE, "grupo-1", holes=[4])
+    await repo.add_many([birdie, _logro(T.BIRDIE, "grupo-2", user=EVA)])
+
+    campo = _logro(T.NEW_COURSE, "grupo-1", golf_course_id="c-1")
+    campo.keep_published_at(CUANDO + timedelta(days=3))
+    await repo.add_many([campo])
+
+    assert campo.published_at == birdie.published_at

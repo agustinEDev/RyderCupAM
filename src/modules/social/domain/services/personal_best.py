@@ -6,6 +6,10 @@ Agustin, 23 oct 2026): un record del 12 oct que «mejora su 35.6» no puede
 estar comparandose con un 35.6 del 15 oct, que se cerro antes por casualidad.
 Las del mismo dia no cuentan como anteriores, porque las estadisticas solo
 guardan el dia de cada vuelta, no la hora.
+
+Limite aceptado (Agustin, 23 oct 2026): la partida rapida se fecha con su dia
+en UTC y la ronda de torneo con el dia local del campo, asi que una partida
+empezada entre las 00:00 y las 02:00 de Madrid cae en el dia anterior.
 """
 
 from collections.abc import Callable, Sequence

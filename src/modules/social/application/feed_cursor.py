@@ -7,7 +7,8 @@ separarian en cuanto una de las dos cambiara de formato.
 
 El cursor son **dos** valores, fecha e id, y no solo la fecha. Todos los logros
 de una misma vuelta se publican con el mismo `published_at` —salen del mismo
-instante—, asi que un cursor por fecha sola dejaria fuera los que aun no se han
+instante, y lo que llega despues a esa vuelta toma la fecha de su tarjeta
+(`cards_keep_their_date`)—, asi que un cursor por fecha sola dejaria fuera los que aun no se han
 enseñado de esa vuelta.
 
 La fecha es la de publicacion, por la que se ordena el feed. Antes era la de

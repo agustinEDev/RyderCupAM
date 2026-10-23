@@ -37,6 +37,7 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 )
 from src.modules.social.domain.services.withdrawn_achievement import (
     WithdrawnAchievement,
+    cards_keep_their_date,
     exclusive_scope,
     scope_of,
 )
@@ -79,6 +80,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         if not events:
             return
         await self._aplicar_apuntes(events)
+        cards_keep_their_date(events, await self._fechas_de_tarjeta(events))
 
         # Con el reloj de la aplicacion, como el `calculado_en` con el que se
         # compara al publicar un torneo
@@ -144,6 +146,25 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 apunte.apply_to(event)
             if event.type.is_exclusive_by_date and scope_of(event) in ocultos_exclusivos:
                 event.hide_from_friends()
+
+    async def _fechas_de_tarjeta(self, events: list[ActivityEvent]) -> dict[str, datetime]:
+        """La fecha mas antigua de cada tarjeta que ya tiene logros publicados."""
+        logros = [e for e in events if e.type.is_achievement]
+        if not logros:
+            return {}
+        tabla = activity_events_table.c
+        filas = (
+            await self._session.execute(
+                select(tabla.user_id, tabla.source_match_id, func.min(tabla.published_at))
+                .where(
+                    tabla.user_id.in_(list({e.user_id for e in logros})),
+                    tabla.source_match_id.in_(sorted({e.source_match_id for e in logros})),
+                    tabla.type.in_(sorted(t for t in ActivityEventType if t.is_achievement)),
+                )
+                .group_by(tabla.user_id, tabla.source_match_id)
+            )
+        ).all()
+        return {f"{user_id.value}:{origen}": fecha for user_id, origen, fecha in filas}
 
     async def _borrar(self, stmt: Delete) -> int:
         """

@@ -71,9 +71,112 @@ def _logro(
     )
 
 
+async def _hoyos_apuntados(db_session, user: User) -> list:
+    filas = await db_session.execute(
+        text("SELECT hidden_holes FROM withdrawn_hidden_achievements WHERE user_id = :u"),
+        {"u": str(user.id.value)},
+    )
+    return filas.scalars().all()
+
+
 async def _eventos(repository, user: User) -> dict[tuple, ActivityEvent]:
     eventos = await repository.find_in([ActivitySlice(user_ids=(user.id,), types=TODOS)], 50)
     return {(e.type, e.source_match_id): e for e in eventos}
+
+
+# ==================== La tarjeta no se parte ====================
+
+
+class TestTheCardKeepsItsDate:
+    """Hallazgo 2 del revisor: los logros de una vuelta, una tarjeta y una fecha."""
+
+    async def test_a_new_one_next_to_one_that_kept_its_date_takes_that_date(self, db_session):
+        """2.1: se vuelve a cerrar con el birdie de antes y un eagle nuevo."""
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", holes=[4])])
+        await repository.delete_for_competition("torneo-1", [T.BIRDIE])
+        await db_session.commit()
+
+        await repository.add_many(
+            [
+                _logro(diego, T.BIRDIE, "grupo-1", publicado=DESPUES, holes=[4]),
+                _logro(diego, T.EAGLE_OR_BETTER, "grupo-1", publicado=DESPUES, holes=[9]),
+            ]
+        )
+        await db_session.commit()
+
+        eventos = await _eventos(repository, diego)
+        assert eventos[(T.EAGLE_OR_BETTER, "grupo-1")].published_at == PRIMERA
+
+    async def test_one_arriving_at_a_card_already_published_takes_its_date(self, db_session):
+        """2.8: el «campo nuevo» heredado entra en la tarjeta que ya estaba."""
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await repository.add_many(
+            [
+                _logro(diego, T.BIRDIE, "grupo-1", holes=[4]),
+                _logro(diego, T.BIRDIE, "grupo-2", publicado=PRIMERA + timedelta(days=1)),
+            ]
+        )
+        await db_session.commit()
+
+        await repository.add_many(
+            [_logro(diego, T.NEW_COURSE, "grupo-1", publicado=DESPUES, golf_course_id="c-1")]
+        )
+        await db_session.commit()
+
+        eventos = await _eventos(repository, diego)
+        assert eventos[(T.NEW_COURSE, "grupo-1")].published_at == PRIMERA
+
+    async def test_a_notice_from_the_same_origin_does_not_date_the_card(self, db_session):
+        """El «como acabo» de una partida rapida comparte origen con sus logros."""
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await repository.add_many([_logro(diego, T.QUICK_MATCH_FINISHED, "partida-1")])
+        await db_session.commit()
+
+        await repository.add_many([_logro(diego, T.BIRDIE, "partida-1", publicado=DESPUES)])
+        await db_session.commit()
+
+        assert (await _eventos(repository, diego))[(T.BIRDIE, "partida-1")].published_at == DESPUES
+
+    async def test_a_card_split_before_this_rule_gives_its_oldest_date(self, db_session):
+        """Filas de antes, con la tarjeta partida: lo que llega va con la primera."""
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", holes=[4])])
+        await repository.add_many(
+            [_logro(diego, T.EAGLE_OR_BETTER, "grupo-1", publicado=PRIMERA + timedelta(days=1))]
+        )
+        await db_session.execute(
+            text(
+                "UPDATE activity_events SET published_at = :p "
+                "WHERE type = 'EAGLE_OR_BETTER' AND user_id = :u"
+            ),
+            {"p": PRIMERA + timedelta(days=1), "u": str(diego.id.value)},
+        )
+        await db_session.commit()
+
+        await repository.add_many([_logro(diego, T.PERSONAL_BEST, "grupo-1", publicado=DESPUES)])
+        await db_session.commit()
+
+        eventos = await _eventos(repository, diego)
+        assert eventos[(T.PERSONAL_BEST, "grupo-1")].published_at == PRIMERA
+
+    async def test_a_notice_of_that_round_is_not_part_of_the_card(self, db_session):
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await repository.add_many([_logro(diego, T.BIRDIE, "torneo-1", holes=[4])])
+        await db_session.commit()
+
+        await repository.add_many(
+            [_logro(diego, T.TOURNAMENT_FINAL_STANDING, "torneo-1", publicado=DESPUES)]
+        )
+        await db_session.commit()
+
+        eventos = await _eventos(repository, diego)
+        assert eventos[(T.TOURNAMENT_FINAL_STANDING, "torneo-1")].published_at == DESPUES
 
 
 # ==================== 1. La fecha del mismo logro ====================
@@ -428,11 +531,46 @@ class TestHiddenHoles:
         await repository.delete_for_competition("torneo-1", [T.BIRDIE])
         await db_session.commit()
 
-        await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", holes=[3])])
+        assert await _hoyos_apuntados(db_session, diego) == [[3, 5]]
+
+        await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", holes=[5])])
         await db_session.commit()
 
         eventos = await _eventos(repository, diego)
         assert eventos[(T.BIRDIE, "grupo-1")].visible_to_friends is False
+
+    async def test_a_note_from_before_still_hides_every_hole_after_another_withdrawal(
+        self, db_session
+    ):
+        """Un apunte de la 2.38.0 (todos los hoyos) sumado a uno del 5: siguen todos."""
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await db_session.execute(
+            text(
+                "INSERT INTO withdrawn_hidden_achievements (user_id, source_match_id, type) "
+                "VALUES (:u, 'grupo-1', 'BIRDIE')"
+            ),
+            {"u": str(diego.id.value)},
+        )
+        await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", visible=False, holes=[5])])
+        await repository.delete_for_competition("torneo-1", [T.BIRDIE])
+        await db_session.commit()
+
+        assert await _hoyos_apuntados(db_session, diego) == [None]
+
+    async def test_a_hidden_one_without_holes_notes_every_hole_as_sql_null(self, db_session):
+        """Sin hoyos en el payload se oculta todo: NULL de SQL, no el `null` de JSON."""
+        diego = await _user(db_session)
+        repository = SQLAlchemyActivityEventRepository(db_session)
+        await repository.add_many([_logro(diego, T.BIRDIE, "grupo-1", visible=False)])
+        await repository.delete_for_competition("torneo-1", [T.BIRDIE])
+        await db_session.commit()
+
+        assert await _hoyos_apuntados(db_session, diego) == [None]
+        tipo = await db_session.execute(
+            text("SELECT jsonb_typeof(hidden_holes) FROM withdrawn_hidden_achievements")
+        )
+        assert tipo.scalars().all() == [None]
 
     async def test_a_note_from_before_without_holes_hides_the_whole_achievement(self, db_session):
         """3.4: un apunte de la 2.38.0 no guarda los hoyos."""

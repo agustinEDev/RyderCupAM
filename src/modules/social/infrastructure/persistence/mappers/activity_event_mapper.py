@@ -161,7 +161,9 @@ withdrawn_hidden_achievements_table = Table(
     ),
     Column("published_at", DateTime, nullable=True),
     Column("hidden", Boolean, nullable=False, server_default=text("true")),
-    Column("hidden_holes", postgresql.JSONB, nullable=True),
+    # `none_as_null`: sin hoyos es NULL de SQL (todos), no el `null` de JSON, que
+    # al sumarse con `||` daria `[null, 3]`
+    Column("hidden_holes", postgresql.JSONB(none_as_null=True), nullable=True),
     Column("golf_course_id", String(36), nullable=True),
 )
 

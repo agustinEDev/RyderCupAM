@@ -11,6 +11,7 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
 )
 from src.modules.social.domain.services.withdrawn_achievement import (
     WithdrawnAchievement,
+    cards_keep_their_date,
     exclusive_scope,
     scope_of,
 )
@@ -55,6 +56,11 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
             for (user_id, tipo, _), apunte in self._apuntes.items()
             if apunte.hidden and tipo.is_exclusive_by_date
         }
+        publicadas: dict[str, datetime] = {}
+        for e in self._events:
+            if e.type.is_achievement:
+                clave = e.card_key
+                publicadas[clave] = min(publicadas.get(clave, e.published_at), e.published_at)
         for event in events:
             # Lo apuntado al retirarlo, como en SQL: los apuntes no se gastan
             if event.type.is_achievement:
@@ -63,6 +69,8 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
                     apunte.apply_to(event)
                 if event.type.is_exclusive_by_date and scope_of(event) in ocultos_exclusivos:
                     event.hide_from_friends()
+        cards_keep_their_date(events, publicadas)
+        for event in events:
             if not self._existe(event):
                 self._events.append(event)
                 self._escritos[event.id] = escrito

@@ -8,6 +8,7 @@ from datetime import datetime
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.social.domain.services.withdrawn_achievement import (
     WithdrawnAchievement,
+    cards_keep_their_date,
     exclusive_scope,
     scope_of,
 )
@@ -20,12 +21,14 @@ PRIMERA = datetime(2026, 10, 20, 9, 0)
 DESPUES = datetime(2026, 10, 23, 9, 0)
 
 
-def _logro(tipo=T.BIRDIE, *, visible=True, publicado=DESPUES, **payload) -> ActivityEvent:
+def _logro(
+    tipo=T.BIRDIE, *, visible=True, publicado=DESPUES, origen="grupo-1", **payload
+) -> ActivityEvent:
     return ActivityEvent.create(
         user_id=DIEGO,
         type=tipo,
         occurred_at=PRIMERA,
-        source_match_id="grupo-1",
+        source_match_id=origen,
         published_at=publicado,
         payload=payload,
         visible_to_friends=visible,
@@ -135,3 +138,85 @@ class TestTheScopeOfTheExclusiveOnes:
         assert scope_of(_logro(T.FIRST_TOURNAMENT, golf_course_id="c-1")) == exclusive_scope(
             DIEGO, T.FIRST_TOURNAMENT, None
         )
+
+
+class TestTheCardKeepsItsDate:
+    """
+    Hallazgo 2 del revisor (Agustin, 23 oct 2026): los logros de una vuelta son
+    una tarjeta en el feed, y una tarjeta no se parte.
+    """
+
+    def test_a_new_one_of_a_card_that_kept_its_date_takes_that_date(self):
+        """2.1: el birdie conserva el 20 oct y el eagle nuevo entra en su tarjeta."""
+        birdie, eagle = _logro(publicado=PRIMERA), _logro(T.EAGLE_OR_BETTER)
+
+        cards_keep_their_date([birdie, eagle], {})
+
+        assert (birdie.published_at, eagle.published_at) == (PRIMERA, PRIMERA)
+
+    def test_the_oldest_date_of_the_card_wins(self):
+        """2.2."""
+        antes = datetime(2026, 10, 18, 9, 0)
+        birdie, eagle = _logro(publicado=PRIMERA), _logro(T.EAGLE_OR_BETTER, publicado=antes)
+
+        cards_keep_their_date([birdie, eagle], {})
+
+        assert (birdie.published_at, eagle.published_at) == (antes, antes)
+
+    def test_a_card_already_published_keeps_its_date(self):
+        """2.8: el «campo nuevo» heredado entra en la tarjeta que ya estaba."""
+        campo = _logro(T.NEW_COURSE)
+
+        cards_keep_their_date([campo], {campo.card_key: PRIMERA})
+
+        assert campo.published_at == PRIMERA
+
+    def test_what_is_already_published_wins_so_the_card_never_splits(self):
+        """Lo publicado no se mueve: lo que llega se pone con ello, aunque sea anterior."""
+        antes = datetime(2026, 10, 18, 9, 0)
+        birdie = _logro(publicado=antes)
+
+        cards_keep_their_date([birdie], {birdie.card_key: PRIMERA})
+
+        assert birdie.published_at == PRIMERA
+
+    def test_a_new_card_keeps_its_date(self):
+        """2.3."""
+        birdie, eagle = _logro(), _logro(T.EAGLE_OR_BETTER)
+
+        cards_keep_their_date([birdie, eagle], {})
+
+        assert (birdie.published_at, eagle.published_at) == (DESPUES, DESPUES)
+
+    def test_each_card_on_its_own(self):
+        """2.7."""
+        uno, otro = _logro(publicado=PRIMERA), _logro(T.EAGLE_OR_BETTER, origen="grupo-2")
+
+        cards_keep_their_date([uno, otro], {})
+
+        assert (uno.published_at, otro.published_at) == (PRIMERA, DESPUES)
+
+    def test_a_notice_is_its_own_card(self):
+        """2.4."""
+        aviso = ActivityEvent.create(
+            user_id=DIEGO,
+            type=T.QUICK_MATCH_FINISHED,
+            occurred_at=PRIMERA,
+            source_match_id="grupo-1",
+            published_at=DESPUES,
+            payload={},
+            visible_to_friends=True,
+        )
+        birdie = _logro(publicado=PRIMERA)
+
+        cards_keep_their_date([aviso, birdie], {})
+
+        assert aviso.published_at == DESPUES
+
+    def test_it_only_moves_the_date(self):
+        """2.5."""
+        oculto = _logro(T.EAGLE_OR_BETTER, visible=False)
+
+        cards_keep_their_date([_logro(publicado=PRIMERA), oculto], {})
+
+        assert oculto.visible_to_friends is False

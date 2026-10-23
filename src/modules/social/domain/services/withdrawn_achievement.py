@@ -96,11 +96,37 @@ def _holes(payload: dict) -> tuple[int, ...] | None:
 
 
 def exclusive_scope(user_id, type: ActivityEventType, golf_course_id: str | None) -> tuple:
-    """Entre que logros exclusivos se hereda lo oculto: jugador, tipo y, en «campo nuevo», campo."""
+    """
+    Entre que logros exclusivos se elige uno, y se hereda lo oculto: jugador,
+    tipo y, en «campo nuevo», campo.
+    """
     return user_id, type, golf_course_id if type == ActivityEventType.NEW_COURSE else None
 
 
 def scope_of(event: ActivityEvent) -> tuple:
-    """El ambito de herencia de un logro exclusivo que se publica."""
+    """El ambito de un logro exclusivo que se publica."""
     campo = event.payload.get("golf_course_id")
     return exclusive_scope(event.user_id, event.type, campo if isinstance(campo, str) else None)
+
+
+def cards_keep_their_date(events: list[ActivityEvent], published: dict[str, datetime]) -> None:
+    """
+    Todos los logros de una tarjeta (los de una vuelta de un jugador) con una
+    sola fecha: el feed los agrupa y una tarjeta no se parte (hallazgo 2 del
+    revisor, Agustin, 23 oct 2026).
+
+    Si la tarjeta ya tiene logros publicados (`published`, la fecha mas
+    antigua de cada una), lo que llega se pone con ellos: lo publicado no se
+    mueve. Si no, la mas antigua de lo que llega, que puede ser la que
+    conservo un logro al volver. Los avisos son cada uno su tarjeta.
+    """
+    fechas = dict(published)
+    nuevas: dict[str, datetime] = {}
+    for event in events:
+        if event.type.is_achievement and event.card_key not in fechas:
+            clave = event.card_key
+            nuevas[clave] = min(nuevas.get(clave, event.published_at), event.published_at)
+    fechas.update(nuevas)
+    for event in events:
+        if event.type.is_achievement:
+            event.keep_published_at(fechas[event.card_key])
