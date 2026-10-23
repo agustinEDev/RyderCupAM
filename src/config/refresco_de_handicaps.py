@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.candado_de_postgres import con_candado, soltar
+from src.config.candado_de_postgres import con_candado
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
@@ -173,8 +173,3 @@ class VigilanteDeActualizaciones:
                 reloj=self._reloj,
             ).execute,
         )
-
-    @staticmethod
-    async def _soltar(candado) -> None:
-        """Suelta el candado del vigilante (ver `candado_de_postgres.soltar`)."""
-        await soltar(candado, CANDADO_DEL_VIGILANTE)

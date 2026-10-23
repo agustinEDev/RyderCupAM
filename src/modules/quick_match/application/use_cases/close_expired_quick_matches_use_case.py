@@ -40,7 +40,8 @@ from src.modules.quick_match.domain.value_objects.quick_match_status import Quic
 logger = logging.getLogger(__name__)
 
 
-def _ahora() -> datetime:
+def ahora_en_utc() -> datetime:
+    """El reloj del cierre: ahora, en UTC sin zona como las fechas guardadas."""
     return datetime.now(UTC).replace(tzinfo=None)
 
 
@@ -61,7 +62,7 @@ class CloseExpiredQuickMatchesUseCase:
         uow: QuickMatchUnitOfWorkInterface,
         golf_course_uow: GolfCourseUnitOfWorkInterface,
         achievements: RoundAchievementsPublisherInterface | None = None,
-        reloj: Callable[[], datetime] = _ahora,
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._uow = uow
         self._golf_course_uow = golf_course_uow

@@ -33,6 +33,7 @@ from src.modules.golf_course.infrastructure.persistence.sqlalchemy.golf_course_u
 from src.modules.quick_match.application.use_cases.close_expired_quick_matches_use_case import (
     ClosedQuickMatches,
     CloseExpiredQuickMatchesUseCase,
+    ahora_en_utc,
 )
 from src.modules.quick_match.infrastructure.persistence.sqlalchemy.quick_match_unit_of_work import (
     SQLAlchemyQuickMatchUnitOfWork,
@@ -58,11 +59,10 @@ class CierreDePartidasRapidas:
         self,
         fabrica: async_sessionmaker[AsyncSession],
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        reloj: Callable[[], datetime] | None = None,
+        reloj: Callable[[], datetime] = ahora_en_utc,
     ):
         self._fabrica = fabrica
         self._esperar = esperar
-        # Sin reloj, el del caso de uso: ahora en UTC
         self._reloj = reloj
 
     async def vigilar(self) -> None:
@@ -95,10 +95,9 @@ class CierreDePartidasRapidas:
                 get_publish_round_achievements_use_case(uows),
                 get_publish_quick_match_result_use_case(uows),
             )
-            relojes = {"reloj": self._reloj} if self._reloj else {}
             return await CloseExpiredQuickMatchesUseCase(
                 SQLAlchemyQuickMatchUnitOfWork(sesion),
                 SQLAlchemyGolfCourseUnitOfWork(sesion),
                 publicador,
-                **relojes,
+                reloj=self._reloj,
             ).execute()
