@@ -22,6 +22,7 @@ from src.modules.competition.application.dto.competition_dto import (
 from src.modules.competition.application.use_cases.complete_competition_use_case import (
     CompleteCompetitionUseCase,
 )
+from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePartida
 from src.modules.competition.domain.value_objects.estado_de_tarjeta import EstadoDeTarjeta
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -598,11 +599,29 @@ class TestARayaIsAPlayedHole:
 
         assert T.BIRDIE in await _tipos(social_uow, ana)
 
-    async def test_l5_an_unvalidated_raya_still_does_not_count(self, world, social_uow):
+    async def test_l5_an_unvalidated_number_still_does_not_count(self, world, social_uow):
         ana = await world.user()
         golpes = tarjeta(h4=3)
         del golpes[7]
         competition, _, _ = await _torneo(world, {ana: golpes}, sin_validar={ana: {7: 5}})
+
+        await _publisher(world, social_uow).execute(str(competition.id.value))
+
+        assert T.BIRDIE not in await _tipos(social_uow, ana)
+
+    async def test_l5_an_unvalidated_raya_does_not_count(self, world, social_uow):
+        """El jugador pone raya y el marcador un numero: no coinciden, no cuenta."""
+        ana = await world.user()
+        golpes = tarjeta(h4=3)
+        del golpes[7]
+        competition, _, partida = await _torneo(world, {ana: golpes})
+        golpe = GolpeDePartida.crear(
+            partida.id, partida.round_id, competition.id, ana.id, 7, MOMENTO
+        )
+        golpe.anotar_propio(None, True, ana.id, MOMENTO)
+        golpe.anotar_del_marcador(5, True, ana.id, MOMENTO)
+        async with world.comp:
+            await world.comp.golpes_de_partida.guardar(golpe)
 
         await _publisher(world, social_uow).execute(str(competition.id.value))
 

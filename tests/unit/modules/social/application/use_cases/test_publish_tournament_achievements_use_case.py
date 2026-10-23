@@ -669,3 +669,46 @@ async def test_l7_a_ryder_hole_nobody_sent_still_does_not_count(
 
     tipos = [e.type for e in await _feed_de(social_uow, player)]
     assert ActivityEventType.BIRDIE not in tipos
+
+
+async def test_l4_a_ryder_raya_alone_gives_no_achievement(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """La raya se juzga como doble bogey: solo pisar el campo y el primer torneo."""
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    tarjeta: dict = dict.fromkeys(range(1, 19), PAR)
+    tarjeta[7] = None
+    competition, _ = await _completed_tournament(
+        competition_uow, course, player, rival, scores_by_hole=tarjeta
+    )
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    assert sorted(e.type for e in await _feed_de(social_uow, player)) == sorted(
+        [ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT]
+    )
+
+
+async def test_l6_half_a_ryder_round_with_a_raya(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    tarjeta: dict = dict.fromkeys(range(1, 10), PAR)
+    tarjeta[4] = PAR - 1
+    tarjeta[7] = None
+    competition, _ = await _completed_tournament(
+        competition_uow, course, player, rival, scores_by_hole=tarjeta
+    )
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    tipos = [e.type for e in await _feed_de(social_uow, player)]
+    assert ActivityEventType.BIRDIE in tipos

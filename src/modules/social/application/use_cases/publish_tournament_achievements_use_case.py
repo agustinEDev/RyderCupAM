@@ -47,7 +47,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.countable_round import countable_holes
-from src.shared.domain.services.stroke_play_scoring import NET_DOUBLE_BOGEY_OVER_PAR
 from src.shared.domain.utc_clock import utc_now
 
 logger = logging.getLogger(__name__)
@@ -615,17 +614,9 @@ class PublishTournamentAchievementsUseCase:
             instant=round_instant(ronda.round_date, ronda.session_type, course.timezone),
             visible_to_friends=visible_to_friends,
             holes=[
-                PlayedHole(
-                    number=hole.number,
-                    par=hole.par,
-                    # La raya se juzga como doble bogey, igual que en la
-                    # partida rapida: no da ningun logro
-                    strokes=(
-                        scores_by_hole[hole.number]
-                        if scores_by_hole[hole.number] is not None
-                        else hole.par + NET_DOUBLE_BOGEY_OVER_PAR
-                    ),
-                )
+                # La raya, juzgada como doble bogey, igual que en la partida
+                # rapida: no da ningun logro
+                PlayedHole.of(hole.number, hole.par, scores_by_hole[hole.number])
                 for hole in jugados
             ],
         )

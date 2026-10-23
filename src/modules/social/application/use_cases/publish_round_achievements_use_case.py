@@ -48,13 +48,6 @@ from src.shared.domain.services.countable_round import countable_holes
 # con más historia que esto ya no estrena nada que importe recordar.
 MAX_HISTORY_LOOKUP = 200
 
-# Golpes sobre el par con los que el detector juzga un hoyo que no se termino
-# (la raya): doble bogey, sin golpes recibidos. En los totales la raya vale su
-# doble bogey NETO (`par + 2 + golpes recibidos`, Agustin, 23 oct 2026), pero
-# aqui da igual: el detector solo busca birdies o mejor hoyo a hoyo, y una raya
-# no lo es con ningun reparto realista
-DOUBLE_BOGEY_OVER_PAR = 2
-
 
 @dataclass(frozen=True)
 class _RoundToJudge:
@@ -273,23 +266,11 @@ class PublishRoundAchievementsUseCase:
                         occurred_at=utc_naive(match.created_at),
                         visible_to_friends=user.share_activity,
                         holes=[
-                            PlayedHole(
-                                number=hole.number,
-                                par=hole.par,
-                                # La raya (score nulo: el jugador recogio) va
-                                # como doble bogey, que es lo que se anota en un
-                                # hoyo no terminado. Aqui se mide a bruto contra
-                                # el par, sin golpes recibidos, porque eso es lo
-                                # que juzga el detector. Ningun logro sale de un
-                                # doble bogey, asi que la raya no inventa nada
-                                # — y el birdie de otro hoyo de la misma vuelta
-                                # se sigue pudiendo presumir.
-                                strokes=(
-                                    scores_by_hole[hole.number]
-                                    if scores_by_hole[hole.number] is not None
-                                    else hole.par + DOUBLE_BOGEY_OVER_PAR
-                                ),
-                            )
+                            # La raya (score nulo: el jugador recogio) es un
+                            # hoyo jugado, juzgado como doble bogey: no inventa
+                            # ningun logro, y el birdie de otro hoyo de la
+                            # misma vuelta se sigue pudiendo presumir
+                            PlayedHole.of(hole.number, hole.par, scores_by_hole[hole.number])
                             for hole in jugados
                         ],
                     )
