@@ -341,6 +341,9 @@ quick_matches_table = Table(
     Column("stats_excluded_by_participant_ids", ScorerIdsJsonType, nullable=False, default=list),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+    # Cuándo empezó, para cerrarla sola al acabar el día siguiente; las de
+    # antes de guardarlo, NULL (cuentan desde `created_at`)
+    Column("started_at", DateTime, nullable=True),
     CheckConstraint(
         "(match_format IS NULL) <> (scoring_format IS NULL)",
         name="ck_quick_matches_exactly_one_format",
@@ -402,6 +405,7 @@ def start_quick_match_mappers() -> None:
                 ),
                 "_created_at": quick_matches_table.c.created_at,
                 "_updated_at": quick_matches_table.c.updated_at,
+                "_started_at": quick_matches_table.c.started_at,
             },
         )
 

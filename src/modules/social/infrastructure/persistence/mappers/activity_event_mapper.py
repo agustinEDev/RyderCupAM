@@ -75,6 +75,16 @@ activity_events_table = Table(
     # Con la publicacion apagada el logro se guarda solo para su autor, y
     # encenderla despues no lo destapa
     Column("visible_to_friends", Boolean, nullable=False, server_default=text("true")),
+    # Cuando se escribio la fila, que no es cuando se publico: el mismo logro
+    # que se vuelve a publicar conserva su `published_at` (23 oct 2026), y quien
+    # publica un torneo mira esta para saber si otro escribio mientras calculaba.
+    # No se mapea a la entidad: es de la persistencia
+    Column(
+        "written_at",
+        DateTime,
+        nullable=False,
+        server_default=text("timezone('utc', now())"),
+    ),
     # El detalle de cada tipo (cuántos birdies, en qué hoyos, qué diferencial)
     # vive en JSONB en vez de en columnas: cada tipo lleva lo suyo y añadir uno
     # nuevo no debería exigir una migración
@@ -120,12 +130,18 @@ withdrawn_tee_time_notices_table = Table(
     Index("ix_withdrawn_tee_time_notices_competition", "competition_id"),
 )
 
-# Los logros que se publicaron ocultos (con la publicacion apagada) y se
-# retiraron: al reabrir el torneo, o al llevarse otro mas antiguo «campo nuevo»
-# o «primer torneo». Si el mismo logro —jugador, tipo y origen— se vuelve a
-# publicar, vuelve oculto aunque ahora este encendida: encenderla no destapa
-# nada (fallo del probador, 23 oct 2026). La fila se gasta al volver a publicar
-# el logro, que desde entonces guarda el mismo lo oculto
+# Los logros que se retiraron: al reabrir el torneo, al corregir una tarjeta, o
+# al llevarse otro mas antiguo «campo nuevo» o «primer torneo». Una fila por
+# logro (jugador, origen y tipo), que no se gasta nunca:
+# - `published_at`: si el mismo logro se vuelve a publicar, conserva esa fecha
+#   y no sube ni cuenta como nuevo (23 oct 2026).
+# - `hidden`: se publico con la publicacion apagada; vuelve oculto aunque
+#   ahora este encendida (fallo del probador, 23 oct 2026). En birdie, eagle y
+#   hoyo en uno, solo si vuelve alguno de `hidden_holes` (NULL = todos).
+# - `golf_course_id`: el campo de un «campo nuevo» oculto, para que lo herede
+#   oculto otra vuelta en ese campo.
+# Se llama asi porque nacio solo para lo oculto (2.38.0); renombrarla romperia
+# al codigo viejo durante el despliegue.
 withdrawn_hidden_achievements_table = Table(
     "withdrawn_hidden_achievements",
     metadata,
@@ -143,6 +159,12 @@ withdrawn_hidden_achievements_table = Table(
         nullable=False,
         server_default=text("timezone('utc', now())"),
     ),
+    Column("published_at", DateTime, nullable=True),
+    Column("hidden", Boolean, nullable=False, server_default=text("true")),
+    # `none_as_null`: sin hoyos es NULL de SQL (todos), no el `null` de JSON, que
+    # al sumarse con `||` daria `[null, 3]`
+    Column("hidden_holes", postgresql.JSONB(none_as_null=True), nullable=True),
+    Column("golf_course_id", String(36), nullable=True),
 )
 
 # El orden del feed: por publicacion y con el id de desempate, como el cursor.
@@ -178,4 +200,5 @@ def start_activity_event_mappers() -> None:
                 "_payload": activity_events_table.c.payload,
                 "_source_match_id": activity_events_table.c.source_match_id,
             },
+            exclude_properties=["written_at"],
         )

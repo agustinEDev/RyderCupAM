@@ -15,6 +15,7 @@ from sqlalchemy import (
     delete,
     exists,
     func,
+    literal_column,
     not_,
     or_,
     select,
@@ -34,6 +35,12 @@ from src.modules.social.domain.repositories.activity_event_repository_interface 
     ActivityEventRepositoryInterface,
     ActivitySlice,
 )
+from src.modules.social.domain.services.withdrawn_achievement import (
+    WithdrawnAchievement,
+    cards_keep_their_date,
+    exclusive_scope,
+    scope_of,
+)
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper import (
     activity_events_table,
@@ -41,6 +48,7 @@ from src.modules.social.infrastructure.persistence.mappers.activity_event_mapper
     withdrawn_tee_time_notices_table,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 UQ_ACTIVITY_EVENTS_MATCH_TYPE = "uq_activity_events_match_type"
 
@@ -66,12 +74,17 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         admite ON CONFLICT, y aqui el evento ya nace completo y no se vuelve a
         tocar, asi que no se pierde nada por no tenerlo en el identity map.
 
-        Un logro que se retiro oculto vuelve oculto (`_volver_a_ocultar`).
+        Un logro que se retiro vuelve con su fecha y, si estaba oculto,
+        oculto (`_aplicar_apuntes`).
         """
         if not events:
             return
-        await self._volver_a_ocultar(events)
+        await self._aplicar_apuntes(events)
+        cards_keep_their_date(events, await self._fechas_de_tarjeta(events))
 
+        # Con el reloj de la aplicacion, como el `calculado_en` con el que se
+        # compara al publicar un torneo
+        escrito = utc_now()
         filas = [
             {
                 "id": event.id,
@@ -82,6 +95,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
                 "visible_to_friends": event.visible_to_friends,
                 "payload": event.payload,
                 "source_match_id": event.source_match_id,
+                "written_at": escrito,
             }
             for event in events
         ]
@@ -91,52 +105,105 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
             stmt.on_conflict_do_nothing(constraint=UQ_ACTIVITY_EVENTS_MATCH_TYPE)
         )
 
-    async def _volver_a_ocultar(self, events: list[ActivityEvent]) -> None:
+    async def _aplicar_apuntes(self, events: list[ActivityEvent]) -> None:
         """
-        Oculta los logros que se retiraron ocultos y gasta su apunte: desde
-        aqui, lo oculto lo guarda el propio logro. Si el alta se salta por la
-        clave unica, el logro que ya estaba se queda como estaba.
+        Aplica a los logros que llegan lo apuntado al retirar otros (decisiones
+        del 23 oct 2026). Los apuntes no se gastan: lo que estuvo oculto se
+        queda oculto aunque se publique muchas veces.
+
+        - El mismo logro (jugador, tipo y origen) conserva su fecha.
+        - Y si se retiro oculto, vuelve oculto; en birdie, eagle y hoyo en uno
+          solo si vuelve alguno de sus hoyos ocultos (un apunte sin hoyos los
+          oculta todos).
+        - «Campo nuevo» y «primer torneo» nacen ocultos si se retiro oculto
+          otro del mismo jugador (y campo), venga de la vuelta que venga.
+
+        Si el alta se salta por la clave unica, el logro que ya estaba se queda
+        como estaba.
         """
-        claves = [(e.user_id, e.type, e.source_match_id) for e in events if e.type.is_achievement]
-        if not claves:
+        logros = [e for e in events if e.type.is_achievement]
+        if not logros:
             return
         apuntes = withdrawn_hidden_achievements_table.c
-        gastados = (
+        filas = (
             await self._session.execute(
-                delete(withdrawn_hidden_achievements_table)
-                .where(tuple_(apuntes.user_id, apuntes.type, apuntes.source_match_id).in_(claves))
-                .returning(apuntes.user_id, apuntes.type, apuntes.source_match_id)
+                select(withdrawn_hidden_achievements_table).where(
+                    apuntes.user_id.in_(list({e.user_id for e in logros})),
+                    apuntes.type.in_(sorted({e.type for e in logros})),
+                    # Los apuntes no se borran nunca: solo los de estas vueltas,
+                    # salvo los exclusivos, que se heredan de cualquier vuelta
+                    or_(
+                        apuntes.source_match_id.in_(sorted({e.source_match_id for e in logros})),
+                        apuntes.type.in_(
+                            sorted(t for t in ActivityEventType if t.is_exclusive_by_date)
+                        ),
+                    ),
+                )
             )
         ).all()
-        ocultos = {(f.user_id, f.type, f.source_match_id) for f in gastados}
-        for event in events:
-            if (event.user_id, event.type, event.source_match_id) in ocultos:
+        por_clave = {(f.user_id, f.type, f.source_match_id): _de_la_fila(f) for f in filas}
+        ocultos_exclusivos = {
+            exclusive_scope(f.user_id, f.type, f.golf_course_id)
+            for f in filas
+            if f.hidden and f.type.is_exclusive_by_date
+        }
+
+        for event in logros:
+            apunte = por_clave.get((event.user_id, event.type, event.source_match_id))
+            if apunte is not None:
+                apunte.apply_to(event)
+            if event.type.is_exclusive_by_date and scope_of(event) in ocultos_exclusivos:
                 event.hide_from_friends()
+
+    async def _fechas_de_tarjeta(self, events: list[ActivityEvent]) -> dict[str, datetime]:
+        """La fecha mas antigua de cada tarjeta que ya tiene logros publicados."""
+        logros = [e for e in events if e.type.is_achievement]
+        if not logros:
+            return {}
+        tabla = activity_events_table.c
+        filas = (
+            await self._session.execute(
+                select(tabla.user_id, tabla.source_match_id, func.min(tabla.published_at))
+                .where(
+                    tabla.user_id.in_(list({e.user_id for e in logros})),
+                    tabla.source_match_id.in_(sorted({e.source_match_id for e in logros})),
+                    tabla.type.in_(sorted(t for t in ActivityEventType if t.is_achievement)),
+                )
+                .group_by(tabla.user_id, tabla.source_match_id)
+            )
+        ).all()
+        return {f"{user_id.value}:{origen}": fecha for user_id, origen, fecha in filas}
 
     async def _borrar(self, stmt: Delete) -> int:
         """
-        Borra y apunta los logros ocultos que se van: si se vuelven a publicar,
-        vuelven ocultos (fallo del probador, 23 oct 2026). Los avisos no se
-        apuntan: apuntarse otra vez a un torneo es un aviso nuevo.
+        Borra y apunta los logros que se van: su fecha, si estaban ocultos (y
+        en que hoyos) y el campo de un «campo nuevo». Los avisos no se apuntan:
+        apuntarse otra vez a un torneo es un aviso nuevo.
+
+        Si ya habia apunte de ese logro, se conserva la primera fecha y lo
+        oculto se suma: nada que estuvo oculto deja de estarlo.
         """
         tabla = activity_events_table.c
         filas = (
             await self._session.execute(
                 stmt.returning(
-                    tabla.user_id, tabla.type, tabla.source_match_id, tabla.visible_to_friends
+                    tabla.user_id,
+                    tabla.type,
+                    tabla.source_match_id,
+                    tabla.visible_to_friends,
+                    tabla.published_at,
+                    tabla.payload,
                 )
             )
         ).all()
-        ocultos = [
-            {"user_id": f.user_id, "type": f.type, "source_match_id": f.source_match_id}
-            for f in filas
-            if not f.visible_to_friends and f.type.is_achievement
-        ]
-        if ocultos:
+        apuntes = [_a_la_fila(f) for f in filas if f.type.is_achievement]
+        if apuntes:
+            nuevo = pg_insert(withdrawn_hidden_achievements_table).values(apuntes)
             await self._session.execute(
-                pg_insert(withdrawn_hidden_achievements_table)
-                .values(ocultos)
-                .on_conflict_do_nothing()
+                nuevo.on_conflict_do_update(
+                    index_elements=["user_id", "source_match_id", "type"],
+                    set_=_sumar_apuntes(nuevo.excluded),
+                )
             )
         return len(filas)
 
@@ -387,14 +454,14 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def last_published_at(
+    async def last_written_at(
         self, competition_id: str, types: Collection[ActivityEventType]
     ) -> datetime | None:
         if not types:
             return None
         tabla = activity_events_table.c
         result = await self._session.execute(
-            select(func.max(tabla.published_at)).where(
+            select(func.max(tabla.written_at)).where(
                 tabla.payload["competition_id"].astext == competition_id,
                 tabla.type.in_(sorted(types)),
             )
@@ -539,3 +606,57 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         if user_id is not None:
             stmt = stmt.where(withdrawn_tee_time_notices_table.c.user_id == user_id)
         await self._session.execute(stmt)
+
+
+def _de_la_fila(fila) -> WithdrawnAchievement:
+    hoyos = fila.hidden_holes
+    return WithdrawnAchievement(
+        published_at=fila.published_at,
+        hidden=fila.hidden,
+        hidden_holes=tuple(hoyos) if isinstance(hoyos, list) else None,
+        golf_course_id=fila.golf_course_id,
+    )
+
+
+def _a_la_fila(fila) -> dict:
+    """El apunte de un logro que se retira, a partir de lo que devolvio el borrado."""
+    apunte = WithdrawnAchievement.of(
+        fila.type, fila.published_at, fila.visible_to_friends, fila.payload
+    )
+    return {
+        "user_id": fila.user_id,
+        "source_match_id": fila.source_match_id,
+        "type": fila.type,
+        "published_at": apunte.published_at,
+        "hidden": apunte.hidden,
+        "hidden_holes": list(apunte.hidden_holes) if apunte.hidden_holes is not None else None,
+        "golf_course_id": apunte.golf_course_id,
+    }
+
+
+def _sumar_apuntes(nuevo) -> dict:
+    """
+    `WithdrawnAchievement.merged_with` en SQL, para que dos retiradas a la vez
+    no se pisen: la primera fecha (LEAST ignora el NULL de un apunte de la
+    2.38.0) y lo oculto de los dos. Los hoyos ocultos se juntan; si alguno los
+    ocultaba todos (NULL), todos.
+    """
+    viejo = withdrawn_hidden_achievements_table.c
+    # Los dos ocultos: su union, sin repetir y en orden. Si alguno los ocultaba
+    # todos (NULL), NULL: en Postgres `NULL || x` es NULL
+    juntos = literal_column(
+        "(SELECT jsonb_agg(DISTINCT h ORDER BY h) FROM jsonb_array_elements("
+        "withdrawn_hidden_achievements.hidden_holes || excluded.hidden_holes) AS t(h))",
+        JSONB,
+    )
+    return {
+        "published_at": func.least(viejo.published_at, nuevo.published_at),
+        "hidden": or_(viejo.hidden, nuevo.hidden),
+        "hidden_holes": case(
+            (not_(viejo.hidden), nuevo.hidden_holes),
+            (not_(nuevo.hidden), viejo.hidden_holes),
+            else_=juntos,
+        ),
+        "golf_course_id": func.coalesce(nuevo.golf_course_id, viejo.golf_course_id),
+        "withdrawn_at": nuevo.withdrawn_at,
+    }

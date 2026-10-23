@@ -417,6 +417,10 @@ class TestPaginasSinPartirTarjetas:
         7. Given la vuelta 1 con logros en tres momentos y, en medio, la vuelta 2
         que sigue despues / When pido paginas de 2 / Then la primera llega hasta
         el ultimo de las dos vueltas, con lo de en medio, y la segunda sigue.
+
+        Hoy una tarjeta se publica con una sola fecha (hallazgo 2 del revisor,
+        23 oct 2026), pero las filas de antes pueden tenerlas partidas: se meten
+        tal cual, sin pasar por `add_many`, que ya las juntaria.
         """
         yo = await _user(user_uow)
 
@@ -430,7 +434,7 @@ class TestPaginasSinPartirTarjetas:
             )
 
         async with social_uow:
-            await social_uow.activity_events.add_many(
+            social_uow.activity_events._events.extend(
                 [
                     _logro(ActivityEventType.ENROLLMENT_APPROVED, "reciente", 10),
                     _logro(ActivityEventType.BIRDIE, "vuelta-1", 9),

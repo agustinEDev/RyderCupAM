@@ -87,6 +87,7 @@ class QuickMatch:
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
+        started_at: datetime | None = None,
     ):
         self._validate_format(match_format, scoring_format)
         self._validate_allowance(allowance_percentage)
@@ -109,6 +110,8 @@ class QuickMatch:
         )
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
+        # Cuándo empezó, para cerrarla sola; las de antes de guardarlo no lo tienen
+        self._started_at = started_at
         self._domain_events: list[DomainEvent] = domain_events or []
 
     @staticmethod
@@ -236,6 +239,7 @@ class QuickMatch:
         hidden_by_participant_ids: list[ParticipantId] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
+        started_at: datetime | None = None,
     ) -> "QuickMatch":
         """Reconstruye una partida rapida desde la base de datos (sin domain events)."""
         return cls(
@@ -253,6 +257,7 @@ class QuickMatch:
             hidden_by_participant_ids=hidden_by_participant_ids,
             created_at=created_at,
             updated_at=updated_at,
+            started_at=started_at,
         )
 
     # ===========================================
@@ -366,6 +371,10 @@ class QuickMatch:
     @property
     def created_at(self) -> datetime:
         return self._created_at
+
+    @property
+    def started_at(self) -> datetime | None:
+        return self._started_at
 
     @property
     def updated_at(self) -> datetime:
@@ -696,6 +705,7 @@ class QuickMatch:
         now = datetime.now()
         self._status = QuickMatchStatus.IN_PROGRESS
         self._scorer_ids = list(scorer_ids)
+        self._started_at = now
         self._updated_at = now
 
         self.add_domain_event(QuickMatchStartedEvent(quick_match_id=str(self._id)))

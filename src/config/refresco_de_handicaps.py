@@ -25,9 +25,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config.candado_de_postgres import con_candado
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
     IHandicapUpdateEmailService,
 )
@@ -163,38 +163,13 @@ class VigilanteDeActualizaciones:
 
     async def vuelta(self) -> int | None:
         """Una vuelta, o None si otro proceso tiene el candado."""
-        motor = self._lanzador.fabrica.kw["bind"]
-        async with motor.connect() as candado:
-            cogido = await candado.scalar(
-                text("SELECT pg_try_advisory_lock(:k)"), {"k": CANDADO_DEL_VIGILANTE}
-            )
-            # El candado es de la conexión, no de la transacción: se cierra
-            # para no dejarla abierta toda la vuelta
-            await candado.commit()
-            if not cogido:
-                return None
-            try:
-                return await VigilarActualizacionesUseCase(
-                    herramientas=self._lanzador.herramientas,
-                    lanzador=self._lanzador,
-                    avisos=self._lanzador.avisos,
-                    reloj=self._reloj,
-                ).execute()
-            finally:
-                await self._soltar(candado)
-
-    @staticmethod
-    async def _soltar(candado) -> None:
-        """
-        Suelta el candado; si no puede (un error, o la app apagándose a media
-        vuelta), cierra la conexión, que es lo que lo suelta de verdad. Devolverla
-        al pool con el candado cogido dejaría a todos los procesos sin vigilante.
-        """
-        try:
-            await candado.scalar(
-                text("SELECT pg_advisory_unlock(:k)"), {"k": CANDADO_DEL_VIGILANTE}
-            )
-            await candado.commit()
-        except BaseException:
-            await candado.invalidate()
-            raise
+        return await con_candado(
+            self._lanzador.fabrica.kw["bind"],
+            CANDADO_DEL_VIGILANTE,
+            VigilarActualizacionesUseCase(
+                herramientas=self._lanzador.herramientas,
+                lanzador=self._lanzador,
+                avisos=self._lanzador.avisos,
+                reloj=self._reloj,
+            ).execute,
+        )

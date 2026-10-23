@@ -78,15 +78,13 @@ def _todos(*user_ids) -> ActivitySlice:
 
 
 class _DifferentialsStub(PlayerDifferentialsInterface):
-    """`ahora`: el mejor diferencial de hoy; `antes`: el de antes del torneo."""
+    """Las vueltas con diferencial de cada jugador, fijadas por el test."""
 
-    def __init__(self, ahora: dict | None = None, antes: dict | None = None):
-        self._ahora = ahora or {}
-        self._antes = antes or {}
+    def __init__(self, por_jugador: dict | None = None):
+        self._por_jugador = por_jugador or {}
 
-    async def best_differential(self, user_id, excluding_competition_id=None):
-        fuente = self._antes if excluding_competition_id else self._ahora
-        return fuente.get(str(user_id.value))
+    async def round_differentials(self, user_id):
+        return self._por_jugador.get(str(user_id.value), [])
 
 
 class _CourseHistoryFake(PlayerCourseHistoryInterface):
@@ -614,3 +612,103 @@ async def test_la_ronda_de_torneo_se_fecha_a_mediodia_utc(
     eventos = await _feed_de(social_uow, player)
     assert eventos
     assert {e.occurred_at for e in eventos} == {datetime(2026, 6, 1, 12, 0)}
+
+
+async def test_l1_a_ryder_card_with_a_raya_publishes_its_birdie(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """
+    Agustin, 23 oct 2026: la raya (enviada sin numero) es un hoyo jugado, como
+    en la partida rapida. Antes la vuelta quedaba con 17 y no publicaba nada.
+    """
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    tarjeta: dict = dict.fromkeys(range(1, 19), PAR)
+    tarjeta[4] = PAR - 1
+    tarjeta[7] = None
+    competition, _ = await _completed_tournament(
+        competition_uow, course, player, rival, scores_by_hole=tarjeta
+    )
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    tipos = [e.type for e in await _feed_de(social_uow, player)]
+    assert ActivityEventType.BIRDIE in tipos
+
+
+async def test_l7_a_ryder_hole_nobody_sent_still_does_not_count(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """Un hoyo con su fila pero sin nada enviado no es una raya: la vuelta no cuenta."""
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    tarjeta: dict = dict.fromkeys(range(1, 18), PAR)
+    tarjeta[4] = PAR - 1
+    competition, (partido,) = await _completed_tournament(
+        competition_uow, course, player, rival, scores_by_hole=tarjeta
+    )
+    async with competition_uow:
+        await competition_uow.hole_scores.add(
+            HoleScore.create(
+                match_id=partido.id,
+                hole_number=18,
+                player_user_id=player.id,
+                team="A",
+                strokes_received=0,
+            )
+        )
+        await competition_uow.commit()
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    tipos = [e.type for e in await _feed_de(social_uow, player)]
+    assert ActivityEventType.BIRDIE not in tipos
+
+
+async def test_l4_a_ryder_raya_alone_gives_no_achievement(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    """La raya se juzga como doble bogey: solo pisar el campo y el primer torneo."""
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    tarjeta: dict = dict.fromkeys(range(1, 19), PAR)
+    tarjeta[7] = None
+    competition, _ = await _completed_tournament(
+        competition_uow, course, player, rival, scores_by_hole=tarjeta
+    )
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    assert sorted(e.type for e in await _feed_de(social_uow, player)) == sorted(
+        [ActivityEventType.NEW_COURSE, ActivityEventType.FIRST_TOURNAMENT]
+    )
+
+
+async def test_l6_half_a_ryder_round_with_a_raya(
+    social_uow, competition_uow, golf_course_uow, user_uow
+):
+    player = await _create_user(user_uow)
+    rival = await _create_user(user_uow)
+    course = await _create_course(golf_course_uow, player.id)
+    tarjeta: dict = dict.fromkeys(range(1, 10), PAR)
+    tarjeta[4] = PAR - 1
+    tarjeta[7] = None
+    competition, _ = await _completed_tournament(
+        competition_uow, course, player, rival, scores_by_hole=tarjeta
+    )
+
+    await _use_case(social_uow, competition_uow, golf_course_uow, user_uow).execute(
+        str(competition.id.value)
+    )
+
+    tipos = [e.type for e in await _feed_de(social_uow, player)]
+    assert ActivityEventType.BIRDIE in tipos

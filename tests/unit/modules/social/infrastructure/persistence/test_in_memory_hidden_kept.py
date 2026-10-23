@@ -17,6 +17,7 @@ from src.modules.social.infrastructure.persistence.in_memory.in_memory_activity_
     InMemoryActivityEventRepository,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.utc_clock import utc_now
 
 pytestmark = pytest.mark.asyncio
 
@@ -113,18 +114,12 @@ async def test_a_notice_is_not_remembered(repo):
     assert await _visibles(repo) == {(T.ENROLLED_IN_TOURNAMENT, "torneo-1"): True}
 
 
-async def test_the_note_is_used_once_and_retiring_again_writes_it_again(repo):
+async def test_the_note_is_kept_however_many_times_it_comes_back(repo):
+    """El apunte no se gasta (23 oct 2026): lo que estuvo oculto se queda oculto."""
     await repo.add_many([_logro(T.BIRDIE, "grupo-1", visible=False)])
     await repo.delete_for_competition("torneo-1", [T.BIRDIE])
     await repo.add_many([_logro(T.BIRDIE, "grupo-1")])
-    # Ya gastado: lo oculto lo guarda el propio logro
     await repo.delete_for_user(DIEGO)
-    await repo.add_many([_logro(T.BIRDIE, "grupo-1")])
-    assert await _visibles(repo) == {(T.BIRDIE, "grupo-1"): True}
-
-    await repo.delete_for_competition("torneo-1", [T.BIRDIE])
-    await repo.add_many([_logro(T.BIRDIE, "grupo-1", visible=False)])
-    await repo.delete_for_competition("torneo-1", [T.BIRDIE])
     await repo.add_many([_logro(T.BIRDIE, "grupo-1")])
     assert await _visibles(repo) == {(T.BIRDIE, "grupo-1"): False}
 
@@ -159,3 +154,39 @@ async def test_replacing_a_visible_one_with_a_hidden_one_hides_it(repo):
     )
 
     assert await _visibles(repo) == {(T.BIRDIE, "grupo-1"): False}
+
+
+async def test_the_last_write_is_when_it_was_written_not_its_kept_date(repo):
+    """
+    El mismo logro que vuelve conserva su fecha (23 oct 2026), pero cuenta como
+    escritura: quien publica un torneo lo mira para no pisar una herencia.
+    """
+    hace_meses = ActivityEvent.create(
+        user_id=DIEGO,
+        type=T.NEW_COURSE,
+        occurred_at=CUANDO,
+        source_match_id="grupo-1",
+        published_at=datetime(2026, 1, 10, 9, 0),
+        payload={"competition_id": "torneo-1"},
+    )
+    await repo.add_many([hace_meses])
+    await repo.delete_for_competition("torneo-1", [T.NEW_COURSE])
+    antes = utc_now()
+
+    await repo.add_many([_logro(T.NEW_COURSE, "grupo-1")])
+
+    ultima = await repo.last_written_at("torneo-1", [T.NEW_COURSE])
+    assert ultima is not None
+    assert ultima >= antes
+
+
+async def test_a_card_already_published_keeps_its_date(repo):
+    """Como en SQL: lo que llega a una vuelta ya publicada entra en su tarjeta."""
+    birdie = _logro(T.BIRDIE, "grupo-1", holes=[4])
+    await repo.add_many([birdie, _logro(T.BIRDIE, "grupo-2", user=EVA)])
+
+    campo = _logro(T.NEW_COURSE, "grupo-1", golf_course_id="c-1")
+    campo.keep_published_at(CUANDO + timedelta(days=3))
+    await repo.add_many([campo])
+
+    assert campo.published_at == birdie.published_at

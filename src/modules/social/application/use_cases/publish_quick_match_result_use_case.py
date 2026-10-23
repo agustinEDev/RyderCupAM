@@ -281,7 +281,7 @@ class PublishQuickMatchResultUseCase:
         """
         Puntos, bruto y neto de su vuelta, como `computeParticipantTotals` del
         cliente: contra la tarjeta de su barra, y la raya (recogio) a doble
-        bogey, que no puntua.
+        bogey neto, que no puntua.
         """
         anotados = lectura.scores.get(p.participant_id)
         if not anotados:
@@ -297,7 +297,9 @@ class PublishQuickMatchResultUseCase:
             hoyos += 1
             par += hoyo.par
             if score is None:
-                bruto += hoyo.par + NET_DOUBLE_BOGEY_OVER_PAR
+                # La raya: su doble bogey neto, `par + 2 + golpes recibidos`, de
+                # bruto, y `par + 2` de neto (Agustin, 23 oct 2026)
+                bruto += StrokePlayScoring.net_double_bogey(hoyo.par, recibe)
                 neto += hoyo.par + NET_DOUBLE_BOGEY_OVER_PAR
                 continue
             puntos += StrokePlayScoring.hole_points(score, hoyo.par, recibe)

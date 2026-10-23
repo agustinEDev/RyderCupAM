@@ -213,3 +213,40 @@ class TestCancelQuickMatchUseCase:
         response = await use_case.execute(str(qm.id.value), str(creator.id.value))
 
         assert response.status == "CANCELLED"
+
+
+def _solo_bloqueada(qm_uow):
+    """
+    Que la partida se lea bloqueada: el cierre automático (23 oct 2026) también
+    la escribe, y sin `FOR UPDATE` el último en escribir pisaba al otro.
+    """
+
+    async def sin_bloquear(_quick_match_id):
+        raise AssertionError("se leyó la partida sin bloquearla")
+
+    qm_uow.quick_matches.find_by_id = sin_bloquear
+
+
+class TestTheyLockTheMatch:
+    async def test_completing_it(self, qm_uow, user_uow):
+        creator = await create_user(user_uow, "lock-complete@test.com")
+        qm = await _create_match(qm_uow, creator.id, with_full_roster=True)
+        qm.start([qm.creator_participant_id])
+        _solo_bloqueada(qm_uow)
+
+        response = await CompleteQuickMatchUseCase(qm_uow, user_uow).execute(
+            str(qm.id.value), str(creator.id.value)
+        )
+
+        assert response.status == "COMPLETED"
+
+    async def test_cancelling_it(self, qm_uow, user_uow):
+        creator = await create_user(user_uow, "lock-cancel@test.com")
+        qm = await _create_match(qm_uow, creator.id)
+        _solo_bloqueada(qm_uow)
+
+        response = await CancelQuickMatchUseCase(qm_uow, user_uow).execute(
+            str(qm.id.value), str(creator.id.value)
+        )
+
+        assert response.status == "CANCELLED"

@@ -365,3 +365,66 @@ class TestUnaTarjetaPorBando:
 
         assert respuesta.match_complete is True
         assert (await uow.matches.find_by_id(match.id)).status.value == "COMPLETED"
+
+
+class _Campo:
+    """Un campo de par 4 en los 18, con la tarjeta de cualquier barra."""
+
+    def __init__(self):
+        self.pedido = None
+
+    async def find_by_id(self, golf_course_id):
+        self.pedido = golf_course_id
+        campo = MagicMock()
+        campo.hole_card_for.return_value = [
+            MagicMock(number=hoyo, par=4, stroke_index=hoyo) for hoyo in range(1, 19)
+        ]
+        return campo
+
+
+class TestThePickedUpHoleInTheTotals:
+    """
+    «Siempre una raya es par + golpes recibidos + 2» (Agustín, 23 oct 2026): la
+    tarjeta entregada suma la raya con los golpes que recibe en el partido. En
+    neto, `par + 2`. Antes la raya se quedaba fuera del total.
+    """
+
+    async def _entrega(self, uow, scoring_service, golf_course_repo):
+        a, b = _make_player(), _make_player()
+        ronda = _sesion(uow)
+        match = Match.create(
+            round_id=ronda.id, match_number=1, team_a_players=[a], team_b_players=[b]
+        )
+        match.start()
+        for hole in range(1, 19):
+            for player, team in ((a, "A"), (b, "B")):
+                hs = HoleScore.create(
+                    match_id=match.id,
+                    hole_number=hole,
+                    player_user_id=player.user_id,
+                    team=team,
+                    strokes_received=1 if hole == 1 else 0,
+                )
+                golpes = None if (player is a and hole == 1) else 5
+                hs.set_own_score(golpes)
+                hs.set_marker_score(golpes)
+                hs.recalculate_validation()
+                await uow.hole_scores.add(hs)
+        await uow.matches.add(match)
+
+        uc = SubmitScorecardUseCase(uow, scoring_service, golf_course_repo=golf_course_repo)
+        return await uc.execute(str(match.id), a.user_id)
+
+    @pytest.mark.asyncio
+    async def test_the_raya_adds_its_net_double_bogey(self, uow, scoring_service):
+        result = await self._entrega(uow, scoring_service, _Campo())
+
+        # 17 cincos y la raya de un par 4 con un golpe: 7 en bruto, 6 en neto
+        assert result.stats.player_gross_total == 17 * 5 + 7
+        assert result.stats.player_net_total == 17 * 5 + 6
+
+    @pytest.mark.asyncio
+    async def test_without_the_course_the_raya_is_left_out_as_before(self, uow, scoring_service):
+        result = await self._entrega(uow, scoring_service, None)
+
+        assert result.stats.player_gross_total == 17 * 5

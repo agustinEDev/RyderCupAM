@@ -1860,13 +1860,12 @@ def get_round_achievements_publisher(
     publish_use_case: PublishRoundAchievementsUseCase = Depends(
         get_publish_round_achievements_use_case
     ),
-    uows: ActivityUnitsOfWork = Depends(get_activity_units_of_work),
     result_use_case: PublishQuickMatchResultUseCase = Depends(
         get_publish_quick_match_result_use_case
     ),
 ) -> RoundAchievementsPublisherInterface:
     """Proveedor del adaptador que conecta quick_match con el feed social."""
-    return QuickMatchAchievementsPublisher(publish_use_case, uows.differentials, result_use_case)
+    return QuickMatchAchievementsPublisher(publish_use_case, result_use_case)
 
 
 def get_publish_competition_notices_use_case(
@@ -3188,11 +3187,14 @@ def get_submit_hole_score_use_case(
 
 def get_submit_scorecard_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SubmitScorecardUseCase:
-    """Proveedor del caso de uso SubmitScorecardUseCase."""
-    return SubmitScorecardUseCase(uow, scoring_service, actividad=actividad)
+    """Proveedor del caso de uso SubmitScorecardUseCase (el campo, para el par de la raya)."""
+    return SubmitScorecardUseCase(
+        uow, scoring_service, actividad=actividad, golf_course_repo=gc_uow.golf_courses
+    )
 
 
 def get_get_leaderboard_use_case(

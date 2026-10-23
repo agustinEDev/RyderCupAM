@@ -516,6 +516,47 @@ class TestReopeningTheEarlierOne:
         assert await e.de(T.NEW_COURSE) == [_id(grupo_anterior)]
         assert await e.de(T.FIRST_TOURNAMENT) == [_id(grupo_anterior)]
 
+    async def test_closing_it_again_keeps_the_date_of_its_achievements(self):
+        """
+        Agustin, 23 oct 2026 (1.1): el mismo logro de la misma vuelta no sube
+        ni cuenta como nuevo, tampoco en el heredero que ya lo tuvo.
+        """
+        e = await _escena()
+        anterior, grupo_anterior = await e.torneo(AYER, TARDE)
+        posterior, grupo_posterior = await e.torneo(DIA, MANANA)
+        await e.cerrar(posterior)
+        del_posterior = {t: (await e.eventos(t))[0].published_at for t in EXCLUSIVOS}
+        await e.cerrar(anterior)
+        del_anterior = {t: (await e.eventos(t))[0].published_at for t in EXCLUSIVOS}
+
+        await e.reabrir(anterior)
+        for tipo in EXCLUSIVOS:
+            (heredado,) = await e.eventos(tipo)
+            assert heredado.source_match_id == _id(grupo_posterior)
+            assert heredado.published_at == del_posterior[tipo]
+        await e.cerrar(anterior)
+
+        for tipo in EXCLUSIVOS:
+            (logro,) = await e.eventos(tipo)
+            assert logro.source_match_id == _id(grupo_anterior)
+            assert logro.published_at == del_anterior[tipo]
+
+    async def test_a_round_that_never_had_it_inherits_it_as_new(self):
+        """1.3: heredado por una vuelta que no lo habia tenido nunca, con fecha de ahora."""
+        e = await _escena()
+        anterior, _ = await e.torneo(AYER, TARDE)
+        posterior, grupo_posterior = await e.torneo(DIA, MANANA)
+        await e.cerrar(anterior)
+        await e.cerrar(posterior)
+        del_anterior = {t: (await e.eventos(t))[0].published_at for t in EXCLUSIVOS}
+
+        await e.reabrir(anterior)
+
+        for tipo in EXCLUSIVOS:
+            (heredado,) = await e.eventos(tipo)
+            assert heredado.source_match_id == _id(grupo_posterior)
+            assert heredado.published_at > del_anterior[tipo]
+
     async def test_a_quick_match_inherits_the_new_course(self):
         e = await _escena()
         anterior, grupo = await e.torneo(DIA, MANANA)
@@ -926,6 +967,32 @@ class TestInheritingOnlyTheExclusiveOnes:
         for tipo in EXCLUSIVOS:
             (heredado,) = await e.eventos(tipo)
             assert heredado.visible_to_friends is False
+
+    async def test_inheriting_a_hidden_one_is_hidden_even_if_sharing_now(self):
+        """
+        Agustin, 23 oct 2026 (2.1 y 2.2): el anterior se cerro con la actividad
+        oculta; al reabrirlo, el heredero los recibe ocultos aunque hoy comparta.
+        """
+        e = await _escena()
+        anterior, _ = await e.torneo(AYER, TARDE)
+        heredero, grupo = await e.torneo(DIA, MANANA)
+        await e.cerrar(heredero)
+        await self._compartir(e, False)
+        await e.cerrar(anterior)
+        await self._compartir(e, True)
+
+        await e.reabrir(anterior)
+
+        for tipo in EXCLUSIVOS:
+            (heredado,) = await e.eventos(tipo)
+            assert heredado.source_match_id == _id(grupo)
+            assert heredado.visible_to_friends is False
+
+    @staticmethod
+    async def _compartir(e, compartir: bool) -> None:
+        e.ana.set_activity_sharing(compartir)
+        async with e.world.users:
+            await e.world.users.users.save(e.ana)
 
     async def test_inheriting_never_replaces_the_heirs_achievements(self, monkeypatch):
         e, anterior, heredero, _ = await self._escena_con_heredero()

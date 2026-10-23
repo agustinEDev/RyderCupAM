@@ -154,6 +154,13 @@ class ActivityEvent:
     def is_from(self, match_id: str) -> bool:
         return self._source_match_id == match_id
 
+    def keep_published_at(self, published_at: datetime) -> None:
+        """
+        Conserva la fecha con la que se publico la primera vez: el mismo logro
+        que se vuelve a publicar no sube ni cuenta como nuevo (23 oct 2026).
+        """
+        self._published_at = published_at
+
     def hide_from_friends(self) -> None:
         """Deja de verlo nadie mas que su autor (apagar la publicacion)."""
         self._visible_to_friends = False

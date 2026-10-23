@@ -3,7 +3,6 @@
 import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, time
-from decimal import Decimal
 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -41,6 +40,7 @@ from src.modules.social.domain.services.achievement_detector import (
     PlayedHole,
     RoundContext,
 )
+from src.modules.social.domain.services.personal_best import record_context
 from src.modules.social.domain.value_objects.activity_event_type import ActivityEventType
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -103,7 +103,7 @@ class _Grupos:
 
     # Por jugador, sus grupos de este torneo con la tarjeta entregada
     del_torneo: dict = field(default_factory=dict)
-    # (grupo, jugador) -> hoyo -> golpes validados
+    # (grupo, jugador) -> hoyo -> golpes validados (None, una raya validada)
     validados: dict = field(default_factory=dict)
 
 
@@ -194,7 +194,7 @@ class PublishTournamentAchievementsUseCase:
                 # Otra publicacion de este torneo escribio despues de que
                 # empezara este calculo (p. ej. la herencia de una reapertura
                 # de otro): lo calculado es viejo y se recalcula
-                ultima = await repo.last_published_at(competition_id_raw, _LOGROS)
+                ultima = await repo.last_written_at(competition_id_raw, _LOGROS)
                 if ahora == marca and (ultima is None or ultima <= calculado_en):
                     # Despues del candado del torneo, los de sus jugadores, en
                     # orden: lo exclusivo se compara y se retira bajo ellos
@@ -304,22 +304,17 @@ class PublishTournamentAchievementsUseCase:
             # si cambia entre ejecuciones, el mismo logro colgaria de otra
             # vuelta y la clave unica dejaria de reconocerlo como repetido
             vueltas = sorted(sin_ordenar, key=lambda v: (v.instant, v.match_id))
-            # La marca de ANTES del torneo, sin ninguna de sus vueltas
-            # (decision del 22 oct 2026): se puede pedir en cualquier momento,
+            # El record se mide una vez por jugador, no una por vuelta: su mejor
+            # vuelta del torneo contra lo jugado en dias ANTERIORES a su primer
+            # dia (Agustin, 23 oct 2026). Se puede pedir en cualquier momento,
             # tambien al volver a cerrar un torneo reabierto
-            marca_previa = await self._differentials.best_differential(
-                vueltas[0].user_id, excluding_competition_id=competition_id_raw
+            record = record_context(
+                await self._differentials.round_differentials(vueltas[0].user_id),
+                lambda r: r.competition_id == competition_id_raw,
             )
-            # El record se mide una vez por jugador, no una por vuelta: solo hay
-            # una marca previa con la que comparar y la mejor de sus vueltas
-            # nuevas es la que la batio
-            record = await self._diferencial_si_es_record(vueltas[0].user_id, marca_previa)
 
             for indice, vuelta in enumerate(vueltas):
-                contexto = RoundContext(
-                    previous_best_differential=self._como_decimal(marca_previa),
-                    differential=record if indice == 0 else None,
-                )
+                contexto = record if indice == 0 else RoundContext()
                 logros = self._detector.detect(holes=vuelta.holes, context=contexto)
                 eventos.extend(self._a_eventos(logros, vuelta))
 
@@ -494,9 +489,10 @@ class PublishTournamentAchievementsUseCase:
         for golpe in await self._competition_uow.golpes_de_partida.de_las_partidas(
             list(del_torneo)
         ):
-            # Solo lo validado (jugador y marcador coinciden) y con numero: la
-            # raya deja el hoyo sin golpes, como en la Ryder (`own_score`)
-            if golpe.validado and golpe.golpes_validados is not None:
+            # Solo lo validado (jugador y marcador coinciden). La raya validada
+            # es un hoyo jugado, como en la partida rapida (Agustin, 23 oct
+            # 2026); en Medal no la hay, porque el anotador la rechaza
+            if golpe.validado:
                 leidos.validados.setdefault((golpe.partida_id, golpe.user_id), {})[golpe.hoyo] = (
                     golpe.golpes_validados
                 )
@@ -547,10 +543,14 @@ class PublishTournamentAchievementsUseCase:
         hole_scores = await self._competition_uow.hole_scores.find_by_match_and_player(
             partido.id, user_id
         )
+        # Lo que el jugador envio, raya incluida (enviada y sin numero): es un
+        # hoyo jugado, como en la partida rapida (Agustin, 23 oct 2026). En la
+        # Ryder cuenta lo enviado sin mirar la validacion, igual que los
+        # numeros y que las estadisticas; en stroke play, solo lo validado
         scores_by_hole = {
             hole_score.hole_number: hole_score.own_score
             for hole_score in hole_scores
-            if hole_score.own_score is not None
+            if hole_score.own_submitted
         }
         vuelta = await self._vuelta_de(
             ronda,
@@ -616,30 +616,12 @@ class PublishTournamentAchievementsUseCase:
             instant=round_instant(ronda.round_date, ronda.session_type, course.timezone),
             visible_to_friends=visible_to_friends,
             holes=[
-                PlayedHole(
-                    number=hole.number,
-                    par=hole.par,
-                    strokes=scores_by_hole[hole.number],
-                )
+                # La raya, juzgada como doble bogey, igual que en la partida
+                # rapida: no da ningun logro
+                PlayedHole.of(hole.number, hole.par, scores_by_hole[hole.number])
                 for hole in jugados
             ],
         )
-
-    async def _diferencial_si_es_record(
-        self, user_id: UserId, best_before: float | None
-    ) -> Decimal | None:
-        """El diferencial del torneo, solo cuando ha batido el record."""
-        if best_before is None:
-            return None
-
-        ahora = await self._differentials.best_differential(user_id)
-        if ahora is None or ahora >= best_before:
-            return None
-        return self._como_decimal(ahora)
-
-    @staticmethod
-    def _como_decimal(value: float | None) -> Decimal | None:
-        return None if value is None else Decimal(str(value))
 
     def _a_eventos(
         self,

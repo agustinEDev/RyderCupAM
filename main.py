@@ -27,7 +27,12 @@ from pydantic import BaseModel  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
+from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
+    CierreDePartidasRapidas,
+    cierre_activado,
+)
 from src.config.cors_config import get_cors_config  # noqa: E402
+from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
 from src.config.rate_limit import limiter  # noqa: E402
@@ -119,15 +124,19 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     # El vigilante de las actualizaciones de hándicaps: lanza las programadas y
     # recupera las cortadas por un reinicio. Solo en producción (#251)
-    vigilante = None
+    tareas = []
     lanzador = get_lanzador_de_actualizaciones()
     if isinstance(lanzador, LanzadorEnSegundoPlano):
-        vigilante = asyncio.create_task(VigilanteDeActualizaciones(lanzador).vigilar())
+        tareas.append(asyncio.create_task(VigilanteDeActualizaciones(lanzador).vigilar()))
+    # Las partidas rápidas que nadie termina se cierran solas, cada hora (23 oct
+    # 2026). En PRO y en el Kind; en los tests no
+    if cierre_activado(os.environ):
+        tareas.append(asyncio.create_task(CierreDePartidasRapidas(async_session_maker).vigilar()))
     yield
-    if vigilante is not None:
-        vigilante.cancel()
+    for tarea in tareas:
+        tarea.cancel()
         with contextlib.suppress(asyncio.CancelledError):
-            await vigilante
+            await tarea
     print("INFO:     Apagando aplicación...")
 
 
