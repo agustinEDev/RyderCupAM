@@ -329,7 +329,7 @@ class PublishQuickMatchResultUseCase:
         # Sin un solo hoyo de ningun bando no hay nada que contar. Con hoyos
         # pero ninguno adjudicable (la ida frente a la vuelta, o un rival sin
         # anotar) si hay aviso: sin terminar, como lo cuenta «Partidas juntos»
-        if not hoyos_a and not hoyos_b:
+        if not any(lectura.scores.get(p) for p in (*bando_a, *bando_b)):
             return []
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla del 22 oct, A). Si no, «sin

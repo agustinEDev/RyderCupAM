@@ -92,14 +92,12 @@ class CloseExpiredQuickMatchesUseCase:
                 continue
             if cerrada is None:
                 continue
-            estado, plazo = cerrada
+            estado, plazo, jugada = cerrada
             if estado == QuickMatchStatus.CANCELLED:
                 cancelled += 1
                 continue
             completed += 1
-            if publishes_when_closed(plazo, ahora) and await self._publica(
-                abierta.id, abierta.played_at
-            ):
+            if publishes_when_closed(plazo, ahora) and await self._publica(abierta.id, jugada):
                 published += 1
         return ClosedQuickMatches(completed, cancelled, published)
 
@@ -112,10 +110,10 @@ class CloseExpiredQuickMatchesUseCase:
 
     async def _cierra(
         self, quick_match_id: QuickMatchId, zona: str | None, ahora: datetime
-    ) -> tuple[QuickMatchStatus, datetime] | None:
+    ) -> tuple[QuickMatchStatus, datetime, datetime] | None:
         """
-        La cierra si sigue abierta y vencida; devuelve cómo queda y su plazo, o
-        None si no la tocó. El plazo se vuelve a mirar con la fila bloqueada:
+        La cierra si sigue abierta y vencida; devuelve cómo queda, su plazo y
+        cuándo se jugó, o None si no la tocó. El plazo se vuelve a mirar con la fila bloqueada:
         leída PENDING y vencida, puede haberla empezado el creador entretanto.
         """
         async with self._uow:
@@ -133,7 +131,7 @@ class CloseExpiredQuickMatchesUseCase:
             else:
                 actual.cancel()
             await self._uow.quick_matches.update(actual)
-            return actual.status, plazo
+            return actual.status, plazo, actual.played_at
 
     async def _publica(self, quick_match_id: QuickMatchId, jugada: datetime) -> bool:
         """
@@ -160,7 +158,6 @@ class _Abierta:
     status: QuickMatchStatus
     created_at: datetime
     started_at: datetime | None
-    played_at: datetime
     golf_course_id: GolfCourseId
 
     @classmethod
@@ -170,7 +167,6 @@ class _Abierta:
             partida.status,
             partida.created_at,
             partida.started_at,
-            partida.played_at,
             partida.golf_course_id,
         )
 

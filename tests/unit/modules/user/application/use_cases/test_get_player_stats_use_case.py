@@ -7,7 +7,7 @@ contando para el resto de participantes. El ocultado es por persona, no de la
 partida entera.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import ClassVar
 from uuid import uuid4
@@ -1381,8 +1381,31 @@ class TestRoundDifferentials:
         ).execute_round_differentials(player.id)
 
         assert [(r.played_on, r.source_id, r.competition_id, r.differential) for r in rondas] == [
-            (match.created_at.date(), str(match.id.value), None, Decimal("18.1"))
+            (match.played_at.date(), str(match.id.value), None, Decimal("18.1"))
         ]
+
+    async def test_a_quick_match_was_played_the_day_it_started(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Creada el viernes para el domingo: es una vuelta del domingo (24 oct 2026)."""
+        player = await create_user(user_uow, unique_email("started"), handicap=10.0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        match = await _played_quick_match(
+            qm_uow,
+            course,
+            player,
+            strokes_per_hole=5,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+        )
+        match._created_at = datetime(2026, 10, 16, 18, 0)
+        match._started_at = datetime(2026, 10, 18, 8, 0)
+
+        rondas = await _use_case(
+            user_uow, competition_uow, qm_uow, golf_course_uow
+        ).execute_round_differentials(player.id)
+
+        assert [r.played_on for r in rondas] == [date(2026, 10, 18)]
 
     async def test_a_round_without_a_known_tee_is_left_out(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

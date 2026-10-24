@@ -8,7 +8,7 @@ tests fijan qué campos rellena cada una y, sobre todo, cuáles deja en None en
 lugar de inventar una equivalencia.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -1657,6 +1657,22 @@ class TestMatchName:
         )
 
         assert feed.matches[0].match_name == "Meis Fourball"
+
+    async def test_a_quick_match_is_dated_the_day_it_started(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Creada el viernes para el domingo: en el historial, del domingo (24 oct 2026)."""
+        player = await create_user(user_uow, "Dated", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        match = await played_quick_match(qm_uow, course, player)
+        match._created_at = datetime(2026, 10, 16, 18, 0)
+        match._started_at = datetime(2026, 10, 18, 8, 0)
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].date == date(2026, 10, 18)
 
     async def test_a_quick_match_without_a_name_sends_null(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

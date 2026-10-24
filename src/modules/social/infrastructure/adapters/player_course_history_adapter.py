@@ -55,7 +55,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
         ]
 
     async def _partidas_rapidas(self, usuarios: list[UserId]) -> list[PlayedRound]:
-        """Las partidas rapidas terminadas con algun hoyo suyo, por su creacion."""
+        """Las partidas rapidas terminadas con algun hoyo suyo, por cuando se jugaron."""
         async with self._quick_match_uow:
             partidas = await self._quick_match_uow.quick_matches.list_completed_for_users(usuarios)
             hoyos = await self._quick_match_uow.quick_match_hole_scores.played_holes(
@@ -71,7 +71,7 @@ class PlayerCourseHistoryAdapter(PlayerCourseHistoryInterface):
                         PlayedRound(
                             user_id=user_id,
                             golf_course_id=str(partida.golf_course_id.value),
-                            instant=utc_naive(partida.created_at),
+                            instant=utc_naive(partida.played_at),
                             source_id=str(partida.id.value),
                             holes_played=jugados,
                         )

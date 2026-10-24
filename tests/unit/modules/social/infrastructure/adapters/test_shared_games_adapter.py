@@ -1110,8 +1110,9 @@ class TestLoQueTraeCadaPartida:
             [4, 5],
             scoring_format=ScoringFormat.STABLEFORD,
         )
-        # Se creó un día y se tocó otro (ocultarla, por ejemplo): manda la creación
-        match._created_at = datetime(2026, 9, 1, 9, 0)
+        # Creada un día y empezada otro: manda cuando empezó (24 oct 2026)
+        match._created_at = datetime(2026, 8, 30, 18, 0)
+        match._started_at = datetime(2026, 9, 1, 9, 0)
 
         (partida,) = await _entre(mundo, yo, el)
 
@@ -1204,7 +1205,7 @@ class TestElInstanteDeCadaPartida:
     zona, la misma escala para las tres fuentes.
     """
 
-    async def test_la_partida_rapida_lleva_su_hora_de_creacion(self, mundo):
+    async def test_la_partida_rapida_lleva_su_hora_de_inicio(self, mundo):
         """Se juegan del tiron: la hora de creacion es la del juego."""
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
@@ -1216,7 +1217,8 @@ class TestElInstanteDeCadaPartida:
             [4, 5],
             scoring_format=ScoringFormat.STABLEFORD,
         )
-        match._created_at = datetime(2026, 9, 1, 17, 45)
+        match._created_at = datetime(2026, 8, 30, 10, 0)
+        match._started_at = datetime(2026, 9, 1, 17, 45)
 
         (partida,) = await _entre(mundo, yo, el)
 

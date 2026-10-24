@@ -296,8 +296,6 @@ class PublishRoundAchievementsUseCase:
             ActivityEvent.create(
                 user_id=user_id,
                 type=logro.type,
-                # La partida rápida no guarda cuándo se jugó: se crea el mismo
-                # día, igual que asumen las estadísticas
                 occurred_at=occurred_at,
                 source_match_id=match_id,
                 payload=self._payload(logro, golf_course_id, holes_played),

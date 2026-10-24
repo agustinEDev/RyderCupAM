@@ -1095,6 +1095,37 @@ class TestTablaACuandoCuentaElMatchPlay:
             assert evento.payload["outcome"] == "UNFINISHED"
             assert evento.payload["holes_played"] == 4
 
+    async def test_a_fourball_con_un_hueco_en_cada_bando_avisa_sin_terminar(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """
+        Revision (24 oct 2026): Ana y Eva anotan los 18, sus parejas nada.
+        Ningun hoyo tiene las cuatro bolas, pero hubo partida: aviso sin terminar.
+        """
+        ana = await _user(user_uow, "Ana")
+        pepa = await _user(user_uow, "Pepa")
+        eva = await _user(user_uow, "Eva")
+        luz = await _user(user_uow, "Luz")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(
+            qm_uow,
+            course,
+            ana,
+            [_tarjeta(4), {}, _tarjeta(4), {}],
+            otros=[
+                QuickMatchParticipant.for_user(pepa.id, team="A"),
+                QuickMatchParticipant.for_user(eva.id, team="B"),
+                QuickMatchParticipant.for_user(luz.id, team="B"),
+            ],
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+        )
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, ana)).payload["outcome"] == "UNFINISHED"
+        assert (await _uno_de(social_uow, luz)).payload["outcome"] == "UNFINISHED"
+
     async def test_a_fourball_un_bando_sin_bola_en_un_hoyo_queda_corto(
         self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
     ):
