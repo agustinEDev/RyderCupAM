@@ -1575,7 +1575,6 @@ class TestTorneoComoVueltaPropia:
             play_mode=PlayMode.HANDICAP,
             tee_color=TeeColor.WHITE,
             player_handicaps={player.id: 18.0},
-            match_handicaps={player.id: 21},
         )
 
         entry = (
@@ -1611,7 +1610,6 @@ class TestTorneoComoVueltaPropia:
             play_mode=PlayMode.HANDICAP,
             tee_color=TeeColor.WHITE,
             player_handicaps={player.id: 18.0},
-            match_handicaps={player.id: 21},
         )
 
         entry = (

@@ -73,10 +73,9 @@ def own_playing_handicap(
 
     La pendiente y el rating de su barra, como la partida, o el índice si la
     barra no se puede valorar, por `personal_playing_handicap`: la misma pieza
-    que mide los partidos de torneo en las estadísticas. El
-    historial y las estadísticas puntuaban con el índice tal cual, sin barra, y
-    la misma vuelta daba 28 puntos en el panel y 32 en la partida (BE #513).
-    Al 100 %.
+    que mide los partidos de torneo en las estadísticas, al 100 %. Lo usan las
+    estadísticas: el historial mide con el allowance de la partida (Agustín, 24
+    oct 2026).
 
     En match play también: el partido se decide por la diferencia con el rival,
     pero la vuelta de cada uno se mide contra el campo con su propio hándicap.
