@@ -73,7 +73,7 @@ def own_playing_handicap(
 
     La pendiente y el rating de su barra, como la partida, o el índice si la
     barra no se puede valorar, por `personal_playing_handicap`: la misma pieza
-    que mide los partidos de torneo en el historial y las estadísticas. El
+    que mide los partidos de torneo en las estadísticas. El
     historial y las estadísticas puntuaban con el índice tal cual, sin barra, y
     la misma vuelta daba 28 puntos en el panel y 32 en la partida (BE #513).
     Al 100 %.

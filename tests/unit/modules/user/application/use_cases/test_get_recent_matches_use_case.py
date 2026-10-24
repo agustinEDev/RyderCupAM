@@ -1430,6 +1430,40 @@ class TestHandicapDeJuegoComoEnLaPartida:
         assert entry.stableford_points == 39
         assert entry.result == "HALVED"
 
+    async def test_en_fourball_su_handicap_con_el_90_y_no_la_diferencia(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Fourball entre cuatro de 18 en blancas: el partido no da golpes (la
+        diferencia es 0), pero su vuelta va con 19 de juego al 90 %: dos golpes
+        en el hoyo 1 (3 puntos) y uno en el resto: 37.
+        """
+        player = await create_user(user_uow, "QmFourball", handicap=18.0)
+        otros = [await create_user(user_uow, f"QmF{i}", handicap=18.0) for i in range(3)]
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            player,
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+            others=[
+                QuickMatchParticipant.for_user(
+                    u.id, team=team, tee_color=TeeColor.WHITE, tee_gender=Gender.MALE
+                )
+                for u, team in zip(otros, ("A", "B", "B"), strict=True)
+            ],
+            strokes_per_hole=5,
+            creator_tee_color=TeeColor.WHITE,
+            creator_tee_gender=Gender.MALE,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 37
+
     async def test_una_partida_scratch_sigue_sin_golpes_aunque_haya_barra(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
@@ -1523,7 +1557,7 @@ class TestTorneoComoVueltaPropia:
     ):
         """
         Given un singles con hándicap donde el partido no le dio golpes (los
-        hoyos guardan 0) y 21 de juego en el partido
+        hoyos guardan 0) y 18 de índice en blancas (21 de juego al 100 %)
         When firma 5 en los 18
         Then 39 puntos, como la misma vuelta en partida rápida. Antes, 18
         """
@@ -1589,15 +1623,46 @@ class TestTorneoComoVueltaPropia:
         # 39 de la vuelta de cincos, menos los 3 que valía el 5 del hoyo 1
         assert entry.stableford_points == 36
 
-    async def test_manda_el_handicap_de_juego_del_partido_y_no_el_indice(
+    async def test_en_fourball_su_handicap_con_el_90_y_no_la_diferencia(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
-        Given 18 en el perfil (21 de juego al 100 %) y 16 de juego en el partido
-        (con el allowance de su modalidad)
+        Given un fourball con 18 de índice en blancas (20,7 de campo) en el que
+            el partido le guardó 0 golpes (es el más bajo: la diferencia)
         When firma 5 en los 18
-        Then 34: un golpe en los hoyos 1-16 (2 puntos) y ninguno en el 17 y 18
+        Then 37: 19 de juego al 90 %, dos golpes en el hoyo 1 (3 puntos) y uno
+            en el resto (2). Con la diferencia salían 18
         """
+        player = await create_user(user_uow, "Fourball")
+        partner = await create_user(user_uow, "FourballP")
+        rival = await create_user(user_uow, "FourballR")
+        rival2 = await create_user(user_uow, "FourballR2")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id, partner.id],
+            team_b_user_ids=[rival.id, rival2.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            match_format=MatchFormat.FOURBALL,
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.HANDICAP,
+            tee_color=TeeColor.WHITE,
+            player_handicaps={player.id: 18.0},
+            match_handicaps={player.id: 0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 37
+
+    async def test_sin_indice_guardado_usa_el_del_perfil(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Given un singles sin índice guardado y 18 en el perfil When firma 5 Then 39, como con el guardado."""
         player = await create_user(user_uow, "TorneoPerfil", handicap=18.0)
         rival = await create_user(user_uow, "TorneoPerfilR")
         course = await create_golf_course(golf_course_uow, player.id)
@@ -1611,14 +1676,13 @@ class TestTorneoComoVueltaPropia:
             own_scores_by_user_id={player.id: [5] * 18},
             play_mode=PlayMode.HANDICAP,
             tee_color=TeeColor.WHITE,
-            match_handicaps={player.id: 16},
         )
 
         entry = (
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
         ).matches[0]
 
-        assert entry.stableford_points == 34
+        assert entry.stableford_points == 39
 
     async def test_una_competicion_scratch_puntua_sin_golpes(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
