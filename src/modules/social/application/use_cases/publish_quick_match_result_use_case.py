@@ -322,15 +322,16 @@ class PublishQuickMatchResultUseCase:
             return []
         bando_a, bando_b = bandos
 
+        # Sin un solo hoyo de nadie no hay nada que contar. Con hoyos pero
+        # ninguno adjudicable (la ida frente a la vuelta, un rival sin anotar o
+        # un fourball sin las cuatro bolas) si hay aviso: sin terminar, como lo
+        # cuenta «Partidas juntos»
+        if not any(lectura.scores.get(p) for p in (*bando_a, *bando_b)):
+            return []
         # El mismo calculo que el historial de partidas y el cara a cara
         resultado = match_play_reading(match, lectura.scores, lectura.strokes, self._match_play)
         hoyos_a = holes_by_side(lectura.scores, bando_a, match.match_format)
         hoyos_b = holes_by_side(lectura.scores, bando_b, match.match_format)
-        # Sin un solo hoyo de ningun bando no hay nada que contar. Con hoyos
-        # pero ninguno adjudicable (la ida frente a la vuelta, o un rival sin
-        # anotar) si hay aviso: sin terminar, como lo cuenta «Partidas juntos»
-        if not any(lectura.scores.get(p) for p in (*bando_a, *bando_b)):
-            return []
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla del 22 oct, A). Si no, «sin
         # terminar» y sin tanteo: un 1UP tras un hoyo no es una victoria

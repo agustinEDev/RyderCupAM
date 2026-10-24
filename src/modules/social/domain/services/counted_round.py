@@ -63,7 +63,7 @@ def holes_by_side(
     hoyos = [frozenset(scores_by_player.get(jugador, {})) for jugador in side]
     if not hoyos:
         return frozenset()
-    if match_format == MatchFormat.FOURBALL:
+    if match_format is not None and not match_format.one_ball_per_side():
         return frozenset.intersection(*hoyos)
     return frozenset().union(*hoyos)
 
