@@ -418,9 +418,7 @@ class GetPlayerStatsUseCase:
                 )
                 results.append(
                     _ComputableRound(
-                        # No hay campo de cuándo se jugó: la partida rápida se
-                        # crea el mismo día que se juega
-                        played_on=match.created_at.date(),
+                        played_on=match.played_at.date(),
                         to_par=self._to_eighteen(totals.to_par, len(played)),
                         played_round=self._to_played_round(
                             course=course,

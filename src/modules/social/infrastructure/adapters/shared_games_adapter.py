@@ -314,9 +314,8 @@ class SharedGamesAdapter(SharedGamesInterface):
         return SharedGame(
             kind=SharedGameKind.QUICK_MATCH,
             game_id=str(match.id.value),
-            # Se juegan del tiron: la fecha de creacion es la del juego
-            played_on=match.created_at.date(),
-            played_at=_sin_zona(match.created_at),
+            played_on=match.played_at.date(),
+            played_at=_sin_zona(match.played_at),
             golf_course_id=str(match.golf_course_id.value),
             golf_course_name=course.name if course else None,
             format=formato,
@@ -353,14 +352,12 @@ class SharedGamesAdapter(SharedGamesInterface):
             golpes,
             quick_match_strokes(match, course, usuarios, self._stroke_allocation),
             self._scoring,
-            # Basta la bola de uno por bando, tambien en fourball (Agustin, 22 oct)
-            one_ball_per_side=True,
         )
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla A)
         if not match_play_counts(
-            holes_by_side(golpes, team_a_ids),
-            holes_by_side(golpes, team_b_ids),
+            holes_by_side(golpes, team_a_ids, match.match_format),
+            holes_by_side(golpes, team_b_ids, match.match_format),
             lectura.decided_early,
         ):
             return relation, None, True

@@ -72,6 +72,11 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
             cast([str(user_id.value)], JSONB)
         )
 
+    @staticmethod
+    def _played_at():
+        """Cuando se jugo, como `QuickMatch.played_at`: al empezar, o al crearla."""
+        return func.coalesce(QuickMatch._started_at, QuickMatch._created_at)
+
     async def list_for_user(
         self,
         user_id: UserId,
@@ -86,7 +91,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         stmt = (
             select(QuickMatch)
             .where(and_(*conditions))
-            .order_by(QuickMatch._created_at.desc())
+            .order_by(self._played_at().desc())
             .limit(limit)
             .offset(offset)
         )
@@ -129,7 +134,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         if status is not None:
             conditions.append(QuickMatch._status == status)
 
-        stmt = select(QuickMatch).where(and_(*conditions)).order_by(QuickMatch._created_at.desc())
+        stmt = select(QuickMatch).where(and_(*conditions)).order_by(self._played_at().desc())
         if limit is not None:
             stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
@@ -168,7 +173,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
             self._not_hidden_filter(other_id),
             QuickMatch._status == status,
         ]
-        stmt = select(QuickMatch).where(and_(*conditions)).order_by(QuickMatch._created_at.desc())
+        stmt = select(QuickMatch).where(and_(*conditions)).order_by(self._played_at().desc())
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 

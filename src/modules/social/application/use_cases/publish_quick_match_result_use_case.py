@@ -1,6 +1,7 @@
 """Caso de Uso: Publicar como acabo cada uno una partida rapida (BE-2, bloque D)."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
@@ -129,8 +130,11 @@ class PublishQuickMatchResultUseCase:
         self._stroke_allocation = stroke_allocation or StrokeAllocationService()
         self._match_play = match_play or MatchPlayScoring()
 
-    async def execute(self, quick_match_id_raw: str) -> int:
-        """Publica el resultado de cada jugador con cuenta y devuelve cuantos."""
+    async def execute(self, quick_match_id_raw: str, published_at: datetime | None = None) -> int:
+        """
+        Publica el resultado de cada jugador con cuenta y devuelve cuantos.
+        `published_at`, la fecha con la que sale en Actividad si no es ahora.
+        """
         lectura = await self._leer(quick_match_id_raw)
         if lectura is None:
             return 0
@@ -142,7 +146,7 @@ class PublishQuickMatchResultUseCase:
         if not eventos:
             return 0
 
-        eventos = await stamp_for_publication(self._user_uow, eventos)
+        eventos = await stamp_for_publication(self._user_uow, eventos, published_at)
         async with self._social_uow:
             await self._social_uow.activity_events.add_many(eventos)
         return len(eventos)
@@ -318,19 +322,16 @@ class PublishQuickMatchResultUseCase:
             return []
         bando_a, bando_b = bandos
 
-        # El mismo calculo que el historial de partidas y el cara a cara
-        # Un hoyo es del bando en cuanto lo anota uno, con el mejor neto que
-        # haya, tambien en fourball (Agustin, 22 oct 2026)
-        resultado = match_play_reading(
-            match, lectura.scores, lectura.strokes, self._match_play, one_ball_per_side=True
-        )
-        hoyos_a = holes_by_side(lectura.scores, bando_a)
-        hoyos_b = holes_by_side(lectura.scores, bando_b)
-        # Sin un solo hoyo de ningun bando no hay nada que contar. Con hoyos
-        # pero ninguno adjudicable (la ida frente a la vuelta, o un rival sin
-        # anotar) si hay aviso: sin terminar, como lo cuenta «Partidas juntos»
-        if not hoyos_a and not hoyos_b:
+        # Sin un solo hoyo de nadie no hay nada que contar. Con hoyos pero
+        # ninguno adjudicable (la ida frente a la vuelta, un rival sin anotar o
+        # un fourball sin las cuatro bolas) si hay aviso: sin terminar, como lo
+        # cuenta «Partidas juntos»
+        if not any(lectura.scores.get(p) for p in (*bando_a, *bando_b)):
             return []
+        # El mismo calculo que el historial de partidas y el cara a cara
+        resultado = match_play_reading(match, lectura.scores, lectura.strokes, self._match_play)
+        hoyos_a = holes_by_side(lectura.scores, bando_a, match.match_format)
+        hoyos_b = holes_by_side(lectura.scores, bando_b, match.match_format)
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla del 22 oct, A). Si no, «sin
         # terminar» y sin tanteo: un 1UP tras un hoyo no es una victoria
@@ -386,8 +387,7 @@ class PublishQuickMatchResultUseCase:
         return ActivityEvent.create(
             user_id=user_id,
             type=ActivityEventType.QUICK_MATCH_FINISHED,
-            # La partida rapida no guarda cuando se jugo: se crea el mismo dia
-            occurred_at=match.created_at,
+            occurred_at=match.played_at,
             source_match_id=str(match.id.value),
             payload=payload,
         )

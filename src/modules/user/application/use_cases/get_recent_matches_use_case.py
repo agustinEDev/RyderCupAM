@@ -341,9 +341,7 @@ class GetRecentMatchesUseCase:
         return RecentMatchDTO(
             id=str(match.id.value),
             excluded_from_stats=match.is_stats_excluded_for(ParticipantId(user_id.value)),
-            # Una partida rápida no guarda cuándo se jugó, solo cuándo se creó:
-            # se juegan del tirón, así que la fecha de creación es la del juego
-            date=match.created_at.date(),
+            date=match.played_at.date(),
             match_format=match.match_format.value if match.match_format else None,
             scoring_format=match.scoring_format.value if match.scoring_format else None,
             golf_course_id=str(match.golf_course_id.value),

@@ -610,6 +610,21 @@ class TestQuickMatchStart:
 
         assert copia.started_at == empezada
 
+    def test_it_was_played_when_it_started(self):
+        """Creada el viernes para el domingo: se jugo el domingo (24 oct 2026)."""
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+        qm.add_participant(_registered())
+        qm._created_at = datetime(2026, 10, 16, 18, 0)
+        qm.start([qm.creator_participant_id])
+        qm._started_at = datetime(2026, 10, 18, 7, 0)
+
+        assert qm.played_at == datetime(2026, 10, 18, 7, 0)
+
+    def test_without_starting_it_was_played_when_it_was_created(self):
+        qm = _make_quick_match(match_format=MatchFormat.SINGLES)
+
+        assert qm.played_at == qm.created_at
+
     def test_start_with_incomplete_roster_raises(self):
         qm = _make_quick_match(match_format=MatchFormat.SINGLES)
         with pytest.raises(IncompleteRosterViolation):

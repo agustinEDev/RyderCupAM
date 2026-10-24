@@ -1110,8 +1110,9 @@ class TestLoQueTraeCadaPartida:
             [4, 5],
             scoring_format=ScoringFormat.STABLEFORD,
         )
-        # Se creó un día y se tocó otro (ocultarla, por ejemplo): manda la creación
-        match._created_at = datetime(2026, 9, 1, 9, 0)
+        # Creada un día y empezada otro: manda cuando empezó (24 oct 2026)
+        match._created_at = datetime(2026, 8, 30, 18, 0)
+        match._started_at = datetime(2026, 9, 1, 9, 0)
 
         (partida,) = await _entre(mundo, yo, el)
 
@@ -1204,7 +1205,7 @@ class TestElInstanteDeCadaPartida:
     zona, la misma escala para las tres fuentes.
     """
 
-    async def test_la_partida_rapida_lleva_su_hora_de_creacion(self, mundo):
+    async def test_la_partida_rapida_lleva_su_hora_de_inicio(self, mundo):
         """Se juegan del tiron: la hora de creacion es la del juego."""
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
@@ -1216,7 +1217,8 @@ class TestElInstanteDeCadaPartida:
             [4, 5],
             scoring_format=ScoringFormat.STABLEFORD,
         )
-        match._created_at = datetime(2026, 9, 1, 17, 45)
+        match._created_at = datetime(2026, 8, 30, 10, 0)
+        match._started_at = datetime(2026, 9, 1, 17, 45)
 
         (partida,) = await _entre(mundo, yo, el)
 
@@ -1484,10 +1486,11 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
         assert partida.outcome == Outcome.WON
         assert partida.unfinished is False
 
-    async def test_fourball_basta_la_bola_de_uno_del_bando(self, mundo):
+    async def test_fourball_sin_la_bola_del_companero_queda_sin_terminar(self, mundo):
         """
-        Fourball (Agustin, 22 oct): él solo anota birdie en el 1 y el 2; yo y
-        los rivales, 4 en los 18. Cuenta con los 18 y lo ganamos 2UP.
+        Fourball (Agustin, 24 oct 2026, deshace la bola de uno del 22 oct): él
+        solo anota birdie en el 1 y el 2; yo y los rivales, 4 en los 18. El
+        hoyo espera a las cuatro bolas: solo hay dos, y queda sin terminar.
         """
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
@@ -1510,14 +1513,14 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
         (partida,) = await _entre(mundo, yo, el)
 
         assert partida.relation == Relation.WITH
-        assert partida.unfinished is False
-        assert partida.outcome == Outcome.WON
+        assert partida.unfinished is True
+        assert partida.outcome is None
 
-    async def test_fourball_el_mejor_neto_de_los_que_haya_en_cada_hoyo(self, mundo):
+    async def test_fourball_ya_no_basta_el_mejor_neto_de_los_que_haya(self, mundo):
         """
         Fourball: él solo anota birdie en el 1 y el 2, y un rival solo birdie en
-        el 3, el 4 y el 5. Con la bola de uno por bando cuentan los 18: ganamos
-        dos hoyos, perdemos tres, y lo perdemos 1UP.
+        el 3, el 4 y el 5. Con la bola de uno contaban los 18 y perdiamos 1UP;
+        con las cuatro no hay ningun hoyo completo (24 oct 2026).
         """
         yo = await mundo.jugador("Yo")
         el = await mundo.jugador("El")
@@ -1539,7 +1542,7 @@ class TestTablaAMatchPlayRapidoDesdeNueveHoyos:
 
         (partida,) = await _entre(mundo, yo, el)
 
-        assert (partida.unfinished, partida.outcome) == (False, Outcome.LOST)
+        assert (partida.unfinished, partida.outcome) == (True, None)
 
     async def test_fourball_un_hoyo_sin_bola_del_bando_sin_terminar(self, mundo):
         yo = await mundo.jugador("Yo")
