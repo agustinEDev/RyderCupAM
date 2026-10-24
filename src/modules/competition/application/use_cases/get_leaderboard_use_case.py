@@ -14,9 +14,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.validation_status import (
-    ValidationStatus,
-)
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -184,39 +181,13 @@ class GetLeaderboardUseCase:
         """Computes standing for an in-progress match."""
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
         if hole_scores and round_entity.match_format:
-            hole_results = self._compute_hole_results(hole_scores, round_entity.match_format)
+            hole_results = self._scoring_service.hole_results(
+                hole_scores, round_entity.match_format
+            )
             if hole_results:
                 standing = self._scoring_service.calculate_match_standing(hole_results)
                 return standing["status"], standing["leading_team"], standing["holes_played"]
         return None, None, None
-
-    def _compute_hole_results(self, hole_scores, match_format):
-        """Computa resultados por hoyo."""
-        scores_by_hole: dict[int, list] = {}
-        for hs in hole_scores:
-            scores_by_hole.setdefault(hs.hole_number, []).append(hs)
-
-        hole_results = []
-        for hole_num in sorted(scores_by_hole.keys()):
-            hole_hs = scores_by_hole[hole_num]
-            has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs)
-            if not has_validated:
-                continue
-
-            team_a_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
-            ]
-            team_b_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
-            ]
-
-            if team_a_nets and team_b_nets:
-                winner = self._scoring_service.calculate_hole_winner(
-                    team_a_nets, team_b_nets, match_format
-                )
-                hole_results.append(winner)
-
-        return hole_results
 
     async def _compute_decided_result(self, match, match_format) -> dict | None:
         """Recompute result from hole scores, finding the actual decision point."""
@@ -224,7 +195,7 @@ class GetLeaderboardUseCase:
         if not hole_scores:
             return None
 
-        hole_results = self._compute_hole_results(hole_scores, match_format)
+        hole_results = self._scoring_service.hole_results(hole_scores, match_format)
         if not hole_results:
             return None
 

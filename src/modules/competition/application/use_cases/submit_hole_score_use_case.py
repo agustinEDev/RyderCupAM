@@ -37,7 +37,6 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -328,37 +327,9 @@ class SubmitHoleScoreUseCase:
     async def _check_decided(self, match, match_id, match_format):
         """Verifica si el partido esta matematicamente decidido."""
         all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        hole_results = self._compute_hole_results(all_scores, match_format)
+        hole_results = self._scoring_service.hole_results(all_scores, match_format)
         standing = self._scoring_service.calculate_match_standing(hole_results)
         if self._scoring_service.is_match_decided(standing) and not match.is_decided:
             decided_result = self._scoring_service.format_decided_result(hole_results)
             match.mark_decided(decided_result)
             await self._uow.matches.update(match)
-
-    def _compute_hole_results(self, all_scores, match_format):
-        """Computa resultados por hoyo a partir de todos los scores."""
-        scores_by_hole: dict[int, list] = {}
-        for hs in all_scores:
-            scores_by_hole.setdefault(hs.hole_number, []).append(hs)
-
-        hole_results = []
-        for hole_num in sorted(scores_by_hole.keys()):
-            hole_hs = scores_by_hole[hole_num]
-            has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs)
-            if not has_validated:
-                continue
-
-            team_a_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
-            ]
-            team_b_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
-            ]
-
-            if team_a_nets and team_b_nets:
-                winner = self._scoring_service.calculate_hole_winner(
-                    team_a_nets, team_b_nets, match_format
-                )
-                hole_results.append(winner)
-
-        return hole_results
