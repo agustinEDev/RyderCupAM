@@ -183,22 +183,8 @@ class SubmitScorecardUseCase:
 
         hole_results = []
         for hole_num in sorted(scores_by_hole.keys()):
-            hole_hs = scores_by_hole[hole_num]
-            has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs)
-            if not has_validated:
-                continue
-
-            team_a_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
-            ]
-            team_b_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
-            ]
-
-            if team_a_nets and team_b_nets:
-                winner = self._scoring_service.calculate_hole_winner(
-                    team_a_nets, team_b_nets, match_format
-                )
+            winner = self._scoring_service.hole_result(scores_by_hole[hole_num], match_format)
+            if winner is not None:
                 hole_results.append(winner)
 
         return hole_results
