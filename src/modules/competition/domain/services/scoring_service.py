@@ -131,7 +131,7 @@ class ScoringService(MatchPlayScoring):
         La raya (validada sin numero, tambien el hoyo concedido) pierde el
         hoyo: `calculate_hole_winner` la ve como bando sin bola. En foursomes
         el bando juega una bola, guardada en las filas de los dos, y basta una
-        validada por bando; en individual y fourball hacen falta todas, porque
+        validada por bando si ninguna esta en disputa; en individual y fourball hacen falta todas, porque
         en fourball la bola que falta puede cambiar el mejor neto.
 
         Args:
@@ -143,8 +143,9 @@ class ScoringService(MatchPlayScoring):
             team: [hs.net_score for hs in validadas if hs.team == team] for team in ("A", "B")
         }
         cada_bando = bool(por_bando["A"]) and bool(por_bando["B"])
+        en_disputa = any(hs.validation_status == ValidationStatus.MISMATCH for hs in hole_scores)
         todas = len(validadas) == len(hole_scores)
-        if not cada_bando or (not match_format.one_ball_per_side() and not todas):
+        if not cada_bando or en_disputa or (not match_format.one_ball_per_side() and not todas):
             return None
         return self.calculate_hole_winner(por_bando["A"], por_bando["B"], match_format)
 

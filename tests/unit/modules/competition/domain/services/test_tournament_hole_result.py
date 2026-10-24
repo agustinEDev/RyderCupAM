@@ -162,3 +162,14 @@ class TestTheHolesOfTheMatch:
         ]
 
         assert ScoringService().hole_results(filas, F.SINGLES) == ["B", "A"]
+
+
+class TestADisputedFoursomesBall:
+    def test_a_side_row_in_mismatch_leaves_the_hole_open(self):
+        """Las dos filas son la misma bola: si una esta en disputa, la bola tambien."""
+        disputada = _fila("A", 4)
+        disputada.set_marker_score(6)
+        disputada.recalculate_validation()
+        filas = [_fila("A", 4), disputada, _fila("B", 5), _fila("B", 5)]
+
+        assert _resultado(filas, F.FOURSOMES) is None
