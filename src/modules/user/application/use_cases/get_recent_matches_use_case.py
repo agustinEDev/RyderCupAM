@@ -38,7 +38,6 @@ from src.modules.user.application.dto.player_stats_dto import (
 )
 from src.modules.user.application.services.tournament_round import (
     is_scratch,
-    tournament_personal_handicap,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -309,17 +308,13 @@ class GetRecentMatchesUseCase:
         result = None
         score = None
 
+        # El reparto del partido, una vez: lo usan la vuelta, el resultado y la
+        # raya del bando en foursomes
+        strokes = self._quick_match_strokes(raw, course, users_by_id)
         # Los totales se calculan siempre, sea cual sea el formato: los puntos
         # Stableford son la única cifra que compara vueltas entre sí, porque 36
         # puntos es jugar a tu hándicap en cualquier campo y cualquier formato
-        totals = self._participant_totals(raw, course, profile_handicap)
-        # El reparto del partido, una vez: lo usan el resultado y la raya del
-        # bando en foursomes
-        strokes = (
-            self._quick_match_strokes(raw, course, users_by_id)
-            if match.match_format is not None
-            else {}
-        )
+        totals = self._participant_totals(raw, course, profile_handicap, strokes)
         # En foursomes no hay vuelta propia que enseñar —la pareja juega una
         # bola— pero sí los golpes brutos del bando, y los mismos para los dos.
         # Leyendo solo lo anotado a nombre de cada uno, el que llevaba la fila
@@ -397,15 +392,12 @@ class GetRecentMatchesUseCase:
             if own_player is not None
             else course.reference_card
         )
-        # Los puntos de su vuelta propia, como en partida rápida: con su índice
-        # (el que guardó el partido, o el del perfil) en su barra al 100 %, no
-        # con la diferencia con el rival que reparte el partido (BE #517)
-        user = users_by_id.get(user_id)
-        playing_handicap = tournament_personal_handicap(
-            course,
-            own_player,
-            user.handicap.value if user and user.handicap else None,
-            scratch=raw.scratch,
+        # Los puntos de su vuelta, como en partida rápida: con su hándicap de
+        # juego en el partido, el de su tarjeta, que lleva el allowance de la
+        # modalidad (Agustín, 24 oct 2026), no con la diferencia con el rival
+        # que reparte el partido (BE #517)
+        playing_handicap = (
+            None if own_player is None else 0 if raw.scratch else own_player.playing_handicap
         )
         # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
         # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
@@ -584,6 +576,7 @@ class GetRecentMatchesUseCase:
         raw: _QuickMatchRaw,
         course: GolfCourse | None,
         profile_handicap: float | None,
+        strokes: dict[ParticipantId, ParticipantStrokes],
     ):
         """Puntos y golpes del jugador en una partida libre; None si no hay con qué."""
         if course is None:
@@ -597,14 +590,21 @@ class GetRecentMatchesUseCase:
             HoleSetup(hole.number, hole.par, hole.stroke_index)
             for hole in course.hole_card_for(raw.participant.tee_color, raw.participant.tee_gender)
         ]
-        # El hándicap de juego de su vuelta propia, con su barra como en la
-        # partida: con el índice tal cual el panel daba 28 puntos a una vuelta
-        # de 32 (BE #513). En una partida scratch sale 0, sin golpes
-        playing_handicap = own_playing_handicap(
-            raw.match,
-            raw.participant,
-            raw.participant.effective_handicap(profile_handicap),
-            course,
+        # «Tu vuelta» es la real de la partida (Agustín, 24 oct 2026): su
+        # hándicap de juego en ella, con su barra y el allowance del formato,
+        # repartido por los índices de su barra. No los golpes que recibe en
+        # el partido, que en match play son la diferencia con el rival. Sin
+        # reparto (el jugador no está en él), el de su barra al 100 %
+        suyo = strokes.get(raw.participant.participant_id)
+        playing_handicap = (
+            suyo.playing_handicap
+            if suyo is not None
+            else own_playing_handicap(
+                raw.match,
+                raw.participant,
+                raw.participant.effective_handicap(profile_handicap),
+                course,
+            )
         )
         # Sin barra ni allowance: ya van dentro del hándicap de juego, y el
         # calculador sin `tee_rating` reparte la cifra que recibe tal cual
