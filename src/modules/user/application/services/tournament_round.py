@@ -1,15 +1,19 @@
 """
-La vuelta propia de un partido de torneo, para el panel y las estadísticas (BE #517).
+La vuelta propia de un partido de torneo, para el historial y las estadísticas (BE #517).
 
-Las dos pantallas tienen que medirla igual: el índice que guardó el partido (o
-el del perfil si falta), con la pendiente y el rating de su barra, al 100 %,
-por `personal_playing_handicap`, la misma pieza que mide la partida rápida.
+El índice que guardó el partido (o el del perfil si falta), con la pendiente y
+el rating de su barra, por `personal_playing_handicap`, la misma pieza que mide
+la partida rápida. Las estadísticas, al 100 %; el historial, con el allowance de
+la modalidad: «Tu vuelta» es la real de la partida (Agustín, 24 oct 2026).
 """
 
 from decimal import Decimal
 
 from src.modules.golf_course.domain.services.stroke_context import StrokeContextBuilder
-from src.shared.domain.services.personal_round import personal_playing_handicap
+from src.shared.domain.services.personal_round import (
+    PERSONAL_ROUND_ALLOWANCE,
+    personal_playing_handicap,
+)
 
 
 def tournament_index(player, profile_handicap: float | None) -> float | Decimal | None:
@@ -28,7 +32,12 @@ def is_scratch(competition) -> bool:
 
 
 def tournament_personal_handicap(
-    course, player, profile_handicap: float | None, *, scratch: bool
+    course,
+    player,
+    profile_handicap: float | None,
+    *,
+    scratch: bool,
+    allowance: int = PERSONAL_ROUND_ALLOWANCE,
 ) -> int | None:
     """Hándicap de juego de la vuelta propia de un jugador en un partido de torneo."""
     tee_rating = (
@@ -37,5 +46,5 @@ def tournament_personal_handicap(
         else None
     )
     return personal_playing_handicap(
-        tournament_index(player, profile_handicap), tee_rating, scratch=scratch
+        tournament_index(player, profile_handicap), tee_rating, scratch=scratch, allowance=allowance
     )
