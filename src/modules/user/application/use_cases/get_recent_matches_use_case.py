@@ -15,7 +15,7 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.services.match_play_result import (
-    match_play_result,
+    match_play_reading,
     quick_match_strokes,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
@@ -31,6 +31,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.social.domain.services.counted_round import holes_by_side, match_play_counts
 from src.modules.user.application.dto.player_stats_dto import (
     RecentMatchDTO,
     RecentMatchesResponseDTO,
@@ -63,6 +64,9 @@ TOTAL_HOLES = 18
 RESULT_WON = "WON"
 RESULT_LOST = "LOST"
 RESULT_HALVED = "HALVED"
+# Un match play que no cuenta: ni decidido antes de tiempo ni con los mismos
+# hoyos, 9 o más, en los dos bandos (Agustín, 24 oct 2026)
+RESULT_UNFINISHED = "UNFINISHED"
 HALVED_WINNER = "HALVED"
 
 
@@ -456,24 +460,33 @@ class GetRecentMatchesUseCase:
         """
         Cómo quedó una partida rápida por equipos, desde el lado del jugador.
 
-        Lo calcula `match_play_result`, la misma pieza que usan las partidas
-        jugadas con un amigo (BE-3), con los golpes repartidos como en el
+        Lo calcula `match_play_reading`, la misma pieza que usan las partidas
+        jugadas con un amigo (BE-3) y Actividad, con los golpes repartidos como en el
         detalle: si aquí se compararan los brutos, el historial contaría una
         película distinta de la que muestra la partida abierta.
         """
         rosters = raw.match.team_rosters()
         if rosters is None:
             return None, None
-        team_a_ids, _ = rosters
+        team_a_ids, team_b_ids = rosters
 
-        winner, score = match_play_result(
+        lectura = match_play_reading(
             raw.match,
             raw.scores_by_participant,
             strokes,
             self._scoring_service,
         )
+        # Cuenta como en Actividad y en «Partidas juntos»: decidido antes de
+        # tiempo, o los dos bandos con los mismos hoyos, 9 o más. Si no, «sin
+        # terminar» y sin tanteo: un 6UP de seis hoyos no es una victoria
+        if not match_play_counts(
+            holes_by_side(raw.scores_by_participant, team_a_ids, raw.match.match_format),
+            holes_by_side(raw.scores_by_participant, team_b_ids, raw.match.match_format),
+            lectura.decided_early,
+        ):
+            return RESULT_UNFINISHED, None
         own_team = "A" if raw.participant.participant_id in team_a_ids else "B"
-        return self._result_for_team(winner, own_team), score
+        return self._result_for_team(lectura.winner, own_team), lectura.score
 
     def _foursomes_side_strokes(
         self,
