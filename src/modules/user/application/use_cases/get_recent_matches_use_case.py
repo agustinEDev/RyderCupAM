@@ -65,7 +65,7 @@ RESULT_WON = "WON"
 RESULT_LOST = "LOST"
 RESULT_HALVED = "HALVED"
 # Un match play que no cuenta: ni decidido antes de tiempo ni con los mismos
-# hoyos, 9 o mas, en los dos bandos (Agustin, 24 oct 2026)
+# hoyos, 9 o más, en los dos bandos (Agustín, 24 oct 2026)
 RESULT_UNFINISHED = "UNFINISHED"
 HALVED_WINNER = "HALVED"
 
@@ -477,7 +477,7 @@ class GetRecentMatchesUseCase:
             self._scoring_service,
         )
         # Cuenta como en Actividad y en «Partidas juntos»: decidido antes de
-        # tiempo, o los dos bandos con los mismos hoyos, 9 o mas. Si no, «sin
+        # tiempo, o los dos bandos con los mismos hoyos, 9 o más. Si no, «sin
         # terminar» y sin tanteo: un 6UP de seis hoyos no es una victoria
         if not match_play_counts(
             holes_by_side(raw.scores_by_participant, team_a_ids, raw.match.match_format),

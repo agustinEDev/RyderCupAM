@@ -1,8 +1,8 @@
 """
 El resultado de una partida rapida por hoyos, ya terminada.
 
-Lo comparten el historial del jugador y las partidas jugadas con un amigo
-(BE-3): las dos tienen que contar la misma pelicula que la partida abierta, y
+Lo comparten el historial del jugador, las partidas jugadas con un amigo (BE-3)
+y Actividad: tienen que contar la misma pelicula que la partida abierta, y
 escrito dos veces se separarian en cuanto cambiara una de las reglas.
 """
 
@@ -81,23 +81,6 @@ class MatchPlayReading:
     score: str | None
     holes_played: int
     decided_early: bool
-
-
-def match_play_result(
-    match: QuickMatch,
-    scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
-    strokes_by_participant: Mapping[ParticipantId, ParticipantStrokes],
-    scoring_service: MatchPlayScoring,
-) -> tuple[str | None, str | None]:
-    """
-    Quien gano («A», «B» o «HALVED») y con que marcador, o `(None, None)`.
-
-    Es `match_play_reading` sin lo demas: lo que siempre ha leido el historial.
-    """
-    lectura = match_play_reading(
-        match, scores_by_participant, strokes_by_participant, scoring_service
-    )
-    return lectura.winner, lectura.score
 
 
 def match_play_reading(

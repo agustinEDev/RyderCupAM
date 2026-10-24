@@ -2,9 +2,8 @@
 La lectura completa de un match play rapido: quien gano, el tanteo, cuantos
 hoyos cuentan y si se decidio antes de tiempo.
 
-`match_play_result` sigue devolviendo lo mismo de siempre (el historial no
-cambia); lo social necesita ademas saber si el partido se cerro antes de
-quedarse sin hoyos, porque un «3&2» cuenta aunque no llegue al 18.
+Lo social y el historial necesitan ademas saber si el partido se cerro antes
+de quedarse sin hoyos, porque un «3&2» cuenta aunque no llegue al 18.
 """
 
 from uuid import uuid4
@@ -12,7 +11,6 @@ from uuid import uuid4
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.services.match_play_result import (
     match_play_reading,
-    match_play_result,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
@@ -75,15 +73,6 @@ class TestMatchPlayReading:
 
         assert (lectura.winner, lectura.score, lectura.holes_played) == (None, None, 0)
         assert lectura.decided_early is False
-
-    def test_el_resultado_de_siempre_no_cambia(self):
-        """El historial sigue leyendo un 1UP tras un hoyo: eso no es de lo social."""
-        match = _singles()
-        yo, el = (p.participant_id for p in match.participants)
-
-        resultado = match_play_result(match, {yo: {1: 3}, el: {1: 4}}, {}, MatchPlayScoring())
-
-        assert resultado == ("A", "1UP")
 
 
 class TestFourballConLasCuatroBolas:
