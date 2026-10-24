@@ -98,7 +98,7 @@ class SubmitScorecardUseCase:
 
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
-            hole_results = self._compute_hole_results(all_scores, match_format)
+            hole_results = self._scoring_service.hole_results(all_scores, match_format)
 
             # Result is derived from whichever holes are already validated, so the
             # submitting player sees the real outcome even before every other player
@@ -174,20 +174,6 @@ class SubmitScorecardUseCase:
             raise ScorecardNotReadyError(
                 f"Hoyos sin validar: {holes}. Todos los hoyos jugados deben tener validation_status MATCH."
             )
-
-    def _compute_hole_results(self, all_scores, match_format):
-        """Computa resultados por hoyo."""
-        scores_by_hole: dict[int, list] = {}
-        for hs in all_scores:
-            scores_by_hole.setdefault(hs.hole_number, []).append(hs)
-
-        hole_results = []
-        for hole_num in sorted(scores_by_hole.keys()):
-            winner = self._scoring_service.hole_result(scores_by_hole[hole_num], match_format)
-            if winner is not None:
-                hole_results.append(winner)
-
-        return hole_results
 
     async def _pars_del_jugador(self, round_entity, player) -> dict[int, int]:
         """El par de cada hoyo en la barra del jugador, o vacío si no se sabe."""

@@ -134,3 +134,31 @@ class TestWithoutARivalRow:
     def test_a_side_without_any_row_is_not_a_hole_won(self):
         assert _resultado([_fila("A", 4)]) is None
         assert _resultado([_fila("A", RAYA), _fila("A", 4)], F.FOURBALL) is None
+
+
+class TestAMismatchedBall:
+    def test_a_fourball_partner_in_mismatch_leaves_the_hole_open(self):
+        descuadre = _fila("A", 4)
+        descuadre.set_marker_score(5)
+        descuadre.recalculate_validation()
+        filas = [descuadre, _fila("A", 6), _fila("B", 5), _fila("B", 5)]
+
+        assert _resultado(filas, F.FOURBALL) is None
+
+
+class TestTheHolesOfTheMatch:
+    def test_the_decided_holes_in_order_of_hole(self):
+        def _en(hoyo, fila):
+            fila._hole_number = hoyo
+            return fila
+
+        filas = [
+            _en(3, _fila("A", 4)),
+            _en(3, _fila("B", RAYA)),
+            _en(1, _fila("A", RAYA)),
+            _en(1, _fila("B", 5)),
+            _en(2, _fila("A", 4)),
+            _en(2, _fila("B", 4, validada=False)),
+        ]
+
+        assert ScoringService().hole_results(filas, F.SINGLES) == ["B", "A"]

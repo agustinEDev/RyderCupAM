@@ -144,9 +144,22 @@ class ScoringService(MatchPlayScoring):
         }
         cada_bando = bool(por_bando["A"]) and bool(por_bando["B"])
         todas = len(validadas) == len(hole_scores)
-        if not cada_bando or (match_format != MatchFormat.FOURSOMES and not todas):
+        if not cada_bando or (not match_format.one_ball_per_side() and not todas):
             return None
         return self.calculate_hole_winner(por_bando["A"], por_bando["B"], match_format)
+
+    def hole_results(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> list[str]:
+        """
+        Los resultados de los hoyos ya decididos del partido, por orden de
+        hoyo: los que `hole_result` aun no puede decidir no entran.
+        """
+        por_hoyo: dict[int, list[HoleScore]] = {}
+        for hs in hole_scores:
+            por_hoyo.setdefault(hs.hole_number, []).append(hs)
+        resultados = (self.hole_result(por_hoyo[hoyo], match_format) for hoyo in sorted(por_hoyo))
+        return [r for r in resultados if r is not None]
 
     def get_affected_player_ids(
         self,

@@ -181,25 +181,13 @@ class GetLeaderboardUseCase:
         """Computes standing for an in-progress match."""
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
         if hole_scores and round_entity.match_format:
-            hole_results = self._compute_hole_results(hole_scores, round_entity.match_format)
+            hole_results = self._scoring_service.hole_results(
+                hole_scores, round_entity.match_format
+            )
             if hole_results:
                 standing = self._scoring_service.calculate_match_standing(hole_results)
                 return standing["status"], standing["leading_team"], standing["holes_played"]
         return None, None, None
-
-    def _compute_hole_results(self, hole_scores, match_format):
-        """Computa resultados por hoyo."""
-        scores_by_hole: dict[int, list] = {}
-        for hs in hole_scores:
-            scores_by_hole.setdefault(hs.hole_number, []).append(hs)
-
-        hole_results = []
-        for hole_num in sorted(scores_by_hole.keys()):
-            winner = self._scoring_service.hole_result(scores_by_hole[hole_num], match_format)
-            if winner is not None:
-                hole_results.append(winner)
-
-        return hole_results
 
     async def _compute_decided_result(self, match, match_format) -> dict | None:
         """Recompute result from hole scores, finding the actual decision point."""
@@ -207,7 +195,7 @@ class GetLeaderboardUseCase:
         if not hole_scores:
             return None
 
-        hole_results = self._compute_hole_results(hole_scores, match_format)
+        hole_results = self._scoring_service.hole_results(hole_scores, match_format)
         if not hole_results:
             return None
 

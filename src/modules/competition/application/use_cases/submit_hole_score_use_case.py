@@ -327,23 +327,9 @@ class SubmitHoleScoreUseCase:
     async def _check_decided(self, match, match_id, match_format):
         """Verifica si el partido esta matematicamente decidido."""
         all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        hole_results = self._compute_hole_results(all_scores, match_format)
+        hole_results = self._scoring_service.hole_results(all_scores, match_format)
         standing = self._scoring_service.calculate_match_standing(hole_results)
         if self._scoring_service.is_match_decided(standing) and not match.is_decided:
             decided_result = self._scoring_service.format_decided_result(hole_results)
             match.mark_decided(decided_result)
             await self._uow.matches.update(match)
-
-    def _compute_hole_results(self, all_scores, match_format):
-        """Computa resultados por hoyo a partir de todos los scores."""
-        scores_by_hole: dict[int, list] = {}
-        for hs in all_scores:
-            scores_by_hole.setdefault(hs.hole_number, []).append(hs)
-
-        hole_results = []
-        for hole_num in sorted(scores_by_hole.keys()):
-            winner = self._scoring_service.hole_result(scores_by_hole[hole_num], match_format)
-            if winner is not None:
-                hole_results.append(winner)
-
-        return hole_results
