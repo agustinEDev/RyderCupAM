@@ -22,7 +22,6 @@ from src.modules.quick_match.domain.value_objects.participant_id import Particip
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
-from src.shared.domain.value_objects.match_format import MatchFormat
 
 # `GolfCourse` valida exactamente 18 hoyos como invariante
 TOTAL_HOLES = 18
@@ -106,7 +105,6 @@ def match_play_reading(
     scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
     strokes_by_participant: Mapping[ParticipantId, ParticipantStrokes],
     scoring_service: MatchPlayScoring,
-    one_ball_per_side: bool = False,
 ) -> MatchPlayReading:
     """
     Quien gano, con que marcador, cuantos hoyos cuentan y si se decidio antes
@@ -119,12 +117,10 @@ def match_play_reading(
     una copia: escrita a mano, exigia los cuatro scores y dejaba sin resultado
     todas las partidas de foursomes mientras la partida abierta ya las puntuaba.
 
-    Con `one_ball_per_side` un hoyo se adjudica en cuanto cada bando tiene al
-    menos una bola, tambien en fourball, con el mejor neto de las que haya: es
-    como lo cuenta lo social (Agustin, 22 oct 2026). La partida rapida sigue
-    sin el, exigiendo las cuatro en fourball, hasta que se decida.
+    En fourball hacen falta las cuatro bolas, tambien en lo social (Agustin, 24
+    oct 2026; deshace la bola de uno por bando del 22 oct).
     """
-    regla = MatchFormat.FOURSOMES if one_ball_per_side else match.match_format
+    regla = match.match_format
     sin_resultado = MatchPlayReading(None, None, 0, decided_early=False)
     rosters = match.team_rosters()
     if rosters is None:

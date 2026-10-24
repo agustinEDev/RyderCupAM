@@ -752,6 +752,43 @@ class TestCarrerasYFechas:
         assert len(eventos) >= 2
         assert len({e.published_at for e in eventos}) == 1
 
+    async def test_l7_los_logros_son_del_dia_que_empezo(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        """Creada el viernes para el domingo: el birdie es del domingo (24 oct 2026)."""
+        user = await _create_user(user_uow)
+        course = await _create_course(golf_course_uow, user.id)
+        tarjeta = dict.fromkeys(range(1, 19), PAR)
+        tarjeta[1] = PAR - 1
+        match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
+        match._created_at = datetime(2026, 10, 16, 18, 0)
+        match._started_at = datetime(2026, 10, 18, 7, 0)
+
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(str(match.id.value))
+
+        birdies = [
+            e for e in await _feed_de(social_uow, user) if e.type == ActivityEventType.BIRDIE
+        ]
+        assert [e.occurred_at for e in birdies] == [datetime(2026, 10, 18, 7, 0)]
+
+    async def test_l5_con_su_fecha_de_publicacion_todos_salen_ese_dia(
+        self, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        user = await _create_user(user_uow)
+        course = await _create_course(golf_course_uow, user.id)
+        tarjeta = dict.fromkeys(range(1, 19), PAR)
+        tarjeta[1] = PAR - 1
+        match = await _played_match(qm_uow, course, user, scores_by_hole=tarjeta)
+        jugada = datetime(2026, 10, 18, 7, 0)
+
+        await _use_case(social_uow, qm_uow, golf_course_uow, user_uow).execute(
+            str(match.id.value), published_at=jugada
+        )
+
+        eventos = await _feed_de(social_uow, user)
+        assert eventos
+        assert {e.published_at for e in eventos} == {jugada}
+
 
 async def test_una_raya_en_stableford_se_juzga_como_doble_bogey(
     social_uow, qm_uow, golf_course_uow, user_uow

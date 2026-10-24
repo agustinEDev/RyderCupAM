@@ -22,6 +22,8 @@ Puro, sin IO: recibe los hoyos ya leidos.
 from collections.abc import Collection, Hashable, Iterable, Mapping
 from typing import TypeVar
 
+from src.shared.domain.value_objects.match_format import MatchFormat
+
 # Media vuelta: lo minimo que se juega y se cuenta
 MIN_COUNTED_HOLES = 9
 
@@ -44,17 +46,26 @@ def counting_units(holes_by_unit: Mapping[K, Iterable[int]]) -> frozenset[K]:
 
 
 def holes_by_side(
-    scores_by_player: Mapping[K, Mapping[int, int | None]], side: Collection[K]
+    scores_by_player: Mapping[K, Mapping[int, int | None]],
+    side: Collection[K],
+    match_format: MatchFormat | None,
 ) -> frozenset[int]:
     """
-    Los hoyos que entrego un bando: los que anoto al menos uno de sus jugadores.
+    Los hoyos que entrego un bando.
 
-    En fourball cuenta el mejor hoyo del bando, asi que basta la bola de uno
-    (Agustin, 22 oct 2026); en foursomes el bando juega una sola bola; en
-    individual, el bando es el jugador. La raya (score nulo) es un hoyo
-    entregado: recogio la bola, pero el hoyo esta acabado.
+    En fourball, los que anotaron los dos: la bola que falta puede cambiar el
+    mejor neto, como en la pantalla de la partida y en los torneos (Agustin, 24
+    oct 2026; deshace la bola de uno del 22 oct). En foursomes el bando juega
+    una sola bola, guardada a nombre de uno; en individual, el bando es el
+    jugador. La raya (score nulo) es un hoyo entregado: recogio la bola, pero
+    el hoyo esta acabado.
     """
-    return frozenset(hoyo for jugador in side for hoyo in scores_by_player.get(jugador, {}))
+    hoyos = [frozenset(scores_by_player.get(jugador, {})) for jugador in side]
+    if not hoyos:
+        return frozenset()
+    if match_format == MatchFormat.FOURBALL:
+        return frozenset.intersection(*hoyos)
+    return frozenset().union(*hoyos)
 
 
 def match_play_counts(holes_a: Iterable[int], holes_b: Iterable[int], decided_early: bool) -> bool:

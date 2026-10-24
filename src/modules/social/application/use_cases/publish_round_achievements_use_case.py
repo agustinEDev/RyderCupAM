@@ -106,6 +106,7 @@ class PublishRoundAchievementsUseCase:
         self,
         quick_match_id_raw: str,
         only_new_course: bool = False,
+        published_at: datetime | None = None,
     ) -> int:
         """
         Publica lo que merezca publicarse y devuelve cuántos eventos creó.
@@ -123,6 +124,8 @@ class PublishRoundAchievementsUseCase:
         hoyo, aunque la tarjeta no valga para los demas logros) y, bajo el
         candado del jugador, solo si no hay otro publicado anterior; los
         posteriores se retiran (`keep_only_the_oldest`).
+
+        `published_at`, la fecha con la que sale en Actividad si no es ahora.
         """
         # Fase 1: leer. Todo lo que hace falta de la partida, en un solo paso y
         # con las unidades de trabajo abiertas lo justo
@@ -161,7 +164,7 @@ class PublishRoundAchievementsUseCase:
 
         # Fase 3: publicar
         # Una fecha para toda la publicacion y el interruptor de ahora mismo
-        eventos = await stamp_for_publication(self._user_uow, eventos)
+        eventos = await stamp_for_publication(self._user_uow, eventos, published_at)
         async with self._social_uow:
             repo = self._social_uow.activity_events
             await lock_players(repo, [e.user_id for e in eventos if e.type in EXCLUSIVE_TYPES])
@@ -263,7 +266,7 @@ class PublishRoundAchievementsUseCase:
                         user_id=participant.user_id,
                         match_id=str(match.id.value),
                         golf_course_id=str(match.golf_course_id.value),
-                        occurred_at=utc_naive(match.created_at),
+                        occurred_at=utc_naive(match.played_at),
                         visible_to_friends=user.share_activity,
                         holes=[
                             # La raya (score nulo: el jugador recogio) es un

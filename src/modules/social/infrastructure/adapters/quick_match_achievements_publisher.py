@@ -1,6 +1,7 @@
 """Adaptador: `quick_match` publica sus logros a traves del modulo social."""
 
 import logging
+from datetime import datetime
 
 from src.modules.quick_match.application.ports.round_achievements_publisher_interface import (
     RoundAchievementsPublisherInterface,
@@ -36,17 +37,17 @@ class QuickMatchAchievementsPublisher(RoundAchievementsPublisherInterface):
         self._publish = publish_use_case
         self._result = result_use_case
 
-    async def publish(self, quick_match_id: str) -> int:
+    async def publish(self, quick_match_id: str, published_at: datetime | None = None) -> int:
         publicados = 0
         try:
-            publicados += await self._publish.execute(quick_match_id)
+            publicados += await self._publish.execute(quick_match_id, published_at=published_at)
         except Exception:
             logger.warning(
                 "Could not publish achievements for quick match %s", quick_match_id, exc_info=True
             )
         if self._result is not None:
             try:
-                publicados += await self._result.execute(quick_match_id)
+                publicados += await self._result.execute(quick_match_id, published_at=published_at)
             except Exception:
                 logger.warning(
                     "Could not publish the result of quick match %s", quick_match_id, exc_info=True

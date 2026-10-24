@@ -97,7 +97,9 @@ class CloseExpiredQuickMatchesUseCase:
                 cancelled += 1
                 continue
             completed += 1
-            if publishes_when_closed(plazo, ahora) and await self._publica(abierta.id):
+            if publishes_when_closed(plazo, ahora) and await self._publica(
+                abierta.id, abierta.played_at
+            ):
                 published += 1
         return ClosedQuickMatches(completed, cancelled, published)
 
@@ -133,15 +135,16 @@ class CloseExpiredQuickMatchesUseCase:
             await self._uow.quick_matches.update(actual)
             return actual.status, plazo
 
-    async def _publica(self, quick_match_id: QuickMatchId) -> bool:
+    async def _publica(self, quick_match_id: QuickMatchId, jugada: datetime) -> bool:
         """
         Sus logros y su resultado en Actividad, sin que un fallo tumbe el cierre.
-        Cuenta si publicó algo: el publicador se traga sus propios fallos.
+        Cuenta si publicó algo: el publicador se traga sus propios fallos. Salen
+        el día que se jugó, no arriba con «ahora» (Agustín, 24 oct 2026).
         """
         if self._achievements is None:
             return False
         try:
-            return await self._achievements.publish(str(quick_match_id.value)) > 0
+            return await self._achievements.publish(str(quick_match_id.value), jugada) > 0
         except Exception:
             logger.warning(
                 "Could not publish quick match %s closed on its own", quick_match_id, exc_info=True
@@ -157,6 +160,7 @@ class _Abierta:
     status: QuickMatchStatus
     created_at: datetime
     started_at: datetime | None
+    played_at: datetime
     golf_course_id: GolfCourseId
 
     @classmethod
@@ -166,6 +170,7 @@ class _Abierta:
             partida.status,
             partida.created_at,
             partida.started_at,
+            partida.played_at,
             partida.golf_course_id,
         )
 

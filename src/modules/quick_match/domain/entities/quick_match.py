@@ -377,6 +377,14 @@ class QuickMatch:
         return self._started_at
 
     @property
+    def played_at(self) -> datetime:
+        """
+        Cuando se jugo: al empezar, no al crearla, que puede ser dias antes
+        (Agustin, 24 oct 2026). Sin empezar, cuando se creo.
+        """
+        return self._started_at or self._created_at
+
+    @property
     def updated_at(self) -> datetime:
         return self._updated_at
 

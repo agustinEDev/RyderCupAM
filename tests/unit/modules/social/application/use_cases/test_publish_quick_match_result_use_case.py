@@ -5,6 +5,7 @@ extras del formato: 29, 30 y 31).
 Lo ve el jugador y lo ven sus amigos (BOTH), tambien cuando queda el ultimo.
 """
 
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -51,6 +52,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork as InMemoryUserUnitOfWork,
 )
+from src.shared.domain.utc_clock import utc_now
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -86,8 +88,8 @@ def user_uow():
 def publicar(social_uow, qm_uow, golf_course_uow, user_uow):
     caso = PublishQuickMatchResultUseCase(social_uow, qm_uow, golf_course_uow, user_uow)
 
-    async def _publicar(match) -> int:
-        return await caso.execute(str(match.id.value))
+    async def _publicar(match, published_at=None) -> int:
+        return await caso.execute(str(match.id.value), published_at=published_at)
 
     return _publicar
 
@@ -1058,14 +1060,14 @@ class TestTablaACuandoCuentaElMatchPlay:
         assert (de_ana.payload["outcome"], de_ana.payload["score"]) == ("WON", "3&2")
         assert de_ana.payload["unfinished"] is False
 
-    async def test_a_fourball_basta_la_bola_de_uno_del_bando(
+    async def test_a_fourball_el_hoyo_espera_a_las_cuatro_bolas(
         self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
     ):
         """
-        A (fourball, Agustin 22 oct). Given la pareja de Ana anota birdie en el
-        1 y el 2, levanta en el 3 y el 4 y no anota mas; Ana y las rivales
-        hacen 4 en los 18 / When se publica / Then cuenta con los 18 hoyos: cada
-        hoyo es del bando en cuanto lo anota uno, con el mejor neto que haya.
+        L9 (fourball, Agustin 24 oct, deshace la bola de uno del 22 oct). Given
+        la pareja de Ana anota birdie en el 1 y el 2, levanta en el 3 y el 4 y
+        no anota mas; Ana y las rivales hacen 4 en los 18 / When se publica /
+        Then sin terminar: solo los 4 primeros tienen las cuatro bolas.
         """
         ana = await _user(user_uow, "Ana")
         pepa = await _user(user_uow, "Pepa")
@@ -1088,12 +1090,10 @@ class TestTablaACuandoCuentaElMatchPlay:
 
         await publicar(match)
 
-        for user in (ana, pepa):
+        for user in (ana, pepa, eva):
             evento = await _uno_de(social_uow, user)
-            assert (evento.payload["outcome"], evento.payload["score"]) == ("WON", "2UP")
-            assert evento.payload["unfinished"] is False
-            assert evento.payload["holes_played"] == 18
-        assert (await _uno_de(social_uow, eva)).payload["outcome"] == "LOST"
+            assert evento.payload["outcome"] == "UNFINISHED"
+            assert evento.payload["holes_played"] == 4
 
     async def test_a_fourball_un_bando_sin_bola_en_un_hoyo_queda_corto(
         self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
@@ -1544,3 +1544,43 @@ class TestMatchPlayDecididoAntesDeTiempo:
         payload = (await _uno_de(social_uow, ana)).payload
         assert payload["unfinished"] is True
         assert payload["decided_early"] is False
+
+
+class TestLaFechaDeLaPartida:
+    """L5 y L7 (Agustin, 24 oct 2026)."""
+
+    async def test_l7_se_jugo_cuando_empezo_y_no_cuando_se_creo(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _user(user_uow, "Ana")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(qm_uow, course, ana, [_tarjeta(4)])
+        match._created_at = datetime(2026, 10, 16, 18, 0)
+        match._started_at = datetime(2026, 10, 18, 7, 0)
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, ana)).occurred_at == datetime(2026, 10, 18, 7, 0)
+
+    async def test_l5_con_su_fecha_de_publicacion_sale_en_ese_dia(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _user(user_uow, "Ana")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(qm_uow, course, ana, [_tarjeta(4)])
+
+        await publicar(match, published_at=datetime(2026, 10, 18, 7, 0))
+
+        assert (await _uno_de(social_uow, ana)).published_at == datetime(2026, 10, 18, 7, 0)
+
+    async def test_l6_sin_ella_sale_ahora(
+        self, publicar, social_uow, qm_uow, golf_course_uow, user_uow
+    ):
+        ana = await _user(user_uow, "Ana")
+        course = await _campo(golf_course_uow, ana.id)
+        match = await _partida(qm_uow, course, ana, [_tarjeta(4)])
+        antes = utc_now()
+
+        await publicar(match)
+
+        assert (await _uno_de(social_uow, ana)).published_at >= antes

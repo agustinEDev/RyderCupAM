@@ -353,14 +353,12 @@ class SharedGamesAdapter(SharedGamesInterface):
             golpes,
             quick_match_strokes(match, course, usuarios, self._stroke_allocation),
             self._scoring,
-            # Basta la bola de uno por bando, tambien en fourball (Agustin, 22 oct)
-            one_ball_per_side=True,
         )
         # Cuenta si se decidio antes de tiempo o si los dos bandos entregaron
         # los mismos hoyos, 9 o mas (tabla A)
         if not match_play_counts(
-            holes_by_side(golpes, team_a_ids),
-            holes_by_side(golpes, team_b_ids),
+            holes_by_side(golpes, team_a_ids, match.match_format),
+            holes_by_side(golpes, team_b_ids, match.match_format),
             lectura.decided_early,
         ):
             return relation, None, True
