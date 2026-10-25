@@ -199,11 +199,10 @@ class GetLeaderboardUseCase:
         if not hole_results:
             return None
 
-        # Walk through hole results to find when match was first decided
-        for i in range(1, len(hole_results) + 1):
-            standing = self._scoring_service.calculate_match_standing(hole_results[:i])
-            if self._scoring_service.is_match_decided(standing):
-                return self._scoring_service.format_decided_result(hole_results[:i])
+        # Decidido en el orden de los hoyos, como lo guarda `SubmitHoleScoreUseCase`
+        decided = self._scoring_service.decided_result(hole_scores, match_format)
+        if decided is not None:
+            return decided
 
         # Not decided early: use all hole results (e.g., "1UP" after 18 holes)
         return self._scoring_service.format_decided_result(hole_results)

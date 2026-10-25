@@ -327,9 +327,7 @@ class SubmitHoleScoreUseCase:
     async def _check_decided(self, match, match_id, match_format):
         """Verifica si el partido esta matematicamente decidido."""
         all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        hole_results = self._scoring_service.hole_results(all_scores, match_format)
-        standing = self._scoring_service.calculate_match_standing(hole_results)
-        if self._scoring_service.is_match_decided(standing) and not match.is_decided:
-            decided_result = self._scoring_service.format_decided_result(hole_results)
+        decided_result = self._scoring_service.decided_result(all_scores, match_format)
+        if decided_result is not None and not match.is_decided:
             match.mark_decided(decided_result)
             await self._uow.matches.update(match)

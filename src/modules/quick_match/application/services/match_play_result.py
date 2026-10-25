@@ -110,7 +110,7 @@ def match_play_reading(
         return sin_resultado
     team_a_ids, team_b_ids = rosters
 
-    hole_results = []
+    results_by_hole: dict[int, str] = {}
     for hole_number in range(1, TOTAL_HOLES + 1):
         scores = {
             participant_id: holes[hole_number]
@@ -134,29 +134,30 @@ def match_play_reading(
 
         # Solo los que anotaron: en foursomes el bando entrega UNA bola, asi
         # que el companero no tiene score y `values[pid]` reventaria.
-        hole_results.append(
-            scoring_service.calculate_hole_winner(
-                [net(pid) for pid in team_a_ids if pid in scores],
-                [net(pid) for pid in team_b_ids if pid in scores],
-                match.match_format,
-            )
+        results_by_hole[hole_number] = scoring_service.calculate_hole_winner(
+            [net(pid) for pid in team_a_ids if pid in scores],
+            [net(pid) for pid in team_b_ids if pid in scores],
+            match.match_format,
         )
 
-    if not hole_results:
+    if not results_by_hole:
         return sin_resultado
 
+    hole_results = list(results_by_hole.values())
     jugados = len(hole_results)
     standing = scoring_service.calculate_match_standing(hole_results)
 
-    if scoring_service.is_match_decided(standing):
-        # Se cerro antes del 18: el resultado va en "3&2", ventaja y hoyos
-        # que quedaban
-        outcome = scoring_service.format_decided_result(hole_results)
+    # Decidido en el orden de los hoyos, como en los torneos: con un hoyo sin
+    # cerrar antes no lo esta (Agustin, 25 oct 2026). Si se cerro antes del 18,
+    # el resultado va en "3&2", ventaja y hoyos que quedaban
+    outcome = scoring_service.decided_in_hole_order(results_by_hole)
+    if outcome is not None:
         return MatchPlayReading(
             outcome["winner"],
             outcome["score"],
             jugados,
-            decided_early=standing["holes_remaining"] > 0,
+            # "3&2" antes del 18; "1UP" en el 18
+            decided_early="&" in outcome["score"],
         )
 
     if standing["leading_team"] is None:

@@ -622,3 +622,125 @@ class TestQuickMatchShowsTheAlias:
         detail = await use_case.execute(str(qm.id.value), str(creator.id.value))
 
         assert "Jane Doe" in {p.name for p in detail.participants}
+
+
+class TestDecididoEnElOrdenDeLosHoyos:
+    """
+    D9 (Agustin, 25 oct 2026): el aviso de «decidido» de la pantalla sigue el
+    orden de los hoyos. Con un hueco antes, el partido sigue en juego.
+    """
+
+    async def _gana_el_creador(self, qm_uow, user_uow, hoyos, sin_el_rival=()):
+        creator = await create_user(user_uow, unique_email("orden-yo"))
+        other = await create_user(user_uow, unique_email("orden-el"))
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+        for hoyo in hoyos:
+            await _score(qm_uow, qm, creator.id, creator.id, hoyo, 3)
+            if hoyo not in sin_el_rival:
+                await _score(qm_uow, qm, creator.id, other.id, hoyo, 5)
+        return qm, creator
+
+    async def _standing(self, qm_uow, user_uow, golf_course_uow, qm, creator):
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+        return detail.standing
+
+    async def test_d9_with_a_gap_at_the_4th_it_is_still_in_play(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        qm, creator = await self._gana_el_creador(qm_uow, user_uow, range(1, 18), sin_el_rival=(4,))
+
+        standing = await self._standing(qm_uow, user_uow, golf_course_uow, qm, creator)
+
+        assert standing.is_decided is False
+
+    async def test_d9_once_the_gap_closes_it_is_decided(self, qm_uow, user_uow, golf_course_uow):
+        qm, creator = await self._gana_el_creador(qm_uow, user_uow, range(1, 18))
+
+        standing = await self._standing(qm_uow, user_uow, golf_course_uow, qm, creator)
+
+        assert standing.is_decided is True
+
+
+class TestLaPantallaDiceElTanteoDeLaDecision:
+    """
+    Decidido el partido, la pantalla da el estado del hoyo en que se decidio
+    aunque se sigan anotando hoyos (Agustin, 25 oct 2026): el front pinta
+    «10&8» con la ventaja y los hoyos que quedaban, y no un «18UP».
+
+        #   caso                                                  | standing
+        ----|-----------------------------------------------------|-------------------------
+        E1  decidida en el 10, anotada hasta el 18                | 10UP, 10 jugados, quedan 8
+        E2  decidida en el 10, siguen hasta el 12                 | 10UP, 10 jugados, quedan 8
+        E3  decidida en el 10, falta el rival en el 12, sigue 13  | 10UP, 10 jugados, quedan 8
+        E4  «5&4» en el 14, y el rival gana del 15 al 18          | 5UP de A, quedan 4
+        E5  1UP en el 18 / sin decidir                            | como antes
+    """
+
+    async def _partida(self, qm_uow, user_uow, golpes_del_rival, golf_course_uow, sin_el_rival=()):
+        creator = await create_user(user_uow, unique_email("decision-yo"))
+        other = await create_user(user_uow, unique_email("decision-el"))
+        qm = await _create_in_progress_match(qm_uow, creator.id, other.id)
+        for hoyo, golpes in golpes_del_rival.items():
+            await _score(qm_uow, qm, creator.id, creator.id, hoyo, 4)
+            if hoyo not in sin_el_rival:
+                await _score(qm_uow, qm, creator.id, other.id, hoyo, golpes)
+        detail = await GetQuickMatchUseCase(
+            qm_uow, user_uow, MatchPlayScoring(), ScoringCoverageService(), golf_course_uow
+        ).execute(str(qm.id.value), str(creator.id.value))
+        return detail.standing
+
+    @staticmethod
+    def _foto(standing):
+        return (
+            standing.status,
+            standing.leading_team,
+            standing.holes_played,
+            standing.holes_remaining,
+            standing.is_decided,
+        )
+
+    @pytest.mark.parametrize("hasta", [18, 12])
+    async def test_e1_e2_scored_past_the_decision_it_stays_10_and_8(
+        self, qm_uow, user_uow, golf_course_uow, hasta
+    ):
+        standing = await self._partida(
+            qm_uow, user_uow, dict.fromkeys(range(1, hasta + 1), 5), golf_course_uow
+        )
+
+        assert self._foto(standing) == ("10UP", "A", 10, 8, True)
+
+    async def test_e3_a_gap_after_the_decision_does_not_move_it(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        standing = await self._partida(
+            qm_uow, user_uow, dict.fromkeys(range(1, 14), 5), golf_course_uow, sin_el_rival=(12,)
+        )
+
+        assert self._foto(standing) == ("10UP", "A", 10, 8, True)
+
+    async def test_e4_the_rival_winning_holes_afterwards_does_not_change_the_winner(
+        self, qm_uow, user_uow, golf_course_uow
+    ):
+        # A gana del 1 al 5, empatan del 6 al 14 (5&4) y B gana del 15 al 18
+        golpes = {**dict.fromkeys(range(1, 6), 5), **dict.fromkeys(range(6, 15), 4)}
+        golpes |= dict.fromkeys(range(15, 19), 3)
+
+        standing = await self._partida(qm_uow, user_uow, golpes, golf_course_uow)
+
+        assert self._foto(standing) == ("5UP", "A", 14, 4, True)
+
+    async def test_e5_one_up_on_the_18th_is_as_before(self, qm_uow, user_uow, golf_course_uow):
+        golpes = {1: 5, **dict.fromkeys(range(2, 19), 4)}
+
+        standing = await self._partida(qm_uow, user_uow, golpes, golf_course_uow)
+
+        assert self._foto(standing) == ("1UP", "A", 18, 0, True)
+
+    async def test_e5_undecided_with_a_gap_is_as_before(self, qm_uow, user_uow, golf_course_uow):
+        standing = await self._partida(
+            qm_uow, user_uow, dict.fromkeys(range(1, 18), 5), golf_course_uow, sin_el_rival=(4,)
+        )
+
+        assert self._foto(standing) == ("16UP", "A", 16, 2, False)
