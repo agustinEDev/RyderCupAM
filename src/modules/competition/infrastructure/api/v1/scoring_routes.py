@@ -134,6 +134,10 @@ async def submit_hole_score(
     Los dos scores son opcionales y se aplica **solo lo que llega**: omitir un campo
     deja esa anotacion como estaba, y mandarlo nulo es una raya (hoyo recogido, o
     concedido en match play). Ver #301. Acepta own_score y marked_score (score que el marcador asigna al jugador marcado).
+    `marked_player_id` es opcional: sin el solo se guarda own_score (en un fourball
+    con un retirado, quien le marcaba ya no marca a nadie). marked_score sin
+    marked_player_id es un 422; marcando a un jugador retirado, esa parte se
+    ignora y own_score se guarda.
     Retorna la vista completa de scoring actualizada.
 
     **Restricciones:**

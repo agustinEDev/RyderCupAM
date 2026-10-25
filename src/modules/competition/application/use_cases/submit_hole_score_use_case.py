@@ -199,6 +199,11 @@ class SubmitHoleScoreUseCase:
             raise PlayerWithdrawnError()
         if marked_player_id is None:
             return None
+        # Un golpe guardado sin red cuando el marcado aun jugaba y que llega
+        # tras retirarle: su bola propia se guarda y la del retirado se ignora,
+        # que ya no cuenta (code-review: antes se perdia entera)
+        if any(str(uid) == marked_player_id for uid in match.withdrawn_player_ids):
+            return None
         return cls._marked_player(match, user_id, marked_player_id)
 
     @staticmethod

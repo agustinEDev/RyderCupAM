@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SubmitHoleScoreBodyDTO(BaseModel):
@@ -34,6 +34,12 @@ class SubmitHoleScoreBodyDTO(BaseModel):
         None,
         description="Solo admin: ID del jugador al que se representa para registrar su score.",
     )
+
+    @field_validator("marked_player_id")
+    @classmethod
+    def _vacio_es_ninguno(cls, valor: str | None) -> str | None:
+        """Un texto vacío es no mandarlo: sin marcado (code-review)."""
+        return valor or None
 
     @model_validator(mode="after")
     def _marcado_con_su_jugador(self) -> "SubmitHoleScoreBodyDTO":
