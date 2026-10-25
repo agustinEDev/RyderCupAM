@@ -317,3 +317,22 @@ class TestRetiradosDelFourball:
         db_session.expire_all()
 
         assert (await repo.find_by_id_for_update(match_id)).withdrawn_player_ids == (retirado,)
+
+    @pytest.mark.asyncio
+    async def test_holes_without_ball_round_trip(self, db_session, match):
+        """
+        Given un jugador que volvió con el 1 y el 3 cerrados sin su bola / When
+        se guarda y se relee / Then los mismos hoyos; y sin nada, vacío.
+        """
+        repo = SQLAlchemyMatchRepository(db_session)
+        match_id = match.id
+        jugador = match.team_a_players[0].user_id
+        leido = await repo.find_by_id_for_update(match_id)
+        assert leido.holes_without_ball == {}
+
+        leido._holes_without_ball = {jugador: (1, 3)}
+        await repo.update(leido)
+        await db_session.commit()
+        db_session.expire_all()
+
+        assert (await repo.find_by_id_for_update(match_id)).holes_without_ball == {jugador: (1, 3)}

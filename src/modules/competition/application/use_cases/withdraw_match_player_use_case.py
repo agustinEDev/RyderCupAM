@@ -1,5 +1,9 @@
 """Caso de Uso: retirar a un jugador de un fourball, o deshacerlo (25 oct 2026)."""
 
+from src.modules.competition.application.dto.scoring_dto import (
+    DecidedResultDTO,
+    WithdrawalResponseDTO,
+)
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     MatchNotFoundError,
@@ -10,6 +14,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.services.decision_del_partido import (
     revisa_la_decision,
 )
+from src.modules.competition.domain.exceptions.competition_violations import WithdrawalViolation
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -42,7 +47,7 @@ class WithdrawMatchPlayerUseCase:
         *,
         is_admin: bool = False,
         undo: bool = False,
-    ) -> dict:
+    ) -> WithdrawalResponseDTO:
         async with self._uow:
             match_id = MatchId(match_id_str)
             # Bloqueada: un golpe que llega a la vez recalcula la decisión con
@@ -66,22 +71,29 @@ class WithdrawMatchPlayerUseCase:
 
             try:
                 if undo:
-                    match.reinstate_player(player_id)
+                    # Lo cerrado sin su bola se queda asi; vuelve en lo demas
+                    filas = await self._uow.hole_scores.find_by_match(match.id)
+                    cerrados = self._scoring_service.hoyos_cerrados_sin_su_bola(
+                        filas, round_entity.match_format, match.bolas_fuera, player_id
+                    )
+                    match.reinstate_player(player_id, cerrados)
                 else:
                     match.withdraw_player(player_id, round_entity.match_format)
-            except ValueError as e:
-                raise WithdrawalNotAllowedError(str(e)) from e
+            except WithdrawalViolation as e:
+                raise WithdrawalNotAllowedError(e.reason, str(e)) from e
 
             await revisa_la_decision(
                 self._uow, self._scoring_service, match, round_entity.match_format
             )
             await self._uow.matches.update(match)
 
-        return {
-            "match_id": str(match.id),
-            "withdrawn_player_ids": [str(uid) for uid in match.withdrawn_player_ids],
-            "decided_result": match.decided_result,
-        }
+        return WithdrawalResponseDTO(
+            match_id=str(match.id),
+            withdrawn_player_ids=[str(uid) for uid in match.withdrawn_player_ids],
+            decided_result=DecidedResultDTO(**match.decided_result)
+            if match.decided_result
+            else None,
+        )
 
     @staticmethod
     def _autoriza(match, actor_id: UserId, player_id: UserId, gestiona: bool) -> None:

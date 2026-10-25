@@ -9,9 +9,10 @@ resultado) viven en `shared` (`MatchPlayScoring`, RyderCupAM#165) y esta clase
 las hereda: las usan también la partida rápida y las estadísticas.
 """
 
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 
 from src.modules.competition.domain.entities.hole_score import HoleScore
+from src.modules.competition.domain.value_objects.bolas_fuera import BolasFuera
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
@@ -125,7 +126,7 @@ class ScoringService(MatchPlayScoring):
         self,
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
-        withdrawn: Collection[UserId] = (),
+        fuera: BolasFuera | None = None,
     ) -> str | None:
         """
         El resultado de un hoyo con lo anotado: "A", "B", "HALVED", o None si
@@ -140,16 +141,11 @@ class ScoringService(MatchPlayScoring):
         Args:
             hole_scores: las filas del hoyo, una por jugador
             match_format: formato del partido
-            withdrawn: los retirados del fourball; su bola sin validar no cuenta
-                y el hoyo se cierra con las demas (W7, W8)
+            fuera: las bolas que no cuentan por los retirados del fourball
+                (`match.bolas_fuera`); el hoyo se cierra con las demas (W7, W8)
         """
-        if withdrawn:
-            hole_scores = [
-                hs
-                for hs in hole_scores
-                if hs.player_user_id not in withdrawn
-                or hs.validation_status == ValidationStatus.MATCH
-            ]
+        if fuera:
+            hole_scores = [hs for hs in hole_scores if fuera.cuenta(hs)]
         validadas = [hs for hs in hole_scores if hs.validation_status == ValidationStatus.MATCH]
         por_bando = {
             team: [hs.net_score for hs in validadas if hs.team == team] for team in ("A", "B")
@@ -165,27 +161,26 @@ class ScoringService(MatchPlayScoring):
         self,
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
-        withdrawn: Collection[UserId] = (),
+        fuera: BolasFuera | None = None,
     ) -> list[str]:
         """
         Los resultados de los hoyos ya decididos del partido, por orden de
         hoyo: los que `hole_result` aun no puede decidir no entran.
         """
-        return list(self.hole_results_by_hole(hole_scores, match_format, withdrawn).values())
+        return list(self.hole_results_by_hole(hole_scores, match_format, fuera).values())
 
     def hole_results_by_hole(
         self,
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
-        withdrawn: Collection[UserId] = (),
+        fuera: BolasFuera | None = None,
     ) -> dict[int, str]:
         """Los resultados de los hoyos ya decididos, por numero de hoyo y en orden."""
         por_hoyo: dict[int, list[HoleScore]] = {}
         for hs in hole_scores:
             por_hoyo.setdefault(hs.hole_number, []).append(hs)
         resultados = {
-            hoyo: self.hole_result(por_hoyo[hoyo], match_format, withdrawn)
-            for hoyo in sorted(por_hoyo)
+            hoyo: self.hole_result(por_hoyo[hoyo], match_format, fuera) for hoyo in sorted(por_hoyo)
         }
         return {hoyo: r for hoyo, r in resultados.items() if r is not None}
 
@@ -193,26 +188,47 @@ class ScoringService(MatchPlayScoring):
         self,
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
-        withdrawn: Collection[UserId] = (),
+        fuera: BolasFuera | None = None,
     ) -> dict | None:
         """
         El resultado del partido si ya esta decidido en el orden de los hoyos
         (`decided_in_hole_order`), o None si sigue en juego.
         """
         return self.decided_in_hole_order(
-            self.hole_results_by_hole(hole_scores, match_format, withdrawn)
+            self.hole_results_by_hole(hole_scores, match_format, fuera)
         )
 
     def standing(
         self,
         hole_scores: Sequence[HoleScore],
         match_format: MatchFormat,
-        withdrawn: Collection[UserId] = (),
+        fuera: BolasFuera | None = None,
     ) -> dict:
         """Como va el partido (`standing_in_hole_order`)."""
         return self.standing_in_hole_order(
-            self.hole_results_by_hole(hole_scores, match_format, withdrawn)
+            self.hole_results_by_hole(hole_scores, match_format, fuera)
         )
+
+    def hoyos_cerrados_sin_su_bola(
+        self,
+        hole_scores: Sequence[HoleScore],
+        match_format: MatchFormat,
+        fuera: BolasFuera,
+        jugador: UserId,
+    ) -> set[int]:
+        """
+        Los hoyos que ya se cerraron sin la bola del jugador: al deshacer su
+        retirada se quedan asi, y su bola solo vuelve en los demas (25 oct 2026).
+        """
+        por_hoyo: dict[int, list[HoleScore]] = {}
+        for hs in hole_scores:
+            por_hoyo.setdefault(hs.hole_number, []).append(hs)
+        return {
+            hoyo
+            for hoyo, filas in por_hoyo.items()
+            if any(hs.player_user_id == jugador and not fuera.cuenta(hs) for hs in filas)
+            and self.hole_result(filas, match_format, fuera) is not None
+        }
 
     def get_affected_player_ids(
         self,

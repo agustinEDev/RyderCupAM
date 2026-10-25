@@ -1,7 +1,7 @@
 """Excepciones compartidas de la capa de aplicación del módulo Competition."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from src.modules.competition.domain.services.ventana_de_actualizacion import CodigoDeVentana
@@ -192,6 +192,25 @@ class WithdrawalNotAllowedError(Exception):
     """
 
     error_code = "WITHDRAWAL_NOT_ALLOWED"
+    # El texto para el jugador, por motivo: la ruta no devuelve el de la
+    # excepcion, que esta en ingles y es para los logs
+    MENSAJES: ClassVar[dict[str, str]] = {
+        "NOT_FOURBALL": "Solo se puede retirar a un jugador en un fourball",
+        "MATCH_NOT_ACTIVE": "El partido ya no está en juego",
+        "NOT_A_PLAYER": "Ese jugador no juega este partido",
+        "ALREADY_WITHDRAWN": "Ese jugador ya está retirado",
+        "LAST_OF_SIDE": "No se puede retirar a los dos de un bando: concede el partido",
+        "SCORECARD_SUBMITTED": "Ya hay una tarjeta entregada: lo validado no se mueve",
+        "NOT_WITHDRAWN": "Ese jugador no está retirado",
+    }
+
+    def __init__(self, reason: str, message: str | None = None):
+        super().__init__(message or reason)
+        self.reason = reason
+
+    @property
+    def message(self) -> str:
+        return self.MENSAJES.get(self.reason, "No se puede retirar a ese jugador")
 
 
 class ScorecardNotReadyError(Exception):

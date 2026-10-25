@@ -44,7 +44,9 @@ class ConcedeMatchUseCase:
     ) -> dict:
         async with self._uow:
             match_id = MatchId(match_id_str)
-            match = await self._uow.matches.find_by_id(match_id)
+            # Bloqueada: la regla del retirado se mira con lo de ahora, no con una
+            # retirada que llega a la vez (code-review)
+            match = await self._uow.matches.find_by_id_for_update(match_id)
             if not match:
                 raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
 

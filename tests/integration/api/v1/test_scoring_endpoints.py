@@ -747,6 +747,9 @@ class TestRetirarJugador:
         )
 
         assert response.status_code == 409
+        # Codigo en la raiz y el motivo, para que el cliente lo explique
+        assert response.json()["error_code"] == "WITHDRAWAL_NOT_ALLOWED"
+        assert response.json()["reason"] == "NOT_FOURBALL"
 
     @pytest.mark.asyncio
     async def test_a_rival_is_403(self, client: AsyncClient):

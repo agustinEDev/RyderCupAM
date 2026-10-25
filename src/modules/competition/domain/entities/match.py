@@ -4,10 +4,12 @@ Match Entity - Partido de una sesión.
 Representa un partido individual dentro de una sesión de competición.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from src.modules.competition.domain.exceptions.competition_violations import WithdrawalViolation
+from src.modules.competition.domain.value_objects.bolas_fuera import BolasFuera
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
@@ -57,6 +59,7 @@ class Match:
         is_decided: bool = False,
         decided_result: dict | None = None,
         withdrawn_player_ids: tuple[UserId, ...] = (),
+        holes_without_ball: dict[UserId, tuple[int, ...]] | None = None,
     ):
         """Constructor privado (usar factory methods)."""
         self._id = id
@@ -75,6 +78,8 @@ class Match:
         self._is_decided = is_decided
         self._decided_result = decided_result
         self._withdrawn_player_ids = withdrawn_player_ids
+        # De los que volvieron, los hoyos que se cerraron sin su bola
+        self._holes_without_ball = dict(holes_without_ball or {})
 
     @classmethod
     def create(
@@ -183,6 +188,7 @@ class Match:
         is_decided: bool = False,
         decided_result: dict | None = None,
         withdrawn_player_ids: list[UserId] | None = None,
+        holes_without_ball: dict[UserId, tuple[int, ...]] | None = None,
     ) -> "Match":
         """Reconstruye desde BD (sin validaciones)."""
         return cls(
@@ -202,6 +208,7 @@ class Match:
             is_decided=is_decided,
             decided_result=decided_result,
             withdrawn_player_ids=tuple(withdrawn_player_ids or []),
+            holes_without_ball=holes_without_ball,
         )
 
     # ==================== Business Methods ====================
@@ -351,35 +358,47 @@ class Match:
                 bando o si alguien ya entrego la tarjeta
         """
         if match_format != MatchFormat.FOURBALL:
-            raise ValueError("Only a fourball player can be withdrawn")
+            raise WithdrawalViolation("NOT_FOURBALL", "Only a fourball player can be withdrawn")
         if self._status not in (MatchStatus.SCHEDULED, MatchStatus.IN_PROGRESS):
-            raise ValueError(f"Cannot withdraw a player from a match in status {self._status}")
+            raise WithdrawalViolation(
+                "MATCH_NOT_ACTIVE",
+                f"Cannot withdraw a player from a match in status {self._status}",
+            )
         team = self.get_player_team(user_id)
         if team is None:
-            raise ValueError(f"User {user_id} is not a player in this match")
+            raise WithdrawalViolation(
+                "NOT_A_PLAYER", f"User {user_id} is not a player in this match"
+            )
         if user_id in self._withdrawn_player_ids:
-            raise ValueError(f"User {user_id} is already withdrawn")
+            raise WithdrawalViolation("ALREADY_WITHDRAWN", f"User {user_id} is already withdrawn")
         bando = self._team_a_players if team == "A" else self._team_b_players
         if all(p.user_id == user_id or p.user_id in self._withdrawn_player_ids for p in bando):
             # El bando se queda sin bola: para eso estan conceder y el walkover
-            raise ValueError("Cannot withdraw the last player of a side")
+            raise WithdrawalViolation("LAST_OF_SIDE", "Cannot withdraw the last player of a side")
         self._sin_tarjetas_entregadas()
         self._withdrawn_player_ids = (*self._withdrawn_player_ids, user_id)
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-    def reinstate_player(self, user_id: UserId) -> None:
+    def reinstate_player(self, user_id: UserId, hoyos_cerrados: Collection[int]) -> None:
         """
-        Deshace la retirada: su bola vuelve a contar en los hoyos que quedan.
+        Deshace la retirada. Los hoyos que se cerraron sin su bola mientras
+        estuvo fuera (`hoyos_cerrados`, los calcula `ScoringService`) se quedan
+        asi; su bola vuelve en los demas (Agustin, 25 oct 2026).
 
         Raises:
-            ValueError: si no esta retirado, con el partido terminado o si
-                alguien ya entrego la tarjeta
+            WithdrawalViolation: si no esta retirado, con el partido terminado o
+                si alguien ya entrego la tarjeta
         """
         if user_id not in self._withdrawn_player_ids:
-            raise ValueError(f"User {user_id} is not withdrawn")
+            raise WithdrawalViolation("NOT_WITHDRAWN", f"User {user_id} is not withdrawn")
         if self._status not in (MatchStatus.SCHEDULED, MatchStatus.IN_PROGRESS):
-            raise ValueError(f"Cannot reinstate a player in a match in status {self._status}")
+            raise WithdrawalViolation(
+                "MATCH_NOT_ACTIVE", f"Cannot reinstate a player in a match in status {self._status}"
+            )
         self._sin_tarjetas_entregadas()
+        sin_su_bola = set(self._holes_without_ball.get(user_id, ())) | set(hoyos_cerrados)
+        if sin_su_bola:
+            self._holes_without_ball[user_id] = tuple(sorted(sin_su_bola))
         self._withdrawn_player_ids = tuple(
             uid for uid in self._withdrawn_player_ids if uid != user_id
         )
@@ -388,7 +407,9 @@ class Match:
     def _sin_tarjetas_entregadas(self) -> None:
         """Con una tarjeta entregada, lo validado ya no se mueve (W4)."""
         if self._scorecard_submitted_by:
-            raise ValueError("A scorecard has already been submitted in this match")
+            raise WithdrawalViolation(
+                "SCORECARD_SUBMITTED", "A scorecard has already been submitted in this match"
+            )
 
     def completar_genero_de_las_barras(
         self, genero_de: Callable[[MatchPlayer], Gender | None]
@@ -590,6 +611,21 @@ class Match:
     def withdrawn_player_ids(self) -> tuple[UserId, ...]:
         """Los jugadores retirados del fourball, en orden de retirada."""
         return self._withdrawn_player_ids
+
+    @property
+    def holes_without_ball(self) -> dict[UserId, tuple[int, ...]]:
+        """De los que volvieron, los hoyos que se cerraron sin su bola."""
+        return dict(self._holes_without_ball)
+
+    @property
+    def bolas_fuera(self) -> BolasFuera:
+        """Las bolas que no cuentan: lo que pasa la regla del hoyo (`ScoringService`)."""
+        return BolasFuera(
+            retirados=frozenset(self._withdrawn_player_ids),
+            hoyos_sin_su_bola={
+                uid: frozenset(hoyos) for uid, hoyos in self._holes_without_ball.items() if hoyos
+            },
+        )
 
     @property
     def effective_marker_assignments(self) -> tuple[MarkerAssignment, ...]:

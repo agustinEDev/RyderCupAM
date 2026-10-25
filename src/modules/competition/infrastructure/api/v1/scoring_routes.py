@@ -27,6 +27,7 @@ from src.modules.competition.application.dto.scoring_dto import (
     ScoringViewResponseDTO,
     SubmitHoleScoreBodyDTO,
     SubmitScorecardResponseDTO,
+    WithdrawalResponseDTO,
 )
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
@@ -149,6 +150,7 @@ async def submit_hole_score(
       (`error_code` `NOT_YOUR_MARKED_PLAYER`, BE #520; no se guarda nada)
     - 404: Partido no encontrado
     - 409: Partido no en estado de scoring, o su anotacion aun no ha abierto
+    - 409 `PLAYER_WITHDRAWN`: esta retirado del fourball (definitivo: la cola no reintenta)
       (`error_code` `SCORING_NOT_OPEN_YET`, con `scoring_opens_at`)
     """
     if body.acting_as is not None and not current_user.is_admin:
@@ -180,13 +182,7 @@ async def submit_hole_score(
     except NotYourMarkedPlayerError:
         # Con código propio en la RAÍZ, como SCORING_NOT_OPEN_YET: es un rechazo
         # definitivo (BE #520) y el cliente tiene que poder distinguirlo
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "detail": NotYourMarkedPlayerError.message,
-                "error_code": NotYourMarkedPlayerError.error_code,
-            },
-        )
+        return _error_en_la_raiz(NotYourMarkedPlayerError, status.HTTP_403_FORBIDDEN)
     except ScoringNotOpenYetError as e:
         # Con codigo propio y la hora: este rechazo lo arregla ESPERAR, asi que
         # el movil conserva el golpe en su cola en vez de darlo por perdido, a
@@ -257,6 +253,7 @@ async def submit_scorecard(
     - 400: Hoyos sin validar, tarjeta ya entregada
     - 403: No es jugador del partido
     - 404: Partido no encontrado
+    - 409 `PLAYER_WITHDRAWN`: esta retirado del fourball y no entrega
     - 409: Partido no en estado de scoring
     """
     if acting_as is not None and not current_user.is_admin:
@@ -330,15 +327,20 @@ async def get_leaderboard(
         ) from e
 
 
-def _retirado() -> JSONResponse:
-    """409 con codigo propio en la raiz: lo lee el cliente (`api.js`)."""
+def _error_en_la_raiz(error, codigo_http: int) -> JSONResponse:
+    """
+    Un rechazo con su codigo en la RAIZ del cuerpo, donde lo lee el cliente
+    (`api.js`), y el texto fijo de la clase, no el de la excepcion.
+    """
     return JSONResponse(
-        status_code=status.HTTP_409_CONFLICT,
-        content={
-            "detail": PlayerWithdrawnError.message,
-            "error_code": PlayerWithdrawnError.error_code,
-        },
+        status_code=codigo_http,
+        content={"detail": error.message, "error_code": error.error_code},
     )
+
+
+def _retirado() -> JSONResponse:
+    """El retirado del fourball no anota ni entrega: 409, y la cola no reintenta."""
+    return _error_en_la_raiz(PlayerWithdrawnError, status.HTTP_409_CONFLICT)
 
 
 # ======================================================================================
@@ -434,7 +436,12 @@ async def _retirada(use_case, match_id, player_id, current_user, *, undo: bool):
     except NotMatchPlayerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except WithdrawalNotAllowedError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+        # Codigo en la raiz y el motivo, para que el cliente explique cual de
+        # las reglas (code-review); el texto, en español y por motivo
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": e.message, "error_code": e.error_code, "reason": e.reason},
+        )
 
 
 @router.post(
@@ -442,6 +449,7 @@ async def _retirada(use_case, match_id, player_id, current_user, *, undo: bool):
     status_code=status.HTTP_200_OK,
     summary="Retirar a un jugador de un fourball",
     tags=["Competitions - Scoring"],
+    response_model=WithdrawalResponseDTO,
 )
 @limiter.limit("10/minute")
 async def withdraw_match_player(
@@ -461,8 +469,8 @@ async def withdraw_match_player(
     - 200: `{match_id, withdrawn_player_ids, decided_result}`
     - 403: un rival o alguien de fuera
     - 404: partido, ronda o competicion no encontrados
-    - 409: no se puede (no es fourball, partido terminado, ultimo de su bando,
-      ya retirado o con una tarjeta entregada)
+    - 409 `WITHDRAWAL_NOT_ALLOWED` con `reason`: no es fourball, partido
+      terminado, ultimo de su bando, ya retirado o con una tarjeta entregada
     """
     return await _retirada(use_case, match_id, player_id, current_user, undo=False)
 
@@ -472,6 +480,7 @@ async def withdraw_match_player(
     status_code=status.HTTP_200_OK,
     summary="Deshacer la retirada de un jugador de un fourball",
     tags=["Competitions - Scoring"],
+    response_model=WithdrawalResponseDTO,
 )
 @limiter.limit("10/minute")
 async def reinstate_match_player(
@@ -482,7 +491,8 @@ async def reinstate_match_player(
     use_case: WithdrawMatchPlayerUseCase = Depends(get_withdraw_match_player_use_case),
 ):
     """
-    Deshace la retirada: su bola vuelve a contar en los hoyos que quedan.
+    Deshace la retirada: los hoyos que se cerraron sin su bola se quedan asi y
+    su bola vuelve a contar en los demas.
 
     **Auth y respuestas:** las mismas que al retirar.
     """

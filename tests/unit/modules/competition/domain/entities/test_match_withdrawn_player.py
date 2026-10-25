@@ -9,14 +9,16 @@ avanzaba nunca.
 | #   | caso                                                         | esperado                   |
 |-----|--------------------------------------------------------------|----------------------------|
 | W2  | retirar en fourball, programado o en juego                   | queda retirado             |
-| W2b | en individual o foursomes                                    | ValueError                 |
-| W2c | con el partido terminado                                     | ValueError                 |
-| W2d | alguien que no juega el partido                              | ValueError                 |
-| W2e | retirarlo dos veces                                          | ValueError                 |
-| W3  | retirar a los dos de un bando                                | ValueError                 |
-| W4  | con una tarjeta ya entregada (retirar o deshacer)            | ValueError                 |
+| W2b | en individual o foursomes                                    | WithdrawalViolation        |
+| W2c | con el partido terminado                                     | WithdrawalViolation        |
+| W2d | alguien que no juega el partido                              | WithdrawalViolation        |
+| W2e | retirarlo dos veces                                          | WithdrawalViolation        |
+| W3  | retirar a los dos de un bando                                | WithdrawalViolation        |
+| W4  | con una tarjeta ya entregada (retirar o deshacer)            | WithdrawalViolation        |
 | W5  | deshacer                                                     | vuelve a jugar             |
-| W5b | deshacer a quien no está retirado                            | ValueError                 |
+| W5b | deshacer a quien no está retirado                            | WithdrawalViolation        |
+| W5d | deshacer: los hoyos cerrados sin él se quedan así            | sin su bola para siempre   |
+| W5e | qué hoyos se cerraron sin su bola                            | los que ya tenían resultado|
 | W7  | su bola validada antes de retirarse                          | cuenta en ese hoyo         |
 | W8  | su bola sin validar                                          | el hoyo se cierra con tres |
 | W8b | sin retirados, una bola sin validar                          | el hoyo sigue abierto      |
@@ -29,6 +31,7 @@ import pytest
 
 from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.exceptions.competition_violations import WithdrawalViolation
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -105,32 +108,32 @@ class TestRetirar:
     @pytest.mark.parametrize("formato", [MatchFormat.SINGLES, MatchFormat.FOURSOMES])
     def test_w2b_only_in_fourball(self, formato):
         m = _partido(formato)
-        with pytest.raises(ValueError):
+        with pytest.raises(WithdrawalViolation):
             m.withdraw_player(_a1(m), formato)
         assert m.withdrawn_player_ids == ()
 
     def test_w2c_not_once_the_match_is_over(self):
         m = _partido()
         m.complete({"winner": "A", "score": "2&1"})
-        with pytest.raises(ValueError):
+        with pytest.raises(WithdrawalViolation):
             m.withdraw_player(_a1(m), F)
 
     def test_w2d_not_someone_outside_the_match(self):
         m = _partido()
-        with pytest.raises(ValueError):
+        with pytest.raises(WithdrawalViolation):
             m.withdraw_player(UserId.generate(), F)
 
     def test_w2e_not_twice(self):
         m = _partido()
         m.withdraw_player(_a1(m), F)
-        with pytest.raises(ValueError):
+        with pytest.raises(WithdrawalViolation):
             m.withdraw_player(_a1(m), F)
         assert m.withdrawn_player_ids == (_a1(m),)
 
     def test_w3_not_both_players_of_a_side(self):
         m = _partido()
         m.withdraw_player(_a1(m), F)
-        with pytest.raises(ValueError):
+        with pytest.raises(WithdrawalViolation):
             m.withdraw_player(_a2(m), F)
 
     def test_w3b_one_of_each_side_is_fine(self):
@@ -142,36 +145,79 @@ class TestRetirar:
     def test_w4_not_with_a_scorecard_handed_in(self):
         m = _partido()
         m.submit_scorecard(m.team_b_players[0].user_id, F)
-        with pytest.raises(ValueError):
+        with pytest.raises(WithdrawalViolation):
             m.withdraw_player(_a1(m), F)
 
     def test_w4b_undo_neither_with_a_scorecard_handed_in(self):
         m = _partido()
         m.withdraw_player(_a1(m), F)
         m.submit_scorecard(m.team_b_players[0].user_id, F)
-        with pytest.raises(ValueError):
-            m.reinstate_player(_a1(m))
+        with pytest.raises(WithdrawalViolation):
+            m.reinstate_player(_a1(m), ())
         assert m.withdrawn_player_ids == (_a1(m),)
 
 
 class TestDeshacer:
+    def test_w5d_holes_closed_without_him_stay_that_way(self):
+        """Given vuelve tras cerrarse el 1 sin él / When se deshace / Then el 1 sigue sin su bola."""
+        m = _partido()
+        m.withdraw_player(_a1(m), F)
+        m.reinstate_player(_a1(m), {1})
+
+        assert m.withdrawn_player_ids == ()
+        assert m.holes_without_ball == {_a1(m): (1,)}
+        filas = _hoyo(m, None, a1_validada=False)
+        assert ScoringService().hole_result(filas, F, m.bolas_fuera) == "B"
+        assert ScoringService().hole_result(filas, F) is None
+
+    def test_w5f_a_second_absence_adds_up(self):
+        """Given se va dos veces / When vuelve las dos / Then suma los hoyos de las dos."""
+        m = _partido()
+        m.withdraw_player(_a1(m), F)
+        m.reinstate_player(_a1(m), {1, 2})
+        m.withdraw_player(_a1(m), F)
+        m.reinstate_player(_a1(m), {7})
+        assert m.holes_without_ball == {_a1(m): (1, 2, 7)}
+
+    def test_w5e_the_service_finds_the_holes_closed_without_him(self):
+        """Given el 1 cerrado sin él, el 2 abierto y el 3 cerrado con él / Then solo el 1."""
+        m = _partido()
+        filas = _hoyo(m, None, a1_validada=False)
+        abierto = _hoyo(m, None, a1_validada=False)
+        for fila in abierto:
+            fila._hole_number = 2
+        abierto[3] = _fila(m, m.team_b_players[1].user_id, "B", None, validada=False)
+        abierto[3]._hole_number = 2
+        # El 3, cerrado CON su bola (la validó antes de irse): no es de los de sin él
+        con_el = _hoyo(m, 3, a1_validada=True)
+        for fila in con_el:
+            fila._hole_number = 3
+        m.withdraw_player(_a1(m), F)
+
+        cerrados = ScoringService().hoyos_cerrados_sin_su_bola(
+            [*filas, *abierto, *con_el], F, m.bolas_fuera, _a1(m)
+        )
+
+        assert cerrados == {1}
+
     def test_w5_back_in_play(self):
         m = _partido()
         m.withdraw_player(_a1(m), F)
-        m.reinstate_player(_a1(m))
+        m.reinstate_player(_a1(m), ())
         assert m.withdrawn_player_ids == ()
 
     def test_w5b_not_someone_who_is_not_withdrawn(self):
         m = _partido()
-        with pytest.raises(ValueError):
-            m.reinstate_player(_a1(m))
+        with pytest.raises(WithdrawalViolation):
+            m.reinstate_player(_a1(m), ())
 
 
 class TestElHoyo:
     def test_w8_his_unvalidated_ball_does_not_hold_the_hole(self):
         m = _partido()
         filas = _hoyo(m, None, a1_validada=False)
-        assert ScoringService().hole_result(filas, F, withdrawn=(_a1(m),)) == "B"
+        m.withdraw_player(_a1(m), F)
+        assert ScoringService().hole_result(filas, F, m.bolas_fuera) == "B"
 
     def test_w8b_without_withdrawals_the_hole_stays_open(self):
         m = _partido()
@@ -181,14 +227,16 @@ class TestElHoyo:
         m = _partido()
         # A1 hizo 3, validado antes de irse: gana A con su bola
         filas = _hoyo(m, 3, a1_validada=True)
-        assert ScoringService().hole_result(filas, F, withdrawn=(_a1(m),)) == "A"
+        m.withdraw_player(_a1(m), F)
+        assert ScoringService().hole_result(filas, F, m.bolas_fuera) == "A"
 
     def test_w8c_the_decision_follows_the_same_rule(self):
         m = _partido()
         filas = _hoyo(m, None, a1_validada=False)
         servicio = ScoringService()
-        assert servicio.hole_results_by_hole(filas, F, withdrawn=(_a1(m),)) == {1: "B"}
         assert servicio.hole_results_by_hole(filas, F) == {}
+        m.withdraw_player(_a1(m), F)
+        assert servicio.hole_results_by_hole(filas, F, m.bolas_fuera) == {1: "B"}
 
 
 class TestMarcadores:
@@ -279,7 +327,7 @@ class TestMarcadores:
     def test_w5c_undoing_restores_the_draw(self):
         m = _partido()
         m.withdraw_player(_a1(m), F)
-        m.reinstate_player(_a1(m))
+        m.reinstate_player(_a1(m), ())
         assert m.effective_marker_assignments == m.marker_assignments
 
 
@@ -295,5 +343,5 @@ class TestTarjetas:
     def test_w12b_the_withdrawn_player_hands_in_nothing(self):
         m = _partido()
         m.withdraw_player(_a1(m), F)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError):  # entregar no es retirar: su ValueError de siempre
             m.submit_scorecard(_a1(m), F)

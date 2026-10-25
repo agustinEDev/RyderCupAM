@@ -25,9 +25,7 @@ async def revisa_la_decision(
     if match.scorecard_submitted_by and match.is_decided:
         return False
     all_scores = await uow.hole_scores.find_by_match(match.id)
-    decided_result = scoring_service.decided_result(
-        all_scores, match_format, match.withdrawn_player_ids
-    )
+    decided_result = scoring_service.decided_result(all_scores, match_format, match.bolas_fuera)
     if decided_result == match.decided_result:
         return False
     if decided_result is None:

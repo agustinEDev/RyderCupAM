@@ -200,6 +200,14 @@ class SubmitScorecardResponseDTO(BaseModel):
     match_complete: bool
 
 
+class WithdrawalResponseDTO(BaseModel):
+    """Respuesta al retirar a un jugador del fourball o deshacerlo (25 oct 2026)."""
+
+    match_id: str
+    withdrawn_player_ids: list[str]
+    decided_result: DecidedResultDTO | None = None
+
+
 class ConcedeMatchBodyDTO(BaseModel):
     """Body del request para conceder un partido."""
 

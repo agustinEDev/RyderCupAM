@@ -182,7 +182,7 @@ class GetLeaderboardUseCase:
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
         if hole_scores and round_entity.match_format:
             results = self._scoring_service.hole_results_by_hole(
-                hole_scores, round_entity.match_format, match.withdrawn_player_ids
+                hole_scores, round_entity.match_format, match.bolas_fuera
             )
             if results:
                 standing = self._scoring_service.standing_in_hole_order(results)
@@ -196,7 +196,7 @@ class GetLeaderboardUseCase:
         """
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
         results = self._scoring_service.hole_results_by_hole(
-            hole_scores, match_format, match.withdrawn_player_ids
+            hole_scores, match_format, match.bolas_fuera
         )
         if not results:
             return None

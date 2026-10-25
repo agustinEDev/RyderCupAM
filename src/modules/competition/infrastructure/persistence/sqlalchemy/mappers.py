@@ -674,6 +674,26 @@ class MarkerAssignmentsJsonType(TypeDecorator):
         )
 
 
+class HolesWithoutBallJsonType(TypeDecorator):
+    """
+    dict[UserId, tuple[int, ...]] a/desde JSONB: de cada jugador que volvio al
+    fourball, los hoyos que se cerraron sin su bola (25 oct 2026). Vacio es NULL.
+    """
+
+    impl = JSONB
+    cache_ok = True
+
+    def process_bind_param(self, value: dict | None, dialect) -> dict | None:
+        if not value:
+            return None
+        return {str(uid.value): sorted(hoyos) for uid, hoyos in value.items() if hoyos}
+
+    def process_result_value(self, value: dict | None, dialect) -> dict:
+        if not value:
+            return {}
+        return {UserId(uuid.UUID(uid)): tuple(hoyos) for uid, hoyos in value.items()}
+
+
 class ScorecardSubmittedByJsonType(TypeDecorator):
     """
     TypeDecorator para serializar tuple[UserId, ...] a/desde JSONB.
@@ -1047,6 +1067,7 @@ matches_table = Table(
     # Fourball: los retirados (25 oct 2026). Misma forma que las tarjetas
     # entregadas, una lista de user_id; nulo se lee como ninguno
     Column("withdrawn_player_ids", ScorecardSubmittedByJsonType, nullable=True),
+    Column("holes_without_ball", HolesWithoutBallJsonType, nullable=True),
     Column("is_decided", Boolean, nullable=False, default=False),
     Column("decided_result", MatchResultJsonType, nullable=True),
     Column("created_at", DateTime, nullable=False),
@@ -1663,6 +1684,7 @@ def start_competition_mappers():
                 "_marker_assignments": matches_table.c.marker_assignments,
                 "_scorecard_submitted_by": matches_table.c.scorecard_submitted_by,
                 "_withdrawn_player_ids": matches_table.c.withdrawn_player_ids,
+                "_holes_without_ball": matches_table.c.holes_without_ball,
                 "_is_decided": matches_table.c.is_decided,
                 "_decided_result": matches_table.c.decided_result,
                 "_created_at": matches_table.c.created_at,

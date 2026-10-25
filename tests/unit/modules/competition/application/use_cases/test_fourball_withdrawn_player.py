@@ -217,7 +217,12 @@ class TestQuienPuede:
 
 class TestLaDecision:
     @pytest.mark.asyncio
-    async def test_w9_withdrawing_decides_it_and_undoing_clears_it(self):
+    async def test_w9_withdrawing_decides_it_and_undoing_keeps_what_closed(self):
+        """
+        Given diez hoyos que solo esperaban su bola / When se le retira / Then
+        10&8; y al deshacer, esos diez se quedan cerrados sin él (code-review:
+        antes volvían a esperarle y el partido se atascaba).
+        """
         e = _Escena()
         await e.guardar(_diez_hoyos_para_b_sin_la_bola_de_a1(e))
         assert (await e.partido()).is_decided is False
@@ -226,8 +231,31 @@ class TestLaDecision:
         decidido = await e.partido()
         assert decidido.decided_result == {"winner": "B", "score": "10&8"}
 
+        respuesta = await e.retirar(e.a1, e.a2, deshacer=True)
+        vuelto = await e.partido()
+        assert vuelto.withdrawn_player_ids == ()
+        assert vuelto.holes_without_ball == {e.a1: tuple(range(1, 11))}
+        assert vuelto.decided_result == {"winner": "B", "score": "10&8"}
+        assert respuesta.decided_result.score == "10&8"
+
+    @pytest.mark.asyncio
+    async def test_w9d_undoing_brings_his_ball_back_where_nothing_closed(self):
+        """Given un hoyo abierto también por otra bola / When vuelve / Then ahí su bola cuenta otra vez."""
+        e = _Escena()
+        b2 = e.match.team_b_players[1].user_id
+        await e.guardar(
+            [
+                _fila(e.match, 1, e.a1, "A", None, validada=False),
+                _fila(e.match, 1, e.a2, "A", 5),
+                _fila(e.match, 1, e.b1, "B", 4),
+                _fila(e.match, 1, b2, "B", None, validada=False),
+            ]
+        )
+        await e.retirar(e.a1, e.a2)
+
         await e.retirar(e.a1, e.a2, deshacer=True)
-        assert (await e.partido()).is_decided is False
+
+        assert (await e.partido()).holes_without_ball == {}
 
     @pytest.mark.asyncio
     async def test_w9b_scoring_a_hole_keeps_the_withdrawn_player_out(self):
@@ -254,6 +282,21 @@ class TestLaDecision:
         )._compute_decided_result(e.match, F)
 
         assert resultado == {"winner": "B", "score": "10&8"}
+
+    @pytest.mark.asyncio
+    async def test_w13b_the_live_leaderboard_too(self):
+        """Given A1 retirado y diez hoyos para B sin su bola / Then la clasificación en juego, B 10 arriba."""
+        e = _Escena()
+        filas = _diez_hoyos_para_b_sin_la_bola_de_a1(e)
+        e.match.withdraw_player(e.a1, F)
+        await e.guardar(filas)
+
+        estado = await GetLeaderboardUseCase(
+            e.uow, MagicMock(), ScoringService()
+        )._compute_in_progress_standing(e.match, e.ronda)
+
+        assert estado[1] == "B"
+        assert estado[2] == 10
 
 
 class TestAnotarYEntregar:

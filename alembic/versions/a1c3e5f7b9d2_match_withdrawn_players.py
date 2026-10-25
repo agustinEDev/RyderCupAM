@@ -6,8 +6,9 @@ los hoyos que no tenia validados y su bando juega con la de su pareja. Con la
 regla de las cuatro bolas (BE #656), un ausente dejaba el partido sin avanzar.
 
 La lista de retirados va en el partido, como las tarjetas entregadas: JSONB
-nulo, que se lee como ninguno. Una columna nula sin reescribir filas: va en la
-transaccion.
+nulo, que se lee como ninguno. Y de los que vuelven, los hoyos que se cerraron
+sin su bola, que se quedan asi (`holes_without_ball`, {user_id: [hoyos]}). Dos
+columnas nulas sin reescribir filas: va en la transaccion.
 
 Revision ID: a1c3e5f7b9d2
 Revises: f8a0c2e4b6d7
@@ -30,7 +31,12 @@ def upgrade() -> None:
         "matches",
         sa.Column("withdrawn_player_ids", postgresql.JSONB(), nullable=True),
     )
+    op.add_column(
+        "matches",
+        sa.Column("holes_without_ball", postgresql.JSONB(), nullable=True),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("matches", "holes_without_ball")
     op.drop_column("matches", "withdrawn_player_ids")

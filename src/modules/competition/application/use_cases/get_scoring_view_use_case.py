@@ -101,13 +101,13 @@ class GetScoringViewUseCase:
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
             players_dto = self._build_players(match, user_names, golf_course)
             scores_dto, hole_results_list = self._build_scores(
-                hole_scores, round_entity, match.withdrawn_player_ids
+                hole_scores, round_entity, match.bolas_fuera
             )
 
             # Decidido, el estado del hoyo en que se decidio (Agustin, 25 oct 2026)
             standing = (
                 self._scoring_service.standing(
-                    hole_scores, round_entity.match_format, match.withdrawn_player_ids
+                    hole_scores, round_entity.match_format, match.bolas_fuera
                 )
                 if round_entity.match_format
                 else self._scoring_service.calculate_match_standing(hole_results_list)
@@ -204,7 +204,7 @@ class GetScoringViewUseCase:
             for p in (*match.team_a_players, *match.team_b_players)
         ]
 
-    def _build_scores(self, hole_scores, round_entity, withdrawn=()):
+    def _build_scores(self, hole_scores, round_entity, fuera=None):
         """Construye DTOs de scores por hoyo y calcula resultados."""
         scores_by_hole: dict[int, list] = {}
         for hs in hole_scores:
@@ -228,7 +228,7 @@ class GetScoringViewUseCase:
                 team_b_player_nets,
                 match_format,
                 hole_results_list,
-                withdrawn,
+                fuera,
             )
 
             scores_dto.append(
@@ -275,10 +275,10 @@ class GetScoringViewUseCase:
         team_b_player_nets,
         match_format,
         hole_results_list,
-        withdrawn=(),
+        fuera=None,
     ):
         """El resultado del hoyo, o None si aun no se puede decidir (`hole_result`)."""
-        winner = self._scoring_service.hole_result(hole_hs_list, match_format, withdrawn)
+        winner = self._scoring_service.hole_result(hole_hs_list, match_format, fuera)
         if winner is None:
             return None
 

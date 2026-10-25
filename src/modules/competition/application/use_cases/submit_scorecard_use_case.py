@@ -107,7 +107,7 @@ class SubmitScorecardUseCase:
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
             results_by_hole = self._scoring_service.hole_results_by_hole(
-                all_scores, match_format, match.withdrawn_player_ids
+                all_scores, match_format, match.bolas_fuera
             )
             hole_results = list(results_by_hole.values())
 
