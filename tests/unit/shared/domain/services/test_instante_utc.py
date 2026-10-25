@@ -34,7 +34,7 @@ def test_i3_none():
 # BE #635 (25 oct 2026): las fechas de la partida rápida se guardan sin zona y se
 # leen como UTC (`en_utc`, y el front desde la FE #710). Con `datetime.now()` eran
 # la hora LOCAL del servidor: bien en Render (UTC), desplazadas en otra zona
-def test_i4_la_partida_rapida_fecha_en_utc_aunque_el_servidor_este_en_otra_zona(monkeypatch):
+def test_i4_la_partida_rapida_fecha_en_utc_aunque_el_servidor_este_en_otra_zona():
     """Given el proceso en la zona de Tokio / When se crea / Then sus fechas, en UTC."""
     import os
     import time
@@ -46,7 +46,10 @@ def test_i4_la_partida_rapida_fecha_en_utc_aunque_el_servidor_este_en_otra_zona(
     from src.modules.user.domain.value_objects.user_id import UserId
     from src.shared.domain.value_objects.match_format import MatchFormat
 
-    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    # A mano y no con monkeypatch: este no vuelve a llamar a tzset al restaurar,
+    # y los tests siguientes se quedarían con otra zona (CodeRabbit)
+    zona_original = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Tokyo"
     time.tzset()
     try:
         qm = QuickMatch.create(
@@ -60,6 +63,8 @@ def test_i4_la_partida_rapida_fecha_en_utc_aunque_el_servidor_este_en_otra_zona(
         assert abs(qm.created_at - ahora_utc) < timedelta(minutes=1)
         assert abs(qm.updated_at - ahora_utc) < timedelta(minutes=1)
     finally:
-        monkeypatch.delenv("TZ", raising=False)
-        os.environ.pop("TZ", None)
+        if zona_original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = zona_original
         time.tzset()
