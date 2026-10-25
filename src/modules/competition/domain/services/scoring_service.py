@@ -179,6 +179,10 @@ class ScoringService(MatchPlayScoring):
         """
         return self.decided_in_hole_order(self.hole_results_by_hole(hole_scores, match_format))
 
+    def standing(self, hole_scores: Sequence[HoleScore], match_format: MatchFormat) -> dict:
+        """Como va el partido (`standing_in_hole_order`)."""
+        return self.standing_in_hole_order(self.hole_results_by_hole(hole_scores, match_format))
+
     def get_affected_player_ids(
         self,
         team_a_players: tuple[MatchPlayer, ...],

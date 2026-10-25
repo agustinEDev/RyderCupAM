@@ -102,7 +102,12 @@ class GetScoringViewUseCase:
             players_dto = self._build_players(match, user_names, golf_course)
             scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
 
-            standing = self._scoring_service.calculate_match_standing(hole_results_list)
+            # Decidido, el estado del hoyo en que se decidio (Agustin, 25 oct 2026)
+            standing = (
+                self._scoring_service.standing(hole_scores, round_entity.match_format)
+                if round_entity.match_format
+                else self._scoring_service.calculate_match_standing(hole_results_list)
+            )
             # Un partido concedido o ganado por walkover tambien esta decidido, y
             # la pantalla tiene que saber quien gano: ese resultado lo guarda la
             # concesion o el walkover, no `decided_result`, que es el de los

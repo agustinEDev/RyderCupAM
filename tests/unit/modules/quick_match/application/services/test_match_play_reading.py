@@ -131,11 +131,12 @@ class TestDecididoEnElOrdenDeLosHoyos:
     def test_d8_a_missing_ball_before_the_decision_leaves_it_undecided(self):
         lectura = self._gana_a(self._fourball(), range(1, 19), sin_la_bola_de_a2=(4,))
 
-        assert lectura.decided_early is False
-        assert lectura.score != "17&1"
+        assert (lectura.winner, lectura.score, lectura.decided_early) == ("A", "17UP", False)
 
     def test_d10_a_missing_ball_after_the_decision_keeps_10_and_8(self):
         lectura = self._gana_a(self._fourball(), range(1, 13), sin_la_bola_de_a2=(11,))
 
         assert (lectura.winner, lectura.score) == ("A", "10&8")
         assert lectura.decided_early is True
+        # Los que cuentan: hasta la decision, como la pantalla
+        assert lectura.holes_played == 10

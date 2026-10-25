@@ -150,12 +150,14 @@ def match_play_reading(
     # Decidido en el orden de los hoyos, como en los torneos: con un hoyo sin
     # cerrar antes no lo esta (Agustin, 25 oct 2026). Si se cerro antes del 18,
     # el resultado va en "3&2", ventaja y hoyos que quedaban
-    outcome = scoring_service.decided_in_hole_order(results_by_hole)
-    if outcome is not None:
+    hasta_la_decision = scoring_service.holes_until_decided(results_by_hole)
+    if hasta_la_decision is not None:
+        outcome = scoring_service.format_decided_result(hasta_la_decision)
         return MatchPlayReading(
             outcome["winner"],
             outcome["score"],
-            jugados,
+            # Los que cuentan: hasta la decision, como la pantalla
+            len(hasta_la_decision),
             # "3&2" antes del 18; "1UP" en el 18
             decided_early="&" in outcome["score"],
         )

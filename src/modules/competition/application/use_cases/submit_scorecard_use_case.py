@@ -108,7 +108,9 @@ class SubmitScorecardUseCase:
             if match.is_decided and match.decided_result:
                 result_data = match.decided_result
             elif hole_results:
-                result_data = self._scoring_service.format_decided_result(hole_results)
+                result_data = self._scoring_service.result_in_hole_order(
+                    self._scoring_service.hole_results_by_hole(all_scores, match_format)
+                )
             else:
                 result_data = {"winner": None, "score": None}
 

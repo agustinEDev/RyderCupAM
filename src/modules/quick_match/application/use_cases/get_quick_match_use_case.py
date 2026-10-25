@@ -273,16 +273,13 @@ class GetQuickMatchUseCase:
         # Decidido en el orden de los hoyos, el estado es el del hoyo en que se
         # decidio: lo anotado despues no lo mueve y el front pinta «10&8», no
         # «18UP» (Agustin, 25 oct 2026). Con un hueco antes, sigue en juego
-        hasta_la_decision = self._scoring_service.holes_until_decided(results_by_hole)
-        standing = self._scoring_service.calculate_match_standing(
-            hasta_la_decision or list(results_by_hole.values())
-        )
+        standing = self._scoring_service.standing_in_hole_order(results_by_hole)
         return QuickMatchStandingResponseDTO(
             status=standing["status"],
             leading_team=standing["leading_team"],
             holes_played=standing["holes_played"],
             holes_remaining=standing["holes_remaining"],
-            is_decided=hasta_la_decision is not None,
+            is_decided=self._scoring_service.holes_until_decided(results_by_hole) is not None,
         )
 
     @staticmethod

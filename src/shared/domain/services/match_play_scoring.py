@@ -183,6 +183,29 @@ class MatchPlayScoring:
             return None
         return self.format_decided_result(hasta_la_decision)
 
+    def result_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict:
+        """
+        El resultado con lo anotado: el de la decision si la hay y, si no, la
+        ventaja tal cual («5UP», «AS»). Con hoyos sin cerrar, `format_decided_result`
+        de los cerrados inventaba un «5&3» que no habia ocurrido (Agustin, 25
+        oct 2026).
+        """
+        decidido = self.decided_in_hole_order(results_by_hole)
+        if decidido is not None:
+            return decidido
+        standing = self.calculate_match_standing(list(results_by_hole.values()))
+        if standing["leading_team"] is None:
+            return {"winner": "HALVED", "score": "AS"}
+        return {"winner": standing["leading_team"], "score": standing["status"]}
+
+    def standing_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict:
+        """
+        Como va el partido: decidido, el estado del hoyo en que se decidio (lo
+        anotado despues no lo mueve); si no, el de todos los hoyos cerrados.
+        """
+        hasta_la_decision = self.holes_until_decided(results_by_hole)
+        return self.calculate_match_standing(hasta_la_decision or list(results_by_hole.values()))
+
     def holes_until_decided(self, results_by_hole: Mapping[int, str]) -> list[str] | None:
         """
         Los resultados del 1 al hoyo en que se decidio el partido, o None si
