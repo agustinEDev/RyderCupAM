@@ -546,6 +546,11 @@ class TestSinMarcado:
 
         assert (await e.uow.hole_scores.find_one(e.match.id, 1, rival)).own_score == 6
 
+    @pytest.mark.parametrize("vacio", ["", "   "])
+    def test_a_blank_marked_player_is_none(self, vacio):
+        """Given `marked_player_id` vacío o de espacios / Then None (code-review, CodeRabbit)."""
+        assert SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=vacio).marked_player_id is None
+
     def test_a_marker_score_without_whose_it_is_is_rejected(self):
         """Given `marked_score` sin `marked_player_id` / Then ValidationError (W21b, 422)."""
         with pytest.raises(ValidationError):

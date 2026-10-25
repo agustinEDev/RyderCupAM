@@ -38,8 +38,8 @@ class SubmitHoleScoreBodyDTO(BaseModel):
     @field_validator("marked_player_id")
     @classmethod
     def _vacio_es_ninguno(cls, valor: str | None) -> str | None:
-        """Un texto vacío es no mandarlo: sin marcado (code-review)."""
-        return valor or None
+        """Un texto vacío, o solo de espacios, es no mandarlo: sin marcado (code-review, CodeRabbit)."""
+        return (valor or "").strip() or None
 
     @model_validator(mode="after")
     def _marcado_con_su_jugador(self) -> "SubmitHoleScoreBodyDTO":
