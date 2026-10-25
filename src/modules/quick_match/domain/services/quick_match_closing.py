@@ -16,7 +16,8 @@ Lo que se cierra más de 2 días después de su plazo no se publica en Actividad
 saldría como nueva una partida de hace semanas.
 
 Las fechas son UTC sin zona, como las que se guardan: `created_at` y
-`started_at` salen de `datetime.now()` en un servidor en UTC (Render y el Kind).
+`started_at` salen de `ahora_utc_sin_zona()`, en UTC sea cual sea la zona del
+servidor (BE #635).
 """
 
 from datetime import UTC, datetime, time, timedelta

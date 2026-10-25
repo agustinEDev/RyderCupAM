@@ -8,7 +8,7 @@ tests fijan qué campos rellena cada una y, sobre todo, cuáles deja en None en
 lugar de inventar una equivalencia.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -1254,6 +1254,8 @@ class TestCompetitionMatch:
         away = (await use_case.execute(rival.id)).matches[0]
 
         assert home.date == date(2026, 6, 1)
+        # H5: el de torneo no lleva instante; su día ya es el de la ronda
+        assert home.played_at is None
         assert home.tournament_name == "Ryder Cup Test"
         assert home.golf_course_name == "Real Club"
         assert home.match_format == "SINGLES"
@@ -2151,6 +2153,28 @@ class TestMatchName:
         )
 
         assert feed.matches[0].date == date(2026, 10, 18)
+
+    async def test_h5_a_quick_match_sends_when_it_was_played_in_utc(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        H5 (25 oct 2026): `date` es el día en UTC, y una partida empezada a las
+        22:30 UTC es del día siguiente en Madrid. `played_at`, con su zona, deja
+        que el cliente la ponga en su hora local, como Actividad.
+        """
+        player = await create_user(user_uow, "Late", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        match = await played_quick_match(qm_uow, course, player)
+        match._created_at = datetime(2026, 10, 15, 18, 0)
+        match._started_at = datetime(2026, 10, 21, 22, 30)
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].played_at == datetime(2026, 10, 21, 22, 30, tzinfo=UTC)
+        assert feed.matches[0].played_at.tzinfo is not None
+        assert feed.matches[0].date == date(2026, 10, 21)
 
     async def test_a_quick_match_without_a_name_sends_null(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

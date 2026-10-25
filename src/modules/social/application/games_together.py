@@ -20,6 +20,7 @@ from src.modules.social.application.ports.shared_games_interface import (
     SharedGameKind,
 )
 from src.modules.social.domain.services.head_to_head import Record, tally
+from src.shared.domain.services.instante_utc import en_utc
 
 # La fecha en ISO no contiene '|', asi que parte el cursor sin ambiguedad
 CURSOR_SEPARATOR = "|"
@@ -128,6 +129,7 @@ def _to_dto(game: SharedGame) -> GameTogetherDTO:
         kind=game.kind.value,
         id=game.game_id,
         played_on=game.played_on,
+        played_at=en_utc(game.played_at) if rapida else None,
         golf_course_id=game.golf_course_id,
         golf_course_name=game.golf_course_name,
         format=game.format,

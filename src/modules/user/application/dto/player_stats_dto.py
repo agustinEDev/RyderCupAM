@@ -2,7 +2,10 @@
 
 # El DTO expone un campo llamado `date`, que sombrearia al tipo dentro de la
 # clase: de ahi el alias
-from datetime import date as date_type
+from datetime import (
+    date as date_type,
+    datetime,
+)
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -101,6 +104,9 @@ class RecentMatchDTO(BaseModel):
 
     id: str
     date: date_type | None = None
+    # H5: la partida rapida, en UTC con su zona, para que el cliente la ponga en
+    # su dia local (`date` es el dia en UTC). Nulo en torneo: su dia es el de la ronda
+    played_at: datetime | None = None
     match_format: str | None = None
     scoring_format: str | None = None
     golf_course_id: str | None = None

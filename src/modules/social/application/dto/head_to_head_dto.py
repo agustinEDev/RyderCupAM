@@ -1,6 +1,6 @@
 """DTOs del cara a cara y de las partidas jugadas juntos (BE-3)."""
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -54,6 +54,13 @@ class GameTogetherDTO(BaseModel):
         )
     )
     played_on: date
+    played_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Solo en QUICK_MATCH: cuando se jugo, en UTC con su zona, para el dia "
+            "local (played_on es el dia en UTC). Nulo en torneo (H5)."
+        ),
+    )
     golf_course_id: str | None = None
     golf_course_name: str | None = None
     format: str = Field(description="SINGLES, FOURBALL, FOURSOMES, STABLEFORD o MEDAL")
