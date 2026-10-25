@@ -215,3 +215,17 @@ class InvitationRateLimitViolation(BusinessRuleViolation):
     def __init__(self, message: str, limit: int) -> None:
         super().__init__(message)
         self.limit = limit
+
+
+class WithdrawalViolation(BusinessRuleViolation):
+    """
+    No se puede retirar a un jugador del fourball, o deshacerlo (25 oct 2026).
+
+    `reason` dice cuál de las reglas, para que el cliente lo explique:
+    NOT_FOURBALL, MATCH_NOT_ACTIVE, NOT_A_PLAYER, ALREADY_WITHDRAWN,
+    LAST_OF_SIDE, SCORECARD_SUBMITTED o NOT_WITHDRAWN.
+    """
+
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason

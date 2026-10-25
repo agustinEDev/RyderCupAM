@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotScoringError,
     NotMatchPlayerError,
     NotYourMarkedPlayerError,
+    PlayerWithdrawnError,
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
@@ -20,6 +21,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.decision_del_partido import (
+    revisa_la_decision,
+)
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.application.services.solicitudes_al_empezar import (
     rechazar_las_solicitudes_pendientes,
@@ -94,7 +98,7 @@ class SubmitHoleScoreUseCase:
 
             # Antes de abrir el partido, como lo de arriba: una petición fuera de
             # su asignación no abre nada ni guarda nada, tampoco su propio golpe
-            marked_player_uid = self._marked_player(match, user_id, body.marked_player_id)
+            marked_player_uid = self._quien_marca(match, user_id, body.marked_player_id)
 
             # Despues de saber que es suyo: abrir el partido bloquea su fila,
             # crea 36 filas y arranca la ronda, y eso no lo dispara alguien que
@@ -119,6 +123,11 @@ class SubmitHoleScoreUseCase:
                         f"Partido no esta en estado para scoring. Estado: {bloqueado.status.value}"
                     )
                 match = bloqueado
+
+            # Otra vez con el partido bloqueado: si lo retiraron (o lo
+            # devolvieron) mientras este golpe esperaba, manda lo de ahora, no lo
+            # leido antes (revisor sin contexto)
+            marked_player_uid = self._quien_marca(match, user_id, body.marked_player_id)
 
             # El formato decide de quién es la tarjeta: en foursomes, del bando
             # (BE #377). Si el compañero la entregó, la bola ya no cambia
@@ -173,6 +182,17 @@ class SubmitHoleScoreUseCase:
             self._uow, self._user_repo, self._scoring_service, self._gc_repo
         )
         return await view_uc.execute(match_id_str)
+
+    @classmethod
+    def _quien_marca(cls, match: Match, user_id: UserId, marked_player_id: str) -> UserId:
+        """
+        El marcado de quien anota, si puede anotar: el retirado del fourball ni
+        su bola ni la de nadie (W19). Se mira antes de abrir el partido y otra
+        vez con él bloqueado.
+        """
+        if user_id in match.withdrawn_player_ids:
+            raise PlayerWithdrawnError()
+        return cls._marked_player(match, user_id, marked_player_id)
 
     @staticmethod
     def _marked_player(match: Match, user_id: UserId, marked_player_id: str) -> UserId:
@@ -325,21 +345,6 @@ class SubmitHoleScoreUseCase:
                 await self._uow.hole_scores.update(hs)
 
     async def _check_decided(self, match, match_id, match_format):
-        """
-        Vuelve a mirar si el partido esta decidido tras cada golpe: corregir un
-        hoyo anterior puede quitar la decision o cambiar el N&M (Agustin, 25 oct
-        2026). Con una tarjeta ya entregada, una decision que ya habia no se
-        mueve: quien entrego con el partido decidido ya no puede anotar el
-        resto, y se atascaria. Si aun no estaba decidido, si puede llegar.
-        """
-        if match.scorecard_submitted_by and match.is_decided:
-            return
-        all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        decided_result = self._scoring_service.decided_result(all_scores, match_format)
-        if decided_result == match.decided_result:
-            return
-        if decided_result is None:
-            match.clear_decided()
-        else:
-            match.mark_decided(decided_result)
-        await self._uow.matches.update(match)
+        """La decision, revisada tras cada golpe (`revisa_la_decision`)."""
+        if await revisa_la_decision(self._uow, self._scoring_service, match, match_format):
+            await self._uow.matches.update(match)

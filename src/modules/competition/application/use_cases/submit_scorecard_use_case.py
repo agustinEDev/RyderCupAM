@@ -9,6 +9,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     MatchNotScoringError,
     NotMatchPlayerError,
+    PlayerWithdrawnError,
     RoundNotFoundError,
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
@@ -48,6 +49,14 @@ class SubmitScorecardUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
+    @staticmethod
+    def _puede_entregar(match, user_id: UserId) -> None:
+        """Juega el partido y no esta retirado: el retirado no entrega (W12, W19)."""
+        if match.find_player(user_id) is None:
+            raise NotMatchPlayerError("No eres jugador de este partido")
+        if user_id in match.withdrawn_player_ids:
+            raise PlayerWithdrawnError()
+
     async def execute(
         self,
         match_id_str: str,
@@ -66,8 +75,7 @@ class SubmitScorecardUseCase:
                     f"Partido no esta en estado para scoring. Estado: {match.status.value}"
                 )
 
-            if match.find_player(user_id) is None:
-                raise NotMatchPlayerError("No eres jugador de este partido")
+            self._puede_entregar(match, user_id)
 
             # El formato decide de quién es la tarjeta: en foursomes, del bando
             round_entity = await self._uow.rounds.find_by_id(match.round_id)
@@ -98,7 +106,9 @@ class SubmitScorecardUseCase:
 
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
-            results_by_hole = self._scoring_service.hole_results_by_hole(all_scores, match_format)
+            results_by_hole = self._scoring_service.hole_results_by_hole(
+                all_scores, match_format, match.bolas_fuera
+            )
             hole_results = list(results_by_hole.values())
 
             # Result is derived from whichever holes are already validated, so the
