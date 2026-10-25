@@ -107,7 +107,7 @@ class MatchPlayScoring:
         a_wins = hole_results.count("A")
         b_wins = hole_results.count("B")
         holes_played = len(hole_results)
-        holes_remaining = 18 - holes_played
+        holes_remaining = TOTAL_HOLES - holes_played
 
         diff = a_wins - b_wins
 

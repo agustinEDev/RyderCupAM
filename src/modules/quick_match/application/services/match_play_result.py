@@ -159,7 +159,7 @@ def match_play_reading(
             # Los que cuentan: hasta la decision, como la pantalla
             len(hasta_la_decision),
             # "3&2" antes del 18; "1UP" en el 18
-            decided_early="&" in outcome["score"],
+            decided_early=len(hasta_la_decision) < TOTAL_HOLES,
         )
 
     if standing["leading_team"] is None:

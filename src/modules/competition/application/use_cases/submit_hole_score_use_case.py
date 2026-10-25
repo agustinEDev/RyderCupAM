@@ -328,10 +328,11 @@ class SubmitHoleScoreUseCase:
         """
         Vuelve a mirar si el partido esta decidido tras cada golpe: corregir un
         hoyo anterior puede quitar la decision o cambiar el N&M (Agustin, 25 oct
-        2026). Con una tarjeta ya entregada no se mueve: quien entrego con el
-        partido decidido ya no puede anotar el resto, y se atascaria.
+        2026). Con una tarjeta ya entregada, una decision que ya habia no se
+        mueve: quien entrego con el partido decidido ya no puede anotar el
+        resto, y se atascaria. Si aun no estaba decidido, si puede llegar.
         """
-        if match.scorecard_submitted_by:
+        if match.scorecard_submitted_by and match.is_decided:
             return
         all_scores = await self._uow.hole_scores.find_by_match(match_id)
         decided_result = self._scoring_service.decided_result(all_scores, match_format)

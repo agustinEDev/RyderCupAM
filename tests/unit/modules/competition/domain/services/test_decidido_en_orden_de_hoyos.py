@@ -320,6 +320,25 @@ class TestSeRecalculaAlAnotar:
 
         assert (match.is_decided, match.decided_result) == (True, {"winner": "A", "score": "10&8"})
 
+    @pytest.mark.asyncio
+    async def test_r7_with_a_scorecard_submitted_it_can_still_become_decided(self):
+        """Lo entregado congela una decision que ya habia, no impide que llegue."""
+        uow = InMemoryUnitOfWork()
+        match = _partido(F.SINGLES)
+        filas = _filas(match, GANA_A_HASTA_EL_14, abiertos=(3,))
+        await _con_las_filas(uow, match, filas)
+        match.submit_scorecard(match.team_b_players[0].user_id, F.SINGLES)
+        caso = SubmitHoleScoreUseCase(uow, AsyncMock(), ScoringService())
+        await caso._check_decided(match, match.id, F.SINGLES)
+        assert match.is_decided is False
+        fila = _fila_de(filas, match, 3)
+
+        fila.set_marker_score(fila.own_score)
+        fila.recalculate_validation()
+        await caso._check_decided(match, match.id, F.SINGLES)
+
+        assert match.decided_result == {"winner": "A", "score": "10&8"}
+
 
 class TestLaPantallaDelTorneo:
     @pytest.mark.asyncio
