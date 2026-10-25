@@ -37,7 +37,6 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.validation_status import ValidationStatus
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -326,39 +325,21 @@ class SubmitHoleScoreUseCase:
                 await self._uow.hole_scores.update(hs)
 
     async def _check_decided(self, match, match_id, match_format):
-        """Verifica si el partido esta matematicamente decidido."""
+        """
+        Vuelve a mirar si el partido esta decidido tras cada golpe: corregir un
+        hoyo anterior puede quitar la decision o cambiar el N&M (Agustin, 25 oct
+        2026). Con una tarjeta ya entregada, una decision que ya habia no se
+        mueve: quien entrego con el partido decidido ya no puede anotar el
+        resto, y se atascaria. Si aun no estaba decidido, si puede llegar.
+        """
+        if match.scorecard_submitted_by and match.is_decided:
+            return
         all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        hole_results = self._compute_hole_results(all_scores, match_format)
-        standing = self._scoring_service.calculate_match_standing(hole_results)
-        if self._scoring_service.is_match_decided(standing) and not match.is_decided:
-            decided_result = self._scoring_service.format_decided_result(hole_results)
+        decided_result = self._scoring_service.decided_result(all_scores, match_format)
+        if decided_result == match.decided_result:
+            return
+        if decided_result is None:
+            match.clear_decided()
+        else:
             match.mark_decided(decided_result)
-            await self._uow.matches.update(match)
-
-    def _compute_hole_results(self, all_scores, match_format):
-        """Computa resultados por hoyo a partir de todos los scores."""
-        scores_by_hole: dict[int, list] = {}
-        for hs in all_scores:
-            scores_by_hole.setdefault(hs.hole_number, []).append(hs)
-
-        hole_results = []
-        for hole_num in sorted(scores_by_hole.keys()):
-            hole_hs = scores_by_hole[hole_num]
-            has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs)
-            if not has_validated:
-                continue
-
-            team_a_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "A" and hs.net_score is not None
-            ]
-            team_b_nets = [
-                hs.net_score for hs in hole_hs if hs.team == "B" and hs.net_score is not None
-            ]
-
-            if team_a_nets and team_b_nets:
-                winner = self._scoring_service.calculate_hole_winner(
-                    team_a_nets, team_b_nets, match_format
-                )
-                hole_results.append(winner)
-
-        return hole_results
+        await self._uow.matches.update(match)

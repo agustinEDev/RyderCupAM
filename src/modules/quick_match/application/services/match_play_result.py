@@ -1,8 +1,8 @@
 """
 El resultado de una partida rapida por hoyos, ya terminada.
 
-Lo comparten el historial del jugador y las partidas jugadas con un amigo
-(BE-3): las dos tienen que contar la misma pelicula que la partida abierta, y
+Lo comparten el historial del jugador, las partidas jugadas con un amigo (BE-3)
+y Actividad: tienen que contar la misma pelicula que la partida abierta, y
 escrito dos veces se separarian en cuanto cambiara una de las reglas.
 """
 
@@ -22,7 +22,6 @@ from src.modules.quick_match.domain.value_objects.participant_id import Particip
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
-from src.shared.domain.value_objects.match_format import MatchFormat
 
 # `GolfCourse` valida exactamente 18 hoyos como invariante
 TOTAL_HOLES = 18
@@ -84,29 +83,11 @@ class MatchPlayReading:
     decided_early: bool
 
 
-def match_play_result(
-    match: QuickMatch,
-    scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
-    strokes_by_participant: Mapping[ParticipantId, ParticipantStrokes],
-    scoring_service: MatchPlayScoring,
-) -> tuple[str | None, str | None]:
-    """
-    Quien gano («A», «B» o «HALVED») y con que marcador, o `(None, None)`.
-
-    Es `match_play_reading` sin lo demas: lo que siempre ha leido el historial.
-    """
-    lectura = match_play_reading(
-        match, scores_by_participant, strokes_by_participant, scoring_service
-    )
-    return lectura.winner, lectura.score
-
-
 def match_play_reading(
     match: QuickMatch,
     scores_by_participant: Mapping[ParticipantId, Mapping[int, int | None]],
     strokes_by_participant: Mapping[ParticipantId, ParticipantStrokes],
     scoring_service: MatchPlayScoring,
-    one_ball_per_side: bool = False,
 ) -> MatchPlayReading:
     """
     Quien gano, con que marcador, cuantos hoyos cuentan y si se decidio antes
@@ -119,19 +100,17 @@ def match_play_reading(
     una copia: escrita a mano, exigia los cuatro scores y dejaba sin resultado
     todas las partidas de foursomes mientras la partida abierta ya las puntuaba.
 
-    Con `one_ball_per_side` un hoyo se adjudica en cuanto cada bando tiene al
-    menos una bola, tambien en fourball, con el mejor neto de las que haya: es
-    como lo cuenta lo social (Agustin, 22 oct 2026). La partida rapida sigue
-    sin el, exigiendo las cuatro en fourball, hasta que se decida.
+    En fourball hacen falta las cuatro bolas, tambien en lo social (Agustin, 24
+    oct 2026; deshace la bola de uno por bando del 22 oct).
     """
-    regla = MatchFormat.FOURSOMES if one_ball_per_side else match.match_format
+    regla = match.match_format
     sin_resultado = MatchPlayReading(None, None, 0, decided_early=False)
     rosters = match.team_rosters()
     if rosters is None:
         return sin_resultado
     team_a_ids, team_b_ids = rosters
 
-    hole_results = []
+    results_by_hole: dict[int, str] = {}
     for hole_number in range(1, TOTAL_HOLES + 1):
         scores = {
             participant_id: holes[hole_number]
@@ -155,29 +134,32 @@ def match_play_reading(
 
         # Solo los que anotaron: en foursomes el bando entrega UNA bola, asi
         # que el companero no tiene score y `values[pid]` reventaria.
-        hole_results.append(
-            scoring_service.calculate_hole_winner(
-                [net(pid) for pid in team_a_ids if pid in scores],
-                [net(pid) for pid in team_b_ids if pid in scores],
-                match.match_format,
-            )
+        results_by_hole[hole_number] = scoring_service.calculate_hole_winner(
+            [net(pid) for pid in team_a_ids if pid in scores],
+            [net(pid) for pid in team_b_ids if pid in scores],
+            match.match_format,
         )
 
-    if not hole_results:
+    if not results_by_hole:
         return sin_resultado
 
+    hole_results = list(results_by_hole.values())
     jugados = len(hole_results)
     standing = scoring_service.calculate_match_standing(hole_results)
 
-    if scoring_service.is_match_decided(standing):
-        # Se cerro antes del 18: el resultado va en "3&2", ventaja y hoyos
-        # que quedaban
-        outcome = scoring_service.format_decided_result(hole_results)
+    # Decidido en el orden de los hoyos, como en los torneos: con un hoyo sin
+    # cerrar antes no lo esta (Agustin, 25 oct 2026). Si se cerro antes del 18,
+    # el resultado va en "3&2", ventaja y hoyos que quedaban
+    hasta_la_decision = scoring_service.holes_until_decided(results_by_hole)
+    if hasta_la_decision is not None:
+        outcome = scoring_service.format_decided_result(hasta_la_decision)
         return MatchPlayReading(
             outcome["winner"],
             outcome["score"],
-            jugados,
-            decided_early=standing["holes_remaining"] > 0,
+            # Los que cuentan: hasta la decision, como la pantalla
+            len(hasta_la_decision),
+            # "3&2" antes del 18; "1UP" en el 18
+            decided_early=len(hasta_la_decision) < TOTAL_HOLES,
         )
 
     if standing["leading_team"] is None:

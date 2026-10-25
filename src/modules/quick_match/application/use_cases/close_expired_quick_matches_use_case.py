@@ -92,12 +92,12 @@ class CloseExpiredQuickMatchesUseCase:
                 continue
             if cerrada is None:
                 continue
-            estado, plazo = cerrada
+            estado, plazo, jugada = cerrada
             if estado == QuickMatchStatus.CANCELLED:
                 cancelled += 1
                 continue
             completed += 1
-            if publishes_when_closed(plazo, ahora) and await self._publica(abierta.id):
+            if publishes_when_closed(plazo, ahora) and await self._publica(abierta.id, jugada):
                 published += 1
         return ClosedQuickMatches(completed, cancelled, published)
 
@@ -110,10 +110,10 @@ class CloseExpiredQuickMatchesUseCase:
 
     async def _cierra(
         self, quick_match_id: QuickMatchId, zona: str | None, ahora: datetime
-    ) -> tuple[QuickMatchStatus, datetime] | None:
+    ) -> tuple[QuickMatchStatus, datetime, datetime] | None:
         """
-        La cierra si sigue abierta y vencida; devuelve cómo queda y su plazo, o
-        None si no la tocó. El plazo se vuelve a mirar con la fila bloqueada:
+        La cierra si sigue abierta y vencida; devuelve cómo queda, su plazo y
+        cuándo se jugó, o None si no la tocó. El plazo se vuelve a mirar con la fila bloqueada:
         leída PENDING y vencida, puede haberla empezado el creador entretanto.
         """
         async with self._uow:
@@ -131,17 +131,18 @@ class CloseExpiredQuickMatchesUseCase:
             else:
                 actual.cancel()
             await self._uow.quick_matches.update(actual)
-            return actual.status, plazo
+            return actual.status, plazo, actual.played_at
 
-    async def _publica(self, quick_match_id: QuickMatchId) -> bool:
+    async def _publica(self, quick_match_id: QuickMatchId, jugada: datetime) -> bool:
         """
         Sus logros y su resultado en Actividad, sin que un fallo tumbe el cierre.
-        Cuenta si publicó algo: el publicador se traga sus propios fallos.
+        Cuenta si publicó algo: el publicador se traga sus propios fallos. Salen
+        el día que se jugó, no arriba con «ahora» (Agustín, 24 oct 2026).
         """
         if self._achievements is None:
             return False
         try:
-            return await self._achievements.publish(str(quick_match_id.value)) > 0
+            return await self._achievements.publish(str(quick_match_id.value), jugada) > 0
         except Exception:
             logger.warning(
                 "Could not publish quick match %s closed on its own", quick_match_id, exc_info=True

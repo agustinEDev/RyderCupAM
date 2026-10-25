@@ -142,4 +142,55 @@ class TestFormatDecidedResult:
         assert result["score"] == "3&2"
 
 
+# ==================== Decidido en el orden de los hoyos ====================
+
+
+# El caso del revisor del Kind (24 oct 2026): gana A el 1, 2, 3, 6 y 7, el 4 y
+# el 5 son de B y del 8 en adelante se empatan. En orden queda decidido en el
+# 16, «3&2». Contando sin orden, con el 4 y el 5 aun abiertos, salia «5&4».
+REVISOR = {
+    **dict.fromkeys((1, 2, 3, 6, 7), "A"),
+    **dict.fromkeys(range(8, 18), "HALVED"),
+}
+
+
+class TestDecidedInHoleOrder:
+    """
+    El partido se decide en el primer hoyo en que la ventaja supera a los que
+    quedan, con todos los anteriores cerrados (Agustin, 25 oct 2026).
+    """
+
+    def test_d1_holes_closed_in_order_decided_on_the_16th(self, service):
+        resultados = {**REVISOR, 4: "B", 5: "B"}
+        assert service.decided_in_hole_order(resultados) == {"winner": "A", "score": "3&2"}
+
+    def test_d2_with_the_4th_and_5th_open_it_is_still_in_play(self, service):
+        assert service.decided_in_hole_order(REVISOR) is None
+
+    def test_d3_once_the_gap_closes_the_score_follows_the_order_of_play(self, service):
+        resultados = {**REVISOR, 5: "B", 4: "B"}
+        assert service.decided_in_hole_order(resultados) == {"winner": "A", "score": "3&2"}
+
+    def test_d4_a_gap_after_the_decision_does_not_count(self, service):
+        resultados = {**dict.fromkeys(range(1, 12), "A"), 13: "B", 14: "B"}
+        assert service.decided_in_hole_order(resultados) == {"winner": "A", "score": "10&8"}
+
+    def test_d5_won_on_the_18th_by_one_hole(self, service):
+        resultados = {1: "B", **dict.fromkeys(range(2, 19), "HALVED")}
+        assert service.decided_in_hole_order(resultados) == {"winner": "B", "score": "1UP"}
+
+    def test_d5_all_square_on_the_18th_is_not_decided(self, service):
+        assert service.decided_in_hole_order(dict.fromkeys(range(1, 19), "HALVED")) is None
+
+    def test_d5_one_up_with_a_hole_left_is_not_decided(self, service):
+        resultados = {1: "A", **dict.fromkeys(range(2, 18), "HALVED")}
+        assert service.decided_in_hole_order(resultados) is None
+
+    def test_without_the_first_hole_nothing_is_decided(self, service):
+        assert service.decided_in_hole_order(dict.fromkeys(range(2, 19), "A")) is None
+
+    def test_without_holes_nothing_is_decided(self, service):
+        assert service.decided_in_hole_order({}) is None
+
+
 # ==================== Ryder Cup Points ====================

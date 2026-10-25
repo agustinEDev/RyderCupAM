@@ -199,7 +199,8 @@ class TestSubmitScorecardHappyPath:
         # Match isn't complete yet (b hasn't submitted), but the result is already known
         assert result.match_complete is False
         assert result.result.winner == "A"
-        assert result.result.score == "18UP"
+        # Decidido en el 10: lo de despues no cuenta (Agustin, 25 oct 2026)
+        assert result.result.score == "10&8"
 
     @pytest.mark.asyncio
     async def test_all_submit_completes_match(self, uow, scoring_service):

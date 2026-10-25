@@ -21,6 +21,7 @@ from src.modules.social.domain.services.counted_round import (
     holes_by_side,
     match_play_counts,
 )
+from src.shared.domain.value_objects.match_format import MatchFormat
 
 TODOS = range(1, 19)
 IDA = range(1, 10)
@@ -85,14 +86,32 @@ class TestMatchPlayCounts:
 
 
 class TestHolesBySide:
-    """Un hoyo es del bando en cuanto lo anota uno de sus jugadores (Agustin, 22 oct)."""
+    """
+    Los hoyos que entrego un bando. En fourball, con la bola de los dos: como la
+    pantalla de la partida y los torneos (Agustin, 24 oct 2026, deshace la
+    bola de uno del 22 oct).
+    """
 
     def test_singles_los_del_jugador(self):
-        assert holes_by_side({"ana": {1: 4, 2: 5}, "eva": {3: 4}}, {"ana"}) == {1, 2}
+        scores = {"ana": {1: 4, 2: 5}, "eva": {3: 4}}
 
-    def test_fourball_basta_uno_de_los_dos(self):
-        scores = {"ana": {1: 4, 2: 5}, "pepa": {3: None}, "eva": {4: 4}}
-        assert holes_by_side(scores, {"ana", "pepa"}) == {1, 2, 3}
+        assert holes_by_side(scores, {"ana"}, MatchFormat.SINGLES) == {1, 2}
+
+    def test_fourball_hacen_falta_los_dos(self):
+        scores = {"ana": {1: 4, 2: 5, 3: 4}, "pepa": {2: None, 3: 6}, "eva": {4: 4}}
+
+        assert holes_by_side(scores, {"ana", "pepa"}, MatchFormat.FOURBALL) == {2, 3}
+
+    def test_fourball_con_uno_sin_nada_no_entrega_ninguno(self):
+        scores = {"ana": {1: 4, 2: 5}}
+
+        assert holes_by_side(scores, {"ana", "pepa"}, MatchFormat.FOURBALL) == frozenset()
+
+    def test_foursomes_basta_la_bola_del_bando(self):
+        """Una bola por bando, guardada a nombre de uno."""
+        scores = {"ana": {1: 4, 2: None}, "eva": {4: 4}}
+
+        assert holes_by_side(scores, {"ana", "pepa"}, MatchFormat.FOURSOMES) == {1, 2}
 
     def test_bando_sin_nada(self):
-        assert holes_by_side({"eva": {1: 4}}, {"ana", "pepa"}) == frozenset()
+        assert holes_by_side({"eva": {1: 4}}, {"ana", "pepa"}, MatchFormat.FOURSOMES) == frozenset()

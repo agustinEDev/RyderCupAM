@@ -66,7 +66,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
                 if self._matches_user(qm, user_id, status)
                 and not qm.is_stats_excluded_for(participant_id)
             ],
-            key=lambda qm: qm.created_at,
+            key=lambda qm: qm.played_at,
             reverse=True,
         )
         return results[:limit] if limit is not None else results
@@ -81,7 +81,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         results = [
             qm for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
         ]
-        results.sort(key=lambda x: x.created_at, reverse=True)
+        results.sort(key=lambda x: x.played_at, reverse=True)
         return results[offset : offset + limit]
 
     async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
@@ -105,7 +105,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
             for qm in self._quick_matches.values()
             if self._matches_user(qm, user_id, status) and self._matches_user(qm, other_id, status)
         ]
-        results.sort(key=lambda x: x.created_at, reverse=True)
+        results.sort(key=lambda x: x.played_at, reverse=True)
         return results
 
     async def list_completed_for_users(self, user_ids: list[UserId]) -> list[QuickMatch]:

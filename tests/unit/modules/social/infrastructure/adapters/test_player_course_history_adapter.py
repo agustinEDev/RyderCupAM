@@ -113,6 +113,7 @@ async def _rapida(qm_uow, ana, course, creada: datetime, hoyos: int = 1, **estad
         hidden_by_participant_ids=estado.get("oculta_para"),
         created_at=creada,
         updated_at=creada,
+        started_at=estado.get("empezada"),
     )
     async with qm_uow:
         await qm_uow.quick_matches.add(match)
@@ -302,6 +303,20 @@ async def test_a_completed_quick_match_with_a_hole_counts_by_its_creation(world,
         source_id=str(partida.id.value),
         holes_played=12,
     )
+
+
+async def test_a_quick_match_counts_by_when_it_started(world, qm_uow):
+    """Creada el viernes para el domingo: piso el campo el domingo (24 oct 2026)."""
+    ana = await world.user()
+    course = await world.course(ana)
+    await _rapida(
+        qm_uow, ana, course, datetime(2026, 5, 29, 18, 0), empezada=datetime(2026, 5, 31, 8, 0)
+    )
+
+    primera = await _primera(world, ana, course, qm_uow)
+
+    assert primera is not None
+    assert primera.instant == datetime(2026, 5, 31, 8, 0)
 
 
 async def test_a_quick_match_without_holes_or_unfinished_does_not_count(world, qm_uow):

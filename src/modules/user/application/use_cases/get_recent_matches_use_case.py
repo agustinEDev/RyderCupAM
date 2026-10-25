@@ -14,9 +14,8 @@ from src.modules.golf_course.domain.repositories.golf_course_unit_of_work_interf
     GolfCourseUnitOfWorkInterface,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
-from src.modules.quick_match.application.services.course_context import own_playing_handicap
 from src.modules.quick_match.application.services.match_play_result import (
-    match_play_result,
+    match_play_reading,
     quick_match_strokes,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
@@ -32,6 +31,7 @@ from src.modules.quick_match.domain.value_objects.quick_match_participant import
     QuickMatchParticipant,
 )
 from src.modules.quick_match.domain.value_objects.quick_match_status import QuickMatchStatus
+from src.modules.social.domain.services.counted_round import holes_by_side, match_play_counts
 from src.modules.user.application.dto.player_stats_dto import (
     RecentMatchDTO,
     RecentMatchesResponseDTO,
@@ -64,6 +64,9 @@ TOTAL_HOLES = 18
 RESULT_WON = "WON"
 RESULT_LOST = "LOST"
 RESULT_HALVED = "HALVED"
+# Un match play que no cuenta: ni decidido antes de tiempo ni con los mismos
+# hoyos, 9 o más, en los dos bandos (Agustín, 24 oct 2026)
+RESULT_UNFINISHED = "UNFINISHED"
 HALVED_WINNER = "HALVED"
 
 
@@ -137,12 +140,8 @@ class GetRecentMatchesUseCase:
         users_by_id = await self._load_users(user_id, quick_raws, competition_raws)
         courses_by_id = await self._load_golf_courses(quick_raws, competition_raws)
 
-        player = users_by_id.get(user_id)
-        profile_handicap = float(player.handicap.value) if player and player.handicap else None
-
         entries = [
-            self._to_quick_match_dto(raw, users_by_id, courses_by_id, profile_handicap, user_id)
-            for raw in quick_raws
+            self._to_quick_match_dto(raw, users_by_id, courses_by_id, user_id) for raw in quick_raws
         ] + [
             self._to_competition_match_dto(raw, user_id, users_by_id, courses_by_id)
             for raw in competition_raws
@@ -299,7 +298,6 @@ class GetRecentMatchesUseCase:
         raw: _QuickMatchRaw,
         users_by_id: dict[UserId, User],
         courses_by_id: dict[GolfCourseId, GolfCourse],
-        profile_handicap: float | None,
         user_id: UserId,
     ) -> RecentMatchDTO:
         match = raw.match
@@ -309,17 +307,13 @@ class GetRecentMatchesUseCase:
         result = None
         score = None
 
+        # El reparto del partido, una vez: lo usan la vuelta, el resultado y la
+        # raya del bando en foursomes
+        strokes = self._quick_match_strokes(raw, course, users_by_id)
         # Los totales se calculan siempre, sea cual sea el formato: los puntos
-        # Stableford son la única cifra que compara vueltas entre sí, porque 36
-        # puntos es jugar a tu hándicap en cualquier campo y cualquier formato
-        totals = self._participant_totals(raw, course, profile_handicap)
-        # El reparto del partido, una vez: lo usan el resultado y la raya del
-        # bando en foursomes
-        strokes = (
-            self._quick_match_strokes(raw, course, users_by_id)
-            if match.match_format is not None
-            else {}
-        )
+        # Stableford dicen cómo fue la vuelta en cualquier campo, con el
+        # hándicap de juego de la partida
+        totals = self._participant_totals(raw, course, strokes)
         # En foursomes no hay vuelta propia que enseñar —la pareja juega una
         # bola— pero sí los golpes brutos del bando, y los mismos para los dos.
         # Leyendo solo lo anotado a nombre de cada uno, el que llevaba la fila
@@ -341,9 +335,7 @@ class GetRecentMatchesUseCase:
         return RecentMatchDTO(
             id=str(match.id.value),
             excluded_from_stats=match.is_stats_excluded_for(ParticipantId(user_id.value)),
-            # Una partida rápida no guarda cuándo se jugó, solo cuándo se creó:
-            # se juegan del tirón, así que la fecha de creación es la del juego
-            date=match.created_at.date(),
+            date=match.played_at.date(),
             match_format=match.match_format.value if match.match_format else None,
             scoring_format=match.scoring_format.value if match.scoring_format else None,
             golf_course_id=str(match.golf_course_id.value),
@@ -399,15 +391,17 @@ class GetRecentMatchesUseCase:
             if own_player is not None
             else course.reference_card
         )
-        # Los puntos de su vuelta propia, como en partida rápida: con su índice
-        # (el que guardó el partido, o el del perfil) en su barra al 100 %, no
-        # con la diferencia con el rival que reparte el partido (BE #517)
+        # Los puntos de su vuelta, como en partida rápida: con su hándicap de
+        # juego en el partido, con el allowance de la modalidad (Agustín, 24
+        # oct 2026). Calculado aquí: el que guarda el partido es, en fourball y
+        # foursomes, la diferencia con el más bajo (BE #517)
         user = users_by_id.get(user_id)
         playing_handicap = tournament_personal_handicap(
             course,
             own_player,
             user.handicap.value if user and user.handicap else None,
             scratch=raw.scratch,
+            allowance=raw.round_.get_effective_allowance(),
         )
         # En foursomes la pareja juega UNA bola, así que la tarjeta no es la
         # vuelta de ninguno de los dos por separado y no lleva puntos Stableford.
@@ -466,24 +460,33 @@ class GetRecentMatchesUseCase:
         """
         Cómo quedó una partida rápida por equipos, desde el lado del jugador.
 
-        Lo calcula `match_play_result`, la misma pieza que usan las partidas
-        jugadas con un amigo (BE-3), con los golpes repartidos como en el
+        Lo calcula `match_play_reading`, la misma pieza que usan las partidas
+        jugadas con un amigo (BE-3) y Actividad, con los golpes repartidos como en el
         detalle: si aquí se compararan los brutos, el historial contaría una
         película distinta de la que muestra la partida abierta.
         """
         rosters = raw.match.team_rosters()
         if rosters is None:
             return None, None
-        team_a_ids, _ = rosters
+        team_a_ids, team_b_ids = rosters
 
-        winner, score = match_play_result(
+        lectura = match_play_reading(
             raw.match,
             raw.scores_by_participant,
             strokes,
             self._scoring_service,
         )
+        # Cuenta como en Actividad y en «Partidas juntos»: decidido antes de
+        # tiempo, o los dos bandos con los mismos hoyos, 9 o más. Si no, «sin
+        # terminar» y sin tanteo: un 6UP de seis hoyos no es una victoria
+        if not match_play_counts(
+            holes_by_side(raw.scores_by_participant, team_a_ids, raw.match.match_format),
+            holes_by_side(raw.scores_by_participant, team_b_ids, raw.match.match_format),
+            lectura.decided_early,
+        ):
+            return RESULT_UNFINISHED, None
         own_team = "A" if raw.participant.participant_id in team_a_ids else "B"
-        return self._result_for_team(winner, own_team), score
+        return self._result_for_team(lectura.winner, own_team), lectura.score
 
     def _foursomes_side_strokes(
         self,
@@ -585,7 +588,7 @@ class GetRecentMatchesUseCase:
         self,
         raw: _QuickMatchRaw,
         course: GolfCourse | None,
-        profile_handicap: float | None,
+        strokes: dict[ParticipantId, ParticipantStrokes],
     ):
         """Puntos y golpes del jugador en una partida libre; None si no hay con qué."""
         if course is None:
@@ -599,15 +602,13 @@ class GetRecentMatchesUseCase:
             HoleSetup(hole.number, hole.par, hole.stroke_index)
             for hole in course.hole_card_for(raw.participant.tee_color, raw.participant.tee_gender)
         ]
-        # El hándicap de juego de su vuelta propia, con su barra como en la
-        # partida: con el índice tal cual el panel daba 28 puntos a una vuelta
-        # de 32 (BE #513). En una partida scratch sale 0, sin golpes
-        playing_handicap = own_playing_handicap(
-            raw.match,
-            raw.participant,
-            raw.participant.effective_handicap(profile_handicap),
-            course,
-        )
+        # «Tu vuelta» es la real de la partida (Agustín, 24 oct 2026): su
+        # hándicap de juego en ella, con su barra y el allowance del formato,
+        # repartido por los índices de su barra. No los golpes que recibe en
+        # el partido, que en match play son la diferencia con el rival. El
+        # reparto trae a todos los participantes: sin él no hay campo
+        suyo = strokes.get(raw.participant.participant_id)
+        playing_handicap = None if suyo is None else suyo.playing_handicap
         # Sin barra ni allowance: ya van dentro del hándicap de juego, y el
         # calculador sin `tee_rating` reparte la cifra que recibe tal cual
         return self._calculator.compute_participant_totals(
@@ -626,9 +627,9 @@ class GetRecentMatchesUseCase:
         """
         Golpes, hoyos y puntos Stableford de una tarjeta de torneo.
 
-        Los puntos con los golpes de su vuelta propia sobre el índice de su
-        barra, no con los guardados en el hoyo, que son los del partido (BE
-        #517). Se usa `own_score` y
+        Los puntos con su hándicap de juego en la partida repartido por el
+        índice de su barra, no con los golpes guardados en el hoyo, que son la
+        diferencia del partido (BE #517). Se usa `own_score` y
         no `net_score` porque este último solo existe cuando el marcador validó
         el hoyo, y una tarjeta legítima sin validar cerrar se quedaría sin
         cifras que enseñar.

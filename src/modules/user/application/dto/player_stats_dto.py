@@ -115,7 +115,12 @@ class RecentMatchDTO(BaseModel):
     )
     tournament_name: str | None = None
     result: str | None = Field(
-        default=None, description="WON / LOST / HALVED en match play; None si no aplica"
+        default=None,
+        description=(
+            "WON / LOST / HALVED en match play; UNFINISHED si una partida rápida "
+            "no cuenta (ni decidida antes de tiempo ni con los mismos hoyos, 9 o "
+            "más, en los dos bandos), y entonces sin `score`; None si no aplica"
+        ),
     )
     score: str | None = Field(
         default=None, description='Neto respecto al par ("PAR", "+4") o puntos Stableford'

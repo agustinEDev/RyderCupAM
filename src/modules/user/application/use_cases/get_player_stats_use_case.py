@@ -394,10 +394,11 @@ class GetPlayerStatsUseCase:
                 holes = [HoleSetup(hole.number, hole.par, hole.stroke_index) for hole in played]
                 # Son DOS hándicaps distintos y no se pueden compartir:
                 #
-                # - La media de la casa usa el de la vuelta propia: el hándicap
-                #   de juego de su barra al 100 %, como «Tu vuelta» (BE #513).
-                #   NO el allowance de la partida: con él el panel y la partida
-                #   volvían a separarse. En una partida scratch sale 0.
+                # - La media de la casa usa el hándicap de juego de su barra al
+                #   100 % (BE #513), para medir igual cualquier formato. «Tu
+                #   vuelta» del historial ya no: lleva el allowance de la
+                #   partida (Agustín, 24 oct 2026), así que pueden diferir a
+                #   propósito. En una partida scratch sale 0.
                 # - El diferencial WHS de más abajo usa siempre el índice
                 #   efectivo, scratch o no: ahí el hándicap solo sirve para el
                 #   tope de doble bogey neto del Adjusted Gross Score, que es
@@ -418,9 +419,7 @@ class GetPlayerStatsUseCase:
                 )
                 results.append(
                     _ComputableRound(
-                        # No hay campo de cuándo se jugó: la partida rápida se
-                        # crea el mismo día que se juega
-                        played_on=match.created_at.date(),
+                        played_on=match.played_at.date(),
                         to_par=self._to_eighteen(totals.to_par, len(played)),
                         played_round=self._to_played_round(
                             course=course,

@@ -51,10 +51,12 @@ PLAZO = datetime(2026, 10, 20, 0, 0)
 class _Publicador:
     def __init__(self, falla: bool = False):
         self.publicadas: list[str] = []
+        self.fechas: list[datetime | None] = []
         self._falla = falla
 
-    async def publish(self, quick_match_id: str) -> int:
+    async def publish(self, quick_match_id: str, published_at: datetime | None = None) -> int:
         self.publicadas.append(quick_match_id)
+        self.fechas.append(published_at)
         if self._falla:
             raise RuntimeError("Actividad caída")
         return self.devuelve
@@ -122,6 +124,14 @@ class TestInProgress:
         assert await _estado(qm_uow, qm) == T.COMPLETED
         assert publicador.publicadas == [str(qm.id.value)]
         assert (resumen.completed, resumen.cancelled, resumen.published) == (1, 0, 1)
+
+    async def test_l5_it_is_published_on_the_day_it_was_played(self, qm_uow, golf_course_uow):
+        """En Actividad, en su dia y no arriba con «ahora» (Agustin, 24 oct 2026)."""
+        await _partida(qm_uow, created_at=EMPEZO - timedelta(days=2))
+
+        _, publicador = await _cierra(qm_uow, golf_course_uow, PLAZO + timedelta(days=1))
+
+        assert publicador.fechas == [EMPEZO]
 
     async def test_before_its_time_it_is_left_alone(self, qm_uow, golf_course_uow):
         qm = await _partida(qm_uow)

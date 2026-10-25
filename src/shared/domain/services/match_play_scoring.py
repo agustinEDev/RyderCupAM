@@ -9,7 +9,11 @@ rápida y las estadísticas: viven en `shared`. `ScoringService` hereda de esta
 clase y añade lo de la Ryder (marcadores y puntos).
 """
 
+from collections.abc import Mapping
+
 from src.shared.domain.value_objects.match_format import MatchFormat
+
+TOTAL_HOLES = 18
 
 
 class MatchPlayScoring:
@@ -103,7 +107,7 @@ class MatchPlayScoring:
         a_wins = hole_results.count("A")
         b_wins = hole_results.count("B")
         holes_played = len(hole_results)
-        holes_remaining = 18 - holes_played
+        holes_remaining = TOTAL_HOLES - holes_played
 
         diff = a_wins - b_wins
 
@@ -162,3 +166,63 @@ class MatchPlayScoring:
             "winner": standing["leading_team"],
             "score": f"{lead}&{holes_remaining}",
         }
+
+    def decided_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict | None:
+        """
+        El resultado del partido si ya esta decidido, o None si sigue en juego
+        (`holes_until_decided`).
+
+        Args:
+            results_by_hole: {numero de hoyo: "A"/"B"/"HALVED"} de los cerrados
+
+        Returns:
+            {winner, score} como `format_decided_result`, o None
+        """
+        hasta_la_decision = self.holes_until_decided(results_by_hole)
+        if hasta_la_decision is None:
+            return None
+        return self.format_decided_result(hasta_la_decision)
+
+    def result_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict:
+        """
+        El resultado con lo anotado: el de la decision si la hay y, si no, la
+        ventaja tal cual («5UP», «AS»). Con hoyos sin cerrar, `format_decided_result`
+        de los cerrados inventaba un «5&3» que no habia ocurrido (Agustin, 25
+        oct 2026).
+        """
+        decidido = self.decided_in_hole_order(results_by_hole)
+        if decidido is not None:
+            return decidido
+        standing = self.calculate_match_standing(list(results_by_hole.values()))
+        if standing["leading_team"] is None:
+            return {"winner": "HALVED", "score": "AS"}
+        return {"winner": standing["leading_team"], "score": standing["status"]}
+
+    def standing_in_hole_order(self, results_by_hole: Mapping[int, str]) -> dict:
+        """
+        Como va el partido: decidido, el estado del hoyo en que se decidio (lo
+        anotado despues no lo mueve); si no, el de todos los hoyos cerrados.
+        """
+        hasta_la_decision = self.holes_until_decided(results_by_hole)
+        return self.calculate_match_standing(hasta_la_decision or list(results_by_hole.values()))
+
+    def holes_until_decided(self, results_by_hole: Mapping[int, str]) -> list[str] | None:
+        """
+        Los resultados del 1 al hoyo en que se decidio el partido, o None si
+        sigue en juego.
+
+        Se recorren los hoyos del 1 al 18 y se decide en el primero en que la
+        ventaja supera a los que quedan, con todos los anteriores cerrados: un
+        hoyo abierto antes espera a cerrarse, y lo anotado despues no cuenta
+        (Agustin, 25 oct 2026). Contando los cerrados sin mirar su orden, un
+        fourball con el 4 y el 5 abiertos se daba por decidido con un N&M que
+        no habia ocurrido.
+        """
+        en_orden: list[str] = []
+        for hoyo in range(1, TOTAL_HOLES + 1):
+            if hoyo not in results_by_hole:
+                return None
+            en_orden.append(results_by_hole[hoyo])
+            if self.is_match_decided(self.calculate_match_standing(en_orden)):
+                return en_orden
+        return None

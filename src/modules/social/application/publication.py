@@ -1,5 +1,8 @@
 """El ultimo paso antes de guardar los logros de una publicacion."""
 
+from datetime import datetime
+
+from src.modules.social.application.exclusive_achievements import utc_naive
 from src.modules.social.domain.entities.activity_event import ActivityEvent
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -8,7 +11,9 @@ from src.shared.domain.utc_clock import utc_now
 
 
 async def stamp_for_publication(
-    user_uow: UserUnitOfWorkInterface, eventos: list[ActivityEvent]
+    user_uow: UserUnitOfWorkInterface,
+    eventos: list[ActivityEvent],
+    published_at: datetime | None = None,
 ) -> list[ActivityEvent]:
     """
     Los eventos listos para guardar: con una misma fecha de publicacion y con
@@ -27,11 +32,15 @@ async def stamp_for_publication(
     eso lo pone el repositorio al guardar, que sabe que estaba oculto (el
     logro, o el apunte que dejo al retirarlo). Aqui solo se oculta, nunca se
     destapa.
+
+    **La fecha es la de ahora**, salvo que llegue otra: la partida rapida que
+    se cierra sola sale el dia que se jugo, no arriba con «ahora» (Agustin,
+    24 oct 2026).
     """
     if not eventos:
         return []
 
-    publicado = utc_now()
+    publicado = utc_now() if published_at is None else utc_naive(published_at)
     async with user_uow:
         usuarios = {
             u.id: u for u in await user_uow.users.find_by_ids(list({e.user_id for e in eventos}))

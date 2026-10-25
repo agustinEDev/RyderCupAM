@@ -1,6 +1,7 @@
 """Puerto: publicar en el feed los logros de una vuelta terminada."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 
 class RoundAchievementsPublisherInterface(ABC):
@@ -12,5 +13,8 @@ class RoundAchievementsPublisherInterface(ABC):
     """
 
     @abstractmethod
-    async def publish(self, quick_match_id: str) -> int:
-        """Publica los logros de la partida y devuelve cuantos creo."""
+    async def publish(self, quick_match_id: str, published_at: datetime | None = None) -> int:
+        """
+        Publica los logros de la partida y devuelve cuantos creo. Con
+        `published_at` salen en Actividad con esa fecha y no con la de ahora.
+        """

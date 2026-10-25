@@ -9,10 +9,16 @@ resultado) viven en `shared` (`MatchPlayScoring`, RyderCupAM#165) y esta clase
 las hereda: las usan también la partida rápida y las estadísticas.
 """
 
+from collections.abc import Sequence
+
+from src.modules.competition.domain.entities.hole_score import HoleScore
 from src.modules.competition.domain.value_objects.marker_assignment import (
     MarkerAssignment,
 )
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
+from src.modules.competition.domain.value_objects.validation_status import (
+    ValidationStatus,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -114,6 +120,68 @@ class ScoringService(MatchPlayScoring):
                 scorer_user_id=b2.user_id, marks_user_id=a1.user_id, marked_by_user_id=a2.user_id
             ),
         ]
+
+    def hole_result(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> str | None:
+        """
+        El resultado de un hoyo con lo anotado: "A", "B", "HALVED", o None si
+        aun no se puede decidir (Agustin, 24 oct 2026).
+
+        La raya (validada sin numero, tambien el hoyo concedido) pierde el
+        hoyo: `calculate_hole_winner` la ve como bando sin bola. En foursomes
+        el bando juega una bola, guardada en las filas de los dos, y basta una
+        validada por bando si ninguna esta en disputa; en individual y fourball hacen falta todas, porque
+        en fourball la bola que falta puede cambiar el mejor neto.
+
+        Args:
+            hole_scores: las filas del hoyo, una por jugador
+            match_format: formato del partido
+        """
+        validadas = [hs for hs in hole_scores if hs.validation_status == ValidationStatus.MATCH]
+        por_bando = {
+            team: [hs.net_score for hs in validadas if hs.team == team] for team in ("A", "B")
+        }
+        cada_bando = bool(por_bando["A"]) and bool(por_bando["B"])
+        en_disputa = any(hs.validation_status == ValidationStatus.MISMATCH for hs in hole_scores)
+        todas = len(validadas) == len(hole_scores)
+        if not cada_bando or en_disputa or (not match_format.one_ball_per_side() and not todas):
+            return None
+        return self.calculate_hole_winner(por_bando["A"], por_bando["B"], match_format)
+
+    def hole_results(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> list[str]:
+        """
+        Los resultados de los hoyos ya decididos del partido, por orden de
+        hoyo: los que `hole_result` aun no puede decidir no entran.
+        """
+        return list(self.hole_results_by_hole(hole_scores, match_format).values())
+
+    def hole_results_by_hole(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> dict[int, str]:
+        """Los resultados de los hoyos ya decididos, por numero de hoyo y en orden."""
+        por_hoyo: dict[int, list[HoleScore]] = {}
+        for hs in hole_scores:
+            por_hoyo.setdefault(hs.hole_number, []).append(hs)
+        resultados = {
+            hoyo: self.hole_result(por_hoyo[hoyo], match_format) for hoyo in sorted(por_hoyo)
+        }
+        return {hoyo: r for hoyo, r in resultados.items() if r is not None}
+
+    def decided_result(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> dict | None:
+        """
+        El resultado del partido si ya esta decidido en el orden de los hoyos
+        (`decided_in_hole_order`), o None si sigue en juego.
+        """
+        return self.decided_in_hole_order(self.hole_results_by_hole(hole_scores, match_format))
+
+    def standing(self, hole_scores: Sequence[HoleScore], match_format: MatchFormat) -> dict:
+        """Como va el partido (`standing_in_hole_order`)."""
+        return self.standing_in_hole_order(self.hole_results_by_hole(hole_scores, match_format))
 
     def get_affected_player_ids(
         self,

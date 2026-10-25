@@ -8,7 +8,7 @@ tests fijan qué campos rellena cada una y, sobre todo, cuáles deja en None en
 lugar de inventar una equivalencia.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -161,6 +161,8 @@ async def played_quick_match(
     play_mode: PlayMode = PlayMode.HANDICAP,
     creator_custom_handicap: float | None = None,
     frozen_handicaps: dict | None = None,
+    holes_by_participant_index: dict[int, range | list[int]] | None = None,
+    score_by_hole_by_participant_index: dict[int, dict[int, int | None]] | None = None,
 ):
     """
     Una partida rápida terminada con la vuelta anotada.
@@ -171,6 +173,10 @@ async def played_quick_match(
     acaba un match play que se cierra antes del 18.
     `scoring_participant_indexes` limita quién tiene golpes anotados: en
     foursomes el bando entrega UNA bola, así que solo hay dos tarjetas.
+    `holes_by_participant_index` da a alguien otros hoyos que `holes_played`:
+    la ida frente a la vuelta, o una bola que falta en un hoyo.
+    `score_by_hole_by_participant_index` cambia el golpe de hoyos sueltos (None
+    es una raya).
     """
     match = QuickMatch.create(
         id=QuickMatchId.generate(),
@@ -202,14 +208,16 @@ async def played_quick_match(
             if scoring_participant_indexes is not None and index not in scoring_participant_indexes:
                 continue
             strokes = (strokes_by_participant_index or {}).get(index, strokes_per_hole)
-            for hole_number in range(1, holes_played + 1):
+            holes = (holes_by_participant_index or {}).get(index, range(1, holes_played + 1))
+            for hole_number in holes:
+                por_hoyo = (score_by_hole_by_participant_index or {}).get(index, {})
                 await qm_uow.quick_match_hole_scores.add(
                     QuickMatchHoleScore(
                         id=QuickMatchHoleScoreId.generate(),
                         quick_match_id=match.id,
                         hole_number=hole_number,
                         participant_id=participant_id,
-                        score=strokes,
+                        score=por_hoyo.get(hole_number, strokes),
                         recorded_by_participant_id=participant_ids[0],
                     )
                 )
@@ -232,6 +240,7 @@ async def played_competition_match(
     tee_color: TeeColor = TeeColor.YELLOW,
     player_handicaps: dict | None = None,
     row_strokes_received: int = 0,
+    match_handicaps: dict | None = None,
 ):
     """
     Un partido de torneo terminado, con su ronda y su competición.
@@ -264,7 +273,7 @@ async def played_competition_match(
         indice = (player_handicaps or {}).get(user_id)
         return MatchPlayer(
             user_id=user_id,
-            playing_handicap=10,
+            playing_handicap=(match_handicaps or {}).get(user_id, 10),
             tee_color=tee_color,
             tee_gender=Gender.MALE,
             strokes_received=tuple(range(1, 11)),
@@ -427,8 +436,8 @@ class TestTeamQuickMatch:
     ):
         """
         SINGLES, el creador firma 4 y el rival 5 en los 18 hoyos: los gana todos.
-        Con la vuelta entera anotada la ventaja es de 18 y no quedan hoyos, así
-        que el resultado es "18UP" para los dos, con el signo cambiado.
+        Se decidió en el 10 con 10 arriba y quedando 8: "10&8" para los dos,
+        aunque se anotaran los 18 (Agustín, 25 oct 2026; antes era "18UP").
         """
         winner = await create_user(user_uow, "Winner", handicap=0)
         loser = await create_user(user_uow, "Loser", handicap=0)
@@ -450,7 +459,7 @@ class TestTeamQuickMatch:
 
         assert won.result == "WON"
         assert lost.result == "LOST"
-        assert won.score == lost.score == "18UP"
+        assert won.score == lost.score == "10&8"
 
     async def test_a_foursomes_match_is_decided_with_one_ball_per_side(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -489,7 +498,7 @@ class TestTeamQuickMatch:
 
         assert won.result == "WON"
         assert lost.result == "LOST"
-        assert won.score == lost.score == "18UP"
+        assert won.score == lost.score == "10&8"
 
     async def test_the_partner_ball_counts_for_the_side_in_the_history(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -748,7 +757,8 @@ class TestTeamQuickMatch:
         use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
 
         entry = (await use_case.execute(creator.id)).matches[0]
-        assert entry.result is None
+        # Sin un solo hoyo adjudicable, sin terminar: como en Actividad (24 oct)
+        assert entry.result == "UNFINISHED"
         assert entry.score is None
 
     async def test_a_match_closed_early_reports_the_holes_that_were_left(
@@ -820,6 +830,403 @@ class TestTeamQuickMatch:
 
         assert feed.matches[0].opponents == ["Two Player"]
         assert feed.matches[0].partners == []
+
+
+@pytest.mark.asyncio
+class TestUnfinishedQuickMatch:
+    """
+    Un match play que no cuenta sale «sin terminar» y sin tanteo (Agustín, 24 oct
+    2026). El historial decía «Ganado · 6UP» donde la partida y Actividad dicen
+    «Sin terminar»: no aplicaba `match_play_counts`. Cuenta si se decidió antes
+    de tiempo, o si los dos bandos entregaron los mismos hoyos, 9 o más.
+
+        #    caso                                              | result      | score
+        -----|-------------------------------------------------|-------------|-------
+        H1   fourball de 6 hoyos sin decidir                   | UNFINISHED  | nulo
+        H2   cada bando con hoyos distintos (ida / vuelta)     | UNFINISHED  | nulo
+        H3   fourball al que le falta una bola en un hoyo      | UNFINISHED  | nulo
+        H4   decidido antes de tiempo (10&8)                   | WON         | «10&8»  (arriba)
+        H4b  decidido 10&8 y un bando siguió hasta el 14       | WON         | «10&8»
+        H5   18 hoyos completos, decidido en el 10             | WON / LOST  | «10&8»  (arriba)
+        H6   los dos bandos con los mismos 9 hoyos             | cuenta      | el suyo
+        H7   foursomes con 9 hoyos los dos bandos              | cuenta      | el suyo
+        H8   match play sin ningún hoyo anotado                | UNFINISHED  | nulo
+        H9   partido de torneo                                 | sin cambios (TestCompetitionMatch)
+        H10  medal o stableford                                | sin cambios (TestFreePlayQuickMatch)
+        H11  la misma partida vista por los dos bandos         | UNFINISHED los dos
+        H12  foursomes de 6 hoyos                              | UNFINISHED  | nulo
+        H13  contra un invitado, 6 hoyos                       | UNFINISHED  | nulo
+        H14  una raya en uno de 9 hoyos iguales                | cuenta      | el suyo
+        H15  fourball decidido; después falta una bola         | WON         | «10&8»
+        H16  campo borrado, 6 hoyos                            | UNFINISHED  | nulo
+        D8   fourball que falta una bola en el 4, y gana todo  | UNFINISHED  | nulo
+    """
+
+    async def _fourball(self, user_uow, golf_course_uow, qm_uow, **kwargs):
+        creator = await create_user(user_uow, "Fourball", handicap=0)
+        partner = await create_user(user_uow, "Mate", handicap=0)
+        rival_one = await create_user(user_uow, "Opp1", handicap=0)
+        rival_two = await create_user(user_uow, "Opp2", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            **kwargs,
+        )
+        return creator, rival_one
+
+    async def test_h1_h11_a_six_hole_fourball_is_unfinished_for_both_sides(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Seis hoyos ganados por A: «6UP» en la partida abierta, pero no cuenta."""
+        creator, rival = await self._fourball(
+            user_uow,
+            golf_course_uow,
+            qm_uow,
+            holes_played=6,
+            strokes_by_participant_index={0: 4, 1: 4, 2: 5, 3: 5},
+        )
+        use_case = _use_case(user_uow, competition_uow, qm_uow, golf_course_uow)
+
+        mine = (await use_case.execute(creator.id)).matches[0]
+        theirs = (await use_case.execute(rival.id)).matches[0]
+
+        assert (mine.result, mine.score) == ("UNFINISHED", None)
+        assert (theirs.result, theirs.score) == ("UNFINISHED", None)
+
+    async def test_h2_each_side_with_different_holes_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """La ida de uno frente a la vuelta del otro: ningún hoyo se adjudica."""
+        one = await create_user(user_uow, "Front", handicap=0)
+        two = await create_user(user_uow, "Back", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(two.id)],
+            holes_by_participant_index={0: range(1, 10), 1: range(10, 19)},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(one.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h3_a_fourball_missing_one_ball_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        A gana el hoyo 1 y empata los demás, y al compañero le falta el hoyo 5:
+        el bando A entrega 17 hoyos y el B 18, no los mismos. Sería un 1UP sin
+        decidir: no cuenta, ni como victoria ni como empate.
+        """
+        creator, _ = await self._fourball(
+            user_uow,
+            golf_course_uow,
+            qm_uow,
+            holes_by_participant_index={1: [h for h in range(1, 19) if h != 5]},
+            score_by_hole_by_participant_index={0: {1: 3}},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(creator.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h4b_decided_early_counts_even_if_one_side_kept_scoring(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Decidido 10&8 en el 10, pero el ganador siguió anotando hasta el 14: los
+        bandos no entregan los mismos hoyos, y aun así cuenta por decidido.
+        """
+        winner = await create_user(user_uow, "Kept", handicap=0)
+        loser = await create_user(user_uow, "Stopped", handicap=0)
+        course = await create_golf_course(golf_course_uow, winner.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            winner,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(loser.id)],
+            strokes_by_participant_index={0: 4, 1: 5},
+            holes_by_participant_index={0: range(1, 15), 1: range(1, 11)},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(winner.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("WON", "10&8")
+
+    async def test_h6_nine_holes_for_both_sides_count(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Los mismos 9 hoyos los dos y todos empatados: cuenta, «AS»."""
+        one = await create_user(user_uow, "Nine", handicap=0)
+        two = await create_user(user_uow, "Holes", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(two.id)],
+            holes_played=9,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(one.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("HALVED", "AS")
+
+    async def test_h6_eight_holes_for_both_sides_do_not_count(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """El borde: con 8 hoyos iguales y sin decidir, aún no cuenta."""
+        one = await create_user(user_uow, "Eight", handicap=0)
+        two = await create_user(user_uow, "Holes", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(two.id)],
+            holes_played=8,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(one.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h7_a_nine_hole_foursomes_counts(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Foursomes: una bola por bando, a nombre de uno; 9 hoyos los dos."""
+        creator = await create_user(user_uow, "Four", handicap=0)
+        partner = await create_user(user_uow, "Somes", handicap=0)
+        rival_one = await create_user(user_uow, "Opp1", handicap=0)
+        rival_two = await create_user(user_uow, "Opp2", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            holes_played=9,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(creator.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("HALVED", "AS")
+
+    async def test_h8_a_match_play_without_any_hole_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        one = await create_user(user_uow, "Empty", handicap=0)
+        two = await create_user(user_uow, "Card", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(two.id)],
+            holes_played=0,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(one.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h12_a_six_hole_foursomes_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        creator = await create_user(user_uow, "Four", handicap=0)
+        partner = await create_user(user_uow, "Somes", handicap=0)
+        rival_one = await create_user(user_uow, "Opp1", handicap=0)
+        rival_two = await create_user(user_uow, "Opp2", handicap=0)
+        course = await create_golf_course(golf_course_uow, creator.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            creator,
+            scoring_format=None,
+            match_format=MatchFormat.FOURSOMES,
+            others=[
+                QuickMatchParticipant.for_user(partner.id, team="A"),
+                QuickMatchParticipant.for_user(rival_one.id, team="B"),
+                QuickMatchParticipant.for_user(rival_two.id, team="B"),
+            ],
+            scoring_participant_indexes={0, 2},
+            strokes_by_participant_index={0: 4, 2: 5},
+            holes_played=6,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(creator.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h13_against_a_guest_six_holes_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        one = await create_user(user_uow, "Host", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_guest("Seve", "Ballesteros", handicap=0)],
+            strokes_by_participant_index={0: 4, 1: 5},
+            holes_played=6,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(one.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h14_a_raya_is_a_handed_in_hole(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Nueve hoyos los dos, todos empatados menos el 3, donde el creador hace
+        raya: la raya es un hoyo entregado, así que cuenta, y lo pierde.
+        """
+        one = await create_user(user_uow, "Raya", handicap=0)
+        two = await create_user(user_uow, "Steady", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(two.id)],
+            holes_played=9,
+            score_by_hole_by_participant_index={0: {3: None}},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(one.id)
+        ).matches[0]
+
+        assert entry.result == "LOST"
+        assert entry.score is not None
+
+    async def test_h15_a_decided_fourball_counts_even_if_a_ball_goes_missing_later(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        A gana los diez primeros con las cuatro bolas (10&8) y luego el
+        compañero deja de anotar mientras los demás siguen hasta el 14.
+        """
+        creator, _ = await self._fourball(
+            user_uow,
+            golf_course_uow,
+            qm_uow,
+            holes_played=14,
+            strokes_by_participant_index={0: 4, 1: 4, 2: 5, 3: 5},
+            holes_by_participant_index={1: range(1, 11)},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(creator.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("WON", "10&8")
+
+    async def test_d8_a_ball_missing_before_the_decision_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        A gana todos los hoyos, pero al companero le falta el 4 (Agustin, 25 oct
+        2026): en el orden de los hoyos no hay decision, y el bando A entrega 17
+        hoyos y el B 18. Contando sin orden salia «Ganado · 17&1».
+        """
+        creator, _ = await self._fourball(
+            user_uow,
+            golf_course_uow,
+            qm_uow,
+            strokes_by_participant_index={0: 4, 1: 4, 2: 5, 3: 5},
+            holes_by_participant_index={1: [h for h in range(1, 19) if h != 4]},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(creator.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
+
+    async def test_h16_with_the_course_deleted_it_is_still_judged(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Sin el campo no hay reparto de golpes, pero los hoyos entregados no
+        dependen de él: se juzga igual (Agustín, 25 oct 2026). «Partidas
+        juntos», en cambio, no juzga sin campo.
+        """
+        one = await create_user(user_uow, "Gone", handicap=0)
+        two = await create_user(user_uow, "Course", handicap=0)
+        course = await create_golf_course(golf_course_uow, one.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            one,
+            scoring_format=None,
+            match_format=MatchFormat.SINGLES,
+            others=[QuickMatchParticipant.for_user(two.id)],
+            strokes_by_participant_index={0: 4, 1: 5},
+            holes_played=6,
+        )
+
+        # Otro almacén de campos, vacío: el campo de la partida ya no está
+        entry = (
+            await _use_case(
+                user_uow, competition_uow, qm_uow, InMemoryGolfCourseUnitOfWork()
+            ).execute(one.id)
+        ).matches[0]
+
+        assert entry.golf_course_name is None
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
 
 
 @pytest.mark.asyncio
@@ -1292,13 +1699,9 @@ class TestParPorBarra:
 @pytest.mark.asyncio
 class TestHandicapDeJuegoComoEnLaPartida:
     """
-    Los puntos del historial salen del hándicap de juego de su barra (BE #513).
-
-    El historial puntuaba con el Handicap Index tal cual, sin la pendiente ni el
-    rating de la barra, y la misma vuelta salía con 28 puntos en el panel y 32
-    en la clasificación de la partida. Ahora el hándicap de juego sale de
-    `StrokeAllocationService`, como en la partida, y al 100 %: es la vuelta
-    propia, que no lleva el allowance del formato (decisión del 18 ago).
+    Los puntos del historial salen del hándicap de juego de su barra (BE #513),
+    el de la partida, con el allowance del formato: «Tu vuelta» es la real de la
+    partida (Agustín, 24 oct 2026; deshace el 100 % del 18 ago).
 
     Campo de par 72 (par 4 en todos, stroke index 1-18). Blancas: CR 72, SR 130.
     Con 18 de índice: 21 de juego al 100 % (20 al 95 %). Todos firman bogey.
@@ -1307,7 +1710,7 @@ class TestHandicapDeJuegoComoEnLaPartida:
     async def test_stableford_usa_la_pendiente_y_el_rating_de_su_barra(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """21 golpes: dos en los hoyos 1-3 (3 puntos) y uno en el resto (2): 39. Antes, 36."""
+        """20 golpes al 95 %: dos en los hoyos 1-2 (3 puntos) y uno en el resto (2): 38."""
         user = await create_user(user_uow, "Blancas", handicap=18.0)
         course = await create_golf_course(golf_course_uow, user.id)
         await played_quick_match(
@@ -1324,13 +1727,13 @@ class TestHandicapDeJuegoComoEnLaPartida:
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
         ).matches[0]
 
-        assert entry.stableford_points == 39
-        assert entry.score == "39 pts"
+        assert entry.stableford_points == 38
+        assert entry.score == "38 pts"
 
     async def test_medal_resta_el_handicap_de_juego_y_no_el_indice(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """90 brutos menos 21 de juego: 69, tres bajo par. Con el índice salía PAR."""
+        """90 brutos menos 20 de juego (95 %): 70, dos bajo par. Con el índice salía PAR."""
         user = await create_user(user_uow, "Medal", handicap=18.0)
         course = await create_golf_course(golf_course_uow, user.id)
         await played_quick_match(
@@ -1346,16 +1749,15 @@ class TestHandicapDeJuegoComoEnLaPartida:
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
         ).matches[0]
 
-        assert entry.score == "-3"
+        assert entry.score == "-2"
 
-    async def test_sin_barra_juega_con_el_indice_entero(
+    async def test_sin_barra_juega_con_el_indice_y_el_allowance(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
-        Sin barra que valorar, el índice hace de hándicap de juego, al 100 %.
-
-        No el 95 % de la Stableford: 20 golpes, dos en los hoyos 1-2 (3 puntos)
-        y uno en el resto: 38. Con el allowance de la partida serían 37.
+        Sin barra que valorar, el índice hace de hándicap de juego, con el 95 %
+        de la Stableford: 19 golpes, dos en el hoyo 1 (3 puntos) y uno en el
+        resto: 37. Al 100 % eran 38.
         """
         user = await create_user(user_uow, "Sinbarra", handicap=20.0)
         course = await create_golf_course(golf_course_uow, user.id)
@@ -1367,15 +1769,16 @@ class TestHandicapDeJuegoComoEnLaPartida:
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
         ).matches[0]
 
-        assert entry.stableford_points == 38
+        assert entry.stableford_points == 37
 
     async def test_el_handicap_personalizado_tambien_pasa_por_la_barra(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
-        12 personalizado (el perfil dice 30) en blancas: 14 de juego.
+        12 personalizado (el perfil dice 30) en blancas: 13,8 de hándicap de
+        campo, 13 de juego al 95 %.
 
-        Uno en los hoyos 1-14 (2 puntos) y ninguno en el resto (1): 32. Con el
+        Uno en los hoyos 1-13 (2 puntos) y ninguno en el resto (1): 31. Con el
         índice tal cual, 30; con el del perfil, muchos más.
         """
         user = await create_user(user_uow, "Personal", handicap=30.0)
@@ -1395,16 +1798,17 @@ class TestHandicapDeJuegoComoEnLaPartida:
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
         ).matches[0]
 
-        assert entry.stableford_points == 32
+        assert entry.stableford_points == 31
 
     async def test_en_match_play_la_vuelta_propia_va_con_su_handicap_contra_el_campo(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
         Singles al 100 % entre dos de 18: el partido se juega sin golpes, pero
-        la vuelta de cada uno puntúa con sus 21 de juego contra el campo.
+        la vuelta de cada uno puntúa con su hándicap de juego de la partida, 21,
+        contra el campo: no con la diferencia con el rival.
 
-        Dos golpes en los hoyos 1-3 (3 puntos) y uno en el resto: 39. Antes, 36.
+        Dos golpes en los hoyos 1-3 (3 puntos) y uno en el resto: 39.
         """
         player = await create_user(user_uow, "Singles", handicap=18.0)
         rival = await create_user(user_uow, "Rival", handicap=18.0)
@@ -1431,6 +1835,40 @@ class TestHandicapDeJuegoComoEnLaPartida:
 
         assert entry.stableford_points == 39
         assert entry.result == "HALVED"
+
+    async def test_en_fourball_su_handicap_con_el_90_y_no_la_diferencia(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Fourball entre cuatro de 18 en blancas: el partido no da golpes (la
+        diferencia es 0), pero su vuelta va con 19 de juego al 90 %: dos golpes
+        en el hoyo 1 (3 puntos) y uno en el resto: 37.
+        """
+        player = await create_user(user_uow, "QmFourball", handicap=18.0)
+        otros = [await create_user(user_uow, f"QmF{i}", handicap=18.0) for i in range(3)]
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_quick_match(
+            qm_uow,
+            course,
+            player,
+            scoring_format=None,
+            match_format=MatchFormat.FOURBALL,
+            others=[
+                QuickMatchParticipant.for_user(
+                    u.id, team=team, tee_color=TeeColor.WHITE, tee_gender=Gender.MALE
+                )
+                for u, team in zip(otros, ("A", "B", "B"), strict=True)
+            ],
+            strokes_per_hole=5,
+            creator_tee_color=TeeColor.WHITE,
+            creator_tee_gender=Gender.MALE,
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 37
 
     async def test_una_partida_scratch_sigue_sin_golpes_aunque_haya_barra(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -1463,7 +1901,7 @@ class TestHandicapFijadoAlEmpezar:
     async def test_un_cambio_del_perfil_no_mueve_los_puntos_de_una_partida_jugada(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """Fijado 18 en blancas (21 de juego): 39 puntos, aunque hoy el perfil diga 30."""
+        """Fijado 18 en blancas (20 de juego al 95 %): 38 puntos, aunque hoy el perfil diga 30."""
         user = await create_user(user_uow, "Fijado", handicap=30.0)
         course = await create_golf_course(golf_course_uow, user.id)
         await played_quick_match(
@@ -1481,7 +1919,7 @@ class TestHandicapFijadoAlEmpezar:
             await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(user.id)
         ).matches[0]
 
-        assert entry.stableford_points == 39
+        assert entry.stableford_points == 38
 
     async def test_el_resultado_del_match_play_tambien_usa_lo_fijado(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -1514,14 +1952,18 @@ class TestHandicapFijadoAlEmpezar:
 
 @pytest.mark.asyncio
 class TestTorneoComoVueltaPropia:
-    """BE #517: los puntos de un partido de torneo, como «Tu vuelta», no con el reparto del partido."""
+    """
+    Los puntos de un partido de torneo, como «Tu vuelta»: con el hándicap de
+    juego del jugador en el partido, el de su tarjeta, que lleva el allowance de
+    la modalidad (Agustín, 24 oct 2026), no con el reparto del partido (BE #517).
+    """
 
     async def test_un_singles_que_no_le_da_golpes_puntua_con_su_handicap_de_juego(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
         """
         Given un singles con hándicap donde el partido no le dio golpes (los
-        hoyos guardan 0) y 18 de índice en blancas (21 de juego)
+        hoyos guardan 0) y 18 de índice en blancas (21 de juego al 100 %)
         When firma 5 en los 18
         Then 39 puntos, como la misma vuelta en partida rápida. Antes, 18
         """
@@ -1585,10 +2027,46 @@ class TestTorneoComoVueltaPropia:
         # 39 de la vuelta de cincos, menos los 3 que valía el 5 del hoyo 1
         assert entry.stableford_points == 36
 
+    async def test_en_fourball_su_handicap_con_el_90_y_no_la_diferencia(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        Given un fourball con 18 de índice en blancas (20,7 de campo) en el que
+            el partido le guardó 0 golpes (es el más bajo: la diferencia)
+        When firma 5 en los 18
+        Then 37: 19 de juego al 90 %, dos golpes en el hoyo 1 (3 puntos) y uno
+            en el resto (2). Con la diferencia salían 18
+        """
+        player = await create_user(user_uow, "Fourball")
+        partner = await create_user(user_uow, "FourballP")
+        rival = await create_user(user_uow, "FourballR")
+        rival2 = await create_user(user_uow, "FourballR2")
+        course = await create_golf_course(golf_course_uow, player.id)
+        await played_competition_match(
+            competition_uow,
+            course,
+            team_a_user_ids=[player.id, partner.id],
+            team_b_user_ids=[rival.id, rival2.id],
+            round_date=date(2026, 6, 1),
+            result={"winner": "B", "score": "2&1"},
+            match_format=MatchFormat.FOURBALL,
+            own_scores_by_user_id={player.id: [5] * 18},
+            play_mode=PlayMode.HANDICAP,
+            tee_color=TeeColor.WHITE,
+            player_handicaps={player.id: 18.0},
+            match_handicaps={player.id: 0},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(player.id)
+        ).matches[0]
+
+        assert entry.stableford_points == 37
+
     async def test_sin_indice_guardado_usa_el_del_perfil(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
     ):
-        """Given un partido sin índice guardado y 18 en el perfil When firma 5 Then 39, como con el guardado."""
+        """Given un singles sin índice guardado y 18 en el perfil When firma 5 Then 39, como con el guardado."""
         player = await create_user(user_uow, "TorneoPerfil", handicap=18.0)
         rival = await create_user(user_uow, "TorneoPerfilR")
         course = await create_golf_course(golf_course_uow, player.id)
@@ -1657,6 +2135,22 @@ class TestMatchName:
         )
 
         assert feed.matches[0].match_name == "Meis Fourball"
+
+    async def test_a_quick_match_is_dated_the_day_it_started(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """Creada el viernes para el domingo: en el historial, del domingo (24 oct 2026)."""
+        player = await create_user(user_uow, "Dated", handicap=0)
+        course = await create_golf_course(golf_course_uow, player.id)
+        match = await played_quick_match(qm_uow, course, player)
+        match._created_at = datetime(2026, 10, 16, 18, 0)
+        match._started_at = datetime(2026, 10, 18, 8, 0)
+
+        feed = await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(
+            player.id
+        )
+
+        assert feed.matches[0].date == date(2026, 10, 18)
 
     async def test_a_quick_match_without_a_name_sends_null(
         self, user_uow, competition_uow, qm_uow, golf_course_uow

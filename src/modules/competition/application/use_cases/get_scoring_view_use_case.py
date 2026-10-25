@@ -26,9 +26,6 @@ from src.modules.competition.domain.services.scoring_opening_service import (
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.validation_status import (
-    ValidationStatus,
-)
 from src.modules.golf_course.domain.repositories.golf_course_repository import IGolfCourseRepository
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -105,7 +102,12 @@ class GetScoringViewUseCase:
             players_dto = self._build_players(match, user_names, golf_course)
             scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
 
-            standing = self._scoring_service.calculate_match_standing(hole_results_list)
+            # Decidido, el estado del hoyo en que se decidio (Agustin, 25 oct 2026)
+            standing = (
+                self._scoring_service.standing(hole_scores, round_entity.match_format)
+                if round_entity.match_format
+                else self._scoring_service.calculate_match_standing(hole_results_list)
+            )
             # Un partido concedido o ganado por walkover tambien esta decidido, y
             # la pantalla tiene que saber quien gano: ese resultado lo guarda la
             # concesion o el walkover, no `decided_result`, que es el de los
@@ -210,16 +212,12 @@ class GetScoringViewUseCase:
             hole_hs_list = scores_by_hole[hole_num]
             (
                 player_scores,
-                team_a_nets,
-                team_b_nets,
                 team_a_player_nets,
                 team_b_player_nets,
             ) = self._build_hole_player_scores(hole_hs_list)
 
             hole_result = self._compute_hole_result(
                 hole_hs_list,
-                team_a_nets,
-                team_b_nets,
                 team_a_player_nets,
                 team_b_player_nets,
                 match_format,
@@ -237,12 +235,10 @@ class GetScoringViewUseCase:
         return scores_dto, hole_results_list
 
     def _build_hole_player_scores(self, hole_hs_list):
-        """Construye player scores y clasifica nets por equipo (con user_ids para best-ball)."""
+        """Construye player scores y los nets de cada equipo con user_ids, para la mejor bola."""
         player_scores = []
         team_a_player_nets: list[tuple[str, int | None]] = []
         team_b_player_nets: list[tuple[str, int | None]] = []
-        team_a_nets = []
-        team_b_nets = []
 
         for hs in hole_hs_list:
             player_scores.append(
@@ -260,31 +256,24 @@ class GetScoringViewUseCase:
             uid_str = str(hs.player_user_id)
             if hs.team == "A":
                 team_a_player_nets.append((uid_str, hs.net_score))
-                if hs.net_score is not None:
-                    team_a_nets.append(hs.net_score)
             else:
                 team_b_player_nets.append((uid_str, hs.net_score))
-                if hs.net_score is not None:
-                    team_b_nets.append(hs.net_score)
 
-        return player_scores, team_a_nets, team_b_nets, team_a_player_nets, team_b_player_nets
+        return player_scores, team_a_player_nets, team_b_player_nets
 
     def _compute_hole_result(
         self,
         hole_hs_list,
-        team_a_nets,
-        team_b_nets,
         team_a_player_nets,
         team_b_player_nets,
         match_format,
         hole_results_list,
     ):
-        """Calcula el resultado de un hoyo si hay scores validados."""
-        has_validated = any(hs.validation_status == ValidationStatus.MATCH for hs in hole_hs_list)
-        if not has_validated or not team_a_nets or not team_b_nets:
+        """El resultado del hoyo, o None si aun no se puede decidir (`hole_result`)."""
+        winner = self._scoring_service.hole_result(hole_hs_list, match_format)
+        if winner is None:
             return None
 
-        winner = self._scoring_service.calculate_hole_winner(team_a_nets, team_b_nets, match_format)
         hole_results_list.append(winner)
         standing = self._scoring_service.calculate_match_standing(hole_results_list)
 

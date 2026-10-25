@@ -2,9 +2,8 @@
 La lectura completa de un match play rapido: quien gano, el tanteo, cuantos
 hoyos cuentan y si se decidio antes de tiempo.
 
-`match_play_result` sigue devolviendo lo mismo de siempre (el historial no
-cambia); lo social necesita ademas saber si el partido se cerro antes de
-quedarse sin hoyos, porque un «3&2» cuenta aunque no llegue al 18.
+Lo social y el historial necesitan ademas saber si el partido se cerro antes
+de quedarse sin hoyos, porque un «3&2» cuenta aunque no llegue al 18.
 """
 
 from uuid import uuid4
@@ -12,7 +11,6 @@ from uuid import uuid4
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.services.match_play_result import (
     match_play_reading,
-    match_play_result,
 )
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.value_objects.quick_match_id import QuickMatchId
@@ -76,18 +74,9 @@ class TestMatchPlayReading:
         assert (lectura.winner, lectura.score, lectura.holes_played) == (None, None, 0)
         assert lectura.decided_early is False
 
-    def test_el_resultado_de_siempre_no_cambia(self):
-        """El historial sigue leyendo un 1UP tras un hoyo: eso no es de lo social."""
-        match = _singles()
-        yo, el = (p.participant_id for p in match.participants)
 
-        resultado = match_play_result(match, {yo: {1: 3}, el: {1: 4}}, {}, MatchPlayScoring())
-
-        assert resultado == ("A", "1UP")
-
-
-class TestUnaBolaPorBando:
-    """Lo social lee el fourball con la bola de uno por bando (Agustin, 22 oct)."""
+class TestFourballConLasCuatroBolas:
+    """Tambien lo social: el hoyo espera a las cuatro (Agustin, 24 oct 2026)."""
 
     def _fourball(self):
         match = QuickMatch.create(
@@ -100,16 +89,7 @@ class TestUnaBolaPorBando:
             match.add_participant(QuickMatchParticipant.for_user(UserId(uuid4()), team=team))
         return match
 
-    def test_con_un_companero_sin_anotar_el_hoyo_cuenta_con_el_mejor_que_haya(self):
-        match = self._fourball()
-        a1, a2, b1, b2 = (p.participant_id for p in match.participants)
-        scores = {a1: {1: 3, 2: 4}, a2: {}, b1: {1: 4, 2: 4}, b2: {1: 4, 2: 4}}
-
-        lectura = match_play_reading(match, scores, {}, MatchPlayScoring(), one_ball_per_side=True)
-
-        assert (lectura.winner, lectura.score, lectura.holes_played) == ("A", "1UP", 2)
-
-    def test_por_defecto_sigue_exigiendo_las_cuatro(self):
+    def test_con_un_companero_sin_anotar_no_hay_hoyo(self):
         match = self._fourball()
         a1, a2, b1, b2 = (p.participant_id for p in match.participants)
         scores = {a1: {1: 3, 2: 4}, a2: {}, b1: {1: 4, 2: 4}, b2: {1: 4, 2: 4}}
@@ -117,3 +97,46 @@ class TestUnaBolaPorBando:
         lectura = match_play_reading(match, scores, {}, MatchPlayScoring())
 
         assert lectura.holes_played == 0
+
+
+class TestDecididoEnElOrdenDeLosHoyos:
+    """
+    Como en los torneos: el partido se decide en el primer hoyo en que la
+    ventaja supera a los que quedan, con los anteriores cerrados (Agustin, 25
+    oct 2026). Contando sin orden, un fourball con una bola sin anotar en el 4
+    salia «Ganado» con un N&M mal calculado.
+    """
+
+    def _fourball(self):
+        match = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=UserId(uuid4()),
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.FOURBALL,
+        )
+        for team in ("A", "B", "B"):
+            match.add_participant(QuickMatchParticipant.for_user(UserId(uuid4()), team=team))
+        return match
+
+    def _gana_a(self, match, hoyos, sin_la_bola_de_a2=()):
+        a1, a2, b1, b2 = (p.participant_id for p in match.participants)
+        scores = {
+            a1: dict.fromkeys(hoyos, 3),
+            a2: {h: 4 for h in hoyos if h not in sin_la_bola_de_a2},
+            b1: dict.fromkeys(hoyos, 5),
+            b2: dict.fromkeys(hoyos, 5),
+        }
+        return match_play_reading(match, scores, {}, MatchPlayScoring())
+
+    def test_d8_a_missing_ball_before_the_decision_leaves_it_undecided(self):
+        lectura = self._gana_a(self._fourball(), range(1, 19), sin_la_bola_de_a2=(4,))
+
+        assert (lectura.winner, lectura.score, lectura.decided_early) == ("A", "17UP", False)
+
+    def test_d10_a_missing_ball_after_the_decision_keeps_10_and_8(self):
+        lectura = self._gana_a(self._fourball(), range(1, 13), sin_la_bola_de_a2=(11,))
+
+        assert (lectura.winner, lectura.score) == ("A", "10&8")
+        assert lectura.decided_early is True
+        # Los que cuentan: hasta la decision, como la pantalla
+        assert lectura.holes_played == 10
