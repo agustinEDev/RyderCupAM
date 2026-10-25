@@ -11,6 +11,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import en_utc
 
 
 class QuickMatchDTOMapper:
@@ -96,4 +97,5 @@ class QuickMatchDTOMapper:
             ),
             created_at=quick_match.created_at,
             updated_at=quick_match.updated_at,
+            played_at=en_utc(quick_match.played_at),
         )

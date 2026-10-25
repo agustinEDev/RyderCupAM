@@ -1,5 +1,6 @@
 """Tests para ListMyQuickMatchesUseCase."""
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -69,3 +70,36 @@ class TestListMyQuickMatchesUseCase:
 
         assert result.total_count == 1
         assert result.quick_matches[0].id == visible.id.value
+
+    async def test_h5_each_match_says_when_it_was_played(self, qm_uow, user_uow):
+        """
+        H5 (25 oct 2026): «Mis partidas rápidas» enseñaba la fecha de creación.
+        `played_at` es cuando empezó (o cuando se creó si nunca empezó), en UTC
+        con su zona.
+        """
+        me = await create_user(user_uow, "me-played@test.com")
+        started = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=me.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        started._created_at = datetime(2026, 10, 15, 18, 0)
+        started._started_at = datetime(2026, 10, 21, 22, 30)
+        pending = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=me.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        pending._created_at = datetime(2026, 10, 20, 9, 0)
+        async with qm_uow:
+            await qm_uow.quick_matches.add(started)
+            await qm_uow.quick_matches.add(pending)
+
+        result = await ListMyQuickMatchesUseCase(qm_uow, user_uow).execute(str(me.id.value))
+
+        por_id = {m.id: m for m in result.quick_matches}
+        assert por_id[started.id.value].played_at == datetime(2026, 10, 21, 22, 30, tzinfo=UTC)
+        assert por_id[pending.id.value].played_at == datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
+        assert por_id[started.id.value].played_at.tzinfo is not None

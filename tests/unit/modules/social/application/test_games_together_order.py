@@ -6,7 +6,7 @@ id, un uuid4 aleatorio, asi que la de la tarde podia salir detras de la de la
 mañana. Ahora manda el instante real de la partida y el id solo desempata.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -138,3 +138,28 @@ def test_un_cursor_corrupto_o_extremo_da_la_primera_pagina(cursor):
     pagina = page_of(partidas, cursor)
 
     assert [g.id for g in pagina.games] == [_id(3), _id(2), _id(1)]
+
+
+def test_h5_una_rapida_dice_su_instante_en_utc_y_un_torneo_no():
+    """
+    H5 (25 oct 2026): `played_on` es el día en UTC; con `played_at` y su zona el
+    cliente pone la partida en su día local. El torneo no lo lleva: su día es el
+    de la ronda, y un instante a medianoche saldría el día anterior en América.
+    """
+    rapida = _partida(_id(1), 22)
+    torneo = SharedGame(
+        kind=SharedGameKind.TOURNAMENT_MATCH,
+        game_id=_id(2),
+        played_on=DIA,
+        played_at=datetime.combine(DIA, datetime.min.time()),
+        golf_course_id=None,
+        golf_course_name=None,
+        format="SINGLES",
+        relation=Relation.AGAINST,
+        outcome=None,
+    )
+
+    por_id = {g.id: g for g in page_of([rapida, torneo], None, limit=10).games}
+
+    assert por_id[_id(1)].played_at == datetime(2026, 10, 18, 22, 0, tzinfo=UTC)
+    assert por_id[_id(2)].played_at is None

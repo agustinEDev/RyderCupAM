@@ -283,6 +283,13 @@ class QuickMatchResponseDTO(BaseModel):
     )
     created_at: datetime
     updated_at: datetime
+    played_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Cuando se jugo, en UTC con su zona: al empezar, o al crearla si nunca "
+            "empezo. Es la fecha que se enseña (H5)."
+        ),
+    )
 
 
 class PaginatedQuickMatchResponseDTO(BaseModel):
@@ -398,6 +405,7 @@ class SharedQuickMatchDetailResponseDTO(BaseModel):
     excluded_from_stats: bool = False
     created_at: datetime
     updated_at: datetime
+    played_at: datetime | None = None
     hole_scores: list[HoleScoreResponseDTO]
     standing: QuickMatchStandingResponseDTO | None = None
     scoring_assignments: list[SharedScoringAssignmentDTO] = Field(default_factory=list)
