@@ -17,3 +17,12 @@ def en_utc(instante: datetime | None) -> datetime | None:
     if instante.tzinfo is None:
         return instante.replace(tzinfo=UTC)
     return instante.astimezone(UTC)
+
+
+def ahora_utc_sin_zona() -> datetime:
+    """
+    Ahora, en UTC y sin zona: como se guardan las fechas de la partida rápida
+    (BE #635). `datetime.now()` daba la hora LOCAL del servidor, que solo es UTC
+    en Render; en otra zona las fechas salían desplazadas.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)

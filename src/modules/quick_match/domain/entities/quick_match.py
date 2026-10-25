@@ -12,6 +12,7 @@ from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCour
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
 from src.shared.domain.services.playing_handicap_calculator import ALLOWED_ALLOWANCE_PERCENTAGES
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -108,8 +109,8 @@ class QuickMatch:
         self._stats_excluded_by_participant_ids = (
             list(stats_excluded_by_participant_ids) if stats_excluded_by_participant_ids else []
         )
-        self._created_at = created_at or datetime.now()
-        self._updated_at = updated_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
         # Cuándo empezó, para cerrarla sola; las de antes de guardarlo no lo tienen
         self._started_at = started_at
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -178,7 +179,7 @@ class QuickMatch:
         (nadie recibe golpes, en cualquier formato) y HANDICAP —el default— aplica
         el reparto WHS. Es el mismo Value Object que usa `Competition.play_mode`.
         """
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         uses_teams = match_format is not None and match_format != MatchFormat.SINGLES
         creator_team = "A" if uses_teams else None
         creator_participant = QuickMatchParticipant.for_user(
@@ -496,7 +497,7 @@ class QuickMatch:
             if self._team_count(team) >= self._match_format.players_per_team():
                 raise QuickMatchFullViolation(f"Team {team} is already full.")
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         # Reasignar (no `.append()` in-place) para que SQLAlchemy detecte el cambio
         # en la columna JSONB `participants` al hacer flush/commit.
         self._participants = [*self._participants, participant]
@@ -527,7 +528,7 @@ class QuickMatch:
                 f"{participant_id} is not a participant of this quick match."
             )
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._participants = [p for p in self._participants if p.participant_id != participant_id]
         self._updated_at = now
 
@@ -559,7 +560,7 @@ class QuickMatch:
             )
 
         updated_participant = participant.with_handicap(handicap)
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._participants = [
             updated_participant if p.participant_id == participant_id else p
             for p in self._participants
@@ -593,7 +594,7 @@ class QuickMatch:
             return
 
         self._hidden_by_participant_ids = [*self._hidden_by_participant_ids, participant_id]
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
         self.add_domain_event(
             QuickMatchHiddenEvent(quick_match_id=str(self._id), participant_id=str(participant_id))
@@ -612,7 +613,7 @@ class QuickMatch:
         self._hidden_by_participant_ids = [
             pid for pid in self._hidden_by_participant_ids if pid != participant_id
         ]
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
         self.add_domain_event(
             QuickMatchUnhiddenEvent(
@@ -651,7 +652,7 @@ class QuickMatch:
             *self._stats_excluded_by_participant_ids,
             participant_id,
         ]
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
         self.add_domain_event(
             QuickMatchStatsExcludedEvent(
@@ -679,7 +680,7 @@ class QuickMatch:
         self._stats_excluded_by_participant_ids = [
             pid for pid in self._stats_excluded_by_participant_ids if pid != participant_id
         ]
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
         self.add_domain_event(
             QuickMatchStatsIncludedEvent(
@@ -710,7 +711,7 @@ class QuickMatch:
 
         self._validate_scorer_ids(scorer_ids)
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = QuickMatchStatus.IN_PROGRESS
         self._scorer_ids = list(scorer_ids)
         self._started_at = now
@@ -739,7 +740,7 @@ class QuickMatch:
             p.frozen_with(profile_handicaps.get(p.user_id) if p.user_id else None)
             for p in self._participants
         ]
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     def _validate_scorer_ids(self, scorer_ids: list[ParticipantId]) -> None:
         if not (1 <= len(scorer_ids) <= MAX_SCORERS):
@@ -767,7 +768,7 @@ class QuickMatch:
                 f"Cannot complete a quick match in status {self._status.value}."
             )
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = QuickMatchStatus.COMPLETED
         self._updated_at = now
 
@@ -780,7 +781,7 @@ class QuickMatch:
                 f"Cannot cancel a quick match in status {self._status.value}."
             )
 
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         self._status = QuickMatchStatus.CANCELLED
         self._updated_at = now
 

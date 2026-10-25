@@ -10,6 +10,8 @@ que no esta anotando en esta partida).
 
 from datetime import datetime
 
+from src.shared.domain.services.instante_utc import ahora_utc_sin_zona
+
 from ..exceptions.quick_match_violations import InvalidHoleScoreViolation
 from ..value_objects.participant_id import ParticipantId
 from ..value_objects.quick_match_hole_score_id import QuickMatchHoleScoreId
@@ -56,8 +58,8 @@ class QuickMatchHoleScore:
         self._participant_id = participant_id
         self._score = score
         self._recorded_by_participant_id = recorded_by_participant_id
-        self._created_at = created_at or datetime.now()
-        self._updated_at = updated_at or datetime.now()
+        self._created_at = created_at or ahora_utc_sin_zona()
+        self._updated_at = updated_at or ahora_utc_sin_zona()
 
     @staticmethod
     def _validate_hole_number(hole_number: int) -> None:
@@ -88,7 +90,7 @@ class QuickMatchHoleScore:
         score: int | None,
         recorded_by_participant_id: ParticipantId,
     ) -> "QuickMatchHoleScore":
-        now = datetime.now()
+        now = ahora_utc_sin_zona()
         return cls(
             id=id,
             quick_match_id=quick_match_id,
@@ -168,7 +170,7 @@ class QuickMatchHoleScore:
         self._validate_score(score)
         self._score = score
         self._recorded_by_participant_id = recorded_by_participant_id
-        self._updated_at = datetime.now()
+        self._updated_at = ahora_utc_sin_zona()
 
     # ===========================================
     # METODOS ESPECIALES
