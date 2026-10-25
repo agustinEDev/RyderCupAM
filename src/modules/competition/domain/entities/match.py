@@ -398,7 +398,12 @@ class Match:
         self._sin_tarjetas_entregadas()
         sin_su_bola = set(self._holes_without_ball.get(user_id, ())) | set(hoyos_cerrados)
         if sin_su_bola:
-            self._holes_without_ball[user_id] = tuple(sorted(sin_su_bola))
+            # Un diccionario nuevo, no cambiarlo en su sitio: la columna JSONB no
+            # sigue los cambios internos y SQLAlchemy no lo guardaria (CodeRabbit)
+            self._holes_without_ball = {
+                **self._holes_without_ball,
+                user_id: tuple(sorted(sin_su_bola)),
+            }
         self._withdrawn_player_ids = tuple(
             uid for uid in self._withdrawn_player_ids if uid != user_id
         )
