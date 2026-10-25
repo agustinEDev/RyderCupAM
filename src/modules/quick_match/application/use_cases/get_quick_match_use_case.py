@@ -242,7 +242,7 @@ class GetQuickMatchUseCase:
         for hs in hole_scores:
             scores_by_hole.setdefault(hs.hole_number, {})[hs.participant_id] = hs.score
 
-        hole_results = []
+        results_by_hole: dict[int, str] = {}
         for hole_number in range(1, TOTAL_HOLES + 1):
             scores = scores_by_hole.get(hole_number)
             if not scores:
@@ -263,22 +263,26 @@ class GetQuickMatchUseCase:
                 for pid in team_b_ids
                 if pid in scores
             ]
-            hole_results.append(
-                self._scoring_service.calculate_hole_winner(
-                    team_a_scores, team_b_scores, quick_match.match_format
-                )
+            results_by_hole[hole_number] = self._scoring_service.calculate_hole_winner(
+                team_a_scores, team_b_scores, quick_match.match_format
             )
 
-        if not hole_results:
+        if not results_by_hole:
             return None
 
-        standing = self._scoring_service.calculate_match_standing(hole_results)
+        # Decidido en el orden de los hoyos, el estado es el del hoyo en que se
+        # decidio: lo anotado despues no lo mueve y el front pinta «10&8», no
+        # «18UP» (Agustin, 25 oct 2026). Con un hueco antes, sigue en juego
+        hasta_la_decision = self._scoring_service.holes_until_decided(results_by_hole)
+        standing = self._scoring_service.calculate_match_standing(
+            hasta_la_decision or list(results_by_hole.values())
+        )
         return QuickMatchStandingResponseDTO(
             status=standing["status"],
             leading_team=standing["leading_team"],
             holes_played=standing["holes_played"],
             holes_remaining=standing["holes_remaining"],
-            is_decided=self._scoring_service.is_match_decided(standing),
+            is_decided=hasta_la_decision is not None,
         )
 
     @staticmethod

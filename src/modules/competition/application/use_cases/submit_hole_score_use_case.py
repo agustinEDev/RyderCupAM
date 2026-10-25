@@ -325,11 +325,21 @@ class SubmitHoleScoreUseCase:
                 await self._uow.hole_scores.update(hs)
 
     async def _check_decided(self, match, match_id, match_format):
-        """Verifica si el partido esta matematicamente decidido."""
+        """
+        Vuelve a mirar si el partido esta decidido tras cada golpe: corregir un
+        hoyo anterior puede quitar la decision o cambiar el N&M (Agustin, 25 oct
+        2026). Con una tarjeta ya entregada, una decision que ya habia no se
+        mueve: quien entrego con el partido decidido ya no puede anotar el
+        resto, y se atascaria. Si aun no estaba decidido, si puede llegar.
+        """
+        if match.scorecard_submitted_by and match.is_decided:
+            return
         all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        hole_results = self._scoring_service.hole_results(all_scores, match_format)
-        standing = self._scoring_service.calculate_match_standing(hole_results)
-        if self._scoring_service.is_match_decided(standing) and not match.is_decided:
-            decided_result = self._scoring_service.format_decided_result(hole_results)
+        decided_result = self._scoring_service.decided_result(all_scores, match_format)
+        if decided_result == match.decided_result:
+            return
+        if decided_result is None:
+            match.clear_decided()
+        else:
             match.mark_decided(decided_result)
-            await self._uow.matches.update(match)
+        await self._uow.matches.update(match)

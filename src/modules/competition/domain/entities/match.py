@@ -323,6 +323,12 @@ class Match:
         self._decided_result = result
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def clear_decided(self) -> None:
+        """Deja de estar decidido: se corrigio un hoyo anterior a la decision."""
+        self._is_decided = False
+        self._decided_result = None
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
     def completar_genero_de_las_barras(
         self, genero_de: Callable[[MatchPlayer], Gender | None]
     ) -> int:

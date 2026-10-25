@@ -98,7 +98,8 @@ class SubmitScorecardUseCase:
 
             # Load all match scores and round for hole results calculation
             all_scores = await self._uow.hole_scores.find_by_match(match_id)
-            hole_results = self._scoring_service.hole_results(all_scores, match_format)
+            results_by_hole = self._scoring_service.hole_results_by_hole(all_scores, match_format)
+            hole_results = list(results_by_hole.values())
 
             # Result is derived from whichever holes are already validated, so the
             # submitting player sees the real outcome even before every other player
@@ -108,7 +109,7 @@ class SubmitScorecardUseCase:
             if match.is_decided and match.decided_result:
                 result_data = match.decided_result
             elif hole_results:
-                result_data = self._scoring_service.format_decided_result(hole_results)
+                result_data = self._scoring_service.result_in_hole_order(results_by_hole)
             else:
                 result_data = {"winner": None, "score": None}
 

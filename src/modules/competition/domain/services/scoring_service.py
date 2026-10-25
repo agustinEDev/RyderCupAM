@@ -156,11 +156,32 @@ class ScoringService(MatchPlayScoring):
         Los resultados de los hoyos ya decididos del partido, por orden de
         hoyo: los que `hole_result` aun no puede decidir no entran.
         """
+        return list(self.hole_results_by_hole(hole_scores, match_format).values())
+
+    def hole_results_by_hole(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> dict[int, str]:
+        """Los resultados de los hoyos ya decididos, por numero de hoyo y en orden."""
         por_hoyo: dict[int, list[HoleScore]] = {}
         for hs in hole_scores:
             por_hoyo.setdefault(hs.hole_number, []).append(hs)
-        resultados = (self.hole_result(por_hoyo[hoyo], match_format) for hoyo in sorted(por_hoyo))
-        return [r for r in resultados if r is not None]
+        resultados = {
+            hoyo: self.hole_result(por_hoyo[hoyo], match_format) for hoyo in sorted(por_hoyo)
+        }
+        return {hoyo: r for hoyo, r in resultados.items() if r is not None}
+
+    def decided_result(
+        self, hole_scores: Sequence[HoleScore], match_format: MatchFormat
+    ) -> dict | None:
+        """
+        El resultado del partido si ya esta decidido en el orden de los hoyos
+        (`decided_in_hole_order`), o None si sigue en juego.
+        """
+        return self.decided_in_hole_order(self.hole_results_by_hole(hole_scores, match_format))
+
+    def standing(self, hole_scores: Sequence[HoleScore], match_format: MatchFormat) -> dict:
+        """Como va el partido (`standing_in_hole_order`)."""
+        return self.standing_in_hole_order(self.hole_results_by_hole(hole_scores, match_format))
 
     def get_affected_player_ids(
         self,

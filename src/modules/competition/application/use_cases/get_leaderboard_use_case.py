@@ -178,35 +178,27 @@ class GetLeaderboardUseCase:
         return match.result
 
     async def _compute_in_progress_standing(self, match, round_entity):
-        """Computes standing for an in-progress match."""
+        """Computes standing for an in-progress match (`standing_in_hole_order`)."""
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
         if hole_scores and round_entity.match_format:
-            hole_results = self._scoring_service.hole_results(
+            results = self._scoring_service.hole_results_by_hole(
                 hole_scores, round_entity.match_format
             )
-            if hole_results:
-                standing = self._scoring_service.calculate_match_standing(hole_results)
+            if results:
+                standing = self._scoring_service.standing_in_hole_order(results)
                 return standing["status"], standing["leading_team"], standing["holes_played"]
         return None, None, None
 
     async def _compute_decided_result(self, match, match_format) -> dict | None:
-        """Recompute result from hole scores, finding the actual decision point."""
+        """
+        El resultado con los hoyos anotados: el de la decision en el orden de
+        los hoyos, como lo guarda `SubmitHoleScoreUseCase`, o la ventaja tal cual.
+        """
         hole_scores = await self._uow.hole_scores.find_by_match(match.id)
-        if not hole_scores:
+        results = self._scoring_service.hole_results_by_hole(hole_scores, match_format)
+        if not results:
             return None
-
-        hole_results = self._scoring_service.hole_results(hole_scores, match_format)
-        if not hole_results:
-            return None
-
-        # Walk through hole results to find when match was first decided
-        for i in range(1, len(hole_results) + 1):
-            standing = self._scoring_service.calculate_match_standing(hole_results[:i])
-            if self._scoring_service.is_match_decided(standing):
-                return self._scoring_service.format_decided_result(hole_results[:i])
-
-        # Not decided early: use all hole results (e.g., "1UP" after 18 holes)
-        return self._scoring_service.format_decided_result(hole_results)
+        return self._scoring_service.result_in_hole_order(results)
 
     async def _resolve_user_names(
         self, user_ids: list[UserId], competition_id: CompetitionId

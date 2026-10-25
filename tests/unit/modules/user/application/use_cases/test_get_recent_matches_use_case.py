@@ -436,8 +436,8 @@ class TestTeamQuickMatch:
     ):
         """
         SINGLES, el creador firma 4 y el rival 5 en los 18 hoyos: los gana todos.
-        Con la vuelta entera anotada la ventaja es de 18 y no quedan hoyos, así
-        que el resultado es "18UP" para los dos, con el signo cambiado.
+        Se decidió en el 10 con 10 arriba y quedando 8: "10&8" para los dos,
+        aunque se anotaran los 18 (Agustín, 25 oct 2026; antes era "18UP").
         """
         winner = await create_user(user_uow, "Winner", handicap=0)
         loser = await create_user(user_uow, "Loser", handicap=0)
@@ -459,7 +459,7 @@ class TestTeamQuickMatch:
 
         assert won.result == "WON"
         assert lost.result == "LOST"
-        assert won.score == lost.score == "18UP"
+        assert won.score == lost.score == "10&8"
 
     async def test_a_foursomes_match_is_decided_with_one_ball_per_side(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -498,7 +498,7 @@ class TestTeamQuickMatch:
 
         assert won.result == "WON"
         assert lost.result == "LOST"
-        assert won.score == lost.score == "18UP"
+        assert won.score == lost.score == "10&8"
 
     async def test_the_partner_ball_counts_for_the_side_in_the_history(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
@@ -847,7 +847,7 @@ class TestUnfinishedQuickMatch:
         H3   fourball al que le falta una bola en un hoyo      | UNFINISHED  | nulo
         H4   decidido antes de tiempo (10&8)                   | WON         | «10&8»  (arriba)
         H4b  decidido 10&8 y un bando siguió hasta el 14       | WON         | «10&8»
-        H5   18 hoyos completos                                | WON / LOST  | «18UP»  (arriba)
+        H5   18 hoyos completos, decidido en el 10             | WON / LOST  | «10&8»  (arriba)
         H6   los dos bandos con los mismos 9 hoyos             | cuenta      | el suyo
         H7   foursomes con 9 hoyos los dos bandos              | cuenta      | el suyo
         H8   match play sin ningún hoyo anotado                | UNFINISHED  | nulo
@@ -859,6 +859,7 @@ class TestUnfinishedQuickMatch:
         H14  una raya en uno de 9 hoyos iguales                | cuenta      | el suyo
         H15  fourball decidido; después falta una bola         | WON         | «10&8»
         H16  campo borrado, 6 hoyos                            | UNFINISHED  | nulo
+        D8   fourball que falta una bola en el 4, y gana todo  | UNFINISHED  | nulo
     """
 
     async def _fourball(self, user_uow, golf_course_uow, qm_uow, **kwargs):
@@ -1172,6 +1173,28 @@ class TestUnfinishedQuickMatch:
         ).matches[0]
 
         assert (entry.result, entry.score) == ("WON", "10&8")
+
+    async def test_d8_a_ball_missing_before_the_decision_is_unfinished(
+        self, user_uow, competition_uow, qm_uow, golf_course_uow
+    ):
+        """
+        A gana todos los hoyos, pero al companero le falta el 4 (Agustin, 25 oct
+        2026): en el orden de los hoyos no hay decision, y el bando A entrega 17
+        hoyos y el B 18. Contando sin orden salia «Ganado · 17&1».
+        """
+        creator, _ = await self._fourball(
+            user_uow,
+            golf_course_uow,
+            qm_uow,
+            strokes_by_participant_index={0: 4, 1: 4, 2: 5, 3: 5},
+            holes_by_participant_index={1: [h for h in range(1, 19) if h != 4]},
+        )
+
+        entry = (
+            await _use_case(user_uow, competition_uow, qm_uow, golf_course_uow).execute(creator.id)
+        ).matches[0]
+
+        assert (entry.result, entry.score) == ("UNFINISHED", None)
 
     async def test_h16_with_the_course_deleted_it_is_still_judged(
         self, user_uow, competition_uow, qm_uow, golf_course_uow
