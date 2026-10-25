@@ -491,6 +491,44 @@ class TestSubmitHoleScore:
 # ======================================================================================
 
 
+class TestGolpeSinMarcado:
+    """W21 (25 oct 2026): sin marcado se guarda solo el golpe propio."""
+
+    @pytest.mark.asyncio
+    async def test_own_score_without_marked_player_is_saved(self, client: AsyncClient):
+        """Given un jugador / When manda su golpe sin marcado / Then 200 y su golpe guardado."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 5},
+        )
+
+        assert response.status_code == 200
+        mia = [
+            ps
+            for h in response.json()["scores"]
+            if h["hole_number"] == 1
+            for ps in h["player_scores"]
+            if ps["user_id"] == ctx["player_a"]["user"]["id"]
+        ]
+        assert mia[0]["own_score"] == 5
+
+    @pytest.mark.asyncio
+    async def test_marker_score_without_whose_it_is_is_422(self, client: AsyncClient):
+        """Given un golpe de marcador sin `marked_player_id` / Then 422."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 5, "marked_score": 4},
+        )
+
+        assert response.status_code == 422
+
+
 class TestSubmitScorecard:
     """Tests para POST /api/v1/competitions/matches/{match_id}/scorecard/submit"""
 

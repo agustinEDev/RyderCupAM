@@ -11,6 +11,8 @@ Fourball de torneo con un jugador retirado: los casos de uso (25 oct 2026).
 | W19  | el retirado intenta anotar su bola o entregar              | PlayerWithdrawnError             |
 | W19b | y si lo retiran mientras su golpe espera el bloqueo        | PlayerWithdrawnError             |
 | W20  | el retirado intenta conceder por su bando                  | NotMatchPlayerError (403)        |
+| W21  | el rival que marcaba al retirado anota su bola, sin marcado | se guarda (revisor del front)    |
+| W21b | un golpe de marcador sin decir de quién                    | ValidationError (422)            |
 | W10  | su pareja anota al rival que él marcaba                    | se acepta                        |
 | W12  | entregan los otros tres                                    | el partido se cierra             |
 | W13  | la clasificación                                           | usa la misma regla               |
@@ -21,6 +23,7 @@ import copy
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
@@ -453,3 +456,46 @@ class TestLaVistaDeAnotar:
         assert vista.match_standing.leading_team == "B"
         assert vista.match_standing.holes_played == 10
         assert all(s.hole_result is not None for s in vista.scores if s.hole_number <= 10)
+
+
+class TestSinMarcado:
+    """
+    Revisor del front (25 oct 2026): con A1 retirado, el rival que le marcaba
+    se queda sin nadie a quien marcar, y el golpe exigía `marked_player_id`:
+    no podía anotar ni su propia bola.
+    """
+
+    @pytest.mark.asyncio
+    async def test_w21_the_rival_who_marked_him_scores_his_own_ball(self):
+        e = _Escena()
+        e.match.withdraw_player(e.a1, F)
+        await e.guardar(
+            [
+                HoleScore.create(
+                    match_id=e.match.id,
+                    hole_number=1,
+                    player_user_id=p.user_id,
+                    team=equipo,
+                    strokes_received=0,
+                )
+                for equipo, bando in (("A", e.match.team_a_players), ("B", e.match.team_b_players))
+                for p in bando
+            ]
+        )
+        quien_le_marcaba = next(
+            a.scorer_user_id for a in e.match.marker_assignments if a.marks_user_id == e.a1
+        )
+        assert all(
+            a.scorer_user_id != quien_le_marcaba for a in e.match.effective_marker_assignments
+        )
+
+        await SubmitHoleScoreUseCase(
+            e.uow, TestAnotarYEntregar()._usuarios(), ScoringService()
+        ).execute(str(e.match.id), 1, SubmitHoleScoreBodyDTO(own_score=5), quien_le_marcaba)
+
+        fila = await e.uow.hole_scores.find_one(e.match.id, 1, quien_le_marcaba)
+        assert fila.own_score == 5
+
+    def test_w21b_a_marker_score_needs_to_say_whose_it_is(self):
+        with pytest.raises(ValidationError):
+            SubmitHoleScoreBodyDTO(own_score=4, marked_score=5)
