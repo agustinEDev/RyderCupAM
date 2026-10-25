@@ -228,6 +228,48 @@ class TestMarcadores:
         assert not m.may_mark(_a1(m), rival)
         assert m.may_mark(_a2(m), rival)
 
+    @pytest.mark.parametrize("quienes", [("A1",), ("A1", "B1"), ("A1", "B2")])
+    def test_w10c_who_marks_each_one_points_to_someone_still_playing(self, quienes):
+        """
+        Revisor sin contexto: `marked_by` seguía apuntando al retirado, y la
+        pantalla decía «te marca A1». Cada asignación dice quién marca a su
+        anotador, y es quien lo marca de verdad ahora.
+        """
+        m = _partido()
+        ids = {
+            "A1": _a1(m),
+            "A2": _a2(m),
+            "B1": m.team_b_players[0].user_id,
+            "B2": m.team_b_players[1].user_id,
+        }
+        for quien in quienes:
+            m.withdraw_player(ids[quien], F)
+        retirados = set(m.withdrawn_player_ids)
+        efectivas = m.effective_marker_assignments
+        quien_le_marca = {a.marks_user_id: a.scorer_user_id for a in efectivas}
+
+        for a in efectivas:
+            assert {a.scorer_user_id, a.marks_user_id, a.marked_by_user_id}.isdisjoint(retirados)
+            assert a.marked_by_user_id == quien_le_marca[a.scorer_user_id]
+        # Todos los que juegan tienen quien les marque
+        jugando = set(ids.values()) - retirados
+        assert set(quien_le_marca) == jugando
+
+    def test_w11b_without_a_draw_nobody_marks_the_withdrawn_player(self):
+        """Revisor sin contexto: con la regla de bandos, un rival aún podía validarle un hoyo."""
+        m = Match.create(
+            round_id=RoundId.generate(),
+            match_number=1,
+            team_a_players=[_jugador(), _jugador()],
+            team_b_players=[_jugador(), _jugador()],
+        )
+        m.start()
+        rival = m.team_b_players[0].user_id
+        m.withdraw_player(_a1(m), F)
+
+        assert not m.may_mark(rival, _a1(m))
+        assert m.may_mark(rival, _a2(m))
+
     def test_w11_nobody_marks_the_withdrawn_player(self):
         m = _partido()
         a1 = _a1(m)

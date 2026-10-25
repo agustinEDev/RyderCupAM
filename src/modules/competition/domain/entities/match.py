@@ -520,7 +520,8 @@ class Match:
         queda con la regla de fondo del sorteo, el marcador es siempre del
         equipo contrario, que deja fuera a uno mismo y al compañero.
         """
-        if scorer_id in self._withdrawn_player_ids:
+        # Ni marca ni le marcan, tambien con la regla de bandos (sin sorteo)
+        if scorer_id in self._withdrawn_player_ids or marked_id in self._withdrawn_player_ids:
             return False
         if self._marker_assignments:
             return any(
@@ -602,25 +603,28 @@ class Match:
         if not self._withdrawn_player_ids:
             return self._marker_assignments
         retirados = set(self._withdrawn_player_ids)
-        quien_marca_a = {a.scorer_user_id: a.marked_by_user_id for a in self._marker_assignments}
-        efectivas = []
+        # Primero quién anota a quién; luego, de cada anotador, quien lo marca
+        # ahora: con el sorteo de antes, `marked_by` seguía señalando al
+        # retirado (revisor sin contexto)
+        parejas: list[tuple[UserId, UserId, UserId]] = []
         for asignacion in self._marker_assignments:
             if asignacion.marks_user_id in retirados:
                 continue
-            if asignacion.scorer_user_id not in retirados:
-                efectivas.append(asignacion)
-                continue
-            pareja = self._pareja_de(asignacion.scorer_user_id)
-            if pareja is None or pareja in retirados:
-                continue
-            efectivas.append(
-                MarkerAssignment(
-                    scorer_user_id=pareja,
-                    marks_user_id=asignacion.marks_user_id,
-                    marked_by_user_id=quien_marca_a.get(pareja, asignacion.marked_by_user_id),
-                )
+            anotador = asignacion.scorer_user_id
+            if anotador in retirados:
+                anotador = self._pareja_de(anotador)
+                if anotador is None or anotador in retirados:
+                    continue
+            parejas.append((anotador, asignacion.marks_user_id, asignacion.marked_by_user_id))
+        le_marca = {marcado: anotador for anotador, marcado, _ in parejas}
+        return tuple(
+            MarkerAssignment(
+                scorer_user_id=anotador,
+                marks_user_id=marcado,
+                marked_by_user_id=le_marca.get(anotador, antes),
             )
-        return tuple(efectivas)
+            for anotador, marcado, antes in parejas
+        )
 
     def _pareja_de(self, user_id: UserId) -> UserId | None:
         team = self.get_player_team(user_id)

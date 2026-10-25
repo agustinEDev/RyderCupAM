@@ -9,12 +9,15 @@ Fourball de torneo con un jugador retirado: los casos de uso (25 oct 2026).
 | W5   | deshacer, las mismas personas                              | vuelve a jugar                   |
 | W9   | al retirar o deshacer, la decisión del partido             | se recalcula                     |
 | W19  | el retirado intenta anotar su bola o entregar              | PlayerWithdrawnError             |
+| W19b | y si lo retiran mientras su golpe espera el bloqueo        | PlayerWithdrawnError             |
+| W20  | el retirado intenta conceder por su bando                  | NotMatchPlayerError (403)        |
 | W10  | su pareja anota al rival que él marcaba                    | se acepta                        |
 | W12  | entregan los otros tres                                    | el partido se cierra             |
 | W13  | la clasificación                                           | usa la misma regla               |
 | W18  | la vista de anotar: retirados, marcadores efectivos y hoyos | con la regla nueva               |
 """
 
+import copy
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,6 +27,9 @@ from src.modules.competition.application.exceptions import (
     NotMatchPlayerError,
     PlayerWithdrawnError,
     WithdrawalNotAllowedError,
+)
+from src.modules.competition.application.use_cases.concede_match_use_case import (
+    ConcedeMatchUseCase,
 )
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
@@ -273,6 +279,42 @@ class TestAnotarYEntregar:
             await SubmitHoleScoreUseCase(e.uow, self._usuarios(), ScoringService()).execute(
                 str(e.match.id), 1, body, e.a1
             )
+
+    @pytest.mark.asyncio
+    async def test_w19c_withdrawn_while_his_hole_waited_for_the_lock(self):
+        """
+        Revisor sin contexto: el golpe leía el partido sin bloquear, su pareja lo
+        retiraba entretanto y al entrar guardaba su bola. Se vuelve a mirar tras
+        el bloqueo.
+        """
+        e = _Escena()
+        await e.guardar()
+        antes = copy.deepcopy(e.match)
+        e.match.withdraw_player(e.a1, F)
+        e.uow.matches.find_by_id = AsyncMock(return_value=antes)
+        rival = next(
+            a.marks_user_id for a in e.match.marker_assignments if a.scorer_user_id == e.a1
+        )
+        body = SubmitHoleScoreBodyDTO(own_score=4, marked_player_id=str(rival), marked_score=4)
+
+        with pytest.raises(PlayerWithdrawnError):
+            await SubmitHoleScoreUseCase(e.uow, self._usuarios(), ScoringService()).execute(
+                str(e.match.id), 1, body, e.a1
+            )
+
+    @pytest.mark.asyncio
+    async def test_w20_the_withdrawn_player_cannot_concede_his_partner_can(self):
+        """Decidido el 25 oct 2026: retirado ya no decide por el bando; su pareja sí."""
+        e = _Escena()
+        e.match.withdraw_player(e.a1, F)
+        await e.guardar()
+        caso = ConcedeMatchUseCase(e.uow, ScoringService())
+
+        with pytest.raises(NotMatchPlayerError):
+            await caso.execute(str(e.match.id), e.a1, "A")
+        await caso.execute(str(e.match.id), e.a2, "A")
+
+        assert (await e.partido()).status.value == "CONCEDED"
 
     @pytest.mark.asyncio
     async def test_w19b_nor_hand_in_a_scorecard(self):

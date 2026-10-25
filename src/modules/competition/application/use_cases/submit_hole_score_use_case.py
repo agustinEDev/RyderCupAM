@@ -96,13 +96,9 @@ class SubmitHoleScoreUseCase:
             if match.find_player(user_id) is None:
                 raise NotMatchPlayerError("No eres jugador de este partido")
 
-            # Retirado del fourball: ni su bola ni la de nadie (W19)
-            if user_id in match.withdrawn_player_ids:
-                raise PlayerWithdrawnError()
-
             # Antes de abrir el partido, como lo de arriba: una petición fuera de
             # su asignación no abre nada ni guarda nada, tampoco su propio golpe
-            marked_player_uid = self._marked_player(match, user_id, body.marked_player_id)
+            marked_player_uid = self._quien_marca(match, user_id, body.marked_player_id)
 
             # Despues de saber que es suyo: abrir el partido bloquea su fila,
             # crea 36 filas y arranca la ronda, y eso no lo dispara alguien que
@@ -127,6 +123,11 @@ class SubmitHoleScoreUseCase:
                         f"Partido no esta en estado para scoring. Estado: {bloqueado.status.value}"
                     )
                 match = bloqueado
+
+            # Otra vez con el partido bloqueado: si lo retiraron (o lo
+            # devolvieron) mientras este golpe esperaba, manda lo de ahora, no lo
+            # leido antes (revisor sin contexto)
+            marked_player_uid = self._quien_marca(match, user_id, body.marked_player_id)
 
             # El formato decide de quién es la tarjeta: en foursomes, del bando
             # (BE #377). Si el compañero la entregó, la bola ya no cambia
@@ -181,6 +182,17 @@ class SubmitHoleScoreUseCase:
             self._uow, self._user_repo, self._scoring_service, self._gc_repo
         )
         return await view_uc.execute(match_id_str)
+
+    @classmethod
+    def _quien_marca(cls, match: Match, user_id: UserId, marked_player_id: str) -> UserId:
+        """
+        El marcado de quien anota, si puede anotar: el retirado del fourball ni
+        su bola ni la de nadie (W19). Se mira antes de abrir el partido y otra
+        vez con él bloqueado.
+        """
+        if user_id in match.withdrawn_player_ids:
+            raise PlayerWithdrawnError()
+        return cls._marked_player(match, user_id, marked_player_id)
 
     @staticmethod
     def _marked_player(match: Match, user_id: UserId, marked_player_id: str) -> UserId:
