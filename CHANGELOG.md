@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.40.0] - 2026-10-25
+
+**El match play se decide en orden de hoyos y el historial dice lo que pasó.**
+Un partido se decide en el primer hoyo en que la ventaja supera a los que
+quedan, con todos los anteriores cerrados; la raya pierde el hoyo en los
+torneos; y el historial marca como «sin terminar» la partida rápida que no
+cuenta. Va con el frontend **2.53.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones ni variables nuevas.**
+- **Backend y frontend seguidos**: el historial puede devolver
+  `result: "UNFINISHED"` con `score: null` (#659), que el frontend 2.52 no
+  sabe pintar. El 2.53 sí.
+- Sin partidos de torneo en PRO: nada que recalcular. Los resultados de
+  partidas rápidas se calculan al leerlos.
+- Tras desplegar, lanzar `scripts/purge_terms_acceptances.py`.
+
+### Changed
+
+- **El match play se decide en orden de hoyos** (#660): en el primer hoyo en
+  que la ventaja supera a los hoyos que quedan, con todos los anteriores
+  cerrados. Un hueco antes deja el partido vivo; con huecos y sin decidir se
+  lee la ventaja tal cual («5UP», «AS»), nunca un N&M inventado. Decidido, el
+  tanteo es el del hoyo de la decisión: un partido ganado en todos los hoyos
+  dice «10&8», no «18UP». En torneo la decisión se revisa con cada golpe
+  anotado; con una tarjeta entregada, la que ya hubiera se queda.
+- **Fourball: un hoyo se decide con las cuatro bolas** (#656, #657), en
+  torneo, Actividad y «partidas juntos». Sustituye la lectura de una bola por
+  bando del 22 oct.
+- **«Tu vuelta» del historial usa el hándicap de juego del partido** (#658),
+  con el porcentaje de la modalidad sobre el índice de su barra. Sustituye la
+  lectura al 100 % del 18 ago. Estadísticas y hándicap WHS siguen al 100 %.
+- **Una sola fecha de juego por partida rápida** (#657): cuando empezó, o
+  cuando se creó si nunca empezó. La usan Actividad, historial, estadísticas,
+  «partidas juntos» y el orden de esas listas.
+
+### Fixed
+
+- **La raya pierde el hoyo en el match play de torneo** (#656): antes el hoyo
+  se quedaba sin resultado y quien recogió podía ganar el partido. Dos rayas,
+  empate. Una bola en disputa deja el hoyo abierto.
+- **La partida rápida cerrada sola sale en Actividad en su día** (#657), no
+  arriba como si fuera de ahora.
+- **El historial no da por ganada una partida rápida sin terminar** (#659):
+  solo cuenta si se decidió antes o los dos bandos entregaron los mismos
+  hoyos, nueve o más; si no, `UNFINISHED` sin tanteo, como en Actividad.
+
 ## [2.39.0] - 2026-10-24
 
 **La raya cuenta su doble bogey neto y las partidas rápidas se cierran solas.**
