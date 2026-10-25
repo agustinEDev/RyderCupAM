@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SubmitHoleScoreBodyDTO(BaseModel):
@@ -25,12 +25,28 @@ class SubmitHoleScoreBodyDTO(BaseModel):
     """
 
     own_score: int | None = Field(None, ge=1, le=15)
-    marked_player_id: str
+    # Opcional desde el 25 oct 2026: en un fourball con un retirado, el rival que
+    # le marcaba ya no marca a nadie y tiene que poder anotar su propia bola. Sin
+    # el, solo se guarda el golpe propio
+    marked_player_id: str | None = None
     marked_score: int | None = Field(None, ge=1, le=15)
     acting_as: UUID | None = Field(
         None,
         description="Solo admin: ID del jugador al que se representa para registrar su score.",
     )
+
+    @field_validator("marked_player_id")
+    @classmethod
+    def _vacio_es_ninguno(cls, valor: str | None) -> str | None:
+        """Un texto vacío, o solo de espacios, es no mandarlo: sin marcado (code-review, CodeRabbit)."""
+        return (valor or "").strip() or None
+
+    @model_validator(mode="after")
+    def _marcado_con_su_jugador(self) -> "SubmitHoleScoreBodyDTO":
+        """Un golpe de marcador dice de quien es: sin eso no se sabe a quien va."""
+        if "marked_score" in self.model_fields_set and not self.marked_player_id:
+            raise ValueError("marked_score requires marked_player_id")
+        return self
 
 
 class RoundInfoDTO(BaseModel):

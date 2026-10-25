@@ -11,6 +11,8 @@ Fourball de torneo con un jugador retirado: los casos de uso (25 oct 2026).
 | W19  | el retirado intenta anotar su bola o entregar              | PlayerWithdrawnError             |
 | W19b | y si lo retiran mientras su golpe espera el bloqueo        | PlayerWithdrawnError             |
 | W20  | el retirado intenta conceder por su bando                  | NotMatchPlayerError (403)        |
+| W21  | el rival que marcaba al retirado anota su bola, sin marcado | se guarda (revisor del front)    |
+| W21b | un golpe de marcador sin decir de quién                    | ValidationError (422)            |
 | W10  | su pareja anota al rival que él marcaba                    | se acepta                        |
 | W12  | entregan los otros tres                                    | el partido se cierra             |
 | W13  | la clasificación                                           | usa la misma regla               |
@@ -21,6 +23,7 @@ import copy
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import (
@@ -157,6 +160,31 @@ def _diez_hoyos_para_b_sin_la_bola_de_a1(e: _Escena) -> list[HoleScore]:
             _fila(e.match, hoyo, e.match.team_b_players[1].user_id, "B", 6),
         ]
     return filas
+
+
+def _usuarios():
+    """El repositorio de usuarios que pide la vista de anotar, con un nombre cualquiera."""
+    repo = AsyncMock()
+    usuario = MagicMock()
+    usuario.display_name = "Jugador"
+    usuario.display_name_or_legal = MagicMock(return_value="Jugador")
+    repo.find_by_id = AsyncMock(return_value=usuario)
+    return repo
+
+
+def _filas_del_hoyo_1(e):
+    """Las filas del hoyo 1, como las crea quien abre el partido."""
+    return [
+        HoleScore.create(
+            match_id=e.match.id,
+            hole_number=1,
+            player_user_id=p.user_id,
+            team=equipo,
+            strokes_received=0,
+        )
+        for equipo, bando in (("A", e.match.team_a_players), ("B", e.match.team_b_players))
+        for p in bando
+    ]
 
 
 class TestQuienPuede:
@@ -319,7 +347,7 @@ class TestAnotarYEntregar:
         body = SubmitHoleScoreBodyDTO(own_score=4, marked_player_id=str(rival), marked_score=4)
 
         with pytest.raises(PlayerWithdrawnError):
-            await SubmitHoleScoreUseCase(e.uow, self._usuarios(), ScoringService()).execute(
+            await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
                 str(e.match.id), 1, body, e.a1
             )
 
@@ -341,7 +369,7 @@ class TestAnotarYEntregar:
         body = SubmitHoleScoreBodyDTO(own_score=4, marked_player_id=str(rival), marked_score=4)
 
         with pytest.raises(PlayerWithdrawnError):
-            await SubmitHoleScoreUseCase(e.uow, self._usuarios(), ScoringService()).execute(
+            await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
                 str(e.match.id), 1, body, e.a1
             )
 
@@ -391,7 +419,7 @@ class TestAnotarYEntregar:
         )
         body = SubmitHoleScoreBodyDTO(marked_player_id=str(rival), marked_score=4)
 
-        await SubmitHoleScoreUseCase(e.uow, self._usuarios(), ScoringService()).execute(
+        await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
             str(e.match.id), 1, body, e.a2
         )
 
@@ -438,9 +466,9 @@ class TestLaVistaDeAnotar:
             a.marks_user_id for a in e.match.marker_assignments if a.scorer_user_id == e.a1
         )
 
-        vista = await GetScoringViewUseCase(
-            e.uow, TestAnotarYEntregar()._usuarios(), ScoringService()
-        ).execute(str(e.match.id))
+        vista = await GetScoringViewUseCase(e.uow, _usuarios(), ScoringService()).execute(
+            str(e.match.id)
+        )
 
         assert vista.withdrawn_player_ids == [str(e.a1)]
         marca_a2 = {
@@ -453,3 +481,77 @@ class TestLaVistaDeAnotar:
         assert vista.match_standing.leading_team == "B"
         assert vista.match_standing.holes_played == 10
         assert all(s.hole_result is not None for s in vista.scores if s.hole_number <= 10)
+
+
+class TestSinMarcado:
+    """
+    Revisor del front (25 oct 2026): con A1 retirado, el rival que le marcaba
+    se queda sin nadie a quien marcar, y el golpe exigía `marked_player_id`:
+    no podía anotar ni su propia bola.
+    """
+
+    @staticmethod
+    def _quien_le_marcaba(e):
+        return next(a.scorer_user_id for a in e.match.marker_assignments if a.marks_user_id == e.a1)
+
+    @pytest.mark.asyncio
+    async def test_scoring_without_a_marked_player_saves_the_own_ball(self):
+        """
+        Given A1 retirado y el rival que le marcaba sin nadie a quien marcar /
+        When manda su golpe sin marcado / Then se guarda su bola (W21).
+        """
+        e = _Escena()
+        e.match.withdraw_player(e.a1, F)
+        await e.guardar(_filas_del_hoyo_1(e))
+        rival = self._quien_le_marcaba(e)
+        assert all(a.scorer_user_id != rival for a in e.match.effective_marker_assignments)
+
+        await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
+            str(e.match.id), 1, SubmitHoleScoreBodyDTO(own_score=5), rival
+        )
+
+        assert (await e.uow.hole_scores.find_one(e.match.id, 1, rival)).own_score == 5
+
+    @pytest.mark.asyncio
+    async def test_a_queued_score_marking_the_withdrawn_player_keeps_the_own_ball(self):
+        """
+        Given un golpe guardado sin red cuando A1 aún jugaba (marcándole) / When
+        llega tras retirarle / Then se guarda la bola propia y se ignora la de A1,
+        que ya no cuenta (code-review: antes se rechazaba entero).
+        """
+        e = _Escena()
+        e.match.withdraw_player(e.a1, F)
+        await e.guardar(_filas_del_hoyo_1(e))
+        rival = self._quien_le_marcaba(e)
+        body = SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=str(e.a1), marked_score=4)
+
+        await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
+            str(e.match.id), 1, body, rival
+        )
+
+        assert (await e.uow.hole_scores.find_one(e.match.id, 1, rival)).own_score == 5
+        assert (await e.uow.hole_scores.find_one(e.match.id, 1, e.a1)).marker_score is None
+
+    @pytest.mark.asyncio
+    async def test_an_empty_marked_player_counts_as_none(self):
+        """Given `marked_player_id: ""` / When solo su golpe / Then como sin marcado (code-review)."""
+        e = _Escena()
+        e.match.withdraw_player(e.a1, F)
+        await e.guardar(_filas_del_hoyo_1(e))
+        rival = self._quien_le_marcaba(e)
+
+        await SubmitHoleScoreUseCase(e.uow, _usuarios(), ScoringService()).execute(
+            str(e.match.id), 1, SubmitHoleScoreBodyDTO(own_score=6, marked_player_id=""), rival
+        )
+
+        assert (await e.uow.hole_scores.find_one(e.match.id, 1, rival)).own_score == 6
+
+    @pytest.mark.parametrize("vacio", ["", "   "])
+    def test_a_blank_marked_player_is_none(self, vacio):
+        """Given `marked_player_id` vacío o de espacios / Then None (code-review, CodeRabbit)."""
+        assert SubmitHoleScoreBodyDTO(own_score=5, marked_player_id=vacio).marked_player_id is None
+
+    def test_a_marker_score_without_whose_it_is_is_rejected(self):
+        """Given `marked_score` sin `marked_player_id` / Then ValidationError (W21b, 422)."""
+        with pytest.raises(ValidationError):
+            SubmitHoleScoreBodyDTO(own_score=4, marked_score=5)

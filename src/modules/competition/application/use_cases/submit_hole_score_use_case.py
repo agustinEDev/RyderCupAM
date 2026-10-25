@@ -140,7 +140,10 @@ class SubmitHoleScoreUseCase:
             own_score_locked = match.has_submitted_scorecard(user_id, match_format)
 
             # Tarjeta del marcado entregada: marker_score ignorado, own_score sigue editable
-            marker_score_locked = match.has_submitted_scorecard(marked_player_uid, match_format)
+            # Sin marcado no hay golpe de marcador que guardar (W21)
+            marker_score_locked = marked_player_uid is None or match.has_submitted_scorecard(
+                marked_player_uid, match_format
+            )
 
             if not MIN_HOLE <= hole_number <= MAX_HOLE:
                 raise InvalidHoleNumberError(f"Hoyo invalido: {hole_number}")
@@ -184,14 +187,23 @@ class SubmitHoleScoreUseCase:
         return await view_uc.execute(match_id_str)
 
     @classmethod
-    def _quien_marca(cls, match: Match, user_id: UserId, marked_player_id: str) -> UserId:
+    def _quien_marca(
+        cls, match: Match, user_id: UserId, marked_player_id: str | None
+    ) -> UserId | None:
         """
         El marcado de quien anota, si puede anotar: el retirado del fourball ni
         su bola ni la de nadie (W19). Se mira antes de abrir el partido y otra
-        vez con él bloqueado.
+        vez con él bloqueado. Sin marcado, nadie: solo su golpe (W21).
         """
         if user_id in match.withdrawn_player_ids:
             raise PlayerWithdrawnError()
+        if marked_player_id is None:
+            return None
+        # Un golpe guardado sin red cuando el marcado aun jugaba y que llega
+        # tras retirarle: su bola propia se guarda y la del retirado se ignora,
+        # que ya no cuenta (code-review: antes se perdia entera)
+        if any(str(uid) == marked_player_id for uid in match.withdrawn_player_ids):
+            return None
         return cls._marked_player(match, user_id, marked_player_id)
 
     @staticmethod
