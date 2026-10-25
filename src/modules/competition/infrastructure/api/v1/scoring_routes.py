@@ -18,6 +18,7 @@ from src.config.dependencies import (
     get_get_scoring_view_use_case,
     get_submit_hole_score_use_case,
     get_submit_scorecard_use_case,
+    get_withdraw_match_player_use_case,
 )
 from src.config.rate_limit import limiter
 from src.modules.competition.application.dto.scoring_dto import (
@@ -34,10 +35,12 @@ from src.modules.competition.application.exceptions import (
     MatchNotScoringError,
     NotMatchPlayerError,
     NotYourMarkedPlayerError,
+    PlayerWithdrawnError,
     RoundNotFoundError,
     ScorecardAlreadySubmittedError,
     ScorecardNotReadyError,
     ScoringNotOpenYetError,
+    WithdrawalNotAllowedError,
 )
 from src.modules.competition.application.use_cases.concede_match_use_case import (
     ConcedeMatchUseCase,
@@ -53,6 +56,9 @@ from src.modules.competition.application.use_cases.submit_hole_score_use_case im
 )
 from src.modules.competition.application.use_cases.submit_scorecard_use_case import (
     SubmitScorecardUseCase,
+)
+from src.modules.competition.application.use_cases.withdraw_match_player_use_case import (
+    WithdrawMatchPlayerUseCase,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -167,6 +173,10 @@ async def submit_hole_score(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
+    except PlayerWithdrawnError:
+        # Con codigo propio en la raiz: el retirado del fourball no anota hasta
+        # que se deshaga la retirada, y el movil no debe reintentar el golpe
+        return _retirado()
     except NotYourMarkedPlayerError:
         # Con código propio en la RAÍZ, como SCORING_NOT_OPEN_YET: es un rechazo
         # definitivo (BE #520) y el cliente tiene que poder distinguirlo
@@ -274,6 +284,8 @@ async def submit_scorecard(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         ) from e
+    except PlayerWithdrawnError:
+        return _retirado()
     except (ScorecardNotReadyError, ScorecardAlreadySubmittedError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -316,6 +328,17 @@ async def get_leaderboard(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
+
+
+def _retirado() -> JSONResponse:
+    """409 con codigo propio en la raiz: lo lee el cliente (`api.js`)."""
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "detail": PlayerWithdrawnError.message,
+            "error_code": PlayerWithdrawnError.error_code,
+        },
+    )
 
 
 # ======================================================================================
@@ -390,3 +413,77 @@ async def concede_match(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+
+
+# ======================================================================================
+# WITHDRAWN PLAYER (FOURBALL) ENDPOINTS
+# ======================================================================================
+
+
+async def _retirada(use_case, match_id, player_id, current_user, *, undo: bool):
+    try:
+        return await use_case.execute(
+            str(match_id),
+            UserId(current_user.id),
+            str(player_id),
+            is_admin=current_user.is_admin,
+            undo=undo,
+        )
+    except (MatchNotFoundError, RoundNotFoundError, CompetitionNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except NotMatchPlayerError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except WithdrawalNotAllowedError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.post(
+    "/matches/{match_id}/players/{player_id}/withdraw",
+    status_code=status.HTTP_200_OK,
+    summary="Retirar a un jugador de un fourball",
+    tags=["Competitions - Scoring"],
+)
+@limiter.limit("10/minute")
+async def withdraw_match_player(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    match_id: UUID,
+    player_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: WithdrawMatchPlayerUseCase = Depends(get_withdraw_match_player_use_case),
+):
+    """
+    Retira a un jugador de un fourball: su bola deja de contar en los hoyos que
+    no tenia validados y su pareja marca al rival que el marcaba.
+
+    **Auth:** el propio jugador, su pareja, el creador de la competicion o un admin.
+
+    **Returns:**
+    - 200: `{match_id, withdrawn_player_ids, decided_result}`
+    - 403: un rival o alguien de fuera
+    - 404: partido, ronda o competicion no encontrados
+    - 409: no se puede (no es fourball, partido terminado, ultimo de su bando,
+      ya retirado o con una tarjeta entregada)
+    """
+    return await _retirada(use_case, match_id, player_id, current_user, undo=False)
+
+
+@router.post(
+    "/matches/{match_id}/players/{player_id}/reinstate",
+    status_code=status.HTTP_200_OK,
+    summary="Deshacer la retirada de un jugador de un fourball",
+    tags=["Competitions - Scoring"],
+)
+@limiter.limit("10/minute")
+async def reinstate_match_player(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    match_id: UUID,
+    player_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: WithdrawMatchPlayerUseCase = Depends(get_withdraw_match_player_use_case),
+):
+    """
+    Deshace la retirada: su bola vuelve a contar en los hoyos que quedan.
+
+    **Auth y respuestas:** las mismas que al retirar.
+    """
+    return await _retirada(use_case, match_id, player_id, current_user, undo=True)

@@ -13,6 +13,7 @@ from src.modules.competition.application.exceptions import (
     MatchNotScoringError,
     NotMatchPlayerError,
     NotYourMarkedPlayerError,
+    PlayerWithdrawnError,
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
@@ -20,6 +21,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.decision_del_partido import (
+    revisa_la_decision,
+)
 from src.modules.competition.application.services.match_opener import MatchOpener
 from src.modules.competition.application.services.solicitudes_al_empezar import (
     rechazar_las_solicitudes_pendientes,
@@ -91,6 +95,10 @@ class SubmitHoleScoreUseCase:
 
             if match.find_player(user_id) is None:
                 raise NotMatchPlayerError("No eres jugador de este partido")
+
+            # Retirado del fourball: ni su bola ni la de nadie (W19)
+            if user_id in match.withdrawn_player_ids:
+                raise PlayerWithdrawnError()
 
             # Antes de abrir el partido, como lo de arriba: una petición fuera de
             # su asignación no abre nada ni guarda nada, tampoco su propio golpe
@@ -325,21 +333,6 @@ class SubmitHoleScoreUseCase:
                 await self._uow.hole_scores.update(hs)
 
     async def _check_decided(self, match, match_id, match_format):
-        """
-        Vuelve a mirar si el partido esta decidido tras cada golpe: corregir un
-        hoyo anterior puede quitar la decision o cambiar el N&M (Agustin, 25 oct
-        2026). Con una tarjeta ya entregada, una decision que ya habia no se
-        mueve: quien entrego con el partido decidido ya no puede anotar el
-        resto, y se atascaria. Si aun no estaba decidido, si puede llegar.
-        """
-        if match.scorecard_submitted_by and match.is_decided:
-            return
-        all_scores = await self._uow.hole_scores.find_by_match(match_id)
-        decided_result = self._scoring_service.decided_result(all_scores, match_format)
-        if decided_result == match.decided_result:
-            return
-        if decided_result is None:
-            match.clear_decided()
-        else:
-            match.mark_decided(decided_result)
-        await self._uow.matches.update(match)
+        """La decision, revisada tras cada golpe (`revisa_la_decision`)."""
+        if await revisa_la_decision(self._uow, self._scoring_service, match, match_format):
+            await self._uow.matches.update(match)

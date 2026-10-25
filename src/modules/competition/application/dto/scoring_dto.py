@@ -160,6 +160,10 @@ class ScoringViewResponseDTO(BaseModel):
     scores: list[HoleScoreEntryDTO]
     match_standing: MatchStandingDTO
     scorecard_submitted_by: list[str]
+    # Fourball: los jugadores retirados. Su bola ya no cuenta en lo que no
+    # tenian validado y no entregan tarjeta; las asignaciones ya vienen sin
+    # ellos (su pareja marca al rival que marcaban)
+    withdrawn_player_ids: list[str] = Field(default_factory=list)
     # A que hora abre la anotacion de este partido, con su desfase (BE #305).
     # El cliente la usa para ofrecer «Anotar» —tambien sin cobertura, desde lo
     # que tenga guardado— en vez de adivinar si alguien pulso START. `None` en

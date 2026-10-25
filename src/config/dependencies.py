@@ -262,6 +262,9 @@ from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
 )
+from src.modules.competition.application.use_cases.withdraw_match_player_use_case import (
+    WithdrawMatchPlayerUseCase,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -3213,6 +3216,14 @@ def get_concede_match_use_case(
 ) -> ConcedeMatchUseCase:
     """Proveedor del caso de uso ConcedeMatchUseCase."""
     return ConcedeMatchUseCase(uow, scoring_service, actividad=actividad)
+
+
+def get_withdraw_match_player_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    scoring_service: ScoringService = Depends(get_scoring_service),
+) -> WithdrawMatchPlayerUseCase:
+    """Proveedor de WithdrawMatchPlayerUseCase (fourball con un jugador retirado)."""
+    return WithdrawMatchPlayerUseCase(uow, scoring_service)
 
 
 # ============================================================================

@@ -172,6 +172,28 @@ class NotYourMarkedPlayerError(Exception):
         super().__init__(message or self.message)
 
 
+class PlayerWithdrawnError(Exception):
+    """
+    El jugador está retirado del fourball (25 oct 2026): ni anota su bola ni
+    entrega tarjeta. Para volver se deshace la retirada.
+    """
+
+    error_code = "PLAYER_WITHDRAWN"
+    message = "Estás retirado de este partido: deshaz la retirada para volver a anotar"
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.message)
+
+
+class WithdrawalNotAllowedError(Exception):
+    """
+    La retirada o su vuelta no se pueden hacer: fuera de fourball, con el partido
+    terminado, si es el último de su bando o con una tarjeta entregada.
+    """
+
+    error_code = "WITHDRAWAL_NOT_ALLOWED"
+
+
 class ScorecardNotReadyError(Exception):
     """La tarjeta no esta lista para ser entregada (hay hoyos sin validar)."""
 

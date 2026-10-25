@@ -292,3 +292,28 @@ class TestFindByMatchForUpdate:
         bloqueadas = await repo.find_by_match_for_update(match.id)
 
         assert [t.is_recorded for t in bloqueadas] == [True]
+
+
+class TestRetiradosDelFourball:
+    """La lista de retirados (25 oct 2026) va y vuelve de PostgreSQL."""
+
+    @pytest.mark.asyncio
+    async def test_withdrawn_players_round_trip_and_null_reads_as_none(self, db_session, match):
+        """
+        Given un partido sin retirados (la columna a NULL) / When se lee /
+        Then ninguno; y con uno apuntado, se lee ese.
+        """
+        repo = SQLAlchemyMatchRepository(db_session)
+        # Leidos antes de caducar la sesion: despues, tocarlos iria a la base
+        match_id = match.id
+        retirado = match.team_a_players[0].user_id
+        leido = await repo.find_by_id_for_update(match_id)
+        assert leido.withdrawn_player_ids == ()
+
+        # El dominio solo retira en fourball; aqui se mide la persistencia
+        leido._withdrawn_player_ids = (retirado,)
+        await repo.update(leido)
+        await db_session.commit()
+        db_session.expire_all()
+
+        assert (await repo.find_by_id_for_update(match_id)).withdrawn_player_ids == (retirado,)
