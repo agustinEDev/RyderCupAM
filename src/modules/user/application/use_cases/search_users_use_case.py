@@ -1,10 +1,12 @@
 from src.modules.user.application.dto.user_dto import (
     SearchUsersItemDTO,
+    SearchUsersRequestDTO,
     SearchUsersResponseDTO,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class SearchUsersUseCase:
@@ -26,13 +28,15 @@ class SearchUsersUseCase:
     def __init__(self, uow: UserUnitOfWorkInterface):
         self._uow = uow
 
-    async def execute(self, query: str) -> SearchUsersResponseDTO:
+    async def execute(self, request: SearchUsersRequestDTO) -> SearchUsersResponseDTO:
+        """Quien busca (`viewer_id`) no sale en sus resultados (FE #938)."""
+        query = request.query
         if not query or len(query.strip()) < self.MIN_QUERY_LENGTH:
             return SearchUsersResponseDTO(users=[])
 
         async with self._uow:
             users = await self._uow.users.search_by_partial_name(
-                query.strip(), limit=self.MAX_RESULTS
+                query.strip(), limit=self.MAX_RESULTS, exclude_user_id=UserId(request.viewer_id)
             )
 
             return SearchUsersResponseDTO(

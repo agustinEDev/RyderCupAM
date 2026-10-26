@@ -29,6 +29,7 @@ from src.modules.user.application.dto.user_dto import (
     AcceptTermsRequestDTO,
     FindUserRequestDTO,
     FindUserResponseDTO,
+    SearchUsersRequestDTO,
     SearchUsersResponseDTO,
     UpdateProfileRequestDTO,
     UpdateProfileResponseDTO,
@@ -105,15 +106,18 @@ _ACCEPT_TERMS_DESCRIPTION = (
 async def search_users_autocomplete(
     query: str = Query(..., min_length=2, max_length=100, description="Texto de busqueda parcial"),
     use_case: SearchUsersUseCase = Depends(get_search_users_use_case),
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """
     Endpoint de autocompletado para buscar usuarios por nombre parcial.
     Devuelve hasta 10 resultados que coincidan parcialmente con el nombre, el
     apellido o el alias. Cada resultado lleva el alias junto al nombre real:
-    es lo que permite distinguir a dos jugadores parecidos.
+    es lo que permite distinguir a dos jugadores parecidos. Quien busca no
+    sale en sus propios resultados (FE #938).
     """
-    return await use_case.execute(query)
+    return await use_case.execute(
+        SearchUsersRequestDTO(query=query, viewer_id=str(current_user.id))
+    )
 
 
 @router.get(

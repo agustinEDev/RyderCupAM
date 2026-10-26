@@ -368,3 +368,60 @@ async def test_admin_listing_matches_the_alias_too(db_session):
     results = await repository.find_all(search="Chuchi")
 
     assert [u.id for u in results] == [user.id]
+
+
+async def test_search_by_partial_name_with_the_searcher_excluded_fills_the_limit_with_others(
+    db_session,
+):
+    """
+    GIVEN: Tres cuentas con el mismo apellido, una de ellas la de quien busca
+    WHEN: Busca ese apellido con límite 2, dejándose fuera
+    THEN: Salen las otras dos: no ocupa un hueco del límite (FE #938)
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    yo, ana, bea = (
+        User.create(
+            first_name=nombre,
+            last_name="Repetido",
+            email_str=f"{nombre.lower()}.repetido@example.com",
+            plain_password="ValidPassword123!",
+        )
+        for nombre in ("Aaron", "Ana", "Bea")  # quien busca, el primero en el orden
+    )
+    for user in (yo, ana, bea):
+        await repository.save(user)
+    await db_session.commit()
+
+    results = await repository.search_by_partial_name("Repetido", limit=2, exclude_user_id=yo.id)
+
+    assert {user.id for user in results} == {ana.id, bea.id}
+
+
+async def test_search_by_partial_name_with_many_matches_returns_them_by_surname_then_name(
+    db_session,
+):
+    """
+    GIVEN: Tres cuentas que coinciden, guardadas sin orden
+    WHEN: Se busca
+    THEN: Salen por apellido y luego nombre: sin ORDER BY, con más coincidencias
+          que el límite, cada petición podía devolver otras distintas
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    for nombre, apellido in (("Bea", "Ortega"), ("Ana", "Ortiz"), ("Ana", "Ortega")):
+        await repository.save(
+            User.create(
+                first_name=nombre,
+                last_name=apellido,
+                email_str=f"{nombre}.{apellido}@example.com".lower(),
+                plain_password="ValidPassword123!",
+            )
+        )
+    await db_session.commit()
+
+    results = await repository.search_by_partial_name("Ort")
+
+    assert [(u.last_name, u.first_name) for u in results] == [
+        ("Ortega", "Ana"),
+        ("Ortega", "Bea"),
+        ("Ortiz", "Ana"),
+    ]
