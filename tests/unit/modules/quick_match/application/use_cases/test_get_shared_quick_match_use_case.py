@@ -175,6 +175,18 @@ class TestFriendCanViewFinishedMatch:
             SharedQuickMatchDetailResponseDTO.model_fields
         )
 
+    async def test_h5_the_shared_view_says_when_it_was_played_with_its_zone(self, escena):
+        """H5 (25 oct 2026): el instante de juego llega a la vista compartida, con la Z."""
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
+
+        detalle = await escena.ver()
+
+        assert detalle.played_at is not None
+        assert detalle.played_at.tzinfo is not None
+        # El contrato con el navegador: sin la zona, new Date() la toma como hora local
+        assert f'"played_at":"{detalle.played_at:%Y-%m-%dT%H:%M:%S}' in detalle.model_dump_json()
+        assert detalle.model_dump_json().split('"played_at":"')[1].split('"')[0].endswith("Z")
+
     async def test_friend_sees_the_names_of_players_without_a_block(self, escena):
         await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
 

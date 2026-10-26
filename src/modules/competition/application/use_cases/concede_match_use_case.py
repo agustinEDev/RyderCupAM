@@ -44,7 +44,9 @@ class ConcedeMatchUseCase:
     ) -> dict:
         async with self._uow:
             match_id = MatchId(match_id_str)
-            match = await self._uow.matches.find_by_id(match_id)
+            # Bloqueada: la regla del retirado se mira con lo de ahora, no con una
+            # retirada que llega a la vez (code-review)
+            match = await self._uow.matches.find_by_id_for_update(match_id)
             if not match:
                 raise MatchNotFoundError(f"No existe partido con ID {match_id_str}")
 
@@ -72,6 +74,10 @@ class ConcedeMatchUseCase:
 
             if player_team is not None and not is_creator and player_team != conceding_team:
                 raise NotMatchPlayerError("Solo puedes conceder tu propio equipo")
+            # Retirado del fourball, ya no decide por el bando: concede su pareja
+            # (Agustín, 25 oct 2026)
+            if not is_creator and user_id in match.withdrawn_player_ids:
+                raise NotMatchPlayerError("Estás retirado de este partido: concede tu pareja")
 
             match.concede(conceding_team, reason)
             await self._uow.matches.update(match)

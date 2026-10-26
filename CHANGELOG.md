@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.41.0] - 2026-10-26
+
+**Retirar a un jugador de un fourball de torneo.** Un fourball con un jugador
+ausente ya no se queda atascado: el propio jugador, su pareja o el organizador
+lo retiran, el hoyo se cierra con las otras tres bolas y su pareja marca
+también al rival que él marcaba. Y las partidas rápidas dicen el día en que se
+jugaron. Va con el frontend **2.55.0**.
+
+**Notas de despliegue.**
+
+- **Migración `a1c3e5f7b9d2`** (aditiva): `matches.withdrawn_player_ids` y
+  `matches.holes_without_ball`, JSONB que admiten nulo, sin reescribir la tabla.
+- **Backend antes que el frontend**: el frontend 2.55 manda el golpe propio sin
+  marcado (el rival que marcaba al retirado), y el backend 2.40 lo rechaza con
+  un 422. El resto del contrato es aditivo: el frontend 2.54 sigue funcionando
+  con este backend.
+- Tras desplegar, lanzar `scripts/purge_terms_acceptances.py`.
+
+### Added
+
+- **Retirar a un jugador de un fourball de torneo** (#665): lo retira él
+  mismo, su pareja, el creador de la competición o un admin; nunca el rival.
+  Solo en fourball, programado o en juego, sin tarjetas entregadas y nunca al
+  último de su bando (ese concede). Desde que se retira cuentan sus hoyos ya
+  validados; los demás se cierran con las otras tres bolas y su bando juega la
+  de su pareja. Su pareja marca también al rival que él marcaba y a él no lo
+  marca nadie. No anota ni entrega (409 `PLAYER_WITHDRAWN`). Se puede deshacer
+  con las mismas reglas: los hoyos cerrados sin él se quedan así. Rutas
+  `POST /api/v1/competitions/matches/{id}/players/{uid}/withdraw` y
+  `/reinstate`, con 409 `WITHDRAWAL_NOT_ALLOWED` y su `reason`; la vista de
+  anotar trae `withdrawn_player_ids` y los marcadores efectivos.
+- **`played_at` en las partidas rápidas** (#664): el día en que se jugó (o se
+  creó, si nunca empezó), en UTC con su zona, en la lista y el detalle, la
+  vista compartida, el historial y «partidas juntos». El cliente pinta el día
+  local; antes la lista enseñaba el de creación y el historial el día UTC.
+
+### Fixed
+
+- **Quien no tiene a nadie a quien marcar anota su bola** (#666): el rival que
+  marcaba al retirado. `marked_player_id` pasa a ser opcional; una
+  `marked_score` sin él es un 422. Un golpe guardado sin cobertura que marca a
+  quien fue retirado entre medias guarda la bola propia y descarta la del
+  retirado.
+- Las partidas rápidas y sus golpes se fechan en UTC sin depender de la zona
+  del servidor (#664).
+
 ## [2.40.0] - 2026-10-25
 
 **El match play se decide en orden de hoyos y el historial dice lo que pasó.**

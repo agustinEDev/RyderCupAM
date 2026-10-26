@@ -114,6 +114,23 @@ async def test_own_and_marked_score(client: AsyncClient):
 
 
 @pytest.mark.usefixtures("_ya_abrio")
+async def test_own_score_without_marked_player(client: AsyncClient):
+    """
+    Given una partida de stroke play / When el jugador manda solo su golpe, sin
+    marcado / Then se guarda. El DTO es el de la Ryder, donde `marked_player_id`
+    pasó a ser opcional (25 oct 2026): aquí ya se ignoraba sin `marked_score`.
+    """
+    partida, por_id = await _con_partida(client)
+    yo = partida["players"][0]["user_id"]
+
+    respuesta = await _anotar(client, por_id[yo], partida, own_score=4)
+
+    assert respuesta.status_code == 200, respuesta.text
+    jugadores = {p["user_id"]: p for p in respuesta.json()["players"]}
+    assert jugadores[yo]["holes"][0]["own_score"] == 4
+
+
+@pytest.mark.usefixtures("_ya_abrio")
 async def test_without_any_stroke(client: AsyncClient):
     partida, por_id = await _con_partida(client)
     yo = partida["players"][0]["user_id"]

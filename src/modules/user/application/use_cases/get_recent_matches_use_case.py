@@ -45,6 +45,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.services.instante_utc import en_utc
 from src.shared.domain.services.match_play_scoring import MatchPlayScoring
 from src.shared.domain.services.stroke_play_scoring import (
     HoleSetup,
@@ -336,6 +337,7 @@ class GetRecentMatchesUseCase:
             id=str(match.id.value),
             excluded_from_stats=match.is_stats_excluded_for(ParticipantId(user_id.value)),
             date=match.played_at.date(),
+            played_at=en_utc(match.played_at),
             match_format=match.match_format.value if match.match_format else None,
             scoring_format=match.scoring_format.value if match.scoring_format else None,
             golf_course_id=str(match.golf_course_id.value),

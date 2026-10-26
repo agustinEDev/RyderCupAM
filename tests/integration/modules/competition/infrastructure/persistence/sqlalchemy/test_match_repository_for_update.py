@@ -292,3 +292,94 @@ class TestFindByMatchForUpdate:
         bloqueadas = await repo.find_by_match_for_update(match.id)
 
         assert [t.is_recorded for t in bloqueadas] == [True]
+
+
+class TestRetiradosDelFourball:
+    """La lista de retirados (25 oct 2026) va y vuelve de PostgreSQL."""
+
+    @pytest.mark.asyncio
+    async def test_withdrawn_players_round_trip_and_null_reads_as_none(self, db_session, match):
+        """
+        Given un partido sin retirados (la columna a NULL) / When se lee /
+        Then ninguno; y con uno apuntado, se lee ese.
+        """
+        repo = SQLAlchemyMatchRepository(db_session)
+        # Leidos antes de caducar la sesion: despues, tocarlos iria a la base
+        match_id = match.id
+        retirado = match.team_a_players[0].user_id
+        leido = await repo.find_by_id_for_update(match_id)
+        assert leido.withdrawn_player_ids == ()
+
+        # El dominio solo retira en fourball; aqui se mide la persistencia
+        leido._withdrawn_player_ids = (retirado,)
+        await repo.update(leido)
+        await db_session.commit()
+        db_session.expire_all()
+
+        assert (await repo.find_by_id_for_update(match_id)).withdrawn_player_ids == (retirado,)
+
+    @pytest.mark.asyncio
+    async def test_holes_without_ball_round_trip(self, db_session, match):
+        """
+        Given un jugador que volvió con el 1 y el 3 cerrados sin su bola / When
+        se guarda y se relee / Then los mismos hoyos; y sin nada, vacío.
+        """
+        repo = SQLAlchemyMatchRepository(db_session)
+        match_id = match.id
+        jugador = match.team_a_players[0].user_id
+        leido = await repo.find_by_id_for_update(match_id)
+        assert leido.holes_without_ball == {}
+
+        leido._holes_without_ball = {jugador: (1, 3)}
+        await repo.update(leido)
+        await db_session.commit()
+        db_session.expire_all()
+
+        assert (await repo.find_by_id_for_update(match_id)).holes_without_ball == {jugador: (1, 3)}
+
+    @pytest.mark.asyncio
+    async def test_withdraw_and_reinstate_on_a_loaded_match_persist_the_holes(
+        self, db_session, match
+    ):
+        """
+        CodeRabbit: `reinstate_player` cambiaba el diccionario en su sitio y
+        SQLAlchemy no lo veía, así que los hoyos cerrados sin su bola no se
+        guardaban. Given un fourball cargado de la base / When se retira y se
+        deshace con el 1 y el 2 cerrados / Then al releerlo siguen ahí.
+        """
+        repo = SQLAlchemyMatchRepository(db_session)
+        a1, a2 = UserId.generate(), UserId.generate()
+        b1, b2 = UserId.generate(), UserId.generate()
+
+        def _jugador(uid):
+            return MatchPlayer.create(
+                user_id=uid, playing_handicap=0, tee_color=TeeColor.YELLOW, strokes_received=[]
+            )
+
+        fourball = Match.create(
+            round_id=match.round_id,
+            match_number=2,
+            team_a_players=[_jugador(a1), _jugador(a2)],
+            team_b_players=[_jugador(b1), _jugador(b2)],
+        )
+        fourball.start()
+        await repo.add(fourball)
+        await db_session.commit()
+        fourball_id = fourball.id
+        db_session.expire_all()
+
+        cargado = await repo.find_by_id_for_update(fourball_id)
+        cargado.withdraw_player(a1, MatchFormat.FOURBALL)
+        await repo.update(cargado)
+        await db_session.commit()
+        db_session.expire_all()
+
+        cargado = await repo.find_by_id_for_update(fourball_id)
+        cargado.reinstate_player(a1, {1, 2})
+        await repo.update(cargado)
+        await db_session.commit()
+        db_session.expire_all()
+
+        releido = await repo.find_by_id_for_update(fourball_id)
+        assert releido.withdrawn_player_ids == ()
+        assert releido.holes_without_ball == {a1: (1, 2)}

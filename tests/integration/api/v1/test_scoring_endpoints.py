@@ -7,6 +7,7 @@ de tarjetas, leaderboard y concesion de partidos.
 """
 
 from datetime import UTC, date, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -490,6 +491,44 @@ class TestSubmitHoleScore:
 # ======================================================================================
 
 
+class TestGolpeSinMarcado:
+    """W21 (25 oct 2026): sin marcado se guarda solo el golpe propio."""
+
+    @pytest.mark.asyncio
+    async def test_own_score_without_marked_player_is_saved(self, client: AsyncClient):
+        """Given un jugador / When manda su golpe sin marcado / Then 200 y su golpe guardado."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 5},
+        )
+
+        assert response.status_code == 200
+        mia = [
+            ps
+            for h in response.json()["scores"]
+            if h["hole_number"] == 1
+            for ps in h["player_scores"]
+            if ps["user_id"] == ctx["player_a"]["user"]["id"]
+        ]
+        assert mia[0]["own_score"] == 5
+
+    @pytest.mark.asyncio
+    async def test_marker_score_without_whose_it_is_is_422(self, client: AsyncClient):
+        """Given un golpe de marcador sin `marked_player_id` / Then 422."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["player_a"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/scores/holes/1",
+            json={"own_score": 5, "marked_score": 4},
+        )
+
+        assert response.status_code == 422
+
+
 class TestSubmitScorecard:
     """Tests para POST /api/v1/competitions/matches/{match_id}/scorecard/submit"""
 
@@ -726,6 +765,64 @@ class TestConcedeMatch:
         response = await client.put(
             f"/api/v1/competitions/matches/{fake_id}/concede",
             json={"conceding_team": "A"},
+        )
+
+        assert response.status_code == 404
+
+
+class TestRetirarJugador:
+    """POST /matches/{id}/players/{uid}/withdraw y /reinstate (fourball, 25 oct 2026)."""
+
+    @pytest.mark.asyncio
+    async def test_outside_fourball_is_409(self, client: AsyncClient):
+        """Given un individual / When el jugador se retira / Then 409, no un 500."""
+        ctx = await setup_match_in_progress(client)
+        jugador = ctx["player_a"]
+
+        set_auth_cookies(client, jugador["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/players/{jugador['user']['id']}/withdraw"
+        )
+
+        assert response.status_code == 409
+        # Codigo en la raiz y el motivo, para que el cliente lo explique
+        assert response.json()["error_code"] == "WITHDRAWAL_NOT_ALLOWED"
+        assert response.json()["reason"] == "NOT_FOURBALL"
+
+    @pytest.mark.asyncio
+    async def test_a_rival_is_403(self, client: AsyncClient):
+        """Given el rival / When intenta retirarlo / Then 403."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["player_b"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/players/{ctx['player_a']['user']['id']}/withdraw"
+        )
+
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_reinstate_someone_not_withdrawn_is_409(self, client: AsyncClient):
+        """Given el creador / When deshace a quien no esta retirado / Then 409."""
+        ctx = await setup_match_in_progress(client)
+
+        set_auth_cookies(client, ctx["creator"]["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{ctx['match_id']}/players/{ctx['player_a']['user']['id']}/reinstate"
+        )
+
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_unknown_match_is_404(self, client: AsyncClient):
+        """Given un partido que no existe / When se retira a alguien / Then 404."""
+        user = await create_authenticated_user(
+            client, "wd_nf@test.com", "P@ssw0rd123!", "Not", "Found"
+        )
+
+        set_auth_cookies(client, user["cookies"])
+        response = await client.post(
+            f"/api/v1/competitions/matches/{uuid4()}/players/{user['user']['id']}/withdraw"
         )
 
         assert response.status_code == 404

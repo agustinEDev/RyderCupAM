@@ -100,11 +100,15 @@ class GetScoringViewUseCase:
 
             marker_assignments_dto = self._build_marker_assignments(match, user_names)
             players_dto = self._build_players(match, user_names, golf_course)
-            scores_dto, hole_results_list = self._build_scores(hole_scores, round_entity)
+            scores_dto, hole_results_list = self._build_scores(
+                hole_scores, round_entity, match.bolas_fuera
+            )
 
             # Decidido, el estado del hoyo en que se decidio (Agustin, 25 oct 2026)
             standing = (
-                self._scoring_service.standing(hole_scores, round_entity.match_format)
+                self._scoring_service.standing(
+                    hole_scores, round_entity.match_format, match.bolas_fuera
+                )
                 if round_entity.match_format
                 else self._scoring_service.calculate_match_standing(hole_results_list)
             )
@@ -149,6 +153,7 @@ class GetScoringViewUseCase:
                 scorecard_submitted_by=[
                     str(uid) for uid in match.scorecards_submitted_by(round_entity.match_format)
                 ],
+                withdrawn_player_ids=[str(uid) for uid in match.withdrawn_player_ids],
                 # Para que el cliente ofrezca anotar desde esa hora, tambien sin
                 # cobertura, en vez de adivinar si alguien pulso START (BE #305)
                 scoring_opens_at=ScoringOpeningService.opens_at(
@@ -169,7 +174,8 @@ class GetScoringViewUseCase:
                 marked_by_user_id=str(ma.marked_by_user_id),
                 marked_by_name=user_names.get(ma.marked_by_user_id, ""),
             )
-            for ma in match.marker_assignments
+            # Con los retirados fuera: su pareja marca al rival que marcaban
+            for ma in match.effective_marker_assignments
         ]
 
     def _build_players(self, match, user_names, golf_course=None):
@@ -198,7 +204,7 @@ class GetScoringViewUseCase:
             for p in (*match.team_a_players, *match.team_b_players)
         ]
 
-    def _build_scores(self, hole_scores, round_entity):
+    def _build_scores(self, hole_scores, round_entity, fuera=None):
         """Construye DTOs de scores por hoyo y calcula resultados."""
         scores_by_hole: dict[int, list] = {}
         for hs in hole_scores:
@@ -222,6 +228,7 @@ class GetScoringViewUseCase:
                 team_b_player_nets,
                 match_format,
                 hole_results_list,
+                fuera,
             )
 
             scores_dto.append(
@@ -268,9 +275,10 @@ class GetScoringViewUseCase:
         team_b_player_nets,
         match_format,
         hole_results_list,
+        fuera=None,
     ):
         """El resultado del hoyo, o None si aun no se puede decidir (`hole_result`)."""
-        winner = self._scoring_service.hole_result(hole_hs_list, match_format)
+        winner = self._scoring_service.hole_result(hole_hs_list, match_format, fuera)
         if winner is None:
             return None
 
