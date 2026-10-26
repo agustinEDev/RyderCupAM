@@ -159,3 +159,33 @@ async def test_search_still_finds_users_without_an_alias():
     results = await repository.search_by_partial_name("Sinalias")
 
     assert [found.id for found in results] == [user.id]
+
+
+@pytest.mark.asyncio
+async def test_search_leaves_out_who_is_searching_and_fills_the_limit_with_others():
+    """
+    GIVEN: Tres cuentas con el mismo apellido, una de ellas la de quien busca
+    WHEN: Busca ese apellido con un límite de 2, diciendo quién es
+    THEN: Salen las otras dos: él no ocupa un hueco (FE #938, 26 oct 2026)
+    """
+    repository = InMemoryUserRepository()
+    yo = build_user("Yo", "Repetido", "yo@example.com")
+    otros = [build_user(n, "Repetido", f"{n.lower()}@example.com") for n in ("Ana", "Bea")]
+    for user in (yo, *otros):
+        await repository.save(user)
+
+    results = await repository.search_by_partial_name("Repetido", limit=2, exclude_user_id=yo.id)
+
+    assert {user.id for user in results} == {user.id for user in otros}
+
+
+@pytest.mark.asyncio
+async def test_search_without_saying_who_searches_returns_everyone():
+    """Sin decir quién busca, como antes: también la propia cuenta."""
+    repository = InMemoryUserRepository()
+    yo = build_user("Yo", "Repetido", "yo@example.com")
+    await repository.save(yo)
+
+    results = await repository.search_by_partial_name("Repetido")
+
+    assert [user.id for user in results] == [yo.id]

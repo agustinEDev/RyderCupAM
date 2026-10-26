@@ -190,7 +190,9 @@ class TestUserRepositoryInterface:
             async def find_by_alias(self, alias: str):
                 return None
 
-            async def search_by_partial_name(self, query: str, limit: int = 10):
+            async def search_by_partial_name(
+                self, query: str, limit: int = 10, exclude_user_id=None
+            ):
                 return []
 
             async def exists_by_email(self, email: Email) -> bool:

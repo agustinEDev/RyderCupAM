@@ -368,3 +368,27 @@ async def test_admin_listing_matches_the_alias_too(db_session):
     results = await repository.find_all(search="Chuchi")
 
     assert [u.id for u in results] == [user.id]
+
+
+async def test_search_by_partial_name_leaves_out_who_is_searching(db_session):
+    """
+    Quien busca no sale en su propia búsqueda, y no ocupa un hueco del límite
+    (FE #938, 26 oct 2026): con tres coincidencias y límite 2 salen las otras dos.
+    """
+    repository = SQLAlchemyUserRepository(db_session)
+    yo, ana, bea = (
+        User.create(
+            first_name=nombre,
+            last_name="Repetido",
+            email_str=f"{nombre.lower()}.repetido@example.com",
+            plain_password="ValidPassword123!",
+        )
+        for nombre in ("Yo", "Ana", "Bea")
+    )
+    for user in (yo, ana, bea):
+        await repository.save(user)
+    await db_session.commit()
+
+    results = await repository.search_by_partial_name("Repetido", limit=2, exclude_user_id=yo.id)
+
+    assert {user.id for user in results} == {ana.id, bea.id}

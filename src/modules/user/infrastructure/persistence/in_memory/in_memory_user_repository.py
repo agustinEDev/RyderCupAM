@@ -142,7 +142,9 @@ class InMemoryUserRepository(UserRepositoryInterface):
 
     MIN_SEARCH_LENGTH = 2
 
-    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+    async def search_by_partial_name(
+        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+    ) -> list[User]:
         """
         Searches active users by partial name or alias match.
 
@@ -154,7 +156,7 @@ class InMemoryUserRepository(UserRepositoryInterface):
             return []
         results = []
         for user in self._users.values():
-            if not user.is_active:
+            if not user.is_active or user.id == exclude_user_id:
                 continue
             full_name = f"{user.first_name} {user.last_name}".lower()
             alias = user.alias.lower() if user.alias else ""
