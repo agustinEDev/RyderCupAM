@@ -1,5 +1,7 @@
 # 🤖 Guía de Implementación RAG - Asistente de Reglamento de Golf
 
+> **⚠️ SUSTITUIDO (26 oct 2026):** este plan no se llegó a implementar y ha quedado desfasado. El plan vigente está en [plan-de-pago-e-ia.md](plan-de-pago-e-ia.md) y en la épica [RyderCupAM#676](https://github.com/agustinEDev/RyderCupAM/issues/676) (aparcada).
+
 > **⚠️ DOCUMENTO TEMPORAL:** Este archivo debe **ELIMINARSE** una vez completada la implementación de v1.11.0.
 >
 > **Estado:** ❌ Pendiente de implementación
