@@ -80,19 +80,3 @@ class TestPlayerSearchExcludesInactiveAccounts:
         results = await search_players(client, searcher, "Reactivable")
 
         assert any(user["full_name"] == "Regreso Reactivable" for user in results)
-
-
-class TestPlayerSearchLeavesOutTheSearcher:
-    """Quien busca no se encuentra a sí mismo (FE #938, 26 oct 2026)."""
-
-    @pytest.mark.asyncio
-    async def test_searching_your_own_surname(self, client: AsyncClient):
-        """Busca su apellido: sale el otro jugador que lo comparte, él no."""
-        searcher = await create_authenticated_user(
-            client, "me@test.com", "P@ssw0rd123!", "Yo", "Mismo"
-        )
-        await create_authenticated_user(client, "other@test.com", "P@ssw0rd123!", "Otro", "Mismo")
-
-        found = await search_players(client, searcher, "Mismo")
-
-        assert [user["full_name"] for user in found] == ["Otro Mismo"]

@@ -198,7 +198,9 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         )
         if exclude_user_id is not None:
             statement = statement.filter(User._id != str(exclude_user_id))
-        statement = statement.limit(limit)
+        # Por apellido, nombre e id: sin orden, con más coincidencias que el
+        # límite cada petición podía devolver otras distintas (/code-review)
+        statement = statement.order_by(User._last_name, User._first_name, User._id).limit(limit)
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 

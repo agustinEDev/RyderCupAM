@@ -29,6 +29,7 @@ from src.modules.user.application.dto.user_dto import (
     AcceptTermsRequestDTO,
     FindUserRequestDTO,
     FindUserResponseDTO,
+    SearchUsersRequestDTO,
     SearchUsersResponseDTO,
     UpdateProfileRequestDTO,
     UpdateProfileResponseDTO,
@@ -114,7 +115,9 @@ async def search_users_autocomplete(
     es lo que permite distinguir a dos jugadores parecidos. Quien busca no
     sale en sus propios resultados (FE #938).
     """
-    return await use_case.execute(query, viewer_id=UserId(str(current_user.id)))
+    return await use_case.execute(
+        SearchUsersRequestDTO(query=query, viewer_id=str(current_user.id))
+    )
 
 
 @router.get(

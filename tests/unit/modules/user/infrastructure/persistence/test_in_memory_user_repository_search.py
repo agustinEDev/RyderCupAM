@@ -162,14 +162,15 @@ async def test_search_still_finds_users_without_an_alias():
 
 
 @pytest.mark.asyncio
-async def test_search_leaves_out_who_is_searching_and_fills_the_limit_with_others():
+async def test_search_with_the_searcher_excluded_fills_the_limit_with_others():
     """
     GIVEN: Tres cuentas con el mismo apellido, una de ellas la de quien busca
     WHEN: Busca ese apellido con un límite de 2, diciendo quién es
     THEN: Salen las otras dos: él no ocupa un hueco (FE #938, 26 oct 2026)
     """
     repository = InMemoryUserRepository()
-    yo = build_user("Yo", "Repetido", "yo@example.com")
+    # Primero en el orden: si no se le dejara fuera, ocuparía un hueco
+    yo = build_user("Aaron", "Repetido", "yo@example.com")
     otros = [build_user(n, "Repetido", f"{n.lower()}@example.com") for n in ("Ana", "Bea")]
     for user in (yo, *otros):
         await repository.save(user)
@@ -180,8 +181,12 @@ async def test_search_leaves_out_who_is_searching_and_fills_the_limit_with_other
 
 
 @pytest.mark.asyncio
-async def test_search_without_saying_who_searches_returns_everyone():
-    """Sin decir quién busca, como antes: también la propia cuenta."""
+async def test_search_without_an_excluded_user_returns_every_match():
+    """
+    GIVEN: Una cuenta que coincide con la búsqueda
+    WHEN: Se busca sin decir a quién dejar fuera (uso interno)
+    THEN: Sale también esa cuenta, como antes
+    """
     repository = InMemoryUserRepository()
     yo = build_user("Yo", "Repetido", "yo@example.com")
     await repository.save(yo)
@@ -189,3 +194,26 @@ async def test_search_without_saying_who_searches_returns_everyone():
     results = await repository.search_by_partial_name("Repetido")
 
     assert [user.id for user in results] == [yo.id]
+
+
+@pytest.mark.asyncio
+async def test_search_with_many_matches_returns_them_by_surname_then_name():
+    """
+    GIVEN: Tres cuentas que coinciden, guardadas sin orden
+    WHEN: Se busca
+    THEN: Salen por apellido y luego nombre, siempre igual: con más de 10
+          coincidencias, las 10 que salen no cambian de una petición a otra
+    """
+    repository = InMemoryUserRepository()
+    for nombre, apellido in (("Bea", "Ortega"), ("Ana", "Ortiz"), ("Ana", "Ortega")):
+        await repository.save(
+            build_user(nombre, apellido, f"{nombre}.{apellido}@example.com".lower())
+        )
+
+    results = await repository.search_by_partial_name("Ort")
+
+    assert [(u.last_name, u.first_name) for u in results] == [
+        ("Ortega", "Ana"),
+        ("Ortega", "Bea"),
+        ("Ortiz", "Ana"),
+    ]

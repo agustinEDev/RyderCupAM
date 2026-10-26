@@ -167,9 +167,9 @@ class InMemoryUserRepository(UserRepositoryInterface):
                 or (bool(alias) and query_lower in alias)
             ):
                 results.append(user)
-                if len(results) >= limit:
-                    break
-        return results
+        # En el mismo orden que el repositorio real
+        results.sort(key=lambda u: (u.last_name, u.first_name, str(u.id)))
+        return results[:limit]
 
     async def exists_by_email(self, email: Email) -> bool:
         return any(user.email == email for user in self._users.values())
