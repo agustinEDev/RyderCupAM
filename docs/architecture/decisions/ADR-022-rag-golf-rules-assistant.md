@@ -1,7 +1,7 @@
 # ADR-022: RAG Chatbot for Golf Rules Assistant
 
 **Date**: December 6, 2025
-**Status**: Superseded (26 Oct 2026) — never implemented. See [docs/plan-de-pago-e-ia.md](../../plan-de-pago-e-ia.md) and the epic [RyderCupAM#676](https://github.com/agustinEDev/RyderCupAM/issues/676); a new ADR will replace this one when the work starts.
+**Status**: Accepted
 **Decision Makers**: Development Team
 
 ## Context and Problem

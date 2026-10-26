@@ -167,7 +167,7 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 
 ### Asistente del reglamento y entrenador de swing (aparcado)
 
-Sustituye a la antigua v2.2.0 «AI & RAG Module» (LangChain + Pinecone + OpenAI), que no se llegó a hacer. Plan vigente, costes y precio en [docs/plan-de-pago-e-ia.md](docs/plan-de-pago-e-ia.md); épica [#676](https://github.com/agustinEDev/RyderCupAM/issues/676). Aparcado hasta poder facturar (alta de autónomo).
+Sustituye a la antigua v2.2.0 «AI & RAG Module» (LangChain + Pinecone + OpenAI), que no se llegó a hacer. Plan vigente, costes y precio en [docs/plan-de-pago-e-ia.md](docs/plan-de-pago-e-ia.md); épica [#676](https://github.com/agustinEDev/RyderCupAM/issues/676). Aparcado hasta poder facturar (alta de autónomo). Necesita el sistema de pagos (Stripe), que hoy figura en la v3.0.0: habrá que adelantarlo al retomarlo.
 
 ### v3.0.0 — Major Release (4-6 meses)
 
