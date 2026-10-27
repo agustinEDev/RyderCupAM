@@ -54,6 +54,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 # Lo que se enseña del scratch (decisión 4 de la #251): se calcula entero
 CORTE_DEL_SCRATCH = 25
 _SOLO_STROKE_PLAY = "Solo hay clasificación en un Stableford o un Medal."
+_SOLO_EN_FRANJAS = "Solo hay clasificación en las franjas de un Stableford o un Medal."
 
 
 @dataclass(frozen=True)
@@ -96,11 +97,17 @@ class _Clasificaciones:
         if not dentro and quien is not None:
             await exigir_la_clasificacion(False, competicion.id, quien, self._eventos)
 
-    async def _stroke_play(self, competition_id: CompetitionId) -> Competition:
+    async def _competicion(self, competition_id: CompetitionId) -> Competition:
         competicion = await self._uow.competitions.find_by_id(competition_id)
-        if competicion is None or competicion.stroke_play is None:
+        if competicion is None:
             raise PartidasError(_SOLO_STROKE_PLAY)
         return competicion
+
+    @staticmethod
+    def _solo_stroke_play(competicion: Competition) -> None:
+        """Tras la puerta: a quien está fuera no se le dice ni qué torneo es (revisor)."""
+        if competicion.stroke_play is None:
+            raise PartidasError(_SOLO_STROKE_PLAY)
 
     async def _de_la_competicion(
         self, competicion: Competition, escala: Escala, categoria: int | None
@@ -158,13 +165,14 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
         """
         async with self._uow:
             franja = await self._uow.rounds.find_by_id(RoundId(round_id))
-            if franja is None or franja.hoja_de_salidas is None:
-                raise PartidasError(
-                    "Solo hay clasificación en las franjas de un Stableford o un Medal."
-                )
-            competicion = await self._stroke_play(franja.competition_id)
+            if franja is None:
+                raise PartidasError(_SOLO_EN_FRANJAS)
+            competicion = await self._competicion(franja.competition_id)
             dentro = await self._puede_verla(competicion, quien, es_admin)
         await self._exigir(dentro, competicion, quien)
+        if franja.hoja_de_salidas is None:
+            raise PartidasError(_SOLO_EN_FRANJAS)
+        self._solo_stroke_play(competicion)
         async with self._uow:
             partidas = await self._uow.partidas.de_la_franja(franja.id)
             golpes = await self._uow.golpes_de_partida.de_la_franja(franja.id)
@@ -192,9 +200,10 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
             NoPuedeVerloError: Si es una privada en la que no está, sin llave
         """
         async with self._uow:
-            competicion = await self._stroke_play(CompetitionId(competition_id))
+            competicion = await self._competicion(CompetitionId(competition_id))
             dentro = await self._puede_verla(competicion, quien, es_admin)
         await self._exigir(dentro, competicion, quien)
+        self._solo_stroke_play(competicion)
         async with self._uow:
             regla, filas, personas = await self._de_la_competicion(
                 competicion, Escala.NETA, categoria
@@ -214,9 +223,10 @@ class ClasificacionScratchUseCase(_Clasificaciones):
             NoPuedeVerloError: Si es una privada en la que no está, sin llave
         """
         async with self._uow:
-            competicion = await self._stroke_play(CompetitionId(competition_id))
+            competicion = await self._competicion(CompetitionId(competition_id))
             dentro = await self._puede_verla(competicion, quien, es_admin)
         await self._exigir(dentro, competicion, quien)
+        self._solo_stroke_play(competicion)
         async with self._uow:
             regla, filas, personas = await self._de_la_competicion(
                 competicion, Escala.SCRATCH, None

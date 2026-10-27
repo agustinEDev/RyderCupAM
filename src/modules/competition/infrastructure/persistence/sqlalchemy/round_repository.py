@@ -56,7 +56,8 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
         # Una vez por petición: la ficha las pedía para «tus jornadas» y para
         # saber si se puede borrar (PR 2 de rendimiento)
         if (ya := lista_leida(self._session, (_RONDAS, competition_id))) is not None:
-            return ya
+            # En el orden de sus fechas de ahora: una pudo cambiar sin `update`
+            return sorted(ya, key=lambda r: (r.round_date, r.created_at))
         statement = (
             select(Round)
             .where(Round._competition_id == competition_id)

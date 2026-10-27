@@ -95,7 +95,8 @@ async def test_ninguna_lectura_repite_consulta(client: AsyncClient, privada, qui
 
 # Sentencias de cada lectura, medidas tras la PR 2 (27 oct 2026). Antes:
 # ficha 42/30/27, agenda 12/16/18, grupos 14/18/20, inscritos 8/12/11,
-# anotación 21/22/11, general 17/18/9. Si una sube, alguien vuelve a leer de más
+# anotación 21/22/11, general 17/18/9. Si una sube, alguien vuelve a leer de más;
+# si una baja, se baja aquí su tope para que no se pierda lo ganado
 TOPES = {
     "R1 ficha": {"organizador": 22, "aprobado": 19, "fuera": 16},
     "R2 agenda": {"organizador": 12, "aprobado": 15, "fuera": 17},

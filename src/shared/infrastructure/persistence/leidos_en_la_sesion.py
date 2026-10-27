@@ -11,12 +11,39 @@ que dura lo que la sesión: una petición.
 from collections.abc import Hashable, Iterable
 from typing import TypeVar
 
-from sqlalchemy import inspect
+from sqlalchemy import event, inspect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 _LEIDOS = "leidos_enteros"
+_LISTAS = "listas_leidas"
 
 T = TypeVar("T")
+
+
+def _usable(objeto: object) -> bool:
+    """Si sigue en la sesión, al día: ni borrado, ni fuera, ni caducado."""
+    estado = inspect(objeto)
+    return not (
+        estado is None
+        or estado.deleted
+        or estado.was_deleted
+        or estado.detached
+        # Caducado (`session.expire`): tocarlo en asíncrono sería un `MissingGreenlet`
+        or estado.expired_attributes
+    )
+
+
+@event.listens_for(Session, "after_soft_rollback")
+def _olvidar_al_deshacer(session: Session, previous_transaction: object) -> None:  # noqa: ARG001 - firma del evento
+    """
+    Deshacer, también un SAVEPOINT, olvida todo lo recordado (revisor de la PR 2).
+    Lo que se tocó queda caducado; y una fila insertada y leída dentro, si solo
+    la retiene lo recordado, SQLAlchemy la sigue dando por guardada aunque ya
+    no esté en la base de datos.
+    """
+    session.info.pop(_LEIDOS, None)
+    session.info.pop(_LISTAS, None)
 
 
 def sin_cargar(objeto: object) -> frozenset[str]:
@@ -38,17 +65,11 @@ def ya_leido(
     borrado, ni fuera de la sesión, ni caducado. Si no, None, y se lee.
     """
     objeto = session.info.get(_LEIDOS, {}).get((tipo, clave))
-    if not isinstance(objeto, tipo):
-        return None
-    estado = inspect(objeto)
-    if estado is None or estado.deleted or estado.was_deleted or estado.detached:
+    if not isinstance(objeto, tipo) or not _usable(objeto):
         return None
     if any(atributo in sin_cargar(objeto) for atributo in cargados):
         return None
     return objeto
-
-
-_LISTAS = "listas_leidas"
 
 
 def recordar_lista(session: AsyncSession, clave: Hashable, lista: list) -> None:
@@ -59,7 +80,9 @@ def recordar_lista(session: AsyncSession, clave: Hashable, lista: list) -> None:
 def lista_leida(session: AsyncSession, clave: Hashable) -> list | None:
     """Una copia de la lista ya leída en esta sesión, o None: quien llama puede tocarla."""
     lista = session.info.get(_LISTAS, {}).get(clave)
-    return None if lista is None else list(lista)
+    if lista is None or not all(_usable(objeto) for objeto in lista):
+        return None
+    return list(lista)
 
 
 def olvidar_listas(session: AsyncSession, tipo: str) -> None:

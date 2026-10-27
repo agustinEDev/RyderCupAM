@@ -16,6 +16,7 @@ Las clasificaciones de un stroke play por casos de uso (#251, PR 5).
 
 from dataclasses import replace
 from decimal import Decimal
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -348,3 +349,66 @@ async def test_sin_decir_quien_mira_va_entera():
     ).execute(escenario.competicion.id.value)
 
     assert a.value in {r.user_id for r in tabla.rows}
+
+
+async def _ryder_privada():
+    """Una Ryder (privada al crearse) con una sesión de partidos."""
+    from datetime import date as _date
+
+    from src.modules.competition.domain.entities.round import Round
+    from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+    from src.modules.competition.domain.value_objects.session_type import SessionType
+    from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+        InMemoryUnitOfWork,
+    )
+    from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+    from src.shared.domain.value_objects.match_format import MatchFormat
+    from tests.unit.modules.competition.application.use_cases.helpers import create_competition
+
+    uow = InMemoryUnitOfWork()
+    creada = await create_competition(uow, UserId(uuid4()))
+    sesion = Round.create(
+        competition_id=CompetitionId(creada.id),
+        golf_course_id=GolfCourseId(uuid4()),
+        round_date=_date(2026, 6, 1),
+        session_type=SessionType.MORNING,
+        match_format=MatchFormat.SINGLES,
+    )
+    async with uow:
+        await uow.rounds.add(sesion)
+    return uow, creada, sesion
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_de_fuera_de_una_ryder_privada_no_le_dice_ni_que_es_una_ryder(cual):
+    """Revisor de la PR 2: antes, la puerta cortaba primero (403), no el tipo (400)."""
+    uow, creada, sesion = await _ryder_privada()
+    deps = {"uow": uow, "user_repository": MagicMock(), "eventos": _Eventos()}
+    fuera = UserId(uuid4())
+    llamadas = {
+        "franja": lambda: ClasificacionDeLaFranjaUseCase(**deps).execute(
+            sesion.id.value, quien=fuera
+        ),
+        "general": lambda: ClasificacionGeneralUseCase(**deps).execute(creada.id, quien=fuera),
+        "scratch": lambda: ClasificacionScratchUseCase(**deps).execute(creada.id, fuera),
+    }
+
+    with pytest.raises(NoPuedeVerloError):
+        await llamadas[cual]()
+
+
+@pytest.mark.parametrize("cual", ["general", "scratch"])
+async def test_dentro_de_una_ryder_si_le_dice_que_no_hay_clasificacion(cual):
+    uow, creada, _ = await _ryder_privada()
+    deps = {"uow": uow, "user_repository": MagicMock(), "eventos": _Eventos()}
+    llamadas = {
+        "general": lambda: ClasificacionGeneralUseCase(**deps).execute(
+            creada.id, quien=UserId(uuid4()), es_admin=True
+        ),
+        "scratch": lambda: ClasificacionScratchUseCase(**deps).execute(
+            creada.id, UserId(uuid4()), es_admin=True
+        ),
+    }
+
+    with pytest.raises(PartidasError):
+        await llamadas[cual]()
