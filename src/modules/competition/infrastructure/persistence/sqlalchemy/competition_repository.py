@@ -10,7 +10,6 @@ from datetime import date, datetime
 from sqlalchemy import and_, func, inspect, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import class_mapper, selectinload
-from sqlalchemy.orm.util import identity_key
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.competition_golf_course import (
@@ -36,6 +35,10 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# Las competiciones que la sesión ya leyó enteras, en su `info`: el mapa de
+# identidad las suelta en cuanto nadie las retiene (es débil)
+_ENTERAS = "competiciones_enteras"
 
 
 def _sin_cargar(objeto: object) -> frozenset[str]:
@@ -125,16 +128,27 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
             .options(*self._agregado_completo())
         )
         result = await self._session.execute(stmt)
-        return result.scalar_one_or_none()
+        competition = result.scalar_one_or_none()
+        if competition is not None:
+            # La sesión solo las recuerda mientras alguien las retiene: se
+            # guardan para la petición, que es lo que dura la sesión
+            self._session.info.setdefault(_ENTERAS, {})[competition_id] = competition
+        return competition
 
     def _entera_en_la_sesion(self, competition_id: CompetitionId) -> Competition | None:
         """
         La competición si la sesión ya la tiene con su agregado entero (sus
         campos y sus salidas). A medias —de un listado— no: tocar los campos
-        dispararía una carga perezosa en asíncrono (`MissingGreenlet`).
+        dispararía una carga perezosa en asíncrono (`MissingGreenlet`). Ni la
+        que se borró o ya no es de esta sesión.
         """
-        ya = self._session.sync_session.identity_map.get(identity_key(Competition, competition_id))
-        if not isinstance(ya, Competition) or "_golf_courses" in _sin_cargar(ya):
+        ya = self._session.info.get(_ENTERAS, {}).get(competition_id)
+        if not isinstance(ya, Competition):
+            return None
+        estado = inspect(ya)
+        if estado is None or estado.deleted or estado.was_deleted or estado.detached:
+            return None
+        if "_golf_courses" in _sin_cargar(ya):
             return None
         for enlace in ya.golf_courses:
             if "golf_course" in _sin_cargar(enlace):

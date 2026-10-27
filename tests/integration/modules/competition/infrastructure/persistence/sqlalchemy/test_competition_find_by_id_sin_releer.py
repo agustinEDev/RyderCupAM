@@ -9,6 +9,7 @@ devuelve sin preguntar. Si la tiene a medias (de un listado, sin los campos),
 se lee: tocar los campos dispararía una carga perezosa en asíncrono.
 """
 
+import gc
 from uuid import uuid4
 
 import pytest
@@ -57,13 +58,45 @@ async def test_la_segunda_lectura_en_la_misma_sesion_no_pregunta(
 ):
     creada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
     repo = SQLAlchemyCompetitionRepository(db_session)
-    primera = await repo.find_by_id(creada.id)
+    id_de_la_primera = id(await repo.find_by_id(creada.id))
+    # Nadie la retiene: el mapa de identidad de la sesión la soltaría (es débil)
+    gc.collect()
 
     with _Cuenta(db_session) as cuenta:
         segunda = await repo.find_by_id(creada.id)
 
-    assert segunda is primera
+    assert id(segunda) == id_de_la_primera
     assert cuenta.selects == 0
+
+
+async def test_otro_repositorio_de_la_misma_sesion_tampoco_pregunta(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    """En una petición cada pieza tiene su repositorio, sobre la misma sesión."""
+    creada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    await SQLAlchemyCompetitionRepository(db_session).find_by_id(creada.id)
+    gc.collect()
+
+    with _Cuenta(db_session) as cuenta:
+        await SQLAlchemyCompetitionRepository(db_session).find_by_id(creada.id)
+
+    assert cuenta.selects == 0
+
+
+async def test_borrada_en_la_sesion_ya_no_se_devuelve(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    creada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyCompetitionRepository(db_session)
+    leida = await repo.find_by_id(creada.id)
+    await db_session.delete(leida)
+    await db_session.commit()
+
+    assert await repo.find_by_id(creada.id) is None
 
 
 async def test_a_medias_en_la_sesion_se_lee_entera(
