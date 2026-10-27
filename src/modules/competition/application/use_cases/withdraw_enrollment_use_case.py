@@ -18,6 +18,7 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
     sacar_de_la_competicion,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -113,6 +114,10 @@ class WithdrawEnrollmentUseCase:
             enrollment = await self._uow.enrollments.find_by_id_for_update(enrollment_id)
             if not enrollment:
                 raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
+
+            # Con la sala de draft abierta nadie sale (decidido el 27 oct 2026)
+            if competition is not None:
+                await exigir_sin_draft_abierto(self._uow, competition.id)
 
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)

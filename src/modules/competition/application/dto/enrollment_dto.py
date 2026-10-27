@@ -209,6 +209,14 @@ class CancelEnrollmentResponseDTO(BaseModel):
 # ======================================================================================
 
 
+class RemoveEnrolledPlayerRequestDTO(BaseModel):
+    """
+    DTO de entrada para que el organizador quite a un inscrito (release social 2).
+    """
+
+    enrollment_id: UUID = Field(..., description="ID de la inscripción a quitar.")
+
+
 class WithdrawEnrollmentRequestDTO(BaseModel):
     """
     DTO de entrada para que un jugador se retire después de estar aprobado.

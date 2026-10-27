@@ -7,7 +7,7 @@ si era capitán sube su subcapitán y, si estaba en un equipo formado sin
 partidos, los equipos se deshacen (descompensados, uno se quedaba sin jugar).
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.esperas_de_la_competicion import (
@@ -25,6 +25,36 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.draft_status import DraftStatus
+
+DRAFT_IN_PROGRESS = "DRAFT_IN_PROGRESS"
+
+
+class DraftInProgressError(Exception):
+    """Con la sala de draft abierta nadie sale: la sala no se enteraria (27 oct 2026)."""
+
+    error_code = DRAFT_IN_PROGRESS
+
+
+async def exigir_sin_draft_abierto(
+    uow: CompetitionUnitOfWorkInterface, competition_id: CompetitionId
+) -> None:
+    """
+    Nadie sale de la competicion con la sala de draft abierta (decidido el 27 oct
+    2026): la sala seguiria con sus elecciones y sus capitanes de antes, y podia
+    acabar con un retirado en un equipo. Es un rato corto: se espera a que acabe.
+
+    Args:
+        uow: Unit of Work ya abierto
+        competition_id: La competicion
+
+    Raises:
+        DraftInProgressError: Si hay una sala sin terminar (esperando el sorteo o eligiendo)
+    """
+    sala = await uow.drafts.find_by_competition(competition_id)
+    if sala is not None and sala.status != DraftStatus.COMPLETED:
+        raise DraftInProgressError("Espera a que termine el draft")
 
 
 async def sacar_de_la_competicion(
@@ -71,7 +101,7 @@ async def sacar_de_la_competicion(
         # Fuera de las listas, y sus plazas para los que esperan
         esperas = EsperasDeLaCompeticion(uow)
         await esperas.sacar_de_todas(competition, enrollment.user_id)
-        await esperas.rellenar_varias(competition, suyas, datetime.now(UTC))
+        await esperas.rellenar_varias(competition, suyas, ahora)
 
     if competition is None:
         return fotos

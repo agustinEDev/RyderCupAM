@@ -227,7 +227,23 @@ async def test_v1_acepta_una_invitacion_con_una_vieja_y_entra(estado):
     assert respuesta.enrollment_id == vieja.id.value
 
 
-@pytest.mark.parametrize("estado", [EnrollmentStatus.APPROVED, EnrollmentStatus.REQUESTED])
+async def test_acepta_con_su_solicitud_pendiente_y_queda_aprobada():
+    """Decidido el 27 oct: queria entrar y le invitan; aceptar aprueba su solicitud."""
+    uow, usuarios = InMemoryUnitOfWork(), UsuariosEnMemoria()
+    organizador = UserId(uuid4())
+    competicion = await _abierta(uow, organizador)
+    invitado = await _invitado(usuarios)
+    solicitud = Enrollment.request(EnrollmentId.generate(), competicion.id, invitado.id)
+    await _con(uow, solicitud)
+
+    respuesta = await _acepta(uow, usuarios, competicion, organizador, invitado)
+
+    assert respuesta.status == "ACCEPTED"
+    assert respuesta.enrollment_id == solicitud.id.value
+    assert (await _suya(uow, competicion, invitado.id)).status == EnrollmentStatus.APPROVED
+
+
+@pytest.mark.parametrize("estado", [EnrollmentStatus.APPROVED, EnrollmentStatus.INVITED])
 async def test_v4_acepta_con_una_viva_y_sigue_sin_poder(estado):
     uow, usuarios = InMemoryUnitOfWork(), UsuariosEnMemoria()
     organizador = UserId(uuid4())

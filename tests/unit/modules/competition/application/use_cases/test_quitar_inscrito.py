@@ -15,17 +15,25 @@ El organizador quita a un inscrito (release social 2, tabla del 27 oct 2026).
 | W   | Un jugador de un equipo formado se retira él mismo      | También se deshacen (decidido 27 oct)  |
 """
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
-from src.modules.competition.application.dto.enrollment_dto import WithdrawEnrollmentRequestDTO
+from src.modules.competition.application.dto.enrollment_dto import (
+    RemoveEnrolledPlayerRequestDTO,
+    WithdrawEnrollmentRequestDTO,
+)
 from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.esperas_de_la_competicion import (
+    EsperasDeLaCompeticion,
+)
 from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
     CannotRemoveOrganizerError,
+    DraftInProgressError,
     PlayerHasMatchesError,
     RemovalNotAllowedError,
     RemoveEnrolledPlayerUseCase,
@@ -33,9 +41,12 @@ from src.modules.competition.application.use_cases.remove_enrolled_player_use_ca
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
 )
+from src.modules.competition.domain.entities.draft import Draft
 from src.modules.competition.domain.entities.enrollment import Enrollment, EnrollmentStateError
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.draft_id import DraftId
+from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -67,6 +78,10 @@ async def _abierta():
     return uow, organizador, CompetitionId(creada.id), jugador, inscripcion
 
 
+def _pide(enrollment_id) -> RemoveEnrolledPlayerRequestDTO:
+    return RemoveEnrolledPlayerRequestDTO(enrollment_id=enrollment_id.value)
+
+
 def _quita(uow, registro=None):
     return RemoveEnrolledPlayerUseCase(uow, actividad=registro)
 
@@ -80,7 +95,7 @@ async def test_q1_el_organizador_le_quita_y_se_le_avisa_tras_salir():
     uow, organizador, comp_id, jugador, inscripcion = await _abierta()
     registro = _Registro()
 
-    respuesta = await _quita(uow, registro).execute(inscripcion.id.value, organizador)
+    respuesta = await _quita(uow, registro).execute(_pide(inscripcion.id), organizador)
 
     assert respuesta.status == "WITHDRAWN"
     assert (await _suya(uow, inscripcion)).status == EnrollmentStatus.WITHDRAWN
@@ -93,7 +108,7 @@ async def test_q1_el_organizador_le_quita_y_se_le_avisa_tras_salir():
 async def test_q1_un_admin_tambien():
     uow, _, _, _, inscripcion = await _abierta()
 
-    respuesta = await _quita(uow).execute(inscripcion.id.value, UserId(uuid4()), is_admin=True)
+    respuesta = await _quita(uow).execute(_pide(inscripcion.id), UserId(uuid4()), is_admin=True)
 
     assert respuesta.status == "WITHDRAWN"
 
@@ -102,7 +117,7 @@ async def test_q1_otro_jugador_no():
     uow, _, _, _, inscripcion = await _abierta()
 
     with pytest.raises(NotCompetitionCreatorError):
-        await _quita(uow).execute(inscripcion.id.value, UserId(uuid4()))
+        await _quita(uow).execute(_pide(inscripcion.id), UserId(uuid4()))
     assert (await _suya(uow, inscripcion)).status == EnrollmentStatus.APPROVED
 
 
@@ -110,7 +125,9 @@ async def test_no_existe():
     uow, organizador, _, _, _ = await _abierta()
 
     with pytest.raises(EnrollmentNotFoundError):
-        await _quita(uow).execute(uuid4(), organizador)
+        await _quita(uow).execute(
+            RemoveEnrolledPlayerRequestDTO(enrollment_id=uuid4()), organizador
+        )
 
 
 @pytest.mark.parametrize("estado", ["IN_PROGRESS", "COMPLETED"])
@@ -119,7 +136,7 @@ async def test_q3_empezada_o_terminada_no(estado):
     await set_competition_status(uow, comp_id.value, estado)
 
     with pytest.raises(RemovalNotAllowedError):
-        await _quita(uow).execute(inscripcion.id.value, organizador)
+        await _quita(uow).execute(_pide(inscripcion.id), organizador)
     assert (await _suya(uow, inscripcion)).status == EnrollmentStatus.APPROVED
 
 
@@ -128,7 +145,7 @@ async def test_q3_abierta_o_cerrada_si(estado):
     uow, organizador, comp_id, _, inscripcion = await _abierta()
     await set_competition_status(uow, comp_id.value, estado)
 
-    respuesta = await _quita(uow).execute(inscripcion.id.value, organizador)
+    respuesta = await _quita(uow).execute(_pide(inscripcion.id), organizador)
 
     assert respuesta.status == "WITHDRAWN"
 
@@ -139,7 +156,7 @@ async def test_q5_el_organizador_no_se_quita_a_si_mismo():
         suya = await uow.enrollments.find_by_user_and_competition(organizador, comp_id)
 
     with pytest.raises(CannotRemoveOrganizerError):
-        await _quita(uow).execute(suya.id.value, organizador)
+        await _quita(uow).execute(_pide(suya.id), organizador)
 
 
 async def test_una_solicitud_no_se_quita_se_rechaza():
@@ -149,7 +166,7 @@ async def test_una_solicitud_no_se_quita_se_rechaza():
         await uow.enrollments.add(solicitud)
 
     with pytest.raises(EnrollmentStateError):
-        await _quita(uow).execute(solicitud.id.value, organizador)
+        await _quita(uow).execute(_pide(solicitud.id), organizador)
 
 
 async def _de(uow, comp_id, jugador) -> Enrollment:
@@ -163,7 +180,7 @@ async def test_q4_con_equipos_y_sin_partidos_sale_y_se_deshacen():
         organizador = (await uow.competitions.find_by_id(comp_id)).creator_id
     inscripcion = await _de(uow, comp_id, equipo_b[1])
 
-    await _quita(uow).execute(inscripcion.id.value, organizador)
+    await _quita(uow).execute(_pide(inscripcion.id), organizador)
 
     async with uow:
         assert await uow.team_assignments.find_by_competition(comp_id) is None
@@ -185,7 +202,7 @@ async def test_q4_con_partidos_en_los_que_juega_no_se_deja():
     inscripcion = await _de(uow, comp_id, equipo_b[1])
 
     with pytest.raises(PlayerHasMatchesError):
-        await _quita(uow).execute(inscripcion.id.value, organizador)
+        await _quita(uow).execute(_pide(inscripcion.id), organizador)
 
     assert (await _suya(uow, inscripcion)).status == EnrollmentStatus.APPROVED
     async with uow:
@@ -234,7 +251,7 @@ async def test_q4_con_partidos_en_los_que_no_juega_tampoco():
     inscripcion = await _de(uow, comp_id, equipo_b[1])
 
     with pytest.raises(PlayerHasMatchesError):
-        await _quita(uow).execute(inscripcion.id.value, organizador)
+        await _quita(uow).execute(_pide(inscripcion.id), organizador)
 
 
 @pytest.mark.parametrize("quien", ["organizador", "el_mismo"])
@@ -261,10 +278,55 @@ async def test_la_inscripcion_se_relee_con_bloqueo_tras_bloquear_la_competicion(
     uow.enrollments.find_by_id_for_update = releida
 
     if quien == "organizador":
-        await _quita(uow).execute(inscripcion.id.value, organizador)
+        await _quita(uow).execute(_pide(inscripcion.id), organizador)
     else:
         await WithdrawEnrollmentUseCase(uow).execute(
             WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), jugador
         )
 
     assert orden == ["competicion", "inscripcion"]
+
+
+@pytest.mark.parametrize("estado", [DraftStatus.PENDING, DraftStatus.IN_PROGRESS])
+@pytest.mark.parametrize("quien", ["organizador", "el_mismo"])
+async def test_con_la_sala_de_draft_abierta_nadie_sale(estado, quien):
+    """Decidido el 27 oct: la sala no se enteraria; es un rato corto, se espera."""
+    uow, organizador, comp_id, jugador, inscripcion = await _abierta()
+    async with uow:
+        await uow.drafts.add(
+            Draft(
+                id=DraftId.generate(),
+                competition_id=comp_id,
+                team_a_captain_id=organizador,
+                team_b_captain_id=UserId(uuid4()),
+                status=estado,
+            )
+        )
+
+    with pytest.raises(DraftInProgressError):
+        if quien == "organizador":
+            await _quita(uow).execute(_pide(inscripcion.id), organizador)
+        else:
+            await WithdrawEnrollmentUseCase(uow).execute(
+                WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), jugador
+            )
+
+    assert (await _suya(uow, inscripcion)).status == EnrollmentStatus.APPROVED
+
+
+async def test_la_lista_de_espera_se_rellena_con_el_reloj_de_la_baja(monkeypatch):
+    """El mismo `ahora` para las partidas y las franjas (/code-review)."""
+    uow, organizador, _, _, inscripcion = await _abierta()
+    momentos = []
+
+    async def apunta(self, competicion, round_ids, ahora):
+        momentos.append(ahora)
+
+    monkeypatch.setattr(EsperasDeLaCompeticion, "rellenar_varias", apunta)
+    reloj = datetime(2030, 1, 2, 3, 4, 5, tzinfo=UTC)
+
+    await RemoveEnrolledPlayerUseCase(uow, reloj=lambda: reloj).execute(
+        _pide(inscripcion.id), organizador
+    )
+
+    assert momentos == [reloj]

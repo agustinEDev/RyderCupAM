@@ -44,6 +44,7 @@ from src.modules.competition.domain.services.competition_policy import (
     CompetitionPolicy,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -260,7 +261,15 @@ class RespondToInvitationUseCase:
         )
         # Una cerrada (rechazada, cancelada, retirada) no impide entrar: se
         # reutiliza (release social 2)
-        if viva(existing_enrollment):
+        # Con su propia solicitud pendiente: queria entrar y le invitan, aceptar
+        # la aprueba (decidido el 27 oct 2026)
+        solicitud = (
+            existing_enrollment
+            if existing_enrollment is not None
+            and existing_enrollment.status == EnrollmentStatus.REQUESTED
+            else None
+        )
+        if viva(existing_enrollment) and solicitud is None:
             raise InvalidInvitationStatusViolation(
                 "User already has an enrollment in this competition."
             )
@@ -274,13 +283,18 @@ class RespondToInvitationUseCase:
 
         invitation.accept()
 
-        enrollment = await guardar_la_inscripcion(
-            self._uow,
-            existing_enrollment,
-            aprobada=True,
-            competition_id=CompetitionId(invitation.competition_id.value),
-            user_id=current_user_id,
-        )
+        if solicitud is not None:
+            solicitud.approve()
+            await self._uow.enrollments.update(solicitud)
+            enrollment = solicitud
+        else:
+            enrollment = await guardar_la_inscripcion(
+                self._uow,
+                existing_enrollment,
+                aprobada=True,
+                competition_id=CompetitionId(invitation.competition_id.value),
+                user_id=current_user_id,
+            )
         # Entra con los equipos formados y sin partidos: se deshacen, como al
         # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
         await TeamAssignmentWriter.deshacer(self._uow, competition)

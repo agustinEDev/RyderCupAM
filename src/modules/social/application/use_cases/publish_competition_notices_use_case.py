@@ -1,6 +1,6 @@
 """Caso de Uso: Los avisos de Actividad que salen de una competicion (BE-2)."""
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
@@ -211,10 +211,6 @@ class PublishCompetitionNoticesUseCase:
         Con una inscripcion reutilizada (release social 2), lo que decia que no
         estaba —rechazada, cerrada, «te han quitado»— se va.
         """
-        async with self._social_uow:
-            await self._social_uow.activity_events.delete_from_source(
-                enrollment_id, _DE_NO_ESTAR, user_id
-            )
         eventos = []
         if accepted_request:
             eventos.append(
@@ -240,7 +236,7 @@ class PublishCompetitionNoticesUseCase:
                     tournament,
                 )
             )
-        await self._publicar(eventos)
+        await self._publicar(eventos, retirar=(enrollment_id, _DE_NO_ESTAR, user_id))
 
     async def left(self, user_id: UserId, competition_id: str) -> None:
         """
@@ -650,12 +646,23 @@ class PublishCompetitionNoticesUseCase:
             return "HALVED"
         return "WON" if winner == bando else "LOST"
 
-    async def _publicar(self, eventos: list[ActivityEvent]) -> None:
-        if not eventos:
+    async def _publicar(
+        self,
+        eventos: list[ActivityEvent],
+        retirar: tuple[str, Collection[ActivityEventType], UserId] | None = None,
+    ) -> None:
+        """
+        Publica los avisos; y, si se dice, retira antes otros de un origen y un
+        jugador, en la misma transaccion: si publicar falla, no se pierde nada.
+        """
+        if not eventos and retirar is None:
             return
         # Una fecha para todos y el interruptor de cada uno, de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
+            if retirar is not None:
+                origen, tipos, quien = retirar
+                await self._social_uow.activity_events.delete_from_source(origen, tipos, quien)
             # En la misma transaccion: el de antes se va y queda el nuevo
             for evento in eventos:
                 if evento.type in _SE_RENUEVAN:

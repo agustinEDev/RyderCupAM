@@ -38,6 +38,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
     RemoveCustomHandicapResponseDTO,
+    RemoveEnrolledPlayerRequestDTO,
     RequestEnrollmentRequestDTO,
     RequestEnrollmentResponseDTO,
     SetCustomHandicapRequestDTO,
@@ -91,6 +92,7 @@ from src.modules.competition.application.use_cases.remove_custom_handicap_use_ca
 )
 from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
     CannotRemoveOrganizerError,
+    DraftInProgressError,
     PlayerHasMatchesError,
     RemovalNotAllowedError,
     RemoveEnrolledPlayerUseCase,
@@ -539,6 +541,11 @@ async def withdraw_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except WithdrawNotOwnerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except DraftInProgressError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
+        )
     except EnrollmentStateError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -562,13 +569,20 @@ async def remove_enrolled_player(
     """
     try:
         return await use_case.execute(
-            enrollment_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+            RemoveEnrolledPlayerRequestDTO(enrollment_id=enrollment_id),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
         )
     except (RemoveEnrollmentNotFoundError, RemoveCompetitionNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except RemoveNotCreatorError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except (CannotRemoveOrganizerError, RemovalNotAllowedError, PlayerHasMatchesError) as e:
+    except (
+        CannotRemoveOrganizerError,
+        RemovalNotAllowedError,
+        PlayerHasMatchesError,
+        DraftInProgressError,
+    ) as e:
         # Un texto fijo por código, no el de la excepción (CodeQL)
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -582,6 +596,7 @@ _NO_SE_QUITA = {
     CannotRemoveOrganizerError.error_code: "The organizer cannot remove themselves.",
     RemovalNotAllowedError.error_code: "The competition has already started.",
     PlayerHasMatchesError.error_code: "There are already generated matches.",
+    DraftInProgressError.error_code: "Wait until the draft is over.",
 }
 
 

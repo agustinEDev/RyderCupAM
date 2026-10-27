@@ -32,6 +32,8 @@ from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.entities.team_assignment import TeamAssignment
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.draft_id import DraftId
+from src.modules.competition.domain.value_objects.draft_status import DraftStatus
 from src.modules.competition.domain.value_objects.match_generation_block import (
     UNEXPECTED,
     MatchGenerationBlock,
@@ -84,7 +86,16 @@ async def _montar(*, con_bloqueo: bool = False):
                 mode=TeamAssignmentMode.DRAFT,
             )
         )
-        await uow.drafts.add(Draft.create(comp_id, equipo_a[0], equipo_b[0]))
+        # Con equipos formados, la sala ya terminó
+        await uow.drafts.add(
+            Draft(
+                id=DraftId.generate(),
+                competition_id=comp_id,
+                team_a_captain_id=equipo_a[0],
+                team_b_captain_id=equipo_b[0],
+                status=DraftStatus.COMPLETED,
+            )
+        )
         ronda = Round.create(
             competition_id=comp_id,
             golf_course_id=GolfCourseId.generate(),

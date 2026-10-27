@@ -9,9 +9,11 @@ quitado de X». Después se le puede volver a invitar, o pedir plaza.
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from uuid import UUID
 
-from src.modules.competition.application.dto.enrollment_dto import WithdrawEnrollmentResponseDTO
+from src.modules.competition.application.dto.enrollment_dto import (
+    RemoveEnrolledPlayerRequestDTO,
+    WithdrawEnrollmentResponseDTO,
+)
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
     EnrollmentNotFoundError,
@@ -23,6 +25,8 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+    exigir_sin_draft_abierto,
     sacar_de_la_competicion,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -32,6 +36,15 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
+
+# Se reexporta: la ruta lo traduce a su codigo (409)
+__all__ = [
+    "CannotRemoveOrganizerError",
+    "DraftInProgressError",
+    "PlayerHasMatchesError",
+    "RemovalNotAllowedError",
+    "RemoveEnrolledPlayerUseCase",
+]
 
 # Antes de empezar (Q3). En juego ya están «Conceder partido» y retirar del fourball
 _SE_PUEDE_QUITAR = frozenset(
@@ -84,13 +97,13 @@ class RemoveEnrolledPlayerUseCase:
         self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
-        self, enrollment_id: UUID, quien: UserId, is_admin: bool = False
+        self, request: RemoveEnrolledPlayerRequestDTO, quien: UserId, is_admin: bool = False
     ) -> WithdrawEnrollmentResponseDTO:
         """
         Le quita de la competición.
 
         Args:
-            enrollment_id: La inscripción del jugador
+            request: La inscripción del jugador
             quien: Quien lo pide (el organizador)
             is_admin: Si quien lo pide es administrador
 
@@ -103,9 +116,11 @@ class RemoveEnrolledPlayerUseCase:
             NotCompetitionCreatorError: Si no es el organizador ni un admin
             CannotRemoveOrganizerError: Si es la del propio organizador
             RemovalNotAllowedError: Si la competición ya empezó
-            PlayerHasMatchesError: Si ya juega en partidos generados
+            PlayerHasMatchesError: Si ya hay partidos generados
+            DraftInProgressError: Si la sala de draft está abierta
             EnrollmentStateError: Si no estaba aprobada (una solicitud se rechaza)
         """
+        enrollment_id = request.enrollment_id
         async with self._uow:
             enrollment = await self._uow.enrollments.find_by_id(EnrollmentId(enrollment_id))
             if enrollment is None:
@@ -138,6 +153,8 @@ class RemoveEnrolledPlayerUseCase:
             # 27 oct): los equipos ya no se deshacen y seguiría en el reparto
             if await self._hay_partidos(competition.id):
                 raise PlayerHasMatchesError("Ya hay partidos generados")
+
+            await exigir_sin_draft_abierto(self._uow, competition.id)
 
             # La entidad valida el estado: solo un aprobado
             enrollment.withdraw("removed_by_organizer")
