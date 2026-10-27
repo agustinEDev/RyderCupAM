@@ -313,6 +313,7 @@ class TestLaInvitacionDeLaFicha:
             vieja,
             nueva,
             _inv("yo@t.com", YO, status=InvitationStatus.DECLINED, hace=0),
+            # Caduca justo ahora: ya no se puede aceptar
             _inv("yo@t.com", YO, dias=0, hace=0),
             _inv("yo@t.com", YO, hace=0, competicion=CompetitionId(uuid4())),
         ):

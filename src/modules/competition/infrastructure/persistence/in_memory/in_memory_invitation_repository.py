@@ -105,6 +105,7 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
     async def pendiente_de(
         self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
     ) -> Invitation | None:
+        """Su invitación aún aceptable a esa competición, por usuario o correo; la más reciente."""
         correo = email.strip().lower() if email and email.strip() else None
         suyas = [
             inv

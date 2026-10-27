@@ -165,16 +165,15 @@ async def test_la_pendiente_de_quien_mira_en_una_competicion(
         competicion, "yo@test.com", creator_id, InvitationStatus.PENDING, AHORA + timedelta(days=1)
     )
     antigua._created_at = AHORA - timedelta(days=5)
+    # La más reciente de todas, pero ya contestada: no cuenta (revisor)
+    rechazada = _invitacion(
+        competicion, "yo@test.com", creator_id, InvitationStatus.DECLINED, AHORA + timedelta(days=1)
+    )
+    rechazada._created_at = AHORA
     for invitacion in (
         antigua,
         viva,
-        _invitacion(
-            competicion,
-            "yo@test.com",
-            creator_id,
-            InvitationStatus.DECLINED,
-            AHORA + timedelta(days=1),
-        ),
+        rechazada,
         _invitacion(otra, "yo@test.com", creator_id, InvitationStatus.PENDING, AHORA),
     ):
         await repo.add(invitacion)

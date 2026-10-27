@@ -716,7 +716,14 @@ class MyPendingInvitationDTO(BaseModel):
     """La invitación pendiente de quien mira la ficha."""
 
     id: UUID = Field(..., description="La invitación, para responderla.")
-    expires_at: datetime = Field(..., description="Cuándo caduca.")
+    expires_at: datetime = Field(
+        ...,
+        description=(
+            "Cuándo caduca, en la hora del servidor y sin zona, como en el resto de "
+            "las invitaciones: para «expira en N días» basta, en la frontera de un día "
+            "puede descuadrar unas horas."
+        ),
+    )
 
 
 class CompetitionResponseDTO(BaseModel):
@@ -821,7 +828,7 @@ class CompetitionResponseDTO(BaseModel):
             "en los listados, donde no se calcula."
         ),
     )
-    my_pending_invitation: "MyPendingInvitationDTO | None" = Field(
+    my_pending_invitation: MyPendingInvitationDTO | None = Field(
         None,
         description=(
             "Solo en la ficha: la invitación de quien mira que aún puede aceptar, para "

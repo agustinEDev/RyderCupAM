@@ -143,6 +143,7 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
     async def pendiente_de(
         self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
     ) -> Invitation | None:
+        """Su invitación aún aceptable a esa competición, por usuario o correo; la más reciente."""
         tabla = invitations_table.c
         para_quien = tabla.invitee_user_id == user_id
         if email and email.strip():

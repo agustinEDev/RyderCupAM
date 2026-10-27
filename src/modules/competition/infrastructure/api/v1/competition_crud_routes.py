@@ -530,7 +530,14 @@ async def get_competition(
                     current_user_id, current_user.email, competition_vo_id, datetime.now()
                 )
             )
-            if pendiente is not None:
+            # Solo si aceptarla puede salir bien (revisor): sin inscripción ya
+            # (aceptar daría 400) y con la competición activa. La regla de quién
+            # ve los inscritos sigue contando la pendiente tal cual
+            if (
+                pendiente is not None
+                and dto.user_enrollment_status is None
+                and competition.is_active()
+            ):
                 dto.my_pending_invitation = MyPendingInvitationDTO(
                     id=pendiente.id.value, expires_at=pendiente.expires_at
                 )
