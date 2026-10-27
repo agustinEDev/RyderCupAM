@@ -1393,6 +1393,13 @@ def get_social_uow(
     return SQLAlchemySocialUnitOfWork(session)
 
 
+def get_amigos(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> AmigosInterface:
+    """Los amigos de quien mira, del módulo social (release social 2)."""
+    return AmigosAdapter(social_uow)
+
+
 def get_social_email_service() -> ISocialEmailService:
     """Proveedor del servicio de email para el modulo Social (amistades)."""
     return EmailService()
@@ -2420,9 +2427,10 @@ def get_ver_partidas_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    amigos: AmigosInterface = Depends(get_amigos),
 ) -> VerPartidasUseCase:
-    """Ver las partidas de una franja (#251)."""
-    return _de_las_partidas(VerPartidasUseCase, uow, gc_uow, user_uow)
+    """Ver las partidas de una franja (#251), con los sin partida que deja ver la regla."""
+    return _de_las_partidas(VerPartidasUseCase, uow, gc_uow, user_uow, amigos=amigos)
 
 
 def get_mis_partidas_use_case(
@@ -2790,13 +2798,6 @@ def get_remove_custom_handicap_use_case(
     """Proveedor del caso de uso RemoveCustomHandicapUseCase."""
     # Los usuarios: en un stroke play nadie se queda sin hándicap (#251)
     return RemoveCustomHandicapUseCase(uow, user_uow.users)
-
-
-def get_amigos(
-    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
-) -> AmigosInterface:
-    """Los amigos de quien mira, del módulo social (release social 2)."""
-    return AmigosAdapter(social_uow)
 
 
 def get_list_enrollments_use_case(

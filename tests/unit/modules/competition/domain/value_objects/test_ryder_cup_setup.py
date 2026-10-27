@@ -8,7 +8,7 @@ inmutable: cada cambio devuelve una pieza nueva, porque SQLAlchemy no ve un
 cambio hecho dentro de un composite y lo perdería sin avisar.
 """
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
@@ -111,6 +111,29 @@ class TestCapitanes:
 
         assert pieza.without_vice_captains().vice_captain("A") is None
         assert pieza.without_vice_captains().vice_captain("B") is None
+
+
+class TestTieneCargo:
+    """Capitán o subcapitán de cualquiera de los dos (release social 2)."""
+
+    @pytest.mark.parametrize(
+        "cargo",
+        [
+            "team_a_captain_id",
+            "team_b_captain_id",
+            "team_a_vice_captain_id",
+            "team_b_vice_captain_id",
+        ],
+    )
+    def test_con_cualquiera_de_los_cuatro_cargos(self, cargo):
+        yo = UserId.generate()
+
+        assert replace(_pieza(), **{cargo: yo}).tiene_cargo(yo) is True
+
+    def test_sin_cargo_no(self):
+        pieza = replace(_pieza(), team_a_captain_id=UserId.generate())
+
+        assert pieza.tiene_cargo(UserId.generate()) is False
 
 
 class TestBajas:

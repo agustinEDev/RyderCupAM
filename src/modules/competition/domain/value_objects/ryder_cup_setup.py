@@ -145,6 +145,15 @@ class RyderCupSetup:
         """Indica si ese jugador capitanea ese equipo ("A" o "B")."""
         return self.captain(team) == user_id
 
+    def tiene_cargo(self, user_id: UserId) -> bool:
+        """Si capitanea o subcapitanea alguno de los dos equipos (release social 2)."""
+        return user_id in (
+            self.team_a_captain_id,
+            self.team_b_captain_id,
+            self.team_a_vice_captain_id,
+            self.team_b_vice_captain_id,
+        )
+
     def with_captains(self, team_a: UserId, team_b: UserId) -> Self:
         return replace(self, team_a_captain_id=team_a, team_b_captain_id=team_b)
 

@@ -16,6 +16,7 @@ Quién ve a los inscritos de una competición (release social 2, tabla del 27 oc
   11  amigo = amistad aceptada                           | (lo da el puerto)
 """
 
+from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ from src.modules.competition.application.services.quien_ve_los_inscritos import 
     LoQueVe,
     alcance,
 )
+from src.modules.competition.domain.value_objects.ryder_cup_setup import RyderCupSetup
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -43,15 +45,7 @@ def _competicion(visibilidad=Visibility.PUBLIC, ryder=None, stroke_play=None):
 
 
 def _ryder(**capitanes):
-    base = dict.fromkeys(
-        (
-            "team_a_captain_id",
-            "team_b_captain_id",
-            "team_a_vice_captain_id",
-            "team_b_vice_captain_id",
-        )
-    )
-    return SimpleNamespace(**{**base, **capitanes})
+    return replace(RyderCupSetup.create("Europa", "América"), **capitanes)
 
 
 def _alcance(competicion, quien=YO, **como):

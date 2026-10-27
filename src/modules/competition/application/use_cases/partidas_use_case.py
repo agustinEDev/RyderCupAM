@@ -34,6 +34,7 @@ from src.modules.competition.application.exceptions import (
     PartidasError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
@@ -43,6 +44,10 @@ from src.modules.competition.application.services.jugadores_de_la_partida import
     JugadoresDeLaPartida,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    alcance_de,
+    lo_que_ve,
+)
 from src.modules.competition.application.services.salidas_de_la_franja import (
     las_que_salieron,
     numeros_libres,
@@ -442,7 +447,12 @@ class BorrarPartidasUseCase(_ConLaFranja):
 
 
 class VerPartidasUseCase:
-    """Las partidas de una franja: cualquiera con sesión las ve, como la Ryder (D8)."""
+    """
+    Las partidas de una franja: cualquiera con sesión las ve, como la Ryder (D8).
+
+    Los que aún no tienen partida, en cambio, son inscritos sin publicar: de
+    ellos cada uno ve a quien le deja `quien_ve_los_inscritos` (release social 2).
+    """
 
     def __init__(
         self,
@@ -450,13 +460,17 @@ class VerPartidasUseCase:
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
+        amigos: AmigosInterface | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
         self._reloj = reloj
+        self._amigos = amigos
 
-    async def execute(self, round_id: UUID, quien: UserId, is_admin: bool) -> TeeGroupsResponseDTO:
+    async def execute(
+        self, round_id: UUID, quien: UserId, is_admin: bool, *, email: str | None = None
+    ) -> TeeGroupsResponseDTO:
         """
         `editable` solo para quien puede editar: el organizador o un admin (#541).
 
@@ -479,14 +493,19 @@ class VerPartidasUseCase:
             )
             if is_admin or competicion.is_creator(quien):
                 return vista
-            # Nada es «puedes editar» para quien no organiza (#541, #544)
-            return vista.model_copy(
-                update={
-                    "editable": False,
-                    "can_add_group": False,
-                    "groups": [g.model_copy(update={"can_change": False}) for g in vista.groups],
-                }
-            )
+            alcance = await alcance_de(self._uow, competicion, quien, email=email)
+        ve = await lo_que_ve(alcance, quien, self._amigos)
+        # Nada es «puedes editar» para quien no organiza (#541, #544)
+        return vista.model_copy(
+            update={
+                "editable": False,
+                "can_add_group": False,
+                "groups": [g.model_copy(update={"can_change": False}) for g in vista.groups],
+                "unassigned_players": [
+                    p for p in vista.unassigned_players if ve.ve_a(UserId(p.user_id))
+                ],
+            }
+        )
 
 
 class MisPartidasUseCase:

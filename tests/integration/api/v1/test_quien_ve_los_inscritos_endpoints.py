@@ -186,3 +186,20 @@ async def test_la_lista_sabe_el_correo_de_quien_mira(client: AsyncClient):
     (llamada,) = _Apunta.llamadas
     assert str(llamada["viewer_id"].value) == yo["user"]["id"]
     assert llamada["viewer_email"] == "qvi_lista@test.com"
+
+
+async def test_las_partidas_saben_el_correo_de_quien_mira(client: AsyncClient):
+    from main import app
+    from src.config.dependencies import get_ver_partidas_use_case
+
+    yo = await _jugador(client, "Partidas")
+    set_auth_cookies(client, yo["cookies"])
+    app.dependency_overrides[get_ver_partidas_use_case] = _Apunta
+    try:
+        r = await client.get(f"/api/v1/competitions/rounds/{uuid.uuid4()}/groups")
+        assert r.status_code == 500
+    finally:
+        app.dependency_overrides.pop(get_ver_partidas_use_case, None)
+
+    (llamada,) = _Apunta.llamadas
+    assert llamada["email"] == "qvi_partidas@test.com"

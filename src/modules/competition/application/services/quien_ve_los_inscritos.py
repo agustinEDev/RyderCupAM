@@ -59,15 +59,7 @@ class LoQueVe:
 
 
 def _es_capitan(competition: Competition, quien: UserId) -> bool:
-    ryder = competition.ryder_cup
-    if ryder is None:
-        return False
-    return quien in (
-        ryder.team_a_captain_id,
-        ryder.team_b_captain_id,
-        ryder.team_a_vice_captain_id,
-        ryder.team_b_vice_captain_id,
-    )
+    return competition.ryder_cup is not None and competition.ryder_cup.tiene_cargo(quien)
 
 
 def alcance(
