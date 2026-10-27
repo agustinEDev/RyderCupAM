@@ -108,6 +108,10 @@ class CompetitionActivityPublisherInterface(ABC):
         """El organizador rechaza a mano una solicitud."""
 
     @abstractmethod
+    async def removed(self, competition: Competition, enrollment: Enrollment) -> None:
+        """El organizador quita a un inscrito: se le avisa solo a el (release social 2)."""
+
+    @abstractmethod
     async def match_finished(self, competition: Competition, round_: Round, match: Match) -> None:
         """Un partido de match play termina: con tarjeta, concedido o por walkover."""
 

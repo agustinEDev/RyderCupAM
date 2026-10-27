@@ -95,6 +95,10 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             "request_rejected", lambda p: p.request_rejected(competition, enrollment)
         )
 
+    async def removed(self, competition: Competition, enrollment: Enrollment) -> None:
+        """«El organizador te ha quitado de X», solo para el (release social 2)."""
+        await self._avisar("removed", lambda p: p.removed(competition, enrollment))
+
     async def match_finished(self, competition: Competition, round_: Round, match: Match) -> None:
         await self._avisar("match_finished", lambda p: p.match_finished(competition, round_, match))
 

@@ -194,6 +194,9 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
 from src.modules.competition.application.use_cases.remove_custom_handicap_use_case import (
     RemoveCustomHandicapUseCase,
 )
+from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
+    RemoveEnrolledPlayerUseCase,
+)
 from src.modules.competition.application.use_cases.remove_golf_course_use_case import (
     RemoveGolfCourseFromCompetitionUseCase,
 )
@@ -2785,6 +2788,20 @@ def get_withdraw_enrollment_use_case(
 ) -> WithdrawEnrollmentUseCase:
     """Proveedor del caso de uso WithdrawEnrollmentUseCase."""
     return WithdrawEnrollmentUseCase(
+        uow,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        reloj=lambda: datetime.now(UTC),
+        actividad=actividad,
+    )
+
+
+def get_remove_enrolled_player_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+) -> RemoveEnrolledPlayerUseCase:
+    """Proveedor del caso de uso RemoveEnrolledPlayerUseCase (release social 2)."""
+    return RemoveEnrolledPlayerUseCase(
         uow,
         zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
         reloj=lambda: datetime.now(UTC),

@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
@@ -18,6 +19,7 @@ from src.config.dependencies import (
     get_handle_enrollment_use_case,
     get_list_enrollments_use_case,
     get_remove_custom_handicap_use_case,
+    get_remove_enrolled_player_use_case,
     get_request_enrollment_use_case,
     get_set_custom_handicap_use_case,
     get_set_name_preference_use_case,
@@ -36,6 +38,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     HandleEnrollmentRequestDTO,
     HandleEnrollmentResponseDTO,
     RemoveCustomHandicapResponseDTO,
+    RemoveEnrolledPlayerRequestDTO,
     RequestEnrollmentRequestDTO,
     RequestEnrollmentResponseDTO,
     SetCustomHandicapRequestDTO,
@@ -51,15 +54,18 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError as HandicapCompetitionNotFoundError,
     CompetitionNotFoundError as HandleCompetitionNotFoundError,
     CompetitionNotFoundError as ListCompetitionNotFoundError,
+    CompetitionNotFoundError as RemoveCompetitionNotFoundError,
     CompetitionNotFoundError as RequestCompetitionNotFoundError,
     EnrollmentNotFoundError as CancelEnrollmentNotFoundError,
     EnrollmentNotFoundError as HandicapEnrollmentNotFoundError,
     EnrollmentNotFoundError as HandleEnrollmentNotFoundError,
     EnrollmentNotFoundError as NamePreferenceEnrollmentNotFoundError,
+    EnrollmentNotFoundError as RemoveEnrollmentNotFoundError,
     EnrollmentNotFoundError as RemoveHandicapEnrollmentNotFoundError,
     EnrollmentNotFoundError as WithdrawEnrollmentNotFoundError,
     HandicapEditNotAllowedError,
     InvalidTeeColorError,
+    NotCompetitionCreatorError as RemoveNotCreatorError,
     NotCreatorError as DirectNotCreatorError,
     NotCreatorError as HandicapNotCreatorError,
     NotCreatorError as HandleNotCreatorError,
@@ -83,6 +89,13 @@ from src.modules.competition.application.use_cases.list_enrollments_use_case imp
 )
 from src.modules.competition.application.use_cases.remove_custom_handicap_use_case import (
     RemoveCustomHandicapUseCase,
+)
+from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
+    CannotRemoveOrganizerError,
+    DraftInProgressError,
+    PlayerHasMatchesError,
+    RemovalNotAllowedError,
+    RemoveEnrolledPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     AlreadyEnrolledError as RequestAlreadyEnrolledError,
@@ -528,8 +541,63 @@ async def withdraw_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except WithdrawNotOwnerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except DraftInProgressError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
+        )
     except EnrollmentStateError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.post(
+    "/enrollments/{enrollment_id}/remove",
+    response_model=WithdrawEnrollmentResponseDTO,
+    summary="Quitar a un inscrito",
+    description="El organizador (o un admin) quita a un inscrito antes de que empiece.",
+)
+async def remove_enrolled_player(
+    enrollment_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: RemoveEnrolledPlayerUseCase = Depends(get_remove_enrolled_player_use_case),
+):
+    """
+    Quita a un inscrito aprobado (release social 2, 27 oct 2026).
+
+    Lo mismo que si se retirara él, y se le avisa en la app. Con su código en
+    la raíz cuando no se puede, para que la pantalla lo diga en su idioma.
+    """
+    try:
+        return await use_case.execute(
+            RemoveEnrolledPlayerRequestDTO(enrollment_id=enrollment_id),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except (RemoveEnrollmentNotFoundError, RemoveCompetitionNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except RemoveNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (
+        CannotRemoveOrganizerError,
+        RemovalNotAllowedError,
+        PlayerHasMatchesError,
+        DraftInProgressError,
+    ) as e:
+        # Un texto fijo por código, no el de la excepción (CodeQL)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
+        )
+    except EnrollmentStateError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+_NO_SE_QUITA = {
+    CannotRemoveOrganizerError.error_code: "The organizer cannot remove themselves.",
+    RemovalNotAllowedError.error_code: "The competition has already started.",
+    PlayerHasMatchesError.error_code: "There are already generated matches.",
+    DraftInProgressError.error_code: "Wait until the draft is over.",
+}
 
 
 @router.put(

@@ -226,6 +226,24 @@ class Round:
         self._status = RoundStatus.PENDING_MATCHES
         self._updated_at = datetime.now(UTC).replace(tzinfo=None)
 
+    def mark_teams_unassigned(self) -> None:
+        """
+        Los equipos se deshacen (release social 2, 27 oct 2026): vuelve a
+        esperarlos, sin el bloqueo de generar, que era del reparto viejo.
+
+        Transición: PENDING_MATCHES → PENDING_TEAMS
+
+        Raises:
+            ValueError: Si no estaba esperando partidos
+        """
+        if self._status != RoundStatus.PENDING_MATCHES:
+            raise ValueError(
+                f"Cannot mark teams unassigned from status {self._status}. Expected PENDING_MATCHES"
+            )
+        self._status = RoundStatus.PENDING_TEAMS
+        self._match_generation_block = None
+        self._updated_at = datetime.now(UTC).replace(tzinfo=None)
+
     def mark_matches_generated(self) -> None:
         """
         Marca que los partidos han sido generados.

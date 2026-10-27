@@ -62,6 +62,8 @@ SOLO_EL_AUTOR = [
     ActivityEventType.ENROLLMENT_CONFIRMED,
     # G6: tu salida o tu partido, solo tuyo
     ActivityEventType.TEE_TIME_ASSIGNED,
+    # N1 (release social 2): «el organizador te ha quitado», solo tuyo
+    ActivityEventType.ENROLLMENT_REMOVED,
 ]
 
 

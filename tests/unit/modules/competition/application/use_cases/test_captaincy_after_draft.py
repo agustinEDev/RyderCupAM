@@ -5,8 +5,13 @@ Cada capitán elige a su subcapitán entre los de su equipo, y el organizador
 también puede, por si un capitán no usa la app. Si un capitán se va, asciende
 su subcapitán; si no lo había, el organizador cubre el puesto con alguien de
 ese equipo. Así una baja nunca deja la competición atascada.
+
+Desde la release social 2 (27 oct 2026), sin partidos generados la baja deshace
+los equipos: entonces no hay equipo donde cubrir, y los capitanes se vuelven a
+nombrar. Cubrir el puesto queda para cuando ya hay partidos (`con_partidos`).
 """
 
+from datetime import date
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -39,18 +44,24 @@ from src.modules.competition.application.use_cases.withdraw_enrollment_use_case 
 from src.modules.competition.domain.entities.competition import (
     TeamsNotAssignedError,
 )
+from src.modules.competition.domain.entities.match import Match
+from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.ryder_cup_setup import (
     CaptainOnWrongTeamError,
 )
+from src.modules.competition.domain.value_objects.session_type import SessionType
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.helpers import (
     create_approved_enrollment,
     create_competition,
 )
+from tests.unit.modules.competition.application.use_cases.test_deshacer_equipos import _jugador
 
 pytestmark = pytest.mark.asyncio
 
@@ -132,6 +143,34 @@ class Torneo:
             jugador,
         )
 
+    async def con_partidos(self) -> "Torneo":
+        """
+        Con un partido ya generado: los equipos ya no se deshacen cuando alguien
+        se va (release social 2), y el puesto de capitán se cubre dentro del equipo.
+        """
+        async with self.uow:
+            sesion = Round.create(
+                competition_id=self.comp_id,
+                golf_course_id=GolfCourseId.generate(),
+                round_date=date(2026, 12, 1),
+                session_type=SessionType.MORNING,
+                match_format=MatchFormat.SINGLES,
+            )
+            sesion.mark_teams_assigned()
+            await self.uow.rounds.add(sesion)
+            await self.uow.matches.add(
+                Match.create(
+                    round_id=sesion.id,
+                    match_number=1,
+                    team_a_players=[_jugador(self.equipo_a[0])],
+                    team_b_players=[_jugador(self.equipo_b[0])],
+                )
+            )
+            sesion.mark_matches_generated()
+            await self.uow.rounds.update(sesion)
+            await self.uow.commit()
+        return self
+
     async def competicion(self):
         """La competición tal como quedó guardada."""
         async with self.uow:
@@ -195,8 +234,8 @@ async def test_tiene_que_ser_de_su_equipo():
 
 
 async def test_quien_se_retiro_ya_no_cuenta_como_de_su_equipo():
-    """El reparto guarda la lista tal cual; la baja no la toca."""
-    t = await Torneo().montar()
+    """Con partidos, el reparto guarda la lista tal cual; la baja no la toca."""
+    t = await (await Torneo().montar()).con_partidos()
     se_va = t.de_a()
     await t.retirar(se_va)
 
@@ -245,7 +284,7 @@ async def test_sin_subcapitan_el_organizador_cubre_el_puesto():
     When: el organizador pone a un jugador del equipo A
     Then: queda de capitán y la respuesta lo trae
     """
-    t = await Torneo().montar()
+    t = await (await Torneo().montar()).con_partidos()
     await t.retirar(t.ana)
     nuevo = t.de_a()
 
@@ -261,7 +300,7 @@ async def test_cubrir_el_puesto_es_cosa_del_organizador():
     When: Bea intenta cubrir el puesto
     Then: se rechaza
     """
-    t = await Torneo().montar()
+    t = await (await Torneo().montar()).con_partidos()
     await t.retirar(t.ana)
 
     with pytest.raises(NotCompetitionCreatorError):
@@ -285,7 +324,7 @@ async def test_repartir_de_nuevo_deja_libres_los_subcapitanes():
 @pytest.mark.parametrize("accion", ["subcapitan", "cubrir"])
 async def test_bloquean_la_fila_de_la_competicion(accion):
     """Como al nombrar capitanes y al repartir: si no, se pisan entre sí."""
-    t = await Torneo().montar()
+    t = await (await Torneo().montar()).con_partidos()
     if accion == "cubrir":
         await t.retirar(t.ana)
     llamadas = []
@@ -304,6 +343,30 @@ async def test_bloquean_la_fila_de_la_competicion(accion):
         await t.cubrir("A", t.de_a(), t.organizador)
 
     assert llamadas == [t.comp_id]
+
+
+async def test_sin_partidos_la_baja_de_la_capitana_deshace_los_equipos_y_se_renombra():
+    """
+    Release social 2 (decidido el 27 oct 2026): sin partidos, quien se va de un
+    equipo formado deshace los equipos. La capitana se va sin subcapitán: ya no
+    hay equipo donde cubrir el puesto, se nombran los capitanes como al principio.
+    """
+    t = await Torneo().montar()
+    await t.retirar(t.ana)
+
+    with pytest.raises(TeamsNotAssignedError):
+        await t.subcapitan("B", t.otros[0], t.bea)
+    nueva = t.otros[0]
+    await NameCaptainsUseCase(t.uow).execute(
+        NameCaptainsRequestDTO(
+            competition_id=t.comp_id.value,
+            team_a_captain_id=nueva.value,
+            team_b_captain_id=t.bea.value,
+        ),
+        t.organizador,
+    )
+
+    assert (await t.competicion()).ryder_cup.team_a_captain_id == nueva
 
 
 async def test_un_capitan_que_se_fue_en_pleno_torneo_se_puede_sustituir_al_revertir():

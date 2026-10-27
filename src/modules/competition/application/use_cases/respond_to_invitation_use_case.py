@@ -15,12 +15,19 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
+from src.modules.competition.application.services.inscripcion_que_vuelve import (
+    guardar_la_inscripcion,
+    viva,
+)
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_ocupar_una_plaza,
 )
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
+)
+from src.modules.competition.application.services.team_assignment_writer import (
+    TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -37,7 +44,7 @@ from src.modules.competition.domain.services.competition_policy import (
     CompetitionPolicy,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -252,7 +259,17 @@ class RespondToInvitationUseCase:
         existing_enrollment = await self._uow.enrollments.find_by_user_and_competition(
             current_user_id, invitation.competition_id
         )
-        if existing_enrollment:
+        # Una cerrada (rechazada, cancelada, retirada) no impide entrar: se
+        # reutiliza (release social 2)
+        # Con su propia solicitud pendiente: queria entrar y le invitan, aceptar
+        # la aprueba (decidido el 27 oct 2026)
+        solicitud = (
+            existing_enrollment
+            if existing_enrollment is not None
+            and existing_enrollment.status == EnrollmentStatus.REQUESTED
+            else None
+        )
+        if viva(existing_enrollment) and solicitud is None:
             raise InvalidInvitationStatusViolation(
                 "User already has an enrollment in this competition."
             )
@@ -266,13 +283,21 @@ class RespondToInvitationUseCase:
 
         invitation.accept()
 
-        enrollment = Enrollment.direct_enroll(
-            id=EnrollmentId.generate(),
-            competition_id=CompetitionId(invitation.competition_id.value),
-            user_id=current_user_id,
-        )
-
-        await self._uow.enrollments.add(enrollment)
+        if solicitud is not None:
+            solicitud.approve()
+            await self._uow.enrollments.update(solicitud)
+            enrollment = solicitud
+        else:
+            enrollment = await guardar_la_inscripcion(
+                self._uow,
+                existing_enrollment,
+                aprobada=True,
+                competition_id=CompetitionId(invitation.competition_id.value),
+                user_id=current_user_id,
+            )
+        # Entra con los equipos formados y sin partidos: se deshacen, como al
+        # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
+        await TeamAssignmentWriter.deshacer(self._uow, competition)
         await self._uow.invitations.update(invitation)
 
         cerradas = await al_ocupar_una_plaza(
