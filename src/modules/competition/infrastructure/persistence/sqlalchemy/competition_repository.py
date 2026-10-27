@@ -7,9 +7,10 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 from collections.abc import Sequence
 from datetime import date, datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, inspect, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import class_mapper, selectinload
+from sqlalchemy.orm.util import identity_key
 
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.competition_golf_course import (
@@ -35,6 +36,12 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
+
+
+def _sin_cargar(objeto: object) -> frozenset[str]:
+    """Los atributos de un objeto de la sesión que aún no se han cargado."""
+    estado = inspect(objeto)
+    return frozenset(estado.unloaded) if estado is not None else frozenset()
 
 
 class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
@@ -108,6 +115,10 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
+        # Ya entera en la sesión: la consulta devolvería este mismo objeto, con
+        # el estado que tiene (BE #375), y costaba cuatro sentencias (PR 2)
+        if (ya := self._entera_en_la_sesion(competition_id)) is not None:
+            return ya
         stmt = (
             select(Competition)
             .where(Competition._id == competition_id)
@@ -115,6 +126,23 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    def _entera_en_la_sesion(self, competition_id: CompetitionId) -> Competition | None:
+        """
+        La competición si la sesión ya la tiene con su agregado entero (sus
+        campos y sus salidas). A medias —de un listado— no: tocar los campos
+        dispararía una carga perezosa en asíncrono (`MissingGreenlet`).
+        """
+        ya = self._session.sync_session.identity_map.get(identity_key(Competition, competition_id))
+        if not isinstance(ya, Competition) or "_golf_courses" in _sin_cargar(ya):
+            return None
+        for enlace in ya.golf_courses:
+            if "golf_course" in _sin_cargar(enlace):
+                return None
+            campo = enlace.golf_course
+            if campo is not None and "_tees" in _sin_cargar(campo):
+                return None
+        return ya
 
     async def find_by_id_for_update(self, competition_id: CompetitionId) -> Competition | None:
         """
