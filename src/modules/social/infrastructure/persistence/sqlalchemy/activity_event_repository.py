@@ -468,6 +468,20 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
         )
         return result.scalar_one_or_none()
 
+    async def authors_in_competition(
+        self, slice_: ActivitySlice, competition_id: str
+    ) -> set[UserId]:
+        condicion = self._condicion([slice_])
+        if condicion is None:
+            return set()
+        tabla = activity_events_table.c
+        result = await self._session.execute(
+            select(tabla.user_id)
+            .where(condicion, tabla.payload["competition_id"].astext == competition_id)
+            .distinct()
+        )
+        return {UserId(str(user_id)) for user_id in result.scalars().all()}
+
     async def find_for_users(
         self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
     ) -> list[ActivityEvent]:

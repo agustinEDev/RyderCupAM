@@ -3,9 +3,10 @@ Quién ve a los inscritos de una competición (release social 2, 27 oct 2026).
 
 La regla de Agustín: la lista de inscritos y las solicitudes son del
 organizador. Los demás ven las partidas cuando se publican; antes, solo a sus
-amigos inscritos. En una privada, quien no está dentro no ve a nadie; el
-invitado, a sus amigos; quien aceptó, a todos. Los capitanes (y sus vices) ven
-a todos desde el principio: les hace falta para el draft.
+amigos inscritos. En una privada, quien no está dentro no ve a nadie, tampoco
+publicada (27 oct); el invitado, a sus amigos; quien aceptó, a todos. Los
+capitanes (y sus vices) ven a todos desde el principio: les hace falta para el
+draft.
 
 «Publicada» no es un estado nuevo: es que ya hay partidas generadas (stroke
 play) o equipos formados (Ryder), que es cuando sale el aviso de la salida.
@@ -84,13 +85,14 @@ def alcance(
     """La regla, sin leer nada: con lo que se sabe de quien mira."""
     if es_admin or competition.is_creator(quien):
         return Alcance.TODO
-    # El cargo se queda en la Ryder aunque se retire: cuenta si sigue dentro (revisor)
-    if publicada or (aprobado and _es_capitan(competition, quien)):
-        return Alcance.APROBADOS
+    # En una privada, quien no está no ve nada, tampoco publicada (27 oct)
     if competition.visibility is Visibility.PRIVATE:
         if aprobado:
             return Alcance.APROBADOS
         return Alcance.AMIGOS if invitado else Alcance.NADA
+    # El cargo se queda en la Ryder aunque se retire: cuenta si sigue dentro (revisor)
+    if publicada or (aprobado and _es_capitan(competition, quien)):
+        return Alcance.APROBADOS
     return Alcance.AMIGOS
 
 
