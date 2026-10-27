@@ -588,3 +588,20 @@ async def test_en_una_publica_cualquiera():
         await escenario.uow.competitions.update(comp)
 
     await _con_llave(escenario).execute(partida.id.value, UserId(uuid4()))
+
+
+async def test_6_sin_llave_no_se_monta_la_vista():
+    """Se dice que no antes de leer los golpes (PR 2): quien está fuera no cuesta la vista."""
+    escenario, partida = await _partida()
+    leidos = []
+    original = escenario.uow.golpes_de_partida.de_la_partida
+
+    async def _apunta(partida_id):
+        leidos.append(partida_id)
+        return await original(partida_id)
+
+    escenario.uow.golpes_de_partida.de_la_partida = _apunta
+
+    with pytest.raises(NoPuedeVerloError):
+        await _con_llave(escenario).execute(partida.id.value, UserId(uuid4()))
+    assert leidos == []

@@ -11,6 +11,14 @@ from src.modules.competition.domain.repositories.round_repository_interface impo
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.shared.infrastructure.persistence.leidos_en_la_sesion import (
+    lista_leida,
+    olvidar_listas,
+    recordar_lista,
+)
+
+# Las rondas de cada competición ya leídas en la petición
+_RONDAS = "rondas_de"
 
 
 class SQLAlchemyRoundRepository(RoundRepositoryInterface):
@@ -21,9 +29,12 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
 
     async def add(self, round: Round) -> None:
         self._session.add(round)
+        olvidar_listas(self._session, _RONDAS)
 
     async def update(self, round: Round) -> None:
         self._session.add(round)
+        # Cambiar la fecha la reordena entre las de su competición
+        olvidar_listas(self._session, _RONDAS)
 
     async def find_by_id(self, round_id: RoundId) -> Round | None:
         return await self._session.get(Round, round_id)
@@ -42,13 +53,19 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
         return result.scalar_one_or_none()
 
     async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
+        # Una vez por petición: la ficha las pedía para «tus jornadas» y para
+        # saber si se puede borrar (PR 2 de rendimiento)
+        if (ya := lista_leida(self._session, (_RONDAS, competition_id))) is not None:
+            return ya
         statement = (
             select(Round)
             .where(Round._competition_id == competition_id)
             .order_by(Round._round_date.asc(), Round._created_at.asc())
         )
         result = await self._session.execute(statement)
-        return list(result.scalars().all())
+        rondas = list(result.scalars().all())
+        recordar_lista(self._session, (_RONDAS, competition_id), rondas)
+        return rondas
 
     async def find_by_competition_and_date(
         self, competition_id: CompetitionId, round_date: date
@@ -71,6 +88,7 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
         if round is None:
             return False
         await self._session.delete(round)
+        olvidar_listas(self._session, _RONDAS)
         return True
 
     async def find_by_ids(self, round_ids: list[RoundId]) -> list[Round]:

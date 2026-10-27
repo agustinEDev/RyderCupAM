@@ -7,6 +7,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.persistence.leidos_en_la_sesion import recordar, ya_leido
 
 
 class SQLAlchemyUserRepository(UserRepositoryInterface):
@@ -24,8 +25,16 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         self._session.add(user)
 
     async def find_by_id(self, user_id: UserId) -> User | None:
-        """Busca un usuario por su ID."""
-        return await self._session.get(User, user_id)
+        """
+        Busca un usuario por su ID. Una vez por petición: la sesión y el creador
+        de una ficha eran la misma lectura (PR 2 de rendimiento).
+        """
+        if (ya := ya_leido(self._session, User, user_id, ())) is not None:
+            return ya
+        usuario = await self._session.get(User, user_id)
+        if usuario is not None:
+            recordar(self._session, User, user_id, usuario)
+        return usuario
 
     async def find_by_id_for_update(self, user_id: UserId) -> User | None:
         """

@@ -90,6 +90,10 @@ class VerAnotacionDePartidaUseCase:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
             # Con lo ya leído: solo su inscripción, y solo si hace falta (PR 2)
             dentro = await esta_dentro(self._uow, competicion, quien, es_admin=es_admin)
+        # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
+        if not dentro:
+            await exigir_la_partida(False, competicion.id, quien, partida.user_ids, self._eventos)
+        async with self._uow:
             try:
                 # Con el desfase del campo, como `scoring_opens_at` de la Ryder:
                 # el cliente lee la hora de la cadena, y en UTC anunciaba otra
@@ -110,7 +114,6 @@ class VerAnotacionDePartidaUseCase:
             # Su nombre, bajo el título, y los metros de cada hoyo desde la barra
             # de cada uno (BE #532, 16 oct): una sola lectura del campo
             campo = await self._campos.find_by_id(franja.golf_course_id) if self._campos else None
-        await exigir_la_partida(dentro, competicion.id, quien, partida.user_ids, self._eventos)
         de_quien = {(g.user_id, g.hoyo): g for g in golpes}
         jugaron = partida.quienes_jugaron(golpes)
         marcado_por = {marcado: marcador for marcador, marcado in partida.marcadores.items()}

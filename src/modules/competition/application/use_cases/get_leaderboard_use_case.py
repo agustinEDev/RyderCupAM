@@ -11,6 +11,7 @@ from src.modules.competition.application.ports.eventos_de_amigos_interface impor
     EventosDeAmigosInterface,
 )
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    LoJugadoQueVe,
     esta_dentro,
     exigir_la_clasificacion,
 )
@@ -63,7 +64,13 @@ class GetLeaderboardUseCase:
             dentro = quien is None or await esta_dentro(
                 self._uow, competition, quien, es_admin=es_admin
             )
-
+        # De fuera, la llave antes de leer rondas y partidos
+        ve = (
+            None
+            if dentro or quien is None
+            else await exigir_la_clasificacion(False, competition.id, quien, self._eventos)
+        )
+        async with self._uow:
             # Un Stableford o un Medal no tiene todavía su clasificación: se dice
             # antes de leer rondas y partidos, y con su motivo (Agustín, 4 oct 2026)
             tipo = competition.tournament_type
@@ -186,25 +193,19 @@ class GetLeaderboardUseCase:
                 team_b_points=total_b_points,
                 matches=matches_dto,
             )
-        return await self._la_que_ve(clasificacion, dentro, competition.id, quien)
+        return self._la_que_ve(clasificacion, ve)
 
-    async def _la_que_ve(
-        self,
-        clasificacion: LeaderboardResponseDTO,
-        dentro: bool,
-        competition_id: CompetitionId,
-        quien: UserId | None,
+    @staticmethod
+    def _la_que_ve(
+        clasificacion: LeaderboardResponseDTO, ve: LoJugadoQueVe | None
     ) -> LeaderboardResponseDTO:
         """
-        Dentro, o sin decir quién mira, entera. De fuera, con la llave: el
-        marcador, que se cuenta con todos, y solo los partidos de sus amigos.
-
-        Raises:
-            NoPuedeVerloError: De fuera y sin la llave
+        Dentro, o sin decir quién mira (`ve` None), entera. De fuera con la
+        llave: el marcador, que se cuenta con todos, y solo los partidos de
+        sus amigos.
         """
-        if dentro or quien is None:
+        if ve is None:
             return clasificacion
-        ve = await exigir_la_clasificacion(False, competition_id, quien, self._eventos)
         clasificacion.matches = [
             m
             for m in clasificacion.matches

@@ -99,7 +99,12 @@ class GetScoringViewUseCase:
             dentro = quien is None or await esta_dentro(
                 self._uow, competition, quien, es_admin=es_admin
             )
-
+        # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
+        if not dentro and quien is not None:
+            await exigir_la_partida(
+                False, competition.id, quien, match.get_all_player_ids(), self._eventos
+            )
+        async with self._uow:
             hole_scores = await self._uow.hole_scores.find_by_match(match_id)
             user_names = await self._resolve_user_names(match.get_all_player_ids(), competition.id)
 
@@ -185,10 +190,6 @@ class GetScoringViewUseCase:
                     round_entity.session_type,
                     golf_course.timezone if golf_course else None,
                 ),
-            )
-        if not dentro and quien is not None:
-            await exigir_la_partida(
-                False, competition.id, quien, match.get_all_player_ids(), self._eventos
             )
         return vista
 

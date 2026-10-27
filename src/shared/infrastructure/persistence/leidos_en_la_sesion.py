@@ -46,3 +46,24 @@ def ya_leido(
     if any(atributo in sin_cargar(objeto) for atributo in cargados):
         return None
     return objeto
+
+
+_LISTAS = "listas_leidas"
+
+
+def recordar_lista(session: AsyncSession, clave: Hashable, lista: list) -> None:
+    """Apunta una lista leída (sus objetos son los de la sesión, al día)."""
+    session.info.setdefault(_LISTAS, {})[clave] = list(lista)
+
+
+def lista_leida(session: AsyncSession, clave: Hashable) -> list | None:
+    """Una copia de la lista ya leída en esta sesión, o None: quien llama puede tocarla."""
+    lista = session.info.get(_LISTAS, {}).get(clave)
+    return None if lista is None else list(lista)
+
+
+def olvidar_listas(session: AsyncSession, tipo: str) -> None:
+    """Olvida las listas de ese tipo: quien escribe cambia lo que contienen."""
+    listas = session.info.get(_LISTAS, {})
+    for clave in [c for c in listas if isinstance(c, tuple) and c and c[0] == tipo]:
+        del listas[clave]

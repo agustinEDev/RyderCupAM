@@ -16,6 +16,8 @@ traería más datos de los que hacen falta).
   R4   lista de inscritos               | ninguna consulta repetida
   R5   anotación de un grupo            | ninguna consulta repetida
   R6   clasificación general            | ninguna consulta repetida
+  R10  cada una, por quien mira         | no más sentencias que las de hoy
+                                        | (tope medido el 27 oct 2026)
 """
 
 import re
@@ -89,3 +91,38 @@ async def test_ninguna_lectura_repite_consulta(client: AsyncClient, privada, qui
             repetidas[nombre] = sobran
 
     assert repetidas == {}, repetidas
+
+
+# Sentencias de cada lectura, medidas tras la PR 2 (27 oct 2026). Antes:
+# ficha 42/30/27, agenda 12/16/18, grupos 14/18/20, inscritos 8/12/11,
+# anotación 21/22/11, general 17/18/9. Si una sube, alguien vuelve a leer de más
+TOPES = {
+    "R1 ficha": {"organizador": 22, "aprobado": 19, "fuera": 16},
+    "R2 agenda": {"organizador": 12, "aprobado": 15, "fuera": 17},
+    "R3 grupos": {"organizador": 14, "aprobado": 16, "fuera": 18},
+    "R4 inscritos": {"organizador": 8, "aprobado": 10, "fuera": 9},
+    "R5 anotacion": {"organizador": 13, "aprobado": 14, "fuera": 12},
+    "R6 general": {"organizador": 13, "aprobado": 14, "fuera": 9},
+}
+
+
+@pytest.mark.parametrize("quien", ["organizador", "aprobado", "fuera"])
+async def test_ninguna_lectura_crece(client: AsyncClient, privada, quien):
+    """R10: el total de sentencias de cada lectura no sube del medido."""
+    pasadas = {}
+    for nombre, ruta in privada["rutas"].items():
+        sentencias: list = []
+
+        def _apunta(conn, cursor, statement, *args, apuntadas=sentencias):
+            apuntadas.append(statement)
+
+        set_auth_cookies(client, privada["quien"][quien]["cookies"])
+        event.listen(Engine, "before_cursor_execute", _apunta)
+        try:
+            await client.get(ruta)
+        finally:
+            event.remove(Engine, "before_cursor_execute", _apunta)
+        if len(sentencias) > TOPES[nombre][quien]:
+            pasadas[nombre] = (len(sentencias), TOPES[nombre][quien])
+
+    assert pasadas == {}, pasadas
