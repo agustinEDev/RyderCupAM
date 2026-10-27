@@ -43,7 +43,7 @@ def test_stroke_play_groups_get_the_publisher(proveedor, extra):
 
 
 def test_viewing_the_groups_does_not_need_it():
-    caso = d.get_ver_partidas_use_case(**_uows(), amigos=MagicMock())
+    caso = d.get_ver_partidas_use_case(**_uows(), amigos=MagicMock(), eventos=MagicMock())
 
     assert isinstance(caso, VerPartidasUseCase)
 
@@ -52,9 +52,42 @@ def test_viewing_the_groups_knows_the_viewer_s_friends():
     """Release social 2: los que aún no tienen partida, según los amigos de quien mira."""
     amigos = MagicMock()
 
-    caso = d.get_ver_partidas_use_case(**_uows(), amigos=amigos)
+    caso = d.get_ver_partidas_use_case(**_uows(), amigos=amigos, eventos=MagicMock())
 
     assert caso._amigos is amigos
+
+
+def test_viewing_groups_and_schedule_know_the_viewer_s_key():
+    """Tabla del 27 oct 2026: de una privada, la partida de un amigo con evento."""
+    eventos = MagicMock()
+
+    partidas = d.get_ver_partidas_use_case(**_uows(), amigos=MagicMock(), eventos=eventos)
+    agenda = d.get_get_schedule_use_case(
+        **_uows(),
+        scoring_service=MagicMock(),
+        actividad=MagicMock(),
+        amigos=MagicMock(),
+        eventos=eventos,
+    )
+
+    assert partidas._eventos is eventos
+    assert agenda._eventos is eventos
+
+
+def test_the_key_comes_from_the_social_activity():
+    from src.modules.social.infrastructure.adapters.eventos_de_amigos_adapter import (
+        EventosDeAmigosAdapter,
+    )
+
+    social_uow, user_uow = MagicMock(), MagicMock()
+
+    eventos = d.get_eventos_de_amigos(social_uow=social_uow, user_uow=user_uow)
+    puerta = d.get_puerta_de_lo_jugado(uow=MagicMock(), eventos=eventos)
+
+    assert isinstance(eventos, EventosDeAmigosAdapter)
+    assert eventos._social_uow is social_uow
+    assert eventos._user_uow is user_uow
+    assert puerta._eventos is eventos
 
 
 def test_update_round_reopen_and_take_a_place():

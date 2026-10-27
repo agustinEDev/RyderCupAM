@@ -39,10 +39,14 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
 )
+from src.modules.competition.application.services.lo_jugado_de_una_privada import con_la_llave
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.quien_ve_los_inscritos import (
     alcance_de,
@@ -83,6 +87,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
@@ -448,7 +453,8 @@ class BorrarPartidasUseCase(_ConLaFranja):
 
 class VerPartidasUseCase:
     """
-    Las partidas de una franja: cualquiera con sesión las ve, como la Ryder (D8).
+    Las partidas de una franja: cualquiera con sesión las ve, como la Ryder (D8);
+    en una privada, solo quien está dentro (con la llave, la de su amigo: 27 oct).
 
     Los que aún no tienen partida, en cambio, son inscritos sin publicar: de
     ellos cada uno ve a quien le deja `quien_ve_los_inscritos` (release social 2).
@@ -461,12 +467,15 @@ class VerPartidasUseCase:
         user_repository: UserRepositoryInterface,
         reloj: Callable[[], datetime] = lambda: datetime.now(UTC),
         amigos: AmigosInterface | None = None,
+        eventos: EventosDeAmigosInterface | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
         self._reloj = reloj
         self._amigos = amigos
+        # La llave de quien está fuera de una privada (27 oct 2026)
+        self._eventos = eventos
 
     async def execute(
         self, round_id: UUID, quien: UserId, is_admin: bool, *, email: str | None = None
@@ -495,12 +504,24 @@ class VerPartidasUseCase:
                 return vista
             alcance = await alcance_de(self._uow, competicion, quien, email=email)
         ve = await lo_que_ve(alcance, quien, self._amigos)
+        # En una privada, sus partidas solo las ve quien está dentro; de fuera,
+        # con la llave, la de su amigo (27 oct 2026)
+        jugado = await con_la_llave(
+            competicion.visibility is not Visibility.PRIVATE or ve.completa,
+            competicion.id,
+            quien,
+            self._eventos,
+        )
         # Nada es «puedes editar» para quien no organiza (#541, #544)
         return vista.model_copy(
             update={
                 "editable": False,
                 "can_add_group": False,
-                "groups": [g.model_copy(update={"can_change": False}) for g in vista.groups],
+                "groups": [
+                    g.model_copy(update={"can_change": False})
+                    for g in vista.groups
+                    if jugado.ve_la_partida(UserId(str(p.user_id)) for p in g.players)
+                ],
                 "unassigned_players": [
                     p for p in vista.unassigned_players if ve.ve_a(UserId(p.user_id))
                 ],

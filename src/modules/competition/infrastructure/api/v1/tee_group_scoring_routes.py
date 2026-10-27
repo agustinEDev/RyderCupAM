@@ -23,6 +23,7 @@ from src.config.dependencies import (
     get_current_user,
     get_entregar_tarjeta_de_partida_use_case,
     get_marcar_no_presentado_use_case,
+    get_puerta_de_lo_jugado,
     get_reabrir_tarjeta_use_case,
     get_retirar_jugador_use_case,
     get_retirarse_de_partida_use_case,
@@ -46,6 +47,7 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
+from src.modules.competition.application.services.lo_jugado_de_una_privada import PuertaDeLoJugado
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     AnotarHoyoDePartidaUseCase,
     NoEsDeLaPartidaError,
@@ -84,6 +86,10 @@ from src.modules.competition.domain.entities.partida import (
     TarjetaYaAbiertaError,
     TieneGolpesError,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.partida_id import PartidaId
+from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import cerrada
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -240,8 +246,14 @@ async def get_tee_group_scoring_view(
     group_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
+    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
-    """200 con la partida; 404 si no existe."""
+    """200 con la partida; 403 si es de una privada en la que no está; 404 si no existe."""
+    exigir = puerta.exigir_la_partida(
+        PartidaId(group_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
+    )
+    if (no := await cerrada(exigir)) is not None:
+        return no
     try:
         return await ver.execute(group_id, UserId(str(current_user.id)))
     except PartidaNotFoundError as e:
@@ -520,12 +532,18 @@ def _sin_clasificacion() -> JSONResponse:
 async def get_tee_window_standings(
     round_id: UUID,
     category: int | None = None,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    current_user: UserResponseDTO = Depends(get_current_user),
     clasificacion: ClasificacionDeLaFranjaUseCase = Depends(
         get_clasificacion_de_la_franja_use_case
     ),
+    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
-    """200 con la clasificación de la franja."""
+    """200 con la clasificación de la franja; 403 si es de una privada en la que no está."""
+    exigir = puerta.exigir_la_clasificacion_de_la_ronda(
+        RoundId(round_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
+    )
+    if (no := await cerrada(exigir)) is not None:
+        return no
     try:
         return await clasificacion.execute(round_id, category)
     except PartidasError:
@@ -542,10 +560,16 @@ async def get_tee_window_standings(
 async def get_overall_standings(
     competition_id: UUID,
     category: int | None = None,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001 - con sesión
+    current_user: UserResponseDTO = Depends(get_current_user),
     clasificacion: ClasificacionGeneralUseCase = Depends(get_clasificacion_general_use_case),
+    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
-    """200 con la general."""
+    """200 con la general; 403 si es de una privada en la que no está."""
+    exigir = puerta.exigir_la_clasificacion(
+        CompetitionId(competition_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
+    )
+    if (no := await cerrada(exigir)) is not None:
+        return no
     try:
         return await clasificacion.execute(competition_id, category)
     except PartidasError:
@@ -566,8 +590,14 @@ async def get_scratch_standings(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     clasificacion: ClasificacionScratchUseCase = Depends(get_clasificacion_scratch_use_case),
+    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
-    """200 con el scratch."""
+    """200 con el scratch; 403 si es de una privada en la que no está."""
+    exigir = puerta.exigir_la_clasificacion(
+        CompetitionId(competition_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
+    )
+    if (no := await cerrada(exigir)) is not None:
+        return no
     try:
         return await clasificacion.execute(competition_id, UserId(str(current_user.id)))
     except PartidasError:

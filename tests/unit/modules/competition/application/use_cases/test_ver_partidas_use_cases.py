@@ -464,3 +464,59 @@ async def test_my_groups_without_any_do_not_ask_for_course_names():
 
     assert mias.groups == []
     assert campos.pedidos == []
+
+
+# Tabla del 27 oct 2026: en una privada, las partidas solo las ve quien está
+# dentro; de fuera, con la llave de su Actividad, la de su amigo y nada más
+class _Eventos:
+    def __init__(self, *amigos):
+        self.amigos = frozenset(amigos)
+
+    async def amigos_con_evento_en(self, user_id, competition_id):
+        return self.amigos
+
+
+async def _privada_con_dos_partidas(visibilidad=Visibility.PRIVATE):
+    escenario = _Escenario()
+    escenario.competicion._visibility = visibilidad
+    await escenario.guardar()
+    jugadores = [await escenario.con_plaza(f"{h}.0") for h in (8, 7, 6, 5, 4, 3, 2, 1)]
+    generada = await escenario.generar()
+    assert len(generada.groups) == 2
+    return escenario, jugadores, generada
+
+
+async def _grupos_que_ve(escenario, quien, eventos):
+    vista = await VerPartidasUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        reloj=lambda: escenario.ahora,
+        eventos=eventos,
+    ).execute(escenario.manana.id.value, quien, False)
+    return [g.number for g in vista.groups]
+
+
+async def test_6_an_outsider_of_a_private_one_sees_no_groups():
+    escenario, _, _ = await _privada_con_dos_partidas()
+
+    assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos()) == []
+
+
+async def test_7_with_a_friends_event_only_the_friends_group():
+    escenario, _, generada = await _privada_con_dos_partidas()
+    amigo = UserId(str(generada.groups[1].players[0].user_id))
+
+    assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos(amigo)) == [2]
+
+
+async def test_2_an_approved_player_of_a_private_one_sees_every_group():
+    escenario, jugadores, _ = await _privada_con_dos_partidas()
+
+    assert await _grupos_que_ve(escenario, jugadores[0], _Eventos()) == [1, 2]
+
+
+async def test_d8_an_outsider_of_a_public_one_still_sees_every_group():
+    escenario, _, _ = await _privada_con_dos_partidas(Visibility.PUBLIC)
+
+    assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos()) == [1, 2]

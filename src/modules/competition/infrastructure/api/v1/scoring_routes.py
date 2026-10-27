@@ -16,6 +16,7 @@ from src.config.dependencies import (
     get_current_user,
     get_get_leaderboard_use_case,
     get_get_scoring_view_use_case,
+    get_puerta_de_lo_jugado,
     get_submit_hole_score_use_case,
     get_submit_scorecard_use_case,
     get_withdraw_match_player_use_case,
@@ -43,6 +44,7 @@ from src.modules.competition.application.exceptions import (
     ScoringNotOpenYetError,
     WithdrawalNotAllowedError,
 )
+from src.modules.competition.application.services.lo_jugado_de_una_privada import PuertaDeLoJugado
 from src.modules.competition.application.use_cases.concede_match_use_case import (
     ConcedeMatchUseCase,
 )
@@ -61,6 +63,9 @@ from src.modules.competition.application.use_cases.submit_scorecard_use_case imp
 from src.modules.competition.application.use_cases.withdraw_match_player_use_case import (
     WithdrawMatchPlayerUseCase,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import cerrada
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -85,8 +90,9 @@ router = APIRouter()
 async def get_scoring_view(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     match_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetScoringViewUseCase = Depends(get_get_scoring_view_use_case),
+    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """
     Obtiene la vista completa de scoring de un partido.
@@ -95,8 +101,14 @@ async def get_scoring_view(
 
     **Returns:**
     - 200: Vista de scoring completa
+    - 403: Partido de una privada en la que no está (tabla del 27 oct 2026)
     - 404: Partido no encontrado
     """
+    exigir = puerta.exigir_el_partido(
+        MatchId(match_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
+    )
+    if (no := await cerrada(exigir)) is not None:
+        return no
     try:
         return await use_case.execute(str(match_id))
 
@@ -305,8 +317,9 @@ async def submit_scorecard(
 async def get_leaderboard(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetLeaderboardUseCase = Depends(get_get_leaderboard_use_case),
+    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """
     Obtiene el leaderboard completo de la competicion.
@@ -319,8 +332,14 @@ async def get_leaderboard(
     **Returns:**
     - 200: Leaderboard completo
     - 400: Un Stableford o Medal, cuya clasificación llega con sus rondas
+    - 403: Una privada en la que no está, sin llave (tabla del 27 oct 2026)
     - 404: Competicion no encontrada
     """
+    exigir = puerta.exigir_la_clasificacion(
+        CompetitionId(competition_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
+    )
+    if (no := await cerrada(exigir)) is not None:
+        return no
     try:
         return await use_case.execute(str(competition_id))
 

@@ -20,6 +20,14 @@ from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
 )
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    Acceso,
+    LoJugadoQueVe,
+    con_la_llave,
+)
 from src.modules.competition.application.services.quien_ve_los_inscritos import (
     LoQueVe,
     alcance_de,
@@ -37,6 +45,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
@@ -47,6 +56,10 @@ if TYPE_CHECKING:
     # Solo para el tipo: la mesa de sobres llega hasta aquí por el generador de
     # partidos, e importarla de verdad cierra un círculo
     from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+
+
+def _jugadores(match) -> list[UserId]:
+    return [p.user_id for p in (*match.team_a_players, *match.team_b_players)]
 
 
 def _descansan(team_assignment, inscritos: set[UserId], matches: list) -> list[UserId]:
@@ -81,8 +94,12 @@ class GetScheduleUseCase:
         golf_course_repo: IGolfCourseRepository | None = None,
         sobres: "EnvelopeDesk | None" = None,
         amigos: AmigosInterface | None = None,
+        eventos: EventosDeAmigosInterface | None = None,
     ):
         self._uow = uow
+        # La llave de quien está fuera de una privada: sus partidos, solo los
+        # de un amigo con evento en su Actividad (27 oct 2026)
+        self._eventos = eventos
         # De quién es amigo quien mira: en las franjas solo ve a sus amigos
         # hasta que se publica (release social 2)
         self._amigos = amigos
@@ -153,6 +170,25 @@ class GetScheduleUseCase:
                 )
 
         ve = await lo_que_ve(alcance, viewer_id, self._amigos) if alcance and viewer_id else None
+        # En una privada, sus partidos solo los ve quien está dentro (27 oct
+        # 2026): ahí `completa` es organizador, admin o aprobado
+        jugado = (
+            await con_la_llave(
+                competition.visibility is not Visibility.PRIVATE or ve.completa,
+                competition_id,
+                ve.quien,
+                self._eventos,
+            )
+            if ve
+            else LoJugadoQueVe(Acceso.ENTERO)
+        )
+        entero = jugado.acceso is Acceso.ENTERO
+        if not entero:
+            rounds_with_matches = [
+                (r, [m for m in matches if jugado.ve_la_partida(_jugadores(m))])
+                for r, matches in rounds_with_matches
+            ]
+            total_matches = sum(len(matches) for _, matches in rounds_with_matches)
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
@@ -225,7 +261,9 @@ class GetScheduleUseCase:
                 match_generation_block=block_to_dto(round_entity.match_generation_block),
                 resting_player_ids=[
                     uid.value for uid in _descansan(team_assignment, inscritos, matches)
-                ],
+                ]
+                if entero
+                else [],
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,
             )
@@ -243,7 +281,7 @@ class GetScheduleUseCase:
 
         # 7. Construir respuesta de team assignment
         ta_dto = None
-        if team_assignment:
+        if team_assignment and entero:
             ta_dto = TeamAssignmentResponseDTO(
                 id=team_assignment.id.value,
                 competition_id=team_assignment.competition_id.value,

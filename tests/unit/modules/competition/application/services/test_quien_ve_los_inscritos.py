@@ -11,6 +11,7 @@ Quién ve a los inscritos de una competición (release social 2, tabla del 27 oc
   6   pública antes de publicarse, inscrito o no         | sus amigos aprobados
   7   stroke play con las partidas generadas             | todos los aprobados
   8   Ryder con los equipos formados                     | todos los aprobados
+      (7 y 8, en una privada solo quien está: tabla del 27 oct, fila 6)
   9   capitán o vicecapitán, antes de los equipos        | todos los aprobados
   10  su propia fila                                     | siempre
   11  amigo = amistad aceptada                           | (lo da el puerto)
@@ -79,8 +80,15 @@ class TestUnaPrivada:
     def test_5_aprobado_e_invitado_otra_vez_sigue_viendo_a_todos(self):
         assert _alcance(_competicion(PRIVADA), aprobado=True, invitado=True) is Alcance.APROBADOS
 
-    def test_7_8_publicada_la_ve_cualquiera(self):
-        assert _alcance(_competicion(PRIVADA), publicada=True) is Alcance.APROBADOS
+    def test_7_8_publicada_quien_no_esta_sigue_sin_ver_nada(self):
+        """Tabla del 27 oct 2026, fila 6: quien no está, nada, también publicada."""
+        assert _alcance(_competicion(PRIVADA), publicada=True) is Alcance.NADA
+
+    def test_7_8_publicada_el_aprobado_sigue_viendo_a_todos(self):
+        assert _alcance(_competicion(PRIVADA), publicada=True, aprobado=True) is Alcance.APROBADOS
+
+    def test_7_8_publicada_el_invitado_sigue_viendo_a_sus_amigos(self):
+        assert _alcance(_competicion(PRIVADA), publicada=True, invitado=True) is Alcance.AMIGOS
 
 
 class TestUnaPublica:
