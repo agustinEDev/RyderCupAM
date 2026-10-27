@@ -54,7 +54,7 @@ class GetMatchDetailUseCase:
             NoPuedeVerloError: Si es de una privada en la que no está, no juega
                 en él ni tiene la llave de un amigo que juegue (27 oct 2026)
         """
-        dentro, competition_id = True, None
+        fuera_de = None
         async with self._uow:
             # 1. Buscar el partido
             match_id = MatchId(request.match_id)
@@ -65,18 +65,18 @@ class GetMatchDetailUseCase:
 
             # 2. Buscar la ronda para info adicional
             round_entity = await self._uow.rounds.find_by_id(match.round_id)
-            competition = (
-                await self._uow.competitions.find_by_id(round_entity.competition_id)
-                if round_entity is not None and quien is not None
-                else None
-            )
-            if competition is not None and quien is not None:
-                competition_id = competition.id
-                dentro = await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
-
-        if not dentro and quien is not None and competition_id is not None:
             jugadores = [p.user_id for p in (*match.team_a_players, *match.team_b_players)]
-            await exigir_la_partida(False, competition_id, quien, jugadores, self._eventos)
+            # Diciendo quién mira y sin jugar en él: ¿está dentro de su competición?
+            if quien is not None and quien not in jugadores and round_entity is not None:
+                competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+                if competition is not None and not await esta_dentro(
+                    self._uow, competition, quien, es_admin=es_admin
+                ):
+                    fuera_de = competition.id
+
+        # De fuera, la llave
+        if fuera_de is not None and quien is not None:
+            await exigir_la_partida(fuera_de, quien, jugadores, self._eventos)
 
         # 3. Construir respuesta
         return GetMatchDetailResponseDTO(

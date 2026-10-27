@@ -88,11 +88,14 @@ class VerAnotacionDePartidaUseCase:
             competicion = await self._uow.competitions.find_by_id(partida.competition_id)
             if competicion is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
-            # Con lo ya leído: solo su inscripción, y solo si hace falta (PR 2)
-            dentro = await esta_dentro(self._uow, competicion, quien, es_admin=es_admin)
+            # Con lo ya leído: quien juega en ella ya está (cada anotación
+            # devuelve esta vista); si no, su inscripción, si hace falta (PR 2)
+            dentro = quien in partida.user_ids or await esta_dentro(
+                self._uow, competicion, quien, es_admin=es_admin
+            )
         # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
         if not dentro:
-            await exigir_la_partida(False, competicion.id, quien, partida.user_ids, self._eventos)
+            await exigir_la_partida(competicion.id, quien, partida.user_ids, self._eventos)
         async with self._uow:
             try:
                 # Con el desfase del campo, como `scoring_opens_at` de la Ryder:

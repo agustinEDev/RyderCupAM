@@ -68,7 +68,7 @@ class GetLeaderboardUseCase:
         ve = (
             None
             if dentro or quien is None
-            else await exigir_la_clasificacion(False, competition.id, quien, self._eventos)
+            else await exigir_la_clasificacion(competition.id, quien, self._eventos)
         )
         async with self._uow:
             # Un Stableford o un Medal no tiene todavía su clasificación: se dice

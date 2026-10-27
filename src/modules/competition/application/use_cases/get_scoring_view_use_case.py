@@ -95,14 +95,17 @@ class GetScoringViewUseCase:
             competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
             if not competition:
                 raise CompetitionNotFoundError("La competicion asociada no existe")
-            # Con lo ya leído: solo su inscripción, y solo si hace falta (PR 2)
-            dentro = quien is None or await esta_dentro(
-                self._uow, competition, quien, es_admin=es_admin
+            # Con lo ya leído: quien juega en el partido ya está (cada anotación
+            # devuelve esta vista); si no, su inscripción, si hace falta (PR 2)
+            dentro = (
+                quien is None
+                or quien in match.get_all_player_ids()
+                or await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
             )
         # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
         if not dentro and quien is not None:
             await exigir_la_partida(
-                False, competition.id, quien, match.get_all_player_ids(), self._eventos
+                competition.id, quien, match.get_all_player_ids(), self._eventos
             )
         async with self._uow:
             hole_scores = await self._uow.hole_scores.find_by_match(match_id)

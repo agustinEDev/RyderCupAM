@@ -86,36 +86,35 @@ async def esta_dentro(
 
 
 async def exigir_la_partida(
-    dentro: bool,
     competition_id: CompetitionId,
     quien: UserId,
     jugadores: Iterable[UserId],
     eventos: EventosDeAmigosInterface | None,
 ) -> None:
     """
-    Fuera del `uow`: que vea esa partida (o ese partido).
+    Fuera del `uow`, de quien está fuera: que vea esa partida (o ese partido).
 
     Raises:
         NoPuedeVerloError: Si no está dentro, no juega en ella ni tiene la llave
     """
-    ve = await con_la_llave(dentro, competition_id, quien, eventos)
+    ve = await con_la_llave(False, competition_id, quien, eventos)
     if not ve.ve_la_partida(jugadores):
         raise NoPuedeVerloError
 
 
 async def exigir_la_clasificacion(
-    dentro: bool,
     competition_id: CompetitionId,
     quien: UserId,
     eventos: EventosDeAmigosInterface | None,
 ) -> LoJugadoQueVe:
     """
-    Fuera del `uow`: lo que ve de la clasificación, para filtrar los partidos.
+    Fuera del `uow`, de quien está fuera: lo que ve de la clasificación, para
+    filtrar los partidos.
 
     Raises:
         NoPuedeVerloError: Si no está dentro ni tiene la llave
     """
-    ve = await con_la_llave(dentro, competition_id, quien, eventos)
+    ve = await con_la_llave(False, competition_id, quien, eventos)
     if not ve.ve_la_clasificacion:
         raise NoPuedeVerloError
     return ve

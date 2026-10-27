@@ -102,7 +102,7 @@ TOPES = {
     "R2 agenda": {"organizador": 12, "aprobado": 15, "fuera": 17},
     "R3 grupos": {"organizador": 14, "aprobado": 16, "fuera": 18},
     "R4 inscritos": {"organizador": 8, "aprobado": 10, "fuera": 9},
-    "R5 anotacion": {"organizador": 13, "aprobado": 14, "fuera": 12},
+    "R5 anotacion": {"organizador": 13, "aprobado": 13, "fuera": 12},
     "R6 general": {"organizador": 13, "aprobado": 14, "fuera": 9},
 }
 

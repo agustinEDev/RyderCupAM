@@ -605,3 +605,20 @@ async def test_6_sin_llave_no_se_monta_la_vista():
     with pytest.raises(NoPuedeVerloError):
         await _con_llave(escenario).execute(partida.id.value, UserId(uuid4()))
     assert leidos == []
+
+
+async def test_quien_juega_en_ella_no_cuesta_ni_su_inscripcion():
+    """/code-review: cada anotación devuelve esta vista; quien juega ya está dentro."""
+    escenario, partida = await _partida()
+    preguntas = []
+    original = escenario.uow.enrollments.find_by_user_and_competition
+
+    async def _apunta(*args):
+        preguntas.append(args)
+        return await original(*args)
+
+    escenario.uow.enrollments.find_by_user_and_competition = _apunta
+
+    await _con_llave(escenario).execute(partida.id.value, partida.user_ids[0])
+
+    assert preguntas == []

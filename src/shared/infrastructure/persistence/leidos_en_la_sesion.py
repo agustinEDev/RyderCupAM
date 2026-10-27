@@ -46,6 +46,19 @@ def _olvidar_al_deshacer(session: Session, previous_transaction: object) -> None
     session.info.pop(_LISTAS, None)
 
 
+@event.listens_for(Session, "after_flush")
+def _olvidar_las_listas_al_escribir(session: Session, flush_context: object) -> None:  # noqa: ARG001 - firma del evento
+    """
+    Cualquier fila nueva o borrada puede cambiar una lista recordada, también
+    lo que la base de datos borra en cascada (las rondas de una competición
+    borrada): se olvidan todas, sin que cada repositorio tenga que acordarse
+    (/code-review de la PR 2). Lo de cada repositorio al añadir o borrar sigue
+    cubriendo lo que aún no se ha volcado.
+    """
+    if session.new or session.deleted:
+        session.info.pop(_LISTAS, None)
+
+
 def sin_cargar(objeto: object) -> frozenset[str]:
     """Los atributos de un objeto de la sesión que aún no se han cargado."""
     estado = inspect(objeto)

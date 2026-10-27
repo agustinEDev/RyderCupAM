@@ -313,3 +313,15 @@ async def test_una_competicion_creada_en_un_savepoint_deshecho_ya_no_existe(
         pass
 
     assert await uow.competitions.find_by_id(otra_id) is None
+
+
+async def test_borrar_la_competicion_olvida_sus_rondas(db_session, ronda):  # noqa: F811
+    """/code-review: sus rondas caen en cascada en la base de datos, sin pasar por su repositorio."""
+    uow = SQLAlchemyCompetitionUnitOfWork(db_session)
+    competicion = ronda.competition_id
+    assert len(await uow.rounds.find_by_competition(competicion)) == 1
+
+    await uow.competitions.delete(competicion)
+    await db_session.flush()
+
+    assert await uow.rounds.find_by_competition(competicion) == []

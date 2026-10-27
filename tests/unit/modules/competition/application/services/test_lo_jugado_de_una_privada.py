@@ -192,30 +192,19 @@ class TestLoQueVe:
 class TestLasExigencias:
     async def test_6_la_clasificacion_cerrada_para_quien_esta_fuera(self):
         with pytest.raises(NoPuedeVerloError):
-            await exigir_la_clasificacion(False, CompetitionId(uuid4()), YO, _Eventos())
+            await exigir_la_clasificacion(CompetitionId(uuid4()), YO, _Eventos())
 
     async def test_7_la_clasificacion_abierta_con_la_llave_dice_lo_que_ve(self):
-        ve = await exigir_la_clasificacion(False, CompetitionId(uuid4()), YO, _Eventos({AMIGO}))
+        ve = await exigir_la_clasificacion(CompetitionId(uuid4()), YO, _Eventos({AMIGO}))
 
         assert ve == LoJugadoQueVe(Acceso.SUS_AMIGOS, frozenset({AMIGO}), YO)
-
-    async def test_dentro_la_clasificacion_entera_sin_preguntar(self):
-        eventos = _Eventos({AMIGO})
-
-        ve = await exigir_la_clasificacion(True, CompetitionId(uuid4()), YO, eventos)
-
-        assert ve.acceso is Acceso.ENTERO
-        assert eventos.preguntas == 0
 
     async def test_7_la_partida_de_su_amigo_si_y_otra_no(self):
         cid = CompetitionId(uuid4())
 
-        await exigir_la_partida(False, cid, YO, [OTRO, AMIGO], _Eventos({AMIGO}))
+        await exigir_la_partida(cid, YO, [OTRO, AMIGO], _Eventos({AMIGO}))
         with pytest.raises(NoPuedeVerloError):
-            await exigir_la_partida(False, cid, YO, [OTRO], _Eventos({AMIGO}))
+            await exigir_la_partida(cid, YO, [OTRO], _Eventos({AMIGO}))
 
     async def test_5_su_propia_partida_aunque_este_fuera(self):
-        await exigir_la_partida(False, CompetitionId(uuid4()), YO, [YO, OTRO], _Eventos())
-
-    async def test_dentro_cualquier_partida(self):
-        await exigir_la_partida(True, CompetitionId(uuid4()), YO, [OTRO], _Eventos())
+        await exigir_la_partida(CompetitionId(uuid4()), YO, [YO, OTRO], _Eventos())

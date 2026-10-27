@@ -95,7 +95,7 @@ class _Clasificaciones:
             NoPuedeVerloError: Sin estar dentro ni tener la llave
         """
         if not dentro and quien is not None:
-            await exigir_la_clasificacion(False, competicion.id, quien, self._eventos)
+            await exigir_la_clasificacion(competicion.id, quien, self._eventos)
 
     async def _competicion(self, competition_id: CompetitionId) -> Competition:
         competicion = await self._uow.competitions.find_by_id(competition_id)

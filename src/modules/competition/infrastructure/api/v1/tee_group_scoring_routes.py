@@ -226,13 +226,13 @@ async def score_tee_group_hole(
 ):
     """200 con la partida; 4xx con `error_code` si no se puede."""
     quien = UserId(str(current_user.id))
-    try:
-        await anotar.execute(group_id, hole, body, quien)
-        return await ver.execute(group_id, quien)
-    except PartidaNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
-    except _CON_CODIGO as e:
-        return _respuesta(e)
+    return await _y_la_vista(
+        anotar.execute(group_id, hole, body, quien),
+        ver,
+        group_id,
+        quien,
+        es_admin=current_user.is_admin,
+    )
 
 
 @router.get(

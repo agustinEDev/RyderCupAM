@@ -173,3 +173,44 @@ class TestLaClasificacion:
         vista = await self._clasificacion(user_repo, None)
 
         assert sorted(m.match_number for m in vista.matches) == [1, 2]
+
+
+class TestQuienJuegaNoCuestaSuInscripcion:
+    """/code-review: cada anotación devuelve la vista; quien juega ya está dentro."""
+
+    async def _contando(self):
+        uow = InMemoryUnitOfWork()
+        match, _, rojo, gc_repo = await _setup(uow, None)
+        _privada(uow)
+        preguntas = []
+        original = uow.enrollments.find_by_user_and_competition
+
+        async def _apunta(*args):
+            preguntas.append(args)
+            return await original(*args)
+
+        uow.enrollments.find_by_user_and_competition = _apunta
+        return uow, match, rojo, gc_repo, preguntas
+
+    async def test_la_anotacion_de_su_partido(self):
+        uow, match, rojo, gc_repo, preguntas = await self._contando()
+        uc = GetScoringViewUseCase(
+            uow,
+            AsyncMock(find_by_id=AsyncMock(return_value=None)),
+            ScoringService(),
+            gc_repo,
+            eventos=_Eventos(),
+        )
+
+        await uc.execute(str(match.id), quien=rojo.user_id)
+
+        assert preguntas == []
+
+    async def test_el_detalle_de_su_partido(self):
+        uow, match, rojo, _, preguntas = await self._contando()
+
+        await GetMatchDetailUseCase(uow, eventos=_Eventos()).execute(
+            GetMatchDetailRequestDTO(match_id=str(match.id.value)), quien=rojo.user_id
+        )
+
+        assert preguntas == []

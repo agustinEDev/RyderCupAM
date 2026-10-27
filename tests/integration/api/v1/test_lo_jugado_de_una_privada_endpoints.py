@@ -16,7 +16,12 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     NoPuedeVerloError,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from tests.conftest import create_authenticated_user, create_competition, set_auth_cookies
+from tests.conftest import (
+    create_admin_user,
+    create_authenticated_user,
+    create_competition,
+    set_auth_cookies,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -249,3 +254,35 @@ async def test_7_con_la_llave_la_clasificacion_y_solo_la_partida_de_su_amigo(cli
     assert [g["id"] for g in vista["groups"]] == [suya]
     # La lista de inscritos sigue cerrada: solo la clasificación y su partida
     assert (await client.get(f"{base}/enrollments")).json() == []
+
+
+async def test_anotar_un_hoyo_devuelve_la_vista_con_la_puerta(client):
+    """/code-review: tras anotar, la vista sabe si es admin y su «no» es un 403."""
+    from main import app
+    from src.config import dependencies
+
+    class _Anota:
+        def __init__(self):
+            pass
+
+        async def execute(self, *args, **kwargs):
+            return None
+
+    # Un admin: es quien no juega ni organiza y aun así tiene que ver la vista
+    yo = await create_admin_user(
+        client, f"lj_{uuid.uuid4().hex[:8]}@test.com", "P@ssw0rd123!", "Anota", "Hoyo"
+    )
+    set_auth_cookies(client, yo["cookies"])
+    app.dependency_overrides[dependencies.get_anotar_hoyo_de_partida_use_case] = _Anota
+    app.dependency_overrides[dependencies.get_ver_anotacion_de_partida_use_case] = _NoPuede
+    try:
+        r = await client.post(
+            f"/api/v1/competitions/groups/{ID}/scores/holes/3", json={"own_score": 4}
+        )
+    finally:
+        app.dependency_overrides.pop(dependencies.get_anotar_hoyo_de_partida_use_case, None)
+        app.dependency_overrides.pop(dependencies.get_ver_anotacion_de_partida_use_case, None)
+
+    assert r.status_code == 403, r.text
+    ((_, kwargs),) = _NoPuede.llamadas
+    assert kwargs == {"es_admin": True}
