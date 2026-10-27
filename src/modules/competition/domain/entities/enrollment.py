@@ -342,6 +342,55 @@ class Enrollment:
         )
         self._add_domain_event(event)
 
+    def volver_a_entrar(
+        self,
+        *,
+        aprobada: bool,
+        tee_color: TeeColor | None = None,
+        custom_handicap: Decimal | None = None,
+    ) -> None:
+        """
+        Una inscripción cerrada vuelve a abrirse (release social 2, 27 oct 2026).
+
+        Rechazada, cancelada o retirada se queda en la tabla, y la restricción
+        única (competición, usuario) no mira el estado: sin esto, quien la tenía
+        no podía volver a entrar por ninguna vía. Se reutiliza la misma fila,
+        limpia de lo de la vez anterior (equipo, hándicap fijado).
+
+        Args:
+            aprobada: Entra ya (invitación aceptada, inscripción a mano) o pide plaza
+            tee_color: Su barra, si la elige
+            custom_handicap: El hándicap que le pone el organizador, si lo hay
+
+        Raises:
+            EnrollmentStateError: Si no está cerrada (aprobada o pendiente)
+            ValueError: Si el hándicap no es válido
+        """
+        if not self._status.is_final():
+            raise EnrollmentStateError(
+                f"Solo vuelve a entrar una inscripción cerrada, no una en estado "
+                f"{self._status.value}"
+            )
+        if custom_handicap is not None:
+            self._validate_custom_handicap(custom_handicap)
+
+        self._status = EnrollmentStatus.APPROVED if aprobada else EnrollmentStatus.REQUESTED
+        self._team_id = None
+        self._custom_handicap = custom_handicap
+        self._tee_color = tee_color
+        self._fixed_handicap = None
+        self._fixed_category = None
+        self._updated_at = datetime.now()
+
+        evento = EnrollmentApprovedEvent if aprobada else EnrollmentRequestedEvent
+        self._add_domain_event(
+            evento(
+                enrollment_id=str(self._id),
+                competition_id=str(self._competition_id),
+                user_id=str(self._user_id),
+            )
+        )
+
     # ===========================================
     # MÉTODOS DE ACTUALIZACIÓN
     # ===========================================

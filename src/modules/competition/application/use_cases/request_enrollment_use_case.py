@@ -15,7 +15,10 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
-from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.application.services.inscripcion_que_vuelve import (
+    guardar_la_inscripcion,
+    viva,
+)
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
     DuplicateEnrollmentViolation,
@@ -31,7 +34,6 @@ from src.modules.competition.domain.services.competition_policy import (
     CompetitionPolicy,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -162,8 +164,10 @@ class RequestEnrollmentUseCase:
                 CompetitionPolicy.can_enroll(
                     user_id=user_id,
                     competition_id=competition_id,
+                    # Una cerrada no impide pedir plaza otra vez: se reutiliza
+                    # (release social 2)
                     existing_enrollment_id=(
-                        str(existing_enrollment.id.value) if existing_enrollment else None
+                        str(existing_enrollment.id.value) if viva(existing_enrollment) else None
                     ),
                     competition_status=competition.status,
                     competition_start_date=competition.dates.start_date,
@@ -196,15 +200,15 @@ class RequestEnrollmentUseCase:
                     f"Valor de tee_color no válido: '{request.tee_color}'. "
                     f"Valores permitidos: {[c.value for c in TeeColor]}"
                 ) from e
-            enrollment = Enrollment.request(
-                id=EnrollmentId.generate(),
+            # 5. Persistir: con su inscripción cerrada, si la tiene
+            enrollment = await guardar_la_inscripcion(
+                self._uow,
+                existing_enrollment,
+                aprobada=False,
                 competition_id=competition_id,
                 user_id=user_id,
                 tee_color=tee_color,
             )
-
-            # 5. Persistir
-            await self._uow.enrollments.add(enrollment)
 
         # 7. Retornar DTO
         return RequestEnrollmentResponseDTO(

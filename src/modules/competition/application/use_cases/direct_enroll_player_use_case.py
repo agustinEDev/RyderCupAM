@@ -20,10 +20,13 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
+from src.modules.competition.application.services.inscripcion_que_vuelve import (
+    guardar_la_inscripcion,
+    viva,
+)
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_ocupar_una_plaza,
 )
-from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
 )
@@ -35,7 +38,6 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 from src.modules.competition.domain.value_objects.competition_status import (
     CompetitionStatus,
 )
-from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
@@ -139,10 +141,12 @@ class DirectEnrollPlayerUseCase:
                 )
 
             # 4. Verificar que el jugador no esta ya inscrito
-            already_enrolled = await self._uow.enrollments.exists_for_user_in_competition(
+            # Una cerrada (rechazada, cancelada, retirada) no lo impide: se
+            # reutiliza (release social 2)
+            existente = await self._uow.enrollments.find_by_user_and_competition(
                 player_id, competition_id
             )
-            if already_enrolled:
+            if viva(existente):
                 raise AlreadyEnrolledError(
                     "El jugador ya tiene una inscripcion en esta competicion"
                 )
@@ -181,16 +185,16 @@ class DirectEnrollPlayerUseCase:
                     f"Valor de tee_color no válido: '{request.tee_color}'. "
                     f"Valores permitidos: {[c.value for c in TeeColor]}"
                 ) from e
-            enrollment = Enrollment.direct_enroll(
-                id=EnrollmentId.generate(),
+            # 7. Persistir: con su inscripción cerrada, si la tiene
+            enrollment = await guardar_la_inscripcion(
+                self._uow,
+                existente,
+                aprobada=True,
                 competition_id=competition_id,
                 user_id=player_id,
                 custom_handicap=request.custom_handicap,
                 tee_color=tee_color,
             )
-
-            # 7. Persistir
-            await self._uow.enrollments.add(enrollment)
 
             # Si era la última plaza, las invitaciones pendientes se quedan sin
             # ella ya (BE #359)
