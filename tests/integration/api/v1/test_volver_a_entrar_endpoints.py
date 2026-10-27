@@ -103,3 +103,35 @@ async def test_retirado_vuelve_a_mano_del_organizador(client: AsyncClient):
     assert otra_vez.status_code == 201, otra_vez.text
     assert otra_vez.json()["id"] == dentro.json()["id"]
     assert otra_vez.json()["status"] == "APPROVED"
+
+
+async def test_r4_tras_una_pendiente_ya_caducada_sale_otra(client: AsyncClient):
+    """Con el índice único de pendientes: la vieja pasa a EXPIRED antes de la nueva."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from tests.conftest import _URL_DE_LA_BD_DE_TEST
+
+    creador, jugador = await _jugador(client), await _jugador(client)
+    comp = await _publica(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    url = f"/api/v1/competitions/{comp['id']}/invitations"
+    primera = await client.post(url, json={"invitee_user_id": jugador["user"]["id"]})
+    assert primera.status_code == 201, primera.text
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "UPDATE invitations SET expires_at = now() - interval '1 hour', "
+                    "created_at = now() - interval '8 days' WHERE id = :id"
+                ),
+                {"id": primera.json()["id"]},
+            )
+    finally:
+        await engine.dispose()
+
+    segunda = await client.post(url, json={"invitee_user_id": jugador["user"]["id"]})
+
+    assert segunda.status_code == 201, segunda.text
+    assert segunda.json()["id"] != primera.json()["id"]

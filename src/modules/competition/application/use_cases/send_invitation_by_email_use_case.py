@@ -18,6 +18,7 @@ from src.modules.competition.application.ports.invitation_email_service_interfac
     IInvitationEmailService,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -137,8 +138,10 @@ class SendInvitationByEmailUseCase:
             )
 
             # 6. Verificar no invitation PENDING duplicada
-            existing_invitation = await self._uow.invitations.find_pending_by_email_and_competition(
-                request.invitee_email.strip().lower(), competition_id
+            # Una pendiente que ya caducó sin que nadie la abriera no impide
+            # invitar otra vez (release social 2)
+            existing_invitation = await pendiente_vigente(
+                self._uow, request.invitee_email.strip().lower(), competition_id
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
