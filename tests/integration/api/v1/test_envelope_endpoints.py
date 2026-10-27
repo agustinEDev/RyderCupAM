@@ -93,3 +93,42 @@ class TestLasRutasDeLosSobres:
 
         assert respuesta.status_code == 409, respuesta.text
         assert "los dos capitanes" in respuesta.json()["detail"]
+
+
+async def test_a1_la_ruta_le_dice_al_caso_de_uso_que_mira_un_admin(client: AsyncClient):
+    """El admin ve los sobres (27 oct 2026): la ruta tiene que pasar el flag."""
+    import uuid
+
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.dependencies import get_db_session, get_envelopes_use_case
+    from tests.conftest import create_authenticated_user, set_auth_cookies
+
+    llamadas = []
+
+    class _Apunta:
+        async def execute(self, *args, **kwargs):
+            llamadas.append(kwargs)
+            raise RuntimeError("basta")
+
+    correo = f"sobres_admin_{uuid.uuid4().hex[:6]}@test.com"
+    admin = await create_authenticated_user(client, correo, "P@ssw0rd123!", "Ad", "Min")
+    async for session in app.dependency_overrides[get_db_session]():
+        try:
+            await session.execute(
+                text("UPDATE users SET is_admin = true WHERE email = :email"), {"email": correo}
+            )
+            await session.commit()
+            break
+        finally:
+            await session.close()
+    set_auth_cookies(client, admin["cookies"])
+    app.dependency_overrides[get_envelopes_use_case] = _Apunta
+    try:
+        r = await client.get(f"/api/v1/competitions/rounds/{uuid.uuid4()}/envelopes")
+    finally:
+        app.dependency_overrides.pop(get_envelopes_use_case, None)
+
+    assert r.status_code == 500
+    assert llamadas == [{"is_admin": True}]

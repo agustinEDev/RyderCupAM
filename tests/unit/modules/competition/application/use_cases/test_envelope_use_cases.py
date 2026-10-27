@@ -989,6 +989,9 @@ class TestQuienVeQue:
 
         assert vista.team_a_submitted is True
         assert vista.mine is None
+        # Cerrado, su contenido no lo ve nadie: tampoco el admin
+        assert vista.revealed is False
+        assert vista.rival is None
 
     async def test_un_retirado_tampoco_los_ve(self):
         """Estar inscrito no basta: hay que estarlo APROBADO.

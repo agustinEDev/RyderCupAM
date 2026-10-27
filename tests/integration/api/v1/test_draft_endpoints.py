@@ -133,6 +133,17 @@ class TestLaSalaPorHttp:
         assert del_admin.status_code == 200, del_admin.text
         assert del_ajeno.status_code == 403
 
+        # Mirar, sí; elegir sigue siendo de los capitanes
+        set_auth_cookies(client, admin["cookies"])
+        elegido = await client.post(
+            f"/api/v1/competitions/{comp_id}/draft/picks",
+            json={"player_id": del_admin.json()["available_players"][0]["user_id"]},
+        )
+        # No le toca a nadie que no sea el capitán de turno: ni al admin (409)
+        assert elegido.status_code == 409, elegido.text
+        sala = (await client.get(f"/api/v1/competitions/{comp_id}/draft")).json()
+        assert sala["picks"] == []
+
     async def test_sin_sorteo_todavia_no_hay_sala(self, client: AsyncClient):
         montaje = await _cerrada_con_capitanes(client)
 
