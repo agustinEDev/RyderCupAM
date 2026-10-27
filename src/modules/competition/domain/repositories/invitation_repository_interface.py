@@ -93,6 +93,17 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def competiciones_con_invitacion_pendiente(
+        self, user_id: UserId, email: str | None, now: datetime
+    ) -> set[CompetitionId]:
+        """
+        Las competiciones en las que tiene una invitación que aún puede aceptar
+        (PENDING y sin caducar en `now`), por su usuario o por su correo. Con ella,
+        una privada se le enseña (release social 2, 27 oct 2026).
+        """
+        pass
+
+    @abstractmethod
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         """TODAS las invitaciones PENDING de una competicion, sin paginar (#710)."""
         pass

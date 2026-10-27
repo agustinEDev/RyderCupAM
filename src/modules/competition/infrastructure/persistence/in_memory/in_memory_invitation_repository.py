@@ -90,6 +90,18 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
             and now < inv.expires_at
         }
 
+    async def competiciones_con_invitacion_pendiente(
+        self, user_id: UserId, email: str | None, now: datetime
+    ) -> set[CompetitionId]:
+        correo = email.strip().lower() if email and email.strip() else None
+        return {
+            inv.competition_id
+            for inv in self._invitations.values()
+            if inv.status == InvitationStatus.PENDING
+            and now < inv.expires_at
+            and (inv.invitee_user_id == user_id or (correo and inv.invitee_email == correo))
+        }
+
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         return [
             inv

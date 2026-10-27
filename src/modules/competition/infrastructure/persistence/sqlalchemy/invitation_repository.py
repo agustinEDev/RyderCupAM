@@ -124,6 +124,22 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         result = await self._session.execute(stmt)
         return set(result.scalars().all())
 
+    async def competiciones_con_invitacion_pendiente(
+        self, user_id: UserId, email: str | None, now: datetime
+    ) -> set[CompetitionId]:
+        """Solo el id de la competición: sin cargar las invitaciones."""
+        tabla = invitations_table.c
+        para_quien = tabla.invitee_user_id == user_id
+        if email and email.strip():
+            para_quien = or_(para_quien, tabla.invitee_email == email.strip().lower())
+        stmt = select(tabla.competition_id).where(
+            para_quien,
+            tabla.status == InvitationStatus.PENDING,
+            tabla.expires_at > now,
+        )
+        result = await self._session.execute(stmt)
+        return set(result.scalars().all())
+
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         stmt = select(Invitation).where(
             and_(
