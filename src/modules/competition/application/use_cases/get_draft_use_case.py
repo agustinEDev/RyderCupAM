@@ -41,7 +41,9 @@ class GetDraftUseCase:
         self._uow = uow
         self._room = DraftRoom(uow, user_repository, clock)
 
-    async def execute(self, competition_id: UUID, user_id: UserId) -> DraftStateDTO | None:
+    async def execute(
+        self, competition_id: UUID, user_id: UserId, *, is_admin: bool = False
+    ) -> DraftStateDTO | None:
         """
         Devuelve la sala al dia, resolviendo los minutos que se hayan agotado.
 
@@ -49,6 +51,7 @@ class GetDraftUseCase:
             competition_id: La competicion
             user_id: Quien mira. Tiene que ser de esta competicion: la sala la
                 ve el grupo, pero el grupo es el de ESA competicion
+            is_admin: Un admin la ve aunque no juegue ni organice
 
         Returns:
             La sala, o None si todavia no se ha lanzado el sorteo
@@ -63,7 +66,9 @@ class GetDraftUseCase:
             # Sin bloquear: mirar es leer, y la sala la refrescan doce móviles
             # cada pocos segundos
             competition = await self._room.competicion(comp_id, bloquear=False)
-            await self._room.comprobar_que_es_de_la_competicion(competition, user_id)
+            await self._room.comprobar_que_es_de_la_competicion(
+                competition, user_id, is_admin=is_admin
+            )
             draft = await self._uow.drafts.find_by_competition(comp_id)
             if draft is None:
                 return None

@@ -56,7 +56,8 @@ class GetEnvelopesUseCase:
         Args:
             round_id: La sesion
             user_id: Quien mira
-            is_admin: Si es administrador, que tambien puede abrirlos
+            is_admin: Si es administrador: los ve aunque no juegue ni organice, y
+                tambien puede abrirlos
 
         Returns:
             Su sobre si capitanea, si el rival entrego, y los enfrentamientos
@@ -69,7 +70,9 @@ class GetEnvelopesUseCase:
         """
         async with self._uow:
             ronda, competition = await self._desk.ronda_y_competicion(RoundId(round_id))
-            await self._desk.comprobar_que_es_de_la_competicion(competition, user_id)
+            await self._desk.comprobar_que_es_de_la_competicion(
+                competition, user_id, is_admin=is_admin
+            )
             sobres = {s.team: s for s in await self._uow.envelopes.find_by_round(ronda.id)}
             # Mirarlos es lo que los abre cuando llega su hora: no hay ningun
             # proceso de fondo con el reloj, igual que la anotacion (BE #305)
