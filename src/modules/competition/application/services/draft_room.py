@@ -105,7 +105,8 @@ class DraftRoom:
         nombres, handicaps y equipos de cualquiera, incluida una privada.
 
         Raises:
-            NotCompetitionParticipantError: Si no esta inscrito ni la organiza
+            NotCompetitionParticipantError: Si no esta inscrito (aprobado) ni la
+                organiza. Un admin pasa siempre: entra a todo (27 oct 2026)
         """
         # El admin entra a todo (Agustín, 27 oct 2026)
         if is_admin or competition.is_creator(user_id):

@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user, set_auth_cookies
+from tests.conftest import create_admin_user, create_authenticated_user, set_auth_cookies
 
 pytestmark = [pytest.mark.asyncio]
 
@@ -94,41 +94,32 @@ class TestLasRutasDeLosSobres:
         assert respuesta.status_code == 409, respuesta.text
         assert "los dos capitanes" in respuesta.json()["detail"]
 
+    async def test_a1_la_ruta_le_dice_al_caso_de_uso_que_mira_un_admin(self, client: AsyncClient):
+        """
+        Given: un admin
+        When: mira los sobres de una sesión
+        Then: la ruta le dice al caso de uso que es admin, que los ve (27 oct 2026)
+        """
+        from main import app
+        from src.config.dependencies import get_envelopes_use_case
+        from src.modules.competition.application.exceptions import RoundNotFoundError
 
-async def test_a1_la_ruta_le_dice_al_caso_de_uso_que_mira_un_admin(client: AsyncClient):
-    """El admin ve los sobres (27 oct 2026): la ruta tiene que pasar el flag."""
-    import uuid
+        llamadas = []
 
-    from sqlalchemy import text
+        class _Apunta:
+            async def execute(self, *args, **kwargs):
+                llamadas.append(kwargs)
+                raise RoundNotFoundError("no existe")
 
-    from main import app
-    from src.config.dependencies import get_db_session, get_envelopes_use_case
-    from tests.conftest import create_authenticated_user, set_auth_cookies
-
-    llamadas = []
-
-    class _Apunta:
-        async def execute(self, *args, **kwargs):
-            llamadas.append(kwargs)
-            raise RuntimeError("basta")
-
-    correo = f"sobres_admin_{uuid.uuid4().hex[:6]}@test.com"
-    admin = await create_authenticated_user(client, correo, "P@ssw0rd123!", "Ad", "Min")
-    async for session in app.dependency_overrides[get_db_session]():
+        admin = await create_admin_user(
+            client, f"sobres_admin_{uuid4().hex[:6]}@test.com", "P@ssw0rd123!", "Ad", "Min"
+        )
+        set_auth_cookies(client, admin["cookies"])
+        app.dependency_overrides[get_envelopes_use_case] = _Apunta
         try:
-            await session.execute(
-                text("UPDATE users SET is_admin = true WHERE email = :email"), {"email": correo}
-            )
-            await session.commit()
-            break
+            r = await client.get(f"/api/v1/competitions/rounds/{uuid4()}/envelopes")
         finally:
-            await session.close()
-    set_auth_cookies(client, admin["cookies"])
-    app.dependency_overrides[get_envelopes_use_case] = _Apunta
-    try:
-        r = await client.get(f"/api/v1/competitions/rounds/{uuid.uuid4()}/envelopes")
-    finally:
-        app.dependency_overrides.pop(get_envelopes_use_case, None)
+            app.dependency_overrides.pop(get_envelopes_use_case, None)
 
-    assert r.status_code == 500
-    assert llamadas == [{"is_admin": True}]
+        assert r.status_code == 404
+        assert llamadas == [{"is_admin": True}]

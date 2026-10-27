@@ -340,6 +340,7 @@ class TestMirarLaSala:
             await ver.execute(comp_id.value, UserId(uuid4()))
 
     async def test_a2_el_organizador_la_ve_aunque_no_juegue(self):
+        """Organizar basta: no hace falta estar inscrito para mirar la sala."""
         uow, comp_id, creator_id, _, usuarios = await _montar()
         start, ver, _, _ = _casos(uow, usuarios)
         await start.execute(comp_id.value, creator_id)

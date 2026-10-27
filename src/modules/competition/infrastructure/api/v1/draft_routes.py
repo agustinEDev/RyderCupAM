@@ -103,7 +103,8 @@ async def start_draft(
         "equipos llenándose y quién sigue disponible, con su nombre y su hándicap. "
         "Lleva la hora del servidor (`server_time`) para que el contador no dependa "
         "del reloj del móvil. Mirarla es además lo que resuelve los turnos que se "
-        "hayan agotado. 404 si todavía no se ha lanzado el sorteo."
+        "hayan agotado. La ven el organizador, los inscritos aprobados y un admin; "
+        "cualquier otro, 403. 404 si todavía no se ha lanzado el sorteo."
     ),
     tags=["Competitions - Draft"],
 )

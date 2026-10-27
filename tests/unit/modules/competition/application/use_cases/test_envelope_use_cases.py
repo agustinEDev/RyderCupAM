@@ -966,6 +966,7 @@ class TestQuienVeQue:
             await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, UserId(uuid4()))
 
     async def test_a2_el_organizador_los_ve_aunque_ya_no_juegue(self):
+        """Organizar basta: no hace falta seguir inscrito para mirar los sobres."""
         uow, comp_id, round_id, _, _ = await _montar()
         async with uow:
             creador = (await uow.competitions.find_by_id(comp_id)).creator_id
