@@ -37,6 +37,7 @@ class _Puerta:
 
     async def exigir_la_clasificacion(self, competition_id, quien, *, es_admin=False):
         self._apunta("clasificacion", competition_id, quien, es_admin)
+        return LO_QUE_VE
 
     async def exigir_la_clasificacion_de_la_ronda(self, round_id, quien, *, es_admin=False):
         self._apunta("ronda", round_id, quien, es_admin)
@@ -48,6 +49,8 @@ class _Puerta:
         self._apunta("partida", partida_id, quien, es_admin)
 
 
+# Lo que la puerta dice que ve: la clasificación de la Ryder se lo pasa a su caso de uso
+LO_QUE_VE = object()
 ID = uuid.UUID("7a1e0c3e-27a0-4c1d-9f00-000000000027")
 RUTAS = [
     (f"/api/v1/competitions/{ID}/leaderboard", "clasificacion", CompetitionId(ID)),
@@ -276,3 +279,30 @@ async def test_7_con_la_llave_la_clasificacion_y_solo_la_partida_de_su_amigo(cli
     assert [g["id"] for g in vista["groups"]] == [suya]
     # La lista de inscritos sigue cerrada: solo la clasificación y su partida
     assert (await client.get(f"{base}/enrollments")).json() == []
+
+
+async def test_7_la_clasificacion_ryder_filtra_con_lo_que_ve(client, con_la_puerta):
+    """Con la llave, la Ryder: el marcador y solo el partido de su amigo (27 oct)."""
+    from main import app
+    from src.config.dependencies import get_get_leaderboard_use_case
+
+    llamadas = []
+
+    class _Clasificacion:
+        async def execute(self, *args):
+            llamadas.append(args)
+            raise _BastaError
+
+    _Puerta.cierra = False
+    app.dependency_overrides[get_get_leaderboard_use_case] = _Clasificacion
+    try:
+        r = await client.get(f"/api/v1/competitions/{ID}/leaderboard")
+    finally:
+        app.dependency_overrides.pop(get_get_leaderboard_use_case, None)
+
+    assert r.status_code == 500
+    assert llamadas == [(str(ID), LO_QUE_VE)]
+
+
+class _BastaError(Exception):
+    pass

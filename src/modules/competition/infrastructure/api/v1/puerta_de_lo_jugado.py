@@ -16,10 +16,15 @@ SOLO_QUIEN_PARTICIPA = {
 }
 
 
-async def cerrada(exigir: Awaitable[None]) -> JSONResponse | None:
+def solo_quien_participa() -> JSONResponse:
+    """El 403 de lo jugado de una privada en la que no está."""
+    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=SOLO_QUIEN_PARTICIPA)
+
+
+async def cerrada(exigir: Awaitable[object]) -> JSONResponse | None:
     """El 403 si la puerta no le deja pasar; None si puede verlo."""
     try:
         await exigir
     except NoPuedeVerloError:
-        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=SOLO_QUIEN_PARTICIPA)
+        return solo_quien_participa()
     return None

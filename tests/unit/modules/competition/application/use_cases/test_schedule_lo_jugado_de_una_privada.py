@@ -120,3 +120,17 @@ async def test_sin_decir_quien_mira_va_entera():
 
     assert _partidos(agenda) == [1, 2]
     assert agenda.team_assignment is not None
+
+
+async def test_5_quien_se_retiro_tras_jugar_ve_su_partido_y_nada_mas():
+    """/code-review: su propio partido lo ve siempre."""
+    uow, comp, a, _ = await _privada()
+    async with uow:
+        suya = await uow.enrollments.find_by_user_and_competition(a[0], comp.id)
+        suya.withdraw()
+        await uow.enrollments.update(suya)
+
+    agenda = await _agenda(uow, comp, viewer_id=a[0])
+
+    assert _partidos(agenda) == [1]
+    assert agenda.team_assignment is None

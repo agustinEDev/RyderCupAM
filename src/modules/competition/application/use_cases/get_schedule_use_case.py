@@ -33,6 +33,7 @@ from src.modules.competition.application.services.quien_ve_los_inscritos import 
     alcance_de,
     lo_que_ve,
 )
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -58,7 +59,8 @@ if TYPE_CHECKING:
     from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 
 
-def _jugadores(match) -> list[UserId]:
+def _jugadores(match: Match) -> list[UserId]:
+    """Los de los dos lados de un partido."""
     return [p.user_id for p in (*match.team_a_players, *match.team_b_players)]
 
 

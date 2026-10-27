@@ -7,6 +7,9 @@ from src.modules.competition.application.dto.scoring_dto import (
     LeaderboardResponseDTO,
 )
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    LoJugadoQueVe,
+)
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import TournamentTypeError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -33,7 +36,14 @@ class GetLeaderboardUseCase:
         self._user_repo = user_repo
         self._scoring_service = scoring_service
 
-    async def execute(self, competition_id_str: str) -> LeaderboardResponseDTO:
+    async def execute(
+        self, competition_id_str: str, ve: LoJugadoQueVe | None = None
+    ) -> LeaderboardResponseDTO:
+        """
+        La clasificación. Con `ve` de quien está fuera de una privada con la
+        llave, el marcador por equipos y solo los partidos de sus amigos (27
+        oct 2026); sin `ve` o dentro, todos.
+        """
         async with self._uow:
             comp_id = CompetitionId(competition_id_str)
             competition = await self._uow.competitions.find_by_id(comp_id)
@@ -160,7 +170,15 @@ class GetLeaderboardUseCase:
                 team_b_name=team_b_name,
                 team_a_points=total_a_points,
                 team_b_points=total_b_points,
-                matches=matches_dto,
+                # El marcador se cuenta con todos; los partidos, los que ve
+                matches=[
+                    m
+                    for m in matches_dto
+                    if ve is None
+                    or ve.ve_la_partida(
+                        UserId(p.user_id) for p in (*m.team_a_players, *m.team_b_players)
+                    )
+                ],
             )
 
     async def _resolve_final_result(self, match, round_entity) -> dict:

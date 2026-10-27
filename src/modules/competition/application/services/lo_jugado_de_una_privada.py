@@ -48,14 +48,23 @@ class LoJugadoQueVe:
 
     acceso: Acceso
     amigos: frozenset[UserId] = field(default_factory=frozenset)
+    # Quien mira: su propia partida la ve siempre, aunque se retirara (/code-review)
+    quien: UserId | None = None
 
     @property
     def ve_la_clasificacion(self) -> bool:
+        """Si ve la clasificación: dentro, o con la llave."""
         return self.acceso is not Acceso.NADA
 
     def ve_la_partida(self, jugadores: Iterable[UserId]) -> bool:
-        """Si ve una partida (o un partido): entero, o si juega en ella un amigo con evento."""
+        """
+        Si ve una partida (o un partido): entero, la suya, o si juega en ella
+        un amigo con evento.
+        """
         if self.acceso is Acceso.ENTERO:
+            return True
+        jugadores = list(jugadores)
+        if self.quien is not None and self.quien in jugadores:
             return True
         return self.acceso is Acceso.SUS_AMIGOS and any(j in self.amigos for j in jugadores)
 
@@ -83,14 +92,26 @@ class PuertaDeLoJugado:
 
     async def exigir_la_clasificacion(
         self, competition_id: CompetitionId, quien: UserId, *, es_admin: bool = False
-    ) -> None:
+    ) -> LoJugadoQueVe | None:
+        """
+        Lo que ve de la clasificación de esa competición, para filtrar los
+        partidos de la Ryder; None si no existe.
+
+        Raises:
+            NoPuedeVerloError: Si es de una privada en la que no está, sin llave
+        """
         ve = await self.de_la_competicion(competition_id, quien, es_admin=es_admin)
         if ve is not None and not ve.ve_la_clasificacion:
             raise NoPuedeVerloError
+        return ve
 
     async def exigir_la_clasificacion_de_la_ronda(
         self, round_id: RoundId, quien: UserId, *, es_admin: bool = False
     ) -> None:
+        """
+        Raises:
+            NoPuedeVerloError: Si la ronda es de una privada en la que no está, sin llave
+        """
         async with self._uow:
             ronda = await self._uow.rounds.find_by_id(round_id)
             if ronda is None:
@@ -172,6 +193,6 @@ async def con_la_llave(
     if dentro:
         return LoJugadoQueVe(Acceso.ENTERO)
     if eventos is None:
-        return LoJugadoQueVe(Acceso.NADA)
+        return LoJugadoQueVe(Acceso.NADA, quien=quien)
     amigos = await eventos.amigos_con_evento_en(quien, competition_id)
-    return LoJugadoQueVe(Acceso.SUS_AMIGOS if amigos else Acceso.NADA, amigos)
+    return LoJugadoQueVe(Acceso.SUS_AMIGOS if amigos else Acceso.NADA, amigos, quien)

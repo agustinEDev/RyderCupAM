@@ -12,6 +12,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    Acceso,
+    LoJugadoQueVe,
+)
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
 )
@@ -377,3 +381,58 @@ class TestLaClasificacionDeUnStrokePlay:
 
         with pytest.raises(TournamentTypeError):
             await use_case.execute(str(competicion.id))
+
+
+class TestConLaLlaveSoloElPartidoDeSuAmigo:
+    """
+    Tabla del 27 oct 2026: de fuera de una privada, con un evento de un amigo,
+    el marcador por equipos y solo el partido de ese amigo.
+    """
+
+    async def _dos_partidos(self, uow):
+        competition_id, player_a, _ = await _setup_scheduled_match(uow)
+        (ronda,) = list(uow._rounds._rounds)
+        otro = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=5,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+            strokes_received=[],
+        )
+        rival = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=7,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+            strokes_received=[],
+        )
+        await uow.matches.add(
+            Match.create(
+                round_id=ronda, match_number=2, team_a_players=[otro], team_b_players=[rival]
+            )
+        )
+        return competition_id, player_a, rival
+
+    @pytest.mark.asyncio
+    async def test_solo_el_partido_de_su_amigo(self, uow, user_repo):
+        competition_id, _, rival = await self._dos_partidos(uow)
+        ve = LoJugadoQueVe(Acceso.SUS_AMIGOS, frozenset({rival.user_id}), UserId.generate())
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id), ve
+        )
+
+        assert [m.match_number for m in view.matches] == [2]
+        assert view.team_a_name == "Team A"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("entero", [True, False])
+    async def test_dentro_o_sin_decir_quien_mira_todos(self, uow, user_repo, entero):
+        competition_id, _, _ = await self._dos_partidos(uow)
+        ve = LoJugadoQueVe(Acceso.ENTERO) if entero else None
+
+        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
+            str(competition_id), ve
+        )
+
+        assert sorted(m.match_number for m in view.matches) == [1, 2]

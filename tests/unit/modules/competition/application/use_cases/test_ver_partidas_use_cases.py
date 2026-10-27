@@ -520,3 +520,17 @@ async def test_d8_an_outsider_of_a_public_one_still_sees_every_group():
     escenario, _, _ = await _privada_con_dos_partidas(Visibility.PUBLIC)
 
     assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos()) == [1, 2]
+
+
+async def test_5_a_withdrawn_player_still_sees_his_own_group_only():
+    """/code-review: quien se retiró tras jugar sigue viendo su partida."""
+    escenario, _, generada = await _privada_con_dos_partidas()
+    yo = UserId(str(generada.groups[0].players[0].user_id))
+    async with escenario.uow:
+        suya = await escenario.uow.enrollments.find_by_user_and_competition(
+            yo, escenario.competicion.id
+        )
+        suya.withdraw()
+        await escenario.uow.enrollments.update(suya)
+
+    assert await _grupos_que_ve(escenario, yo, _Eventos()) == [1]

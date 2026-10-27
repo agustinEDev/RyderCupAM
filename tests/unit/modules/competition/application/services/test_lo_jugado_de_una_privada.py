@@ -23,6 +23,7 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     LoJugadoQueVe,
     NoPuedeVerloError,
     PuertaDeLoJugado,
+    con_la_llave,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
@@ -163,6 +164,21 @@ class TestLoQueVe:
         assert ve.ve_la_partida([OTRO, AMIGO])
         assert not ve.ve_la_partida([OTRO])
 
+    @pytest.mark.parametrize("acceso", [Acceso.NADA, Acceso.SUS_AMIGOS])
+    def test_su_propia_partida_siempre(self, acceso):
+        """/code-review: quien se retiró tras jugar sigue viendo su partida."""
+        ve = LoJugadoQueVe(acceso, quien=YO)
+
+        assert ve.ve_la_partida([OTRO, YO])
+        assert not ve.ve_la_partida([OTRO])
+
+    async def test_sin_puerto_de_eventos_nada_salvo_lo_suyo(self):
+        ve = await con_la_llave(False, CompetitionId(uuid4()), YO, None)
+
+        assert ve.acceso is Acceso.NADA
+        assert ve.ve_la_partida([YO])
+        assert not ve.ve_la_partida([OTRO])
+
     def test_6_nada_ni_la_clasificacion_ni_partidas(self):
         ve = LoJugadoQueVe(Acceso.NADA, frozenset({AMIGO}))
 
@@ -177,10 +193,24 @@ class TestLaPuerta:
         with pytest.raises(NoPuedeVerloError):
             await PuertaDeLoJugado(uow, _Eventos()).exigir_la_clasificacion(uow.comp.id, YO)
 
-    async def test_7_la_clasificacion_abierta_con_la_llave(self):
+    async def test_7_la_clasificacion_abierta_con_la_llave_dice_lo_que_ve(self):
         uow = _Uow()
 
-        await PuertaDeLoJugado(uow, _Eventos({AMIGO})).exigir_la_clasificacion(uow.comp.id, YO)
+        ve = await PuertaDeLoJugado(uow, _Eventos({AMIGO})).exigir_la_clasificacion(uow.comp.id, YO)
+
+        assert ve == LoJugadoQueVe(Acceso.SUS_AMIGOS, frozenset({AMIGO}), YO)
+
+    async def test_5_retirado_entra_a_su_propia_partida_y_a_su_partido(self):
+        uow = _Uow(estado=EnrollmentStatus.WITHDRAWN)
+        puerta = PuertaDeLoJugado(uow, _Eventos())
+
+        uow.con_partida(YO, OTRO)
+        await puerta.exigir_la_partida(uuid4(), YO)
+        uow.con_partido(OTRO, YO)
+        await puerta.exigir_el_partido(uuid4(), YO)
+        uow.con_partida(OTRO)
+        with pytest.raises(NoPuedeVerloError):
+            await puerta.exigir_la_partida(uuid4(), YO)
 
     async def test_la_clasificacion_de_una_ronda_va_por_su_competicion(self):
         uow = _Uow()

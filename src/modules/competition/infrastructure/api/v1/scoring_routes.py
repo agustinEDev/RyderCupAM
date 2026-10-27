@@ -44,7 +44,10 @@ from src.modules.competition.application.exceptions import (
     ScoringNotOpenYetError,
     WithdrawalNotAllowedError,
 )
-from src.modules.competition.application.services.lo_jugado_de_una_privada import PuertaDeLoJugado
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    NoPuedeVerloError,
+    PuertaDeLoJugado,
+)
 from src.modules.competition.application.use_cases.concede_match_use_case import (
     ConcedeMatchUseCase,
 )
@@ -65,7 +68,10 @@ from src.modules.competition.application.use_cases.withdraw_match_player_use_cas
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import cerrada
+from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import (
+    cerrada,
+    solo_quien_participa,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -335,13 +341,17 @@ async def get_leaderboard(
     - 403: Una privada en la que no está, sin llave (tabla del 27 oct 2026)
     - 404: Competicion no encontrada
     """
-    exigir = puerta.exigir_la_clasificacion(
-        CompetitionId(competition_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
-    )
-    if (no := await cerrada(exigir)) is not None:
-        return no
     try:
-        return await use_case.execute(str(competition_id))
+        ve = await puerta.exigir_la_clasificacion(
+            CompetitionId(competition_id),
+            UserId(str(current_user.id)),
+            es_admin=current_user.is_admin,
+        )
+    except NoPuedeVerloError:
+        return solo_quien_participa()
+    try:
+        # Con la llave, en la Ryder: el marcador y solo el partido de su amigo
+        return await use_case.execute(str(competition_id), ve)
 
     except CompetitionNotFoundError as e:
         raise HTTPException(
