@@ -1,6 +1,7 @@
 """Competition CRUD Routes - Create, Read, Update, Delete endpoints."""
 
 import logging
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -143,8 +144,12 @@ def _matches_status_filter(competition_status, status_filter):
     return competition_status == status_filter.upper()
 
 
-async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids):
+async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids, invitadas=()):
     """Las competiciones donde el usuario está inscrito, sin filtrar por estado.
+
+    Y las privadas a las que le han invitado y aún no ha contestado: la
+    invitación no crea fila de inscripción hasta que se acepta, y sin esto no
+    las veía en «Mis competiciones» (release social 2).
 
     Solo las trae. Los filtros que dependen del estado van en
     `_filtrar_inscritas`, y se aplican después de abrir las que toquen: este
@@ -153,6 +158,7 @@ async def _fetch_enrolled_competitions(uow, enrollments, created_competition_ids
     borrador la competición a la que a uno le invitaron, pasado su día (BE #331).
     """
     enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
+    enrolled_competition_ids |= set(invitadas)
     candidatas = []
 
     for comp_id in enrolled_competition_ids:
@@ -187,7 +193,7 @@ def _filtrar_inscritas(competitions, status_filter, enrollment_status_map):
 
 
 async def _get_user_competitions(
-    uow, use_case, current_user_id, status_filter, search_name, search_creator
+    uow, use_case, current_user_id, status_filter, search_name, search_creator, viewer_email=None
 ):
     """Obtiene competiciones donde el usuario es creador O está inscrito.
 
@@ -210,12 +216,19 @@ async def _get_user_competitions(
 
     created_competition_ids = [c.id for c in created_competitions]
 
-    candidatas = await _fetch_enrolled_competitions(uow, enrollments, created_competition_ids)
+    invitadas = await uow.invitations.competiciones_con_invitacion_pendiente(
+        current_user_id, viewer_email, datetime.now()
+    )
+    candidatas = await _fetch_enrolled_competitions(
+        uow, enrollments, created_competition_ids, invitadas
+    )
 
     # Las que salen de tus inscripciones tambien pasan por el filtro: una fila
     # rechazada o retirada no se borra, y sin esto el expulsado recuperaba la
     # privada por aqui (BE #318, punto gemelo del listado)
-    visibles = await use_case.visibles_para(candidatas, str(current_user_id.value))
+    visibles = await use_case.visibles_para(
+        candidatas, str(current_user_id.value), viewer_email=viewer_email
+    )
 
     # Abrir DESPUES de la visibilidad y ANTES del filtro por estado, igual que
     # hace el caso de uso: a quien no se le ensena una privada tampoco se le
@@ -386,6 +399,7 @@ async def list_competitions(
                     status_filter,
                     search_name,
                     search_creator,
+                    viewer_email=current_user.email,
                 )
             elif my_competitions is False:
                 competitions = await _get_all_competitions(

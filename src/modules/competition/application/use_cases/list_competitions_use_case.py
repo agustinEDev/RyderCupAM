@@ -4,6 +4,8 @@ Caso de Uso: Listar Competitions con filtros.
 Permite obtener lista de competiciones con filtros opcionales.
 """
 
+from datetime import datetime
+
 from src.modules.competition.application.ports.competition_timezone import (
     ICompetitionTimezone,
 )
@@ -88,6 +90,7 @@ class ListCompetitionsUseCase:
         search_creator: str | None = None,
         viewer_id: str | None = None,
         is_admin: bool = False,
+        viewer_email: str | None = None,
     ) -> list[Competition]:
         """
         Ejecuta el caso de uso de listado de competiciones.
@@ -113,7 +116,9 @@ class ListCompetitionsUseCase:
                     status=status,
                     creator_id=creator_id,
                 )
-                visibles = await self.visibles_para(encontradas, viewer_id, is_admin)
+                visibles = await self.visibles_para(
+                    encontradas, viewer_id, is_admin, viewer_email=viewer_email
+                )
                 await EnrollmentOpener.abrir_las_que_toquen(
                     visibles, self._uow, self._zona_del_campo
                 )
@@ -121,7 +126,9 @@ class ListCompetitionsUseCase:
 
             # Si no hay búsqueda, usar el método antiguo (compatibilidad)
             competitions = await self._fetch_filtered_competitions(status, creator_id)
-            visibles = await self.visibles_para(competitions, viewer_id, is_admin)
+            visibles = await self.visibles_para(
+                competitions, viewer_id, is_admin, viewer_email=viewer_email
+            )
 
             # Se abren DESPUES de filtrar la visibilidad: una privada que no se
             # le ensena a quien mira tampoco se le abre de paso (BE #318)
@@ -153,6 +160,8 @@ class ListCompetitionsUseCase:
         competitions: list[Competition],
         viewer_id: str | None,
         is_admin: bool = False,
+        *,
+        viewer_email: str | None = None,
     ) -> list[Competition]:
         """Aparta las privadas de quien no esta dentro (BE #318).
 
@@ -163,7 +172,9 @@ class ListCompetitionsUseCase:
 
         Una privada la ve su creador, quien esta dentro y quien tiene una
         invitacion o una solicitud en marcha — ese necesita mirarla antes de
-        decidir. No la ve quien fue rechazado, se retiro o cancelo: su fila
+        decidir. La invitacion vive en su tabla, sin fila de inscripcion hasta
+        que se acepta: cuenta la pendiente y sin caducar, por su usuario o por
+        su correo (release social 2). No la ve quien fue rechazado, se retiro o cancelo: su fila
         sigue en la tabla, pero ya no esta dentro.
 
         Un admin lo ve todo: puede editarla y borrarla, asi que no verla en el
@@ -184,6 +195,9 @@ class ListCompetitionsUseCase:
         # hasta 100 y el endpoint llama una vez por cada estado del filtro
         inscripciones = await self._uow.enrollments.find_by_user(quien)
         dentro_de = {e.competition_id for e in inscripciones if e.status in ESTADOS_QUE_DEJAN_VER}
+        dentro_de |= await self._uow.invitations.competiciones_con_invitacion_pendiente(
+            quien, viewer_email, datetime.now()
+        )
 
         visibles = {c.id for c in publicas}
         visibles |= {c.id for c in privadas if c.creator_id == quien or c.id in dentro_de}
