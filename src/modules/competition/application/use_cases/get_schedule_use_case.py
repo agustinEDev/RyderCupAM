@@ -307,6 +307,10 @@ def _hoja(
     if hoja is None:
         return None
     ocupadas = len(jugadores)
+    en_espera = len(esperan)
+    mi_puesto = (
+        esperan.index(ve.quien.value) + 1 if ve is not None and ve.quien.value in esperan else None
+    )
     if ve is not None:
         jugadores = [j for j in jugadores if ve.ve_a(UserId(j))]
         esperan = [j for j in esperan if ve.ve_a(UserId(j))]
@@ -318,6 +322,8 @@ def _hoja(
         tee_times=hoja.salidas,
         capacity=hoja.cupo,
         places_taken=ocupadas,
+        waiting_count=en_espera,
+        my_waiting_position=mi_puesto,
         player_ids=jugadores,
         waiting_ids=esperan,
     )

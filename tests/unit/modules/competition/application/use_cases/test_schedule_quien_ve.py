@@ -88,6 +88,34 @@ class TestQuienNoVeLaListaCompleta:
         assert franjas["MORNING"].player_ids == _ids(yo)
 
 
+class TestLaListaDeEspera:
+    """Revisor del front: con la espera filtrada, su puesto y cuántos esperan salían mal."""
+
+    async def test_cuantos_esperan_de_verdad(self, p):
+        franjas = await p.franjas(_Amigos(), viewer_id=UserId(uuid4()))
+
+        assert franjas["MORNING"].waiting_ids == []
+        assert franjas["MORNING"].waiting_count == 2
+
+    async def test_su_puesto_en_la_espera_de_verdad(self, p):
+        # El segundo en esperar, sin amigos delante: sigue siendo el 2.º
+        franjas = await p.franjas(_Amigos(), viewer_id=p.otro_esperando)
+
+        assert franjas["MORNING"].waiting_ids == _ids(p.otro_esperando)
+        assert franjas["MORNING"].my_waiting_position == 2
+
+    async def test_sin_esperar_no_tiene_puesto(self, p):
+        franjas = await p.franjas(_Amigos(), viewer_id=p.dentro[0])
+
+        assert franjas["MORNING"].my_waiting_position is None
+
+    async def test_sin_decir_quien_mira_tampoco(self, p):
+        franjas = await p.franjas()
+
+        assert franjas["MORNING"].waiting_count == 2
+        assert franjas["MORNING"].my_waiting_position is None
+
+
 class TestQuienLaVeCompleta:
     async def test_15_el_organizador_ve_a_todos(self, p):
         franjas = await p.franjas(_Amigos(), viewer_id=p.creador)
