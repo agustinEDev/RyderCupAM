@@ -7,8 +7,13 @@ from src.modules.competition.application.dto.scoring_dto import (
     LeaderboardResponseDTO,
 )
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
     LoJugadoQueVe,
+    esta_dentro,
+    exigir_la_clasificacion,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import TournamentTypeError
@@ -31,25 +36,41 @@ class GetLeaderboardUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repo: UserRepositoryInterface,
         scoring_service: ScoringService,
+        eventos: EventosDeAmigosInterface | None = None,
     ):
         self._uow = uow
         self._user_repo = user_repo
         self._scoring_service = scoring_service
+        # La llave de quien está fuera de una privada (27 oct 2026)
+        self._eventos = eventos
 
     async def execute(
-        self, competition_id_str: str, ve: LoJugadoQueVe | None = None
+        self, competition_id_str: str, *, quien: UserId | None = None, es_admin: bool = False
     ) -> LeaderboardResponseDTO:
         """
-        La clasificación. Con `ve` de quien está fuera de una privada con la
-        llave, el marcador por equipos y solo los partidos de sus amigos (27
-        oct 2026); sin `ve` o dentro, todos.
+        La clasificación. Quien está fuera de una privada, con la llave, ve el
+        marcador por equipos y solo los partidos de sus amigos (27 oct 2026);
+        dentro, o sin decir quién mira (usos internos), todos.
+
+        Raises:
+            NoPuedeVerloError: Si es una privada en la que no está, sin llave
         """
         async with self._uow:
             comp_id = CompetitionId(competition_id_str)
             competition = await self._uow.competitions.find_by_id(comp_id)
             if not competition:
                 raise CompetitionNotFoundError(f"No existe competicion con ID {competition_id_str}")
-
+            # Con lo ya leído: solo su inscripción, y solo si hace falta (PR 2)
+            dentro = quien is None or await esta_dentro(
+                self._uow, competition, quien, es_admin=es_admin
+            )
+        # De fuera, la llave antes de leer rondas y partidos
+        ve = (
+            None
+            if dentro or quien is None
+            else await exigir_la_clasificacion(competition.id, quien, self._eventos)
+        )
+        async with self._uow:
             # Un Stableford o un Medal no tiene todavía su clasificación: se dice
             # antes de leer rondas y partidos, y con su motivo (Agustín, 4 oct 2026)
             tipo = competition.tournament_type
@@ -161,7 +182,7 @@ class GetLeaderboardUseCase:
             team_a_name = ryder_cup.team_1_name
             team_b_name = ryder_cup.team_2_name
 
-            return LeaderboardResponseDTO(
+            clasificacion = LeaderboardResponseDTO(
                 competition_id=str(competition.id),
                 competition_name=competition.name.value
                 if hasattr(competition.name, "value")
@@ -170,16 +191,27 @@ class GetLeaderboardUseCase:
                 team_b_name=team_b_name,
                 team_a_points=total_a_points,
                 team_b_points=total_b_points,
-                # El marcador se cuenta con todos; los partidos, los que ve
-                matches=[
-                    m
-                    for m in matches_dto
-                    if ve is None
-                    or ve.ve_la_partida(
-                        UserId(p.user_id) for p in (*m.team_a_players, *m.team_b_players)
-                    )
-                ],
+                matches=matches_dto,
             )
+        return self._la_que_ve(clasificacion, ve)
+
+    @staticmethod
+    def _la_que_ve(
+        clasificacion: LeaderboardResponseDTO, ve: LoJugadoQueVe | None
+    ) -> LeaderboardResponseDTO:
+        """
+        Dentro, o sin decir quién mira (`ve` None), entera. De fuera con la
+        llave: el marcador, que se cuenta con todos, y solo los partidos de
+        sus amigos.
+        """
+        if ve is None:
+            return clasificacion
+        clasificacion.matches = [
+            m
+            for m in clasificacion.matches
+            if ve.ve_la_partida(UserId(p.user_id) for p in (*m.team_a_players, *m.team_b_players))
+        ]
+        return clasificacion
 
     async def _resolve_final_result(self, match, round_entity) -> dict:
         """Determines the final result for a finished match."""

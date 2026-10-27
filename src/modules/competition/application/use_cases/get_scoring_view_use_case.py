@@ -17,6 +17,13 @@ from src.modules.competition.application.exceptions import (
     MatchNotFoundError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    esta_dentro,
+    exigir_la_partida,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -55,13 +62,26 @@ class GetScoringViewUseCase:
         user_repo: UserRepositoryInterface,
         scoring_service: ScoringService,
         golf_course_repo: IGolfCourseRepository | None = None,
+        eventos: EventosDeAmigosInterface | None = None,
     ):
         self._uow = uow
         self._user_repo = user_repo
         self._scoring_service = scoring_service
         self._gc_repo = golf_course_repo
+        # La llave de quien está fuera de una privada (27 oct 2026)
+        self._eventos = eventos
 
-    async def execute(self, match_id_str: str) -> ScoringViewResponseDTO:
+    async def execute(
+        self, match_id_str: str, *, quien: UserId | None = None, es_admin: bool = False
+    ) -> ScoringViewResponseDTO:
+        """
+        La vista para anotar el partido. Diciendo quién mira, con la puerta de
+        una privada (27 oct 2026); sin decirlo, como la leen los usos internos.
+
+        Raises:
+            NoPuedeVerloError: Si es de una privada en la que no está, no juega
+                en el partido ni tiene la llave de un amigo que juegue
+        """
         async with self._uow:
             match_id = MatchId(match_id_str)
             match = await self._uow.matches.find_by_id(match_id)
@@ -75,7 +95,19 @@ class GetScoringViewUseCase:
             competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
             if not competition:
                 raise CompetitionNotFoundError("La competicion asociada no existe")
-
+            # Con lo ya leído: quien juega en el partido ya está (cada anotación
+            # devuelve esta vista); si no, su inscripción, si hace falta (PR 2)
+            dentro = (
+                quien is None
+                or quien in match.get_all_player_ids()
+                or await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
+            )
+        # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
+        if not dentro and quien is not None:
+            await exigir_la_partida(
+                competition.id, quien, match.get_all_player_ids(), self._eventos
+            )
+        async with self._uow:
             hole_scores = await self._uow.hole_scores.find_by_match(match_id)
             user_names = await self._resolve_user_names(match.get_all_player_ids(), competition.id)
 
@@ -131,7 +163,7 @@ class GetScoringViewUseCase:
             team_a_name = ryder_cup.team_1_name
             team_b_name = ryder_cup.team_2_name
 
-            return ScoringViewResponseDTO(
+            vista = ScoringViewResponseDTO(
                 match_id=str(match.id),
                 match_number=match.match_number,
                 match_format=round_entity.match_format.value if round_entity.match_format else "",
@@ -162,6 +194,7 @@ class GetScoringViewUseCase:
                     golf_course.timezone if golf_course else None,
                 ),
             )
+        return vista
 
     def _build_marker_assignments(self, match, user_names):
         """Construye DTOs de marker assignments."""

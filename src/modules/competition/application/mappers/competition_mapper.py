@@ -28,6 +28,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.domain.entities.country import Country
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +111,11 @@ class CompetitionDTOMapper:
             )
 
         # Formatear location
-        location_str = await CompetitionDTOMapper._format_location(competition, uow)
+        paises = await CompetitionDTOMapper._paises(competition, uow)
+        location_str = CompetitionDTOMapper._format_location(paises)
 
         # Obtener lista de países con detalles
-        countries_list = await CompetitionDTOMapper._get_countries_list(competition, uow)
+        countries_list = CompetitionDTOMapper._get_countries_list(paises)
 
         # Obtener información del creador (si user_uow es provisto)
         creator_dto = None
@@ -277,78 +279,33 @@ class CompetitionDTOMapper:
         )
 
     @staticmethod
-    async def _format_location(
-        competition: Competition,
-        uow: CompetitionUnitOfWorkInterface,
-    ) -> str:
-        """Formatea la ubicación como string legible (ej: "Spain, France")."""
+    async def _paises(
+        competition: Competition, uow: CompetitionUnitOfWorkInterface
+    ) -> list[Country]:
+        """
+        Los países de la competición, el principal primero: una lectura de
+        cada uno para la ubicación y para la lista (PR 2 de rendimiento).
+        """
         location = competition.location
-        country_names = []
-
-        # País principal
-        main_country = await uow.countries.find_by_code(location.main_country)
-        if main_country:
-            country_names.append(main_country.name_en)
-
-        # País adyacente 1
-        if location.adjacent_country_1:
-            country = await uow.countries.find_by_code(location.adjacent_country_1)
-            if country:
-                country_names.append(country.name_en)
-
-        # País adyacente 2
-        if location.adjacent_country_2:
-            country = await uow.countries.find_by_code(location.adjacent_country_2)
-            if country:
-                country_names.append(country.name_en)
-
-        return ", ".join(country_names) if country_names else "Unknown"
+        codigos = [location.main_country, location.adjacent_country_1, location.adjacent_country_2]
+        paises = []
+        for codigo in codigos:
+            if codigo and (pais := await uow.countries.find_by_code(codigo)):
+                paises.append(pais)
+        return paises
 
     @staticmethod
-    async def _get_countries_list(
-        competition: Competition,
-        uow: CompetitionUnitOfWorkInterface,
-    ) -> list[CountryResponseDTO]:
-        """Obtiene la lista completa de países participantes con códigos y nombres."""
-        location = competition.location
-        countries = []
+    def _format_location(paises: list[Country]) -> str:
+        """Formatea la ubicación como string legible (ej: "Spain, France")."""
+        return ", ".join(p.name_en for p in paises) if paises else "Unknown"
 
-        # País principal
-        main_country = await uow.countries.find_by_code(location.main_country)
-        if main_country:
-            countries.append(
-                CountryResponseDTO(
-                    code=main_country.code.value,
-                    name_en=main_country.name_en,
-                    name_es=main_country.name_es,
-                )
-            )
-
-        # País adyacente 1
-        if location.adjacent_country_1:
-            country = await uow.countries.find_by_code(location.adjacent_country_1)
-            if country:
-                countries.append(
-                    CountryResponseDTO(
-                        code=country.code.value,
-                        name_en=country.name_en,
-                        name_es=country.name_es,
-                    )
-                )
-
-        # País adyacente 2
-        if location.adjacent_country_2:
-            country = await uow.countries.find_by_code(location.adjacent_country_2)
-            if country:
-                countries.append(
-                    CountryResponseDTO(
-                        code=country.code.value,
-                        name_en=country.name_en,
-                        name_es=country.name_es,
-                    )
-                )
-
-        return countries
+    @staticmethod
+    def _get_countries_list(paises: list[Country]) -> list[CountryResponseDTO]:
+        """La lista de países participantes con códigos y nombres."""
+        return [
+            CountryResponseDTO(code=p.code.value, name_en=p.name_en, name_es=p.name_es)
+            for p in paises
+        ]
 
     @staticmethod
     async def _get_creator_dto(

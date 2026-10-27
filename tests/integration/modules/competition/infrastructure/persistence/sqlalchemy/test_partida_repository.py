@@ -10,7 +10,7 @@ Las partidas de stroke play se guardan y se leen igual en Postgres (#251, PR 4).
 | Intercambiar sus números                                     | Se guarda                        |
 | Borrar                                                       | Desaparece                       |
 | De la franja / de la competición / del jugador               | Lo suyo, por número              |
-| existe_con_jugador                                           | Sí / no                          |
+| existe_con_jugador / existe_en_la_competicion                | Sí / no                          |
 | El mismo jugador en dos partidas de la franja                | La base de datos lo rechaza      |
 | Borrar a un usuario que juega una partida                    | La base de datos lo rechaza      |
 """
@@ -256,6 +256,9 @@ async def test_queries(db_session, ronda, otra_franja, jugadores):  # noqa: F811
     assert await uow.partidas.del_jugador(ronda.competition_id, fuera) == []
     assert await uow.partidas.existe_con_jugador(a)
     assert not await uow.partidas.existe_con_jugador(fuera)
+    # Si la competición ya tiene alguna, sin cargarlas (PR 2 de rendimiento)
+    assert await uow.partidas.existe_en_la_competicion(ronda.competition_id)
+    assert not await uow.partidas.existe_en_la_competicion(CompetitionId(uuid4()))
 
 
 async def test_the_same_player_twice_in_a_window_is_refused(db_session, ronda, jugadores):  # noqa: F811

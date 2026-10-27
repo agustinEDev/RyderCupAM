@@ -58,6 +58,10 @@ class PartidaRepositoryInterface(ABC):
         """Las partidas de la competición en las que juega, por franja y número."""
 
     @abstractmethod
+    async def existe_en_la_competicion(self, competition_id: CompetitionId) -> bool:
+        """Si la competición tiene alguna partida, sin cargarlas («publicada»)."""
+
+    @abstractmethod
     async def existe_con_jugador(self, user_id: UserId) -> bool:
         """Si juega en alguna partida, de cualquier competición (antes de borrar al usuario)."""
 

@@ -12,6 +12,7 @@ draft.
 play) o equipos formados (Ryder), que es cuando sale el aviso de la salida.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -19,6 +20,7 @@ from typing import Literal
 
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -98,7 +100,8 @@ def alcance(
 
 async def _publicada(uow: CompetitionUnitOfWorkInterface, competition: Competition) -> bool:
     if competition.stroke_play is not None:
-        return bool(await uow.partidas.de_la_competicion(competition.id))
+        # Sin cargarlas: basta con saber si hay alguna (PR 2 de rendimiento)
+        return await uow.partidas.existe_en_la_competicion(competition.id)
     return await uow.team_assignments.find_by_competition(competition.id) is not None
 
 
@@ -110,18 +113,21 @@ async def alcance_de(
     es_admin: bool = False,
     email: str | None = None,
     ahora: datetime | None = None,
+    aprobados: Sequence[Enrollment] | None = None,
 ) -> Alcance:
     """
     La regla con lo que hay que leer para aplicarla. Con el `uow` ya abierto.
+    Con los `aprobados` que ya haya leído quien llama, no se vuelven a pedir.
 
     El reloj de la invitación es el suyo (`Invitation.is_expired`, hora local
     sin zona): con otro, se vería caducada aquí y viva al aceptarla.
     """
     if es_admin or competition.is_creator(quien):
         return Alcance.TODO
-    aprobados = await uow.enrollments.find_by_competition_and_status(
-        competition.id, EnrollmentStatus.APPROVED
-    )
+    if aprobados is None:
+        aprobados = await uow.enrollments.find_by_competition_and_status(
+            competition.id, EnrollmentStatus.APPROVED
+        )
     invitado = competition.id in await uow.invitations.competiciones_con_invitacion_pendiente(
         quien, email, ahora or datetime.now()
     )

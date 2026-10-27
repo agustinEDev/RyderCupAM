@@ -6,10 +6,18 @@ from src.modules.competition.application.dto.round_match_dto import (
     MatchPlayerResponseDTO,
 )
 from src.modules.competition.application.exceptions import MatchNotFoundError
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    esta_dentro,
+    exigir_la_partida,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.match_id import MatchId
+from src.modules.user.domain.value_objects.user_id import UserId
 
 
 class GetMatchDetailUseCase:
@@ -22,10 +30,31 @@ class GetMatchDetailUseCase:
     Accesible por cualquier usuario (lectura).
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        eventos: EventosDeAmigosInterface | None = None,
+    ):
         self._uow = uow
+        # La llave de quien está fuera de una privada (27 oct 2026)
+        self._eventos = eventos
 
-    async def execute(self, request: GetMatchDetailRequestDTO) -> GetMatchDetailResponseDTO:
+    async def execute(
+        self,
+        request: GetMatchDetailRequestDTO,
+        *,
+        quien: UserId | None = None,
+        es_admin: bool = False,
+    ) -> GetMatchDetailResponseDTO:
+        """
+        El partido. Diciendo quién mira, con la puerta de una privada.
+
+        Raises:
+            MatchNotFoundError: Si no existe
+            NoPuedeVerloError: Si es de una privada en la que no está, no juega
+                en él ni tiene la llave de un amigo que juegue (27 oct 2026)
+        """
+        fuera_de = None
         async with self._uow:
             # 1. Buscar el partido
             match_id = MatchId(request.match_id)
@@ -36,6 +65,18 @@ class GetMatchDetailUseCase:
 
             # 2. Buscar la ronda para info adicional
             round_entity = await self._uow.rounds.find_by_id(match.round_id)
+            jugadores = [p.user_id for p in (*match.team_a_players, *match.team_b_players)]
+            # Diciendo quién mira y sin jugar en él: ¿está dentro de su competición?
+            if quien is not None and quien not in jugadores and round_entity is not None:
+                competition = await self._uow.competitions.find_by_id(round_entity.competition_id)
+                if competition is not None and not await esta_dentro(
+                    self._uow, competition, quien, es_admin=es_admin
+                ):
+                    fuera_de = competition.id
+
+        # De fuera, la llave
+        if fuera_de is not None and quien is not None:
+            await exigir_la_partida(fuera_de, quien, jugadores, self._eventos)
 
         # 3. Construir respuesta
         return GetMatchDetailResponseDTO(

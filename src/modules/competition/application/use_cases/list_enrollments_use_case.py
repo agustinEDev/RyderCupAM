@@ -101,8 +101,19 @@ class ListEnrollmentsUseCase:
                 )
             else:
                 enrollments = await self._uow.enrollments.find_by_competition(comp_id)
+            # Sin filtrar, o filtrando por aprobados, ya están leídos (PR 2)
+            aprobados = (
+                [e for e in enrollments if e.status is EnrollmentStatus.APPROVED]
+                if status in (None, EnrollmentStatus.APPROVED)
+                else None
+            )
             alcance = await alcance_de(
-                self._uow, competition, viewer_id, es_admin=viewer_is_admin, email=viewer_email
+                self._uow,
+                competition,
+                viewer_id,
+                es_admin=viewer_is_admin,
+                email=viewer_email,
+                aprobados=aprobados,
             )
 
         ve_todo = alcance is Alcance.TODO

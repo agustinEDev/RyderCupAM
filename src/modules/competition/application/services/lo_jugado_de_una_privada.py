@@ -15,14 +15,12 @@ from enum import Enum
 from src.modules.competition.application.ports.eventos_de_amigos_interface import (
     EventosDeAmigosInterface,
 )
+from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
-from src.modules.competition.domain.value_objects.match_id import MatchId
-from src.modules.competition.domain.value_objects.partida_id import PartidaId
-from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -69,115 +67,57 @@ class LoJugadoQueVe:
         return self.acceso is Acceso.SUS_AMIGOS and any(j in self.amigos for j in jugadores)
 
 
-class PuertaDeLoJugado:
+async def esta_dentro(
+    uow: CompetitionUnitOfWorkInterface,
+    competition: Competition,
+    quien: UserId,
+    *,
+    es_admin: bool = False,
+) -> bool:
     """
-    Quien pregunta por lo jugado de una competición. Lee con su `uow` y,
-    cerrado este, pregunta por la llave al módulo social: las unidades de
-    trabajo comparten sesión y no se abren una dentro de otra.
-
-    Lo que no existe no lo corta: su caso de uso da después su 404.
+    Si ve lo jugado entero: es pública, o la organiza, o es admin, o tiene su
+    inscripción aprobada. Con el `uow` abierto y la competición ya leída: solo
+    pregunta por su inscripción, y solo si hace falta.
     """
+    if competition.visibility is Visibility.PUBLIC or es_admin or competition.is_creator(quien):
+        return True
+    suya = await uow.enrollments.find_by_user_and_competition(quien, competition.id)
+    return suya is not None and suya.status == EnrollmentStatus.APPROVED
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface, eventos: EventosDeAmigosInterface):
-        self._uow = uow
-        self._eventos = eventos
 
-    async def de_la_competicion(
-        self, competition_id: CompetitionId, quien: UserId, *, es_admin: bool = False
-    ) -> LoJugadoQueVe | None:
-        """Lo que ve de lo jugado de esa competición; None si no existe."""
-        async with self._uow:
-            dentro = await self._dentro(competition_id, quien, es_admin)
-        return await self._con_la_llave(dentro, competition_id, quien)
+async def exigir_la_partida(
+    competition_id: CompetitionId,
+    quien: UserId,
+    jugadores: Iterable[UserId],
+    eventos: EventosDeAmigosInterface | None,
+) -> None:
+    """
+    Fuera del `uow`, de quien está fuera: que vea esa partida (o ese partido).
 
-    async def exigir_la_clasificacion(
-        self, competition_id: CompetitionId, quien: UserId, *, es_admin: bool = False
-    ) -> LoJugadoQueVe | None:
-        """
-        Lo que ve de la clasificación de esa competición, para filtrar los
-        partidos de la Ryder; None si no existe.
+    Raises:
+        NoPuedeVerloError: Si no está dentro, no juega en ella ni tiene la llave
+    """
+    ve = await con_la_llave(False, competition_id, quien, eventos)
+    if not ve.ve_la_partida(jugadores):
+        raise NoPuedeVerloError
 
-        Raises:
-            NoPuedeVerloError: Si es de una privada en la que no está, sin llave
-        """
-        ve = await self.de_la_competicion(competition_id, quien, es_admin=es_admin)
-        if ve is not None and not ve.ve_la_clasificacion:
-            raise NoPuedeVerloError
-        return ve
 
-    async def exigir_la_clasificacion_de_la_ronda(
-        self, round_id: RoundId, quien: UserId, *, es_admin: bool = False
-    ) -> None:
-        """
-        Raises:
-            NoPuedeVerloError: Si la ronda es de una privada en la que no está, sin llave
-        """
-        async with self._uow:
-            ronda = await self._uow.rounds.find_by_id(round_id)
-            if ronda is None:
-                return
-            competition_id = ronda.competition_id
-            dentro = await self._dentro(competition_id, quien, es_admin)
-        ve = await self._con_la_llave(dentro, competition_id, quien)
-        if ve is not None and not ve.ve_la_clasificacion:
-            raise NoPuedeVerloError
+async def exigir_la_clasificacion(
+    competition_id: CompetitionId,
+    quien: UserId,
+    eventos: EventosDeAmigosInterface | None,
+) -> LoJugadoQueVe:
+    """
+    Fuera del `uow`, de quien está fuera: lo que ve de la clasificación, para
+    filtrar los partidos.
 
-    async def exigir_el_partido(
-        self, match_id: MatchId, quien: UserId, *, es_admin: bool = False
-    ) -> None:
-        """Un partido de la Ryder: el suyo, o el de un amigo con evento."""
-        async with self._uow:
-            partido = await self._uow.matches.find_by_id(match_id)
-            ronda = partido and await self._uow.rounds.find_by_id(partido.round_id)
-            if ronda is None:
-                return
-            competition_id = ronda.competition_id
-            jugadores = [p.user_id for p in (*partido.team_a_players, *partido.team_b_players)]
-            dentro = await self._dentro(competition_id, quien, es_admin)
-        await self._exigir_la_partida(dentro, competition_id, quien, jugadores)
-
-    async def exigir_la_partida(
-        self, partida_id: PartidaId, quien: UserId, *, es_admin: bool = False
-    ) -> None:
-        """Una partida de stroke play: la suya, o la de un amigo con evento."""
-        async with self._uow:
-            partida = await self._uow.partidas.find_by_id(partida_id)
-            if partida is None:
-                return
-            competition_id = partida.competition_id
-            jugadores = list(partida.user_ids)
-            dentro = await self._dentro(competition_id, quien, es_admin)
-        await self._exigir_la_partida(dentro, competition_id, quien, jugadores)
-
-    async def _exigir_la_partida(
-        self,
-        dentro: bool | None,
-        competition_id: CompetitionId,
-        quien: UserId,
-        jugadores: list[UserId],
-    ) -> None:
-        ve = await self._con_la_llave(dentro, competition_id, quien)
-        if ve is not None and not ve.ve_la_partida(jugadores):
-            raise NoPuedeVerloError
-
-    async def _dentro(
-        self, competition_id: CompetitionId, quien: UserId, es_admin: bool
-    ) -> bool | None:
-        """Si está dentro (o es pública); None si la competición no existe. Con el `uow` abierto."""
-        competition = await self._uow.competitions.find_by_id(competition_id)
-        if competition is None:
-            return None
-        if competition.visibility is Visibility.PUBLIC or es_admin or competition.is_creator(quien):
-            return True
-        suya = await self._uow.enrollments.find_by_user_and_competition(quien, competition_id)
-        return suya is not None and suya.status == EnrollmentStatus.APPROVED
-
-    async def _con_la_llave(
-        self, dentro: bool | None, competition_id: CompetitionId, quien: UserId
-    ) -> LoJugadoQueVe | None:
-        if dentro is None:
-            return None
-        return await con_la_llave(dentro, competition_id, quien, self._eventos)
+    Raises:
+        NoPuedeVerloError: Si no está dentro ni tiene la llave
+    """
+    ve = await con_la_llave(False, competition_id, quien, eventos)
+    if not ve.ve_la_clasificacion:
+        raise NoPuedeVerloError
+    return ve
 
 
 async def con_la_llave(

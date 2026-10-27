@@ -84,6 +84,7 @@ from src.modules.competition.domain.services.reparto_de_partidas import (
     RepartoDePartidas,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.partida_id import PartidaId
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -497,12 +498,25 @@ class VerPartidasUseCase:
             if competicion is None:
                 raise CompetitionNotFoundError(f"No existe la competición {franja.competition_id}")
             partidas = await self._uow.partidas.de_la_franja(franja.id)
+            # Una lectura de los aprobados para la vista y para la regla (PR 2)
+            aprobados = await self._uow.enrollments.find_by_competition_and_status(
+                competicion.id, EnrollmentStatus.APPROVED
+            )
             vista = await vista_de_la_franja(
-                self._uow, competicion, franja, partidas, self._zonas, self._usuarios, self._reloj()
+                self._uow,
+                competicion,
+                franja,
+                partidas,
+                self._zonas,
+                self._usuarios,
+                self._reloj(),
+                plazas=await con_plaza_y_aprobados(self._uow, franja, aprobados),
             )
             if is_admin or competicion.is_creator(quien):
                 return vista
-            alcance = await alcance_de(self._uow, competicion, quien, email=email)
+            alcance = await alcance_de(
+                self._uow, competicion, quien, email=email, aprobados=aprobados
+            )
         ve = await lo_que_ve(alcance, quien, self._amigos)
         # En una privada, sus partidas solo las ve quien está dentro; de fuera,
         # con la llave, la de su amigo (27 oct 2026)

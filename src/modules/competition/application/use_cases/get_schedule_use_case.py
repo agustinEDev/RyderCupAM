@@ -156,19 +156,22 @@ class GetScheduleUseCase:
             # 4. Obtener asignación de equipos
             team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
             # Quién sigue dentro: un retirado no «descansa», no está (#710)
-            inscritos = (
-                {
-                    e.user_id
-                    for e in await self._uow.enrollments.find_by_competition_and_status(
-                        competition_id, EnrollmentStatus.APPROVED
-                    )
-                }
+            aprobados = (
+                await self._uow.enrollments.find_by_competition_and_status(
+                    competition_id, EnrollmentStatus.APPROVED
+                )
                 if team_assignment
-                else set()
+                else None
             )
+            inscritos = {e.user_id for e in aprobados} if aprobados is not None else set()
             if viewer_id is not None:
                 alcance = await alcance_de(
-                    self._uow, competition, viewer_id, es_admin=viewer_is_admin, email=viewer_email
+                    self._uow,
+                    competition,
+                    viewer_id,
+                    es_admin=viewer_is_admin,
+                    email=viewer_email,
+                    aprobados=aprobados,
                 )
 
         ve = await lo_que_ve(alcance, viewer_id, self._amigos) if alcance and viewer_id else None

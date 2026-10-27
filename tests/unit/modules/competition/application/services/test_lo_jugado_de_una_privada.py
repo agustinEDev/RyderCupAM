@@ -22,8 +22,10 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     Acceso,
     LoJugadoQueVe,
     NoPuedeVerloError,
-    PuertaDeLoJugado,
     con_la_llave,
+    esta_dentro,
+    exigir_la_clasificacion,
+    exigir_la_partida,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
@@ -88,8 +90,9 @@ class _Uow:
 
 
 async def _ve(uow, quien=YO, eventos=None, es_admin=False) -> LoJugadoQueVe:
-    puerta = PuertaDeLoJugado(uow, eventos or _Eventos())
-    return await puerta.de_la_competicion(uow.comp.id, quien, es_admin=es_admin)
+    async with uow:
+        dentro = await esta_dentro(uow, uow.comp, quien, es_admin=es_admin)
+    return await con_la_llave(dentro, uow.comp.id, quien, eventos or _Eventos())
 
 
 class TestQuienEstaDentro:
@@ -186,83 +189,22 @@ class TestLoQueVe:
         assert not ve.ve_la_partida([AMIGO])
 
 
-class TestLaPuerta:
+class TestLasExigencias:
     async def test_6_la_clasificacion_cerrada_para_quien_esta_fuera(self):
-        uow = _Uow()
-
         with pytest.raises(NoPuedeVerloError):
-            await PuertaDeLoJugado(uow, _Eventos()).exigir_la_clasificacion(uow.comp.id, YO)
+            await exigir_la_clasificacion(CompetitionId(uuid4()), YO, _Eventos())
 
     async def test_7_la_clasificacion_abierta_con_la_llave_dice_lo_que_ve(self):
-        uow = _Uow()
-
-        ve = await PuertaDeLoJugado(uow, _Eventos({AMIGO})).exigir_la_clasificacion(uow.comp.id, YO)
+        ve = await exigir_la_clasificacion(CompetitionId(uuid4()), YO, _Eventos({AMIGO}))
 
         assert ve == LoJugadoQueVe(Acceso.SUS_AMIGOS, frozenset({AMIGO}), YO)
 
-    async def test_5_retirado_entra_a_su_propia_partida_y_a_su_partido(self):
-        uow = _Uow(estado=EnrollmentStatus.WITHDRAWN)
-        puerta = PuertaDeLoJugado(uow, _Eventos())
-
-        uow.con_partida(YO, OTRO)
-        await puerta.exigir_la_partida(uuid4(), YO)
-        uow.con_partido(OTRO, YO)
-        await puerta.exigir_el_partido(uuid4(), YO)
-        uow.con_partida(OTRO)
-        with pytest.raises(NoPuedeVerloError):
-            await puerta.exigir_la_partida(uuid4(), YO)
-
-    async def test_la_clasificacion_de_una_ronda_va_por_su_competicion(self):
-        uow = _Uow()
-
-        with pytest.raises(NoPuedeVerloError):
-            await PuertaDeLoJugado(uow, _Eventos()).exigir_la_clasificacion_de_la_ronda(
-                uow.ronda.id, YO
-            )
-        await PuertaDeLoJugado(uow, _Eventos({AMIGO})).exigir_la_clasificacion_de_la_ronda(
-            uow.ronda.id, YO
-        )
-
-    async def test_7_el_partido_de_su_amigo_si_y_otro_no(self):
-        uow = _Uow()
-        puerta = PuertaDeLoJugado(uow, _Eventos({AMIGO}))
-
-        uow.con_partido(OTRO, AMIGO)
-        await puerta.exigir_el_partido(uuid4(), YO)
-        uow.con_partido(OTRO, UserId(uuid4()))
-        with pytest.raises(NoPuedeVerloError):
-            await puerta.exigir_el_partido(uuid4(), YO)
-
     async def test_7_la_partida_de_su_amigo_si_y_otra_no(self):
-        uow = _Uow()
-        puerta = PuertaDeLoJugado(uow, _Eventos({AMIGO}))
+        cid = CompetitionId(uuid4())
 
-        uow.con_partida(AMIGO, OTRO)
-        await puerta.exigir_la_partida(uuid4(), YO)
-        uow.con_partida(OTRO)
+        await exigir_la_partida(cid, YO, [OTRO, AMIGO], _Eventos({AMIGO}))
         with pytest.raises(NoPuedeVerloError):
-            await puerta.exigir_la_partida(uuid4(), YO)
+            await exigir_la_partida(cid, YO, [OTRO], _Eventos({AMIGO}))
 
-    async def test_1_el_organizador_entra_a_cualquier_partida(self):
-        uow = _Uow()
-        uow.con_partida(OTRO)
-
-        await PuertaDeLoJugado(uow, _Eventos()).exigir_la_partida(uuid4(), CREADOR)
-
-    async def test_un_admin_entra_a_cualquier_partido(self):
-        uow = _Uow()
-        uow.con_partido(OTRO)
-
-        await PuertaDeLoJugado(uow, _Eventos()).exigir_el_partido(uuid4(), YO, es_admin=True)
-
-    async def test_lo_que_no_existe_lo_dice_luego_su_caso_de_uso(self):
-        """Sin partido, partida, ronda o competición no se corta: el caso de uso da su 404."""
-        uow = _Uow()
-        puerta = PuertaDeLoJugado(uow, _Eventos())
-
-        await puerta.exigir_el_partido(uuid4(), YO)
-        await puerta.exigir_la_partida(uuid4(), YO)
-        uow.rounds.find_by_id.return_value = None
-        await puerta.exigir_la_clasificacion_de_la_ronda(uuid4(), YO)
-        uow.competitions.find_by_id.return_value = None
-        await puerta.exigir_la_clasificacion(CompetitionId(uuid4()), YO)
+    async def test_5_su_propia_partida_aunque_este_fuera(self):
+        await exigir_la_partida(CompetitionId(uuid4()), YO, [YO, OTRO], _Eventos())

@@ -188,6 +188,7 @@ def _uow(*, equipos=None, partidas=()):
     uow = InMemoryUnitOfWork()
     uow.team_assignments.find_by_competition = AsyncMock(return_value=equipos)
     uow.partidas.de_la_competicion = AsyncMock(return_value=list(partidas))
+    uow.partidas.existe_en_la_competicion = AsyncMock(return_value=bool(partidas))
     return uow
 
 
@@ -233,3 +234,36 @@ class TestCuandoEstaPublicada:
         async with uow:
             assert await alcance_de(uow, competicion, CREADOR) is Alcance.TODO
         uow.team_assignments.find_by_competition.assert_not_called()
+
+
+class TestSoloLasConsultasNecesarias:
+    """PR 2 de rendimiento (27 oct 2026): «publicada» con un EXISTS, y los aprobados una vez."""
+
+    async def test_8_publicada_en_stroke_play_sin_cargar_las_partidas(self):
+        competicion = _con_id(stroke_play=object())
+        uow = _uow(partidas=[object()])
+        uow.partidas.existe_en_la_competicion = AsyncMock(return_value=True)
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.APROBADOS
+        uow.partidas.de_la_competicion.assert_not_called()
+
+    async def test_7_sin_ninguna_partida_aun_no(self):
+        competicion = _con_id(stroke_play=object())
+        uow = _uow()
+        uow.partidas.existe_en_la_competicion = AsyncMock(return_value=False)
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.AMIGOS
+
+    async def test_con_los_aprobados_ya_leidos_no_los_vuelve_a_pedir(self):
+        competicion = _con_id(visibilidad=PRIVADA)
+        uow = _uow()
+        uow.enrollments.find_by_competition_and_status = AsyncMock(return_value=[])
+        aprobado = SimpleNamespace(user_id=YO)
+
+        async with uow:
+            visto = await alcance_de(uow, competicion, YO, aprobados=[aprobado])
+
+        assert visto is Alcance.APROBADOS
+        uow.enrollments.find_by_competition_and_status.assert_not_called()

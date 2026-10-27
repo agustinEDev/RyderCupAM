@@ -12,10 +12,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.modules.competition.application.services.lo_jugado_de_una_privada import (
-    Acceso,
-    LoJugadoQueVe,
-)
 from src.modules.competition.application.use_cases.get_leaderboard_use_case import (
     GetLeaderboardUseCase,
 )
@@ -413,26 +409,4 @@ class TestConLaLlaveSoloElPartidoDeSuAmigo:
         )
         return competition_id, player_a, rival
 
-    @pytest.mark.asyncio
-    async def test_solo_el_partido_de_su_amigo(self, uow, user_repo):
-        competition_id, _, rival = await self._dos_partidos(uow)
-        ve = LoJugadoQueVe(Acceso.SUS_AMIGOS, frozenset({rival.user_id}), UserId.generate())
-
-        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
-            str(competition_id), ve
-        )
-
-        assert [m.match_number for m in view.matches] == [2]
-        assert view.team_a_name == "Team A"
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("entero", [True, False])
-    async def test_dentro_o_sin_decir_quien_mira_todos(self, uow, user_repo, entero):
-        competition_id, _, _ = await self._dos_partidos(uow)
-        ve = LoJugadoQueVe(Acceso.ENTERO) if entero else None
-
-        view = await GetLeaderboardUseCase(uow, user_repo, ScoringService()).execute(
-            str(competition_id), ve
-        )
-
-        assert sorted(m.match_number for m in view.matches) == [1, 2]
+    # Quién ve qué, con la puerta dentro del caso de uso: test_lo_jugado_de_la_ryder.py

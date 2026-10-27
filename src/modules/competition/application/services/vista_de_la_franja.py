@@ -26,6 +26,7 @@ from src.modules.competition.application.services.salidas_de_la_franja import (
     numeros_libres,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.partida import Partida, PartidaEmpezadaError
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -72,18 +73,22 @@ async def primera_salida_en_el_campo(franja: Round, zonas: ICompetitionTimezone)
     return (await primera_salida(franja, zonas)).astimezone(zona)
 
 
-async def con_plaza_y_aprobados(uow: CompetitionUnitOfWorkInterface, franja: Round) -> list:
+async def con_plaza_y_aprobados(
+    uow: CompetitionUnitOfWorkInterface,
+    franja: Round,
+    aprobados: Sequence[Enrollment] | None = None,
+) -> list:
     """Las plazas de la franja de quien sigue aprobado, por orden de llegada.
 
-    Un retirado con la competición iniciada conserva su plaza: no juega.
+    Un retirado con la competición iniciada conserva su plaza: no juega. Con
+    los `aprobados` que ya haya leído quien llama, no se vuelven a pedir.
     """
-    aprobados = {
-        e.user_id
-        for e in await uow.enrollments.find_by_competition_and_status(
+    if aprobados is None:
+        aprobados = await uow.enrollments.find_by_competition_and_status(
             franja.competition_id, EnrollmentStatus.APPROVED
         )
-    }
-    return [p for p in await uow.plazas.de_la_franja(franja.id) if p.user_id in aprobados]
+    siguen = {e.user_id for e in aprobados}
+    return [p for p in await uow.plazas.de_la_franja(franja.id) if p.user_id in siguen]
 
 
 async def vista_de_la_franja(

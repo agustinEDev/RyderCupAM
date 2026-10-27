@@ -82,12 +82,34 @@ def test_the_key_comes_from_the_social_activity():
     social_uow, user_uow = MagicMock(), MagicMock()
 
     eventos = d.get_eventos_de_amigos(social_uow=social_uow, user_uow=user_uow)
-    puerta = d.get_puerta_de_lo_jugado(uow=MagicMock(), eventos=eventos)
 
     assert isinstance(eventos, EventosDeAmigosAdapter)
     assert eventos._social_uow is social_uow
     assert eventos._user_uow is user_uow
-    assert puerta._eventos is eventos
+
+
+@pytest.mark.parametrize(
+    ("proveedor", "extra"),
+    [
+        (d.get_ver_anotacion_de_partida_use_case, {"gc_uow": MagicMock(), "user_uow": MagicMock()}),
+        (d.get_clasificacion_de_la_franja_use_case, {"user_uow": MagicMock()}),
+        (d.get_clasificacion_general_use_case, {"user_uow": MagicMock()}),
+        (d.get_clasificacion_scratch_use_case, {"user_uow": MagicMock()}),
+        (d.get_get_match_detail_use_case, {}),
+        (
+            d.get_get_scoring_view_use_case,
+            {"gc_uow": MagicMock(), "user_uow": MagicMock(), "scoring_service": MagicMock()},
+        ),
+        (d.get_get_leaderboard_use_case, {"user_uow": MagicMock(), "scoring_service": MagicMock()}),
+    ],
+)
+def test_what_was_played_is_gated_with_the_key(proveedor, extra):
+    """PR 2 (27 oct 2026): la puerta de lo jugado va en cada caso de uso, con su llave."""
+    eventos = MagicMock()
+
+    caso = proveedor(uow=MagicMock(), eventos=eventos, **extra)
+
+    assert caso._eventos is eventos
 
 
 def test_update_round_reopen_and_take_a_place():
