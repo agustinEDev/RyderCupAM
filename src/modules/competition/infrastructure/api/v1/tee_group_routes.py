@@ -317,7 +317,11 @@ async def get_tee_groups(
     use_case: VerPartidasUseCase = Depends(get_ver_partidas_use_case),
 ):
     """200 con las partidas de la franja."""
-    return await _responder(use_case.execute(round_id, _quien(current_user), current_user.is_admin))
+    return await _responder(
+        use_case.execute(
+            round_id, _quien(current_user), current_user.is_admin, email=current_user.email
+        )
+    )
 
 
 @router.get(

@@ -56,3 +56,81 @@ async def test_solo_las_pendientes_sin_caducar(db_session, creator_id, golf_cour
 
 async def test_sin_ids_no_consulta(db_session):
     assert await SQLAlchemyInvitationRepository(db_session).find_acceptable_ids([], AHORA) == set()
+
+
+# Release social 2 (27 oct 2026): con la invitación pendiente, la privada se ve
+async def test_competiciones_con_invitacion_pendiente_por_usuario_o_correo(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    por_usuario = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    por_correo = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    caducada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    rechazada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    de_otro = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyInvitationRepository(db_session)
+    for competicion, email, invitee, status, caduca in (
+        (
+            por_usuario,
+            "x@test.com",
+            creator_id,
+            InvitationStatus.PENDING,
+            AHORA + timedelta(days=1),
+        ),
+        (por_correo, "yo@test.com", None, InvitationStatus.PENDING, AHORA + timedelta(days=1)),
+        (caducada, "yo@test.com", creator_id, InvitationStatus.PENDING, AHORA),
+        (
+            rechazada,
+            "yo@test.com",
+            creator_id,
+            InvitationStatus.DECLINED,
+            AHORA + timedelta(days=1),
+        ),
+        (de_otro, "otro@test.com", None, InvitationStatus.PENDING, AHORA + timedelta(days=1)),
+    ):
+        await repo.add(
+            Invitation.reconstruct(
+                id=InvitationId.generate(),
+                competition_id=competicion.id,
+                inviter_id=creator_id,
+                invitee_email=email,
+                invitee_user_id=invitee,
+                status=status,
+                expires_at=caduca,
+                created_at=AHORA - timedelta(days=2),
+            )
+        )
+    await db_session.commit()
+
+    pendientes = await repo.competiciones_con_invitacion_pendiente(
+        creator_id, " Yo@Test.com ", AHORA
+    )
+
+    assert pendientes == {por_usuario.id, por_correo.id}
+
+
+async def test_competiciones_con_invitacion_pendiente_sin_correo(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    competicion = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyInvitationRepository(db_session)
+    await repo.add(
+        Invitation.reconstruct(
+            id=InvitationId.generate(),
+            competition_id=competicion.id,
+            inviter_id=creator_id,
+            invitee_email="yo@test.com",
+            invitee_user_id=creator_id,
+            status=InvitationStatus.PENDING,
+            expires_at=AHORA + timedelta(days=1),
+            created_at=AHORA,
+        )
+    )
+    await db_session.commit()
+
+    assert await repo.competiciones_con_invitacion_pendiente(creator_id, None, AHORA) == {
+        competicion.id
+    }

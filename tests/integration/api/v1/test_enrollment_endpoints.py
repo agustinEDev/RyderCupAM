@@ -363,7 +363,12 @@ class TestListEnrollmentsBeyondOneHundred:
 
 
 class TestListEnrollmentsPrivacy:
-    """BE #531: quién ve qué filas y qué correos en la lista de inscritos."""
+    """
+    BE #531 y release social 2: quién ve qué filas y qué correos.
+
+    La competición del montaje es pública y aún sin publicar: cada uno ve su
+    fila y, de los aprobados, solo a sus amigos.
+    """
 
     async def _montaje(self, client: AsyncClient, sufijo: str) -> dict:
         """Creador, un aprobado, dos pendientes y uno rechazado."""
@@ -422,26 +427,31 @@ class TestListEnrollmentsPrivacy:
         assert len(filas) == 5
         assert all(f["user"]["email"] == e for e, f in self._por_email(m, filas).items())
 
+    async def _amigos(self, client: AsyncClient, a: dict, b: dict) -> None:
+        set_auth_cookies(client, a["cookies"])
+        pedida = await client.post(
+            "/api/v1/friends/requests", json={"addressee_id": b["user"]["id"]}
+        )
+        assert pedida.status_code == 201, pedida.text
+        set_auth_cookies(client, b["cookies"])
+        aceptada = await client.post(
+            f"/api/v1/friends/requests/{pedida.json()['id']}/respond", json={"action": "ACCEPT"}
+        )
+        assert aceptada.status_code == 200, aceptada.text
+
     @pytest.mark.asyncio
-    async def test_pending_player_sees_approved_and_own_row_and_only_own_email(
-        self, client: AsyncClient
-    ):
+    async def test_pending_player_sees_only_own_row_and_own_email(self, client: AsyncClient):
         m = await self._montaje(client, "p531c")
         yo = m["gente"]["pendiente"]
 
         filas = await self._lista(client, m, yo)
-        por_email = self._por_email(m, filas)
 
-        assert set(por_email) == {
-            m["gente"][r]["user"]["email"] for r in ("creador", "aprobado", "pendiente")
-        }
-        assert por_email[yo["user"]["email"]]["status"] == "REQUESTED"
-        assert por_email[yo["user"]["email"]]["user"]["email"] == yo["user"]["email"]
-        ajenos = [f for e, f in por_email.items() if e != yo["user"]["email"]]
-        assert all(f["user"]["email"] == "" for f in ajenos)
+        assert [f["user_id"] for f in filas] == [yo["user"]["id"]]
+        assert filas[0]["status"] == "REQUESTED"
+        assert filas[0]["user"]["email"] == yo["user"]["email"]
 
     @pytest.mark.asyncio
-    async def test_unrelated_user_sees_only_approved_and_no_email(self, client: AsyncClient):
+    async def test_unrelated_user_sees_nobody_before_it_is_published(self, client: AsyncClient):
         m = await self._montaje(client, "p531d")
         extrano = await create_authenticated_user(
             client, "extrano_p531d@test.com", "P@ssw0rd123!", "Extra", "No"
@@ -451,12 +461,24 @@ class TestListEnrollmentsPrivacy:
             f"/api/v1/competitions/{m['comp']['id']}/enrollments", cookies=extrano["cookies"]
         )
 
-        filas = respuesta.json()
-        assert {f["status"] for f in filas} == {"APPROVED"}
-        assert len(filas) == 2
-        assert all(f["user"]["email"] == "" for f in filas)
+        assert respuesta.json() == []
         for g in m["gente"].values():
             assert g["user"]["email"] not in respuesta.text
+
+    @pytest.mark.asyncio
+    async def test_a_friend_of_the_approved_one_sees_them_without_email(self, client: AsyncClient):
+        m = await self._montaje(client, "p531g")
+        amigo = await create_authenticated_user(
+            client, "amigo_p531g@test.com", "P@ssw0rd123!", "Ami", "Go"
+        )
+        await self._amigos(client, amigo, m["gente"]["aprobado"])
+        # Amigo también del pendiente: ese no sale, no está aprobado
+        await self._amigos(client, amigo, m["gente"]["pendiente"])
+
+        filas = await self._lista(client, m, amigo)
+
+        assert [f["user_id"] for f in filas] == [m["gente"]["aprobado"]["user"]["id"]]
+        assert filas[0]["user"]["email"] == ""
 
     @pytest.mark.asyncio
     async def test_status_filter_goes_on_top_of_what_each_one_sees(self, client: AsyncClient):
@@ -474,8 +496,7 @@ class TestListEnrollmentsPrivacy:
         assert len(del_creador) == 2
         assert [f["user_id"] for f in del_pendiente] == [g["pendiente"]["user"]["id"]]
         assert del_aprobado == []
-        assert {f["status"] for f in del_extrano} == {"APPROVED"}
-        assert len(del_extrano) == 2
+        assert del_extrano == []
 
     @pytest.mark.asyncio
     async def test_unknown_status_filter_is_a_422(self, client: AsyncClient):

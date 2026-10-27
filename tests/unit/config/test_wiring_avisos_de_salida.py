@@ -43,9 +43,18 @@ def test_stroke_play_groups_get_the_publisher(proveedor, extra):
 
 
 def test_viewing_the_groups_does_not_need_it():
-    caso = d.get_ver_partidas_use_case(**_uows())
+    caso = d.get_ver_partidas_use_case(**_uows(), amigos=MagicMock())
 
     assert isinstance(caso, VerPartidasUseCase)
+
+
+def test_viewing_the_groups_knows_the_viewer_s_friends():
+    """Release social 2: los que aún no tienen partida, según los amigos de quien mira."""
+    amigos = MagicMock()
+
+    caso = d.get_ver_partidas_use_case(**_uows(), amigos=amigos)
+
+    assert caso._amigos is amigos
 
 
 def test_update_round_reopen_and_take_a_place():

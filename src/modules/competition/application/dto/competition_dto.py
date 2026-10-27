@@ -814,6 +814,14 @@ class CompetitionResponseDTO(BaseModel):
             "en los listados, donde no se calcula."
         ),
     )
+    enrolled_visibility: Literal["ALL", "FRIENDS", "NONE"] | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: qué ve quien mira de los inscritos (release social 2). "
+            "ALL, todos los aprobados; FRIENDS, solo sus amigos; NONE, a nadie más que "
+            "a sí mismo. Null en los listados."
+        ),
+    )
     actual_team_assignment: str | None = Field(
         None,
         description=(

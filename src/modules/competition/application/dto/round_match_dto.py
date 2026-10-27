@@ -93,6 +93,12 @@ class TeeSheetResponseDTO(TeeSheetDTO):
     waiting_ids: list[UUID] = Field(
         default_factory=list, description="La lista de espera, por orden de llegada (#251)."
     )
+    # Los ids van filtrados por quién mira (release social 2): la cuenta y el
+    # puesto, de la lista entera
+    waiting_count: int = Field(0, description="Cuántos esperan de verdad, se vean o no.")
+    my_waiting_position: int | None = Field(
+        None, description="Puesto de quien mira en la espera (1 el primero), si espera."
+    )
 
 
 class RoundResponseDTO(BaseModel):
