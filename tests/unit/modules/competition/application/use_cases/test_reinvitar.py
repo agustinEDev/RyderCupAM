@@ -47,6 +47,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
 from tests.unit.modules.competition.application.use_cases.helpers import USUARIOS_CON_GENERO
+from tests.unit.modules.competition.application.use_cases.test_avisos_de_actividad import (
+    _Registro,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -98,8 +101,8 @@ async def _anterior(uow, competicion_id, organizador, invitado, estado, caduca) 
     return anterior
 
 
-def _por_correo(uow, usuarios, competicion_id, organizador):
-    return SendInvitationByEmailUseCase(uow, usuarios).execute(
+def _por_correo(uow, usuarios, competicion_id, organizador, actividad=None):
+    return SendInvitationByEmailUseCase(uow, usuarios, actividad=actividad).execute(
         SendInvitationByEmailRequestDTO(
             competition_id=competicion_id.value,
             inviter_id=organizador.id.value,
@@ -108,8 +111,8 @@ def _por_correo(uow, usuarios, competicion_id, organizador):
     )
 
 
-def _por_usuario(uow, usuarios, competicion_id, organizador, invitado):
-    return SendInvitationByUserIdUseCase(uow, usuarios).execute(
+def _por_usuario(uow, usuarios, competicion_id, organizador, invitado, actividad=None):
+    return SendInvitationByUserIdUseCase(uow, usuarios, actividad=actividad).execute(
         SendInvitationByUserIdRequestDTO(
             competition_id=competicion_id.value,
             inviter_id=organizador.id.value,
@@ -120,10 +123,10 @@ def _por_usuario(uow, usuarios, competicion_id, organizador, invitado):
 
 @pytest.fixture(params=["correo", "usuario"])
 def manda(request):
-    def _manda(uow, usuarios, competicion_id, organizador, invitado):
+    def _manda(uow, usuarios, competicion_id, organizador, invitado, actividad=None):
         if request.param == "correo":
-            return _por_correo(uow, usuarios, competicion_id, organizador)
-        return _por_usuario(uow, usuarios, competicion_id, organizador, invitado)
+            return _por_correo(uow, usuarios, competicion_id, organizador, actividad)
+        return _por_usuario(uow, usuarios, competicion_id, organizador, invitado, actividad)
 
     return _manda
 
@@ -185,3 +188,33 @@ async def test_r1_tras_una_cerrada_sale_la_nueva(manda, estado):
     nueva = await manda(uow, usuarios, competicion_id, organizador, invitado)
 
     assert nueva.status == "PENDING"
+
+
+async def test_r4_y_el_aviso_de_la_caducada_se_retira(manda):
+    """
+    Como al caducar al leer la lista: su «te han invitado» ya no pide nada
+    (CodeRabbit, el gemelo de list_competition_invitations).
+    """
+    uow, usuarios, organizador, invitado, competicion_id = await _escenario()
+    anterior = await _anterior(
+        uow,
+        competicion_id,
+        organizador,
+        invitado,
+        InvitationStatus.PENDING,
+        datetime.now() - timedelta(hours=1),
+    )
+    registro = _Registro()
+
+    await manda(uow, usuarios, competicion_id, organizador, invitado, registro)
+
+    assert ("invitations_closed", [(anterior.id, invitado.id)]) in registro.avisos
+
+
+async def test_una_vigente_no_cierra_nada(manda):
+    uow, usuarios, organizador, invitado, competicion_id = await _escenario()
+    registro = _Registro()
+
+    await manda(uow, usuarios, competicion_id, organizador, invitado, registro)
+
+    assert not [a for a in registro.avisos if a[0] == "invitations_closed"]

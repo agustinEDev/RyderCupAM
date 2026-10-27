@@ -15,7 +15,7 @@ from src.modules.competition.domain.value_objects.competition_id import Competit
 
 async def pendiente_vigente(
     uow: CompetitionUnitOfWorkInterface, email: str, competition_id: CompetitionId
-) -> Invitation | None:
+) -> tuple[Invitation | None, Invitation | None]:
     """
     La invitación pendiente que impide mandar otra a ese correo.
 
@@ -25,13 +25,15 @@ async def pendiente_vigente(
         competition_id: La competición
 
     Returns:
-        La pendiente aún vigente; None si no hay o ya caducó (que queda EXPIRED)
+        (la pendiente aún vigente, la que acaba de quedar EXPIRED): como mucho
+        una de las dos. La caducada, para retirar su aviso al guardar, como al
+        caducar leyendo la lista (CodeRabbit)
     """
     pendiente = await uow.invitations.find_pending_by_email_and_competition(email, competition_id)
     if pendiente is None:
-        return None
+        return None, None
     pendiente.check_expiration()
     if pendiente.is_pending():
-        return pendiente
+        return pendiente, None
     await uow.invitations.update(pendiente)
-    return None
+    return None, pendiente
