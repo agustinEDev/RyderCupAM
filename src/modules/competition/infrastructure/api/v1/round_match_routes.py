@@ -414,11 +414,14 @@ async def delete_round(
 async def get_schedule(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetScheduleUseCase = Depends(get_get_schedule_use_case),
 ):
     """
     Obtiene el schedule completo de una competición con rondas agrupadas por día.
+
+    En cada franja, quien mira ve a quien le deja la regla de la release
+    social 2 (sus amigos hasta que se publica), con las plazas ocupadas reales.
 
     **Returns:**
     - 200: Schedule con días, rondas, partidos y asignación de equipos
@@ -426,7 +429,12 @@ async def get_schedule(
     """
     try:
         request_dto = GetScheduleRequestDTO(competition_id=competition_id)
-        return await use_case.execute(request_dto)
+        return await use_case.execute(
+            request_dto,
+            viewer_id=UserId(str(current_user.id)),
+            viewer_is_admin=current_user.is_admin,
+            viewer_email=current_user.email,
+        )
 
     except GetScheduleNotFoundError as e:
         raise HTTPException(

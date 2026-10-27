@@ -14,6 +14,7 @@ from src.config.database import async_session_maker
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
 from src.config.settings import settings
 from src.config.terms_guard import require_current_terms
+from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
@@ -498,6 +499,7 @@ from src.modules.social.application.use_cases.upload_profile_photo_use_case impo
 from src.modules.social.domain.repositories.social_unit_of_work_interface import (
     SocialUnitOfWorkInterface,
 )
+from src.modules.social.infrastructure.adapters.amigos_adapter import AmigosAdapter
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
     CompetitionActivityPublisher,
 )
@@ -2790,11 +2792,19 @@ def get_remove_custom_handicap_use_case(
     return RemoveCustomHandicapUseCase(uow, user_uow.users)
 
 
+def get_amigos(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+) -> AmigosInterface:
+    """Los amigos de quien mira, del módulo social (release social 2)."""
+    return AmigosAdapter(social_uow)
+
+
 def get_list_enrollments_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    amigos: AmigosInterface = Depends(get_amigos),
 ) -> ListEnrollmentsUseCase:
-    """Proveedor del caso de uso ListEnrollmentsUseCase."""
-    return ListEnrollmentsUseCase(uow)
+    """Proveedor del caso de uso ListEnrollmentsUseCase (con quién ve a quién)."""
+    return ListEnrollmentsUseCase(uow, amigos)
 
 
 # ======================================================================================
@@ -2846,6 +2856,7 @@ def get_get_schedule_use_case(
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     scoring_service: ScoringService = Depends(get_scoring_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+    amigos: AmigosInterface = Depends(get_amigos),
 ) -> GetScheduleUseCase:
     """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse).
 
@@ -2861,6 +2872,7 @@ def get_get_schedule_use_case(
             timezone_service=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
             generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
         ),
+        amigos=amigos,
     )
 
 

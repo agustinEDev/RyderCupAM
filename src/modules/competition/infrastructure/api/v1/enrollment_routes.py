@@ -373,8 +373,9 @@ async def list_enrollments(
     Filtros disponibles:
     - status: REQUESTED, INVITED, APPROVED, REJECTED, CANCELLED, WITHDRAWN
 
-    Quién ve qué (BE #531): el organizador y los admin, todo; cualquier otro,
-    los aprobados y sus propias filas, y solo su propio correo.
+    Quién ve qué (BE #531 y release social 2): el organizador y los admin,
+    todo; cualquier otro, sus propias filas, solo su propio correo y, de los
+    aprobados, todos, sus amigos o ninguno según la competición.
 
     **Returns:**
     - Lista de enrollments con objeto `user` nested incluyendo:
@@ -389,6 +390,7 @@ async def list_enrollments(
             status=status_filter,
             viewer_id=viewer_id,
             viewer_is_admin=current_user.is_admin,
+            viewer_email=current_user.email,
         )
 
         # Entidades a DTOs, con los datos de cada usuario leídos en bloque

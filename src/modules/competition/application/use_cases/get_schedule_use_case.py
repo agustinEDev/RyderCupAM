@@ -19,6 +19,12 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
 )
+from src.modules.competition.application.ports.amigos_interface import AmigosInterface
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    LoQueVe,
+    alcance_de,
+    lo_que_ve,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -74,8 +80,12 @@ class GetScheduleUseCase:
         uow: CompetitionUnitOfWorkInterface,
         golf_course_repo: IGolfCourseRepository | None = None,
         sobres: "EnvelopeDesk | None" = None,
+        amigos: AmigosInterface | None = None,
     ):
         self._uow = uow
+        # De quién es amigo quien mira: en las franjas solo ve a sus amigos
+        # hasta que se publica (release social 2)
+        self._amigos = amigos
         # Mirar la agenda abre los sobres que ya tocan (BE #367), como mirar la
         # página del sobre: si nadie la abría, la sesión llegaba a su hora con
         # los sobres cerrados y, desde la #361, sin partidos
@@ -85,7 +95,20 @@ class GetScheduleUseCase:
         # partidos, asi que sin esto no puede ofrecer «Anotar» sin cobertura
         self._gc_repo = golf_course_repo
 
-    async def execute(self, request: GetScheduleRequestDTO) -> GetScheduleResponseDTO:
+    async def execute(
+        self,
+        request: GetScheduleRequestDTO,
+        *,
+        viewer_id: UserId | None = None,
+        viewer_is_admin: bool = False,
+        viewer_email: str | None = None,
+    ) -> GetScheduleResponseDTO:
+        """
+        La agenda. Diciendo quién mira, en cada franja ve solo a quien le deja
+        `quien_ve_los_inscritos` (con las plazas ocupadas de verdad); sin
+        decirlo, entera: es como la leen los usos internos.
+        """
+        alcance = None
         async with self._uow:
             # 1. Verificar que la competición existe
             competition_id = CompetitionId(request.competition_id)
@@ -124,6 +147,12 @@ class GetScheduleUseCase:
                 if team_assignment
                 else set()
             )
+            if viewer_id is not None:
+                alcance = await alcance_de(
+                    self._uow, competition, viewer_id, es_admin=viewer_is_admin, email=viewer_email
+                )
+
+        ve = await lo_que_ve(alcance, viewer_id, self._amigos) if alcance and viewer_id else None
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
@@ -187,6 +216,7 @@ class GetScheduleUseCase:
                     round_entity.hoja_de_salidas,
                     [p.user_id.value for p in plazas if p.round_id == round_entity.id],
                     [e.user_id.value for e in esperas if e.round_id == round_entity.id],
+                    ve,
                 ),
                 matches=match_dtos,
                 scoring_opens_at=_abre(
@@ -263,11 +293,23 @@ class GetScheduleUseCase:
 
 
 def _hoja(
-    hoja: HojaDeSalidas | None, jugadores: list[UUID], esperan: list[UUID]
+    hoja: HojaDeSalidas | None,
+    jugadores: list[UUID],
+    esperan: list[UUID],
+    ve: LoQueVe | None = None,
 ) -> TeeSheetResponseDTO | None:
-    """La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251)."""
+    """
+    La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251).
+
+    Quien no ve la lista completa ve solo a quien le deja `ve`, pero las plazas
+    ocupadas son las de verdad: así le salen bien las libres (release social 2).
+    """
     if hoja is None:
         return None
+    ocupadas = len(jugadores)
+    if ve is not None:
+        jugadores = [j for j in jugadores if ve.ve_a(UserId(j))]
+        esperan = [j for j in esperan if ve.ve_a(UserId(j))]
     return TeeSheetResponseDTO(
         first_tee_time=hoja.primera_salida,
         last_tee_time=hoja.ultima_salida,
@@ -275,7 +317,7 @@ def _hoja(
         group_size=hoja.jugadores_por_partida,
         tee_times=hoja.salidas,
         capacity=hoja.cupo,
-        places_taken=len(jugadores),
+        places_taken=ocupadas,
         player_ids=jugadores,
         waiting_ids=esperan,
     )
