@@ -96,6 +96,8 @@ async def test_lo_que_se_devuelve_no_es_la_lista_guardada(db_session, ronda):  #
     """Quien llama puede tocar su lista sin cambiar la de la siguiente lectura."""
     uow = SQLAlchemyCompetitionUnitOfWork(db_session)
     (await uow.rounds.find_by_competition(ronda.competition_id)).clear()
+    # La segunda sale de lo recordado: tocarla tampoco cambia la siguiente
+    (await uow.rounds.find_by_competition(ronda.competition_id)).clear()
 
     assert [r.id for r in await uow.rounds.find_by_competition(ronda.competition_id)] == [ronda.id]
 

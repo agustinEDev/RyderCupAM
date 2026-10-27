@@ -152,3 +152,22 @@ async def test_bloqueada_se_lee_siempre(
         await repo.find_by_id_for_update(creada.id)
 
     assert cuenta.selects > 0
+
+
+async def test_caducada_tras_un_rollback_se_vuelve_a_leer(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    """Un rollback caduca lo de la sesión: tocarlo sería una carga perezosa en asíncrono."""
+    creada = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyCompetitionRepository(db_session)
+    await repo.find_by_id(creada.id)
+    await db_session.rollback()
+
+    with _Cuenta(db_session) as cuenta:
+        leida = await repo.find_by_id(creada.id)
+
+    assert cuenta.selects > 0
+    salidas = leida.golf_courses[0].golf_course.tees
+    assert [(t.color.value, t.gender.value) for t in salidas] == [("YELLOW", "MALE")]

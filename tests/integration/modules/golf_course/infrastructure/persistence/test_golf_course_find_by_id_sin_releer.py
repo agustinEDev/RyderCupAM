@@ -74,3 +74,16 @@ async def test_borrado_en_la_sesion_ya_no_se_devuelve(db_session, golf_course_id
     await db_session.flush()
 
     assert await repo.find_by_id(golf_course_id) is None
+
+
+async def test_caducado_tras_un_rollback_se_vuelve_a_leer(db_session, golf_course_id):  # noqa: F811
+    db_session.expunge_all()
+    repo = GolfCourseRepository(db_session)
+    await repo.find_by_id(golf_course_id)
+    await db_session.rollback()
+
+    with _Cuenta(db_session) as cuenta:
+        campo = await repo.find_by_id(golf_course_id)
+
+    assert cuenta.selects > 0
+    assert [t.color.value for t in campo.tees] == ["YELLOW"]

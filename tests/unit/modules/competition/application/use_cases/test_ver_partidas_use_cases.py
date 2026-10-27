@@ -534,3 +534,18 @@ async def test_5_a_withdrawn_player_still_sees_his_own_group_only():
         await escenario.uow.enrollments.update(suya)
 
     assert await _grupos_que_ve(escenario, yo, _Eventos()) == [1]
+
+
+async def test_whether_a_competition_has_any_group_without_loading_them():
+    """PR 2 de rendimiento: «publicada» es un EXISTS (en memoria, lo mismo)."""
+    escenario = _Escenario()
+    await escenario.guardar()
+    await escenario.con_plaza("3.0")
+    await escenario.con_plaza("2.0")
+    partidas = escenario.uow.partidas
+
+    antes = await partidas.existe_en_la_competicion(escenario.competicion.id)
+    await escenario.generar()
+
+    assert antes is False
+    assert await partidas.existe_en_la_competicion(escenario.competicion.id) is True
