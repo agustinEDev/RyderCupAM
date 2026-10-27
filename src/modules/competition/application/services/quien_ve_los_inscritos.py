@@ -14,6 +14,7 @@ play) o equipos formados (Ryder), que es cuando sale el aviso de la salida.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.domain.entities.competition import Competition
@@ -36,6 +37,15 @@ class Alcance(Enum):
     AMIGOS = "AMIGOS"
     # Nadie más que él
     NADA = "NADA"
+
+
+# Lo que se le dice a la ficha: TODO y APROBADOS son, para quien mira, «todos»
+VISIBILIDAD_DE_LOS_INSCRITOS: dict[Alcance, Literal["ALL", "FRIENDS", "NONE"]] = {
+    Alcance.TODO: "ALL",
+    Alcance.APROBADOS: "ALL",
+    Alcance.AMIGOS: "FRIENDS",
+    Alcance.NADA: "NONE",
+}
 
 
 @dataclass(frozen=True)

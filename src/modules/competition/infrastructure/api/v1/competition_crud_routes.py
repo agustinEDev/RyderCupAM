@@ -42,6 +42,10 @@ from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    VISIBILIDAD_DE_LOS_INSCRITOS,
+    alcance_de,
+)
 from src.modules.competition.application.use_cases.actualizar_handicaps_use_case import (
     VentanaDeActualizacionUseCase,
 )
@@ -512,6 +516,16 @@ async def get_competition(
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
+            # Lo que ve de los inscritos, para que la ficha no lo adivine
+            # comparando la lista con el número (/code-review del front)
+            alcance = await alcance_de(
+                uow,
+                competition,
+                current_user_id,
+                es_admin=current_user.is_admin,
+                email=current_user.email,
+            )
+            dto.enrolled_visibility = VISIBILIDAD_DE_LOS_INSCRITOS[alcance]
 
         # Solo aquí y no en el mapper, que usan también los listados: saberlo
         # exige recorrer lo jugado. La regla es la misma que aplica el borrado,

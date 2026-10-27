@@ -203,3 +203,31 @@ async def test_las_partidas_saben_el_correo_de_quien_mira(client: AsyncClient):
 
     (llamada,) = _Apunta.llamadas
     assert llamada["email"] == "qvi_partidas@test.com"
+
+
+# /code-review del front: la ficha dice qué ve cada uno de los inscritos, para
+# no adivinarlo comparando la lista con el número
+async def _visibilidad(client: AsyncClient, jugador: dict, comp: dict) -> str:
+    set_auth_cookies(client, jugador["cookies"])
+    r = await client.get(f"/api/v1/competitions/{comp['id']}")
+    assert r.status_code == 200, r.text
+    return r.json()["enrolled_visibility"]
+
+
+async def test_la_ficha_dice_que_ve_cada_uno(client: AsyncClient):
+    creador = await _jugador(client, "Ficha")
+    invitado = await _jugador(client, "Fichado")
+    curioso = await _jugador(client, "Mirona")
+    privada = await _privada(client, creador)
+    publica = await create_competition(client, creador["cookies"])
+    set_auth_cookies(client, creador["cookies"])
+    r = await client.post(
+        f"/api/v1/competitions/{privada['id']}/invitations",
+        json={"invitee_user_id": invitado["user"]["id"]},
+    )
+    assert r.status_code == 201, r.text
+
+    assert await _visibilidad(client, creador, privada) == "ALL"
+    assert await _visibilidad(client, invitado, privada) == "FRIENDS"
+    assert await _visibilidad(client, curioso, privada) == "NONE"
+    assert await _visibilidad(client, curioso, publica) == "FRIENDS"
