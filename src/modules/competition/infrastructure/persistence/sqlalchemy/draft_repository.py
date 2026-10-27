@@ -42,6 +42,7 @@ class SQLAlchemyDraftRepository(DraftRepositoryInterface):
         return result.scalar_one_or_none()
 
     async def delete_by_competition(self, competition_id: CompetitionId) -> bool:
+        """Borra la sala de esa competicion (se deshacen los equipos); dice si habia una."""
         draft = await self.find_by_competition(competition_id)
         if draft is None:
             return False

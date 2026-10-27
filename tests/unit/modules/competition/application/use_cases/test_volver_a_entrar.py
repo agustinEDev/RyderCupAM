@@ -108,6 +108,22 @@ async def test_una_cerrada_vuelve_a_entrar_limpia(estado, aprobada, queda):
     assert vieja.fixed_category is None
 
 
+async def test_vuelve_a_la_cola_con_la_fecha_de_hoy_y_conserva_su_nombre_elegido():
+    """
+    Decidido el 27 oct: las solicitudes se ordenan por fecha de inscripción, y
+    quien vuelve entra como nuevo. El nombre que eligió mostrar es suyo: se queda.
+    """
+    vieja = _vieja(CompetitionId.generate(), UserId(uuid4()), EnrollmentStatus.REJECTED)
+    vieja._created_at = vieja.created_at - timedelta(days=60)
+    vieja._use_real_name = False
+    antes = vieja.created_at
+
+    vieja.volver_a_entrar(aprobada=False)
+
+    assert vieja.created_at > antes + timedelta(days=59)
+    assert vieja.use_real_name is False
+
+
 async def test_con_su_handicap_nuevo_validado():
     vieja = _vieja(CompetitionId.generate(), UserId(uuid4()), EnrollmentStatus.WITHDRAWN)
 

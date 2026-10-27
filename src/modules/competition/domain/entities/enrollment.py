@@ -355,7 +355,9 @@ class Enrollment:
         Rechazada, cancelada o retirada se queda en la tabla, y la restricción
         única (competición, usuario) no mira el estado: sin esto, quien la tenía
         no podía volver a entrar por ninguna vía. Se reutiliza la misma fila,
-        limpia de lo de la vez anterior (equipo, hándicap fijado).
+        limpia de lo de la vez anterior (equipo, hándicap fijado). Entra como
+        nuevo: con la fecha de hoy, que ordena las solicitudes (decidido el 27
+        oct). El nombre que eligió mostrar es preferencia suya: se queda.
 
         Args:
             aprobada: Entra ya (invitación aceptada, inscripción a mano) o pide plaza
@@ -380,7 +382,8 @@ class Enrollment:
         self._tee_color = tee_color
         self._fixed_handicap = None
         self._fixed_category = None
-        self._updated_at = datetime.now()
+        self._created_at = datetime.now()
+        self._updated_at = self._created_at
 
         evento = EnrollmentApprovedEvent if aprobada else EnrollmentRequestedEvent
         self._add_domain_event(

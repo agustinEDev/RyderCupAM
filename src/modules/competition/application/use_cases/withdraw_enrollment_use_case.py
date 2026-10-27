@@ -108,6 +108,11 @@ class WithdrawEnrollmentUseCase:
             competition = await self._uow.competitions.find_by_id_for_update(
                 enrollment.competition_id
             )
+            # Releída con el bloqueo: si el organizador le quitó mientras se
+            # esperaba, aquí ya está retirada (revisor, release social 2)
+            enrollment = await self._uow.enrollments.find_by_id_for_update(enrollment_id)
+            if not enrollment:
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
 
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)

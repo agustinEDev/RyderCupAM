@@ -194,6 +194,18 @@ async def test_en_juego_no_se_deshace():
         assert await uow.team_assignments.find_by_competition(comp_id) is not None
 
 
+async def test_sin_la_pieza_de_la_ryder_no_se_toca_nada():
+    """Un reparto sin Ryder no deberia existir; si existe, la baja no revienta (revisor)."""
+    uow, comp_id, _, _, _ = await _montar()
+    async with uow:
+        competicion = await uow.competitions.find_by_id(comp_id)
+        competicion._ryder_cup = None
+        await uow.competitions.update(competicion)
+        await uow.commit()
+
+    assert await _deshace(uow, comp_id) is False
+
+
 async def test_sin_reparto_no_hay_nada_que_deshacer():
     uow = InMemoryUnitOfWork()
     creada = await create_competition(uow, UserId(uuid4()))

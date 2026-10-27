@@ -51,6 +51,14 @@ _SE_RENUEVAN = frozenset(
     }
 )
 
+# Lo que deja de ser cierto al entrar con esa inscripcion (decidido el 27 oct
+# 2026): rechazada, cerrada sola o «te han quitado»
+_DE_NO_ESTAR = (
+    ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
+    ActivityEventType.ENROLLMENT_REJECTED,
+    ActivityEventType.ENROLLMENT_REMOVED,
+)
+
 # Lo que se va cuando ya no estas en el torneo: que estas apuntado, tu «ya
 # estas inscrito» (C) y tus salidas
 _DE_ESTAR_APUNTADO = (
@@ -199,7 +207,14 @@ class PublishCompetitionNoticesUseCase:
         Inscrito directamente o aceptando una invitacion no hay nada que
         aceptarle: le llega «ya estas inscrito» (ENROLLMENT_CONFIRMED, tabla del
         22 oct 2026, C), uno por torneo, para retirarlo al irse.
+
+        Con una inscripcion reutilizada (release social 2), lo que decia que no
+        estaba —rechazada, cerrada, «te han quitado»— se va.
         """
+        async with self._social_uow:
+            await self._social_uow.activity_events.delete_from_source(
+                enrollment_id, _DE_NO_ESTAR, user_id
+            )
         eventos = []
         if accepted_request:
             eventos.append(

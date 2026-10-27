@@ -28,6 +28,7 @@ from src.modules.competition.application.services.baja_de_la_competicion import 
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -55,7 +56,7 @@ class CannotRemoveOrganizerError(Exception):
 
 
 class PlayerHasMatchesError(Exception):
-    """Ya hay partidos generados en los que juega (Q4)."""
+    """Ya hay partidos generados en la competición (Q4)."""
 
     error_code = PLAYER_HAS_MATCHES
 
@@ -118,6 +119,13 @@ class RemoveEnrolledPlayerUseCase:
                 raise CompetitionNotFoundError(
                     f"Competición no encontrada: {enrollment.competition_id}"
                 )
+            # Releída con el bloqueo: si se retiró mientras se esperaba, aquí ya
+            # está retirada y no se le «quita» ni se le avisa (revisor)
+            enrollment = await self._uow.enrollments.find_by_id_for_update(
+                EnrollmentId(enrollment_id)
+            )
+            if enrollment is None:
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {enrollment_id}")
             if not is_admin and not competition.is_creator(quien):
                 raise NotCompetitionCreatorError("Solo el organizador puede quitar a un inscrito")
             if enrollment.user_id == competition.creator_id:
@@ -126,8 +134,10 @@ class RemoveEnrolledPlayerUseCase:
                 raise RemovalNotAllowedError(
                     f"No se quita a nadie de una competición en estado {competition.status.value}"
                 )
-            if await self._juega_en_partidos(competition.id, enrollment.user_id):
-                raise PlayerHasMatchesError("Ya hay partidos generados con este jugador")
+            # Con partidos en cualquier sesión, no se quita a nadie (decidido el
+            # 27 oct): los equipos ya no se deshacen y seguiría en el reparto
+            if await self._hay_partidos(competition.id):
+                raise PlayerHasMatchesError("Ya hay partidos generados")
 
             # La entidad valida el estado: solo un aprobado
             enrollment.withdraw("removed_by_organizer")
@@ -151,11 +161,17 @@ class RemoveEnrolledPlayerUseCase:
             updated_at=enrollment.updated_at,
         )
 
-    async def _juega_en_partidos(self, competition_id, user_id: UserId) -> bool:
-        """Si ya está en algún partido de Ryder generado (Q4)."""
+    async def _hay_partidos(self, competition_id: CompetitionId) -> bool:
+        """
+        Si ya hay algún partido de Ryder generado (Q4).
+
+        Args:
+            competition_id: La competición
+
+        Returns:
+            True si alguna de sus sesiones tiene partidos
+        """
         for sesion in await self._uow.rounds.find_by_competition(competition_id):
-            for partido in await self._uow.matches.find_by_round(sesion.id):
-                jugadores = [*partido.team_a_players, *partido.team_b_players]
-                if any(j.user_id == user_id for j in jugadores):
-                    return True
+            if await self._uow.matches.find_by_round(sesion.id):
+                return True
         return False

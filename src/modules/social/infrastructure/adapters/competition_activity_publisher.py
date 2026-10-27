@@ -150,6 +150,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         )
 
     async def removed(self, competition: Competition, enrollment: Enrollment) -> None:
+        """Le avisa de que el organizador le ha quitado, con su inscripcion de origen."""
         await self._notices.removed(enrollment.user_id, _ref(competition), str(enrollment.id.value))
 
     async def match_finished(self, competition: Competition, round_: Round, match: Match) -> None:

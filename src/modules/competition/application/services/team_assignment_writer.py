@@ -91,6 +91,9 @@ class TeamAssignmentWriter:
         # Solo antes de empezar: en juego, o con partidos, el reparto ya es lo jugado
         if competition.status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
             return False
+        # Un reparto es de una Ryder: sin su pieza, nada que deshacer (revisor)
+        if competition.ryder_cup is None:
+            return False
         reparto = await uow.team_assignments.find_by_competition(competition.id)
         if reparto is None:
             return False

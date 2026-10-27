@@ -26,6 +26,9 @@ from src.modules.competition.application.services.nombre_de_quien_invita import 
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
 )
+from src.modules.competition.application.services.team_assignment_writer import (
+    TeamAssignmentWriter,
+)
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
@@ -278,6 +281,9 @@ class RespondToInvitationUseCase:
             competition_id=CompetitionId(invitation.competition_id.value),
             user_id=current_user_id,
         )
+        # Entra con los equipos formados y sin partidos: se deshacen, como al
+        # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
+        await TeamAssignmentWriter.deshacer(self._uow, competition)
         await self._uow.invitations.update(invitation)
 
         cerradas = await al_ocupar_una_plaza(

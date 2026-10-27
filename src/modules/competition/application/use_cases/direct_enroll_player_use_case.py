@@ -27,6 +27,9 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     al_ocupar_una_plaza,
 )
+from src.modules.competition.application.services.team_assignment_writer import (
+    TeamAssignmentWriter,
+)
 from src.modules.competition.domain.exceptions.competition_violations import (
     CompetitionFullViolation,
 )
@@ -195,6 +198,9 @@ class DirectEnrollPlayerUseCase:
                 custom_handicap=request.custom_handicap,
                 tee_color=tee_color,
             )
+            # Entra con los equipos formados y sin partidos: se deshacen, como al
+            # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
+            await TeamAssignmentWriter.deshacer(self._uow, competition)
 
             # Si era la última plaza, las invitaciones pendientes se quedan sin
             # ella ya (BE #359)

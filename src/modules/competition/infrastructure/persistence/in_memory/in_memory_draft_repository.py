@@ -29,6 +29,7 @@ class InMemoryDraftRepository(DraftRepositoryInterface):
         return self._drafts.get(str(competition_id.value))
 
     async def delete_by_competition(self, competition_id: CompetitionId) -> bool:
+        """Borra la sala de esa competicion; dice si habia una."""
         return self._drafts.pop(str(competition_id.value), None) is not None
 
     async def exists_by_captain(self, user_id: UserId) -> bool:

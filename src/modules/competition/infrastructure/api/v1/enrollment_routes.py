@@ -581,7 +581,7 @@ async def remove_enrolled_player(
 _NO_SE_QUITA = {
     CannotRemoveOrganizerError.error_code: "The organizer cannot remove themselves.",
     RemovalNotAllowedError.error_code: "The competition has already started.",
-    PlayerHasMatchesError.error_code: "The player is already in generated matches.",
+    PlayerHasMatchesError.error_code: "There are already generated matches.",
 }
 
 

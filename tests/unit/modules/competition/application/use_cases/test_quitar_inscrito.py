@@ -217,7 +217,8 @@ async def test_w_quien_no_estaba_en_ningun_equipo_no_los_deshace():
         assert await uow.team_assignments.find_by_competition(comp_id) is not None
 
 
-async def test_q4_con_partidos_en_los_que_no_juega_si_se_le_quita():
+async def test_q4_con_partidos_en_los_que_no_juega_tampoco():
+    """Decidido el 27 oct: con partidos en cualquier sesión, no se quita a nadie."""
     uow, comp_id, round_id, equipo_a, equipo_b = await _montar()
     async with uow:
         organizador = (await uow.competitions.find_by_id(comp_id)).creator_id
@@ -232,6 +233,38 @@ async def test_q4_con_partidos_en_los_que_no_juega_si_se_le_quita():
         await uow.commit()
     inscripcion = await _de(uow, comp_id, equipo_b[1])
 
-    respuesta = await _quita(uow).execute(inscripcion.id.value, organizador)
+    with pytest.raises(PlayerHasMatchesError):
+        await _quita(uow).execute(inscripcion.id.value, organizador)
 
-    assert respuesta.status == "WITHDRAWN"
+
+@pytest.mark.parametrize("quien", ["organizador", "el_mismo"])
+async def test_la_inscripcion_se_relee_con_bloqueo_tras_bloquear_la_competicion(quien):
+    """
+    Si el jugador se retira mientras el organizador le quita, el segundo en
+    entrar tiene que ver la inscripción ya retirada, no la que leyó antes del
+    bloqueo (revisor): si no, le «quitaba» a quien se fue solo y se lo decía.
+    """
+    uow, organizador, _, jugador, inscripcion = await _abierta()
+    orden = []
+    competicion_original = uow.competitions.find_by_id_for_update
+    inscripcion_original = uow.enrollments.find_by_id_for_update
+
+    async def competicion(competition_id):
+        orden.append("competicion")
+        return await competicion_original(competition_id)
+
+    async def releida(enrollment_id):
+        orden.append("inscripcion")
+        return await inscripcion_original(enrollment_id)
+
+    uow.competitions.find_by_id_for_update = competicion
+    uow.enrollments.find_by_id_for_update = releida
+
+    if quien == "organizador":
+        await _quita(uow).execute(inscripcion.id.value, organizador)
+    else:
+        await WithdrawEnrollmentUseCase(uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), jugador
+        )
+
+    assert orden == ["competicion", "inscripcion"]

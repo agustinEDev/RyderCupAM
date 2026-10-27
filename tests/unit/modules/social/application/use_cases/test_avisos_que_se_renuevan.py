@@ -122,3 +122,20 @@ async def test_n1_si_el_torneo_se_borra_el_aviso_de_que_te_quitaron_tambien():
     await avisos.tournament_deleted(TORNEO.competition_id)
 
     assert await _de(social, yo, T.ENROLLMENT_REMOVED) == []
+
+
+@pytest.mark.parametrize("acepta_solicitud", [True, False])
+async def test_al_entrar_se_van_los_avisos_viejos_de_esa_inscripcion(acepta_solicitud):
+    """Decidido el 27 oct: «rechazada», «cerrada» y «te han quitado» no conviven con entrar."""
+    social, avisos, yo = await _escenario()
+    await avisos.request_rejected(yo.id, TORNEO, "enr-1")
+    await avisos.requests_closed(TORNEO, [(yo.id, "enr-1")])
+    await avisos.removed(yo.id, TORNEO, "enr-1")
+    await avisos.request_rejected(yo.id, TORNEO, "enr-otra")
+
+    await avisos.enrolled(yo.id, TORNEO, "enr-1", accepted_request=acepta_solicitud)
+
+    for tipo in (T.ENROLLMENT_REQUEST_CLOSED, T.ENROLLMENT_REMOVED):
+        assert await _de(social, yo, tipo) == []
+    [de_otra] = await _de(social, yo, T.ENROLLMENT_REJECTED)
+    assert de_otra.source_match_id == "enr-otra"
