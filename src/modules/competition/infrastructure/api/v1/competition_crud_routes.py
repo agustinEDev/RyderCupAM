@@ -43,6 +43,10 @@ from src.modules.competition.application.services.enrollment_opener import (
     EnrollmentOpener,
 )
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
+from src.modules.competition.application.services.invitacion_de_la_ficha import (
+    invitacion_pendiente,
+    se_le_ofrece_aceptar,
+)
 from src.modules.competition.application.services.quien_ve_los_inscritos import (
     VISIBILIDAD_DE_LOS_INSCRITOS,
     alcance_de,
@@ -517,37 +521,27 @@ async def get_competition(
             dto = await CompetitionDTOMapper.to_response_dto(
                 competition, current_user_id, uow, user_uow, is_admin=current_user.is_admin
             )
-            # Lo que ve de los inscritos, para que la ficha no lo adivine
-            # comparando la lista con el número (/code-review del front)
             # La invitación pendiente de quien mira, para aceptarla o rechazarla
-            # desde la ficha (27 oct 2026). Quien organiza no la tiene; un admin
-            # sí puede, que también juega. El reloj, el de `Invitation.is_expired`:
-            # hora local sin zona
-            pendiente = (
-                None
-                if competition.is_creator(current_user_id)
-                else await uow.invitations.pendiente_de(
-                    current_user_id, current_user.email, competition_vo_id, datetime.now()
-                )
+            # desde la ficha: solo si aceptarla puede salir bien (27 oct 2026)
+            pendiente = await invitacion_pendiente(
+                uow, competition, current_user_id, current_user.email, datetime.now()
             )
-            # Solo si aceptarla puede salir bien (revisor): sin inscripción ya
-            # (aceptar daría 400) y con la competición activa. La regla de quién
-            # ve los inscritos sigue contando la pendiente tal cual
-            if (
-                pendiente is not None
-                and dto.user_enrollment_status is None
-                and competition.is_active()
+            if se_le_ofrece_aceptar(
+                competition, pendiente, inscrito=dto.user_enrollment_status is not None
             ):
                 dto.my_pending_invitation = MyPendingInvitationDTO(
                     id=pendiente.id.value, expires_at=pendiente.expires_at
                 )
+            # Lo que ve de los inscritos, para que la ficha no lo adivine
+            # comparando la lista con el número (/code-review del front). La
+            # invitación ya está leída; quien organiza, la regla lo resuelve antes
             alcance = await alcance_de(
                 uow,
                 competition,
                 current_user_id,
                 es_admin=current_user.is_admin,
                 email=current_user.email,
-                invitado=pendiente is not None,
+                invitado=None if competition.is_creator(current_user_id) else pendiente is not None,
             )
             dto.enrolled_visibility = VISIBILIDAD_DE_LOS_INSCRITOS[alcance]
 

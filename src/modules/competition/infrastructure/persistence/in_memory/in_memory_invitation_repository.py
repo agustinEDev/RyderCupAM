@@ -7,9 +7,22 @@ from src.modules.competition.domain.repositories.invitation_repository_interface
     InvitationRepositoryInterface,
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.invitacion_pendiente import (
+    InvitacionPendiente,
+)
 from src.modules.competition.domain.value_objects.invitation_id import InvitationId
 from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.user.domain.value_objects.user_id import UserId
+
+
+def _suya_y_aceptable(inv: Invitation, user_id: UserId, email: str | None, now: datetime) -> bool:
+    """PENDING y sin caducar en `now`, a su usuario o a su correo (sin mayúsculas ni espacios)."""
+    correo = email.strip().lower() if email and email.strip() else None
+    return (
+        inv.status == InvitationStatus.PENDING
+        and now < inv.expires_at
+        and (inv.invitee_user_id == user_id or bool(correo and inv.invitee_email == correo))
+    )
 
 
 class InMemoryInvitationRepository(InvitationRepositoryInterface):
@@ -93,29 +106,23 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
     async def competiciones_con_invitacion_pendiente(
         self, user_id: UserId, email: str | None, now: datetime
     ) -> set[CompetitionId]:
-        correo = email.strip().lower() if email and email.strip() else None
         return {
             inv.competition_id
             for inv in self._invitations.values()
-            if inv.status == InvitationStatus.PENDING
-            and now < inv.expires_at
-            and (inv.invitee_user_id == user_id or (correo and inv.invitee_email == correo))
+            if _suya_y_aceptable(inv, user_id, email, now)
         }
 
     async def pendiente_de(
         self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
-    ) -> Invitation | None:
-        """Su invitación aún aceptable a esa competición, por usuario o correo; la más reciente."""
-        correo = email.strip().lower() if email and email.strip() else None
+    ) -> InvitacionPendiente | None:
+        """Su invitación aún aceptable a esa competición, la más reciente: solo id y caducidad."""
         suyas = [
             inv
             for inv in self._invitations.values()
-            if inv.competition_id == competition_id
-            and inv.status == InvitationStatus.PENDING
-            and now < inv.expires_at
-            and (inv.invitee_user_id == user_id or (correo and inv.invitee_email == correo))
+            if inv.competition_id == competition_id and _suya_y_aceptable(inv, user_id, email, now)
         ]
-        return max(suyas, key=lambda inv: inv.created_at, default=None)
+        inv = max(suyas, key=lambda inv: inv.created_at, default=None)
+        return InvitacionPendiente(inv.id, inv.expires_at) if inv else None
 
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         return [
