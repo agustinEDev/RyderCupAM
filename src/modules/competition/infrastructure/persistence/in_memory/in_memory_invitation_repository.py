@@ -106,6 +106,7 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
     async def competiciones_con_invitacion_pendiente(
         self, user_id: UserId, email: str | None, now: datetime
     ) -> set[CompetitionId]:
+        """Las competiciones con una invitación suya aún aceptable, por su usuario o su correo."""
         return {
             inv.competition_id
             for inv in self._invitations.values()
