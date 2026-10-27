@@ -191,6 +191,16 @@ class ActivityEventRepositoryInterface(ABC):
         """
 
     @abstractmethod
+    async def authors_in_competition(
+        self, slice_: ActivitySlice, competition_id: str
+    ) -> set[UserId]:
+        """
+        Los autores de ese trozo con algun evento de esa competicion
+        (`payload.competition_id`). La llave de una privada (tabla del 27 oct
+        2026): quien esta fuera ve lo jugado de esos amigos.
+        """
+
+    @abstractmethod
     async def find_for_users(
         self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
     ) -> list[ActivityEvent]:

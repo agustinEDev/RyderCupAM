@@ -18,6 +18,9 @@ from src.modules.competition.application.ports.amigos_interface import AmigosInt
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
 from src.modules.competition.application.ports.invitation_email_service_interface import (
     IInvitationEmailService,
 )
@@ -30,6 +33,9 @@ from src.modules.competition.application.ports.tournament_achievements_publisher
 from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresDeLaPartida,
+)
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    PuertaDeLoJugado,
 )
 from src.modules.competition.application.use_cases.activate_competition_use_case import (
     ActivateCompetitionUseCase,
@@ -502,6 +508,9 @@ from src.modules.social.domain.repositories.social_unit_of_work_interface import
 from src.modules.social.infrastructure.adapters.amigos_adapter import AmigosAdapter
 from src.modules.social.infrastructure.adapters.competition_activity_publisher import (
     CompetitionActivityPublisher,
+)
+from src.modules.social.infrastructure.adapters.eventos_de_amigos_adapter import (
+    EventosDeAmigosAdapter,
 )
 from src.modules.social.infrastructure.adapters.invitation_availability_adapter import (
     InvitationAvailabilityAdapter,
@@ -1398,6 +1407,22 @@ def get_amigos(
 ) -> AmigosInterface:
     """Los amigos de quien mira, del módulo social (release social 2)."""
     return AmigosAdapter(social_uow)
+
+
+def get_eventos_de_amigos(
+    social_uow: SocialUnitOfWorkInterface = Depends(get_social_uow),
+    user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> EventosDeAmigosInterface:
+    """La llave de una privada: amigos con evento en la Actividad de quien mira (27 oct)."""
+    return EventosDeAmigosAdapter(social_uow, user_uow)
+
+
+def get_puerta_de_lo_jugado(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    eventos: EventosDeAmigosInterface = Depends(get_eventos_de_amigos),
+) -> PuertaDeLoJugado:
+    """Quién ve lo jugado de una privada, con esa llave (27 oct)."""
+    return PuertaDeLoJugado(uow, eventos)
 
 
 def get_social_email_service() -> ISocialEmailService:
@@ -2428,9 +2453,12 @@ def get_ver_partidas_use_case(
     gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
     amigos: AmigosInterface = Depends(get_amigos),
+    eventos: EventosDeAmigosInterface = Depends(get_eventos_de_amigos),
 ) -> VerPartidasUseCase:
     """Ver las partidas de una franja (#251), con los sin partida que deja ver la regla."""
-    return _de_las_partidas(VerPartidasUseCase, uow, gc_uow, user_uow, amigos=amigos)
+    return _de_las_partidas(
+        VerPartidasUseCase, uow, gc_uow, user_uow, amigos=amigos, eventos=eventos
+    )
 
 
 def get_mis_partidas_use_case(
@@ -2858,6 +2886,7 @@ def get_get_schedule_use_case(
     scoring_service: ScoringService = Depends(get_scoring_service),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
     amigos: AmigosInterface = Depends(get_amigos),
+    eventos: EventosDeAmigosInterface = Depends(get_eventos_de_amigos),
 ) -> GetScheduleUseCase:
     """Proveedor del caso de uso GetScheduleUseCase (cross-module: Competition + GolfCourse).
 
@@ -2874,6 +2903,7 @@ def get_get_schedule_use_case(
             generador=_generador_al_abrir(uow, gc_uow, user_uow, scoring_service, actividad),
         ),
         amigos=amigos,
+        eventos=eventos,
     )
 
 

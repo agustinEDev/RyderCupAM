@@ -23,12 +23,22 @@ from src.modules.competition.domain.value_objects.campo_de_la_competicion import
 )
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.stroke_play_setup import StrokePlaySetup
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
+
+
+# Los capitanes y vices de la Ryder, en la respuesta de una competición
+_CARGOS = (
+    "team_a_captain_id",
+    "team_b_captain_id",
+    "team_a_vice_captain_id",
+    "team_b_vice_captain_id",
+)
 
 
 class CompetitionDTOMapper:
@@ -116,6 +126,11 @@ class CompetitionDTOMapper:
         if campos is None:
             campos = (await uow.competitions.campos_de([competition.id])).get(competition.id, [])
         juega = user_enrollment_status == EnrollmentStatus.APPROVED.value
+        del_torneo = CompetitionDTOMapper.tournament_fields(competition)
+        # En una privada, quien no está no ve a sus jugadores: tampoco a sus
+        # capitanes, que con el id se sacan del perfil (27 oct 2026, revisor)
+        if competition.visibility is Visibility.PRIVATE and not (is_creator or is_admin or juega):
+            del_torneo.update(dict.fromkeys(_CARGOS))
         resumen = await ResumenDeLaCompeticion.de(competition, current_user_id, juega, uow)
         proxima = resumen.proxima
 
@@ -153,7 +168,7 @@ class CompetitionDTOMapper:
             enrollment_opens_days_before=competition.enrollment_opens_days_before,
             visibility=str(competition.visibility),
             # Tipo de torneo y lo de la Ryder (vacío si no lo es)
-            **CompetitionDTOMapper.tournament_fields(competition),
+            **del_torneo,
             # Campos calculados
             is_creator=is_creator,
             enrolled_count=enrolled_count,

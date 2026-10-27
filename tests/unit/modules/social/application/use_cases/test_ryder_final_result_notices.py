@@ -178,7 +178,11 @@ class TestClasificacionFinalDeLaRyder:
         (evento,) = await _de(social_uow, ana)
         assert evento.payload["outcome"] == "HALVED"
 
-    async def test_es_solo_suyo_sus_amigos_no_lo_ven(self, avisos, social_uow, user_uow):
+    async def test_sus_amigos_tambien_lo_ven(self, avisos, social_uow, user_uow):
+        """
+        Tabla del 27 oct 2026, fila 10: la clasificación final la ven también
+        sus amigos, y la de la Ryder es la misma (`TOURNAMENT_FINAL_STANDING`).
+        """
         ana, luz, amigo = [await _user(user_uow) for _ in range(3)]
         amistad = Friendship.create(
             id=FriendshipId(uuid4()), requester_id=ana.id, addressee_id=amigo.id
@@ -192,7 +196,9 @@ class TestClasificacionFinalDeLaRyder:
         feed = await GetFriendsFeedUseCase(
             social_uow, user_uow, InMemoryGolfCourseUnitOfWork()
         ).execute(str(amigo.id.value))
-        assert feed.events == []
+        assert [(e.user_id, e.type) for e in feed.events] == [
+            (str(ana.id.value), ActivityEventType.TOURNAMENT_FINAL_STANDING.value)
+        ]
 
     async def test_sin_jugadores_no_publica_nada(self, avisos, social_uow, user_uow):
         ana = await _user(user_uow)
