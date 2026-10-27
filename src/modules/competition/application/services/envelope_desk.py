@@ -176,7 +176,7 @@ class EnvelopeDesk:
         return None
 
     async def comprobar_que_es_de_la_competicion(
-        self, competition: Competition, user_id: UserId
+        self, competition: Competition, user_id: UserId, *, is_admin: bool = False
     ) -> None:
         """Quien pregunta tiene que ser de esta competicion.
 
@@ -186,7 +186,8 @@ class EnvelopeDesk:
         Raises:
             NotCompetitionParticipantError: Si no esta inscrito ni la organiza
         """
-        if competition.is_creator(user_id):
+        # El admin entra a todo (Agustín, 27 oct 2026)
+        if is_admin or competition.is_creator(user_id):
             return
         inscripcion = await self._uow.enrollments.find_by_user_and_competition(
             user_id, competition.id

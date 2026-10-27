@@ -7,6 +7,8 @@ y que al terminar la sala los equipos quedan de verdad repartidos —que es lo
 que leen las rondas y los partidos—.
 """
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -93,6 +95,43 @@ class TestLaSalaPorHttp:
         assert all(j["name"] and j["handicap"] is not None for j in sala["available_players"])
         assert mirada.status_code == 200
         assert mirada.json()["current_team"] == sala["current_team"]
+
+    async def test_a1_un_admin_la_mira_sin_jugar_ni_organizar(self, client: AsyncClient):
+        """El admin entra a todo (Agustín, 27 oct 2026); un ajeno, no."""
+        from sqlalchemy import text
+
+        from main import app
+        from src.config.dependencies import get_db_session
+
+        montaje = await _cerrada_con_capitanes(client)
+        comp_id = montaje["comp"]["id"]
+        set_auth_cookies(client, montaje["creador"]["cookies"])
+        assert (await client.post(f"/api/v1/competitions/{comp_id}/draft")).status_code == 201
+        sufijo = uuid.uuid4().hex[:6]
+        admin = await create_authenticated_user(
+            client, f"draft_admin_{sufijo}@test.com", "P@ssw0rd123!", "Ad", "Min"
+        )
+        ajeno = await create_authenticated_user(
+            client, f"draft_ajeno_{sufijo}@test.com", "P@ssw0rd123!", "Aje", "No"
+        )
+        async for session in app.dependency_overrides[get_db_session]():
+            try:
+                await session.execute(
+                    text("UPDATE users SET is_admin = true WHERE email = :email"),
+                    {"email": f"draft_admin_{sufijo}@test.com"},
+                )
+                await session.commit()
+                break
+            finally:
+                await session.close()
+
+        set_auth_cookies(client, admin["cookies"])
+        del_admin = await client.get(f"/api/v1/competitions/{comp_id}/draft")
+        set_auth_cookies(client, ajeno["cookies"])
+        del_ajeno = await client.get(f"/api/v1/competitions/{comp_id}/draft")
+
+        assert del_admin.status_code == 200, del_admin.text
+        assert del_ajeno.status_code == 403
 
     async def test_sin_sorteo_todavia_no_hay_sala(self, client: AsyncClient):
         montaje = await _cerrada_con_capitanes(client)

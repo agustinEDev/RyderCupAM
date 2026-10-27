@@ -121,7 +121,9 @@ async def get_draft(
 ):
     """Devuelve la sala de draft (FE #653)."""
     try:
-        draft = await use_case.execute(competition_id, UserId(str(current_user.id)))
+        draft = await use_case.execute(
+            competition_id, UserId(str(current_user.id)), is_admin=current_user.is_admin
+        )
     except CompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotCompetitionParticipantError as e:
