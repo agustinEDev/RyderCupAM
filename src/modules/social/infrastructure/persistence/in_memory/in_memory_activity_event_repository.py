@@ -242,6 +242,7 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
     async def authors_in_competition(
         self, slice_: ActivitySlice, competition_id: str
     ) -> set[UserId]:
+        """Los autores del trozo con algún evento de esa competición."""
         return {
             e.user_id
             for e in self._events

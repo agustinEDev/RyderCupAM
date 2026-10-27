@@ -33,6 +33,7 @@ class EventosDeAmigosAdapter(EventosDeAmigosInterface):
     async def amigos_con_evento_en(
         self, user_id: UserId, competition_id: CompetitionId
     ) -> frozenset[UserId]:
+        """Sus amigos con algún evento de esa competición que le sale en Actividad."""
         amigos = (await resolve_feed_scope(self._social_uow, self._user_uow, user_id)).friends
         if amigos.is_empty:
             return frozenset()
