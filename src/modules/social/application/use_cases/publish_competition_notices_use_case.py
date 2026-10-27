@@ -29,11 +29,25 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.INVITED_TO_TOURNAMENT,
         ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
         ActivityEventType.ENROLLMENT_REJECTED,
+        ActivityEventType.ENROLLMENT_REMOVED,
         ActivityEventType.ENROLLED_IN_TOURNAMENT,
         ActivityEventType.TOURNAMENT_MATCH_RESULT,
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
         ActivityEventType.ENROLLMENT_CONFIRMED,
         ActivityEventType.TEE_TIME_ASSIGNED,
+    }
+)
+
+# Los que salen de una inscripcion (su id es el origen): se renuevan. Desde
+# que una inscripcion cerrada se reutiliza al volver a entrar (release social
+# 2), el mismo id puede recibir dos veces el mismo aviso, y con la clave unica
+# el segundo se saltaba y quedaba el viejo con su fecha de antes
+_SE_RENUEVAN = frozenset(
+    {
+        ActivityEventType.ENROLLMENT_APPROVED,
+        ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
+        ActivityEventType.ENROLLMENT_REJECTED,
+        ActivityEventType.ENROLLMENT_REMOVED,
     }
 )
 
@@ -299,6 +313,16 @@ class PublishCompetitionNoticesUseCase:
         """El organizador la rechaza a mano: un aviso distinto del cierre (A6)."""
         await self._publicar(
             [self._aviso(user_id, ActivityEventType.ENROLLMENT_REJECTED, enrollment_id, tournament)]
+        )
+
+    async def removed(self, user_id: UserId, tournament: TournamentRef, enrollment_id: str) -> None:
+        """
+        El organizador le quita de la competicion: «te ha quitado de X», solo
+        para el (N1, release social 2). Sus avisos de estar apuntado los quita
+        `left`, que va antes.
+        """
+        await self._publicar(
+            [self._aviso(user_id, ActivityEventType.ENROLLMENT_REMOVED, enrollment_id, tournament)]
         )
 
     # === Resultados ===
@@ -617,6 +641,12 @@ class PublishCompetitionNoticesUseCase:
         # Una fecha para todos y el interruptor de cada uno, de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
+            # En la misma transaccion: el de antes se va y queda el nuevo
+            for evento in eventos:
+                if evento.type in _SE_RENUEVAN:
+                    await self._social_uow.activity_events.delete_from_source(
+                        evento.source_match_id, [evento.type], evento.user_id
+                    )
             await self._social_uow.activity_events.add_many(eventos)
 
     async def _sustituir(

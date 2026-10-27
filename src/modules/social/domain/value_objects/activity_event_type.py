@@ -43,6 +43,8 @@ class ActivityEventType(StrEnum):
     ENROLLMENT_CONFIRMED = "ENROLLMENT_CONFIRMED"
     # Tu salida o tu partido en una ronda de torneo (G, tabla del 22 oct 2026)
     TEE_TIME_ASSIGNED = "TEE_TIME_ASSIGNED"
+    # «El organizador te ha quitado de X» (release social 2, 27 oct 2026)
+    ENROLLMENT_REMOVED = "ENROLLMENT_REMOVED"
 
     @property
     def is_achievement(self) -> bool:

@@ -149,6 +149,9 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             enrollment.user_id, _ref(competition), str(enrollment.id.value)
         )
 
+    async def removed(self, competition: Competition, enrollment: Enrollment) -> None:
+        await self._notices.removed(enrollment.user_id, _ref(competition), str(enrollment.id.value))
+
     async def match_finished(self, competition: Competition, round_: Round, match: Match) -> None:
         resultado = match.result or {}
         await self._notices.match_finished(
