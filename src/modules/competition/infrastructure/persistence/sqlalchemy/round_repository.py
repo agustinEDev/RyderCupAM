@@ -28,10 +28,12 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
         self._session = session
 
     async def add(self, round: Round) -> None:
+        """Añade la ronda y olvida las listas de rondas recordadas en la petición."""
         self._session.add(round)
         olvidar_listas(self._session, _RONDAS)
 
     async def update(self, round: Round) -> None:
+        """Guarda la ronda y olvida las listas recordadas: su fecha puede haber cambiado."""
         self._session.add(round)
         # Cambiar la fecha la reordena entre las de su competición
         olvidar_listas(self._session, _RONDAS)
@@ -55,6 +57,7 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
     async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         # Una vez por petición: la ficha las pedía para «tus jornadas» y para
         # saber si se puede borrar (PR 2 de rendimiento)
+        """Las rondas de la competición por fecha; una sola lectura por petición."""
         if (ya := lista_leida(self._session, (_RONDAS, competition_id))) is not None:
             # En el orden de sus fechas de ahora: una pudo cambiar sin `update`
             return sorted(ya, key=lambda r: (r.round_date, r.created_at))
@@ -85,6 +88,7 @@ class SQLAlchemyRoundRepository(RoundRepositoryInterface):
         return list(result.scalars().all())
 
     async def delete(self, round_id: RoundId) -> bool:
+        """Borra la ronda, si existe, y olvida las listas recordadas."""
         round = await self.find_by_id(round_id)
         if round is None:
             return False

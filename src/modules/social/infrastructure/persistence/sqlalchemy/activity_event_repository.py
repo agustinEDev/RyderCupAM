@@ -471,6 +471,7 @@ class SQLAlchemyActivityEventRepository(ActivityEventRepositoryInterface):
     async def authors_in_competition(
         self, slice_: ActivitySlice, competition_id: str
     ) -> set[UserId]:
+        """Los autores del trozo con algún evento de esa competición, sin repetir."""
         condicion = self._condicion([slice_])
         if condicion is None:
             return set()

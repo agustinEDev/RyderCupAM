@@ -28,6 +28,7 @@ class SQLAlchemyTeamAssignmentRepository(TeamAssignmentRepositoryInterface):
         self._session = session
 
     async def add(self, assignment: TeamAssignment) -> None:
+        """Añade el reparto y olvida los recordados en la petición."""
         self._session.add(assignment)
         olvidar_listas(self._session, _REPARTO)
 
@@ -38,6 +39,7 @@ class SQLAlchemyTeamAssignmentRepository(TeamAssignmentRepositoryInterface):
         # Una vez por petición: la ficha de una Ryder lo pedía hasta tres veces
         # (hay equipos, cómo se repartieron, si está publicada). También que no
         # lo hay, que es lo habitual hasta formarlos (PR 2 de rendimiento)
+        """El reparto más reciente de la competición, o None; una lectura por petición."""
         if (ya := lista_leida(self._session, (_REPARTO, competition_id))) is not None:
             return ya[0] if ya else None
         statement = (
@@ -52,6 +54,7 @@ class SQLAlchemyTeamAssignmentRepository(TeamAssignmentRepositoryInterface):
         return reparto
 
     async def delete(self, assignment_id: TeamAssignmentId) -> bool:
+        """Borra el reparto, si existe, y olvida los recordados."""
         assignment = await self.find_by_id(assignment_id)
         if assignment is None:
             return False

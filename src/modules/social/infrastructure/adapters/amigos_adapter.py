@@ -14,5 +14,6 @@ class AmigosAdapter(AmigosInterface):
         self._social_uow = social_uow
 
     async def ids_de_los_amigos(self, user_id: UserId) -> frozenset[UserId]:
+        """Sus amistades aceptadas, en una sola lectura."""
         async with self._social_uow:
             return frozenset(await self._social_uow.friendships.find_friend_ids(user_id))
