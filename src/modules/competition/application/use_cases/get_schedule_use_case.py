@@ -260,7 +260,11 @@ class GetScheduleUseCase:
                 scoring_opens_at=_abre(
                     round_entity, zonas_por_campo.get(round_entity.golf_course_id)
                 ),
-                match_generation_block=block_to_dto(round_entity.match_generation_block),
+                # El aviso de por qué no hay partidos nombra a jugadores: de una
+                # privada, solo para quien está dentro (CodeRabbit)
+                match_generation_block=block_to_dto(round_entity.match_generation_block)
+                if entero
+                else None,
                 resting_player_ids=[
                     uid.value for uid in _descansan(team_assignment, inscritos, matches)
                 ]

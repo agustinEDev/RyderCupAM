@@ -16,6 +16,10 @@ from src.modules.competition.application.dto.round_match_dto import GetScheduleR
 from src.modules.competition.application.use_cases.get_schedule_use_case import (
     GetScheduleUseCase,
 )
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    BlockedPlayer,
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.test_quien_descansa import (
@@ -134,3 +138,26 @@ async def test_5_quien_se_retiro_tras_jugar_ve_su_partido_y_nada_mas():
 
     assert _partidos(agenda) == [1]
     assert agenda.team_assignment is None
+
+
+async def _con_bloqueo(uow, comp, quien):
+    """La sesión no pudo generar partidos por un jugador: el aviso lleva su nombre."""
+    async with uow:
+        (ronda,) = await uow.rounds.find_by_competition(comp.id)
+        ronda._match_generation_block = MatchGenerationBlock(
+            reason="PLAYERS",
+            players=(BlockedPlayer(user_id=quien, name="Jugador Bloqueado", missing="TEE"),),
+        )
+        await uow.rounds.update(ronda)
+
+
+async def test_6_el_bloqueo_de_generar_partidos_no_le_llega_a_quien_esta_fuera():
+    """CodeRabbit: el aviso de por qué no hay partidos lleva nombres de jugadores."""
+    uow, comp, a, _ = await _privada()
+    await _con_bloqueo(uow, comp, a[1])
+
+    fuera = await _agenda(uow, comp, viewer_id=UserId(uuid4()))
+    dentro = await _agenda(uow, comp, viewer_id=a[0])
+
+    assert fuera.days[0].rounds[0].match_generation_block is None
+    assert dentro.days[0].rounds[0].match_generation_block is not None
