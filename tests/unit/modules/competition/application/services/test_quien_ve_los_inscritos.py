@@ -117,7 +117,13 @@ class TestLosCapitanes:
     def test_9_capitan_o_vice_ve_a_todos_antes_de_los_equipos(self, cargo, visibilidad):
         competicion = _competicion(visibilidad, ryder=_ryder(**{cargo: YO}))
 
-        assert _alcance(competicion) is Alcance.APROBADOS
+        assert _alcance(competicion, aprobado=True) is Alcance.APROBADOS
+
+    def test_9_capitan_que_se_retiro_ya_no(self):
+        """Revisor: el cargo se queda en la Ryder, pero quien se retiró ya no está."""
+        competicion = _competicion(ryder=_ryder(team_a_captain_id=YO))
+
+        assert _alcance(competicion, aprobado=False) is Alcance.AMIGOS
 
     def test_9_capitan_de_otro_no_cuenta(self):
         competicion = _competicion(ryder=_ryder(team_a_captain_id=UserId(uuid4())))

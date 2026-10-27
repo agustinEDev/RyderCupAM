@@ -82,7 +82,8 @@ def alcance(
     """La regla, sin leer nada: con lo que se sabe de quien mira."""
     if es_admin or competition.is_creator(quien):
         return Alcance.TODO
-    if publicada or _es_capitan(competition, quien):
+    # El cargo se queda en la Ryder aunque se retire: cuenta si sigue dentro (revisor)
+    if publicada or (aprobado and _es_capitan(competition, quien)):
         return Alcance.APROBADOS
     if competition.visibility is Visibility.PRIVATE:
         if aprobado:

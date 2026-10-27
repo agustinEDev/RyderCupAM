@@ -103,7 +103,14 @@ def _sanitize_creator_id(creator_id: str | None) -> str | None:
 
 
 async def _fetch_competitions_by_status(
-    use_case, status_filter, creator_id, search_name, search_creator, viewer_id=None, is_admin=False
+    use_case,
+    status_filter,
+    creator_id,
+    search_name,
+    search_creator,
+    viewer_id=None,
+    is_admin=False,
+    viewer_email=None,
 ):
     """Obtiene competiciones aplicando filtros de status (soporte para lista o string único)."""
     if isinstance(status_filter, list) and len(status_filter) > 0:
@@ -115,6 +122,7 @@ async def _fetch_competitions_by_status(
                 search_name=search_name,
                 search_creator=search_creator,
                 viewer_id=viewer_id,
+                viewer_email=viewer_email,
                 is_admin=is_admin,
             )
             all_competitions.extend(comps)
@@ -127,6 +135,7 @@ async def _fetch_competitions_by_status(
         search_creator=search_creator,
         viewer_id=viewer_id,
         is_admin=is_admin,
+        viewer_email=viewer_email,
     )
 
 
@@ -249,7 +258,14 @@ async def _map_competitions_to_dtos(competitions, current_user_id, uow, user_uow
 
 
 async def _get_all_competitions(
-    use_case, status_filter, creator_id, search_name, search_creator, viewer_id=None, is_admin=False
+    use_case,
+    status_filter,
+    creator_id,
+    search_name,
+    search_creator,
+    viewer_id=None,
+    is_admin=False,
+    viewer_email=None,
 ):
     """Obtiene todas las competiciones aplicando filtros (sin filtrar por usuario).
 
@@ -257,14 +273,28 @@ async def _get_all_competitions(
     en la pantalla de explorar, que es lo que BE #318 vino a arreglar.
     """
     return await _fetch_competitions_by_status(
-        use_case, status_filter, creator_id, search_name, search_creator, viewer_id, is_admin
+        use_case,
+        status_filter,
+        creator_id,
+        search_name,
+        search_creator,
+        viewer_id,
+        is_admin,
+        viewer_email,
     )
 
 
-async def _exclude_user_competitions(competitions, current_user_id, uow):
-    """Excluye competiciones donde el usuario es creador o está inscrito."""
+async def _exclude_user_competitions(competitions, current_user_id, uow, viewer_email=None):
+    """
+    Excluye competiciones donde el usuario es creador, está inscrito o tiene
+    una invitación pendiente: esas ya salen en «Mis competiciones» (revisor
+    de la release social 2).
+    """
     enrollments = await uow.enrollments.find_by_user(current_user_id)
     enrolled_competition_ids = {enrollment.competition_id for enrollment in enrollments}
+    enrolled_competition_ids |= await uow.invitations.competiciones_con_invitacion_pendiente(
+        current_user_id, viewer_email, datetime.now()
+    )
 
     return [
         comp
@@ -410,8 +440,11 @@ async def list_competitions(
                     search_creator,
                     viewer_id=str(current_user_id.value),
                     is_admin=current_user.is_admin,
+                    viewer_email=current_user.email,
                 )
-                competitions = await _exclude_user_competitions(competitions, current_user_id, uow)
+                competitions = await _exclude_user_competitions(
+                    competitions, current_user_id, uow, viewer_email=current_user.email
+                )
             else:
                 competitions = await _get_all_competitions(
                     use_case,
@@ -421,6 +454,7 @@ async def list_competitions(
                     search_creator,
                     viewer_id=str(current_user_id.value),
                     is_admin=current_user.is_admin,
+                    viewer_email=current_user.email,
                 )
 
             result = await _map_competitions_to_dtos(

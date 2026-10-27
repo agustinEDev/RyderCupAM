@@ -80,6 +80,39 @@ async def test_16_invitado_por_correo_antes_de_darse_de_alta(client: AsyncClient
     assert comp["id"] in await _mis_competiciones(client, nuevo)
 
 
+async def _explorar(client: AsyncClient, jugador: dict, mias: str | None) -> set[str]:
+    set_auth_cookies(client, jugador["cookies"])
+    params = {} if mias is None else {"my_competitions": mias}
+    r = await client.get("/api/v1/competitions", params=params)
+    assert r.status_code == 200, r.text
+    return {c["id"] for c in r.json()}
+
+
+async def test_16_explorar_no_la_repite_y_todas_la_traen_tambien_por_correo(
+    client: AsyncClient,
+):
+    """
+    Revisor: ya sale en «Mis competiciones», así que explorar no la repite; y
+    el listado completo la reconoce también por el correo de la invitación.
+    """
+    creador = await _jugador(client, "Organizadora")
+    comp = await _privada(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    r = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations/by-email",
+        json={"invitee_email": "qvi_correo@test.com"},
+    )
+    assert r.status_code == 201, r.text
+    invitado = await _jugador(client, "Correo")
+
+    assert comp["id"] not in await _explorar(client, invitado, "false")
+    assert comp["id"] in await _explorar(client, invitado, None)
+    # Filtrando por varios estados va por otro camino: también la reconoce
+    set_auth_cookies(client, invitado["cookies"])
+    r = await client.get("/api/v1/competitions", params={"status": ["DRAFT", "ACTIVE"]})
+    assert comp["id"] in {c["id"] for c in r.json()}
+
+
 async def test_17_rechazada_deja_de_salir(client: AsyncClient):
     creador = await _jugador(client, "Organizadora")
     invitado = await _jugador(client, "Invitada")
