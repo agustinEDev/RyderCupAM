@@ -16,7 +16,6 @@ from src.config.dependencies import (
     get_current_user,
     get_get_leaderboard_use_case,
     get_get_scoring_view_use_case,
-    get_puerta_de_lo_jugado,
     get_submit_hole_score_use_case,
     get_submit_scorecard_use_case,
     get_withdraw_match_player_use_case,
@@ -46,7 +45,6 @@ from src.modules.competition.application.exceptions import (
 )
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
     NoPuedeVerloError,
-    PuertaDeLoJugado,
 )
 from src.modules.competition.application.use_cases.concede_match_use_case import (
     ConcedeMatchUseCase,
@@ -66,10 +64,7 @@ from src.modules.competition.application.use_cases.submit_scorecard_use_case imp
 from src.modules.competition.application.use_cases.withdraw_match_player_use_case import (
     WithdrawMatchPlayerUseCase,
 )
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.match_id import MatchId
 from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import (
-    cerrada,
     solo_quien_participa,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -98,7 +93,6 @@ async def get_scoring_view(
     match_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetScoringViewUseCase = Depends(get_get_scoring_view_use_case),
-    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """
     Obtiene la vista completa de scoring de un partido.
@@ -110,13 +104,12 @@ async def get_scoring_view(
     - 403: Partido de una privada en la que no está (tabla del 27 oct 2026)
     - 404: Partido no encontrado
     """
-    exigir = puerta.exigir_el_partido(
-        MatchId(match_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
-    )
-    if (no := await cerrada(exigir)) is not None:
-        return no
     try:
-        return await use_case.execute(str(match_id))
+        return await use_case.execute(
+            str(match_id), quien=UserId(str(current_user.id)), es_admin=current_user.is_admin
+        )
+    except NoPuedeVerloError:
+        return solo_quien_participa()
 
     except MatchNotFoundError as e:
         raise HTTPException(
@@ -325,7 +318,6 @@ async def get_leaderboard(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetLeaderboardUseCase = Depends(get_get_leaderboard_use_case),
-    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """
     Obtiene el leaderboard completo de la competicion.
@@ -342,16 +334,12 @@ async def get_leaderboard(
     - 404: Competicion no encontrada
     """
     try:
-        ve = await puerta.exigir_la_clasificacion(
-            CompetitionId(competition_id),
-            UserId(str(current_user.id)),
-            es_admin=current_user.is_admin,
+        # Con la llave, en la Ryder: el marcador y solo el partido de su amigo
+        return await use_case.execute(
+            str(competition_id), quien=UserId(str(current_user.id)), es_admin=current_user.is_admin
         )
     except NoPuedeVerloError:
         return solo_quien_participa()
-    try:
-        # Con la llave, en la Ryder: el marcador y solo el partido de su amigo
-        return await use_case.execute(str(competition_id), ve)
 
     except CompetitionNotFoundError as e:
         raise HTTPException(

@@ -7,7 +7,7 @@ Implementación concreta del repositorio de competiciones usando SQLAlchemy asyn
 from collections.abc import Sequence
 from datetime import date, datetime
 
-from sqlalchemy import and_, func, inspect, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import class_mapper, selectinload
 
@@ -35,16 +35,11 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
-
-# Las competiciones que la sesión ya leyó enteras, en su `info`: el mapa de
-# identidad las suelta en cuanto nadie las retiene (es débil)
-_ENTERAS = "competiciones_enteras"
-
-
-def _sin_cargar(objeto: object) -> frozenset[str]:
-    """Los atributos de un objeto de la sesión que aún no se han cargado."""
-    estado = inspect(objeto)
-    return frozenset(estado.unloaded) if estado is not None else frozenset()
+from src.shared.infrastructure.persistence.leidos_en_la_sesion import (
+    recordar,
+    sin_cargar,
+    ya_leido,
+)
 
 
 class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
@@ -130,31 +125,23 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         result = await self._session.execute(stmt)
         competition = result.scalar_one_or_none()
         if competition is not None:
-            # La sesión solo las recuerda mientras alguien las retiene: se
-            # guardan para la petición, que es lo que dura la sesión
-            self._session.info.setdefault(_ENTERAS, {})[competition_id] = competition
+            recordar(self._session, Competition, competition_id, competition)
         return competition
 
     def _entera_en_la_sesion(self, competition_id: CompetitionId) -> Competition | None:
         """
         La competición si la sesión ya la tiene con su agregado entero (sus
         campos y sus salidas). A medias —de un listado— no: tocar los campos
-        dispararía una carga perezosa en asíncrono (`MissingGreenlet`). Ni la
-        que se borró o ya no es de esta sesión.
+        dispararía una carga perezosa en asíncrono (`MissingGreenlet`).
         """
-        ya = self._session.info.get(_ENTERAS, {}).get(competition_id)
-        if not isinstance(ya, Competition):
-            return None
-        estado = inspect(ya)
-        if estado is None or estado.deleted or estado.was_deleted or estado.detached:
-            return None
-        if "_golf_courses" in _sin_cargar(ya):
+        ya = ya_leido(self._session, Competition, competition_id, ("_golf_courses",))
+        if ya is None:
             return None
         for enlace in ya.golf_courses:
-            if "golf_course" in _sin_cargar(enlace):
+            if "golf_course" in sin_cargar(enlace):
                 return None
             campo = enlace.golf_course
-            if campo is not None and "_tees" in _sin_cargar(campo):
+            if campo is not None and "_tees" in sin_cargar(campo):
                 return None
         return ya
 

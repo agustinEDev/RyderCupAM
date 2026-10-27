@@ -28,6 +28,9 @@ import pytest
 
 from src.modules.competition.application.dto.scoring_dto import SubmitHoleScoreBodyDTO
 from src.modules.competition.application.exceptions import PartidaNotFoundError
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    NoPuedeVerloError,
+)
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     AnotarHoyoDePartidaUseCase,
 )
@@ -35,6 +38,8 @@ from src.modules.competition.application.use_cases.ver_anotacion_de_partida_use_
     VerAnotacionDePartidaUseCase,
 )
 from src.modules.competition.domain.value_objects.tournament_type import TournamentType
+from src.modules.competition.domain.value_objects.visibility import Visibility
+from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
     A_LAS_NUEVE_Y_CINCO,
     PRIMERA_SALIDA,
@@ -508,3 +513,78 @@ async def test_b5_the_course_is_loaded_once_per_view():
     await _con(escenario, campos).execute(partida.id.value, partida.user_ids[0])
 
     assert len(campos.cargados) == 1
+
+
+# --- Quién la ve, dentro del caso de uso (tabla del 27 oct 2026; PR 2, R7) ---------
+
+
+class _Eventos:
+    def __init__(self, *amigos):
+        self.amigos = frozenset(amigos)
+
+    async def amigos_con_evento_en(self, user_id, competition_id):
+        return self.amigos
+
+
+def _con_llave(escenario, *amigos):
+    return VerAnotacionDePartidaUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        eventos=_Eventos(*amigos),
+    )
+
+
+async def test_6_de_fuera_de_una_privada_no_la_ve():
+    escenario, partida = await _partida()
+
+    with pytest.raises(NoPuedeVerloError):
+        await _con_llave(escenario).execute(partida.id.value, UserId(uuid4()))
+
+
+async def test_7_con_la_llave_la_de_su_amigo_si():
+    escenario, partida = await _partida()
+    amigo = partida.user_ids[0]
+
+    vista = await _con_llave(escenario, amigo).execute(partida.id.value, UserId(uuid4()))
+
+    assert vista.number == 1
+
+
+async def test_7_con_la_llave_de_otro_amigo_no():
+    escenario, partida = await _partida()
+
+    with pytest.raises(NoPuedeVerloError):
+        await _con_llave(escenario, UserId(uuid4())).execute(partida.id.value, UserId(uuid4()))
+
+
+async def test_1_el_organizador_y_un_admin_si():
+    escenario, partida = await _partida()
+
+    await _con_llave(escenario).execute(partida.id.value, escenario.creador)
+    await _con_llave(escenario).execute(partida.id.value, UserId(uuid4()), es_admin=True)
+
+
+async def test_5_quien_juega_en_ella_la_ve_aunque_se_retirara():
+    escenario, partida = await _partida()
+    yo = partida.user_ids[0]
+    async with escenario.uow:
+        suya = await escenario.uow.enrollments.find_by_user_and_competition(
+            yo, partida.competition_id
+        )
+        suya.withdraw()
+        await escenario.uow.enrollments.update(suya)
+
+    vista = await _con_llave(escenario).execute(partida.id.value, yo)
+
+    assert vista.number == 1
+
+
+async def test_en_una_publica_cualquiera():
+    escenario, partida = await _partida()
+    async with escenario.uow:
+        comp = await escenario.uow.competitions.find_by_id(partida.competition_id)
+        comp._visibility = Visibility.PUBLIC
+        await escenario.uow.competitions.update(comp)
+
+    await _con_llave(escenario).execute(partida.id.value, UserId(uuid4()))

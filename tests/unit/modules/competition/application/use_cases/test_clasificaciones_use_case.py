@@ -16,10 +16,12 @@ Las clasificaciones de un stroke play por casos de uso (#251, PR 5).
 
 from dataclasses import replace
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
 from src.modules.competition.application.exceptions import PartidasError
+from src.modules.competition.application.services.lo_jugado_de_una_privada import NoPuedeVerloError
 from src.modules.competition.application.use_cases.clasificaciones_use_case import (
     ClasificacionDeLaFranjaUseCase,
     ClasificacionGeneralUseCase,
@@ -33,6 +35,7 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_part
     InMemoryPartidaRepository,
 )
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.gender import Gender
 from src.shared.domain.value_objects.match_format import MatchFormat
 from tests.unit.modules.competition.application.use_cases.test_anotar_hoyo_de_partida_use_case import (
@@ -280,3 +283,68 @@ async def test_a_session_that_is_not_a_window():
         await _de_la_franja(escenario).execute(sesion.id.value)
     with pytest.raises(PartidasError):
         await _de_la_franja(escenario).execute(RoundId.generate().value)
+
+
+# --- Quién las ve, dentro del caso de uso (tabla del 27 oct 2026; PR 2, R7) --------
+
+
+class _Eventos:
+    def __init__(self, *amigos):
+        self.amigos = frozenset(amigos)
+
+    async def amigos_con_evento_en(self, user_id, competition_id):
+        return self.amigos
+
+
+def _las_tres(escenario, eventos):
+    deps = {"uow": escenario.uow, "user_repository": escenario.usuarios, "eventos": eventos}
+    return {
+        "franja": lambda quien, **kw: ClasificacionDeLaFranjaUseCase(**deps).execute(
+            escenario.manana.id.value, quien=quien, **kw
+        ),
+        "general": lambda quien, **kw: ClasificacionGeneralUseCase(**deps).execute(
+            escenario.competicion.id.value, quien=quien, **kw
+        ),
+        "scratch": lambda quien, **kw: ClasificacionScratchUseCase(**deps).execute(
+            escenario.competicion.id.value, quien, **kw
+        ),
+    }
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_6_de_fuera_de_una_privada_no_la_ve(cual):
+    escenario, _, _, _ = await _dos_franjas()
+
+    with pytest.raises(NoPuedeVerloError):
+        await _las_tres(escenario, _Eventos())[cual](UserId(uuid4()))
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_7_con_la_llave_entera(cual):
+    escenario, a, b, _ = await _dos_franjas()
+
+    con_llave = await _las_tres(escenario, _Eventos(a))[cual](UserId(uuid4()))
+    dentro = await _las_tres(escenario, _Eventos())[cual](b)
+
+    # La misma tabla que quien está dentro: entera, no solo su amigo
+    assert [r.user_id for r in con_llave.rows] == [r.user_id for r in dentro.rows]
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_dentro_la_ve(cual):
+    escenario, a, _, _ = await _dos_franjas()
+
+    await _las_tres(escenario, _Eventos())[cual](a)
+    await _las_tres(escenario, _Eventos())[cual](escenario.creador)
+    await _las_tres(escenario, _Eventos())[cual](UserId(uuid4()), es_admin=True)
+
+
+async def test_sin_decir_quien_mira_va_entera():
+    """Los usos internos leen la general sin puerta."""
+    escenario, a, _, _ = await _dos_franjas()
+
+    tabla = await ClasificacionGeneralUseCase(
+        uow=escenario.uow, user_repository=escenario.usuarios
+    ).execute(escenario.competicion.id.value)
+
+    assert a.value in {r.user_id for r in tabla.rows}

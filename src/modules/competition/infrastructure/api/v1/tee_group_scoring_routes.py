@@ -23,7 +23,6 @@ from src.config.dependencies import (
     get_current_user,
     get_entregar_tarjeta_de_partida_use_case,
     get_marcar_no_presentado_use_case,
-    get_puerta_de_lo_jugado,
     get_reabrir_tarjeta_use_case,
     get_retirar_jugador_use_case,
     get_retirarse_de_partida_use_case,
@@ -47,7 +46,9 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError,
     ScoringNotOpenYetError,
 )
-from src.modules.competition.application.services.lo_jugado_de_una_privada import PuertaDeLoJugado
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    NoPuedeVerloError,
+)
 from src.modules.competition.application.use_cases.anotar_hoyo_de_partida_use_case import (
     AnotarHoyoDePartidaUseCase,
     NoEsDeLaPartidaError,
@@ -86,10 +87,9 @@ from src.modules.competition.domain.entities.partida import (
     TarjetaYaAbiertaError,
     TieneGolpesError,
 )
-from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.partida_id import PartidaId
-from src.modules.competition.domain.value_objects.round_id import RoundId
-from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import cerrada
+from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import (
+    solo_quien_participa,
+)
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -246,26 +246,33 @@ async def get_tee_group_scoring_view(
     group_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     ver: VerAnotacionDePartidaUseCase = Depends(get_ver_anotacion_de_partida_use_case),
-    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """200 con la partida; 403 si es de una privada en la que no está; 404 si no existe."""
-    exigir = puerta.exigir_la_partida(
-        PartidaId(group_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
-    )
-    if (no := await cerrada(exigir)) is not None:
-        return no
     try:
-        return await ver.execute(group_id, UserId(str(current_user.id)))
+        return await ver.execute(
+            group_id, UserId(str(current_user.id)), es_admin=current_user.is_admin
+        )
     except PartidaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
+    except NoPuedeVerloError:
+        return solo_quien_participa()
 
 
-async def _y_la_vista(llamada, ver: VerAnotacionDePartidaUseCase, group_id: UUID, quien: UserId):
+async def _y_la_vista(
+    llamada,
+    ver: VerAnotacionDePartidaUseCase,
+    group_id: UUID,
+    quien: UserId,
+    *,
+    es_admin: bool = False,
+):
     try:
         await llamada
-        return await ver.execute(group_id, quien)
+        return await ver.execute(group_id, quien, es_admin=es_admin)
     except PartidaNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_EXISTE) from e
+    except NoPuedeVerloError:
+        return solo_quien_participa()
     except _CON_CODIGO as e:
         return _respuesta(e)
 
@@ -290,7 +297,9 @@ async def submit_tee_group_scorecard(
 ):
     """200 con la partida."""
     quien = UserId(str(current_user.id))
-    return await _y_la_vista(entregar.execute(group_id, quien), ver, group_id, quien)
+    return await _y_la_vista(
+        entregar.execute(group_id, quien), ver, group_id, quien, es_admin=current_user.is_admin
+    )
 
 
 @router.post(
@@ -310,7 +319,9 @@ async def retire_from_tee_group(
 ):
     """200 con la partida."""
     quien = UserId(str(current_user.id))
-    return await _y_la_vista(retirarse.execute(group_id, quien), ver, group_id, quien)
+    return await _y_la_vista(
+        retirarse.execute(group_id, quien), ver, group_id, quien, es_admin=current_user.is_admin
+    )
 
 
 # ======================================================================================
@@ -347,6 +358,7 @@ async def correct_tee_group_hole(
         ver,
         group_id,
         quien,
+        es_admin=current_user.is_admin,
     )
 
 
@@ -379,6 +391,7 @@ async def delete_tee_group_hole(
         ver,
         group_id,
         quien,
+        es_admin=current_user.is_admin,
     )
 
 
@@ -400,7 +413,11 @@ async def reopen_tee_group_card(
     """200 con la partida."""
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
-        reabrir.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+        reabrir.execute(group_id, user_id, quien, current_user.is_admin),
+        ver,
+        group_id,
+        quien,
+        es_admin=current_user.is_admin,
     )
 
 
@@ -422,7 +439,11 @@ async def mark_tee_group_no_show(
     """200 con la partida."""
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
-        marcar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+        marcar.execute(group_id, user_id, quien, current_user.is_admin),
+        ver,
+        group_id,
+        quien,
+        es_admin=current_user.is_admin,
     )
 
 
@@ -448,7 +469,11 @@ async def retire_tee_group_player(
     """200 con la partida."""
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
-        retirar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+        retirar.execute(group_id, user_id, quien, current_user.is_admin),
+        ver,
+        group_id,
+        quien,
+        es_admin=current_user.is_admin,
     )
 
 
@@ -474,7 +499,11 @@ async def validate_tee_group_scored_holes(
     """200 con la partida."""
     quien = UserId(str(current_user.id))
     return await _y_la_vista(
-        validar.execute(group_id, user_id, quien, current_user.is_admin), ver, group_id, quien
+        validar.execute(group_id, user_id, quien, current_user.is_admin),
+        ver,
+        group_id,
+        quien,
+        es_admin=current_user.is_admin,
     )
 
 
@@ -536,18 +565,19 @@ async def get_tee_window_standings(
     clasificacion: ClasificacionDeLaFranjaUseCase = Depends(
         get_clasificacion_de_la_franja_use_case
     ),
-    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """200 con la clasificación de la franja; 403 si es de una privada en la que no está."""
-    exigir = puerta.exigir_la_clasificacion_de_la_ronda(
-        RoundId(round_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
-    )
-    if (no := await cerrada(exigir)) is not None:
-        return no
     try:
-        return await clasificacion.execute(round_id, category)
+        return await clasificacion.execute(
+            round_id,
+            category,
+            quien=UserId(str(current_user.id)),
+            es_admin=current_user.is_admin,
+        )
     except PartidasError:
         return _sin_clasificacion()
+    except NoPuedeVerloError:
+        return solo_quien_participa()
 
 
 @router.get(
@@ -562,18 +592,19 @@ async def get_overall_standings(
     category: int | None = None,
     current_user: UserResponseDTO = Depends(get_current_user),
     clasificacion: ClasificacionGeneralUseCase = Depends(get_clasificacion_general_use_case),
-    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """200 con la general; 403 si es de una privada en la que no está."""
-    exigir = puerta.exigir_la_clasificacion(
-        CompetitionId(competition_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
-    )
-    if (no := await cerrada(exigir)) is not None:
-        return no
     try:
-        return await clasificacion.execute(competition_id, category)
+        return await clasificacion.execute(
+            competition_id,
+            category,
+            quien=UserId(str(current_user.id)),
+            es_admin=current_user.is_admin,
+        )
     except PartidasError:
         return _sin_clasificacion()
+    except NoPuedeVerloError:
+        return solo_quien_participa()
 
 
 @router.get(
@@ -590,15 +621,13 @@ async def get_scratch_standings(
     competition_id: UUID,
     current_user: UserResponseDTO = Depends(get_current_user),
     clasificacion: ClasificacionScratchUseCase = Depends(get_clasificacion_scratch_use_case),
-    puerta: PuertaDeLoJugado = Depends(get_puerta_de_lo_jugado),
 ):
     """200 con el scratch; 403 si es de una privada en la que no está."""
-    exigir = puerta.exigir_la_clasificacion(
-        CompetitionId(competition_id), UserId(str(current_user.id)), es_admin=current_user.is_admin
-    )
-    if (no := await cerrada(exigir)) is not None:
-        return no
     try:
-        return await clasificacion.execute(competition_id, UserId(str(current_user.id)))
+        return await clasificacion.execute(
+            competition_id, UserId(str(current_user.id)), es_admin=current_user.is_admin
+        )
     except PartidasError:
         return _sin_clasificacion()
+    except NoPuedeVerloError:
+        return solo_quien_participa()
