@@ -267,3 +267,58 @@ class TestSoloLasConsultasNecesarias:
 
         assert visto is Alcance.APROBADOS
         uow.enrollments.find_by_competition_and_status.assert_not_called()
+
+
+class TestLaInvitacionDeLaFicha:
+    """Aceptar desde la ficha (27 oct 2026): la ficha ya sabe si hay invitación."""
+
+    async def test_si_ya_sabe_que_esta_invitado_no_lo_vuelve_a_preguntar(self):
+        competicion = _con_id(visibilidad=PRIVADA)
+        uow = _uow()
+        uow.invitations.competiciones_con_invitacion_pendiente = AsyncMock(return_value=set())
+
+        async with uow:
+            visto = await alcance_de(uow, competicion, YO, invitado=True)
+
+        assert visto is Alcance.AMIGOS
+        uow.invitations.competiciones_con_invitacion_pendiente.assert_not_called()
+
+    async def test_la_pendiente_en_memoria_por_usuario_o_correo_y_la_mas_reciente(self):
+        from datetime import datetime, timedelta
+
+        from src.modules.competition.domain.entities.invitation import Invitation
+        from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+        from src.modules.competition.domain.value_objects.invitation_status import (
+            InvitationStatus,
+        )
+
+        ahora = datetime(2026, 10, 27, 12, 0)
+        comp = CompetitionId(uuid4())
+        repo = InMemoryUnitOfWork().invitations
+
+        def _inv(email, invitee, status=InvitationStatus.PENDING, dias=1, hace=2, competicion=comp):
+            return Invitation.reconstruct(
+                id=InvitationId.generate(),
+                competition_id=competicion,
+                inviter_id=CREADOR,
+                invitee_email=email,
+                invitee_user_id=invitee,
+                status=status,
+                expires_at=ahora + timedelta(days=dias),
+                created_at=ahora - timedelta(days=hace),
+            )
+
+        vieja, nueva = _inv("yo@t.com", YO, hace=3), _inv("yo@t.com", None, hace=1)
+        for inv in (
+            vieja,
+            nueva,
+            _inv("yo@t.com", YO, status=InvitationStatus.DECLINED, hace=0),
+            # Caduca justo ahora: ya no se puede aceptar
+            _inv("yo@t.com", YO, dias=0, hace=0),
+            _inv("yo@t.com", YO, hace=0, competicion=CompetitionId(uuid4())),
+        ):
+            await repo.add(inv)
+
+        assert (await repo.pendiente_de(YO, " YO@t.com ", comp, ahora)).id == nueva.id
+        assert (await repo.pendiente_de(YO, None, comp, ahora)).id == vieja.id
+        assert await repo.pendiente_de(UserId(uuid4()), None, comp, ahora) is None
