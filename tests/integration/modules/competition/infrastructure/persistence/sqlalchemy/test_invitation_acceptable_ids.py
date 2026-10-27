@@ -134,3 +134,57 @@ async def test_competiciones_con_invitacion_pendiente_sin_correo(
     assert await repo.competiciones_con_invitacion_pendiente(creator_id, None, AHORA) == {
         competicion.id
     }
+
+
+# Aceptar desde la ficha (tabla del 27 oct 2026, filas 13-16): la pendiente de quien mira
+async def test_la_pendiente_de_quien_mira_en_una_competicion(
+    db_session,
+    creator_id,  # noqa: F811
+    golf_course_id,  # noqa: F811
+):
+    competicion = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    otra = await _competicion_con_campo(db_session, creator_id, golf_course_id)
+    repo = SQLAlchemyInvitationRepository(db_session)
+
+    def _invitacion(comp, email, invitee, status, caduca):
+        return Invitation.reconstruct(
+            id=InvitationId.generate(),
+            competition_id=comp.id,
+            inviter_id=creator_id,
+            invitee_email=email,
+            invitee_user_id=invitee,
+            status=status,
+            expires_at=caduca,
+            created_at=AHORA - timedelta(days=2),
+        )
+
+    viva = _invitacion(
+        competicion, "yo@test.com", None, InvitationStatus.PENDING, AHORA + timedelta(days=1)
+    )
+    antigua = _invitacion(
+        competicion, "yo@test.com", creator_id, InvitationStatus.PENDING, AHORA + timedelta(days=1)
+    )
+    antigua._created_at = AHORA - timedelta(days=5)
+    for invitacion in (
+        antigua,
+        viva,
+        _invitacion(
+            competicion,
+            "yo@test.com",
+            creator_id,
+            InvitationStatus.DECLINED,
+            AHORA + timedelta(days=1),
+        ),
+        _invitacion(otra, "yo@test.com", creator_id, InvitationStatus.PENDING, AHORA),
+    ):
+        await repo.add(invitacion)
+    await db_session.commit()
+
+    # Por su correo (invitado antes de darse de alta), sin mayúsculas ni espacios
+    assert (
+        await repo.pendiente_de(creator_id, " Yo@Test.com ", competicion.id, AHORA)
+    ).id == viva.id
+    # Caducada justo ahora: ya no
+    assert await repo.pendiente_de(creator_id, "yo@test.com", otra.id, AHORA) is None
+    # Con dos vivas, la más reciente; sin su correo, solo la de su usuario
+    assert (await repo.pendiente_de(creator_id, None, competicion.id, AHORA)).id == antigua.id

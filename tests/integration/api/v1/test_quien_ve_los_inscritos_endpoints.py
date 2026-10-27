@@ -231,3 +231,83 @@ async def test_la_ficha_dice_que_ve_cada_uno(client: AsyncClient):
     assert await _visibilidad(client, invitado, privada) == "FRIENDS"
     assert await _visibilidad(client, curioso, privada) == "NONE"
     assert await _visibilidad(client, curioso, publica) == "FRIENDS"
+
+
+# Aceptar desde la ficha (tabla del 27 oct 2026, filas 13-16): la ficha trae
+# la invitación pendiente de quien mira, con su id y cuándo caduca
+async def _pendiente(client: AsyncClient, jugador: dict, comp: dict):
+    set_auth_cookies(client, jugador["cookies"])
+    r = await client.get(f"/api/v1/competitions/{comp['id']}")
+    assert r.status_code == 200, r.text
+    return r.json()["my_pending_invitation"]
+
+
+async def test_13_la_ficha_trae_la_invitacion_pendiente_de_quien_mira(client: AsyncClient):
+    creador = await _jugador(client, "Anfitrion")
+    invitado = await _jugador(client, "Huesped")
+    curioso = await _jugador(client, "Ajeno")
+    comp = await _privada(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    enviada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": invitado["user"]["id"]},
+    )
+    assert enviada.status_code == 201, enviada.text
+
+    suya = await _pendiente(client, invitado, comp)
+
+    assert suya["id"] == enviada.json()["id"]
+    assert suya["expires_at"]
+    assert await _pendiente(client, curioso, comp) is None
+    assert await _pendiente(client, creador, comp) is None
+
+
+async def test_13_tambien_la_que_se_mando_a_su_correo_antes_del_alta(client: AsyncClient):
+    creador = await _jugador(client, "Anfitriona")
+    comp = await _privada(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    enviada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations/by-email",
+        json={"invitee_email": "qvi_huespeda@test.com"},
+    )
+    assert enviada.status_code == 201, enviada.text
+    nueva = await _jugador(client, "Huespeda")
+
+    assert (await _pendiente(client, nueva, comp))["id"] == enviada.json()["id"]
+
+
+async def test_15_tras_rechazarla_ya_no_hay_pendiente(client: AsyncClient):
+    creador = await _jugador(client, "Anfitriondos")
+    invitado = await _jugador(client, "Huespeddos")
+    comp = await _privada(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    enviada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": invitado["user"]["id"]},
+    )
+    set_auth_cookies(client, invitado["cookies"])
+    r = await client.post(
+        f"/api/v1/invitations/{enviada.json()['id']}/respond", json={"action": "DECLINE"}
+    )
+    assert r.status_code == 200, r.text
+
+    assert await _pendiente(client, invitado, comp) is None
+
+
+async def test_13_un_admin_invitado_tambien_la_ve_para_aceptarla(client: AsyncClient):
+    """Un admin también juega: si le invitan, acepta desde la ficha como cualquiera."""
+    from tests.conftest import create_admin_user
+
+    creador = await _jugador(client, "Organizadorx")
+    admin = await create_admin_user(
+        client, f"qvi_admin_{uuid.uuid4().hex[:6]}@test.com", "P@ssw0rd123!", "Admin", "Jugador"
+    )
+    comp = await _privada(client, creador)
+    set_auth_cookies(client, creador["cookies"])
+    enviada = await client.post(
+        f"/api/v1/competitions/{comp['id']}/invitations",
+        json={"invitee_user_id": admin["user"]["id"]},
+    )
+    assert enviada.status_code == 201, enviada.text
+
+    assert (await _pendiente(client, admin, comp))["id"] == enviada.json()["id"]

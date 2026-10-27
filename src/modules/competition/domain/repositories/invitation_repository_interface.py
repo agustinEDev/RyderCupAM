@@ -104,6 +104,17 @@ class InvitationRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def pendiente_de(
+        self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
+    ) -> Invitation | None:
+        """
+        Su invitación a esa competición que aún puede aceptar (PENDING y sin
+        caducar en `now`), por su usuario o por su correo; la más reciente. Con
+        ella acepta o rechaza desde la ficha (tabla del 27 oct 2026, fila 13).
+        """
+        pass
+
+    @abstractmethod
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         """TODAS las invitaciones PENDING de una competicion, sin paginar (#710)."""
         pass

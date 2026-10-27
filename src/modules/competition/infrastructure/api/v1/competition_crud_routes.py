@@ -26,6 +26,7 @@ from src.modules.competition.application.dto.competition_dto import (
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
     DeleteCompetitionRequestDTO,
+    MyPendingInvitationDTO,
     StrokePlaySettingsDTO,
     StrokePlaySettingsResponseDTO,
     UpdateCompetitionRequestDTO,
@@ -518,12 +519,28 @@ async def get_competition(
             )
             # Lo que ve de los inscritos, para que la ficha no lo adivine
             # comparando la lista con el número (/code-review del front)
+            # La invitación pendiente de quien mira, para aceptarla o rechazarla
+            # desde la ficha (27 oct 2026). Quien organiza no la tiene; un admin
+            # sí puede, que también juega. El reloj, el de `Invitation.is_expired`:
+            # hora local sin zona
+            pendiente = (
+                None
+                if competition.is_creator(current_user_id)
+                else await uow.invitations.pendiente_de(
+                    current_user_id, current_user.email, competition_vo_id, datetime.now()
+                )
+            )
+            if pendiente is not None:
+                dto.my_pending_invitation = MyPendingInvitationDTO(
+                    id=pendiente.id.value, expires_at=pendiente.expires_at
+                )
             alcance = await alcance_de(
                 uow,
                 competition,
                 current_user_id,
                 es_admin=current_user.is_admin,
                 email=current_user.email,
+                invitado=pendiente is not None,
             )
             dto.enrolled_visibility = VISIBILIDAD_DE_LOS_INSCRITOS[alcance]
 

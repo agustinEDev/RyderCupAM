@@ -140,6 +140,27 @@ class SQLAlchemyInvitationRepository(InvitationRepositoryInterface):
         result = await self._session.execute(stmt)
         return set(result.scalars().all())
 
+    async def pendiente_de(
+        self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
+    ) -> Invitation | None:
+        tabla = invitations_table.c
+        para_quien = tabla.invitee_user_id == user_id
+        if email and email.strip():
+            para_quien = or_(para_quien, tabla.invitee_email == email.strip().lower())
+        stmt = (
+            select(Invitation)
+            .where(
+                para_quien,
+                tabla.competition_id == competition_id,
+                tabla.status == InvitationStatus.PENDING,
+                tabla.expires_at > now,
+            )
+            .order_by(tabla.created_at.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         stmt = select(Invitation).where(
             and_(

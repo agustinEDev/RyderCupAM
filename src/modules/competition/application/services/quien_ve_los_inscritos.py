@@ -114,10 +114,12 @@ async def alcance_de(
     email: str | None = None,
     ahora: datetime | None = None,
     aprobados: Sequence[Enrollment] | None = None,
+    invitado: bool | None = None,
 ) -> Alcance:
     """
     La regla con lo que hay que leer para aplicarla. Con el `uow` ya abierto.
-    Con los `aprobados` que ya haya leído quien llama, no se vuelven a pedir.
+    Con los `aprobados` que ya haya leído quien llama, no se vuelven a pedir;
+    lo mismo si ya sabe si tiene una invitación pendiente (`invitado`).
 
     El reloj de la invitación es el suyo (`Invitation.is_expired`, hora local
     sin zona): con otro, se vería caducada aquí y viva al aceptarla.
@@ -128,9 +130,10 @@ async def alcance_de(
         aprobados = await uow.enrollments.find_by_competition_and_status(
             competition.id, EnrollmentStatus.APPROVED
         )
-    invitado = competition.id in await uow.invitations.competiciones_con_invitacion_pendiente(
-        quien, email, ahora or datetime.now()
-    )
+    if invitado is None:
+        invitado = competition.id in await uow.invitations.competiciones_con_invitacion_pendiente(
+            quien, email, ahora or datetime.now()
+        )
     return alcance(
         competition,
         quien,

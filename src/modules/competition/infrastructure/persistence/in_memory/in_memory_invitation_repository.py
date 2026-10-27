@@ -102,6 +102,20 @@ class InMemoryInvitationRepository(InvitationRepositoryInterface):
             and (inv.invitee_user_id == user_id or (correo and inv.invitee_email == correo))
         }
 
+    async def pendiente_de(
+        self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
+    ) -> Invitation | None:
+        correo = email.strip().lower() if email and email.strip() else None
+        suyas = [
+            inv
+            for inv in self._invitations.values()
+            if inv.competition_id == competition_id
+            and inv.status == InvitationStatus.PENDING
+            and now < inv.expires_at
+            and (inv.invitee_user_id == user_id or (correo and inv.invitee_email == correo))
+        ]
+        return max(suyas, key=lambda inv: inv.created_at, default=None)
+
     async def find_pending_by_competition(self, competition_id: CompetitionId) -> list[Invitation]:
         return [
             inv
