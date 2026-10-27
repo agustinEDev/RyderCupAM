@@ -7,10 +7,13 @@ y que al terminar la sala los equipos quedan de verdad repartidos —que es lo
 que leen las rondas y los partidos—.
 """
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import (
+    create_admin_user,
     create_authenticated_user,
     create_competition,
     set_auth_cookies,
@@ -93,6 +96,38 @@ class TestLaSalaPorHttp:
         assert all(j["name"] and j["handicap"] is not None for j in sala["available_players"])
         assert mirada.status_code == 200
         assert mirada.json()["current_team"] == sala["current_team"]
+
+    async def test_a1_un_admin_la_mira_sin_jugar_ni_organizar(self, client: AsyncClient):
+        """
+        Given: una sala lanzada, un admin que no juega ni organiza y un ajeno
+        When: los dos la miran y el admin intenta elegir
+        Then: el admin la ve (27 oct 2026) pero no elige; el ajeno recibe 403
+        """
+        montaje = await _cerrada_con_capitanes(client)
+        comp_id = montaje["comp"]["id"]
+        set_auth_cookies(client, montaje["creador"]["cookies"])
+        assert (await client.post(f"/api/v1/competitions/{comp_id}/draft")).status_code == 201
+        sufijo = uuid.uuid4().hex[:6]
+        admin = await create_admin_user(
+            client, f"draft_admin_{sufijo}@test.com", "P@ssw0rd123!", "Ad", "Min"
+        )
+        ajeno = await create_authenticated_user(
+            client, f"draft_ajeno_{sufijo}@test.com", "P@ssw0rd123!", "Aje", "No"
+        )
+
+        set_auth_cookies(client, admin["cookies"])
+        del_admin = await client.get(f"/api/v1/competitions/{comp_id}/draft")
+        elegido = await client.post(
+            f"/api/v1/competitions/{comp_id}/draft/picks",
+            json={"player_id": del_admin.json()["available_players"][0]["user_id"]},
+        )
+        set_auth_cookies(client, ajeno["cookies"])
+        del_ajeno = await client.get(f"/api/v1/competitions/{comp_id}/draft")
+
+        assert del_admin.status_code == 200, del_admin.text
+        assert del_ajeno.status_code == 403
+        # Elegir sigue siendo del capitán de turno: ni el admin (409, como cualquiera)
+        assert elegido.status_code == 409, elegido.text
 
     async def test_sin_sorteo_todavia_no_hay_sala(self, client: AsyncClient):
         montaje = await _cerrada_con_capitanes(client)

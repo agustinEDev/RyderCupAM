@@ -965,6 +965,35 @@ class TestQuienVeQue:
         with pytest.raises(NotCompetitionParticipantError):
             await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, UserId(uuid4()))
 
+    async def test_a2_el_organizador_los_ve_aunque_ya_no_juegue(self):
+        """Organizar basta: no hace falta seguir inscrito para mirar los sobres."""
+        uow, comp_id, round_id, _, _ = await _montar()
+        async with uow:
+            creador = (await uow.competitions.find_by_id(comp_id)).creator_id
+            suya = await uow.enrollments.find_by_user_and_competition(creador, comp_id)
+            await uow.enrollments.delete(suya.id)
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(round_id.value, creador)
+
+        assert vista.round_id == round_id.value
+
+    async def test_a1_un_admin_los_ve_sin_jugar_ni_organizar(self):
+        """El admin entra a todo (Agustín, 27 oct 2026); su sobre no lo tiene."""
+        uow, _, round_id, equipo_a, _ = await _montar()
+        await _entregar(uow).execute(
+            round_id.value, equipo_a[0], [[str(equipo_a[1].value)], [str(equipo_a[0].value)]]
+        )
+
+        vista = await GetEnvelopesUseCase(uow, _RepoUsuarios()).execute(
+            round_id.value, UserId(uuid4()), is_admin=True
+        )
+
+        assert vista.team_a_submitted is True
+        assert vista.mine is None
+        # Cerrado, su contenido no lo ve nadie: tampoco el admin
+        assert vista.revealed is False
+        assert vista.rival is None
+
     async def test_un_retirado_tampoco_los_ve(self):
         """Estar inscrito no basta: hay que estarlo APROBADO.
 

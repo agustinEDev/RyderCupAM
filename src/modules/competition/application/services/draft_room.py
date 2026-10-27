@@ -96,7 +96,7 @@ class DraftRoom:
         return competition
 
     async def comprobar_que_es_de_la_competicion(
-        self, competition: Competition, user_id: UserId
+        self, competition: Competition, user_id: UserId, *, is_admin: bool = False
     ) -> None:
         """Quien mira la sala tiene que ser de esta competicion.
 
@@ -105,9 +105,11 @@ class DraftRoom:
         nombres, handicaps y equipos de cualquiera, incluida una privada.
 
         Raises:
-            NotCompetitionParticipantError: Si no esta inscrito ni la organiza
+            NotCompetitionParticipantError: Si no esta inscrito (aprobado) ni la
+                organiza. Un admin pasa siempre: entra a todo (27 oct 2026)
         """
-        if competition.is_creator(user_id):
+        # El admin entra a todo (Agustín, 27 oct 2026)
+        if is_admin or competition.is_creator(user_id):
             return
         inscripcion = await self._uow.enrollments.find_by_user_and_competition(
             user_id, competition.id

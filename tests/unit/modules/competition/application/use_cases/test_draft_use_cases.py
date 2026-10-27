@@ -339,6 +339,25 @@ class TestMirarLaSala:
         with pytest.raises(NotCompetitionParticipantError):
             await ver.execute(comp_id.value, UserId(uuid4()))
 
+    async def test_a2_el_organizador_la_ve_aunque_no_juegue(self):
+        """Organizar basta: no hace falta estar inscrito para mirar la sala."""
+        uow, comp_id, creator_id, _, usuarios = await _montar()
+        start, ver, _, _ = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+        async with uow:
+            suya = await uow.enrollments.find_by_user_and_competition(creator_id, comp_id)
+            await uow.enrollments.delete(suya.id)
+
+        assert await ver.execute(comp_id.value, creator_id) is not None
+
+    async def test_a1_un_admin_la_ve_sin_jugar_ni_organizar(self):
+        """El admin entra a todo (Agustín, 27 oct 2026)."""
+        uow, comp_id, creator_id, _, usuarios = await _montar()
+        start, ver, _, _ = _casos(uow, usuarios)
+        await start.execute(comp_id.value, creator_id)
+
+        assert await ver.execute(comp_id.value, UserId(uuid4()), is_admin=True) is not None
+
     async def test_ni_alguien_que_se_retiro(self):
         """Estar inscrito no basta: hay que estarlo APROBADO.
 
