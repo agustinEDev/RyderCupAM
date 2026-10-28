@@ -5,7 +5,9 @@ Decidido con Agustín (#251, 20 sep; y 8 oct 2026):
 
 - **Esperar**: el propio jugador, aprobado, en una franja llena de un día en
   que no juega, mientras las inscripciones están abiertas.
-- **Dejar de esperar**: él, o el organizador.
+- **Dejar de esperar**: él, o el organizador. Quien solo esperaba (sin plaza)
+  y deja su última espera sale de la competición (W2, 28 oct 2026): si no, se
+  quedaba inscrito sin franja y bloqueaba el cierre.
 - **Requiere tu atención**: las plazas que le asignó la lista y aún no ha
   visto, hasta que pulsa «Entendido».
 """
@@ -19,6 +21,10 @@ from src.modules.competition.application.exceptions import (
     PlazaEnFranjaError,
     RoundNotFoundError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     esta_jugada,
 )
@@ -30,6 +36,7 @@ from src.modules.competition.domain.services.listas_de_espera import (
     EsperaNoPosibleError,
     ListasDeEspera,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
@@ -95,8 +102,18 @@ class EsperarUseCase:
 class DejarDeEsperarUseCase:
     """El jugador (o el organizador) lo saca de la lista de espera de una franja."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
+        """
+        Args:
+            actividad: Para que deje de constar como apuntado si sale de la
+                competición con su última espera (W2)
+        """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, round_id: RoundId, jugador: UserId, quien: UserId, is_admin: bool = False
@@ -118,6 +135,35 @@ class DejarDeEsperarUseCase:
                     "Solo el organizador saca a otro jugador de la lista de espera"
                 )
             await self._uow.esperas.quitar(round_id, jugador)
+            # Sin plaza y sin otra espera ya no le queda nada: sale (W2)
+            salio = await self._sale_si_no_le_queda_nada(competicion.id, jugador)
+        if salio:
+            await self._actividad.left(competicion.id, jugador)
+
+    async def _sale_si_no_le_queda_nada(
+        self, competition_id: CompetitionId, jugador: UserId
+    ) -> bool:
+        """Le retira si entró esperando y ya no tiene plaza ni otra espera (W2). Si sale."""
+        inscripcion = await self._uow.enrollments.find_by_user_and_competition(
+            jugador, competition_id
+        )
+        if inscripcion is None or inscripcion.status is not EnrollmentStatus.APPROVED:
+            return False
+        # Solo quien entró apuntándose a una espera: al que entró por invitación
+        # o a mano sin franja lo coloca el organizador (28 oct 2026)
+        if not inscripcion.entered_waiting:
+            return False
+        if any(
+            p.user_id == jugador for p in await self._uow.plazas.de_la_competicion(competition_id)
+        ):
+            return False
+        if any(
+            e.user_id == jugador for e in await self._uow.esperas.de_la_competicion(competition_id)
+        ):
+            return False
+        inscripcion.withdraw("left_the_waiting_list")
+        await self._uow.enrollments.update(inscripcion)
+        return True
 
 
 class MisPlazasAsignadasUseCase:

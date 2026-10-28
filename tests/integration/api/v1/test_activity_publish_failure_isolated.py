@@ -21,6 +21,7 @@ from tests.conftest import (
     create_authenticated_user,
     create_competition,
     set_auth_cookies,
+    solicitud_pendiente,
 )
 from tests.integration.api.v1.test_quick_match_endpoints import _create_approved_golf_course
 
@@ -49,7 +50,7 @@ async def test_aprobar_una_solicitud_responde_bien_aunque_falle_actividad(client
     comp = await create_competition(client, org["cookies"])
     await activate_competition(client, org["cookies"], comp["id"])
     set_auth_cookies(client, yo["cookies"])
-    solicitud = (await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")).json()
+    solicitud = await solicitud_pendiente(client, comp["id"])
 
     set_auth_cookies(client, org["cookies"])
     respuesta = await client.post(f"/api/v1/enrollments/{solicitud['id']}/approve")

@@ -55,11 +55,16 @@ class Enrollment:
         use_real_name: bool = True,
         fixed_handicap: Decimal | None = None,
         fixed_category: int | None = None,
+        entered_waiting: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         domain_events: list[DomainEvent] | None = None,
     ):
         # Validaciones
+        """
+        Raises:
+            ValueError: Si el hándicap personalizado está fuera de rango
+        """
         if custom_handicap is not None:
             self._validate_custom_handicap(custom_handicap)
 
@@ -77,6 +82,9 @@ class Enrollment:
         self._fixed_handicap = fixed_handicap
         # Y su categoría, con la regla de los seis, fijada a la vez (#251)
         self._fixed_category = fixed_category
+        # Entró en la competición apuntándose a una lista de espera: si se queda
+        # sin plaza y sin espera, sale (W2 y A4, 28 oct 2026)
+        self._entered_waiting = entered_waiting
         self._created_at = created_at or datetime.now()
         self._updated_at = updated_at or datetime.now()
         self._domain_events: list[DomainEvent] = domain_events or []
@@ -342,6 +350,32 @@ class Enrollment:
         )
         self._add_domain_event(event)
 
+    @property
+    def entered_waiting(self) -> bool:
+        """Si entró apuntándose a una lista de espera (release social 3)."""
+        return self._entered_waiting
+
+    def entra_esperando(self) -> None:
+        """
+        Entró en una pública apuntándose a la espera de una franja llena (D6).
+
+        Así se distingue de quien entró por invitación o a mano y aún no tiene
+        franja: solo a quien entró esperando le saca quedarse sin plaza y sin
+        espera (decidido el 28 oct 2026).
+        """
+        self._entered_waiting = True
+        self._updated_at = datetime.now()
+
+    def consigue_plaza(self) -> None:
+        """
+        Ya tiene plaza en una franja: deja de contar como entrado esperando. Si
+        luego la suelta, el organizador lo coloca, como a cualquiera (code-review,
+        28 oct 2026).
+        """
+        if self._entered_waiting:
+            self._entered_waiting = False
+            self._updated_at = datetime.now()
+
     def volver_a_entrar(
         self,
         *,
@@ -378,6 +412,7 @@ class Enrollment:
 
         self._status = EnrollmentStatus.APPROVED if aprobada else EnrollmentStatus.REQUESTED
         self._team_id = None
+        self._entered_waiting = False
         self._custom_handicap = custom_handicap
         self._tee_color = tee_color
         self._fixed_handicap = None

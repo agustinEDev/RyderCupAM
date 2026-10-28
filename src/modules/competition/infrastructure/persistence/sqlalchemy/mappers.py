@@ -976,6 +976,8 @@ enrollments_table = Table(
     # El hándicap de todo el torneo, fijado al cerrar las inscripciones (#251)
     Column("fixed_handicap", Numeric(precision=4, scale=1), nullable=True),
     Column("fixed_category", Integer, nullable=True),
+    # Entró apuntándose a una lista de espera (release social 3, 28 oct 2026)
+    Column("entered_waiting", Boolean, nullable=False, server_default="false"),
     Column("created_at", DateTime, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
@@ -1616,6 +1618,7 @@ def start_competition_mappers():
                 "_use_real_name": enrollments_table.c.use_real_name,
                 "_fixed_handicap": enrollments_table.c.fixed_handicap,
                 "_fixed_category": enrollments_table.c.fixed_category,
+                "_entered_waiting": enrollments_table.c.entered_waiting,
                 "_created_at": enrollments_table.c.created_at,
                 "_updated_at": enrollments_table.c.updated_at,
                 # Composite VOs → private attrs

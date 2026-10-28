@@ -158,8 +158,14 @@ class RemoveEnrolledPlayerUseCase:
 
             # La entidad valida el estado: solo un aprobado
             enrollment.withdraw("removed_by_organizer")
+            asignadas: list = []
             fotos = await sacar_de_la_competicion(
-                self._uow, competition, enrollment, zonas=self._zonas, ahora=self._reloj()
+                self._uow,
+                competition,
+                enrollment,
+                zonas=self._zonas,
+                ahora=self._reloj(),
+                asignadas=asignadas,
             )
             await self._uow.enrollments.update(enrollment)
 
@@ -169,6 +175,8 @@ class RemoveEnrolledPlayerUseCase:
         await self._actividad.removed(competition, enrollment)
         for round_id, (antes, despues) in fotos.items():
             await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
+        # Y a quien la lista dio su plaza (A3)
+        await self._actividad.desde_la_espera(competition, asignadas)
 
         return WithdrawEnrollmentResponseDTO(
             id=enrollment.id.value,

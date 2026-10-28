@@ -28,6 +28,7 @@ from src.modules.competition.application.services.handicaps_al_cerrar import Han
 from src.modules.competition.application.services.invitaciones_al_cerrar import (
     sin_plaza_para_las_pendientes,
 )
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -101,6 +102,7 @@ class CloseEnrollmentsUseCase:
             PlayersWithoutHandicapError: Si en un stroke play falta el de alguien
                 (no se cierra)
         """
+        sin_sitio: list[Enrollment] = []
         async with self._uow:
             # 1. Buscar la competición
             competition_id = CompetitionId(request.competition_id)
@@ -117,9 +119,6 @@ class CloseEnrollmentsUseCase:
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede cerrar las inscripciones")
 
-            # 3. Contar inscripciones aprobadas
-            total_enrollments = await self._uow.enrollments.count_approved(competition_id)
-
             # 4. En un Stableford o un Medal se fija el hándicap de cada uno, el de
             #    todo el torneo (7 oct 2026, como la RFEG), y si falta alguno no se
             #    cierra. Solo al cerrar DESDE ABIERTA: este mismo paso devuelve a
@@ -130,9 +129,15 @@ class CloseEnrollmentsUseCase:
                 competition.stroke_play is not None
                 and competition.status is CompetitionStatus.ACTIVE
             ):
-                # Antes, que cada aprobado tenga su franja (8 oct 2026)
-                await FranjasAlCerrar(self._uow, self._usuarios()).comprobar(competition)
+                # Quien sigue solo en espera se queda sin plaza y sale (A4, 28 oct
+                # 2026); después, que cada aprobado tenga su franja (8 oct 2026)
+                sin_sitio = await FranjasAlCerrar(self._uow, self._usuarios()).al_cerrar(
+                    competition
+                )
                 await self._handicaps().fijar(competition)
+
+            # 3. Contar inscripciones aprobadas: tras sacar a los que esperaban
+            total_enrollments = await self._uow.enrollments.count_approved(competition_id)
 
             # 4b. Cerrar inscripciones (la entidad valida la transición)
             desde_abierta = competition.status is CompetitionStatus.ACTIVE
@@ -158,6 +163,10 @@ class CloseEnrollmentsUseCase:
         self._actualizaciones.lanzar(actualizacion)
         # Y las invitaciones cerradas retiran su aviso de invitado (22 oct 2026)
         await self._actividad.invitations_closed(sin_plaza)
+        # Quien se quedó en espera: «no hubo plaza» (A4)
+        for inscripcion in sin_sitio:
+            await self._actividad.left(competition.id, inscripcion.user_id)
+        await self._actividad.no_place(competition, sin_sitio)
 
         # 7. Retornar DTO de respuesta
         return CloseEnrollmentsResponseDTO(

@@ -22,6 +22,7 @@ from tests.conftest import (
     create_golf_course,
     estado_en_bd,
     set_auth_cookies,
+    solicitud_pendiente,
 )
 from tests.integration.api.v1.test_scoring_endpoints import setup_match_in_progress
 
@@ -2324,12 +2325,10 @@ class TestPublicAndPrivate:
         rechazado = await create_authenticated_user(
             client, "rechazado@test.com", "P@ssw0rd123!", "Le", "Rechazan"
         )
-        pedida = await client.post(
-            f"/api/v1/competitions/{competicion_id}/enrollments", cookies=rechazado["cookies"]
-        )
-        assert pedida.status_code == 201, pedida.text
+        set_auth_cookies(client, rechazado["cookies"])
+        pedida = await solicitud_pendiente(client, competicion_id)
         rechazo = await client.post(
-            f"/api/v1/enrollments/{pedida.json()['id']}/reject", cookies=organizador["cookies"]
+            f"/api/v1/enrollments/{pedida['id']}/reject", cookies=organizador["cookies"]
         )
         assert rechazo.status_code == 200, rechazo.text
 

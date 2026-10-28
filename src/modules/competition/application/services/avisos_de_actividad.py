@@ -53,6 +53,47 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             lambda p: p.enrolled(competition, enrollment, accepted_request),
         )
 
+    async def joined(
+        self,
+        competition: Competition,
+        enrollment: Enrollment,
+        franja: Round | None,
+        waiting: bool,
+    ) -> None:
+        # Al organizador no se le cuenta que se ha apuntado el mismo
+        """Al organizador, que alguien se ha apuntado solo (A1); no si es él mismo."""
+        if competition.is_creator(enrollment.user_id):
+            return
+        await self._avisar("joined", lambda p: p.joined(competition, enrollment, franja, waiting))
+
+    async def placed_from_waiting_list(
+        self, competition: Competition, franja: Round, user_id: UserId
+    ) -> None:
+        await self._avisar(
+            "placed_from_waiting_list",
+            lambda p: p.placed_from_waiting_list(competition, franja, user_id),
+        )
+
+    async def desde_la_espera(
+        self, competition: Competition, asignadas: Sequence[tuple[Round, UserId]]
+    ) -> None:
+        """A cada uno al que la lista dio plaza, la suya (A3)."""
+        for franja, user_id in asignadas:
+            await self.placed_from_waiting_list(competition, franja, user_id)
+
+    async def no_place(self, competition: Competition, enrollments: Sequence[Enrollment]) -> None:
+        """A quienes se quedaron sin plaza al cerrar (A4); sin ninguno, nada."""
+        if not enrollments:
+            return
+        await self._avisar("no_place", lambda p: p.no_place(competition, enrollments))
+
+    async def window_removed(
+        self, competition: Competition, franja: Round, enrollment: Enrollment
+    ) -> None:
+        await self._avisar(
+            "window_removed", lambda p: p.window_removed(competition, franja, enrollment)
+        )
+
     async def left(self, competition_id: CompetitionId, user_id: UserId) -> None:
         await self._avisar("left", lambda p: p.left(competition_id, user_id))
 

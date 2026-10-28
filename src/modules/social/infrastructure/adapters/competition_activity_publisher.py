@@ -28,6 +28,7 @@ from src.modules.social.application.use_cases.publish_competition_notices_use_ca
     RyderResultRef,
     StandingRef,
     TeeTimeRef,
+    TeeWindowRef,
     TournamentRef,
 )
 from src.modules.social.application.use_cases.publish_round_achievements_use_case import (
@@ -97,6 +98,41 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             return
         await self._notices.enrolled(
             enrollment.user_id, _ref(competition), str(enrollment.id.value), accepted_request
+        )
+
+    async def joined(
+        self,
+        competition: Competition,
+        enrollment: Enrollment,
+        franja: Round | None,
+        waiting: bool,
+    ) -> None:
+        """Al organizador de la competición, que alguien se ha apuntado (A1)."""
+        await self._notices.joined(
+            competition.creator_id,
+            enrollment.user_id,
+            _ref(competition),
+            str(enrollment.id.value),
+            _franja(franja) if franja is not None else None,
+            waiting,
+        )
+
+    async def placed_from_waiting_list(
+        self, competition: Competition, franja: Round, user_id: UserId
+    ) -> None:
+        await self._notices.placed_from_waiting_list(user_id, _ref(competition), _franja(franja))
+
+    async def no_place(self, competition: Competition, enrollments: Sequence[Enrollment]) -> None:
+        """A cada uno, su «no hubo plaza», por su inscripción (A4)."""
+        await self._notices.no_place(
+            _ref(competition), [(e.user_id, str(e.id.value)) for e in enrollments]
+        )
+
+    async def window_removed(
+        self, competition: Competition, franja: Round, enrollment: Enrollment
+    ) -> None:
+        await self._notices.window_removed(
+            enrollment.user_id, _ref(competition), str(enrollment.id.value), _franja(franja)
         )
 
     async def left(self, competition_id: CompetitionId, user_id: UserId) -> None:
@@ -307,6 +343,17 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             ]
 
         await self._notices.tee_times(_ref(competition), str(round_id.value), _vigentes)
+
+
+def _franja(franja: Round) -> TeeWindowRef:
+    """La franja como la cuenta un aviso: día, sesión y primera salida."""
+    hoja = franja.hoja_de_salidas
+    return TeeWindowRef(
+        round_id=str(franja.id.value),
+        round_date=franja.round_date,
+        session_type=franja.session_type.value,
+        tee_time=hoja.primera_salida.strftime("%H:%M") if hoja is not None else None,
+    )
 
 
 def _ref(competition: Competition) -> TournamentRef:

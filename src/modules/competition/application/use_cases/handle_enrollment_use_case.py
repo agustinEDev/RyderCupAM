@@ -18,11 +18,12 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.cupo_de_la_competicion import (
+    al_entrar_uno,
+    exigir_sitio,
+)
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
-from src.modules.competition.application.services.invitaciones_al_cerrar import (
-    al_ocupar_una_plaza,
-)
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
@@ -34,7 +35,6 @@ from src.modules.competition.domain.exceptions.competition_violations import (
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
-from src.modules.competition.domain.services.competition_policy import CompetitionPolicy
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.repositories.user_repository_interface import (
@@ -140,13 +140,9 @@ class HandleEnrollmentUseCase:
             sin_plaza: list[Invitation] = []
             if request.action == "APPROVE":
                 # Verificar capacidad antes de aprobar
-                approved_count = await self._uow.enrollments.count_approved_by_competition(
-                    enrollment.competition_id
-                )
+                # Con franjas, el cupo es de sus plazas (28 oct 2026)
                 try:
-                    CompetitionPolicy.validate_capacity(
-                        approved_count, competition.max_players, enrollment.competition_id
-                    )
+                    approved_count = await exigir_sitio(self._uow, competition)
                 except CompetitionFullViolation as e:
                     raise CompetitionFullError(
                         f"La competición está completa: {competition.max_players} plazas ocupadas."
@@ -174,9 +170,7 @@ class HandleEnrollmentUseCase:
                 await TeamAssignmentWriter.deshacer(self._uow, competition)
                 # Si era la última plaza, las invitaciones pendientes se quedan sin
                 # ella ya (BE #359)
-                sin_plaza = await al_ocupar_una_plaza(
-                    self._uow, enrollment.competition_id, approved_count, competition.max_players
-                )
+                sin_plaza = await al_entrar_uno(self._uow, competition, approved_count)
             elif request.action == "REJECT":
                 enrollment.reject()
             else:

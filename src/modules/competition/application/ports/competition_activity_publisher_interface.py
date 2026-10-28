@@ -71,6 +71,41 @@ class CompetitionActivityPublisherInterface(ABC):
         """Un jugador queda inscrito; `accepted_request` si fue aprobando su solicitud."""
 
     @abstractmethod
+    async def joined(
+        self,
+        competition: Competition,
+        enrollment: Enrollment,
+        franja: Round | None,
+        waiting: bool,
+    ) -> None:
+        """
+        Alguien se apunta solo a una publica: se le dice al organizador, con la
+        franja en la que entro o cuya espera eligio (A1, 28 oct 2026).
+        """
+
+    @abstractmethod
+    async def placed_from_waiting_list(
+        self, competition: Competition, franja: Round, user_id: UserId
+    ) -> None:
+        """La lista de espera le da plaza en esa franja (A3, 28 oct 2026)."""
+
+    @abstractmethod
+    async def no_place(self, competition: Competition, enrollments: Sequence[Enrollment]) -> None:
+        """
+        Se cerraron las inscripciones y seguian solo en espera: salen sin plaza
+        (A4, 28 oct 2026).
+        """
+
+    @abstractmethod
+    async def window_removed(
+        self, competition: Competition, franja: Round, enrollment: Enrollment
+    ) -> None:
+        """
+        Se borra la franja en cuya espera estaba, que era la ultima suya: sale de
+        la competicion (28 oct 2026).
+        """
+
+    @abstractmethod
     async def left(self, competition_id: CompetitionId, user_id: UserId) -> None:
         """Un inscrito deja de estarlo (se retira)."""
 

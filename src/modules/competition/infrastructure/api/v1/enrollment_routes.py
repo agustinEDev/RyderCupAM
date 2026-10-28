@@ -103,6 +103,10 @@ from src.modules.competition.application.use_cases.request_enrollment_use_case i
     CompetitionNotActiveError,
     EnrollmentClosedError,
     RequestEnrollmentUseCase,
+    TeeWindowFullError,
+    TeeWindowHasRoomError,
+    TeeWindowNotFoundError,
+    TeeWindowRequiredError,
     TooManyEnrollmentsError,
 )
 from src.modules.competition.application.use_cases.set_custom_handicap_use_case import (
@@ -135,12 +139,18 @@ router = APIRouter()
 
 
 class RequestEnrollmentBody(BaseModel):
-    """Body opcional para solicitar inscripción con selección de tee."""
+    """Body opcional al apuntarse: la barra y, con franjas, la franja o su espera."""
 
     tee_color: str | None = Field(
         None,
         pattern=TEE_COLOR_PATTERN,
         description=f"Preferido. {TEE_COLOR_DESCRIPTION}",
+    )
+    round_id: UUID | None = Field(
+        None, description="La franja, obligatoria en un stroke play con franjas."
+    )
+    waiting_list: bool = Field(
+        False, description="Entrar en la lista de espera de la franja, que tiene que estar llena."
     )
 
 
@@ -278,8 +288,11 @@ class EnrollmentDTOMapper:
     "/competitions/{competition_id}/enrollments",
     response_model=RequestEnrollmentResponseDTO,
     status_code=status.HTTP_201_CREATED,
-    summary="Solicitar inscripción",
-    description="El usuario actual solicita inscribirse en una competición.",
+    summary="Apuntarse a una competición pública",
+    description=(
+        "El usuario actual entra directamente en una competición pública (APPROVED). "
+        "En un stroke play con franjas elige franja con hueco o la espera de una llena."
+    ),
 )
 async def request_enrollment(
     competition_id: UUID,
@@ -288,19 +301,34 @@ async def request_enrollment(
     use_case: RequestEnrollmentUseCase = Depends(get_request_enrollment_use_case),
 ):
     """
-    Solicita inscripción en una competición.
+    Apuntarse a una competición pública: se entra directamente (28 oct 2026).
 
-    El usuario actual se inscribe en la competición especificada.
-    La inscripción queda en estado REQUESTED hasta que el creador la apruebe.
-    Opcionalmente puede indicar su color de tee preferida.
+    **Returns:**
+    - 201: Inscrito (APPROVED), con su franja o en su espera
+    - 400: Inscripciones no abiertas, llena, torneo empezado, límite, perfil
+    - 403: Privada
+    - 409: Ya inscrito; o la franja: `TEE_WINDOW_FULL`, `TEE_WINDOW_HAS_ROOM`
+    - 404: `TEE_WINDOW_NOT_FOUND`: la franja no es de esta competición
+    - 422: `TEE_WINDOW_REQUIRED`: con franjas hay que elegir una
     """
     try:
         request_dto = RequestEnrollmentRequestDTO(
             competition_id=competition_id,
             user_id=current_user.id,
             tee_color=body.tee_color if body else None,
+            round_id=body.round_id if body else None,
+            waiting_list=body.waiting_list if body else False,
         )
         return await use_case.execute(request_dto)
+    except (
+        TeeWindowRequiredError,
+        TeeWindowNotFoundError,
+        TeeWindowFullError,
+        TeeWindowHasRoomError,
+    ) as e:
+        # Mensaje fijo por código, no el de la excepción (CodeQL, 28 oct 2026)
+        estado, codigo, texto = _FRANJA_QUE_NO_VALE[type(e)]
+        return JSONResponse(status_code=estado, content={"detail": texto, "error_code": codigo})
 
     except RequestCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -590,6 +618,30 @@ async def remove_enrolled_player(
         )
     except EnrollmentStateError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+_FRANJA_QUE_NO_VALE: dict[type[Exception], tuple[int, str, str]] = {
+    TeeWindowRequiredError: (
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "TEE_WINDOW_REQUIRED",
+        "Choose a tee window, or the waiting list of a full one.",
+    ),
+    TeeWindowNotFoundError: (
+        status.HTTP_404_NOT_FOUND,
+        "TEE_WINDOW_NOT_FOUND",
+        "That tee window is not one of this competition.",
+    ),
+    TeeWindowFullError: (
+        status.HTTP_409_CONFLICT,
+        "TEE_WINDOW_FULL",
+        "That tee window is full: join its waiting list or choose another.",
+    ),
+    TeeWindowHasRoomError: (
+        status.HTTP_409_CONFLICT,
+        "TEE_WINDOW_HAS_ROOM",
+        "That tee window has room: take a place directly.",
+    ),
+}
 
 
 _NO_SE_QUITA = {

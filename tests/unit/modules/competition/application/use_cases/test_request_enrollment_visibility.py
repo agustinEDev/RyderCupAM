@@ -42,7 +42,7 @@ class _ConGenero:
     """Cualquiera tiene el género puesto: esto prueba la visibilidad, no el género."""
 
     async def find_by_id(self, user_id):
-        return SimpleNamespace(id=user_id, gender=Gender.MALE)
+        return SimpleNamespace(id=user_id, gender=Gender.MALE, email=None)
 
 
 _CON_GENERO = _ConGenero()
@@ -93,7 +93,7 @@ class TestAskingForAPlace:
             RequestEnrollmentRequestDTO(competition_id=created.id, user_id=uuid4())
         )
 
-        assert respuesta.status == "REQUESTED"
+        assert respuesta.status == "APPROVED"
 
     async def test_nothing_is_written_when_it_is_refused(self, uow, creator_id):
         """Rechazar no deja una inscripcion a medias por ahi."""
