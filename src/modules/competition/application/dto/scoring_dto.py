@@ -234,7 +234,8 @@ class ConcedeMatchBodyDTO(BaseModel):
 class LeaderboardPlayerDTO(BaseModel):
     """Jugador en el leaderboard."""
 
-    user_id: str
+    # null para un visitante sin sesión (release social 3)
+    user_id: str | None
     user_name: str
 
 

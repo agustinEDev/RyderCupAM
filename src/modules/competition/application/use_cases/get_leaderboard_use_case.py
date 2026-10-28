@@ -15,6 +15,7 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     NoPuedeVerloError,
     esta_dentro,
     exigir_la_clasificacion,
+    la_ve_un_visitante,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.domain.entities.competition import Competition, TournamentTypeError
@@ -23,7 +24,6 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.services.scoring_service import ScoringService
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
-from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -54,7 +54,7 @@ class GetLeaderboardUseCase:
         falta (PR 2). Sin sesión, solo una pública (L1, L3, 28 oct 2026).
         """
         if visitante:
-            return competition.visibility is Visibility.PUBLIC
+            return la_ve_un_visitante(competition)
         return quien is None or await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
 
     async def _que_ve(
@@ -170,14 +170,16 @@ class GetLeaderboardUseCase:
 
                     team_a_players = [
                         LeaderboardPlayerDTO(
-                            user_id=str(p.user_id),
+                            # A un visitante, sin el id interno (code-review, 28 oct)
+                            user_id=None if visitante else str(p.user_id),
                             user_name=user_names.get(p.user_id, ""),
                         )
                         for p in match.team_a_players
                     ]
                     team_b_players = [
                         LeaderboardPlayerDTO(
-                            user_id=str(p.user_id),
+                            # A un visitante, sin el id interno (code-review, 28 oct)
+                            user_id=None if visitante else str(p.user_id),
                             user_name=user_names.get(p.user_id, ""),
                         )
                         for p in match.team_b_players

@@ -119,18 +119,10 @@ class RegisterDeviceUseCase:
                     )
 
                     if existing_device:
-                        # Device found via cookie - update timestamps and IP
-                        await self._reanuda(existing_device)
-                        existing_device.update_ip_address(request.ip_address)
-                        await self._uow.user_devices.save(existing_device)
-
                         logger.debug(f"Device identified via cookie: {existing_device.device_name}")
-
-                        return RegisterDeviceResponseDTO(
-                            device_id=str(existing_device.id.value),
-                            is_new_device=False,
-                            message=f"Dispositivo actualizado: {existing_device.device_name}",
-                            set_device_cookie=False,  # Cookie already valid
+                        # Cookie already valid
+                        return await self._reusa(
+                            existing_device, request.ip_address, poner_cookie=False
                         )
 
                 except ValueError as e:
@@ -180,8 +172,10 @@ class RegisterDeviceUseCase:
                 set_device_cookie=True,  # Caller must set cookie
             )
 
-    async def _reusa(self, device: UserDevice, ip_address: str) -> RegisterDeviceResponseDTO:
-        """El que ya estaba, al día; sin su cookie, el que llama se la pone."""
+    async def _reusa(
+        self, device: UserDevice, ip_address: str, poner_cookie: bool = True
+    ) -> RegisterDeviceResponseDTO:
+        """El que ya estaba, al día; si no traía su cookie, el que llama se la pone."""
         await self._reanuda(device)
         device.update_ip_address(ip_address)
         await self._uow.user_devices.save(device)
@@ -189,7 +183,7 @@ class RegisterDeviceUseCase:
             device_id=str(device.id.value),
             is_new_device=False,
             message=f"Dispositivo actualizado: {device.device_name}",
-            set_device_cookie=True,
+            set_device_cookie=poner_cookie,
         )
 
     async def _reanuda(self, device: UserDevice) -> None:

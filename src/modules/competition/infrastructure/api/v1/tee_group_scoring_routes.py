@@ -31,7 +31,7 @@ from src.config.dependencies import (
     get_validar_lo_anotado_use_case,
     get_ver_anotacion_de_partida_use_case,
 )
-from src.config.rate_limit import LIMITE_DE_LO_PUBLICO, limiter
+from src.config.rate_limit import limite_de_lo_publico, limiter
 from src.modules.competition.application.dto.partidas_dto import (
     CorrectHoleBodyDTO,
     StandingsResponseDTO,
@@ -576,7 +576,7 @@ class _QuienMira:
     ),
     tags=["Competitions - Tee groups"],
 )
-@limiter.limit(LIMITE_DE_LO_PUBLICO)
+@limiter.limit(limite_de_lo_publico)
 async def get_tee_window_standings(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     round_id: UUID,
@@ -608,7 +608,7 @@ async def get_tee_window_standings(
     description="Neta, con la regla de la competición (acumulado o mejor tarjeta) y categorías.",
     tags=["Competitions - Tee groups"],
 )
-@limiter.limit(LIMITE_DE_LO_PUBLICO)
+@limiter.limit(limite_de_lo_publico)
 async def get_overall_standings(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
@@ -642,7 +642,7 @@ async def get_overall_standings(
     ),
     tags=["Competitions - Tee groups"],
 )
-@limiter.limit(LIMITE_DE_LO_PUBLICO)
+@limiter.limit(limite_de_lo_publico)
 async def get_scratch_standings(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,

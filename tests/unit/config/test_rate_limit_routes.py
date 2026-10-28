@@ -17,6 +17,7 @@ from src.config.rate_limit import (
     get_client_identifier,
     get_hole_sample_rate_limit_key,
     get_rate_limit_key,
+    limite_de_lo_publico,
     limiter,
 )
 
@@ -26,6 +27,11 @@ ANONYMOUS_USER_KEYS = {
     "submit_hole_sample": get_hole_sample_rate_limit_key,
     "submit_hole_report": get_hole_sample_rate_limit_key,
 }
+
+
+# Públicas que cuentan por usuario si llega un token válido, y si no por red: no
+# piden sesión para que una caducada no las rompa (resumen público, 28 oct 2026)
+PUBLICAS_POR_USUARIO = {"get_competition_summary"}
 
 
 def _routes(routes) -> Iterator[APIRoute]:
@@ -48,7 +54,8 @@ def _limited_routes() -> list[tuple[APIRoute, list, bool]]:
     rows = []
     for route in _routes(app.routes):
         name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
-        limits = limiter._route_limits.get(name)
+        # Los que dependen de la clave (lo público, 28 oct 2026) van aparte
+        limits = limiter._route_limits.get(name) or limiter._dynamic_route_limits.get(name)
         if limits:
             # Con sesión opcional (la clasificación por enlace, release social 3)
             # cuenta como con sesión: por usuario, y por red si no la hay
@@ -56,6 +63,11 @@ def _limited_routes() -> list[tuple[APIRoute, list, bool]]:
             requires_session = bool({get_current_user, get_current_user_optional} & dependencias)
             rows.append((route, limits, requires_session))
     return rows
+
+
+def _clave(limite):
+    """La función de clave de un límite, fijo (`key_func`) o según la clave (`key_function`)."""
+    return getattr(limite, "key_func", None) or limite.key_function
 
 
 def _label(route: APIRoute) -> str:
@@ -85,7 +97,7 @@ def test_every_limited_route_with_session_counts_per_user():
         for route, limits, requires_session in _limited_routes()
         if requires_session
         and any(
-            lim.key_func is not ANONYMOUS_USER_KEYS.get(route.endpoint.__name__, get_rate_limit_key)
+            _clave(lim) is not ANONYMOUS_USER_KEYS.get(route.endpoint.__name__, get_rate_limit_key)
             for lim in limits
         )
     ]
@@ -102,7 +114,9 @@ def test_every_limited_anonymous_route_counts_per_network():
     wrong = [
         _label(route)
         for route, limits, requires_session in _limited_routes()
-        if not requires_session and any(lim.key_func is not get_client_identifier for lim in limits)
+        if not requires_session
+        and route.endpoint.__name__ not in PUBLICAS_POR_USUARIO
+        and any(_clave(lim) is not get_client_identifier for lim in limits)
     ]
 
     assert wrong == []
@@ -134,7 +148,17 @@ def test_every_route_a_visitor_can_reach_has_a_limit():
         if get_current_user_optional not in set(_dependencies(route.dependant)):
             continue
         name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
-        if not limiter._route_limits.get(name):
+        if not (limiter._route_limits.get(name) or limiter._dynamic_route_limits.get(name)):
             sin_limite.append(_label(route))
 
     assert sin_limite == []
+
+
+def test_lo_publico_cuenta_distinto_con_y_sin_sesion():
+    """
+    Given: El límite de lo que ve un visitante (/code-review, 28 oct 2026)
+    When: Se pide con la clave de un usuario o con la de red
+    Then: Con sesión, el de siempre; sin ella, con margen (contador compartido, ADR-038)
+    """
+    assert limite_de_lo_publico("user:123") == "30/minute"
+    assert limite_de_lo_publico("10.0.0.1") == "600/minute"

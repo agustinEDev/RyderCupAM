@@ -1509,6 +1509,12 @@ class CompetitionGolfCourseResponseDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class GetCompetitionSummaryRequestDTO(BaseModel):
+    """La competición de la que se pide el resumen público."""
+
+    competition_id: UUID = Field(..., description="ID de la competición.")
+
+
 class CompetitionSummaryDTO(BaseModel):
     """
     El resumen público de una competición, sin sesión (release social 3, L5).

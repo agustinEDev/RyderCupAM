@@ -7,9 +7,10 @@ privada para decir que solo la ven quienes participan. Solo eso: nombre, tipo,
 estado, visibilidad y fechas. También de una privada: privada no es secreta.
 """
 
-from uuid import UUID
-
-from src.modules.competition.application.dto.competition_dto import CompetitionSummaryDTO
+from src.modules.competition.application.dto.competition_dto import (
+    CompetitionSummaryDTO,
+    GetCompetitionSummaryRequestDTO,
+)
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -23,11 +24,12 @@ class GetCompetitionSummaryUseCase:
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
         self._uow = uow
 
-    async def execute(self, competition_id: UUID) -> CompetitionSummaryDTO:
+    async def execute(self, request: GetCompetitionSummaryRequestDTO) -> CompetitionSummaryDTO:
         """
         Raises:
             CompetitionNotFoundError: Si no existe
         """
+        competition_id = request.competition_id
         async with self._uow:
             competicion = await self._uow.competitions.find_by_id(CompetitionId(competition_id))
         if competicion is None:

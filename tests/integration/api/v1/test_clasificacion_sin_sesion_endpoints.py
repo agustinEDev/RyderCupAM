@@ -126,3 +126,13 @@ async def test_en_stroke_play_un_token_que_no_vale_es_un_401(client: AsyncClient
     for ruta in _rutas(competicion, stroke_play=True):
         respuesta = await client.get(ruta)
         assert respuesta.status_code == 401, (ruta, respuesta.text)
+
+
+async def test_el_resumen_no_mira_la_sesion(client: AsyncClient):
+    """/code-review: con una cookie que no vale, el resumen sale igual (no pide sesión)."""
+    competicion = await _competicion(client, "PUBLIC", stroke_play=True)
+    client.cookies.set("access_token", "no-es-un-token")
+
+    respuesta = await client.get(f"/api/v1/competitions/{competicion['id']}/summary")
+
+    assert respuesta.status_code == 200, respuesta.text

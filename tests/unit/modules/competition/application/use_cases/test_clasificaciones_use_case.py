@@ -431,7 +431,7 @@ async def test_l2_sin_sesion_una_publica_se_ve_entera(cual):
     visitante = await _las_tres(escenario, _Eventos())[cual](None, visitante=True)
     dentro = await _las_tres(escenario, _Eventos())[cual](b)
 
-    assert [r.user_id for r in visitante.rows] == [r.user_id for r in dentro.rows]
+    assert [r.name for r in visitante.rows] == [r.name for r in dentro.rows]
     assert visitante.me is None
 
 
@@ -441,3 +441,17 @@ async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(cual):
 
     with pytest.raises(NoPuedeVerloError):
         await _las_tres(escenario, _Eventos(a))[cual](None, visitante=True)
+
+
+# En el scratch de este montaje no sale nadie todavía: con las otras dos basta
+@pytest.mark.parametrize("cual", ["franja", "general"])
+async def test_sin_sesion_sin_id_ni_genero_de_barras(cual):
+    """/code-review (28 oct 2026): a un visitante, nombre, hándicap y resultado."""
+    escenario, _, _, _ = await _dos_franjas()
+    _publica(escenario)
+
+    tabla = await _las_tres(escenario, _Eventos())[cual](None, visitante=True)
+
+    assert tabla.rows
+    assert all(r.user_id is None and r.tee_gender is None for r in tabla.rows)
+    assert all(r.name for r in tabla.rows)

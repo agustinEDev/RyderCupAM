@@ -164,6 +164,13 @@ class TestLaClasificacion:
 
         assert sorted(m.match_number for m in vista.matches) == [1, 2]
 
+    async def test_sin_sesion_sin_id_de_jugador(self, user_repo):
+        vista = await self._clasificacion(user_repo, None, visitante=True, publica=True)
+
+        jugadores = [p for m in vista.matches for p in (*m.team_a_players, *m.team_b_players)]
+        assert jugadores
+        assert all(p.user_id is None for p in jugadores)
+
     async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(self, user_repo):
         with pytest.raises(NoPuedeVerloError):
             await self._clasificacion(user_repo, None, "rival", visitante=True)

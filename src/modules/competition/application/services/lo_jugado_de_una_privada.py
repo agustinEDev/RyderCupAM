@@ -67,6 +67,14 @@ class LoJugadoQueVe:
         return self.acceso is Acceso.SUS_AMIGOS and any(j in self.amigos for j in jugadores)
 
 
+def la_ve_un_visitante(competition: Competition) -> bool:
+    """
+    Sin sesión, solo lo de una pública (release social 3, L1-L3). La misma regla
+    para la clasificación de la Ryder y las de stroke play (code-review, 28 oct).
+    """
+    return competition.visibility is Visibility.PUBLIC
+
+
 async def esta_dentro(
     uow: CompetitionUnitOfWorkInterface,
     competition: Competition,

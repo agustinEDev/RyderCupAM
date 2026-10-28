@@ -11,6 +11,9 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.competition.application.dto.competition_dto import (
+    GetCompetitionSummaryRequestDTO,
+)
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
 from src.modules.competition.application.use_cases.get_competition_summary_use_case import (
     GetCompetitionSummaryUseCase,
@@ -55,7 +58,9 @@ async def test_l5_una_ryder_publica():
     uow = InMemoryUnitOfWork()
     competicion = await _una(uow, visibility=Visibility.PUBLIC, team_1_name="A", team_2_name="B")
 
-    resumen = await GetCompetitionSummaryUseCase(uow).execute(competicion.id.value)
+    resumen = await GetCompetitionSummaryUseCase(uow).execute(
+        GetCompetitionSummaryRequestDTO(competition_id=competicion.id.value)
+    )
 
     assert resumen.id == competicion.id.value
     assert resumen.name == "Copa X"
@@ -76,7 +81,9 @@ async def test_l5_un_stroke_play_privado_tambien():
         category_limits=[],
     )
 
-    resumen = await GetCompetitionSummaryUseCase(uow).execute(competicion.id.value)
+    resumen = await GetCompetitionSummaryUseCase(uow).execute(
+        GetCompetitionSummaryRequestDTO(competition_id=competicion.id.value)
+    )
 
     assert resumen.tournament_type == "MEDAL"
     assert resumen.has_teams is False
@@ -85,4 +92,6 @@ async def test_l5_un_stroke_play_privado_tambien():
 
 async def test_l5_la_que_no_existe():
     with pytest.raises(CompetitionNotFoundError):
-        await GetCompetitionSummaryUseCase(InMemoryUnitOfWork()).execute(uuid4())
+        await GetCompetitionSummaryUseCase(InMemoryUnitOfWork()).execute(
+            GetCompetitionSummaryRequestDTO(competition_id=uuid4())
+        )

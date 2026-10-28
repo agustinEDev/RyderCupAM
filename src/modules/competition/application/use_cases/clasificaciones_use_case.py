@@ -28,6 +28,7 @@ from src.modules.competition.application.services.lo_jugado_de_una_privada impor
     NoPuedeVerloError,
     esta_dentro,
     exigir_la_clasificacion,
+    la_ve_un_visitante,
 )
 from src.modules.competition.application.services.participantes_de_la_clasificacion import (
     participantes_de,
@@ -47,7 +48,6 @@ from src.modules.competition.domain.services.clasificacion import (
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.round_id import RoundId
-from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -89,7 +89,7 @@ class _Clasificaciones:
         sesión, solo una pública (L2, L3, 28 oct 2026).
         """
         if visitante:
-            return competicion.visibility is Visibility.PUBLIC
+            return la_ve_un_visitante(competicion)
         if quien is None:
             return True
         return await esta_dentro(self._uow, competicion, quien, es_admin=es_admin)
@@ -193,7 +193,9 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
             filas, personas = await self._tabla(
                 competicion, partidas, golpes, Escala.NETA, regla, categoria
             )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, personas)
+        return _respuesta(
+            competicion, Escala.NETA, regla, categoria, filas, personas, visitante=visitante
+        )
 
 
 class ClasificacionGeneralUseCase(_Clasificaciones):
@@ -222,7 +224,9 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
             regla, filas, personas = await self._de_la_competicion(
                 competicion, Escala.NETA, categoria
             )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, personas)
+        return _respuesta(
+            competicion, Escala.NETA, regla, categoria, filas, personas, visitante=visitante
+        )
 
 
 class ClasificacionScratchUseCase(_Clasificaciones):
@@ -251,14 +255,20 @@ class ClasificacionScratchUseCase(_Clasificaciones):
                 competicion, Escala.SCRATCH, None
             )
         visibles, mia = Clasificacion.cortar(filas, CORTE_DEL_SCRATCH, quien)
-        return _respuesta(competicion, Escala.SCRATCH, regla, None, visibles, personas, mia)
+        return _respuesta(
+            competicion, Escala.SCRATCH, regla, None, visibles, personas, mia, visitante=visitante
+        )
 
 
-def _fila(fila: Fila, personas: _Personas) -> StandingRowDTO:
+def _fila(fila: Fila, personas: _Personas, visitante: bool = False) -> StandingRowDTO:
+    """
+    Una fila. A un visitante, sin el id interno ni el género de sus barras: el
+    nombre, el hándicap y el resultado (code-review, 28 oct 2026).
+    """
     return StandingRowDTO(
         position=fila.puesto,
         tied=fila.empatado,
-        user_id=fila.user_id.value,
+        user_id=None if visitante else fila.user_id.value,
         name=personas.nombres.get(fila.user_id, ""),
         category=fila.categoria,
         handicap=fila.handicap,
@@ -267,7 +277,7 @@ def _fila(fila: Fila, personas: _Personas) -> StandingRowDTO:
         thru=fila.tras,
         status=fila.estado.value,
         retired=fila.retirado,
-        tee_gender=personas.generos.get(fila.user_id),
+        tee_gender=None if visitante else personas.generos.get(fila.user_id),
     )
 
 
@@ -279,12 +289,14 @@ def _respuesta(
     filas: Sequence[Fila],
     personas: _Personas,
     mia: Fila | None = None,
+    visitante: bool = False,
 ) -> StandingsResponseDTO:
+    """La respuesta de una clasificación; a un visitante, sin ids ni géneros (L2)."""
     return StandingsResponseDTO(
         tournament_type=competicion.tournament_type.value,
         scale=escala.value,
         rule=regla.value,
         category=categoria,
-        rows=[_fila(f, personas) for f in filas],
+        rows=[_fila(f, personas, visitante) for f in filas],
         me=_fila(mia, personas) if mia else None,
     )
