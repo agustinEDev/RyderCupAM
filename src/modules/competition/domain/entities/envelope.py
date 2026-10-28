@@ -273,6 +273,24 @@ class Envelope:
         # Quien no entrego no ha pedido adelantar nada
         self._reveal_when_both_ready = False
 
+    def reabrir(self) -> bool:
+        """
+        Vuelve a borrador: el equipo ha cambiado y la lista ya no vale (release
+        social 3, T4, 28 oct 2026). Sin partidos generados, también uno abierto.
+
+        Returns:
+            Si había algo que reabrir
+        """
+        if not self.is_submitted() and not self._revealed:
+            return False
+        self._entries = ()
+        self._submitted_at = None
+        self._submitted_by = None
+        self._automatic = False
+        self._revealed = False
+        self._reveal_when_both_ready = False
+        return True
+
     def reveal(self) -> None:
         """Abre el sobre. A partir de aquí ya no se toca.
 

@@ -53,6 +53,8 @@ class ActivityEventType(StrEnum):
     ENROLLMENT_NO_PLACE = "ENROLLMENT_NO_PLACE"
     # Se borro la franja en cuya espera estaba, la ultima suya, y salio
     TEE_WINDOW_REMOVED = "TEE_WINDOW_REMOVED"
+    # Los equipos de la Ryder cambiaron: a cada capitán, que revise su sobre (T4)
+    TEAMS_CHANGED = "TEAMS_CHANGED"
 
     @property
     def is_achievement(self) -> bool:

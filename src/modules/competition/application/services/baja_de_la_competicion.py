@@ -4,21 +4,20 @@ Sacar a un jugador de una competición (release social 2, 27 oct 2026).
 Lo mismo tanto si se retira él como si le quita el organizador: sale de sus
 partidas sin salir, suelta sus plazas en las franjas (que pasan a quien espera),
 si era capitán sube su subcapitán y, si estaba en un equipo formado sin
-partidos, los equipos se deshacen (descompensados, uno se quedaba sin jugar).
+partidos, sale de su equipo y los demás se quedan (release social 3, 28 oct
+2026; antes se deshacían los equipos).
 """
 
 from datetime import datetime
 
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.services import equipos_que_cambian
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
     esta_jugada,
 )
 from src.modules.competition.application.services.partidas_del_jugador import (
     sacar_de_sus_partidas,
-)
-from src.modules.competition.application.services.team_assignment_writer import (
-    TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -67,6 +66,7 @@ async def sacar_de_la_competicion(
     zonas: ICompetitionTimezone | None,
     ahora: datetime,
     asignadas: list[tuple[Round, UserId]] | None = None,
+    capitanes_a_avisar: list[UserId] | None = None,
 ) -> dict:
     """
     Le saca de todo lo de la competición. La inscripción ya está retirada.
@@ -79,6 +79,8 @@ async def sacar_de_la_competicion(
         ahora: El momento de la baja
         asignadas: Si se da, ahí quedan las plazas que la lista dio por su baja,
             para avisar tras guardar (A3, 28 oct 2026)
+        capitanes_a_avisar: Si se da, ahí quedan los capitanes a los que avisar
+            de que sus equipos cambiaron (T4, 28 oct 2026)
 
     Returns:
         Las salidas de antes y después de cada ronda tocada, para avisar
@@ -117,10 +119,10 @@ async def sacar_de_la_competicion(
     if competition.handle_withdrawal(enrollment.user_id):
         await uow.competitions.update(competition)
 
-    # En un equipo formado sin partidos, los equipos se deshacen (decidido el
-    # 27 oct 2026): descompensados, al generar uno se quedaba sin jugar
-    reparto = await uow.team_assignments.find_by_competition(competition.id)
-    if reparto is not None and reparto.get_player_team(enrollment.user_id) is not None:
-        await TeamAssignmentWriter.deshacer(uow, competition)
+    # Sale de su equipo y los demás se quedan; sus sobres, a borrador (T2, T4:
+    # 28 oct 2026, cambia el deshacer del 27 oct)
+    capitanes = await equipos_que_cambian.al_salir(uow, competition, enrollment.user_id)
+    if capitanes_a_avisar is not None:
+        capitanes_a_avisar.extend(capitanes)
 
     return fotos

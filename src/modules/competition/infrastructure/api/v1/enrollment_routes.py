@@ -320,6 +320,12 @@ async def request_enrollment(
             waiting_list=body.waiting_list if body else False,
         )
         return await use_case.execute(request_dto)
+    except DraftInProgressError as e:
+        # Con la sala de draft abierta no entra nadie (release social 3, T6)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
+        )
     except (
         TeeWindowRequiredError,
         TeeWindowNotFoundError,
@@ -380,6 +386,12 @@ async def direct_enroll_player(
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
+    except DraftInProgressError as e:
+        # Con la sala de draft abierta no entra nadie (release social 3, T6)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
+        )
     except DirectCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except DirectNotCreatorError as e:
@@ -470,6 +482,12 @@ async def approve_enrollment(
         creator_id = UserId(str(current_user.id))
         return await use_case.execute(request_dto, creator_id, is_admin=current_user.is_admin)
 
+    except DraftInProgressError as e:
+        # Con la sala de draft abierta no entra nadie (release social 3, T6)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
+        )
     except HandleEnrollmentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except HandleCompetitionNotFoundError as e:

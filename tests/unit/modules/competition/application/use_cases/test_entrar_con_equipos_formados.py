@@ -1,10 +1,9 @@
 """
-Entrar con los equipos formados también los deshace (release social 2, decidido
-el 27 oct 2026).
+Entrar con los equipos formados ya no los deshace (release social 3, T1, 28 oct 2026).
 
 Los equipos se forman con las inscripciones cerradas; al reabrirlas siguen ahí.
-Quien entra entonces (aprobado, invitado que acepta o inscrito a mano) se
-quedaba fuera de los dos equipos. Sin partidos, se deshacen, como al salir.
+Quien entra entonces (aprobado, invitado que acepta o inscrito a mano) queda sin
+equipo y el organizador le pone en uno; el reparto de los demás se queda.
 """
 
 from types import SimpleNamespace
@@ -36,7 +35,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork as UsuariosEnMemoria,
 )
 from src.shared.domain.value_objects.gender import Gender
-from tests.unit.modules.competition.application.use_cases.test_deshacer_equipos import _montar
+from tests.unit.modules.competition.application.use_cases.equipos_formados import _montar
 
 pytestmark = pytest.mark.asyncio
 
@@ -58,6 +57,7 @@ async def _reabierta():
 
 
 async def _sin_equipos(uow, comp_id) -> bool:
+    """Si el reparto se deshizo (antes del 28 oct 2026, lo que pasaba al entrar)."""
     async with uow:
         return await uow.team_assignments.find_by_competition(comp_id) is None
 
@@ -69,7 +69,7 @@ async def test_inscrito_a_mano():
         DirectEnrollPlayerRequestDTO(competition_id=comp_id.value, user_id=uuid4()), organizador
     )
 
-    assert await _sin_equipos(uow, comp_id)
+    assert not await _sin_equipos(uow, comp_id)
 
 
 async def test_solicitud_aprobada():
@@ -82,7 +82,7 @@ async def test_solicitud_aprobada():
         HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action="APPROVE"), organizador
     )
 
-    assert await _sin_equipos(uow, comp_id)
+    assert not await _sin_equipos(uow, comp_id)
 
 
 async def test_solicitud_rechazada_no():
@@ -126,4 +126,4 @@ async def test_invitacion_aceptada():
         )
     )
 
-    assert await _sin_equipos(uow, comp_id)
+    assert not await _sin_equipos(uow, comp_id)

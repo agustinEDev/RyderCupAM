@@ -32,6 +32,10 @@ class SQLAlchemyTeamAssignmentRepository(TeamAssignmentRepositoryInterface):
         self._session.add(assignment)
         olvidar_listas(self._session, _REPARTO)
 
+    async def update(self, assignment: TeamAssignment) -> None:
+        """Guarda el reparto cambiado; el recordado en la petición es el mismo objeto."""
+        self._session.add(assignment)
+
     async def find_by_id(self, assignment_id: TeamAssignmentId) -> TeamAssignment | None:
         return await self._session.get(TeamAssignment, assignment_id)
 

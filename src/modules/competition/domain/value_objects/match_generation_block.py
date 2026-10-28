@@ -24,6 +24,10 @@ UNEXPECTED = "UNEXPECTED"
 # Se abrieron con las inscripciones reabiertas: al cerrarlas, «Generar» los
 # crea con esos sobres (revisión de la FE #711)
 ENROLLMENT_OPEN = "ENROLLMENT_OPEN"
+# Desde que entrar o salir ya no deshace los equipos (release social 3, T5):
+# alguien sin equipo, o los equipos a más de uno de diferencia
+PLAYERS_WITHOUT_TEAM = "PLAYERS_WITHOUT_TEAM"
+TEAMS_UNBALANCED = "TEAMS_UNBALANCED"
 
 # Lo que le falta a cada jugador
 MISSING_GENDER = "GENDER"

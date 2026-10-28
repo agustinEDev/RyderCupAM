@@ -125,6 +125,7 @@ class WithdrawEnrollmentUseCase:
             # Sale de todo: partidas, franjas, capitanía y, si hace falta, los
             # equipos (release social 2)
             asignadas: list = []
+            capitanes: list = []
             fotos = await sacar_de_la_competicion(
                 self._uow,
                 competition,
@@ -132,6 +133,7 @@ class WithdrawEnrollmentUseCase:
                 zonas=self._zonas,
                 ahora=self._reloj(),
                 asignadas=asignadas,
+                capitanes_a_avisar=capitanes,
             )
 
             # 5. Persistir cambios
@@ -145,6 +147,7 @@ class WithdrawEnrollmentUseCase:
                 await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
             # Y a quien la lista dio su plaza (A3)
             await self._actividad.desde_la_espera(competition, asignadas)
+            await self._actividad.teams_changed(competition, capitanes)
 
         # 7. Retornar DTO
         return WithdrawEnrollmentResponseDTO(

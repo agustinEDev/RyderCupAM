@@ -150,7 +150,7 @@ class RemoveEnrolledPlayerUseCase:
                     f"No se quita a nadie de una competición en estado {competition.status.value}"
                 )
             # Con partidos en cualquier sesión, no se quita a nadie (decidido el
-            # 27 oct): los equipos ya no se deshacen y seguiría en el reparto
+            # 27 oct): el reparto ya es lo jugado y seguiría en él
             if await self._hay_partidos(competition.id):
                 raise PlayerHasMatchesError("Ya hay partidos generados")
 
@@ -159,6 +159,7 @@ class RemoveEnrolledPlayerUseCase:
             # La entidad valida el estado: solo un aprobado
             enrollment.withdraw("removed_by_organizer")
             asignadas: list = []
+            capitanes: list = []
             fotos = await sacar_de_la_competicion(
                 self._uow,
                 competition,
@@ -166,6 +167,7 @@ class RemoveEnrolledPlayerUseCase:
                 zonas=self._zonas,
                 ahora=self._reloj(),
                 asignadas=asignadas,
+                capitanes_a_avisar=capitanes,
             )
             await self._uow.enrollments.update(enrollment)
 
@@ -177,6 +179,8 @@ class RemoveEnrolledPlayerUseCase:
             await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
         # Y a quien la lista dio su plaza (A3)
         await self._actividad.desde_la_espera(competition, asignadas)
+        if competition is not None:
+            await self._actividad.teams_changed(competition, capitanes)
 
         return WithdrawEnrollmentResponseDTO(
             id=enrollment.id.value,

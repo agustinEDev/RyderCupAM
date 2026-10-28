@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from src.config.dependencies import (
     get_assign_teams_use_case,
@@ -26,6 +27,7 @@ from src.config.dependencies import (
     get_get_match_detail_use_case,
     get_get_schedule_use_case,
     get_mis_plazas_asignadas_use_case,
+    get_mover_de_equipo_use_case,
     get_reassign_match_players_use_case,
     get_soltar_plaza_use_case,
     get_update_match_status_use_case,
@@ -56,6 +58,8 @@ from src.modules.competition.application.dto.round_match_dto import (
     GetMatchDetailResponseDTO,
     GetScheduleRequestDTO,
     GetScheduleResponseDTO,
+    MoverDeEquipoRequestDTO,
+    MoverDeEquipoResponseDTO,
     ReassignMatchPlayersBodyDTO,
     ReassignMatchPlayersRequestDTO,
     ReassignMatchPlayersResponseDTO,
@@ -71,8 +75,10 @@ from src.modules.competition.application.dto.round_match_dto import (
 )
 from src.modules.competition.application.exceptions import (
     AgendaNotEditableError,
+    CompetitionNotFoundError as MoverCompetitionNotFoundError,
     CompetitionNotFoundError as StatusCompNotFoundError,
     FranjaInvalidaError,
+    NotCompetitionCreatorError as MoverNotCreatorError,
     NotCompetitionCreatorError as ReassignNotCreatorError,
     NotCompetitionCreatorError as StatusNotCreatorError,
     NotCompetitionCreatorError as WalkoverNotCreatorError,
@@ -80,9 +86,18 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError as StatusRoundNotFoundError,
     ScheduleAlreadyInPlayError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+)
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
+)
+from src.modules.competition.application.services.equipos_que_cambian import (
+    CaptainCannotMoveError,
+    PlayersWithoutTeamError,
+    TeamsLockedError,
+    TeamsUnbalancedError,
 )
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresSinBarraError,
@@ -155,6 +170,9 @@ from src.modules.competition.application.use_cases.listas_de_espera_use_case imp
     EntendidoUseCase,
     EsperarUseCase,
     MisPlazasAsignadasUseCase,
+)
+from src.modules.competition.application.use_cases.mover_de_equipo_use_case import (
+    MoverDeEquipoUseCase,
 )
 from src.modules.competition.application.use_cases.plazas_en_franjas_use_case import (
     CogerPlazaUseCase,
@@ -682,6 +700,66 @@ async def reassign_match_players(
 # ======================================================================================
 
 
+class MoverDeEquipoBody(BaseModel):
+    """El equipo en el que se pone al jugador."""
+
+    team: str = Field(..., pattern="^(A|B)$", description="A o B.")
+
+
+# Mensaje fijo por código, no el de la excepción (como al quitar a un inscrito)
+_NO_SE_MUEVE: dict[str, str] = {
+    CaptainCannotMoveError.error_code: "A captain cannot be moved to another team.",
+    TeamsLockedError.error_code: (
+        "Teams can only change once formed, with no matches and before the start, "
+        "for an enrolled player."
+    ),
+    DraftInProgressError.error_code: "Wait until the draft is over.",
+}
+
+
+@router.put(
+    "/{competition_id}/teams/players/{user_id}",
+    response_model=MoverDeEquipoResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Meter a un jugador en un equipo, o cambiarle",
+    tags=["Competitions - Teams"],
+)
+@limiter.limit("30/minute")
+async def mover_de_equipo(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    user_id: UUID,
+    body: MoverDeEquipoBody,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: MoverDeEquipoUseCase = Depends(get_mover_de_equipo_use_case),
+):
+    """
+    El organizador (o un admin) pone a un jugador en A o en B (release social 3, T3).
+
+    **Returns:**
+    - 200: Los dos equipos tras el cambio (sin cambio si ya estaba en ese)
+    - 403: No la organiza
+    - 404: Competición no encontrada
+    - 409: `CAPTAIN_CANNOT_MOVE`, `TEAMS_LOCKED` (sin equipos, con partidos, empezada
+      o sin ese inscrito) o `DRAFT_IN_PROGRESS`
+    """
+    try:
+        return await use_case.execute(
+            MoverDeEquipoRequestDTO(competition_id=competition_id, user_id=user_id, team=body.team),
+            UserId(str(current_user.id)),
+            is_admin=current_user.is_admin,
+        )
+    except MoverCompetitionNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except MoverNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (CaptainCannotMoveError, TeamsLockedError, DraftInProgressError) as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_MUEVE[e.error_code], "error_code": e.error_code},
+        )
+
+
 @router.post(
     "/{competition_id}/teams",
     response_model=AssignTeamsResponseDTO,
@@ -813,6 +891,8 @@ async def generate_matches(
     except (
         GenMatchesInsufficientError,
         NoTeamAssignmentError,
+        PlayersWithoutTeamError,
+        TeamsUnbalancedError,
         TeeColorNotFoundError,
         NoGolfCourseForHandicapError,
     ) as e:

@@ -135,6 +135,10 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             enrollment.user_id, _ref(competition), str(enrollment.id.value), _franja(franja)
         )
 
+    async def teams_changed(self, competition: Competition, captains: Sequence[UserId]) -> None:
+        """A cada capitán, que sus equipos cambiaron (T4)."""
+        await self._notices.teams_changed(list(captains), _ref(competition))
+
     async def left(self, competition_id: CompetitionId, user_id: UserId) -> None:
         await self._notices.left(user_id, str(competition_id.value))
 

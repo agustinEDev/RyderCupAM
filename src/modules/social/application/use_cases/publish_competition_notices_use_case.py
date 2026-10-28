@@ -39,6 +39,7 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.PLACE_FROM_WAITING_LIST,
         ActivityEventType.ENROLLMENT_NO_PLACE,
         ActivityEventType.TEE_WINDOW_REMOVED,
+        ActivityEventType.TEAMS_CHANGED,
     }
 )
 
@@ -57,6 +58,7 @@ _SE_RENUEVAN = frozenset(
         ActivityEventType.PLACE_FROM_WAITING_LIST,
         ActivityEventType.ENROLLMENT_NO_PLACE,
         ActivityEventType.TEE_WINDOW_REMOVED,
+        ActivityEventType.TEAMS_CHANGED,
     }
 )
 
@@ -441,6 +443,21 @@ class PublishCompetitionNoticesUseCase:
                     user_id, ActivityEventType.ENROLLMENT_NO_PLACE, enrollment_id, tournament
                 )
                 for user_id, enrollment_id in enrollments
+            ]
+        )
+
+    async def teams_changed(self, captain_ids: Sequence[UserId], tournament: TournamentRef) -> None:
+        """
+        Los equipos de la Ryder cambiaron y los sobres volvieron a borrador: a
+        cada capitán, que revise el suyo (T4, 28 oct 2026). Uno por torneo y
+        capitán: otro cambio lo renueva.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    capitan, ActivityEventType.TEAMS_CHANGED, tournament.competition_id, tournament
+                )
+                for capitan in captain_ids
             ]
         )
 

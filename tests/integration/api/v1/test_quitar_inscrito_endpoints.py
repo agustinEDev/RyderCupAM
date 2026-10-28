@@ -106,8 +106,8 @@ async def test_no_existe(client: AsyncClient):
     assert respuesta.status_code == 404
 
 
-async def test_con_equipos_y_sin_partidos_quitarle_deshace_los_equipos(client: AsyncClient):
-    """Contra Postgres: el reparto se borra en la misma transacción que la baja."""
+async def test_con_equipos_y_sin_partidos_quitarle_le_saca_de_su_equipo(client: AsyncClient):
+    """Contra Postgres: el reparto se queda, sin él (release social 3, 28 oct 2026)."""
     creador = await _jugador(client)
     comp = await create_competition(client, creador["cookies"])
     set_auth_cookies(client, creador["cookies"])
@@ -133,4 +133,4 @@ async def test_con_equipos_y_sin_partidos_quitarle_deshace_los_equipos(client: A
 
     assert quitado.status_code == 200, quitado.text
     ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
-    assert ficha.json()["teams_assigned"] is False
+    assert ficha.json()["teams_assigned"] is True

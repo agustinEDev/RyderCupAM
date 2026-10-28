@@ -2700,21 +2700,19 @@ class TestCaptains:
         assert respuesta.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_sin_partidos_la_baja_de_una_capitana_deshace_los_equipos(
+    async def test_sin_partidos_la_baja_de_una_capitana_deja_el_puesto_y_se_cubre(
         self, client: AsyncClient
     ):
         """
-        Release social 2 (decidido el 27 oct 2026): sin partidos, quien se va de
-        un equipo formado deshace los equipos (descompensados, uno se quedaba sin
-        jugar). Ya no hay equipo donde cubrir el puesto: se renombran los
-        capitanes como al principio. Con partidos, cubrir el puesto sigue igual
-        (test_captaincy_after_draft, en unitarios).
+        Release social 3 (28 oct 2026): los equipos ya no se deshacen. Ana se va
+        sin subcapitán: su equipo se queda sin capitán y el organizador cubre el
+        puesto con Carla, que es de su equipo.
 
-        Given: Ana se va tras el draft sin subcapitán y sin partidos
-        When: el organizador intenta cubrir el puesto, y luego nombra a Carla
-        Then: no hay equipos (400) y Carla queda de capitana
+        Given: Ana se va tras el reparto sin subcapitán y sin partidos
+        When: el organizador cubre el puesto con Carla
+        Then: los equipos siguen y Carla queda de capitana
         """
-        creador, comp, ana, bea, carla = await self._repartida(client)
+        creador, comp, ana, _, carla = await self._repartida(client)
         set_auth_cookies(client, ana["cookies"])
         await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
 
@@ -2724,12 +2722,10 @@ class TestCaptains:
             f"/api/v1/competitions/{comp['id']}/teams/A/captain",
             json={"player_id": carla["user"]["id"]},
         )
-        nombrados = await self._nombrar(client, comp, carla, bea)
 
-        assert ficha.json()["teams_assigned"] is False
-        assert cubierto.status_code == 400
-        assert nombrados.status_code == 200, nombrados.text
-        assert nombrados.json()["team_a_captain_id"] == carla["user"]["id"]
+        assert ficha.json()["teams_assigned"] is True
+        assert cubierto.status_code == 200, cubierto.text
+        assert cubierto.json()["team_a_captain_id"] == carla["user"]["id"]
 
     @pytest.mark.asyncio
     async def test_cubrir_un_puesto_que_no_esta_vacio_es_400(self, client: AsyncClient):

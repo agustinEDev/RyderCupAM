@@ -263,3 +263,30 @@ class TestTrasElRevisor:
         await avisos.tournament_cancelled(torneo.competition_id)
 
         assert await _de(social, ana, T.PLACE_FROM_WAITING_LIST) == []
+
+
+class TestEquiposQueCambian:
+    """T4 (28 oct 2026): a los dos capitanes, que revisen su sobre."""
+
+    async def test_a_cada_capitan_el_suyo(self):
+        social, avisos, org, ana = await _escenario()
+        torneo = _torneo()
+
+        await avisos.teams_changed([org.id, ana.id], torneo)
+
+        for capitan in (org, ana):
+            [aviso] = await _de(social, capitan, T.TEAMS_CHANGED)
+            assert aviso.source_match_id == torneo.competition_id
+            assert aviso.payload["competition_name"] == "Copa X"
+        assert AUDIENCE_BY_TYPE[T.TEAMS_CHANGED] is ActivityAudience.SELF
+
+    async def test_otro_cambio_lo_renueva(self):
+        social, avisos, org, _ = await _escenario()
+        torneo = _torneo()
+
+        await avisos.teams_changed([org.id], torneo)
+        [primero] = await _de(social, org, T.TEAMS_CHANGED)
+        await avisos.teams_changed([org.id], torneo)
+
+        [segundo] = await _de(social, org, T.TEAMS_CHANGED)
+        assert segundo.id != primero.id

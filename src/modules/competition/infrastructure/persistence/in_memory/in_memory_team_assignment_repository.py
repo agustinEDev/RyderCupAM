@@ -19,6 +19,9 @@ class InMemoryTeamAssignmentRepository(TeamAssignmentRepositoryInterface):
     async def add(self, assignment: TeamAssignment) -> None:
         self._assignments[assignment.id] = assignment
 
+    async def update(self, assignment: TeamAssignment) -> None:
+        self._assignments[assignment.id] = assignment
+
     async def find_by_id(self, assignment_id: TeamAssignmentId) -> TeamAssignment | None:
         return self._assignments.get(assignment_id)
 

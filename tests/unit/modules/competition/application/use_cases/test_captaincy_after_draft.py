@@ -57,11 +57,11 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
+from tests.unit.modules.competition.application.use_cases.equipos_formados import _jugador
 from tests.unit.modules.competition.application.use_cases.helpers import (
     create_approved_enrollment,
     create_competition,
 )
-from tests.unit.modules.competition.application.use_cases.test_deshacer_equipos import _jugador
 
 pytestmark = pytest.mark.asyncio
 
@@ -345,26 +345,17 @@ async def test_bloquean_la_fila_de_la_competicion(accion):
     assert llamadas == [t.comp_id]
 
 
-async def test_sin_partidos_la_baja_de_la_capitana_deshace_los_equipos_y_se_renombra():
+async def test_sin_partidos_la_baja_de_la_capitana_deja_el_puesto_y_se_cubre():
     """
-    Release social 2 (decidido el 27 oct 2026): sin partidos, quien se va de un
-    equipo formado deshace los equipos. La capitana se va sin subcapitán: ya no
-    hay equipo donde cubrir el puesto, se nombran los capitanes como al principio.
+    Release social 3 (28 oct 2026): los equipos ya no se deshacen. La capitana
+    se va sin subcapitán: su equipo se queda sin capitán y el organizador cubre
+    el puesto con uno del equipo.
     """
     t = await Torneo().montar()
     await t.retirar(t.ana)
+    nueva = t.de_a()
 
-    with pytest.raises(TeamsNotAssignedError):
-        await t.subcapitan("B", t.otros[0], t.bea)
-    nueva = t.otros[0]
-    await NameCaptainsUseCase(t.uow).execute(
-        NameCaptainsRequestDTO(
-            competition_id=t.comp_id.value,
-            team_a_captain_id=nueva.value,
-            team_b_captain_id=t.bea.value,
-        ),
-        t.organizador,
-    )
+    await t.cubrir("A", nueva, t.organizador)
 
     assert (await t.competicion()).ryder_cup.team_a_captain_id == nueva
 

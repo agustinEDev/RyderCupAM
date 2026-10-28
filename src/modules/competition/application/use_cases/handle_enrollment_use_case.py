@@ -17,16 +17,17 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
+from src.modules.competition.application.services import equipos_que_cambian
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.cupo_de_la_competicion import (
     al_entrar_uno,
     exigir_sitio,
 )
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
-from src.modules.competition.application.services.team_assignment_writer import (
-    TeamAssignmentWriter,
-)
 from src.modules.competition.domain.entities.enrollment import EnrollmentStateError
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.exceptions.competition_violations import (
@@ -165,9 +166,10 @@ class HandleEnrollmentUseCase:
                     personalizado=enrollment.custom_handicap,
                 )
                 enrollment.approve()
-                # Entra con los equipos formados y sin partidos: se deshacen, como al
-                # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
-                await TeamAssignmentWriter.deshacer(self._uow, competition)
+                # Con los equipos formados queda sin equipo (T1, T4)
+                # Con la sala de draft abierta no entra nadie: no se enteraría (T6)
+                await exigir_sin_draft_abierto(self._uow, competition.id)
+                capitanes = await equipos_que_cambian.al_entrar(self._uow, competition)
                 # Si era la última plaza, las invitaciones pendientes se quedan sin
                 # ella ya (BE #359)
                 sin_plaza = await al_entrar_uno(self._uow, competition, approved_count)
@@ -187,6 +189,7 @@ class HandleEnrollmentUseCase:
             await self._actividad.enrolled(competition, enrollment, accepted_request=era_solicitud)
             # Las pendientes que se quedaron sin plaza retiran su aviso (22 oct)
             await self._actividad.invitations_closed(sin_plaza)
+            await self._actividad.teams_changed(competition, capitanes)
         elif era_solicitud:
             await self._actividad.request_rejected(competition, enrollment)
 

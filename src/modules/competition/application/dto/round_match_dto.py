@@ -753,3 +753,18 @@ class WaitingListEntryDTO(BaseModel):
 
     round_id: UUID
     user_id: UUID
+
+
+class MoverDeEquipoRequestDTO(BaseModel):
+    """Meter a un jugador en un equipo de la Ryder, o cambiarle (release social 3, T3)."""
+
+    competition_id: UUID = Field(..., description="ID de la competición.")
+    user_id: UUID = Field(..., description="El jugador.")
+    team: str = Field(..., pattern="^(A|B)$", description="A o B.")
+
+
+class MoverDeEquipoResponseDTO(BaseModel):
+    """Los dos equipos tras el cambio."""
+
+    team_a_player_ids: list[UUID] = Field(..., description="Los del equipo A.")
+    team_b_player_ids: list[UUID] = Field(..., description="Los del equipo B.")

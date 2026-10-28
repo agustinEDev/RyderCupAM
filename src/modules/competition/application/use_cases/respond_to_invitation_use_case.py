@@ -12,7 +12,11 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
+from src.modules.competition.application.services import equipos_que_cambian
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.cupo_de_la_competicion import (
     al_entrar_uno,
     exigir_sitio,
@@ -26,9 +30,6 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
-)
-from src.modules.competition.application.services.team_assignment_writer import (
-    TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -65,6 +66,8 @@ class RespondToInvitationUseCase:
     ):
         self._uow = uow
         self._user_uow = user_uow
+        # Los capitanes a avisar si entra con los equipos formados (T4)
+        self._capitanes: tuple = ()
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
@@ -201,6 +204,7 @@ class RespondToInvitationUseCase:
         """
         if inscrito is not None:
             await self._actividad.enrolled(*inscrito, accepted_request=False)
+            await self._actividad.teams_changed(inscrito[0], self._capitanes)
 
     async def _releer_pendiente(
         self, invitation_id: InvitationId, bloqueada: bool = False
@@ -292,9 +296,10 @@ class RespondToInvitationUseCase:
                 competition_id=CompetitionId(invitation.competition_id.value),
                 user_id=current_user_id,
             )
-        # Entra con los equipos formados y sin partidos: se deshacen, como al
-        # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
-        await TeamAssignmentWriter.deshacer(self._uow, competition)
+        # Con los equipos formados queda sin equipo (T1, T4)
+        # Con la sala de draft abierta no entra nadie: no se enteraría (T6)
+        await exigir_sin_draft_abierto(self._uow, competition.id)
+        self._capitanes = await equipos_que_cambian.al_entrar(self._uow, competition)
         await self._uow.invitations.update(invitation)
 
         cerradas = await al_entrar_uno(self._uow, competition, approved_count)

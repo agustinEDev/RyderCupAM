@@ -69,6 +69,7 @@ SOLO_EL_AUTOR = [
     ActivityEventType.PLACE_FROM_WAITING_LIST,
     ActivityEventType.ENROLLMENT_NO_PLACE,
     ActivityEventType.TEE_WINDOW_REMOVED,
+    ActivityEventType.TEAMS_CHANGED,
 ]
 
 

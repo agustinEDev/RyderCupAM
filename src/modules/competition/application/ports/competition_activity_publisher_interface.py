@@ -106,6 +106,13 @@ class CompetitionActivityPublisherInterface(ABC):
         """
 
     @abstractmethod
+    async def teams_changed(self, competition: Competition, captains: Sequence[UserId]) -> None:
+        """
+        Los equipos de la Ryder cambiaron y sus sobres volvieron a borrador: a
+        los dos capitanes, que revisen el suyo (T4, 28 oct 2026).
+        """
+
+    @abstractmethod
     async def left(self, competition_id: CompetitionId, user_id: UserId) -> None:
         """Un inscrito deja de estarlo (se retira)."""
 

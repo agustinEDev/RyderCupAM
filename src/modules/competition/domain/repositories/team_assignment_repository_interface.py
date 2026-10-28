@@ -16,6 +16,11 @@ class TeamAssignmentRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def update(self, assignment: TeamAssignment) -> None:
+        """Guarda un reparto cambiado: alguien entró, salió o se movió (release social 3)."""
+        pass
+
+    @abstractmethod
     async def find_by_id(self, assignment_id: TeamAssignmentId) -> TeamAssignment | None:
         """Busca una asignacion por su ID."""
         pass

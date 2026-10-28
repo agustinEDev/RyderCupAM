@@ -198,6 +198,9 @@ class _Registro(CompetitionActivityPublisherInterface):
     async def window_removed(self, competition, franja, enrollment):
         self.avisos.append(("window_removed", competition.id, franja.id, enrollment.user_id))
 
+    async def teams_changed(self, competition, captains):
+        self.avisos.append(("teams_changed", competition.id, sorted(str(c) for c in captains)))
+
     async def match_finished(self, competition, round_, match):
         self.avisos.append(("match_finished", competition.id, match.id, match.status))
 
@@ -238,6 +241,7 @@ class _Roto(CompetitionActivityPublisherInterface):
     requests_closed = request_rejected = match_finished = completed = reopened = _falla  # type: ignore[assignment]
     made_private = deleted = tee_times = round_deleted = removed = _falla  # type: ignore[assignment]
     joined = placed_from_waiting_list = no_place = window_removed = _falla  # type: ignore[assignment]
+    teams_changed = _falla  # type: ignore[assignment]
 
 
 @pytest.fixture

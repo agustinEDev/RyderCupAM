@@ -64,6 +64,7 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.PLACE_FROM_WAITING_LIST: ActivityAudience.SELF,
     ActivityEventType.ENROLLMENT_NO_PLACE: ActivityAudience.SELF,
     ActivityEventType.TEE_WINDOW_REMOVED: ActivityAudience.SELF,
+    ActivityEventType.TEAMS_CHANGED: ActivityAudience.SELF,
 }
 
 

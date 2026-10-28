@@ -34,6 +34,9 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+)
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
@@ -260,6 +263,10 @@ async def respond_to_invitation(
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: RespondToInvitationUseCase = Depends(get_respond_to_invitation_use_case),
 ):
+    """
+    Aceptar o rechazar la invitación. 409 `DRAFT_IN_PROGRESS` si al aceptar la
+    sala de draft está abierta (release social 3, T6).
+    """
     try:
         request_dto = RespondInvitationRequestDTO(
             invitation_id=invitation_id,
@@ -268,6 +275,12 @@ async def respond_to_invitation(
         )
         return await use_case.execute(request_dto)
 
+    except DraftInProgressError as e:
+        # Con la sala de draft abierta no entra nadie (release social 3, T6)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "Wait until the draft is over.", "error_code": e.error_code},
+        )
     except InvitationNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except NotInviteeError as e:

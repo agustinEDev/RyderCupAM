@@ -18,6 +18,7 @@ from src.modules.competition.application.exceptions import (
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
     CompetitionActivityPublisherInterface,
 )
+from src.modules.competition.application.services import equipos_que_cambian
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.course_context import course_context_for
 from src.modules.competition.application.services.envelope_pairings import (
@@ -51,7 +52,9 @@ from src.modules.competition.domain.value_objects.match_generation_block import 
     NO_GOLF_COURSE,
     NO_TEAMS,
     NOT_ENOUGH_PLAYERS,
+    PLAYERS_WITHOUT_TEAM,
     PLAYERS_WITHOUT_TEE,
+    TEAMS_UNBALANCED,
     BlockedPlayer,
     MatchGenerationBlock,
 )
@@ -125,6 +128,17 @@ class NoGolfCourseForHandicapError(ValueError):
     pass
 
 
+# Los motivos que no dicen quién: solo qué falta
+_SIN_QUIEN: dict[type[Exception], str] = {
+    InsufficientPlayersError: NOT_ENOUGH_PLAYERS,
+    NoTeamAssignmentError: NO_TEAMS,
+    NoGolfCourseForHandicapError: NO_GOLF_COURSE,
+    # Desde que entrar o salir ya no deshace los equipos (T5, 28 oct 2026)
+    equipos_que_cambian.PlayersWithoutTeamError: PLAYERS_WITHOUT_TEAM,
+    equipos_que_cambian.TeamsUnbalancedError: TEAMS_UNBALANCED,
+}
+
+
 def bloqueo_por(error: Exception, at: datetime | None) -> MatchGenerationBlock | None:
     """El motivo que se apunta en la sesión por este fallo al generar (BE #360, #361).
 
@@ -137,12 +151,9 @@ def bloqueo_por(error: Exception, at: datetime | None) -> MatchGenerationBlock |
     # Antes que su clase madre: con él va quién
     if isinstance(error, PlayersNotEnrolledError):
         return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, players=tuple(error.players), at=at)
-    if isinstance(error, InsufficientPlayersError):
-        return MatchGenerationBlock(reason=NOT_ENOUGH_PLAYERS, at=at)
-    if isinstance(error, NoTeamAssignmentError):
-        return MatchGenerationBlock(reason=NO_TEAMS, at=at)
-    if isinstance(error, NoGolfCourseForHandicapError):
-        return MatchGenerationBlock(reason=NO_GOLF_COURSE, at=at)
+    for tipo, motivo in _SIN_QUIEN.items():
+        if isinstance(error, tipo):
+            return MatchGenerationBlock(reason=motivo, at=at)
     return None
 
 
@@ -359,6 +370,9 @@ class GenerateMatchesUseCase:
             raise NoTeamAssignmentError(
                 "No hay asignación de equipos. Use AssignTeamsUseCase primero."
             )
+        # Nadie sin equipo y los equipos a uno de diferencia (T5, 28 oct 2026):
+        # desde que entrar o salir ya no los deshace, puede pasar
+        await equipos_que_cambian.exigir_equipos_completos(self._uow, competition, team_assignment)
 
         # 7. Obtener enrollments y campo
         enrollments = await self._uow.enrollments.find_by_competition_and_status(

@@ -157,6 +157,37 @@ class TeamAssignment:
             return "B"
         return None
 
+    def quitar(self, user_id: UserId) -> bool:
+        """
+        Le saca de su equipo; los demás se quedan (release social 3, T2, 28 oct
+        2026). Sale sin deshacer el reparto: el organizador reequilibra.
+
+        Returns:
+            Si estaba en alguno
+        """
+        if user_id in self._team_a_player_ids:
+            self._team_a_player_ids = tuple(u for u in self._team_a_player_ids if u != user_id)
+            return True
+        if user_id in self._team_b_player_ids:
+            self._team_b_player_ids = tuple(u for u in self._team_b_player_ids if u != user_id)
+            return True
+        return False
+
+    def poner(self, user_id: UserId, equipo: str) -> None:
+        """
+        Le pone al final de ese equipo; si estaba en el otro, le mueve (T3).
+
+        Raises:
+            ValueError: Si el equipo no es A ni B
+        """
+        if equipo not in ("A", "B"):
+            raise ValueError(f"El equipo tiene que ser A o B, no {equipo!r}")
+        self.quitar(user_id)
+        if equipo == "A":
+            self._team_a_player_ids = (*self._team_a_player_ids, user_id)
+        else:
+            self._team_b_player_ids = (*self._team_b_player_ids, user_id)
+
     def total_players(self) -> int:
         """Retorna el total de jugadores asignados."""
         return len(self._team_a_player_ids) + len(self._team_b_player_ids)

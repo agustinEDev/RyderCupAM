@@ -53,6 +53,10 @@ from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit
     InMemoryUnitOfWork,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
+from tests.unit.modules.competition.application.use_cases.equipos_formados import (
+    _jugador,
+    _montar,
+)
 from tests.unit.modules.competition.application.use_cases.helpers import (
     create_approved_enrollment,
     create_competition,
@@ -60,10 +64,6 @@ from tests.unit.modules.competition.application.use_cases.helpers import (
 )
 from tests.unit.modules.competition.application.use_cases.test_avisos_de_actividad import (
     _Registro,
-)
-from tests.unit.modules.competition.application.use_cases.test_deshacer_equipos import (
-    _jugador,
-    _montar,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -174,7 +174,7 @@ async def _de(uow, comp_id, jugador) -> Enrollment:
         return await uow.enrollments.find_by_user_and_competition(jugador, comp_id)
 
 
-async def test_q4_con_equipos_y_sin_partidos_sale_y_se_deshacen():
+async def test_q4_con_equipos_y_sin_partidos_sale_de_su_equipo_y_el_reparto_se_queda():
     uow, comp_id, _, _, equipo_b = await _montar()
     async with uow:
         organizador = (await uow.competitions.find_by_id(comp_id)).creator_id
@@ -182,8 +182,10 @@ async def test_q4_con_equipos_y_sin_partidos_sale_y_se_deshacen():
 
     await _quita(uow).execute(_pide(inscripcion.id), organizador)
 
+    # Release social 3 (28 oct 2026): ya no se deshacen
     async with uow:
-        assert await uow.team_assignments.find_by_competition(comp_id) is None
+        reparto = await uow.team_assignments.find_by_competition(comp_id)
+    assert list(reparto.team_b_player_ids) == [equipo_b[0]]
 
 
 async def test_q4_con_partidos_en_los_que_juega_no_se_deja():
@@ -209,7 +211,7 @@ async def test_q4_con_partidos_en_los_que_juega_no_se_deja():
         assert await uow.team_assignments.find_by_competition(comp_id) is not None
 
 
-async def test_w_quien_se_retira_de_un_equipo_formado_tambien_los_deshace():
+async def test_w_quien_se_retira_de_un_equipo_formado_sale_solo_de_el():
     uow, comp_id, _, _, equipo_b = await _montar()
     inscripcion = await _de(uow, comp_id, equipo_b[1])
 
@@ -218,10 +220,11 @@ async def test_w_quien_se_retira_de_un_equipo_formado_tambien_los_deshace():
     )
 
     async with uow:
-        assert await uow.team_assignments.find_by_competition(comp_id) is None
+        reparto = await uow.team_assignments.find_by_competition(comp_id)
+    assert list(reparto.team_b_player_ids) == [equipo_b[0]]
 
 
-async def test_w_quien_no_estaba_en_ningun_equipo_no_los_deshace():
+async def test_w_quien_no_estaba_en_ningun_equipo_no_toca_el_reparto():
     uow, comp_id, _, _, _ = await _montar()
     fuera = UserId(uuid4())
     inscripcion = await create_approved_enrollment(uow, comp_id.value, fuera)

@@ -234,4 +234,5 @@ class TestTipos:
             "PLACE_FROM_WAITING_LIST",
             "ENROLLMENT_NO_PLACE",
             "TEE_WINDOW_REMOVED",
+            "TEAMS_CHANGED",
         }

@@ -94,6 +94,12 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             "window_removed", lambda p: p.window_removed(competition, franja, enrollment)
         )
 
+    async def teams_changed(self, competition: Competition, captains: Sequence[UserId]) -> None:
+        """A los capitanes, que sus equipos cambiaron (T4); sin capitanes, nada."""
+        if not captains:
+            return
+        await self._avisar("teams_changed", lambda p: p.teams_changed(competition, captains))
+
     async def left(self, competition_id: CompetitionId, user_id: UserId) -> None:
         await self._avisar("left", lambda p: p.left(competition_id, user_id))
 

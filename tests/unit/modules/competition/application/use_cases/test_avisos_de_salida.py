@@ -182,6 +182,7 @@ class _Salidas(CompetitionActivityPublisherInterface):
     invitation_answered = invitations_closed = _nada  # type: ignore[assignment]
     # De la inscripcion directa (28 oct 2026)
     joined = placed_from_waiting_list = no_place = window_removed = _nada  # type: ignore[assignment]
+    teams_changed = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):

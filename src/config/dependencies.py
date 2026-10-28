@@ -159,6 +159,9 @@ from src.modules.competition.application.use_cases.listas_de_espera_use_case imp
 from src.modules.competition.application.use_cases.make_draft_pick_use_case import (
     MakeDraftPickUseCase,
 )
+from src.modules.competition.application.use_cases.mover_de_equipo_use_case import (
+    MoverDeEquipoUseCase,
+)
 from src.modules.competition.application.use_cases.name_captains_use_case import (
     NameCaptainsUseCase,
 )
@@ -2986,6 +2989,14 @@ def get_configure_schedule_use_case(
     return ConfigureScheduleUseCase(
         uow, schedule_format_service=ScheduleFormatService(), actividad=actividad
     )
+
+
+def get_mover_de_equipo_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
+) -> MoverDeEquipoUseCase:
+    """Meter a un jugador en un equipo de la Ryder, o cambiarle (release social 3, T3)."""
+    return MoverDeEquipoUseCase(uow, actividad=actividad)
 
 
 def get_assign_teams_use_case(
