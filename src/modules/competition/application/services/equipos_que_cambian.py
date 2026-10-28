@@ -12,8 +12,9 @@ Cambia lo decidido el 27 oct (deshacer el reparto al entrar o salir alguien):
   nunca a un capitán; un subcapitán movido pierde el puesto.
 - **T4** Cualquier cambio devuelve a borrador los dos sobres entregados, y a los
   dos capitanes se les avisa.
-- **T5** Para generar partidos, nadie sin equipo y los equipos a uno de
-  diferencia como mucho (el sobre y el draft ya admitían uno; ver el informe).
+- **T5** Para generar partidos, nadie sin equipo y A = B (contando solo a los
+  inscritos), mientras los equipos se puedan tocar: con partidos ya no se mueve
+  a nadie, y quien no tenga equipo no juega, como antes.
 - Con partidos generados en alguna sesión, el reparto ya es lo jugado: no se toca.
 
 Va dentro de la transacción de quien llama, con la competición bloqueada.
@@ -29,9 +30,9 @@ from src.modules.competition.domain.value_objects.competition_status import Comp
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# Lo que a los equipos se les permite de diferencia para generar partidos: quien
-# sobra descansa, como ya hacían el sobre y el draft
-DIFERENCIA_MAXIMA = 1
+# A = B para generar, como dice la tabla aprobada: formar equipos ya exige un
+# número par, y con uno de diferencia las sesiones por parejas no se rellenan
+DIFERENCIA_MAXIMA = 0
 
 
 class CaptainCannotMoveError(Exception):
@@ -53,7 +54,7 @@ class PlayersWithoutTeamError(Exception):
 
 
 class TeamsUnbalancedError(Exception):
-    """Para generar partidos, los equipos a uno de diferencia como mucho (T5)."""
+    """Para generar partidos, A y B con los mismos jugadores (T5)."""
 
     error_code = "TEAMS_UNBALANCED"
 
@@ -182,22 +183,29 @@ async def exigir_equipos_completos(
     uow: CompetitionUnitOfWorkInterface, competition: Competition, reparto: TeamAssignment
 ) -> None:
     """
-    Antes de generar partidos (T5).
+    Antes de generar partidos (T5). Solo mientras los equipos se pueden tocar:
+    con partidos en alguna sesión ya no se mueve a nadie, y exigirlo dejaría la
+    siguiente sesión bloqueada para siempre (revisor, 28 oct 2026).
 
     Raises:
         PlayersWithoutTeamError: Si un inscrito no está en ningún equipo
-        TeamsUnbalancedError: Si los equipos se llevan más de uno
+        TeamsUnbalancedError: Si A y B no tienen los mismos inscritos
     """
-    aprobados = await uow.enrollments.find_by_competition_and_status(
-        competition.id, EnrollmentStatus.APPROVED
-    )
-    sin_equipo = [i.user_id for i in aprobados if reparto.get_player_team(i.user_id) is None]
+    if await _reparto_que_se_toca(uow, competition) is None:
+        return
+    aprobados = {
+        i.user_id
+        for i in await uow.enrollments.find_by_competition_and_status(
+            competition.id, EnrollmentStatus.APPROVED
+        )
+    }
+    sin_equipo = [u for u in aprobados if reparto.get_player_team(u) is None]
     if sin_equipo:
         raise PlayersWithoutTeamError(
             f"Hay {len(sin_equipo)} inscritos sin equipo: ponlos en uno antes de generar."
         )
-    diferencia = abs(len(reparto.team_a_player_ids) - len(reparto.team_b_player_ids))
-    if diferencia > DIFERENCIA_MAXIMA:
-        raise TeamsUnbalancedError(
-            "Los equipos se llevan más de un jugador: iguálalos antes de generar."
-        )
+    # Solo los inscritos: el reparto puede guardar a quien se retiró (revisor)
+    en_a = sum(1 for u in reparto.team_a_player_ids if u in aprobados)
+    en_b = sum(1 for u in reparto.team_b_player_ids if u in aprobados)
+    if abs(en_a - en_b) > DIFERENCIA_MAXIMA:
+        raise TeamsUnbalancedError("Los equipos no tienen los mismos jugadores: iguálalos.")

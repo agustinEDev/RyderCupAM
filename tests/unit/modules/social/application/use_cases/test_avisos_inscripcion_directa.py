@@ -101,6 +101,8 @@ class TestA1AlOrganizador:
         assert aviso.payload["session_type"] == "MORNING"
         assert aviso.payload["tee_time"] == "09:00"
         assert aviso.payload["waiting"] is False
+        # Su nombre, para que el organizador lo lea sin buscarlo (28 oct 2026)
+        assert aviso.payload["player_name"] == ana.display_name_or_legal(False)
         assert await _de(social, ana, T.PLAYER_JOINED) == []
 
     async def test_a_la_espera(self):

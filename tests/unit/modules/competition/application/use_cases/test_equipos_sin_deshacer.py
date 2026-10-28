@@ -424,18 +424,39 @@ class TestT5Generar:
         with pytest.raises(TeamsUnbalancedError):
             await self._generar(e)
 
-    async def test_con_uno_de_diferencia_si_se_puede(self, e):
-        """Quien sobra descansa, como ya hacían el sobre y el draft (ver el informe)."""
-        await e.mover(e.b[1], "A")
-        await e.mover(e.a[1], "B")
+    async def test_con_uno_de_diferencia_tampoco(self, e):
+        """A = B, como dice la tabla aprobada (revisor, 28 oct 2026)."""
         inscripcion = await e.inscripcion(e.b[1])
         await WithdrawEnrollmentUseCase(e.uow).execute(
             WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), e.b[1]
         )
-        # 1 contra 2: lo que falle después no es por los equipos
+        # 2 contra 1
+        with pytest.raises(TeamsUnbalancedError):
+            await self._generar(e)
+
+    async def test_con_partidos_en_otra_sesion_no_se_exige_nada(self, e):
+        """
+        Revisor: con partidos ya no se puede mover a nadie; exigir aquí bloqueaba
+        la siguiente sesión para siempre. Como antes: quien no tiene equipo no juega.
+        """
+        await e.con_un_partido()
+        await create_approved_enrollment(e.uow, e.comp_id.value, UserId(uuid4()))
         try:
             await self._generar(e)
         except (PlayersWithoutTeamError, TeamsUnbalancedError):
-            pytest.fail("Con uno de diferencia se puede generar")
+            pytest.fail("Con partidos ya no se exigen los equipos completos")
+        except Exception:
+            pass
+
+    async def test_se_cuentan_solo_los_inscritos(self, e):
+        """Revisor: el reparto puede guardar a quien se retiró con partidos."""
+        async with e.uow:
+            reparto = await e.uow.team_assignments.find_by_competition(e.comp_id)
+            reparto.poner(UserId(uuid4()), "A")
+            await e.uow.team_assignments.update(reparto)
+        try:
+            await self._generar(e)
+        except (PlayersWithoutTeamError, TeamsUnbalancedError):
+            pytest.fail("Un id que ya no está inscrito no cuenta")
         except Exception:
             pass

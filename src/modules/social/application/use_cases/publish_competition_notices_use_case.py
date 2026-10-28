@@ -379,8 +379,12 @@ class PublishCompetitionNoticesUseCase:
         organizador (A1, 28 oct 2026). Uno por inscripcion: si vuelve a
         apuntarse, se renueva.
         """
+        # Su nombre, como se muestra: el organizador lo lee sin buscarlo
+        async with self._user_uow:
+            jugador = await self._user_uow.users.find_by_id(player_id)
         extra = {
             "player_id": str(player_id.value),
+            "player_name": jugador.display_name_or_legal(False) if jugador else None,
             **self._de_la_franja(franja),
             "waiting": waiting,
         }
