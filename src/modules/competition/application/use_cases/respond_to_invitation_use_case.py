@@ -13,14 +13,15 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
     CompetitionActivityPublisherInterface,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.cupo_de_la_competicion import (
+    al_entrar_uno,
+    exigir_sitio,
+)
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.inscripcion_que_vuelve import (
     guardar_la_inscripcion,
     viva,
-)
-from src.modules.competition.application.services.invitaciones_al_cerrar import (
-    al_ocupar_una_plaza,
 )
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
@@ -274,12 +275,8 @@ class RespondToInvitationUseCase:
                 "User already has an enrollment in this competition."
             )
 
-        approved_count = await self._uow.enrollments.count_approved_by_competition(
-            invitation.competition_id
-        )
-        CompetitionPolicy.validate_capacity(
-            approved_count, competition.max_players, invitation.competition_id
-        )
+        # Con franjas, el cupo es de sus plazas (28 oct 2026)
+        approved_count = await exigir_sitio(self._uow, competition)
 
         invitation.accept()
 
@@ -300,9 +297,7 @@ class RespondToInvitationUseCase:
         await TeamAssignmentWriter.deshacer(self._uow, competition)
         await self._uow.invitations.update(invitation)
 
-        cerradas = await al_ocupar_una_plaza(
-            self._uow, invitation.competition_id, approved_count, competition.max_players
-        )
+        cerradas = await al_entrar_uno(self._uow, competition, approved_count)
 
         return competition, enrollment, cerradas
 

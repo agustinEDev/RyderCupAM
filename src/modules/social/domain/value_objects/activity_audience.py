@@ -58,6 +58,12 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.QUICK_MATCH_FINISHED: ActivityAudience.BOTH,
     # Tu salida o tu partido: asunto tuyo, aunque el torneo sea publico (G6)
     ActivityEventType.TEE_TIME_ASSIGNED: ActivityAudience.SELF,
+    # De la inscripcion directa (28 oct 2026): cada uno, el suyo. El de
+    # «se ha apuntado» es del organizador, que es quien lo recibe
+    ActivityEventType.PLAYER_JOINED: ActivityAudience.SELF,
+    ActivityEventType.PLACE_FROM_WAITING_LIST: ActivityAudience.SELF,
+    ActivityEventType.ENROLLMENT_NO_PLACE: ActivityAudience.SELF,
+    ActivityEventType.TEE_WINDOW_REMOVED: ActivityAudience.SELF,
 }
 
 

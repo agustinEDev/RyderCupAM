@@ -78,6 +78,7 @@ class _Usuarios:
             id=user_id,
             gender=Gender.MALE,
             handicap=None if h is None else SimpleNamespace(value=h),
+            email=None,
         )
 
     async def find_by_id(self, user_id):

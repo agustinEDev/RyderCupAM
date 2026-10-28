@@ -48,6 +48,7 @@ class UsuariosConGenero:
             gender=genero,
             handicap=SimpleNamespace(value=10.0),
             display_name_or_legal=lambda _real=False: f"Jugador {user_id}",
+            email=None,
         )
 
     async def find_by_ids(self, user_ids):

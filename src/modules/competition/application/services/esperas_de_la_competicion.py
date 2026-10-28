@@ -65,6 +65,8 @@ class EsperasDeLaCompeticion:
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
         self._uow = uow
+        # Las plazas que dio la lista en esta llamada, para avisar tras guardar (A3)
+        self.asignadas: list[tuple[Round, UserId]] = []
 
     async def rellenar(
         self, competicion: Competition, round_id: RoundId, ahora: datetime
@@ -155,6 +157,7 @@ class EsperasDeLaCompeticion:
             foto.plazas.append(plaza)
             await self._limpiar(competicion, foto, {espera.user_id})
             asignadas.append(plaza)
+            self.asignadas.append((franja, espera.user_id))
         return asignadas
 
     async def _limpiar(self, competicion: Competition, foto: _Foto, quienes: set[UserId]) -> None:

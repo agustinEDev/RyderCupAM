@@ -21,9 +21,12 @@ from src.modules.competition.application.services.franjas import (
     comprobar_que_esta_vacia,
 )
 from src.modules.competition.application.services.lo_jugado import LoJugado
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
+from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -111,12 +114,19 @@ class DeleteRoundUseCase:
                 await self._uow.matches.delete(match.id)
                 matches_deleted += 1
 
+            # 6b. Quien entró esperando en ella y no tiene nada más, sale (28 oct
+            #     2026); su espera se va con la franja
+            fuera = await self._sin_su_ultima_espera(competition.id, round_id)
+
             # 7. Eliminar la ronda
             await self._uow.rounds.delete(round_id)
 
         # Ya borrada: sus avisos de salida retirados se quedarian huerfanos
         # (revisor sin contexto, 22 oct 2026)
         await self._actividad.round_deleted(competition.id, round_id)
+        for inscripcion in fuera:
+            await self._actividad.left(competition.id, inscripcion.user_id)
+            await self._actividad.window_removed(competition, round_entity, inscripcion)
 
         return DeleteRoundResponseDTO(
             id=request.round_id,
@@ -124,3 +134,35 @@ class DeleteRoundUseCase:
             matches_deleted=matches_deleted,
             deleted_at=datetime.now(UTC).replace(tzinfo=None),
         )
+
+    async def _sin_su_ultima_espera(
+        self, competition_id: CompetitionId, round_id: RoundId
+    ) -> list[Enrollment]:
+        """
+        Saca de la espera de la franja a todos y, de la competición, a quien entró
+        esperando y se queda sin plaza ni otra espera. Devuelve sus inscripciones.
+        """
+        esperas = await self._uow.esperas.de_la_competicion(competition_id)
+        aqui = [e.user_id for e in esperas if e.round_id == round_id]
+        if not aqui:
+            return []
+        con_plaza = {p.user_id for p in await self._uow.plazas.de_la_competicion(competition_id)}
+        con_otra = {e.user_id for e in esperas if e.round_id != round_id}
+        fuera = []
+        for user_id in aqui:
+            await self._uow.esperas.quitar(round_id, user_id)
+            if user_id in con_plaza or user_id in con_otra:
+                continue
+            inscripcion = await self._uow.enrollments.find_by_user_and_competition(
+                user_id, competition_id
+            )
+            if (
+                inscripcion is None
+                or inscripcion.status is not EnrollmentStatus.APPROVED
+                or not inscripcion.entered_waiting
+            ):
+                continue
+            inscripcion.withdraw("tee_window_removed")
+            await self._uow.enrollments.update(inscripcion)
+            fuera.append(inscripcion)
+        return fuera

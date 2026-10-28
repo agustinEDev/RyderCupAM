@@ -128,13 +128,16 @@ class CogerPlazaUseCase:
             aprobados = await self._uow.enrollments.find_by_competition_and_status(
                 competicion.id, EnrollmentStatus.APPROVED
             )
-            if jugador not in {i.user_id for i in aprobados}:
+            suya = next((i for i in aprobados if i.user_id == jugador), None)
+            if suya is None:
                 raise PlazaEnFranjaError(
                     "Solo eligen franja los inscritos aprobados en la competición."
                 )
             plazas = await self._uow.plazas.de_la_competicion(competicion.id)
             sesiones = {s.id: s for s in await self._uow.rounds.find_by_competition(competicion.id)}
             suyas = [sesiones[p.round_id] for p in plazas if p.user_id == jugador]
+            # Su primera plaza: quien entró esperando ya juega (A2, 28 oct 2026)
+            primera = not suyas
             try:
                 PlazasEnFranjas.comprobar(
                     franja=franja,
@@ -175,14 +178,27 @@ class CogerPlazaUseCase:
         # recoloca por su salida se le dice (G3)
         for tocada, (antes, despues) in fotos.items():
             await self._actividad.salidas_cambiadas(competicion, tocada, antes, despues)
+        # Y a quien la lista dio la que deja (A3)
+        await self._actividad.desde_la_espera(competicion, esperas.asignadas)
+        if primera:
+            await self._actividad.enrolled(competicion, suya, accepted_request=False)
         return plaza
 
 
 class SoltarPlazaUseCase:
     """Un jugador deja su plaza en una franja (él mismo, o el organizador por él)."""
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: CompetitionUnitOfWorkInterface,
+        actividad: CompetitionActivityPublisherInterface | None = None,
+    ):
+        """
+        Args:
+            actividad: Para avisar a quien la lista da la plaza que se suelta (A3)
+        """
         self._uow = uow
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, round_id: RoundId, jugador: UserId, quien: UserId, is_admin: bool = False
@@ -205,6 +221,6 @@ class SoltarPlazaUseCase:
                 )
             await self._uow.plazas.quitar(round_id, jugador)
             # La plaza libre, para el primero que espera (#251)
-            await EsperasDeLaCompeticion(self._uow).rellenar(
-                competicion, round_id, datetime.now(UTC)
-            )
+            esperas = EsperasDeLaCompeticion(self._uow)
+            await esperas.rellenar(competicion, round_id, datetime.now(UTC))
+        await self._actividad.desde_la_espera(competicion, esperas.asignadas)

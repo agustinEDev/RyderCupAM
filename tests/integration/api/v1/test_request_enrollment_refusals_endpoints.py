@@ -37,7 +37,7 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.enrollment_re
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
 from src.shared.domain.value_objects.play_mode import PlayMode
-from tests.conftest import _URL_DE_LA_BD_DE_TEST
+from tests.conftest import _URL_DE_LA_BD_DE_TEST, set_auth_cookies, solicitud_pendiente
 from tests.integration.api.v1.helpers.auth_helper import create_and_login_user
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -108,16 +108,10 @@ async def test_empezado_el_torneo_es_un_400_con_el_motivo(client: AsyncClient):
 
 
 async def test_llena_es_un_400_con_el_motivo(client: AsyncClient):
-    competicion_id, organiza = await _publica(
-        client, date.today() + timedelta(days=5), max_players=2
-    )
-    # El organizador ya ocupa una plaza: con otro aprobado, se llena
+    competicion_id, _ = await _publica(client, date.today() + timedelta(days=5), max_players=2)
+    # El organizador ya ocupa una plaza: con otro, que entra directo, se llena
     otro = await _pide(client, competicion_id, await _jugador(client, "otro"))
     assert otro.status_code == 201, otro.text
-    aprobado = await client.post(
-        f"/api/v1/enrollments/{otro.json()['id']}/approve", cookies=organiza
-    )
-    assert aprobado.status_code == 200, aprobado.text
 
     respuesta = await _pide(client, competicion_id, await _jugador(client, "ultimo"))
 
@@ -194,17 +188,15 @@ async def test_aprobar_con_la_competicion_llena_es_un_400_con_el_motivo(client: 
     competicion_id, organiza = await _publica(
         client, date.today() + timedelta(days=5), max_players=2
     )
-    primera = await _pide(client, competicion_id, await _jugador(client, "primera"))
-    segunda = await _pide(client, competicion_id, await _jugador(client, "segunda"))
-    assert primera.status_code == segunda.status_code == 201
-    aprobada = await client.post(
-        f"/api/v1/enrollments/{primera.json()['id']}/approve", cookies=organiza
-    )
+    # Dos solicitudes de antes de la inscripción directa (28 oct 2026)
+    set_auth_cookies(client, await _jugador(client, "primera"))
+    primera = await solicitud_pendiente(client, competicion_id)
+    set_auth_cookies(client, await _jugador(client, "segunda"))
+    segunda = await solicitud_pendiente(client, competicion_id)
+    aprobada = await client.post(f"/api/v1/enrollments/{primera['id']}/approve", cookies=organiza)
     assert aprobada.status_code == 200, aprobada.text
 
-    respuesta = await client.post(
-        f"/api/v1/enrollments/{segunda.json()['id']}/approve", cookies=organiza
-    )
+    respuesta = await client.post(f"/api/v1/enrollments/{segunda['id']}/approve", cookies=organiza)
 
     assert respuesta.status_code == 400, respuesta.text
     assert "completa" in respuesta.json()["detail"]

@@ -8,7 +8,7 @@ podía volver a entrar por ninguna vía. Ahora se reutiliza esa misma fila.
 | #  | Caso                                                    | Resultado                       |
 |----|---------------------------------------------------------|---------------------------------|
 | V1 | Acepta una invitación con una retirada/rechazada vieja  | Entra: la misma fila, APPROVED  |
-| V2 | Pide plaza en una pública con una cancelada vieja       | REQUESTED, la misma fila        |
+| V2 | Pide plaza en una pública con una cancelada vieja       | APPROVED (28 oct), la misma fila|
 | V3 | El organizador le inscribe con una rechazada vieja      | APPROVED, con su hándicap y barra |
 | V4 | Con una APPROVED o pendiente                            | Igual que hoy: ya inscrito      |
 | -  | Lo de la vez anterior (equipo, hándicap fijado)         | No se arrastra                  |
@@ -72,7 +72,7 @@ CERRADAS = [EnrollmentStatus.REJECTED, EnrollmentStatus.CANCELLED, EnrollmentSta
 
 class _Usuarios:
     async def find_by_id(self, user_id):
-        return SimpleNamespace(id=user_id, gender=Gender.MALE)
+        return SimpleNamespace(id=user_id, gender=Gender.MALE, email=None)
 
 
 def _vieja(competicion_id, user_id, estado) -> Enrollment:
@@ -269,10 +269,10 @@ async def test_v2_pide_plaza_con_una_vieja_y_sale(estado):
         )
     )
 
-    assert respuesta.status == "REQUESTED"
+    assert respuesta.status == "APPROVED"
     assert respuesta.id == vieja.id.value
     suya = await _suya(uow, competicion, jugador)
-    assert suya.status == EnrollmentStatus.REQUESTED
+    assert suya.status == EnrollmentStatus.APPROVED
     assert suya.tee_color == TeeColor.YELLOW
 
 

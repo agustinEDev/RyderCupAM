@@ -75,18 +75,30 @@ class RequestEnrollmentRequestDTO(BaseModel):
         pattern=TEE_COLOR_PATTERN,
         description=f"Preferido. {TEE_COLOR_DESCRIPTION}",
     )
+    round_id: UUID | None = Field(
+        None,
+        description=(
+            "La franja elegida, obligatoria en un stroke play con franjas: se entra "
+            "con plaza en ella o, con `waiting_list`, en su lista de espera."
+        ),
+    )
+    waiting_list: bool = Field(
+        False, description="Entrar en la lista de espera de la franja, que tiene que estar llena."
+    )
 
 
 class RequestEnrollmentResponseDTO(BaseModel):
     """
-    DTO de salida para solicitud de inscripción.
+    DTO de salida al apuntarse a una pública: se entra directamente (28 oct 2026).
     """
 
     id: UUID = Field(..., description="ID único de la inscripción.")
     competition_id: UUID = Field(..., description="ID de la competición.")
     user_id: UUID = Field(..., description="ID del usuario.")
-    status: str = Field(..., description="Estado de la inscripción (REQUESTED).")
-    created_at: datetime = Field(..., description="Fecha y hora de la solicitud.")
+    status: str = Field(..., description="Estado de la inscripción (APPROVED).")
+    created_at: datetime = Field(..., description="Fecha y hora de la inscripción.")
+    round_id: UUID | None = Field(None, description="La franja en la que entró, si la eligió.")
+    waiting: bool = Field(False, description="Si entró en la lista de espera de esa franja.")
 
     model_config = ConfigDict(from_attributes=True)
 

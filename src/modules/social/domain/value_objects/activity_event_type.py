@@ -45,6 +45,14 @@ class ActivityEventType(StrEnum):
     TEE_TIME_ASSIGNED = "TEE_TIME_ASSIGNED"
     # «El organizador te ha quitado de X» (release social 2, 27 oct 2026)
     ENROLLMENT_REMOVED = "ENROLLMENT_REMOVED"
+    # Inscripcion directa en las publicas (release social 3, 28 oct 2026):
+    # «Ana se ha apuntado» para el organizador, «has entrado en la franja de
+    # las 9:00» para quien esperaba y «no hubo plaza» al cerrar
+    PLAYER_JOINED = "PLAYER_JOINED"
+    PLACE_FROM_WAITING_LIST = "PLACE_FROM_WAITING_LIST"
+    ENROLLMENT_NO_PLACE = "ENROLLMENT_NO_PLACE"
+    # Se borro la franja en cuya espera estaba, la ultima suya, y salio
+    TEE_WINDOW_REMOVED = "TEE_WINDOW_REMOVED"
 
     @property
     def is_achievement(self) -> bool:

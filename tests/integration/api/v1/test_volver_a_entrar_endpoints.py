@@ -11,7 +11,12 @@ from datetime import date, timedelta
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user, create_competition, set_auth_cookies
+from tests.conftest import (
+    create_authenticated_user,
+    create_competition,
+    set_auth_cookies,
+    solicitud_pendiente,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -49,22 +54,21 @@ async def _pide(client: AsyncClient, jugador: dict, comp: dict):
 async def test_rechazada_vuelve_a_pedir_y_luego_acepta_una_invitacion(client: AsyncClient):
     creador, jugador = await _jugador(client), await _jugador(client)
     comp = await _publica(client, creador)
-    pedida = await _pide(client, jugador, comp)
-    assert pedida.status_code == 201, pedida.text
+    # Una solicitud de antes de la inscripción directa (28 oct 2026), rechazada
+    set_auth_cookies(client, jugador["cookies"])
+    pedida = await solicitud_pendiente(client, comp["id"])
     set_auth_cookies(client, creador["cookies"])
-    assert (
-        await client.post(f"/api/v1/enrollments/{pedida.json()['id']}/reject")
-    ).status_code == 200
+    assert (await client.post(f"/api/v1/enrollments/{pedida['id']}/reject")).status_code == 200
 
-    # V2: pide otra vez, con la misma fila
+    # V2: vuelve a apuntarse, con la misma fila, y ya entra
     otra = await _pide(client, jugador, comp)
     assert otra.status_code == 201, otra.text
-    assert otra.json()["id"] == pedida.json()["id"]
-    assert otra.json()["status"] == "REQUESTED"
+    assert otra.json()["id"] == pedida["id"]
+    assert otra.json()["status"] == "APPROVED"
 
-    # Se la vuelven a rechazar, y le invitan: V1, entra
+    # El organizador le quita, y le invita: V1, entra
     set_auth_cookies(client, creador["cookies"])
-    assert (await client.post(f"/api/v1/enrollments/{otra.json()['id']}/reject")).status_code == 200
+    assert (await client.post(f"/api/v1/enrollments/{otra.json()['id']}/remove")).status_code == 200
     invitacion = await client.post(
         f"/api/v1/competitions/{comp['id']}/invitations",
         json={"invitee_user_id": jugador["user"]["id"]},
@@ -76,7 +80,7 @@ async def test_rechazada_vuelve_a_pedir_y_luego_acepta_una_invitacion(client: As
     )
 
     assert aceptada.status_code == 200, aceptada.text
-    assert aceptada.json()["enrollment_id"] == pedida.json()["id"]
+    assert aceptada.json()["enrollment_id"] == pedida["id"]
 
 
 async def test_retirado_vuelve_a_mano_del_organizador(client: AsyncClient):

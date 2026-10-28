@@ -234,12 +234,9 @@ class UpdateRoundUseCase:
             await self._uow.rounds.update(round_entity)
             # Si la franja creció, sus nuevas plazas para los que esperan (#251); si
             # no hay sitio libre o no es una franja, no hace nada
-            await self._listas_al_dia(competition, round_entity, request)
+            asignadas = await self._listas_al_dia(competition, round_entity, request)
 
-        # Solo a quien le cambia la hora o el dia (G3)
-        await self._actividad.salidas_cambiadas(
-            competition, round_entity.id, antes, de_las_partidas(round_entity, partidas)
-        )
+        await self._avisar(competition, round_entity, antes, partidas, asignadas)
 
         return UpdateRoundResponseDTO(
             id=round_entity.id.value,
@@ -360,9 +357,25 @@ class UpdateRoundUseCase:
             )
         return hoja
 
+    async def _avisar(
+        self,
+        competition: Competition,
+        round_entity: Round,
+        antes: dict,
+        partidas: list[Partida],
+        asignadas: list[tuple[Round, UserId]],
+    ) -> None:
+        """Ya guardado, lo que se cuenta en Actividad."""
+        # Solo a quien le cambia la hora o el dia (G3)
+        await self._actividad.salidas_cambiadas(
+            competition, round_entity.id, antes, de_las_partidas(round_entity, partidas)
+        )
+        # Y a quien la lista dio una de las plazas nuevas (A3)
+        await self._actividad.desde_la_espera(competition, asignadas)
+
     async def _listas_al_dia(
         self, competition: Competition, round_entity: Round, request: UpdateRoundRequestDTO
-    ) -> None:
+    ) -> list[tuple[Round, UserId]]:
         """
         Las plazas que haya ahora libres, para los que esperan (#251); y si la
         franja cambió de día, cambia qué días juega cada uno: listas al día.
@@ -372,3 +385,4 @@ class UpdateRoundUseCase:
             await esperas.rellenar(competition, round_entity.id, datetime.now(UTC))
         if request.round_date:
             await esperas.limpiar(competition)
+        return esperas.asignadas
