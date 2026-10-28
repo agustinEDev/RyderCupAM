@@ -12,6 +12,7 @@ from src.config.dependencies import (
     get_competition_uow,
     get_create_competition_use_case,
     get_current_user,
+    get_current_user_optional,
     get_delete_competition_use_case,
     get_get_competition_use_case,
     get_handicap_update_status_use_case,
@@ -21,7 +22,7 @@ from src.config.dependencies import (
     get_update_stroke_play_settings_use_case,
     get_ventana_de_actualizacion_use_case,
 )
-from src.config.rate_limit import get_client_identifier, limiter
+from src.config.rate_limit import LIMITE_DE_LO_PUBLICO, limiter
 from src.modules.competition.application.dto.competition_dto import (
     CompetitionResponseDTO,
     CompetitionSummaryDTO,
@@ -491,10 +492,12 @@ async def list_competitions(
     ),
     tags=["Competitions"],
 )
-@limiter.limit("30/minute", key_func=get_client_identifier)
+@limiter.limit(LIMITE_DE_LO_PUBLICO)
 async def get_competition_summary(
     request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     competition_id: UUID,
+    # Solo para el límite: con sesión cuenta por usuario, sin ella por red (revisor)
+    _sesion: UserResponseDTO | None = Depends(get_current_user_optional),
     use_case: GetCompetitionSummaryUseCase = Depends(get_competition_summary_use_case),
 ):
     """200 con el resumen; 404 si no existe."""

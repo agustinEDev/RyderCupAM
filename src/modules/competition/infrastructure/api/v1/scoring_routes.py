@@ -21,7 +21,7 @@ from src.config.dependencies import (
     get_submit_scorecard_use_case,
     get_withdraw_match_player_use_case,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import LIMITE_DE_LO_PUBLICO, limiter
 from src.modules.competition.application.dto.scoring_dto import (
     ConcedeMatchBodyDTO,
     LeaderboardResponseDTO,
@@ -313,7 +313,7 @@ async def submit_scorecard(
     summary="Leaderboard de la competicion",
     tags=["Competitions - Scoring"],
 )
-@limiter.limit("30/minute")
+@limiter.limit(LIMITE_DE_LO_PUBLICO)
 async def get_leaderboard(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,

@@ -106,3 +106,23 @@ async def test_con_un_token_que_no_vale_es_un_401_no_un_visitante(client: AsyncC
     respuesta = await client.get(f"/api/v1/competitions/{competicion['id']}/leaderboard")
 
     assert respuesta.status_code == 401, respuesta.text
+
+
+@pytest.mark.parametrize("stroke_play", [False, True])
+async def test_con_un_token_que_no_vale_en_la_cabecera_tambien_401(
+    client: AsyncClient, stroke_play
+):
+    competicion = await _competicion(client, "PUBLIC", stroke_play)
+
+    for ruta in _rutas(competicion, stroke_play):
+        respuesta = await client.get(ruta, headers={"Authorization": "Bearer no-es-un-token"})
+        assert respuesta.status_code == 401, (ruta, respuesta.text)
+
+
+async def test_en_stroke_play_un_token_que_no_vale_es_un_401(client: AsyncClient):
+    competicion = await _competicion(client, "PUBLIC", stroke_play=True)
+    client.cookies.set("access_token", "no-es-un-token")
+
+    for ruta in _rutas(competicion, stroke_play=True):
+        respuesta = await client.get(ruta)
+        assert respuesta.status_code == 401, (ruta, respuesta.text)

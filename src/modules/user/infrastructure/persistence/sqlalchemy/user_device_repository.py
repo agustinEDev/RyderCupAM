@@ -73,6 +73,8 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
         dispositivo entre medias, el índice único lo rechaza, se deshace solo el
         SAVEPOINT y se devuelve el suyo (BE #692). El resto de la transacción sigue.
         """
+        # Lo pendiente, antes: un fallo suyo no se confunde con el choque (revisor)
+        await self._session.flush()
         try:
             async with self._session.begin_nested():
                 self._session.add(device)

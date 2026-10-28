@@ -121,3 +121,20 @@ def test_refresh_mine_has_its_own_per_user_limit():
     }
 
     assert any(label.endswith("/refresh-mine") for label in labels)
+
+
+def test_every_route_a_visitor_can_reach_has_a_limit():
+    """
+    Given: Las rutas con sesión opcional (lo que ve un visitante, release social 3)
+    When: Se buscan sus límites
+    Then: Todas tienen uno, por usuario o por red: abiertas sin él, eran gratis
+    """
+    sin_limite = []
+    for route in _routes(app.routes):
+        if get_current_user_optional not in set(_dependencies(route.dependant)):
+            continue
+        name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
+        if not limiter._route_limits.get(name):
+            sin_limite.append(_label(route))
+
+    assert sin_limite == []

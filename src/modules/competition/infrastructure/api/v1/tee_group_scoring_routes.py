@@ -7,6 +7,7 @@ del móvil ya entiende (`SCORING_NOT_OPEN_YET`, que se guarda y reintenta, y
 respuesta nunca lleva el de la excepción (CodeQL).
 """
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -30,7 +31,7 @@ from src.config.dependencies import (
     get_validar_lo_anotado_use_case,
     get_ver_anotacion_de_partida_use_case,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import LIMITE_DE_LO_PUBLICO, limiter
 from src.modules.competition.application.dto.partidas_dto import (
     CorrectHoleBodyDTO,
     StandingsResponseDTO,
@@ -549,11 +550,20 @@ def _sin_clasificacion() -> JSONResponse:
     )
 
 
-def _quien_mira(current_user: UserResponseDTO | None) -> dict:
+@dataclass(frozen=True)
+class _QuienMira:
     """Quién mira una clasificación: sin sesión, un visitante (release social 3)."""
-    if current_user is None:
-        return {"quien": None, "visitante": True}
-    return {"quien": UserId(str(current_user.id)), "es_admin": current_user.is_admin}
+
+    quien: UserId | None
+    es_admin: bool = False
+    visitante: bool = False
+
+    @classmethod
+    def de(cls, current_user: UserResponseDTO | None) -> "_QuienMira":
+        """De la sesión de la petición: sin ella, un visitante."""
+        if current_user is None:
+            return cls(quien=None, visitante=True)
+        return cls(quien=UserId(str(current_user.id)), es_admin=current_user.is_admin)
 
 
 @router.get(
@@ -566,7 +576,9 @@ def _quien_mira(current_user: UserResponseDTO | None) -> dict:
     ),
     tags=["Competitions - Tee groups"],
 )
+@limiter.limit(LIMITE_DE_LO_PUBLICO)
 async def get_tee_window_standings(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     round_id: UUID,
     category: int | None = None,
     current_user: UserResponseDTO | None = Depends(get_current_user_optional),
@@ -579,7 +591,10 @@ async def get_tee_window_standings(
     Sin sesión, solo la de una pública (release social 3, L2 y L3).
     """
     try:
-        return await clasificacion.execute(round_id, category, **_quien_mira(current_user))
+        mira = _QuienMira.de(current_user)
+        return await clasificacion.execute(
+            round_id, category, quien=mira.quien, es_admin=mira.es_admin, visitante=mira.visitante
+        )
     except PartidasError:
         return _sin_clasificacion()
     except NoPuedeVerloError:
@@ -593,7 +608,9 @@ async def get_tee_window_standings(
     description="Neta, con la regla de la competición (acumulado o mejor tarjeta) y categorías.",
     tags=["Competitions - Tee groups"],
 )
+@limiter.limit(LIMITE_DE_LO_PUBLICO)
 async def get_overall_standings(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     category: int | None = None,
     current_user: UserResponseDTO | None = Depends(get_current_user_optional),
@@ -601,7 +618,14 @@ async def get_overall_standings(
 ):
     """200 con la general; 403 si es de una privada en la que no está (o sin sesión)."""
     try:
-        return await clasificacion.execute(competition_id, category, **_quien_mira(current_user))
+        mira = _QuienMira.de(current_user)
+        return await clasificacion.execute(
+            competition_id,
+            category,
+            quien=mira.quien,
+            es_admin=mira.es_admin,
+            visitante=mira.visitante,
+        )
     except PartidasError:
         return _sin_clasificacion()
     except NoPuedeVerloError:
@@ -618,15 +642,19 @@ async def get_overall_standings(
     ),
     tags=["Competitions - Tee groups"],
 )
+@limiter.limit(LIMITE_DE_LO_PUBLICO)
 async def get_scratch_standings(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
     current_user: UserResponseDTO | None = Depends(get_current_user_optional),
     clasificacion: ClasificacionScratchUseCase = Depends(get_clasificacion_scratch_use_case),
 ):
     """200 con el scratch; 403 si es de una privada en la que no está (o sin sesión)."""
     try:
-        mira = _quien_mira(current_user)
-        return await clasificacion.execute(competition_id, mira.pop("quien"), **mira)
+        mira = _QuienMira.de(current_user)
+        return await clasificacion.execute(
+            competition_id, mira.quien, es_admin=mira.es_admin, visitante=mira.visitante
+        )
     except PartidasError:
         return _sin_clasificacion()
     except NoPuedeVerloError:
