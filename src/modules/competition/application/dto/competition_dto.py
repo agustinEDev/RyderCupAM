@@ -1507,3 +1507,20 @@ class CompetitionGolfCourseResponseDTO(BaseModel):
     golf_course: GolfCourseDetailDTO = Field(..., description="Detalles completos del campo")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompetitionSummaryDTO(BaseModel):
+    """
+    El resumen público de una competición, sin sesión (release social 3, L5).
+
+    Para que la página de la clasificación sepa qué pintar sin la ficha.
+    """
+
+    id: UUID = Field(..., description="ID de la competición.")
+    name: str = Field(..., description="Nombre de la competición.")
+    tournament_type: str = Field(..., description="RYDER_CUP, STABLEFORD o MEDAL.")
+    has_teams: bool = Field(..., description="Si es por equipos (Ryder): su leaderboard.")
+    status: str = Field(..., description="Estado de la competición.")
+    visibility: str = Field(..., description="PUBLIC o PRIVATE.")
+    start_date: date = Field(..., description="Primer día.")
+    end_date: date = Field(..., description="Último día.")

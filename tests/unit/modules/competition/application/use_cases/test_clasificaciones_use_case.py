@@ -32,6 +32,7 @@ from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePart
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_partida_repository import (
     InMemoryPartidaRepository,
 )
@@ -412,3 +413,31 @@ async def test_dentro_de_una_ryder_si_le_dice_que_no_hay_clasificacion(cual):
 
     with pytest.raises(PartidasError):
         await llamadas[cual]()
+
+
+# --- Sin sesión (release social 3, tabla del 28 oct 2026: L2, L3) ------------------
+
+
+def _publica(escenario) -> None:
+    # Ya con partidas no se edita por la ficha: aquí basta con que lo sea
+    escenario.competicion._visibility = Visibility.PUBLIC
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_l2_sin_sesion_una_publica_se_ve_entera(cual):
+    escenario, _, b, _ = await _dos_franjas()
+    _publica(escenario)
+
+    visitante = await _las_tres(escenario, _Eventos())[cual](None, visitante=True)
+    dentro = await _las_tres(escenario, _Eventos())[cual](b)
+
+    assert [r.user_id for r in visitante.rows] == [r.user_id for r in dentro.rows]
+    assert visitante.me is None
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(cual):
+    escenario, a, _, _ = await _dos_franjas()
+
+    with pytest.raises(NoPuedeVerloError):
+        await _las_tres(escenario, _Eventos(a))[cual](None, visitante=True)

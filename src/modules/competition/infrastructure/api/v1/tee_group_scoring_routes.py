@@ -21,6 +21,7 @@ from src.config.dependencies import (
     get_clasificacion_scratch_use_case,
     get_corregir_hoyo_de_partida_use_case,
     get_current_user,
+    get_current_user_optional,
     get_entregar_tarjeta_de_partida_use_case,
     get_marcar_no_presentado_use_case,
     get_reabrir_tarjeta_use_case,
@@ -548,6 +549,13 @@ def _sin_clasificacion() -> JSONResponse:
     )
 
 
+def _quien_mira(current_user: UserResponseDTO | None) -> dict:
+    """Quién mira una clasificación: sin sesión, un visitante (release social 3)."""
+    if current_user is None:
+        return {"quien": None, "visitante": True}
+    return {"quien": UserId(str(current_user.id)), "es_admin": current_user.is_admin}
+
+
 @router.get(
     "/rounds/{round_id}/standings",
     response_model=StandingsResponseDTO,
@@ -561,19 +569,17 @@ def _sin_clasificacion() -> JSONResponse:
 async def get_tee_window_standings(
     round_id: UUID,
     category: int | None = None,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO | None = Depends(get_current_user_optional),
     clasificacion: ClasificacionDeLaFranjaUseCase = Depends(
         get_clasificacion_de_la_franja_use_case
     ),
 ):
-    """200 con la clasificación de la franja; 403 si es de una privada en la que no está."""
+    """200 con la clasificación de la franja; 403 si es de una privada en la que no está.
+
+    Sin sesión, solo la de una pública (release social 3, L2 y L3).
+    """
     try:
-        return await clasificacion.execute(
-            round_id,
-            category,
-            quien=UserId(str(current_user.id)),
-            es_admin=current_user.is_admin,
-        )
+        return await clasificacion.execute(round_id, category, **_quien_mira(current_user))
     except PartidasError:
         return _sin_clasificacion()
     except NoPuedeVerloError:
@@ -590,17 +596,12 @@ async def get_tee_window_standings(
 async def get_overall_standings(
     competition_id: UUID,
     category: int | None = None,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO | None = Depends(get_current_user_optional),
     clasificacion: ClasificacionGeneralUseCase = Depends(get_clasificacion_general_use_case),
 ):
-    """200 con la general; 403 si es de una privada en la que no está."""
+    """200 con la general; 403 si es de una privada en la que no está (o sin sesión)."""
     try:
-        return await clasificacion.execute(
-            competition_id,
-            category,
-            quien=UserId(str(current_user.id)),
-            es_admin=current_user.is_admin,
-        )
+        return await clasificacion.execute(competition_id, category, **_quien_mira(current_user))
     except PartidasError:
         return _sin_clasificacion()
     except NoPuedeVerloError:
@@ -619,14 +620,13 @@ async def get_overall_standings(
 )
 async def get_scratch_standings(
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO | None = Depends(get_current_user_optional),
     clasificacion: ClasificacionScratchUseCase = Depends(get_clasificacion_scratch_use_case),
 ):
-    """200 con el scratch; 403 si es de una privada en la que no está."""
+    """200 con el scratch; 403 si es de una privada en la que no está (o sin sesión)."""
     try:
-        return await clasificacion.execute(
-            competition_id, UserId(str(current_user.id)), es_admin=current_user.is_admin
-        )
+        mira = _quien_mira(current_user)
+        return await clasificacion.execute(competition_id, mira.pop("quien"), **mira)
     except PartidasError:
         return _sin_clasificacion()
     except NoPuedeVerloError:

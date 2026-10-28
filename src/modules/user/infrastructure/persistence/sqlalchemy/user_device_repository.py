@@ -17,6 +17,7 @@ Patrón: Repository Pattern + Async SQLAlchemy
 from datetime import datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.user_device import UserDevice
@@ -65,6 +66,22 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
             session: AsyncSession activa (generalmente desde UoW)
         """
         self._session = session
+
+    async def add_unless_registered(self, device: UserDevice) -> UserDevice:
+        """
+        El alta en un SAVEPOINT: si otro inicio de sesión dio de alta el mismo
+        dispositivo entre medias, el índice único lo rechaza, se deshace solo el
+        SAVEPOINT y se devuelve el suyo (BE #692). El resto de la transacción sigue.
+        """
+        try:
+            async with self._session.begin_nested():
+                self._session.add(device)
+        except IntegrityError:
+            ya = await self.find_by_user_and_fingerprint(device.user_id, device.fingerprint_hash)
+            if ya is None:
+                raise
+            return ya
+        return device
 
     async def save(self, device: UserDevice) -> None:
         """

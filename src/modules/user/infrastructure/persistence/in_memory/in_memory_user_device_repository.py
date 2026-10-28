@@ -40,6 +40,14 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         device_key = str(device.id.value)
         self._devices[device_key] = device
 
+    async def add_unless_registered(self, device: UserDevice) -> UserDevice:
+        """El que ya está activo con esa huella, o el nuevo, guardado (BE #692)."""
+        ya = await self.find_by_user_and_fingerprint(device.user_id, device.fingerprint_hash)
+        if ya is not None:
+            return ya
+        await self.save(device)
+        return device
+
     async def find_by_id(self, device_id: UserDeviceId) -> UserDevice | None:
         """
         Busca dispositivo por ID.

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
+    get_competition_summary_use_case,
     get_competition_uow,
     get_create_competition_use_case,
     get_current_user,
@@ -20,9 +21,10 @@ from src.config.dependencies import (
     get_update_stroke_play_settings_use_case,
     get_ventana_de_actualizacion_use_case,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import get_client_identifier, limiter
 from src.modules.competition.application.dto.competition_dto import (
     CompetitionResponseDTO,
+    CompetitionSummaryDTO,
     CreateCompetitionRequestDTO,
     CreateCompetitionResponseDTO,
     DeleteCompetitionRequestDTO,
@@ -60,6 +62,9 @@ from src.modules.competition.application.use_cases.create_competition_use_case i
 from src.modules.competition.application.use_cases.delete_competition_use_case import (
     CompetitionNotDeletableError,
     DeleteCompetitionUseCase,
+)
+from src.modules.competition.application.use_cases.get_competition_summary_use_case import (
+    GetCompetitionSummaryUseCase,
 )
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
@@ -473,6 +478,32 @@ async def list_competitions(
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.get(
+    "/{competition_id}/summary",
+    response_model=CompetitionSummaryDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Resumen público de una competición",
+    description=(
+        "Sin sesión: nombre, tipo, estado, visibilidad y fechas, para la página de su "
+        "clasificación (release social 3). También de una privada."
+    ),
+    tags=["Competitions"],
+)
+@limiter.limit("30/minute", key_func=get_client_identifier)
+async def get_competition_summary(
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    competition_id: UUID,
+    use_case: GetCompetitionSummaryUseCase = Depends(get_competition_summary_use_case),
+):
+    """200 con el resumen; 404 si no existe."""
+    try:
+        return await use_case.execute(competition_id)
+    except CompetitionNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Competition {competition_id} not found"
+        ) from e
 
 
 @router.get(

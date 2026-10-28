@@ -25,6 +25,7 @@ from src.modules.competition.application.ports.eventos_de_amigos_interface impor
     EventosDeAmigosInterface,
 )
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    NoPuedeVerloError,
     esta_dentro,
     exigir_la_clasificacion,
 )
@@ -46,6 +47,7 @@ from src.modules.competition.domain.services.clasificacion import (
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.overall_standing import OverallStanding
 from src.modules.competition.domain.value_objects.round_id import RoundId
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.user.domain.repositories.user_repository_interface import (
     UserRepositoryInterface,
 )
@@ -80,20 +82,30 @@ class _Clasificaciones:
         self._eventos = eventos
 
     async def _puede_verla(
-        self, competicion: Competition, quien: UserId | None, es_admin: bool
+        self, competicion: Competition, quien: UserId | None, es_admin: bool, visitante: bool
     ) -> bool:
-        """Con el `uow` abierto: si quien mira está dentro (sin decir quién, sí)."""
+        """
+        Con el `uow` abierto: si quien mira está dentro (sin decir quién, sí). Sin
+        sesión, solo una pública (L2, L3, 28 oct 2026).
+        """
+        if visitante:
+            return competicion.visibility is Visibility.PUBLIC
         if quien is None:
             return True
         return await esta_dentro(self._uow, competicion, quien, es_admin=es_admin)
 
-    async def _exigir(self, dentro: bool, competicion: Competition, quien: UserId | None) -> None:
+    async def _exigir(
+        self, dentro: bool, competicion: Competition, quien: UserId | None, visitante: bool
+    ) -> None:
         """
-        Fuera del `uow`: quien está fuera de una privada, con la llave.
+        Fuera del `uow`: quien está fuera de una privada, con la llave. Sin sesión
+        no hay llave que buscar (L3).
 
         Raises:
             NoPuedeVerloError: Sin estar dentro ni tener la llave
         """
+        if not dentro and visitante:
+            raise NoPuedeVerloError()
         if not dentro and quien is not None:
             await exigir_la_clasificacion(competicion.id, quien, self._eventos)
 
@@ -157,6 +169,7 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
         *,
         quien: UserId | None = None,
         es_admin: bool = False,
+        visitante: bool = False,
     ) -> StandingsResponseDTO:
         """
         Raises:
@@ -168,8 +181,8 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
             if franja is None:
                 raise PartidasError(_SOLO_EN_FRANJAS)
             competicion = await self._competicion(franja.competition_id)
-            dentro = await self._puede_verla(competicion, quien, es_admin)
-        await self._exigir(dentro, competicion, quien)
+            dentro = await self._puede_verla(competicion, quien, es_admin, visitante)
+        await self._exigir(dentro, competicion, quien, visitante)
         if franja.hoja_de_salidas is None:
             raise PartidasError(_SOLO_EN_FRANJAS)
         self._solo_stroke_play(competicion)
@@ -193,6 +206,7 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
         *,
         quien: UserId | None = None,
         es_admin: bool = False,
+        visitante: bool = False,
     ) -> StandingsResponseDTO:
         """
         Raises:
@@ -201,8 +215,8 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
         """
         async with self._uow:
             competicion = await self._competicion(CompetitionId(competition_id))
-            dentro = await self._puede_verla(competicion, quien, es_admin)
-        await self._exigir(dentro, competicion, quien)
+            dentro = await self._puede_verla(competicion, quien, es_admin, visitante)
+        await self._exigir(dentro, competicion, quien, visitante)
         self._solo_stroke_play(competicion)
         async with self._uow:
             regla, filas, personas = await self._de_la_competicion(
@@ -215,7 +229,12 @@ class ClasificacionScratchUseCase(_Clasificaciones):
     """La scratch, cortada, con la fila de quien mira."""
 
     async def execute(
-        self, competition_id: UUID, quien: UserId, *, es_admin: bool = False
+        self,
+        competition_id: UUID,
+        quien: UserId | None,
+        *,
+        es_admin: bool = False,
+        visitante: bool = False,
     ) -> StandingsResponseDTO:
         """
         Raises:
@@ -224,8 +243,8 @@ class ClasificacionScratchUseCase(_Clasificaciones):
         """
         async with self._uow:
             competicion = await self._competicion(CompetitionId(competition_id))
-            dentro = await self._puede_verla(competicion, quien, es_admin)
-        await self._exigir(dentro, competicion, quien)
+            dentro = await self._puede_verla(competicion, quien, es_admin, visitante)
+        await self._exigir(dentro, competicion, quien, visitante)
         self._solo_stroke_play(competicion)
         async with self._uow:
             regla, filas, personas = await self._de_la_competicion(

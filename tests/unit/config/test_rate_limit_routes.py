@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from fastapi.routing import APIRoute
 
 from main import app
-from src.config.dependencies import get_current_user
+from src.config.dependencies import get_current_user, get_current_user_optional
 from src.config.rate_limit import (
     get_client_identifier,
     get_hole_sample_rate_limit_key,
@@ -50,7 +50,10 @@ def _limited_routes() -> list[tuple[APIRoute, list, bool]]:
         name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
         limits = limiter._route_limits.get(name)
         if limits:
-            requires_session = get_current_user in set(_dependencies(route.dependant))
+            # Con sesión opcional (la clasificación por enlace, release social 3)
+            # cuenta como con sesión: por usuario, y por red si no la hay
+            dependencias = set(_dependencies(route.dependant))
+            requires_session = bool({get_current_user, get_current_user_optional} & dependencias)
             rows.append((route, limits, requires_session))
     return rows
 

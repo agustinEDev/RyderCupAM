@@ -176,7 +176,18 @@ class RegisterDeviceUseCase:
                 user_id=user_id,
                 fingerprint=fingerprint,
             )
-            await self._uow.user_devices.save(new_device)
+            # Si otro inicio de sesión a la vez lo dio de alta, el suyo (BE #692)
+            guardado = await self._uow.user_devices.add_unless_registered(new_device)
+            if guardado is not new_device:
+                await self._reanuda(guardado)
+                guardado.update_ip_address(request.ip_address)
+                await self._uow.user_devices.save(guardado)
+                return RegisterDeviceResponseDTO(
+                    device_id=str(guardado.id.value),
+                    is_new_device=False,
+                    message=f"Dispositivo actualizado: {guardado.device_name}",
+                    set_device_cookie=True,
+                )
 
             logger.info(f"New device registered: {new_device.device_name}")
 

@@ -104,6 +104,9 @@ from src.modules.competition.application.use_cases.fill_captain_use_case import 
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
 )
+from src.modules.competition.application.use_cases.get_competition_summary_use_case import (
+    GetCompetitionSummaryUseCase,
+)
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
@@ -1269,6 +1272,23 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UserResponseDTO | None:
+    """
+    El usuario de la sesión, o None si no hay sesión (release social 3, 28 oct 2026).
+
+    Para lo que también ve un visitante: la clasificación por enlace. Sin token
+    es un visitante; con un token caducado o inválido, el 401 de siempre, para
+    que la app renueve la sesión en vez de enseñarle la vista de visitante.
+    """
+    if not read_access_token(request):
+        return None
+    return await get_current_user(request, credentials, uow)
+
+
 def get_verify_email_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> VerifyEmailUseCase:
@@ -2101,6 +2121,13 @@ def get_get_competition_use_case(
         uow,
         zona_del_campo=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
     )
+
+
+def get_competition_summary_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetCompetitionSummaryUseCase:
+    """El resumen público de una competición (release social 3, L5)."""
+    return GetCompetitionSummaryUseCase(uow)
 
 
 def get_delete_competition_use_case(

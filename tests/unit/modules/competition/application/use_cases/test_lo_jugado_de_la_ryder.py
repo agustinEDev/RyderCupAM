@@ -141,17 +141,32 @@ class TestElDetalleDeUnPartido:
 
 
 class TestLaClasificacion:
-    async def _clasificacion(self, user_repo, quien, amigos=None, es_admin=False):
+    async def _clasificacion(
+        self, user_repo, quien, amigos=None, es_admin=False, visitante=False, publica=False
+    ):
         uow = InMemoryUnitOfWork()
         competition_id, _, rival = await TestConLaLlaveSoloElPartidoDeSuAmigo()._dos_partidos(uow)
-        _privada(uow)
+        comp = _privada(uow)
+        if publica:
+            comp.visibility = Visibility.PUBLIC
         uc = GetLeaderboardUseCase(
             uow,
             user_repo,
             ScoringService(),
             eventos=_Eventos(*([rival.user_id] if amigos == "rival" else [])),
         )
+        if visitante:
+            return await uc.execute(str(competition_id), quien=None, visitante=True)
         return await uc.execute(str(competition_id), quien=quien, es_admin=es_admin)
+
+    async def test_l1_sin_sesion_una_publica_todos(self, user_repo):
+        vista = await self._clasificacion(user_repo, None, visitante=True, publica=True)
+
+        assert sorted(m.match_number for m in vista.matches) == [1, 2]
+
+    async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(self, user_repo):
+        with pytest.raises(NoPuedeVerloError):
+            await self._clasificacion(user_repo, None, "rival", visitante=True)
 
     async def test_6_de_fuera_sin_llave_no(self, user_repo):
         with pytest.raises(NoPuedeVerloError):
