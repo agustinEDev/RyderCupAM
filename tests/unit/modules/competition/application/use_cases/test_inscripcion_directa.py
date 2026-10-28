@@ -50,6 +50,9 @@ from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
 from src.modules.competition.domain.entities.round import Round
+from src.modules.competition.domain.exceptions.competition_violations import (
+    InvitationExpiredViolation,
+)
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_name import CompetitionName
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
@@ -546,3 +549,50 @@ class TestAvisos:
             await e.entra(franja=e.nueve)
 
         assert e.actividad.llamadas == []
+
+
+class TestTrasElCodeReview:
+    """Hallazgos del /code-review de la BE PR A (28 oct 2026)."""
+
+    async def test_una_solicitud_pendiente_de_antes_entra_al_apuntarse(self, e):
+        await e.ryder()
+        quien = UserId(uuid4())
+        async with e.uow:
+            vieja = Enrollment.request(
+                id=EnrollmentId.generate(), competition_id=e.competicion.id, user_id=quien
+            )
+            await e.uow.enrollments.add(vieja)
+
+        _, respuesta = await e.entra(quien)
+
+        assert respuesta.id == vieja.id.value
+        assert respuesta.status == "APPROVED"
+
+    async def test_si_la_invitacion_no_se_puede_aceptar_entra_igual(self, e, monkeypatch):
+        await e.ryder()
+        quien = UserId(uuid4())
+        invitacion = Invitation.create(
+            id=InvitationId.generate(),
+            competition_id=e.competicion.id,
+            inviter_id=e.creador,
+            invitee_email=f"{quien.value}@example.com",
+            invitee_user_id=quien,
+        )
+        async with e.uow:
+            await e.uow.invitations.add(invitacion)
+
+        def caducada(self):
+            raise InvitationExpiredViolation("caducó justo ahora")
+
+        monkeypatch.setattr(Invitation, "accept", caducada)
+
+        _, respuesta = await e.entra(quien)
+
+        assert respuesta.status == "APPROVED"
+        assert e.actividad.de("invitation_answered") == []
+
+    async def test_pedir_la_espera_sin_franja_es_un_error(self, e):
+        await e.ryder()
+
+        with pytest.raises(TeeWindowRequiredError):
+            await e.entra(espera=True)

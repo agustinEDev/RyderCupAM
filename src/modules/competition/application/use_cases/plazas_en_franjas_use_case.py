@@ -136,8 +136,9 @@ class CogerPlazaUseCase:
             plazas = await self._uow.plazas.de_la_competicion(competicion.id)
             sesiones = {s.id: s for s in await self._uow.rounds.find_by_competition(competicion.id)}
             suyas = [sesiones[p.round_id] for p in plazas if p.user_id == jugador]
-            # Su primera plaza: quien entró esperando ya juega (A2, 28 oct 2026)
-            primera = not suyas
+            # Su primera plaza, si entró esperando: ya juega (A2, 28 oct 2026). Los
+            # demás tuvieron su aviso al entrar
+            primera = not suyas and suya.entered_waiting
             try:
                 PlazasEnFranjas.comprobar(
                     franja=franja,
@@ -169,6 +170,9 @@ class CogerPlazaUseCase:
                 competicion.id, franja.id, jugador, ahora, desde_espera=sin_ver
             )
             await self._uow.plazas.add(plaza)
+            if suya.entered_waiting:
+                suya.consigue_plaza()
+                await self._uow.enrollments.update(suya)
             # Fuera de las listas de ese día; y la que deja, para el primero que espera
             esperas = EsperasDeLaCompeticion(self._uow)
             await esperas.tras_coger(competicion, jugador)

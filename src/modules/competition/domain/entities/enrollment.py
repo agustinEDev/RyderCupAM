@@ -362,6 +362,16 @@ class Enrollment:
         self._entered_waiting = True
         self._updated_at = datetime.now()
 
+    def consigue_plaza(self) -> None:
+        """
+        Ya tiene plaza en una franja: deja de contar como entrado esperando. Si
+        luego la suelta, el organizador lo coloca, como a cualquiera (code-review,
+        28 oct 2026).
+        """
+        if self._entered_waiting:
+            self._entered_waiting = False
+            self._updated_at = datetime.now()
+
     def volver_a_entrar(
         self,
         *,

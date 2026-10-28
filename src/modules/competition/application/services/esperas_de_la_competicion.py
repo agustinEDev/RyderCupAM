@@ -158,7 +158,17 @@ class EsperasDeLaCompeticion:
             await self._limpiar(competicion, foto, {espera.user_id})
             asignadas.append(plaza)
             self.asignadas.append((franja, espera.user_id))
+            await self._ya_tiene_plaza(competicion, espera.user_id)
         return asignadas
+
+    async def _ya_tiene_plaza(self, competicion: Competition, user_id: UserId) -> None:
+        """Deja de contar como entrado esperando (code-review, 28 oct 2026)."""
+        inscripcion = await self._uow.enrollments.find_by_user_and_competition(
+            user_id, competicion.id
+        )
+        if inscripcion is not None and inscripcion.entered_waiting:
+            inscripcion.consigue_plaza()
+            await self._uow.enrollments.update(inscripcion)
 
     async def _limpiar(self, competicion: Competition, foto: _Foto, quienes: set[UserId]) -> None:
         maximo = self._maximo(competicion)

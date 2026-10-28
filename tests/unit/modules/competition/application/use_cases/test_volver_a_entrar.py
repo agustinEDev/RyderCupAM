@@ -276,7 +276,8 @@ async def test_v2_pide_plaza_con_una_vieja_y_sale(estado):
     assert suya.tee_color == TeeColor.YELLOW
 
 
-@pytest.mark.parametrize("estado", [EnrollmentStatus.APPROVED, EnrollmentStatus.REQUESTED])
+# Una solicitud pendiente de antes ya no bloquea: entra (code-review, 28 oct 2026)
+@pytest.mark.parametrize("estado", [EnrollmentStatus.APPROVED])
 async def test_v4_pide_plaza_con_una_viva_y_ya_esta(estado):
     uow = InMemoryUnitOfWork()
     competicion = await _abierta(uow, UserId(uuid4()), publica=True)

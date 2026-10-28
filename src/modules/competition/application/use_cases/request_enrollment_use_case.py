@@ -23,6 +23,10 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.cupo_de_la_competicion import (
+    al_entrar_uno,
+    exigir_sitio,
+)
 from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
@@ -33,13 +37,11 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
     guardar_la_inscripcion,
     viva,
 )
-from src.modules.competition.application.services.invitaciones_al_cerrar import (
-    al_ocupar_una_plaza,
-)
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
+from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.entities.espera_en_franja import EsperaEnFranja
 from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.plaza_en_franja import PlazaEnFranja
@@ -49,6 +51,8 @@ from src.modules.competition.domain.exceptions.competition_violations import (
     DuplicateEnrollmentViolation,
     EnrollmentPastStartDateViolation,
     InvalidCompetitionStatusViolation,
+    InvalidInvitationStatusViolation,
+    InvitationExpiredViolation,
     MaxEnrollmentsExceededViolation,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -60,6 +64,7 @@ from src.modules.competition.domain.services.competition_policy import (
 )
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
+from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.golf_course.domain.value_objects.tee_color import TeeColor
 from src.modules.user.domain.repositories.user_repository_interface import (
@@ -200,9 +205,13 @@ class RequestEnrollmentUseCase:
                 if s.hoja_de_salidas is not None
             ]
             franja = self._la_elegida(request, franjas)
-            if franja is None:
-                # Sin franjas manda el máximo de jugadores (D1, D2)
-                await self._exigir_sitio(competition)
+            # Sin franjas manda el máximo de jugadores (D1, D2); con ellas, sus plazas
+            try:
+                aprobadas_antes = await exigir_sitio(self._uow, competition)
+            except CompetitionFullViolation as e:
+                raise CompetitionFullError(
+                    f"La competición está completa: {competition.max_players} plazas ocupadas."
+                ) from e
 
             # Sin género no se sabe desde qué barras juega (#710)
             await exigir_genero(self._user_repo, user_id, es_quien_se_apunta=True)
@@ -221,17 +230,8 @@ class RequestEnrollmentUseCase:
             if franja is not None:
                 espera = await self._plaza_o_espera(competition, franja, user_id, request)
 
-            aprobadas_antes = await self._uow.enrollments.count_approved_by_competition(
-                competition_id
-            )
-            # Con su inscripción cerrada, si la tiene (release social 2)
-            enrollment = await guardar_la_inscripcion(
-                self._uow,
-                existing_enrollment,
-                aprobada=True,
-                competition_id=competition_id,
-                user_id=user_id,
-                tee_color=tee_color,
+            enrollment = await self._guardar(
+                existing_enrollment, competition_id, user_id, tee_color
             )
             if espera:
                 # Entró esperando: si se queda sin plaza ni espera, sale (W2, A4)
@@ -241,13 +241,7 @@ class RequestEnrollmentUseCase:
             # los demás caminos de entrar (decidido el 27 oct 2026)
             await TeamAssignmentWriter.deshacer(self._uow, competition)
             aceptada = await self._aceptar_su_invitacion(competition, user_id)
-            cerradas = (
-                await al_ocupar_una_plaza(
-                    self._uow, competition_id, aprobadas_antes, competition.max_players
-                )
-                if franja is None
-                else []
-            )
+            cerradas = await al_entrar_uno(self._uow, competition, aprobadas_antes)
 
         # Ya guardado: lo que se le cuenta a cada uno (A1, A2)
         if aceptada is not None:
@@ -272,7 +266,7 @@ class RequestEnrollmentUseCase:
     def _la_elegida(request: RequestEnrollmentRequestDTO, franjas: list[Round]) -> Round | None:
         """La franja elegida entre las suyas; con franjas, elegir una es obligatorio (D4)."""
         if request.round_id is None:
-            if franjas:
+            if franjas or request.waiting_list:
                 raise TeeWindowRequiredError(
                     "Elige una franja para apuntarte, o la lista de espera de una llena."
                 )
@@ -283,14 +277,31 @@ class RequestEnrollmentUseCase:
                 return franja
         raise TeeWindowNotFoundError("Esa franja no es de esta competición.")
 
-    async def _exigir_sitio(self, competition: Competition) -> None:
-        aprobadas = await self._uow.enrollments.count_approved_by_competition(competition.id)
-        try:
-            CompetitionPolicy.validate_capacity(aprobadas, competition.max_players, competition.id)
-        except CompetitionFullViolation as e:
-            raise CompetitionFullError(
-                f"La competición está completa: {competition.max_players} plazas ocupadas."
-            ) from e
+    async def _guardar(
+        self,
+        existente: Enrollment | None,
+        competition_id: CompetitionId,
+        user_id: UserId,
+        tee_color: TeeColor | None,
+    ) -> Enrollment:
+        """
+        Con su inscripción cerrada, si la tiene (release social 2). Una solicitud
+        pendiente de antes de la inscripción directa entra ya (code-review, 28 oct).
+        """
+        if existente is not None and existente.status is EnrollmentStatus.REQUESTED:
+            existente.approve()
+            if tee_color is not None:
+                existente.set_tee_color(tee_color)
+            await self._uow.enrollments.update(existente)
+            return existente
+        return await guardar_la_inscripcion(
+            self._uow,
+            existente,
+            aprobada=True,
+            competition_id=competition_id,
+            user_id=user_id,
+            tee_color=tee_color,
+        )
 
     async def _exigir_que_puede(self, competition: Competition, user_id: UserId, existente) -> None:
         """Duplicados, límite por jugador y fecha, con los «no» traducidos (BE #372)."""
@@ -299,8 +310,13 @@ class RequestEnrollmentUseCase:
             CompetitionPolicy.can_enroll(
                 user_id=user_id,
                 competition_id=competition.id,
-                # Una cerrada no impide volver: se reutiliza (release social 2)
-                existing_enrollment_id=(str(existente.id.value) if viva(existente) else None),
+                # Una cerrada no impide volver: se reutiliza (release social 2); una
+                # solicitud pendiente de antes tampoco: entra (code-review, 28 oct)
+                existing_enrollment_id=(
+                    str(existente.id.value)
+                    if viva(existente) and existente.status is not EnrollmentStatus.REQUESTED
+                    else None
+                ),
                 competition_status=competition.status,
                 competition_start_date=competition.dates.start_date,
                 user_total_enrollments=user_total_enrollments,
@@ -326,11 +342,10 @@ class RequestEnrollmentUseCase:
         request: RequestEnrollmentRequestDTO,
     ) -> bool:
         """Su plaza en la franja, o su sitio en la espera si está llena (D3, D5-D7)."""
-        hoja = franja.hoja_de_salidas
-        if hoja is None:
-            raise TeeWindowRequiredError("Esa sesión no tiene franjas.")
+        # Solo llegan franjas con hoja (las filtra `execute`)
+        cupo = franja.hoja_de_salidas.cupo if franja.hoja_de_salidas else 0
         plazas = await self._uow.plazas.de_la_competicion(competition.id)
-        llena = sum(1 for p in plazas if p.round_id == franja.id) >= hoja.cupo
+        llena = sum(1 for p in plazas if p.round_id == franja.id) >= cupo
         ahora = datetime.now(UTC)
         if request.waiting_list:
             if not llena:
@@ -362,6 +377,10 @@ class RequestEnrollmentUseCase:
         invitacion = await self._uow.invitations.find_by_id_for_update(pendiente.id)
         if invitacion is None:
             return None
-        invitacion.accept()
+        try:
+            invitacion.accept()
+        except (InvitationExpiredViolation, InvalidInvitationStatusViolation):
+            # Caducó entre leerla y aceptarla: entra igual, sin ella (code-review)
+            return None
         await self._uow.invitations.update(invitacion)
         return invitacion

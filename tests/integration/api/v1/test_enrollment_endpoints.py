@@ -100,11 +100,12 @@ class TestRequestEnrollment:
         comp = await create_competition(client, creator["cookies"])
         await activate_competition(client, creator["cookies"], comp["id"])
 
-        # Primera solicitud
+        # Entra (directa desde el 28 oct 2026)
         set_auth_cookies(client, player["cookies"])
-        await solicitud_pendiente(client, comp["id"])
+        primera = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
+        assert primera.status_code == 201, primera.text
 
-        # Segunda solicitud (duplicada)
+        # Otra vez: ya está dentro
         response = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
 
         assert response.status_code == 409

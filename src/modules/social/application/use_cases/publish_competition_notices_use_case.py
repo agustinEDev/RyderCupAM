@@ -290,7 +290,9 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO
             )
-            await self._social_uow.activity_events.delete_for_competition(competition_id, [_SALIDA])
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [_SALIDA, _PLAZA_DE_LA_ESPERA]
+            )
             await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
                 competition_id
             )

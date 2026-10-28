@@ -433,3 +433,45 @@ class TestPrimeraPlaza:
         )
 
         assert e.actividad.de("enrolled") == []
+
+
+class TestTrasElCodeReview:
+    """Hallazgos del /code-review de la BE PR A (28 oct 2026)."""
+
+    async def test_al_darle_plaza_la_lista_deja_de_contar_como_entrado_esperando(self, e):
+        dentro, espera = await e.llena_con_uno_esperando(e.nueve)
+
+        await SoltarPlazaUseCase(e.uow, actividad=e.actividad).execute(
+            e.nueve.id, dentro[0], dentro[0]
+        )
+
+        assert (await e.inscripcion(espera)).entered_waiting is False
+
+    async def test_al_coger_plaza_a_mano_tambien(self, e):
+        for _ in range(3):
+            await e.inscrito(e.nueve)
+        quien = await e.inscrito(espera=[e.nueve], entro_esperando=True)
+
+        await CogerPlazaUseCase(e.uow, actividad=e.actividad).execute(e.diez.id, quien, quien)
+
+        assert (await e.inscripcion(quien)).entered_waiting is False
+
+    async def test_si_suelta_la_plaza_que_le_dio_la_lista_bloquea_el_cierre(self, e):
+        dentro, espera = await e.llena_con_uno_esperando(e.nueve)
+        # Uno se cambia a otra franja: la lista le da su plaza a quien esperaba
+        await CogerPlazaUseCase(e.uow).execute(
+            e.diez.id, dentro[0], dentro[0], en_lugar_de=e.nueve.id
+        )
+        await SoltarPlazaUseCase(e.uow).execute(e.nueve.id, espera, espera)
+
+        with pytest.raises(PlayersWithoutTeeWindowError) as fallo:
+            await TestA4AlCerrar()._cerrar(e)
+
+        assert [p.user_id for p in fallo.value.players] == [espera]
+
+    async def test_la_primera_plaza_de_quien_no_entro_esperando_no_repite_avisos(self, e):
+        quien = await e.inscrito()
+
+        await CogerPlazaUseCase(e.uow, actividad=e.actividad).execute(e.nueve.id, quien, quien)
+
+        assert e.actividad.de("enrolled") == []

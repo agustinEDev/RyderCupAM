@@ -254,3 +254,12 @@ class TestTrasElRevisor:
 
         [aviso] = await _de(social, ana, T.TEE_WINDOW_REMOVED)
         assert aviso.payload["tee_time"] == "15:00"
+
+    async def test_al_cancelar_el_torneo_se_va_su_has_entrado(self):
+        social, avisos, _, ana = await _escenario()
+        torneo = _torneo()
+        await avisos.placed_from_waiting_list(ana.id, torneo, FRANJA)
+
+        await avisos.tournament_cancelled(torneo.competition_id)
+
+        assert await _de(social, ana, T.PLACE_FROM_WAITING_LIST) == []
