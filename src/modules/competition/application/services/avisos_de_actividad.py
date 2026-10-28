@@ -61,6 +61,7 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
         waiting: bool,
     ) -> None:
         # Al organizador no se le cuenta que se ha apuntado el mismo
+        """Al organizador, que alguien se ha apuntado solo (A1); no si es él mismo."""
         if competition.is_creator(enrollment.user_id):
             return
         await self._avisar("joined", lambda p: p.joined(competition, enrollment, franja, waiting))
@@ -81,6 +82,7 @@ class AvisosDeActividad(CompetitionActivityPublisherInterface):
             await self.placed_from_waiting_list(competition, franja, user_id)
 
     async def no_place(self, competition: Competition, enrollments: Sequence[Enrollment]) -> None:
+        """A quienes se quedaron sin plaza al cerrar (A4); sin ninguno, nada."""
         if not enrollments:
             return
         await self._avisar("no_place", lambda p: p.no_place(competition, enrollments))

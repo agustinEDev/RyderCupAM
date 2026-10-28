@@ -61,6 +61,10 @@ class Enrollment:
         domain_events: list[DomainEvent] | None = None,
     ):
         # Validaciones
+        """
+        Raises:
+            ValueError: Si el hándicap personalizado está fuera de rango
+        """
         if custom_handicap is not None:
             self._validate_custom_handicap(custom_handicap)
 

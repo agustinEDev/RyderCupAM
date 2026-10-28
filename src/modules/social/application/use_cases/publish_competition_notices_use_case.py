@@ -465,6 +465,7 @@ class PublishCompetitionNoticesUseCase:
 
     @staticmethod
     def _de_la_franja(franja: TeeWindowRef | None) -> dict:
+        """Lo que un aviso cuenta de su franja; sin franja, todo vacío."""
         return {
             "round_id": franja.round_id if franja else None,
             "round_date": franja.round_date.isoformat() if franja and franja.round_date else None,
@@ -760,6 +761,7 @@ class PublishCompetitionNoticesUseCase:
         tournament: TournamentRef,
         extra: dict | None = None,
     ) -> ActivityEvent:
+        """Un aviso de torneo para alguien, con lo que se cuenta de él y lo que se añada."""
         return ActivityEvent.create(
             user_id=user_id,
             type=tipo,

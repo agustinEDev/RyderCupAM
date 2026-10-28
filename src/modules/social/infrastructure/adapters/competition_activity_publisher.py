@@ -107,6 +107,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         franja: Round | None,
         waiting: bool,
     ) -> None:
+        """Al organizador de la competición, que alguien se ha apuntado (A1)."""
         await self._notices.joined(
             competition.creator_id,
             enrollment.user_id,
@@ -122,6 +123,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
         await self._notices.placed_from_waiting_list(user_id, _ref(competition), _franja(franja))
 
     async def no_place(self, competition: Competition, enrollments: Sequence[Enrollment]) -> None:
+        """A cada uno, su «no hubo plaza», por su inscripción (A4)."""
         await self._notices.no_place(
             _ref(competition), [(e.user_id, str(e.id.value)) for e in enrollments]
         )
@@ -344,6 +346,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
 
 
 def _franja(franja: Round) -> TeeWindowRef:
+    """La franja como la cuenta un aviso: día, sesión y primera salida."""
     hoja = franja.hoja_de_salidas
     return TeeWindowRef(
         round_id=str(franja.id.value),

@@ -106,6 +106,16 @@ class UpdateRoundUseCase:
     async def execute(
         self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateRoundResponseDTO:
+        """
+        Edita una sesión: fecha, campo, formato o su hoja de salidas.
+
+        Si la franja crece, sus plazas nuevas son para los que esperan, y a cada uno
+        se le avisa (A3, 28 oct 2026).
+
+        Raises:
+            RoundNotFoundError, CompetitionNotFoundError, NotCompetitionCreatorError,
+            RoundNotModifiableError y los de la hoja de salidas
+        """
         async with self._uow:
             # 1. Buscar la ronda
             round_id = RoundId(request.round_id)
@@ -139,14 +149,7 @@ class UpdateRoundUseCase:
             comprobar_agenda(competition)
 
             # 5. Verificar campo de golf si se cambia
-            golf_course_id = None
-            if request.golf_course_id:
-                golf_course_id = GolfCourseId(request.golf_course_id)
-                if not competition.has_golf_course(golf_course_id):
-                    raise GolfCourseNotInCompetitionError(
-                        f"El campo de golf {request.golf_course_id} no está "
-                        f"asociado a la competición"
-                    )
+            golf_course_id = self._campo_nuevo(competition, request)
 
             # 6. Verificar sesión duplicada si se cambia fecha o tipo
             # Dentro del torneo, como al crearla: con la agenda abierta desde el
@@ -356,6 +359,25 @@ class UpdateRoundUseCase:
                 excepto=round_entity.id,
             )
         return hoja
+
+    @staticmethod
+    def _campo_nuevo(
+        competition: Competition, request: UpdateRoundRequestDTO
+    ) -> GolfCourseId | None:
+        """
+        El campo al que se cambia, si se cambia.
+
+        Raises:
+            GolfCourseNotInCompetitionError: Si no es uno de los de la competición
+        """
+        if not request.golf_course_id:
+            return None
+        golf_course_id = GolfCourseId(request.golf_course_id)
+        if not competition.has_golf_course(golf_course_id):
+            raise GolfCourseNotInCompetitionError(
+                f"El campo de golf {request.golf_course_id} no está asociado a la competición"
+            )
+        return golf_course_id
 
     async def _avisar(
         self,

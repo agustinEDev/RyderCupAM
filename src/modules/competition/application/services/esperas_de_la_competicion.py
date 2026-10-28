@@ -138,6 +138,8 @@ class EsperasDeLaCompeticion:
     async def _rellenar(
         self, competicion: Competition, foto: _Foto, round_id: RoundId, ahora: datetime
     ) -> list[PlazaEnFranja]:
+        """Da las plazas libres de la franja, en orden de llegada, a quien le toque; apunta
+        a quién para avisarle y deja de contarle como entrado esperando."""
         franja = foto.sesiones.get(round_id)
         if franja is None or franja.hoja_de_salidas is None or esta_jugada(franja):
             return []

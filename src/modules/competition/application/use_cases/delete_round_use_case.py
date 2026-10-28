@@ -56,6 +56,15 @@ class DeleteRoundUseCase:
     async def execute(
         self, request: DeleteRoundRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> DeleteRoundResponseDTO:
+        """
+        Borra una sesión que no se ha jugado, con sus partidas y partidos. Quien
+        entró esperando en ella y no tiene nada más sale de la competición (28 oct
+        2026).
+
+        Raises:
+            RoundNotFoundError, CompetitionNotFoundError, NotCompetitionCreatorError,
+            RoundNotModifiableError: con gente dentro, ya jugada o fuera de plazo
+        """
         async with self._uow:
             # 1. Buscar la ronda
             round_id = RoundId(request.round_id)

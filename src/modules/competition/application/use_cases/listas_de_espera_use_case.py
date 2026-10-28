@@ -143,6 +143,7 @@ class DejarDeEsperarUseCase:
     async def _sale_si_no_le_queda_nada(
         self, competition_id: CompetitionId, jugador: UserId
     ) -> bool:
+        """Le retira si entró esperando y ya no tiene plaza ni otra espera (W2). Si sale."""
         inscripcion = await self._uow.enrollments.find_by_user_and_competition(
             jugador, competition_id
         )

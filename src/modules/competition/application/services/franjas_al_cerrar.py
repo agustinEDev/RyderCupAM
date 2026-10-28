@@ -98,6 +98,10 @@ class FranjasAlCerrar:
             await self._faltan(competition, sin)
 
     async def _faltan(self, competition: Competition, sin: list) -> None:
+        """
+        Raises:
+            PlayersWithoutTeeWindowError: Siempre, con el nombre de cada uno
+        """
         nombres = await PlayerNames.de_la_competicion(sin, competition.id, self._users, self._uow)
         raise PlayersWithoutTeeWindowError(
             [

@@ -320,26 +320,15 @@ async def request_enrollment(
             waiting_list=body.waiting_list if body else False,
         )
         return await use_case.execute(request_dto)
-    except TeeWindowRequiredError as e:
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"detail": str(e), "error_code": "TEE_WINDOW_REQUIRED"},
-        )
-    except TeeWindowNotFoundError as e:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": str(e), "error_code": "TEE_WINDOW_NOT_FOUND"},
-        )
-    except TeeWindowFullError as e:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"detail": str(e), "error_code": "TEE_WINDOW_FULL"},
-        )
-    except TeeWindowHasRoomError as e:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"detail": str(e), "error_code": "TEE_WINDOW_HAS_ROOM"},
-        )
+    except (
+        TeeWindowRequiredError,
+        TeeWindowNotFoundError,
+        TeeWindowFullError,
+        TeeWindowHasRoomError,
+    ) as e:
+        # Mensaje fijo por código, no el de la excepción (CodeQL, 28 oct 2026)
+        estado, codigo, texto = _FRANJA_QUE_NO_VALE[type(e)]
+        return JSONResponse(status_code=estado, content={"detail": texto, "error_code": codigo})
 
     except RequestCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -629,6 +618,30 @@ async def remove_enrolled_player(
         )
     except EnrollmentStateError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+_FRANJA_QUE_NO_VALE: dict[type[Exception], tuple[int, str, str]] = {
+    TeeWindowRequiredError: (
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "TEE_WINDOW_REQUIRED",
+        "Choose a tee window, or the waiting list of a full one.",
+    ),
+    TeeWindowNotFoundError: (
+        status.HTTP_404_NOT_FOUND,
+        "TEE_WINDOW_NOT_FOUND",
+        "That tee window is not one of this competition.",
+    ),
+    TeeWindowFullError: (
+        status.HTTP_409_CONFLICT,
+        "TEE_WINDOW_FULL",
+        "That tee window is full: join its waiting list or choose another.",
+    ),
+    TeeWindowHasRoomError: (
+        status.HTTP_409_CONFLICT,
+        "TEE_WINDOW_HAS_ROOM",
+        "That tee window has room: take a place directly.",
+    ),
+}
 
 
 _NO_SE_QUITA = {
