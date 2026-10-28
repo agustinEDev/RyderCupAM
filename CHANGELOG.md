@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.42.0] - 2026-10-28
+
+**Release social 2: quién ve a los inscritos.** Los jugadores ya no ven la
+lista entera de una competición: en una pública ven a sus amigos inscritos
+hasta que se generan las partidas, y en una privada quien no está dentro no ve
+nada. Además, el organizador puede quitar a un inscrito y volver a invitar a
+quien rechazó, la invitación se acepta desde la ficha y los amigos ven el
+resultado final de tus torneos. Va con el frontend **2.56.0**.
+
+**Notas de despliegue.**
+
+- **Sin migraciones ni variables nuevas.**
+- **Backend y frontend seguidos**: el frontend 2.56 usa `enrolled_visibility`,
+  `my_pending_invitation` y `POST /enrollments/{id}/remove`, que el 2.41 no
+  tiene. El frontend 2.55 sigue funcionando con este backend, pero quien no
+  está en una privada recibe un 403 `PRIVATE_COMPETITION` que el 2.55 pinta
+  como un error genérico.
+
+### Added
+
+- **Quién ve a los inscritos** (#683): el organizador y el admin lo ven todo.
+  En una privada, quien no está ve solo lo suyo; el invitado pendiente, además,
+  a sus amigos aprobados; el aprobado, a todos. En una pública, lo suyo y sus
+  amigos aprobados hasta que se publica (grupos de salida generados o equipos
+  de Ryder formados). Los capitanes y subcapitanes ven a todos los aprobados
+  desde el principio. Se aplica a la lista de inscritos, a la agenda (los
+  `player_ids` y `waiting_ids` de cada franja; `places_taken` sigue siendo el
+  número real) y a los jugadores sin grupo. La ficha trae
+  `enrolled_visibility` (`ALL`, `FRIENDS`, `NONE`) y la agenda `waiting_count`
+  y `my_waiting_position`. «Mis competiciones» incluye las que tienen una
+  invitación pendiente.
+- **Privadas cerradas a quien no está** (#684): la clasificación de Ryder, las
+  de stroke play, el detalle de un partido y las vistas de anotación responden
+  **403 `PRIVATE_COMPETITION`** a quien no está dentro, también publicadas.
+  **La llave del evento**: quien tiene en su Actividad un evento de un amigo en
+  esa competición ve la clasificación de stroke play entera, o el marcador por
+  equipos de la Ryder, y solo la partida de su amigo. Tu propio partido lo ves
+  siempre, aunque te hayas retirado.
+- **Los amigos ven tu posición final** (#684), también el resultado de una
+  Ryder, en públicas y privadas.
+- **El admin entra a la sala de draft y a los sobres** (#685), solo para
+  mirar; un sobre cerrado sigue sin enseñar su contenido.
+- **La invitación pendiente, en la ficha** (#688): `my_pending_invitation`
+  (`id`, `expires_at`) cuando aceptar puede funcionar: pendiente, sin caducar,
+  por usuario o por el correo al que se mandó, y con la competición abierta.
+- **Quitar a un inscrito** (#689): `POST /api/v1/enrollments/{id}/remove`,
+  para el organizador o un admin, antes de empezar (`DRAFT`, `ACTIVE`,
+  `CLOSED`) y con los mismos efectos que retirarse. 409 con `error_code`:
+  `CANNOT_REMOVE_ORGANIZER`, `REMOVAL_NOT_ALLOWED`, `PLAYER_HAS_MATCHES` (con
+  cualquier partido generado) y `DRAFT_IN_PROGRESS`. Al jugador le llega el
+  aviso `ENROLLMENT_REMOVED`, solo en la app, y se le quitan sus avisos de
+  inscrito.
+- **Equipos que se deshacen** (#689): si alguien sale de un equipo formado sin
+  partidos (porque lo quitan o porque se retira), o entra con los equipos ya
+  formados, se deshace el reparto, los subcapitanes, la sala de draft y los
+  sobres; los capitanes se quedan. Con la sala de draft abierta no sale nadie.
+
+### Changed
+
+- **Solo las consultas que hace falta** (#686): cada petición recuerda lo que
+  ya leyó (competición, campo, usuarios, rondas y reparto de equipos) y lo
+  olvida en cualquier rollback o escritura que lo cambie; «¿publicada?» es un
+  `EXISTS`. La ficha de una privada pasa de 42/30/27 consultas (organizador /
+  aprobado / de fuera) a 22/19/16.
+- La búsqueda de jugadores ya no devuelve a quien busca y ordena por apellido,
+  nombre e id, así que el límite de 10 resultados es estable (#682).
+
+### Fixed
+
+- **Volver a entrar con una inscripción vieja** (#689): una rechazada,
+  cancelada o retirada impedía para siempre aceptar una invitación, pedir
+  plaza o que el organizador te inscribiera (409 por la restricción única).
+  Ahora se reutiliza la fila, limpia, con la fecha de hoy, y se quitan sus
+  avisos viejos. Aceptar una invitación con una solicitud propia pendiente la
+  aprueba.
+- **Volver a invitar** (#689): una invitación pendiente que caducó sin leerse
+  bloqueaba una nueva; ahora se da por caducada y la nueva sale.
+
 ## [2.41.0] - 2026-10-26
 
 **Retirar a un jugador de un fourball de torneo.** Un fourball con un jugador

@@ -10,7 +10,7 @@ una release ha llegado realmente a produccion.
 
 import os
 
-APP_VERSION = "2.41.0"
+APP_VERSION = "2.42.0"
 
 
 def get_deployed_commit() -> str:
