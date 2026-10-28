@@ -227,4 +227,6 @@ class TestTipos:
             "ENROLLMENT_CONFIRMED",
             # Aviso de horario (G, tabla del 22 oct 2026)
             "TEE_TIME_ASSIGNED",
+            # «El organizador te ha quitado» (N1, release social 2, 27 oct 2026)
+            "ENROLLMENT_REMOVED",
         }

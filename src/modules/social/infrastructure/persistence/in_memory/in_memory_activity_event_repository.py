@@ -239,6 +239,16 @@ class InMemoryActivityEventRepository(ActivityEventRepositoryInterface):
         ]
         return max(fechas, default=None)
 
+    async def authors_in_competition(
+        self, slice_: ActivitySlice, competition_id: str
+    ) -> set[UserId]:
+        """Los autores del trozo con algún evento de esa competición."""
+        return {
+            e.user_id
+            for e in self._events
+            if self._entra(e, [slice_]) and e.payload.get("competition_id") == competition_id
+        }
+
     async def find_for_users(
         self, user_ids: Collection[UserId], types: Collection[ActivityEventType]
     ) -> list[ActivityEvent]:

@@ -8,7 +8,7 @@ Quien SI la ve: su creador, y quien tiene una inscripcion en ella. Lo demas es
 de otros.
 """
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -23,10 +23,13 @@ from src.modules.competition.application.use_cases.list_competitions_use_case im
     ListCompetitionsUseCase,
 )
 from src.modules.competition.domain.entities.enrollment import Enrollment
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.services.location_builder import LocationBuilder
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.enrollment_id import EnrollmentId
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -216,6 +219,81 @@ class TestWhatAStrangerSees:
         visibles = await uc.execute(viewer_id=str(invitado.value))
 
         assert len(visibles) == 1
+
+    # Release social 2 (27 oct 2026): la invitación vive en su tabla, sin fila de
+    # inscripción hasta que se acepta; con ella pendiente, la privada se ve
+    async def _invitar(self, uow, creada, organizador, *, user_id=None, email="x@test.com", **como):
+        datos = {
+            "status": InvitationStatus.PENDING,
+            "expires_at": datetime.now() + timedelta(days=7),
+        }
+        async with uow:
+            await uow.invitations.add(
+                Invitation(
+                    id=InvitationId.generate(),
+                    competition_id=CompetitionId(creada.id),
+                    inviter_id=organizador,
+                    invitee_email=email,
+                    invitee_user_id=user_id,
+                    **{**datos, **como},
+                )
+            )
+            await uow.commit()
+
+    async def test_16_with_a_pending_invitation_they_see_it(self, uow):
+        organizador, invitado = UserId(uuid4()), UserId(uuid4())
+        creada = await self._crear(uow, organizador, "Ryder de los amigos", Visibility.PRIVATE)
+        await self._invitar(uow, creada, organizador, user_id=invitado)
+
+        visibles = await ListCompetitionsUseCase(uow).execute(viewer_id=str(invitado.value))
+
+        assert [c.id.value for c in visibles] == [creada.id]
+
+    async def test_16_invited_by_their_email_they_see_it(self, uow):
+        organizador, invitado = UserId(uuid4()), UserId(uuid4())
+        creada = await self._crear(uow, organizador, "Ryder de los amigos", Visibility.PRIVATE)
+        await self._invitar(uow, creada, organizador, email="Ana@Test.com")
+
+        visibles = await ListCompetitionsUseCase(uow).visibles_para(
+            [await self._entidad(uow, creada)], str(invitado.value), viewer_email="ana@test.com"
+        )
+
+        assert len(visibles) == 1
+
+    @pytest.mark.parametrize(
+        "como",
+        [
+            {"status": InvitationStatus.DECLINED},
+            {"status": InvitationStatus.CANCELLED},
+            {"status": InvitationStatus.EXPIRED},
+            {"expires_at": datetime.now() - timedelta(minutes=1)},
+        ],
+    )
+    async def test_17_an_invitation_that_no_longer_counts_does_not(self, uow, como):
+        organizador, invitado = UserId(uuid4()), UserId(uuid4())
+        creada = await self._crear(uow, organizador, "Ryder de los amigos", Visibility.PRIVATE)
+        await self._invitar(uow, creada, organizador, user_id=invitado, **como)
+
+        visibles = await ListCompetitionsUseCase(uow).execute(viewer_id=str(invitado.value))
+
+        assert visibles == []
+
+    async def test_16_somebody_else_s_invitation_does_not(self, uow):
+        organizador, curioso = UserId(uuid4()), UserId(uuid4())
+        creada = await self._crear(uow, organizador, "Ryder de los amigos", Visibility.PRIVATE)
+        await self._invitar(
+            uow, creada, organizador, user_id=UserId(uuid4()), email="otro@test.com"
+        )
+
+        visibles = await ListCompetitionsUseCase(uow).visibles_para(
+            [await self._entidad(uow, creada)], str(curioso.value), viewer_email="yo@test.com"
+        )
+
+        assert visibles == []
+
+    async def _entidad(self, uow, creada):
+        async with uow:
+            return await uow.competitions.find_by_id(CompetitionId(creada.id))
 
     async def test_an_admin_sees_everything(self, uow):
         """El panel de administracion tiene que poder encontrarla para moderarla.

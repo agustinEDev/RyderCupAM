@@ -19,6 +19,21 @@ from src.modules.competition.application.dto.round_match_dto import (
 from src.modules.competition.application.exceptions import (
     CompetitionNotFoundError,
 )
+from src.modules.competition.application.ports.amigos_interface import AmigosInterface
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    Acceso,
+    LoJugadoQueVe,
+    con_la_llave,
+)
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    LoQueVe,
+    alcance_de,
+    lo_que_ve,
+)
+from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -31,6 +46,7 @@ from src.modules.competition.domain.value_objects.enrollment_status import Enrol
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.setup_mode import SetupMode
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.repositories.golf_course_repository import (
     IGolfCourseRepository,
 )
@@ -41,6 +57,11 @@ if TYPE_CHECKING:
     # Solo para el tipo: la mesa de sobres llega hasta aquí por el generador de
     # partidos, e importarla de verdad cierra un círculo
     from src.modules.competition.application.services.envelope_desk import EnvelopeDesk
+
+
+def _jugadores(match: Match) -> list[UserId]:
+    """Los de los dos lados de un partido."""
+    return [p.user_id for p in (*match.team_a_players, *match.team_b_players)]
 
 
 def _descansan(team_assignment, inscritos: set[UserId], matches: list) -> list[UserId]:
@@ -74,8 +95,16 @@ class GetScheduleUseCase:
         uow: CompetitionUnitOfWorkInterface,
         golf_course_repo: IGolfCourseRepository | None = None,
         sobres: "EnvelopeDesk | None" = None,
+        amigos: AmigosInterface | None = None,
+        eventos: EventosDeAmigosInterface | None = None,
     ):
         self._uow = uow
+        # La llave de quien está fuera de una privada: sus partidos, solo los
+        # de un amigo con evento en su Actividad (27 oct 2026)
+        self._eventos = eventos
+        # De quién es amigo quien mira: en las franjas solo ve a sus amigos
+        # hasta que se publica (release social 2)
+        self._amigos = amigos
         # Mirar la agenda abre los sobres que ya tocan (BE #367), como mirar la
         # página del sobre: si nadie la abría, la sesión llegaba a su hora con
         # los sobres cerrados y, desde la #361, sin partidos
@@ -85,7 +114,20 @@ class GetScheduleUseCase:
         # partidos, asi que sin esto no puede ofrecer «Anotar» sin cobertura
         self._gc_repo = golf_course_repo
 
-    async def execute(self, request: GetScheduleRequestDTO) -> GetScheduleResponseDTO:
+    async def execute(
+        self,
+        request: GetScheduleRequestDTO,
+        *,
+        viewer_id: UserId | None = None,
+        viewer_is_admin: bool = False,
+        viewer_email: str | None = None,
+    ) -> GetScheduleResponseDTO:
+        """
+        La agenda. Diciendo quién mira, en cada franja ve solo a quien le deja
+        `quien_ve_los_inscritos` (con las plazas ocupadas de verdad); sin
+        decirlo, entera: es como la leen los usos internos.
+        """
+        alcance = None
         async with self._uow:
             # 1. Verificar que la competición existe
             competition_id = CompetitionId(request.competition_id)
@@ -114,16 +156,44 @@ class GetScheduleUseCase:
             # 4. Obtener asignación de equipos
             team_assignment = await self._uow.team_assignments.find_by_competition(competition_id)
             # Quién sigue dentro: un retirado no «descansa», no está (#710)
-            inscritos = (
-                {
-                    e.user_id
-                    for e in await self._uow.enrollments.find_by_competition_and_status(
-                        competition_id, EnrollmentStatus.APPROVED
-                    )
-                }
+            aprobados = (
+                await self._uow.enrollments.find_by_competition_and_status(
+                    competition_id, EnrollmentStatus.APPROVED
+                )
                 if team_assignment
-                else set()
+                else None
             )
+            inscritos = {e.user_id for e in aprobados} if aprobados is not None else set()
+            if viewer_id is not None:
+                alcance = await alcance_de(
+                    self._uow,
+                    competition,
+                    viewer_id,
+                    es_admin=viewer_is_admin,
+                    email=viewer_email,
+                    aprobados=aprobados,
+                )
+
+        ve = await lo_que_ve(alcance, viewer_id, self._amigos) if alcance and viewer_id else None
+        # En una privada, sus partidos solo los ve quien está dentro (27 oct
+        # 2026): ahí `completa` es organizador, admin o aprobado
+        jugado = (
+            await con_la_llave(
+                competition.visibility is not Visibility.PRIVATE or ve.completa,
+                competition_id,
+                ve.quien,
+                self._eventos,
+            )
+            if ve
+            else LoJugadoQueVe(Acceso.ENTERO)
+        )
+        entero = jugado.acceso is Acceso.ENTERO
+        if not entero:
+            rounds_with_matches = [
+                (r, [m for m in matches if jugado.ve_la_partida(_jugadores(m))])
+                for r, matches in rounds_with_matches
+            ]
+            total_matches = sum(len(matches) for _, matches in rounds_with_matches)
 
         # 5. La zona horaria de cada campo, una consulta por campo distinto: una
         # competicion juega en uno o dos, no en veinte
@@ -187,15 +257,22 @@ class GetScheduleUseCase:
                     round_entity.hoja_de_salidas,
                     [p.user_id.value for p in plazas if p.round_id == round_entity.id],
                     [e.user_id.value for e in esperas if e.round_id == round_entity.id],
+                    ve,
                 ),
                 matches=match_dtos,
                 scoring_opens_at=_abre(
                     round_entity, zonas_por_campo.get(round_entity.golf_course_id)
                 ),
-                match_generation_block=block_to_dto(round_entity.match_generation_block),
+                # El aviso de por qué no hay partidos nombra a jugadores: de una
+                # privada, solo para quien está dentro (CodeRabbit)
+                match_generation_block=block_to_dto(round_entity.match_generation_block)
+                if entero
+                else None,
                 resting_player_ids=[
                     uid.value for uid in _descansan(team_assignment, inscritos, matches)
-                ],
+                ]
+                if entero
+                else [],
                 created_at=round_entity.created_at,
                 updated_at=round_entity.updated_at,
             )
@@ -213,7 +290,7 @@ class GetScheduleUseCase:
 
         # 7. Construir respuesta de team assignment
         ta_dto = None
-        if team_assignment:
+        if team_assignment and entero:
             ta_dto = TeamAssignmentResponseDTO(
                 id=team_assignment.id.value,
                 competition_id=team_assignment.competition_id.value,
@@ -263,11 +340,27 @@ class GetScheduleUseCase:
 
 
 def _hoja(
-    hoja: HojaDeSalidas | None, jugadores: list[UUID], esperan: list[UUID]
+    hoja: HojaDeSalidas | None,
+    jugadores: list[UUID],
+    esperan: list[UUID],
+    ve: LoQueVe | None = None,
 ) -> TeeSheetResponseDTO | None:
-    """La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251)."""
+    """
+    La hoja de salidas de una franja, con sus horas, su cupo y quién va (#251).
+
+    Quien no ve la lista completa ve solo a quien le deja `ve`, pero las plazas
+    ocupadas son las de verdad: así le salen bien las libres (release social 2).
+    """
     if hoja is None:
         return None
+    ocupadas = len(jugadores)
+    en_espera = len(esperan)
+    mi_puesto = (
+        esperan.index(ve.quien.value) + 1 if ve is not None and ve.quien.value in esperan else None
+    )
+    if ve is not None:
+        jugadores = [j for j in jugadores if ve.ve_a(UserId(j))]
+        esperan = [j for j in esperan if ve.ve_a(UserId(j))]
     return TeeSheetResponseDTO(
         first_tee_time=hoja.primera_salida,
         last_tee_time=hoja.ultima_salida,
@@ -275,7 +368,9 @@ def _hoja(
         group_size=hoja.jugadores_por_partida,
         tee_times=hoja.salidas,
         capacity=hoja.cupo,
-        places_taken=len(jugadores),
+        places_taken=ocupadas,
+        waiting_count=en_espera,
+        my_waiting_position=mi_puesto,
         player_ids=jugadores,
         waiting_ids=esperan,
     )

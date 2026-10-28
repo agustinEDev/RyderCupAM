@@ -17,12 +17,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
-from src.modules.competition.application.services.esperas_de_la_competicion import (
-    EsperasDeLaCompeticion,
-    esta_jugada,
-)
-from src.modules.competition.application.services.partidas_del_jugador import (
-    sacar_de_sus_partidas,
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+    sacar_de_la_competicion,
 )
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -112,43 +109,24 @@ class WithdrawEnrollmentUseCase:
             competition = await self._uow.competitions.find_by_id_for_update(
                 enrollment.competition_id
             )
+            # Releída con el bloqueo: si el organizador le quitó mientras se
+            # esperaba, aquí ya está retirada (revisor, release social 2)
+            enrollment = await self._uow.enrollments.find_by_id_for_update(enrollment_id)
+            if not enrollment:
+                raise EnrollmentNotFoundError(f"Inscripción no encontrada: {request.enrollment_id}")
+
+            # Con la sala de draft abierta nadie sale (decidido el 27 oct 2026)
+            if competition is not None:
+                await exigir_sin_draft_abierto(self._uow, competition.id)
 
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
 
-            # Sale de sus partidas sin salir, también ya iniciada (D2, #251)
-            fotos = await sacar_de_sus_partidas(
-                self._uow,
-                enrollment.competition_id,
-                enrollment.user_id,
-                zonas=self._zonas,
-                ahora=self._reloj(),
+            # Sale de todo: partidas, franjas, capitanía y, si hace falta, los
+            # equipos (release social 2)
+            fotos = await sacar_de_la_competicion(
+                self._uow, competition, enrollment, zonas=self._zonas, ahora=self._reloj()
             )
-
-            # Y suelta sus plazas en las franjas de un stroke play, si aún no se
-            # juega: empezada, son las del historial de lo jugado (#251)
-            if competition is not None and competition.status.allows_tee_window_edits():
-                # Las de franjas ya jugadas (tras volver atrás) se quedan: historial
-                sesiones = {
-                    r.id: r
-                    for r in await self._uow.rounds.find_by_competition(enrollment.competition_id)
-                }
-                suyas = []
-                for plaza in await self._uow.plazas.de_la_competicion(enrollment.competition_id):
-                    if plaza.user_id != enrollment.user_id:
-                        continue
-                    franja = sesiones.get(plaza.round_id)
-                    if franja is not None and not esta_jugada(franja):
-                        await self._uow.plazas.quitar(plaza.round_id, plaza.user_id)
-                        suyas.append(plaza.round_id)
-                # Fuera de las listas, y sus plazas para los que esperan
-                esperas = EsperasDeLaCompeticion(self._uow)
-                await esperas.sacar_de_todas(competition, enrollment.user_id)
-                await esperas.rellenar_varias(competition, suyas, datetime.now(UTC))
-
-            #    Si era capitan, su puesto queda libre
-            if competition and competition.handle_withdrawal(enrollment.user_id):
-                await self._uow.competitions.update(competition)
 
             # 5. Persistir cambios
             await self._uow.enrollments.update(enrollment)

@@ -58,11 +58,12 @@ SOLO_EL_AUTOR = [
     ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
     ActivityEventType.ENROLLMENT_REJECTED,
     ActivityEventType.TOURNAMENT_MATCH_RESULT,
-    ActivityEventType.TOURNAMENT_FINAL_STANDING,
     # Tabla del 22 oct 2026, C: «ya estás inscrito», solo tuyo
     ActivityEventType.ENROLLMENT_CONFIRMED,
     # G6: tu salida o tu partido, solo tuyo
     ActivityEventType.TEE_TIME_ASSIGNED,
+    # N1 (release social 2): «el organizador te ha quitado», solo tuyo
+    ActivityEventType.ENROLLMENT_REMOVED,
 ]
 
 
@@ -71,6 +72,10 @@ class TestPublicoDeLosAvisos:
     def test_los_avisos_de_inscripcion_y_resultados_son_solo_tuyos(self, tipo):
         """A y C. Given un aviso de inscripcion o de resultado / Then SELF."""
         assert audience_of(tipo) is ActivityAudience.SELF
+
+    def test_la_posicion_final_la_ven_tambien_sus_amigos(self):
+        """Tabla del 27 oct 2026, fila 10. Given su puesto final en un torneo / Then BOTH."""
+        assert audience_of(ActivityEventType.TOURNAMENT_FINAL_STANDING) is ActivityAudience.BOTH
 
     def test_el_amigo_apuntado_lo_ven_solo_sus_amigos(self):
         """B. Given «X se ha apuntado a Y» / Then FRIENDS: el autor tiene su propio aviso."""
@@ -84,13 +89,19 @@ class TestPublicoDeLosAvisos:
 class TestTiposVisibles:
     def test_con_el_mapa_real_autor_y_amigos_ven_lo_suyo(self):
         assert types_seen_by_author() == frozenset(
-            [*LOGROS, *SOLO_EL_AUTOR, ActivityEventType.QUICK_MATCH_FINISHED]
+            [
+                *LOGROS,
+                *SOLO_EL_AUTOR,
+                ActivityEventType.QUICK_MATCH_FINISHED,
+                ActivityEventType.TOURNAMENT_FINAL_STANDING,
+            ]
         )
         assert types_seen_by_friends() == frozenset(
             [
                 *LOGROS,
                 ActivityEventType.ENROLLED_IN_TOURNAMENT,
                 ActivityEventType.QUICK_MATCH_FINISHED,
+                ActivityEventType.TOURNAMENT_FINAL_STANDING,
             ]
         )
 

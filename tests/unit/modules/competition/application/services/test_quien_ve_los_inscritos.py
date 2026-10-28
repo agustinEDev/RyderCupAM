@@ -1,0 +1,324 @@
+"""
+Quién ve a los inscritos de una competición (release social 2, tabla del 27 oct 2026).
+
+  #   quien mira                                         | ve
+  ----|-------------------------------------------------|----------------------
+  1   organizador o admin                                | todo
+  2   privada, sin estar dentro                          | nada (solo lo suyo)
+  3   privada, con fila de retirado o rechazado          | nada (solo lo suyo)
+  4   privada, con invitación pendiente                  | sus amigos aprobados
+  5   privada, aprobado                                  | todos los aprobados
+  6   pública antes de publicarse, inscrito o no         | sus amigos aprobados
+  7   stroke play con las partidas generadas             | todos los aprobados
+  8   Ryder con los equipos formados                     | todos los aprobados
+      (7 y 8, en una privada solo quien está: tabla del 27 oct, fila 6)
+  9   capitán o vicecapitán, antes de los equipos        | todos los aprobados
+  10  su propia fila                                     | siempre
+  11  amigo = amistad aceptada                           | (lo da el puerto)
+"""
+
+from dataclasses import replace
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    Alcance,
+    LoQueVe,
+    alcance,
+)
+from src.modules.competition.domain.value_objects.ryder_cup_setup import RyderCupSetup
+from src.modules.competition.domain.value_objects.visibility import Visibility
+from src.modules.user.domain.value_objects.user_id import UserId
+
+YO = UserId(uuid4())
+CREADOR = UserId(uuid4())
+
+
+def _competicion(visibilidad=Visibility.PUBLIC, ryder=None, stroke_play=None):
+    return SimpleNamespace(
+        visibility=visibilidad,
+        ryder_cup=ryder,
+        stroke_play=stroke_play,
+        is_creator=lambda quien: quien == CREADOR,
+    )
+
+
+def _ryder(**capitanes):
+    return replace(RyderCupSetup.create("Europa", "América"), **capitanes)
+
+
+def _alcance(competicion, quien=YO, **como):
+    datos = {"es_admin": False, "aprobado": False, "invitado": False, "publicada": False}
+    return alcance(competicion, quien, **{**datos, **como})
+
+
+PRIVADA = Visibility.PRIVATE
+
+
+class TestElQueOrganiza:
+    @pytest.mark.parametrize("visibilidad", [Visibility.PUBLIC, PRIVADA])
+    def test_1_el_organizador_lo_ve_todo(self, visibilidad):
+        assert _alcance(_competicion(visibilidad), CREADOR) is Alcance.TODO
+
+    @pytest.mark.parametrize("visibilidad", [Visibility.PUBLIC, PRIVADA])
+    def test_1_un_admin_lo_ve_todo(self, visibilidad):
+        assert _alcance(_competicion(visibilidad), es_admin=True) is Alcance.TODO
+
+
+class TestUnaPrivada:
+    def test_2_sin_estar_dentro_no_ve_a_nadie(self):
+        assert _alcance(_competicion(PRIVADA)) is Alcance.NADA
+
+    def test_4_con_invitacion_pendiente_ve_a_sus_amigos(self):
+        assert _alcance(_competicion(PRIVADA), invitado=True) is Alcance.AMIGOS
+
+    def test_5_aprobado_ve_a_todos(self):
+        assert _alcance(_competicion(PRIVADA), aprobado=True) is Alcance.APROBADOS
+
+    def test_5_aprobado_e_invitado_otra_vez_sigue_viendo_a_todos(self):
+        assert _alcance(_competicion(PRIVADA), aprobado=True, invitado=True) is Alcance.APROBADOS
+
+    def test_7_8_publicada_quien_no_esta_sigue_sin_ver_nada(self):
+        """Tabla del 27 oct 2026, fila 6: quien no está, nada, también publicada."""
+        assert _alcance(_competicion(PRIVADA), publicada=True) is Alcance.NADA
+
+    def test_7_8_publicada_el_aprobado_sigue_viendo_a_todos(self):
+        assert _alcance(_competicion(PRIVADA), publicada=True, aprobado=True) is Alcance.APROBADOS
+
+    def test_7_8_publicada_el_invitado_sigue_viendo_a_sus_amigos(self):
+        assert _alcance(_competicion(PRIVADA), publicada=True, invitado=True) is Alcance.AMIGOS
+
+
+class TestUnaPublica:
+    def test_6_sin_estar_dentro_ve_a_sus_amigos(self):
+        assert _alcance(_competicion()) is Alcance.AMIGOS
+
+    def test_6_inscrito_tambien_solo_a_sus_amigos(self):
+        assert _alcance(_competicion(), aprobado=True) is Alcance.AMIGOS
+
+    def test_6_invitado_tambien_solo_a_sus_amigos(self):
+        assert _alcance(_competicion(), invitado=True) is Alcance.AMIGOS
+
+    def test_7_8_publicada_ve_a_todos(self):
+        assert _alcance(_competicion(), publicada=True) is Alcance.APROBADOS
+
+
+class TestLosCapitanes:
+    @pytest.mark.parametrize(
+        "cargo",
+        [
+            "team_a_captain_id",
+            "team_b_captain_id",
+            "team_a_vice_captain_id",
+            "team_b_vice_captain_id",
+        ],
+    )
+    @pytest.mark.parametrize("visibilidad", [Visibility.PUBLIC, PRIVADA])
+    def test_9_capitan_o_vice_ve_a_todos_antes_de_los_equipos(self, cargo, visibilidad):
+        competicion = _competicion(visibilidad, ryder=_ryder(**{cargo: YO}))
+
+        assert _alcance(competicion, aprobado=True) is Alcance.APROBADOS
+
+    def test_9_capitan_que_se_retiro_ya_no(self):
+        """Revisor: el cargo se queda en la Ryder, pero quien se retiró ya no está."""
+        competicion = _competicion(ryder=_ryder(team_a_captain_id=YO))
+
+        assert _alcance(competicion, aprobado=False) is Alcance.AMIGOS
+
+    def test_9_capitan_de_otro_no_cuenta(self):
+        competicion = _competicion(ryder=_ryder(team_a_captain_id=UserId(uuid4())))
+
+        assert _alcance(competicion) is Alcance.AMIGOS
+
+
+class TestLoQueVe:
+    AMIGO = UserId(uuid4())
+    OTRO = UserId(uuid4())
+
+    @pytest.mark.parametrize("a", [Alcance.TODO, Alcance.APROBADOS])
+    def test_completa_ve_a_cualquiera(self, a):
+        assert LoQueVe(a, YO).ve_a(self.OTRO) is True
+
+    def test_amigos_ve_a_sus_amigos_y_no_a_otros(self):
+        lo = LoQueVe(Alcance.AMIGOS, YO, frozenset({self.AMIGO}))
+
+        assert lo.ve_a(self.AMIGO) is True
+        assert lo.ve_a(self.OTRO) is False
+
+    def test_nada_no_ve_ni_a_un_amigo(self):
+        lo = LoQueVe(Alcance.NADA, YO, frozenset({self.AMIGO}))
+
+        assert lo.ve_a(self.AMIGO) is False
+
+    @pytest.mark.parametrize("a", list(Alcance))
+    def test_10_a_si_mismo_siempre(self, a):
+        assert LoQueVe(a, YO).ve_a(YO) is True
+
+    @pytest.mark.parametrize(
+        ("a", "completa"),
+        [
+            (Alcance.TODO, True),
+            (Alcance.APROBADOS, True),
+            (Alcance.AMIGOS, False),
+            (Alcance.NADA, False),
+        ],
+    )
+    def test_si_ve_la_lista_completa(self, a, completa):
+        assert LoQueVe(a, YO).completa is completa
+
+
+# --- De dónde salen los datos (alcance_de) ------------------------------------------
+
+from unittest.mock import AsyncMock
+
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    alcance_de,
+)
+from src.modules.competition.domain.value_objects.competition_id import (
+    CompetitionId,
+)
+from src.modules.competition.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
+
+
+def _uow(*, equipos=None, partidas=()):
+    uow = InMemoryUnitOfWork()
+    uow.team_assignments.find_by_competition = AsyncMock(return_value=equipos)
+    uow.partidas.de_la_competicion = AsyncMock(return_value=list(partidas))
+    uow.partidas.existe_en_la_competicion = AsyncMock(return_value=bool(partidas))
+    return uow
+
+
+def _con_id(**como):
+    competicion = _competicion(**como)
+    competicion.id = CompetitionId(uuid4())
+    return competicion
+
+
+class TestCuandoEstaPublicada:
+    async def test_7_stroke_play_con_partidas_generadas(self):
+        competicion = _con_id(stroke_play=object())
+        uow = _uow(partidas=[object()])
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.APROBADOS
+
+    async def test_7_stroke_play_sin_partidas_aun_no(self):
+        competicion = _con_id(stroke_play=object())
+        uow = _uow(equipos=object())
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.AMIGOS
+
+    async def test_8_ryder_con_equipos_formados(self):
+        competicion = _con_id(ryder=_ryder())
+        uow = _uow(equipos=object())
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.APROBADOS
+
+    async def test_8_ryder_sin_equipos_aun_no(self):
+        competicion = _con_id(ryder=_ryder())
+        uow = _uow(partidas=[object()])
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.AMIGOS
+
+    async def test_el_organizador_no_necesita_leer_nada(self):
+        competicion = _con_id(visibilidad=PRIVADA)
+        uow = _uow()
+
+        async with uow:
+            assert await alcance_de(uow, competicion, CREADOR) is Alcance.TODO
+        uow.team_assignments.find_by_competition.assert_not_called()
+
+
+class TestSoloLasConsultasNecesarias:
+    """PR 2 de rendimiento (27 oct 2026): «publicada» con un EXISTS, y los aprobados una vez."""
+
+    async def test_8_publicada_en_stroke_play_sin_cargar_las_partidas(self):
+        competicion = _con_id(stroke_play=object())
+        uow = _uow(partidas=[object()])
+        uow.partidas.existe_en_la_competicion = AsyncMock(return_value=True)
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.APROBADOS
+        uow.partidas.de_la_competicion.assert_not_called()
+
+    async def test_7_sin_ninguna_partida_aun_no(self):
+        competicion = _con_id(stroke_play=object())
+        uow = _uow()
+        uow.partidas.existe_en_la_competicion = AsyncMock(return_value=False)
+
+        async with uow:
+            assert await alcance_de(uow, competicion, YO) is Alcance.AMIGOS
+
+    async def test_con_los_aprobados_ya_leidos_no_los_vuelve_a_pedir(self):
+        competicion = _con_id(visibilidad=PRIVADA)
+        uow = _uow()
+        uow.enrollments.find_by_competition_and_status = AsyncMock(return_value=[])
+        aprobado = SimpleNamespace(user_id=YO)
+
+        async with uow:
+            visto = await alcance_de(uow, competicion, YO, aprobados=[aprobado])
+
+        assert visto is Alcance.APROBADOS
+        uow.enrollments.find_by_competition_and_status.assert_not_called()
+
+
+class TestLaInvitacionDeLaFicha:
+    """Aceptar desde la ficha (27 oct 2026): la ficha ya sabe si hay invitación."""
+
+    async def test_si_ya_sabe_que_esta_invitado_no_lo_vuelve_a_preguntar(self):
+        competicion = _con_id(visibilidad=PRIVADA)
+        uow = _uow()
+        uow.invitations.competiciones_con_invitacion_pendiente = AsyncMock(return_value=set())
+
+        async with uow:
+            visto = await alcance_de(uow, competicion, YO, invitado=True)
+
+        assert visto is Alcance.AMIGOS
+        uow.invitations.competiciones_con_invitacion_pendiente.assert_not_called()
+
+    async def test_la_pendiente_en_memoria_por_usuario_o_correo_y_la_mas_reciente(self):
+        from datetime import datetime, timedelta
+
+        from src.modules.competition.domain.entities.invitation import Invitation
+        from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+        from src.modules.competition.domain.value_objects.invitation_status import (
+            InvitationStatus,
+        )
+
+        ahora = datetime(2026, 10, 27, 12, 0)
+        comp = CompetitionId(uuid4())
+        repo = InMemoryUnitOfWork().invitations
+
+        def _inv(email, invitee, status=InvitationStatus.PENDING, dias=1, hace=2, competicion=comp):
+            return Invitation.reconstruct(
+                id=InvitationId.generate(),
+                competition_id=competicion,
+                inviter_id=CREADOR,
+                invitee_email=email,
+                invitee_user_id=invitee,
+                status=status,
+                expires_at=ahora + timedelta(days=dias),
+                created_at=ahora - timedelta(days=hace),
+            )
+
+        vieja, nueva = _inv("yo@t.com", YO, hace=3), _inv("yo@t.com", None, hace=1)
+        for inv in (
+            vieja,
+            nueva,
+            _inv("yo@t.com", YO, status=InvitationStatus.DECLINED, hace=0),
+            # Caduca justo ahora: ya no se puede aceptar
+            _inv("yo@t.com", YO, dias=0, hace=0),
+            _inv("yo@t.com", YO, hace=0, competicion=CompetitionId(uuid4())),
+        ):
+            await repo.add(inv)
+
+        assert (await repo.pendiente_de(YO, " YO@t.com ", comp, ahora)).id == nueva.id
+        assert (await repo.pendiente_de(YO, None, comp, ahora)).id == vieja.id
+        assert await repo.pendiente_de(UserId(uuid4()), None, comp, ahora) is None

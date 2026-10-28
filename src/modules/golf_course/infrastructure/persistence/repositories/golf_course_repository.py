@@ -22,6 +22,7 @@ from src.modules.golf_course.infrastructure.persistence.mappers.golf_course_mapp
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.country_code import CountryCode
+from src.shared.infrastructure.persistence.leidos_en_la_sesion import recordar, ya_leido
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -138,6 +139,9 @@ class GolfCourseRepository(IGolfCourseRepository):
         Returns:
             GolfCourse si existe, None si no
         """
+        # Ya entero en la sesión: la anotación lo pedía tres veces (PR 2)
+        if (ya := ya_leido(self._session, GolfCourse, golf_course_id, ("_tees",))) is not None:
+            return ya
         stmt = (
             select(GolfCourse)
             .where(golf_courses_table.c.id == golf_course_id)
@@ -147,7 +151,10 @@ class GolfCourseRepository(IGolfCourseRepository):
         )
         result = await self._session.execute(stmt)
         result = result.unique()
-        return result.scalar_one_or_none()
+        campo = result.scalar_one_or_none()
+        if campo is not None:
+            recordar(self._session, GolfCourse, golf_course_id, campo)
+        return campo
 
     async def find_by_approval_status(self, approval_status: ApprovalStatus) -> list[GolfCourse]:
         """

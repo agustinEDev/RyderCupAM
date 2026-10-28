@@ -235,6 +235,19 @@ class SearchUsersItemDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SearchUsersRequestDTO(BaseModel):
+    """
+    Una búsqueda del autocompletado de jugadores.
+
+    `viewer_id` es obligatorio: quien busca no sale en sus propios resultados
+    ni ocupa uno de sus huecos (FE #938). Opcional, un llamador nuevo que lo
+    olvidara devolvería el fallo sin que nada avisara.
+    """
+
+    query: str = Field(..., description="Texto parcial del nombre, apellido o alias.")
+    viewer_id: str = Field(..., description="ID de quien busca.")
+
+
 class SearchUsersResponseDTO(BaseModel):
     """Response for user search autocomplete."""
 

@@ -1,6 +1,6 @@
 """Caso de Uso: Los avisos de Actividad que salen de una competicion (BE-2)."""
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time
 
@@ -29,12 +29,34 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.INVITED_TO_TOURNAMENT,
         ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
         ActivityEventType.ENROLLMENT_REJECTED,
+        ActivityEventType.ENROLLMENT_REMOVED,
         ActivityEventType.ENROLLED_IN_TOURNAMENT,
         ActivityEventType.TOURNAMENT_MATCH_RESULT,
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
         ActivityEventType.ENROLLMENT_CONFIRMED,
         ActivityEventType.TEE_TIME_ASSIGNED,
     }
+)
+
+# Los que salen de una inscripcion (su id es el origen): se renuevan. Desde
+# que una inscripcion cerrada se reutiliza al volver a entrar (release social
+# 2), el mismo id puede recibir dos veces el mismo aviso, y con la clave unica
+# el segundo se saltaba y quedaba el viejo con su fecha de antes
+_SE_RENUEVAN = frozenset(
+    {
+        ActivityEventType.ENROLLMENT_APPROVED,
+        ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
+        ActivityEventType.ENROLLMENT_REJECTED,
+        ActivityEventType.ENROLLMENT_REMOVED,
+    }
+)
+
+# Lo que deja de ser cierto al entrar con esa inscripcion (decidido el 27 oct
+# 2026): rechazada, cerrada sola o «te han quitado»
+_DE_NO_ESTAR = (
+    ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
+    ActivityEventType.ENROLLMENT_REJECTED,
+    ActivityEventType.ENROLLMENT_REMOVED,
 )
 
 # Lo que se va cuando ya no estas en el torneo: que estas apuntado, tu «ya
@@ -185,6 +207,9 @@ class PublishCompetitionNoticesUseCase:
         Inscrito directamente o aceptando una invitacion no hay nada que
         aceptarle: le llega «ya estas inscrito» (ENROLLMENT_CONFIRMED, tabla del
         22 oct 2026, C), uno por torneo, para retirarlo al irse.
+
+        Con una inscripcion reutilizada (release social 2), lo que decia que no
+        estaba —rechazada, cerrada, «te han quitado»— se va.
         """
         eventos = []
         if accepted_request:
@@ -211,7 +236,7 @@ class PublishCompetitionNoticesUseCase:
                     tournament,
                 )
             )
-        await self._publicar(eventos)
+        await self._publicar(eventos, retirar=(enrollment_id, _DE_NO_ESTAR, user_id))
 
     async def left(self, user_id: UserId, competition_id: str) -> None:
         """
@@ -299,6 +324,16 @@ class PublishCompetitionNoticesUseCase:
         """El organizador la rechaza a mano: un aviso distinto del cierre (A6)."""
         await self._publicar(
             [self._aviso(user_id, ActivityEventType.ENROLLMENT_REJECTED, enrollment_id, tournament)]
+        )
+
+    async def removed(self, user_id: UserId, tournament: TournamentRef, enrollment_id: str) -> None:
+        """
+        El organizador le quita de la competicion: «te ha quitado de X», solo
+        para el (N1, release social 2). Sus avisos de estar apuntado los quita
+        `left`, que va antes.
+        """
+        await self._publicar(
+            [self._aviso(user_id, ActivityEventType.ENROLLMENT_REMOVED, enrollment_id, tournament)]
         )
 
     # === Resultados ===
@@ -611,12 +646,29 @@ class PublishCompetitionNoticesUseCase:
             return "HALVED"
         return "WON" if winner == bando else "LOST"
 
-    async def _publicar(self, eventos: list[ActivityEvent]) -> None:
-        if not eventos:
+    async def _publicar(
+        self,
+        eventos: list[ActivityEvent],
+        retirar: tuple[str, Collection[ActivityEventType], UserId] | None = None,
+    ) -> None:
+        """
+        Publica los avisos; y, si se dice, retira antes otros de un origen y un
+        jugador, en la misma transaccion: si publicar falla, no se pierde nada.
+        """
+        if not eventos and retirar is None:
             return
         # Una fecha para todos y el interruptor de cada uno, de ahora mismo
         eventos = await stamp_for_publication(self._user_uow, eventos)
         async with self._social_uow:
+            if retirar is not None:
+                origen, tipos, quien = retirar
+                await self._social_uow.activity_events.delete_from_source(origen, tipos, quien)
+            # En la misma transaccion: el de antes se va y queda el nuevo
+            for evento in eventos:
+                if evento.type in _SE_RENUEVAN:
+                    await self._social_uow.activity_events.delete_from_source(
+                        evento.source_match_id, [evento.type], evento.user_id
+                    )
             await self._social_uow.activity_events.add_many(eventos)
 
     async def _sustituir(

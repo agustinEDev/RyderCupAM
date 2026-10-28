@@ -712,6 +712,20 @@ class HandicapUpdateLaunchedDTO(BaseModel):
     )
 
 
+class MyPendingInvitationDTO(BaseModel):
+    """La invitación pendiente de quien mira la ficha."""
+
+    id: UUID = Field(..., description="La invitación, para responderla.")
+    expires_at: datetime = Field(
+        ...,
+        description=(
+            "Cuándo caduca, en la hora del servidor y sin zona, como en el resto de "
+            "las invitaciones: para «expira en N días» basta, en la frontera de un día "
+            "puede descuadrar unas horas."
+        ),
+    )
+
+
 class CompetitionResponseDTO(BaseModel):
     """
     DTO de salida genérico para representar una competición.
@@ -812,6 +826,22 @@ class CompetitionResponseDTO(BaseModel):
             "Solo en la ficha: si ya hay equipos repartidos. Con equipos los capitanes "
             "ya no se cambian, y reabrir las inscripciones no deshace el reparto. Null "
             "en los listados, donde no se calcula."
+        ),
+    )
+    my_pending_invitation: MyPendingInvitationDTO | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: la invitación de quien mira que aún puede aceptar, para "
+            "aceptarla o rechazarla desde ahí (27 oct 2026). Null si no la tiene, si "
+            "organiza, y en los listados."
+        ),
+    )
+    enrolled_visibility: Literal["ALL", "FRIENDS", "NONE"] | None = Field(
+        None,
+        description=(
+            "Solo en la ficha: qué ve quien mira de los inscritos (release social 2). "
+            "ALL, todos los aprobados; FRIENDS, solo sus amigos; NONE, a nadie más que "
+            "a sí mismo. Null en los listados."
         ),
     )
     actual_team_assignment: str | None = Field(

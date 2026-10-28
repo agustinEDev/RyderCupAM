@@ -19,6 +19,7 @@ from src.modules.competition.application.ports.invitation_email_service_interfac
     IInvitationEmailService,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
@@ -60,9 +61,32 @@ class SendInvitationByUserIdUseCase:
         # Los avisos de Actividad (BE-2); sin el, no se avisa
         self._actividad = AvisosDeActividad(actividad)
 
+    async def _avisar(self, competition, invitation, caducada) -> None:
+        """
+        Ya guardada: si tiene cuenta, le sale en Actividad (BE-2); y la que
+        caducó sin abrirse y dio paso a esta pierde su aviso (CodeRabbit).
+        """
+        await self._actividad.invited(competition, invitation)
+        if caducada is not None:
+            await self._actividad.invitations_closed([caducada])
+
     async def execute(
         self, request: SendInvitationByUserIdRequestDTO, is_admin: bool = False
     ) -> InvitationResponseDTO:
+        """
+        Invita a un usuario por su id a la competición.
+
+        Args:
+            request: A quién, a qué competición y con qué mensaje
+            is_admin: Si quien invita es administrador (no hace falta organizar)
+
+        Returns:
+            La invitación creada, con los nombres
+
+        Raises:
+            Las del organizador, el estado, el cupo, el freno por hora y la
+            pendiente duplicada (una pendiente ya caducada no cuenta)
+        """
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
             inviter_id = UserId(request.inviter_id)
@@ -131,8 +155,10 @@ class SendInvitationByUserIdUseCase:
             )
 
             # 7. Verificar no invitation PENDING duplicada
-            existing_invitation = await self._uow.invitations.find_pending_by_email_and_competition(
-                invitee_email, competition_id
+            # Una pendiente que ya caducó sin que nadie la abriera no impide
+            # invitar otra vez (release social 2)
+            existing_invitation, caducada = await pendiente_vigente(
+                self._uow, invitee_email, competition_id
             )
             if existing_invitation:
                 raise DuplicateInvitationViolation(
@@ -164,7 +190,7 @@ class SendInvitationByUserIdUseCase:
             legal = bool(await quieren_su_nombre_legal(self._uow, [(competition_id, inviter_id)]))
 
         # Ya guardada: si tiene cuenta, le sale en Actividad (BE-2)
-        await self._actividad.invited(competition, invitation)
+        await self._avisar(competition, invitation, caducada)
 
         # 10. Retornar DTO enriquecido
         # Obtener inviter_name

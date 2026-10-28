@@ -250,7 +250,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 ### Coming Soon
 - 🔄 **GDPR Compliance** - Data export, right to be forgotten (v2.1.0)
 - 🔄 **WebSocket Leaderboards** - Real-time updates (v2.1.1)
-- 🔄 **AI & RAG Module** - Golf rules chatbot (v2.2.0)
+- ⏸️ **Rules assistant & swing tutor** - Parked until the paid plan ([plan](docs/plan-de-pago-e-ia.md), #676)
 
 ---
 

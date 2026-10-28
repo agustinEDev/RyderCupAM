@@ -165,13 +165,9 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 | Avatar System | Cloudinary/S3, max 2MB, jpg/png/webp |
 | Unified Error Handling | ErrorCode enum, formato estándar, i18n ES/EN |
 
-### v2.2.0 — AI & RAG Module (2-3 semanas)
+### Asistente del reglamento y entrenador de swing (aparcado)
 
-- Chatbot de reglas de golf (R&A Official Rules)
-- LangChain + Pinecone + OpenAI GPT-4o-mini (~$1-2/mes)
-- Solo disponible si `competition.status == IN_PROGRESS`
-- Rate limiting: 10/día global, 3/día player, 6/día creator
-- Redis cache (TTL 7 días), pre-FAQs hardcoded
+Sustituye a la antigua v2.2.0 «AI & RAG Module» (LangChain + Pinecone + OpenAI), que no se llegó a hacer. Plan vigente, costes y precio en [docs/plan-de-pago-e-ia.md](docs/plan-de-pago-e-ia.md); épica [#676](https://github.com/agustinEDev/RyderCupAM/issues/676). Aparcado hasta poder facturar (alta de autónomo). Necesita el sistema de pagos (Stripe), que hoy figura en la v3.0.0: habrá que adelantarlo al retomarlo.
 
 ### v3.0.0 — Major Release (4-6 meses)
 
@@ -195,7 +191,6 @@ GET  /api/v1/competitions/{id}/invitations             # Vista creador
 2026 Q1  │ v2.0.13              Sprint 4: Live Scoring + Leaderboard (5 endpoints, 238 tests) ✅
          │ v2.0.14              Backward Competition State Transitions (2 endpoints, 29 tests) ✅
 2026 Q2  │ v2.1.0              Compliance (GDPR, Audit, Avatars)
-         │ v2.2.0              AI & RAG Module
 2026 Q3  │ v2.1.1 - v2.1.2    WebSocket, Stats, Export PDF
 2026 Q4+ │ v3.0.0              Major Release
 ```

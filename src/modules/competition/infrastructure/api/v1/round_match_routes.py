@@ -91,6 +91,9 @@ from src.modules.competition.application.services.jugadores_de_la_partida import
 from src.modules.competition.application.services.jugadores_del_partido import (
     PlayerNotEnrolledError as ReassignPlayerNotEnrolledError,
 )
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    NoPuedeVerloError,
+)
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
     AssignTeamsUseCase,
     CompetitionNotClosedError as AssignTeamsNotClosedError,
@@ -190,6 +193,7 @@ from src.modules.competition.domain.value_objects.ryder_cup_setup import (
 from src.modules.competition.infrastructure.api.v1.competition_state_routes import (
     respuesta_con_jugadores,
 )
+from src.modules.competition.infrastructure.api.v1.puerta_de_lo_jugado import solo_quien_participa
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -414,11 +418,14 @@ async def delete_round(
 async def get_schedule(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetScheduleUseCase = Depends(get_get_schedule_use_case),
 ):
     """
     Obtiene el schedule completo de una competición con rondas agrupadas por día.
+
+    En cada franja, quien mira ve a quien le deja la regla de la release
+    social 2 (sus amigos hasta que se publica), con las plazas ocupadas reales.
 
     **Returns:**
     - 200: Schedule con días, rondas, partidos y asignación de equipos
@@ -426,7 +433,12 @@ async def get_schedule(
     """
     try:
         request_dto = GetScheduleRequestDTO(competition_id=competition_id)
-        return await use_case.execute(request_dto)
+        return await use_case.execute(
+            request_dto,
+            viewer_id=UserId(str(current_user.id)),
+            viewer_is_admin=current_user.is_admin,
+            viewer_email=current_user.email,
+        )
 
     except GetScheduleNotFoundError as e:
         raise HTTPException(
@@ -451,7 +463,7 @@ async def get_schedule(
 async def get_match_detail(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     match_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),  # noqa: ARG001
+    current_user: UserResponseDTO = Depends(get_current_user),
     use_case: GetMatchDetailUseCase = Depends(get_get_match_detail_use_case),
 ):
     """
@@ -459,11 +471,16 @@ async def get_match_detail(
 
     **Returns:**
     - 200: Detalle del partido con jugadores, handicaps y resultado
+    - 403: Partido de una privada en la que no está (tabla del 27 oct 2026)
     - 404: Partido no encontrado
     """
     try:
         request_dto = GetMatchDetailRequestDTO(match_id=match_id)
-        return await use_case.execute(request_dto)
+        return await use_case.execute(
+            request_dto, quien=UserId(str(current_user.id)), es_admin=current_user.is_admin
+        )
+    except NoPuedeVerloError:
+        return solo_quien_participa()
 
     except GetMatchNotFoundError as e:
         raise HTTPException(

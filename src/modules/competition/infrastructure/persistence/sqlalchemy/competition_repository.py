@@ -35,6 +35,11 @@ from src.modules.competition.infrastructure.persistence.sqlalchemy.mappers impor
 )
 from src.modules.golf_course.domain.entities.golf_course import GolfCourse
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.persistence.leidos_en_la_sesion import (
+    recordar,
+    sin_cargar,
+    ya_leido,
+)
 
 
 class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
@@ -108,13 +113,37 @@ class SQLAlchemyCompetitionRepository(CompetitionRepositoryInterface):
         Returns:
             Optional[Competition]: La competición encontrada o None
         """
+        # Ya entera en la sesión: la consulta devolvería este mismo objeto, con
+        # el estado que tiene (BE #375), y costaba cuatro sentencias (PR 2)
+        if (ya := self._entera_en_la_sesion(competition_id)) is not None:
+            return ya
         stmt = (
             select(Competition)
             .where(Competition._id == competition_id)
             .options(*self._agregado_completo())
         )
         result = await self._session.execute(stmt)
-        return result.scalar_one_or_none()
+        competition = result.scalar_one_or_none()
+        if competition is not None:
+            recordar(self._session, Competition, competition_id, competition)
+        return competition
+
+    def _entera_en_la_sesion(self, competition_id: CompetitionId) -> Competition | None:
+        """
+        La competición si la sesión ya la tiene con su agregado entero (sus
+        campos y sus salidas). A medias —de un listado— no: tocar los campos
+        dispararía una carga perezosa en asíncrono (`MissingGreenlet`).
+        """
+        ya = ya_leido(self._session, Competition, competition_id, ("_golf_courses",))
+        if ya is None:
+            return None
+        for enlace in ya.golf_courses:
+            if "golf_course" in sin_cargar(enlace):
+                return None
+            campo = enlace.golf_course
+            if campo is not None and "_tees" in sin_cargar(campo):
+                return None
+        return ya
 
     async def find_by_id_for_update(self, competition_id: CompetitionId) -> Competition | None:
         """

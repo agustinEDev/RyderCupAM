@@ -202,3 +202,23 @@ class TestGuardarYLeerLaSala:
         with pytest.raises(Exception, match="(?i)unique|duplicate"):
             await SQLAlchemyDraftRepository(db_session).add(otra)
             await db_session.commit()
+
+
+class TestBorrarLaSala:
+    """Al deshacer los equipos la sala se borra: se puede volver a abrir (release social 2)."""
+
+    async def test_borrada_ya_no_esta_y_cabe_otra(self, db_session, competition_id, capitanes):
+        repo = SQLAlchemyDraftRepository(db_session)
+        await _sala_guardada(db_session, competition_id, capitanes)
+
+        assert await repo.delete_by_competition(competition_id) is True
+        await db_session.commit()
+        db_session.expunge_all()
+
+        assert await repo.find_by_competition(competition_id) is None
+        await _sala_guardada(db_session, competition_id, capitanes)
+
+    async def test_sin_sala_no_borra_nada(self, db_session, competition_id):
+        repo = SQLAlchemyDraftRepository(db_session)
+
+        assert await repo.delete_by_competition(competition_id) is False

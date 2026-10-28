@@ -377,3 +377,36 @@ class TestLaClasificacionDeUnStrokePlay:
 
         with pytest.raises(TournamentTypeError):
             await use_case.execute(str(competicion.id))
+
+
+class TestConLaLlaveSoloElPartidoDeSuAmigo:
+    """
+    Tabla del 27 oct 2026: de fuera de una privada, con un evento de un amigo,
+    el marcador por equipos y solo el partido de ese amigo.
+    """
+
+    async def _dos_partidos(self, uow):
+        competition_id, player_a, _ = await _setup_scheduled_match(uow)
+        (ronda,) = list(uow._rounds._rounds)
+        otro = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=5,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+            strokes_received=[],
+        )
+        rival = MatchPlayer.create(
+            user_id=UserId.generate(),
+            playing_handicap=7,
+            tee_color=TeeColor.YELLOW,
+            tee_gender=Gender.MALE,
+            strokes_received=[],
+        )
+        await uow.matches.add(
+            Match.create(
+                round_id=ronda, match_number=2, team_a_players=[otro], team_b_players=[rival]
+            )
+        )
+        return competition_id, player_a, rival
+
+    # Quién ve qué, con la puerta dentro del caso de uso: test_lo_jugado_de_la_ryder.py

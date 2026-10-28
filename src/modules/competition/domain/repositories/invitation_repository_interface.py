@@ -7,6 +7,9 @@ Define el contrato para la persistencia de invitaciones siguiendo Clean Architec
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+from src.modules.competition.domain.value_objects.invitacion_pendiente import (
+    InvitacionPendiente,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..entities.invitation import Invitation
@@ -89,6 +92,29 @@ class InvitationRepositoryInterface(ABC):
         (la misma regla que `Invitation.is_expired`). Una sola lectura ligera,
         sin cargar las invitaciones: lo usa el feed para no enseñar avisos de
         invitaciones que ya no valen (22 oct 2026).
+        """
+        pass
+
+    @abstractmethod
+    async def competiciones_con_invitacion_pendiente(
+        self, user_id: UserId, email: str | None, now: datetime
+    ) -> set[CompetitionId]:
+        """
+        Las competiciones en las que tiene una invitación que aún puede aceptar
+        (PENDING y sin caducar en `now`), por su usuario o por su correo. Con ella,
+        una privada se le enseña (release social 2, 27 oct 2026).
+        """
+        pass
+
+    @abstractmethod
+    async def pendiente_de(
+        self, user_id: UserId, email: str | None, competition_id: CompetitionId, now: datetime
+    ) -> InvitacionPendiente | None:
+        """
+        Su invitación a esa competición que aún puede aceptar (PENDING y sin
+        caducar en `now`), por su usuario o por su correo; la más reciente: su
+        id y su caducidad. Con ella acepta o rechaza desde la ficha (tabla del
+        27 oct 2026, fila 13).
         """
         pass
 

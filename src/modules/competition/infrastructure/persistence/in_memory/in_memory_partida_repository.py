@@ -55,6 +55,10 @@ class InMemoryPartidaRepository(PartidaRepositoryInterface):
     async def de_la_competicion(self, competition_id: CompetitionId) -> list[Partida]:
         return self._donde(lambda p: p.competition_id == competition_id)
 
+    async def existe_en_la_competicion(self, competition_id: CompetitionId) -> bool:
+        """Si la competición tiene alguna partida."""
+        return bool(self._donde(lambda p: p.competition_id == competition_id))
+
     async def de_las_competiciones(self, competition_ids: list[CompetitionId]) -> list[Partida]:
         pedidas = set(competition_ids)
         return self._donde(lambda p: p.competition_id in pedidas)

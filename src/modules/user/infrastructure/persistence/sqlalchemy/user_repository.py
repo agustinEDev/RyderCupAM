@@ -7,6 +7,7 @@ from src.modules.user.domain.repositories.user_repository_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.persistence.leidos_en_la_sesion import recordar, ya_leido
 
 
 class SQLAlchemyUserRepository(UserRepositoryInterface):
@@ -24,8 +25,16 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         self._session.add(user)
 
     async def find_by_id(self, user_id: UserId) -> User | None:
-        """Busca un usuario por su ID."""
-        return await self._session.get(User, user_id)
+        """
+        Busca un usuario por su ID. Una vez por petición: la sesión y el creador
+        de una ficha eran la misma lectura (PR 2 de rendimiento).
+        """
+        if (ya := ya_leido(self._session, User, user_id, ())) is not None:
+            return ya
+        usuario = await self._session.get(User, user_id)
+        if usuario is not None:
+            recordar(self._session, User, user_id, usuario)
+        return usuario
 
     async def find_by_id_for_update(self, user_id: UserId) -> User | None:
         """
@@ -165,7 +174,9 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
 
     MIN_SEARCH_LENGTH = 2
 
-    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+    async def search_by_partial_name(
+        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+    ) -> list[User]:
         """
         Searches active users by partial name or alias match using ILIKE.
 
@@ -177,26 +188,28 @@ class SQLAlchemyUserRepository(UserRepositoryInterface):
         nombre, así que dejarlas visibles significa exponer a quien pidió
         desactivarse y permitir solicitudes de amistad que nunca verá. El
         listado de administración sí las muestra, que es donde tiene sentido.
+
+        Quien busca se queda fuera en la propia consulta, no después: si no,
+        se encontraba a sí mismo y ocupaba uno de los huecos del límite (FE #938).
         """
         query = query.strip()
         if len(query) < self.MIN_SEARCH_LENGTH:
             return []
         q = query.lower()
-        statement = (
-            select(User)
-            .filter(
-                User._is_active.is_(True),
-                or_(
-                    func.lower(User._first_name).contains(q, autoescape=True),
-                    func.lower(User._last_name).contains(q, autoescape=True),
-                    func.lower(User._first_name + " " + User._last_name).contains(
-                        q, autoescape=True
-                    ),
-                    func.lower(User._alias).contains(q, autoescape=True),
-                ),
-            )
-            .limit(limit)
+        statement = select(User).filter(
+            User._is_active.is_(True),
+            or_(
+                func.lower(User._first_name).contains(q, autoescape=True),
+                func.lower(User._last_name).contains(q, autoescape=True),
+                func.lower(User._first_name + " " + User._last_name).contains(q, autoescape=True),
+                func.lower(User._alias).contains(q, autoescape=True),
+            ),
         )
+        if exclude_user_id is not None:
+            statement = statement.filter(User._id != str(exclude_user_id))
+        # Por apellido, nombre e id: sin orden, con más coincidencias que el
+        # límite cada petición podía devolver otras distintas (/code-review)
+        statement = statement.order_by(User._last_name, User._first_name, User._id).limit(limit)
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 

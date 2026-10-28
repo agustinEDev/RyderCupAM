@@ -108,6 +108,15 @@ class SQLAlchemyPartidaRepository(PartidaRepositoryInterface):
             )
         )
 
+    async def existe_en_la_competicion(self, competition_id: CompetitionId) -> bool:
+        """Si la competición tiene alguna partida, con un EXISTS: sin cargarlas."""
+        partidas = tee_groups_table
+        return bool(
+            await self._session.scalar(
+                select(exists().where(partidas.c.competition_id == competition_id))
+            )
+        )
+
     async def existe_con_jugador(self, user_id: UserId) -> bool:
         jugadores = tee_group_players_table
         return bool(

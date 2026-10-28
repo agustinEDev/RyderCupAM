@@ -16,8 +16,15 @@ from src.modules.competition.application.dto.partidas_dto import (
 )
 from src.modules.competition.application.exceptions import PartidaNotFoundError
 from src.modules.competition.application.ports.competition_timezone import ICompetitionTimezone
+from src.modules.competition.application.ports.eventos_de_amigos_interface import (
+    EventosDeAmigosInterface,
+)
 from src.modules.competition.application.services.jornadas_de_la_competicion import (
     ZonaDesconocidaError,
+)
+from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    esta_dentro,
+    exigir_la_partida,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
 from src.modules.competition.application.services.vista_de_la_franja import (
@@ -54,17 +61,24 @@ class VerAnotacionDePartidaUseCase:
         zonas: ICompetitionTimezone,
         user_repository: UserRepositoryInterface,
         golf_courses: IGolfCourseRepository | None = None,
+        eventos: EventosDeAmigosInterface | None = None,
     ):
         self._uow = uow
         self._zonas = zonas
         self._usuarios = user_repository
+        # La llave de quien está fuera de una privada (27 oct 2026)
+        self._eventos = eventos
         # El nombre del campo bajo el título y los metros de cada hoyo (BE #532)
         self._campos = golf_courses
 
-    async def execute(self, group_id: UUID, quien: UserId) -> TeeGroupScoringViewDTO:
+    async def execute(
+        self, group_id: UUID, quien: UserId, *, es_admin: bool = False
+    ) -> TeeGroupScoringViewDTO:
         """
         Raises:
             PartidaNotFoundError: Si la partida o su franja no existen
+            NoPuedeVerloError: Si es de una privada en la que no está, no juega
+                en ella ni tiene la llave de un amigo que juegue (27 oct 2026)
         """
         async with self._uow:
             partida = await self._uow.partidas.find_by_id(PartidaId(group_id))
@@ -74,6 +88,15 @@ class VerAnotacionDePartidaUseCase:
             competicion = await self._uow.competitions.find_by_id(partida.competition_id)
             if competicion is None:
                 raise PartidaNotFoundError(f"No existe la partida {group_id}")
+            # Con lo ya leído: quien juega en ella ya está (cada anotación
+            # devuelve esta vista); si no, su inscripción, si hace falta (PR 2)
+            dentro = quien in partida.user_ids or await esta_dentro(
+                self._uow, competicion, quien, es_admin=es_admin
+            )
+        # De fuera, la llave antes de leer nada más: sin ella no se monta la vista
+        if not dentro:
+            await exigir_la_partida(competicion.id, quien, partida.user_ids, self._eventos)
+        async with self._uow:
             try:
                 # Con el desfase del campo, como `scoring_opens_at` de la Ryder:
                 # el cliente lee la hora de la cadena, y en UTC anunciaba otra

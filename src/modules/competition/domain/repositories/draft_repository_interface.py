@@ -36,6 +36,11 @@ class DraftRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def delete_by_competition(self, competition_id: CompetitionId) -> bool:
+        """Borra la sala de esa competicion, si la hay (se deshacen los equipos)."""
+        pass
+
+    @abstractmethod
     async def exists_by_captain(self, user_id: UserId) -> bool:
         """Si esa persona capitanea alguna sala de draft.
 

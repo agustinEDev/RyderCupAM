@@ -19,7 +19,7 @@ organizador aún puede tocarlas; mirar nunca falla por eso.
 | Mis partidas, sin ninguna                                | []                                |
 """
 
-from datetime import time
+from datetime import datetime, time, timedelta
 
 import pytest
 
@@ -28,14 +28,18 @@ from src.modules.competition.application.use_cases.partidas_use_case import (
     MisPartidasUseCase,
     VerPartidasUseCase,
 )
+from src.modules.competition.domain.entities.invitation import Invitation
 from src.modules.competition.domain.entities.partida import Partida
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
 from src.modules.competition.domain.value_objects.estado_partida import EstadoPartida
 from src.modules.competition.domain.value_objects.hoja_de_salidas import HojaDeSalidas
+from src.modules.competition.domain.value_objects.invitation_id import InvitationId
+from src.modules.competition.domain.value_objects.invitation_status import InvitationStatus
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.value_objects.match_format import MatchFormat
@@ -100,6 +104,84 @@ async def test_before_generating_everybody_is_unassigned():
     assert [p.name for p in vista.unassigned_players] == ["Jugador 3.0", "Jugador 2.0"]
     assert [p.user_id for p in vista.unassigned_players] == [u.value for u in jugadores]
     assert vista.editable
+
+
+# /code-review de la release social 2: antes de generar, «sin partida» eran todos
+# los que tienen plaza, con nombre, para cualquiera. Ahora, lo que deja la regla
+class _Amigos:
+    def __init__(self, de):
+        self._de = de
+
+    async def ids_de_los_amigos(self, user_id):
+        return frozenset(self._de.get(user_id, set()))
+
+
+async def _vista_de(escenario, quien, amigos, email=None):
+    return await VerPartidasUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        reloj=lambda: escenario.ahora,
+        amigos=amigos,
+    ).execute(escenario.manana.id.value, quien, False, email=email)
+
+
+async def test_before_generating_a_player_of_a_public_one_sees_only_friends_unassigned():
+    escenario = _Escenario()
+    escenario.competicion._visibility = Visibility.PUBLIC
+    await escenario.guardar()
+    yo, amiga, _otra = [await escenario.con_plaza(f"{h}.0") for h in (3, 2, 1)]
+
+    vista = await _vista_de(escenario, yo, _Amigos({yo: {amiga}}))
+
+    assert [p.user_id for p in vista.unassigned_players] == [yo.value, amiga.value]
+
+
+async def test_before_generating_an_outsider_of_a_private_one_sees_nobody_unassigned():
+    escenario = _Escenario()
+    await escenario.guardar()
+    for h in (3, 2):
+        await escenario.con_plaza(f"{h}.0")
+
+    vista = await _vista_de(escenario, UserId.generate(), _Amigos({}))
+
+    assert vista.unassigned_players == []
+
+
+async def test_before_generating_invited_by_email_to_a_private_one_sees_friends():
+    escenario = _Escenario()
+    await escenario.guardar()
+    yo, amiga = UserId.generate(), await escenario.con_plaza("3.0")
+    await escenario.con_plaza("2.0")
+    async with escenario.uow:
+        await escenario.uow.invitations.add(
+            Invitation(
+                id=InvitationId.generate(),
+                competition_id=escenario.competicion.id,
+                inviter_id=escenario.creador,
+                invitee_email="yo@test.com",
+                status=InvitationStatus.PENDING,
+                expires_at=datetime.now() + timedelta(days=7),
+            )
+        )
+    amigos = _Amigos({yo: {amiga}})
+
+    con_correo = await _vista_de(escenario, yo, amigos, email="yo@test.com")
+    sin_correo = await _vista_de(escenario, yo, amigos)
+
+    assert [p.user_id for p in con_correo.unassigned_players] == [amiga.value]
+    assert sin_correo.unassigned_players == []
+
+
+async def test_the_organiser_still_sees_everybody_unassigned():
+    escenario = _Escenario()
+    escenario.competicion._visibility = Visibility.PUBLIC
+    await escenario.guardar()
+    jugadores = [await escenario.con_plaza(f"{h}.0") for h in (3, 2)]
+
+    vista = await _vista_de(escenario, escenario.creador, _Amigos({}))
+
+    assert [p.user_id for p in vista.unassigned_players] == [u.value for u in jugadores]
 
 
 async def test_unassigned_leaves_out_the_withdrawn_and_the_placed():
@@ -382,3 +464,88 @@ async def test_my_groups_without_any_do_not_ask_for_course_names():
 
     assert mias.groups == []
     assert campos.pedidos == []
+
+
+# Tabla del 27 oct 2026: en una privada, las partidas solo las ve quien está
+# dentro; de fuera, con la llave de su Actividad, la de su amigo y nada más
+class _Eventos:
+    def __init__(self, *amigos):
+        self.amigos = frozenset(amigos)
+
+    async def amigos_con_evento_en(self, user_id, competition_id):
+        return self.amigos
+
+
+async def _privada_con_dos_partidas(visibilidad=Visibility.PRIVATE):
+    escenario = _Escenario()
+    escenario.competicion._visibility = visibilidad
+    await escenario.guardar()
+    jugadores = [await escenario.con_plaza(f"{h}.0") for h in (8, 7, 6, 5, 4, 3, 2, 1)]
+    generada = await escenario.generar()
+    assert len(generada.groups) == 2
+    return escenario, jugadores, generada
+
+
+async def _grupos_que_ve(escenario, quien, eventos):
+    vista = await VerPartidasUseCase(
+        uow=escenario.uow,
+        zonas=escenario.zonas,
+        user_repository=escenario.usuarios,
+        reloj=lambda: escenario.ahora,
+        eventos=eventos,
+    ).execute(escenario.manana.id.value, quien, False)
+    return [g.number for g in vista.groups]
+
+
+async def test_6_an_outsider_of_a_private_one_sees_no_groups():
+    escenario, _, _ = await _privada_con_dos_partidas()
+
+    assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos()) == []
+
+
+async def test_7_with_a_friends_event_only_the_friends_group():
+    escenario, _, generada = await _privada_con_dos_partidas()
+    amigo = UserId(str(generada.groups[1].players[0].user_id))
+
+    assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos(amigo)) == [2]
+
+
+async def test_2_an_approved_player_of_a_private_one_sees_every_group():
+    escenario, jugadores, _ = await _privada_con_dos_partidas()
+
+    assert await _grupos_que_ve(escenario, jugadores[0], _Eventos()) == [1, 2]
+
+
+async def test_d8_an_outsider_of_a_public_one_still_sees_every_group():
+    escenario, _, _ = await _privada_con_dos_partidas(Visibility.PUBLIC)
+
+    assert await _grupos_que_ve(escenario, UserId.generate(), _Eventos()) == [1, 2]
+
+
+async def test_5_a_withdrawn_player_still_sees_his_own_group_only():
+    """/code-review: quien se retiró tras jugar sigue viendo su partida."""
+    escenario, _, generada = await _privada_con_dos_partidas()
+    yo = UserId(str(generada.groups[0].players[0].user_id))
+    async with escenario.uow:
+        suya = await escenario.uow.enrollments.find_by_user_and_competition(
+            yo, escenario.competicion.id
+        )
+        suya.withdraw()
+        await escenario.uow.enrollments.update(suya)
+
+    assert await _grupos_que_ve(escenario, yo, _Eventos()) == [1]
+
+
+async def test_whether_a_competition_has_any_group_without_loading_them():
+    """PR 2 de rendimiento: «publicada» es un EXISTS (en memoria, lo mismo)."""
+    escenario = _Escenario()
+    await escenario.guardar()
+    await escenario.con_plaza("3.0")
+    await escenario.con_plaza("2.0")
+    partidas = escenario.uow.partidas
+
+    antes = await partidas.existe_en_la_competicion(escenario.competicion.id)
+    await escenario.generar()
+
+    assert antes is False
+    assert await partidas.existe_en_la_competicion(escenario.competicion.id) is True

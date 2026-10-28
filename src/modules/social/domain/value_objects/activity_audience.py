@@ -46,8 +46,11 @@ AUDIENCE_BY_TYPE: dict[ActivityEventType, ActivityAudience] = {
     ActivityEventType.INVITED_TO_TOURNAMENT: ActivityAudience.SELF,
     ActivityEventType.ENROLLMENT_REQUEST_CLOSED: ActivityAudience.SELF,
     ActivityEventType.ENROLLMENT_REJECTED: ActivityAudience.SELF,
+    ActivityEventType.ENROLLMENT_REMOVED: ActivityAudience.SELF,
     ActivityEventType.TOURNAMENT_MATCH_RESULT: ActivityAudience.SELF,
-    ActivityEventType.TOURNAMENT_FINAL_STANDING: ActivityAudience.SELF,
+    # Su puesto final lo ven tambien sus amigos (tabla del 27 oct 2026): les
+    # abre la clasificacion de una privada
+    ActivityEventType.TOURNAMENT_FINAL_STANDING: ActivityAudience.BOTH,
     ActivityEventType.ENROLLMENT_CONFIRMED: ActivityAudience.SELF,
     # «X se ha apuntado a Y»: el autor ya tiene su aviso, o se apunto el
     ActivityEventType.ENROLLED_IN_TOURNAMENT: ActivityAudience.FRIENDS,

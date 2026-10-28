@@ -632,6 +632,8 @@ async def test_withdrawing_takes_the_player_out_of_the_group(client: AsyncClient
     (suya,) = [i for i in inscritos if i["user_id"] == jugador["user"]["id"]]
 
     retirada = await client.post(f"/api/v1/enrollments/{suya['id']}/withdraw", json={})
+    # Lo mira quien organiza: retirado de una privada, él ya no ve las partidas (27 oct)
+    set_auth_cookies(client, organizador["cookies"])
     vista = (await client.get(f"/api/v1/competitions/rounds/{franja}/groups")).json()
 
     assert retirada.status_code == 200, retirada.text

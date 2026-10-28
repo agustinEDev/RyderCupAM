@@ -8,6 +8,12 @@ Retorna entidades (NO DTOs) - siguiendo Clean Architecture.
 from dataclasses import dataclass
 
 from src.modules.competition.application.exceptions import CompetitionNotFoundError
+from src.modules.competition.application.ports.amigos_interface import AmigosInterface
+from src.modules.competition.application.services.quien_ve_los_inscritos import (
+    Alcance,
+    alcance_de,
+    lo_que_ve,
+)
 from src.modules.competition.domain.entities.enrollment import Enrollment
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
@@ -46,14 +52,17 @@ class ListEnrollmentsUseCase:
     sin aplicar quién ve qué (BE #531).
     """
 
-    def __init__(self, uow: CompetitionUnitOfWorkInterface):
+    def __init__(self, uow: CompetitionUnitOfWorkInterface, amigos: AmigosInterface | None = None):
         """
         Constructor.
 
         Args:
             uow: Unit of Work para gestionar transacciones
+            amigos: De quién es amigo quien mira (release social 2). Sin él,
+                no ve a ningún amigo
         """
         self._uow = uow
+        self._amigos = amigos
 
     async def execute(
         self,
@@ -62,16 +71,18 @@ class ListEnrollmentsUseCase:
         *,
         viewer_id: UserId,
         viewer_is_admin: bool = False,
+        viewer_email: str | None = None,
     ) -> ListaDeInscritos:
         """
         Las inscripciones que puede ver quien pide, si ve todos los correos y,
         en un stroke play con el hándicap ya fijado (desde que se cierran las
         inscripciones), la categoría fijada de cada aprobado.
 
-        Quién ve qué (BE #531): el organizador y los admin, todas las filas y
-        todos los correos; cualquier otro, los aprobados y sus propias filas
-        (en el estado que estén), y solo su propio correo. El filtro de estado
-        va encima.
+        Quién ve qué (BE #531 y release social 2): el organizador y los admin,
+        todas las filas y todos los correos; cualquier otro, sus propias filas
+        (en el estado que estén), solo su propio correo, y de los aprobados los
+        que le deje `quien_ve_los_inscritos`: todos, sus amigos o ninguno. El
+        filtro de estado va encima.
 
         La categoría se fijó al cerrar, con la regla de los seis: aquí solo se
         lee, y no se mueve aunque alguien se retire (#251).
@@ -90,13 +101,29 @@ class ListEnrollmentsUseCase:
                 )
             else:
                 enrollments = await self._uow.enrollments.find_by_competition(comp_id)
+            # Sin filtrar, o filtrando por aprobados, ya están leídos (PR 2)
+            aprobados = (
+                [e for e in enrollments if e.status is EnrollmentStatus.APPROVED]
+                if status in (None, EnrollmentStatus.APPROVED)
+                else None
+            )
+            alcance = await alcance_de(
+                self._uow,
+                competition,
+                viewer_id,
+                es_admin=viewer_is_admin,
+                email=viewer_email,
+                aprobados=aprobados,
+            )
 
-        ve_todo = viewer_is_admin or competition.is_creator(viewer_id)
+        ve_todo = alcance is Alcance.TODO
         if not ve_todo:
+            ve = await lo_que_ve(alcance, viewer_id, self._amigos)
             enrollments = [
                 e
                 for e in enrollments
-                if e.status is EnrollmentStatus.APPROVED or e.user_id == viewer_id
+                if e.user_id == viewer_id
+                or (e.status is EnrollmentStatus.APPROVED and ve.ve_a(e.user_id))
             ]
 
         categorias: dict[UserId, int | None] = {}

@@ -157,7 +157,9 @@ class UserRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def search_by_partial_name(self, query: str, limit: int = 10) -> list[User]:
+    async def search_by_partial_name(
+        self, query: str, limit: int = 10, exclude_user_id: UserId | None = None
+    ) -> list[User]:
         """
         Searches users whose first_name, last_name or alias partially matches the query (case-insensitive).
 
@@ -169,6 +171,8 @@ class UserRepositoryInterface(ABC):
         Args:
             query (str): Partial name to search for (min 2 characters)
             limit (int): Maximum number of results to return (default: 10)
+            exclude_user_id (UserId | None): Quien busca, que no se encuentra a
+                sí mismo ni ocupa un hueco del límite (FE #938)
 
         Returns:
             list[User]: List of matching active users
