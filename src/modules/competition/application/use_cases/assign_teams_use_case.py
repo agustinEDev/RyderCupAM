@@ -10,6 +10,11 @@ from src.modules.competition.application.exceptions import (
     InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.ports.competition_activity_publisher_interface import (
+    CompetitionActivityPublisherInterface,
+)
+from src.modules.competition.application.services import equipos_que_cambian
+from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
 from src.modules.competition.application.services.draft_roster import DraftRoster
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
@@ -54,7 +59,8 @@ class AssignTeamsUseCase:
     AUTOMATIC: usa SnakeDraftService con handicaps de los jugadores.
     MANUAL: usa las listas proporcionadas, verificando que todos son enrollees.
 
-    Si ya existe una asignación previa, la elimina (re-asignación).
+    Si ya existe una asignación previa, la elimina (re-asignación): sin partidos,
+    los sobres vuelven a borrador y se avisa a los capitanes (A1, 29 oct 2026).
     Transiciona todas las rondas PENDING_TEAMS → PENDING_MATCHES.
     """
 
@@ -63,10 +69,12 @@ class AssignTeamsUseCase:
         uow: CompetitionUnitOfWorkInterface,
         user_repository: UserRepositoryInterface,
         snake_draft_service: SnakeDraftService | None = None,
+        actividad: CompetitionActivityPublisherInterface | None = None,
     ):
         self._uow = uow
         self._user_repo = user_repository
         self._draft_service = snake_draft_service or SnakeDraftService()
+        self._actividad = AvisosDeActividad(actividad)
 
     async def execute(
         self, request: AssignTeamsRequestDTO, user_id: UserId, is_admin: bool = False
@@ -121,9 +129,18 @@ class AssignTeamsUseCase:
                 )
             team_a_ids, team_b_ids = await self._repartir(competition, request, enrollments, mode)
 
+            habia_equipos = (
+                await self._uow.team_assignments.find_by_competition(competition_id) is not None
+            )
             assignment = await TeamAssignmentWriter.guardar(
                 self._uow, competition, mode, team_a_ids, team_b_ids
             )
+            capitanes = (
+                await equipos_que_cambian.al_formarlos_de_nuevo(self._uow, competition)
+                if habia_equipos
+                else ()
+            )
+        await self._actividad.teams_changed(competition, capitanes)
 
         return AssignTeamsResponseDTO(
             id=assignment.id.value,

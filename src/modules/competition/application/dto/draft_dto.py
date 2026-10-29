@@ -35,6 +35,11 @@ class DraftPickDTO(BaseModel):
     last_remaining: bool = Field(
         False, description="True si entro solo por ser el ultimo: no habia nada que elegir."
     )
+    # Tras el draft el reparto sigue cambiando (se mueve o se retira alguien):
+    # la eleccion se queda como fue y esto dice donde esta hoy (29 oct 2026)
+    current_team: str | None = Field(
+        None, description="Equipo en el que esta hoy: A, B o None si ya no esta en ninguno."
+    )
 
 
 class DraftStateDTO(BaseModel):

@@ -15,6 +15,8 @@ Cambia lo decidido el 27 oct (deshacer el reparto al entrar o salir alguien):
 - **T5** Para generar partidos, nadie sin equipo y A = B (contando solo a los
   inscritos), mientras los equipos se puedan tocar: con partidos ya no se mueve
   a nadie, y quien no tenga equipo no juega, como antes.
+- **A1** Volver a formar los equipos (AssignTeams) es otro cambio: los sobres,
+  también los revelados, a borrador y aviso a los capitanes (29 oct 2026).
 - Con partidos generados en alguna sesión, el reparto ya es lo jugado: no se toca.
 
 Va dentro de la transacción de quien llama, con la competición bloqueada.
@@ -135,6 +137,26 @@ async def al_entrar(
     Returns:
         Los capitanes a avisar; vacío si no había equipos que tocar
     """
+    return await _sobres_a_borrador(uow, competition)
+
+
+async def al_formarlos_de_nuevo(
+    uow: CompetitionUnitOfWorkInterface, competition: Competition
+) -> tuple[UserId, ...]:
+    """
+    Se forman otros equipos encima de los que había (A1): los sobres, a borrador
+    (T4). Se llama con el reparto nuevo ya guardado.
+
+    Returns:
+        Los capitanes a avisar; vacío si ya hay partidos
+    """
+    return await _sobres_a_borrador(uow, competition)
+
+
+async def _sobres_a_borrador(
+    uow: CompetitionUnitOfWorkInterface, competition: Competition
+) -> tuple[UserId, ...]:
+    """Los sobres a borrador y los capitanes a avisar, si los equipos se pueden tocar."""
     tocable = await _reparto_que_se_toca(uow, competition)
     if tocable is None:
         return ()

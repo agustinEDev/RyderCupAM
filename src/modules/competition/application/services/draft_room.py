@@ -27,7 +27,7 @@ from src.modules.competition.application.services.team_assignment_writer import 
     TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
-from src.modules.competition.domain.entities.draft import Draft
+from src.modules.competition.domain.entities.draft import Draft, DraftPick
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -194,7 +194,7 @@ class DraftRoom:
             self._user_repo,
             self._uow,
         )
-        equipo_a, equipo_b = draft.teams()
+        equipo_a, equipo_b, donde_esta = await self._equipos_de_hoy(competition, draft)
         return DraftStateDTO(
             id=draft.id.value,
             competition_id=draft.competition_id.value,
@@ -218,6 +218,7 @@ class DraftRoom:
                     order=pick.order,
                     automatic=pick.automatic,
                     last_remaining=pick.last_remaining,
+                    current_team=donde_esta(pick),
                 )
                 for pick in draft.picks
             ],
@@ -229,4 +230,27 @@ class DraftRoom:
                 )
                 for p in disponibles
             ],
+        )
+
+    async def _equipos_de_hoy(
+        self, competition: Competition, draft: Draft
+    ) -> tuple[list[UserId], list[UserId], Callable[[DraftPick], str | None]]:
+        """Los dos equipos y dónde está hoy cada elegido.
+
+        Terminada la sala, mandan los equipos guardados: después se mueve, entra
+        o se retira gente, y la sala enseñaba la foto del draft (29 oct 2026).
+        Mientras se elige, los equipos son los del draft.
+        """
+        reparto = (
+            await self._uow.team_assignments.find_by_competition(competition.id)
+            if draft.status == DraftStatus.COMPLETED
+            else None
+        )
+        if reparto is None:
+            equipo_a, equipo_b = draft.teams()
+            return equipo_a, equipo_b, lambda pick: pick.team
+        return (
+            list(reparto.team_a_player_ids),
+            list(reparto.team_b_player_ids),
+            lambda pick: reparto.get_player_team(pick.user_id),
         )

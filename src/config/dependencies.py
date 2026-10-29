@@ -3002,12 +3002,14 @@ def get_mover_de_equipo_use_case(
 def get_assign_teams_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> AssignTeamsUseCase:
     """Proveedor del caso de uso AssignTeamsUseCase (cross-module: Competition + User)."""
     return AssignTeamsUseCase(
         uow=uow,
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
+        actividad=actividad,
     )
 
 

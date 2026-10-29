@@ -20,6 +20,15 @@ Cambia lo decidido el 27 oct: ni entrar ni salir deshace el reparto.
     T5   generar con alguien sin equipo / A y B a más de 1  | error (con uno de diferencia, sí)
     T6   con la sala de draft abierta no entra nadie         | DraftInProgressError
     T7   la sala de draft, las sesiones y los capitanes      | se quedan
+    A1   se vuelven a formar sin partidos (también revelados)| los dos sobres a borrador y aviso
+    A2   se forman la primera vez                            | ni se reabre ni se avisa
+    A3   ... sin sobres entregados                           | se avisa igual
+    A4   ... con partidos                                    | ni se reabre ni se avisa
+    D1   tras el draft, uno cambia de equipo                 | la sala, con los equipos de verdad;
+                                                         | su elección, con «ahora en B»
+    D2   ... se retira                                       | en ningún equipo; «se retiró»
+    D3   ... se forman de nuevo sin draft                    | los nuevos, y marcado quien cambió
+    D4   nadie cambia, o la sala sigue abierta               | sin marcas
 """
 
 from datetime import UTC, date, datetime
@@ -34,6 +43,7 @@ from src.modules.competition.application.dto.enrollment_dto import (
     WithdrawEnrollmentRequestDTO,
 )
 from src.modules.competition.application.dto.round_match_dto import (
+    AssignTeamsRequestDTO,
     GenerateMatchesRequestDTO,
     MoverDeEquipoRequestDTO,
 )
@@ -49,12 +59,16 @@ from src.modules.competition.application.services.equipos_que_cambian import (
     TeamsLockedError,
     TeamsUnbalancedError,
 )
+from src.modules.competition.application.use_cases.assign_teams_use_case import (
+    AssignTeamsUseCase,
+)
 from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
     DirectEnrollPlayerUseCase,
 )
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
 )
+from src.modules.competition.application.use_cases.get_draft_use_case import GetDraftUseCase
 from src.modules.competition.application.use_cases.mover_de_equipo_use_case import (
     MoverDeEquipoUseCase,
 )
@@ -64,7 +78,7 @@ from src.modules.competition.application.use_cases.remove_enrolled_player_use_ca
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
 )
-from src.modules.competition.domain.entities.draft import Draft
+from src.modules.competition.domain.entities.draft import Draft, DraftPick
 from src.modules.competition.domain.entities.envelope import Envelope
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.entities.round import Round
@@ -460,3 +474,163 @@ class TestT5Generar:
             pytest.fail("Un id que ya no está inscrito no cuenta")
         except Exception:
             pass
+
+
+class _SinUsuarios:
+    """Nadie en el repositorio de usuarios: los nombres salen vacíos."""
+
+    async def find_by_ids(self, user_ids):
+        return []
+
+    async def find_by_id(self, user_id):
+        return None
+
+
+class TestA1VolverAFormarlos:
+    """Volver a formar los equipos (AssignTeams) es otro cambio de equipos (29 oct 2026)."""
+
+    async def _formar(self, e, a, b):
+        return await AssignTeamsUseCase(e.uow, _SinUsuarios(), actividad=e.actividad).execute(
+            AssignTeamsRequestDTO(
+                competition_id=e.comp_id.value,
+                mode="MANUAL",
+                team_a_player_ids=[u.value for u in a],
+                team_b_player_ids=[u.value for u in b],
+            ),
+            e.creador,
+        )
+
+    async def _sobres(self, e):
+        async with e.uow:
+            return {s.team: s for s in await e.uow.envelopes.find_by_round(e.ronda.id)}
+
+    async def test_a1_los_sobres_a_borrador_y_aviso_a_los_dos_capitanes(self, e):
+        await self._formar(e, [e.a[0], e.b[1]], [e.b[0], e.a[1]])
+
+        assert await e.sobres_entregados() == []
+        assert e.avisados() == [{e.a[0], e.b[0]}]
+
+    async def test_a1_tambien_el_sobre_ya_revelado(self, e):
+        async with e.uow:
+            sobre = (await self._sobres(e))["A"]
+            sobre.reveal()
+            await e.uow.envelopes.update(sobre)
+
+        await self._formar(e, [e.a[0], e.b[1]], [e.b[0], e.a[1]])
+
+        sobres = await self._sobres(e)
+        assert sobres["A"].entries == ()
+        assert sobres["A"].is_submitted() is False
+
+    async def test_a2_la_primera_vez_ni_se_reabre_ni_se_avisa(self, e):
+        async with e.uow:
+            reparto = await e.uow.team_assignments.find_by_competition(e.comp_id)
+            await e.uow.team_assignments.delete(reparto.id)
+
+        await self._formar(e, e.a, e.b)
+
+        assert await e.sobres_entregados() == ["A", "B"]
+        assert e.avisados() == []
+
+    async def test_a3_sin_sobres_entregados_se_avisa_igual(self, e):
+        async with e.uow:
+            for sobre in (await self._sobres(e)).values():
+                sobre.reabrir()
+                await e.uow.envelopes.update(sobre)
+
+        await self._formar(e, [e.a[0], e.b[1]], [e.b[0], e.a[1]])
+
+        assert e.avisados() == [{e.a[0], e.b[0]}]
+
+    async def test_a4_con_partidos_ni_se_reabre_ni_se_avisa(self, e):
+        await e.con_un_partido()
+
+        await self._formar(e, [e.a[0], e.b[1]], [e.b[0], e.a[1]])
+
+        assert await e.sobres_entregados() == ["A", "B"]
+        assert e.avisados() == []
+
+
+class TestDSalaCompletada:
+    """La sala terminada enseña los equipos de verdad y marca quién cambió (29 oct 2026)."""
+
+    async def _con_elecciones(self, e):
+        """El draft de `e`, con a[1] elegido por A y b[1] por B."""
+        async with e.uow:
+            sala = await e.uow.drafts.find_by_competition(e.comp_id)
+            await e.uow.drafts.update(
+                Draft(
+                    id=sala.id,
+                    competition_id=e.comp_id,
+                    team_a_captain_id=e.a[0],
+                    team_b_captain_id=e.b[0],
+                    status=sala.status,
+                    picks=(DraftPick(e.a[1], "A", 1), DraftPick(e.b[1], "B", 2)),
+                )
+            )
+            await e.uow.commit()
+
+    async def _sala(self, e):
+        sala = await GetDraftUseCase(e.uow, _SinUsuarios()).execute(e.comp_id.value, e.creador)
+        ahora = {p.user_id: p.current_team for p in sala.picks}
+        return sala, ahora
+
+    async def test_d1_quien_cambia_de_equipo_sale_en_el_nuevo_y_marcado(self, e):
+        await self._con_elecciones(e)
+        await e.mover(e.a[1], "B")
+
+        sala, ahora = await self._sala(e)
+
+        assert sala.team_a == [e.a[0].value]
+        assert set(sala.team_b) == {e.b[0].value, e.b[1].value, e.a[1].value}
+        assert ahora[e.a[1].value] == "B"
+        # La elección se queda como fue
+        assert [(p.user_id, p.team) for p in sala.picks] == [
+            (e.a[1].value, "A"),
+            (e.b[1].value, "B"),
+        ]
+
+    async def test_d2_quien_se_retira_no_sale_en_ningun_equipo(self, e):
+        await self._con_elecciones(e)
+        inscripcion = await e.inscripcion(e.b[1])
+        await WithdrawEnrollmentUseCase(e.uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), e.b[1]
+        )
+
+        sala, ahora = await self._sala(e)
+
+        assert e.b[1].value not in sala.team_a + sala.team_b
+        assert ahora[e.b[1].value] is None
+
+    async def test_d3_formados_de_nuevo_sin_draft_se_ven_los_nuevos(self, e):
+        await self._con_elecciones(e)
+        await TestA1VolverAFormarlos()._formar(e, [e.a[0], e.b[1]], [e.b[0], e.a[1]])
+
+        sala, ahora = await self._sala(e)
+
+        assert set(sala.team_a) == {e.a[0].value, e.b[1].value}
+        assert set(sala.team_b) == {e.b[0].value, e.a[1].value}
+        assert ahora == {e.a[1].value: "B", e.b[1].value: "A"}
+
+    async def test_d4_sin_cambios_cada_uno_donde_le_eligieron(self, e):
+        await self._con_elecciones(e)
+
+        sala, ahora = await self._sala(e)
+
+        assert sala.team_a == [e.a[0].value, e.a[1].value]
+        assert sala.team_b == [e.b[0].value, e.b[1].value]
+        assert ahora == {e.a[1].value: "A", e.b[1].value: "B"}
+
+    async def test_d4_en_curso_sin_marcas_y_los_equipos_del_draft(self):
+        """Mientras se elige mandan las elecciones, aunque haya un reparto guardado."""
+        e = await _E().montar(draft=DraftStatus.IN_PROGRESS)
+        await self._con_elecciones(e)
+        async with e.uow:
+            reparto = await e.uow.team_assignments.find_by_competition(e.comp_id)
+            reparto.quitar(e.a[1])
+            await e.uow.team_assignments.update(reparto)
+
+        sala, ahora = await self._sala(e)
+
+        assert sala.team_a == [e.a[0].value, e.a[1].value]
+        assert ahora == {e.a[1].value: "A", e.b[1].value: "B"}
