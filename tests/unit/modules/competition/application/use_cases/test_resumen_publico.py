@@ -39,6 +39,7 @@ EMPIEZA = date(2027, 3, 3)
 
 
 async def _una(uow, **datos) -> Competition:
+    """Una competición en juego, guardada, con los `datos` que cambian."""
     competicion = Competition(
         id=CompetitionId.generate(),
         creator_id=UserId(uuid4()),
@@ -55,6 +56,7 @@ async def _una(uow, **datos) -> Competition:
 
 
 async def test_l5_una_ryder_publica():
+    """L5: el resumen de una Ryder pública trae todo lo que pinta la página."""
     uow = InMemoryUnitOfWork()
     competicion = await _una(uow, visibility=Visibility.PUBLIC, team_1_name="A", team_2_name="B")
 
@@ -73,6 +75,7 @@ async def test_l5_una_ryder_publica():
 
 
 async def test_l5_un_stroke_play_privado_tambien():
+    """L5: también el de un stroke play privado: la página dice que es privada."""
     uow = InMemoryUnitOfWork()
     competicion = await _una(
         uow,
@@ -91,6 +94,7 @@ async def test_l5_un_stroke_play_privado_tambien():
 
 
 async def test_l5_la_que_no_existe():
+    """L5: la que no existe, CompetitionNotFoundError."""
     with pytest.raises(CompetitionNotFoundError):
         await GetCompetitionSummaryUseCase(InMemoryUnitOfWork()).execute(
             GetCompetitionSummaryRequestDTO(competition_id=uuid4())

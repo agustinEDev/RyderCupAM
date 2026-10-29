@@ -22,6 +22,7 @@ AGENTE = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chr
 
 
 async def test_el_segundo_alta_devuelve_el_primero_y_la_transaccion_sigue(db_session):
+    """#692: el segundo alta del mismo dispositivo devuelve el primero sin romper la transacción."""
     usuario = User.create(
         first_name="Dos",
         last_name="Logins",

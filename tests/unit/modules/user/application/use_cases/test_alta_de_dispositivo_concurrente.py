@@ -27,6 +27,7 @@ IP = "192.168.1.100"
 
 
 async def test_s1_si_otro_lo_dio_de_alta_entre_medias_se_reutiliza(monkeypatch):
+    """S1 (#692): si otro login lo dio de alta entre la lectura y el alta, se reutiliza el suyo."""
     uow = InMemoryUnitOfWork()
     user_id = UserId.generate()
     del_otro = UserDevice.create(
@@ -39,6 +40,7 @@ async def test_s1_si_otro_lo_dio_de_alta_entre_medias_se_reutiliza(monkeypatch):
     lecturas = []
 
     async def la_primera_no_lo_ve(*args, **kwargs):
+        """La primera lectura llega antes que el alta del otro; las siguientes, después."""
         lecturas.append(args or kwargs)
         if len(lecturas) == 1:
             await uow.user_devices.save(del_otro)
@@ -60,6 +62,7 @@ async def test_s1_si_otro_lo_dio_de_alta_entre_medias_se_reutiliza(monkeypatch):
 
 
 async def test_sin_carrera_se_da_de_alta_como_siempre():
+    """Sin carrera, el dispositivo se da de alta como siempre."""
     uow = InMemoryUnitOfWork()
     user_id = UserId.generate()
 

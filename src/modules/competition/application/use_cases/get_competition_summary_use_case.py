@@ -22,6 +22,10 @@ class GetCompetitionSummaryUseCase:
     """Lo mínimo de una competición para su página pública."""
 
     def __init__(self, uow: CompetitionUnitOfWorkInterface):
+        """
+        Args:
+            uow: Unit of Work del módulo
+        """
         self._uow = uow
 
     async def execute(self, request: GetCompetitionSummaryRequestDTO) -> CompetitionSummaryDTO:

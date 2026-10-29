@@ -420,11 +420,13 @@ async def test_dentro_de_una_ryder_si_le_dice_que_no_hay_clasificacion(cual):
 
 def _publica(escenario) -> None:
     # Ya con partidas no se edita por la ficha: aquí basta con que lo sea
+    """Hace pública la competición del escenario."""
     escenario.competicion._visibility = Visibility.PUBLIC
 
 
 @pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
 async def test_l2_sin_sesion_una_publica_se_ve_entera(cual):
+    """L2: sin sesión, una pública se ve igual que desde dentro y sin «mi fila»."""
     escenario, _, b, _ = await _dos_franjas()
     _publica(escenario)
 
@@ -437,6 +439,7 @@ async def test_l2_sin_sesion_una_publica_se_ve_entera(cual):
 
 @pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
 async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(cual):
+    """L3: sin sesión, una privada no se ve, aunque haya un amigo dentro."""
     escenario, a, _, _ = await _dos_franjas()
 
     with pytest.raises(NoPuedeVerloError):

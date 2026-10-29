@@ -26,6 +26,7 @@ AGENTE = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chr
 
 
 async def test_la_segunda_conexion_espera_y_se_queda_con_el_de_la_primera(db_session):
+    """#692: dos logins a la vez en dos conexiones dejan un solo dispositivo activo."""
     usuario = User.create(
         first_name="Dos",
         last_name="Conexiones",
@@ -41,6 +42,7 @@ async def test_la_segunda_conexion_espera_y_se_queda_con_el_de_la_primera(db_ses
     dada_de_alta = asyncio.Event()
 
     async def login_1():
+        """Da de alta el dispositivo y aguanta la transacción abierta un momento."""
         async with sesiones() as sesion:
             guardado = await SQLAlchemyUserDeviceRepository(sesion).add_unless_registered(primero)
             dada_de_alta.set()
@@ -50,6 +52,7 @@ async def test_la_segunda_conexion_espera_y_se_queda_con_el_de_la_primera(db_ses
             return guardado
 
     async def login_2():
+        """Intenta el mismo alta mientras la primera conexión no ha confirmado."""
         await dada_de_alta.wait()
         async with sesiones() as sesion:
             guardado = await SQLAlchemyUserDeviceRepository(sesion).add_unless_registered(segundo)

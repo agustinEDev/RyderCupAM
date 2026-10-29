@@ -51,6 +51,7 @@ def _dependencies(dependant) -> Iterator:
 
 
 def _limited_routes() -> list[tuple[APIRoute, list, bool]]:
+    """Las rutas con límite, sus límites y si cuentan como con sesión."""
     rows = []
     for route in _routes(app.routes):
         name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"

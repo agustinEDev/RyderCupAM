@@ -14,6 +14,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _competicion(client: AsyncClient, visibilidad: str, stroke_play: bool) -> dict:
+    """Una competición recién creada, con una franja, y el cliente ya sin sesión."""
     organizador = await create_authenticated_user(
         client, f"vis-{uuid.uuid4().hex[:8]}@test.com", "P@ssw0rd123!", "Vi", "Sitante"
     )
@@ -42,6 +43,7 @@ async def _competicion(client: AsyncClient, visibilidad: str, stroke_play: bool)
 
 
 def _rutas(competicion: dict, stroke_play: bool) -> list[str]:
+    """Las clasificaciones de la competición: la de la Ryder, o las tres de un stroke play."""
     if not stroke_play:
         return [f"/api/v1/competitions/{competicion['id']}/leaderboard"]
     base = f"/api/v1/competitions/{competicion['id']}"
@@ -54,6 +56,7 @@ def _rutas(competicion: dict, stroke_play: bool) -> list[str]:
 
 @pytest.mark.parametrize("stroke_play", [False, True])
 async def test_l1_l2_una_publica_se_ve_sin_sesion(client: AsyncClient, stroke_play):
+    """L1 y L2: una pública se ve sin sesión, en todas sus clasificaciones."""
     competicion = await _competicion(client, "PUBLIC", stroke_play)
 
     for ruta in _rutas(competicion, stroke_play):
@@ -63,6 +66,7 @@ async def test_l1_l2_una_publica_se_ve_sin_sesion(client: AsyncClient, stroke_pl
 
 @pytest.mark.parametrize("stroke_play", [False, True])
 async def test_l3_una_privada_no_sin_sesion(client: AsyncClient, stroke_play):
+    """L3: una privada, sin sesión, dice que es privada."""
     competicion = await _competicion(client, "PRIVATE", stroke_play)
 
     for ruta in _rutas(competicion, stroke_play):
@@ -73,6 +77,7 @@ async def test_l3_una_privada_no_sin_sesion(client: AsyncClient, stroke_play):
 
 @pytest.mark.parametrize("visibilidad", ["PUBLIC", "PRIVATE"])
 async def test_l5_el_resumen_sin_sesion(client: AsyncClient, visibilidad):
+    """L5: el resumen se ve sin sesión, también el de una privada."""
     competicion = await _competicion(client, visibilidad, stroke_play=True)
 
     respuesta = await client.get(f"/api/v1/competitions/{competicion['id']}/summary")
@@ -86,12 +91,14 @@ async def test_l5_el_resumen_sin_sesion(client: AsyncClient, visibilidad):
 
 
 async def test_l5_el_resumen_de_una_que_no_existe(client: AsyncClient):
+    """L5: el resumen de una que no existe es un 404."""
     respuesta = await client.get(f"/api/v1/competitions/{uuid.uuid4()}/summary")
 
     assert respuesta.status_code == 404, respuesta.text
 
 
 async def test_l6_la_ficha_sigue_pidiendo_sesion(client: AsyncClient):
+    """L6: la ficha entera sigue pidiendo sesión."""
     competicion = await _competicion(client, "PUBLIC", stroke_play=False)
 
     respuesta = await client.get(f"/api/v1/competitions/{competicion['id']}")
@@ -100,6 +107,7 @@ async def test_l6_la_ficha_sigue_pidiendo_sesion(client: AsyncClient):
 
 
 async def test_con_un_token_que_no_vale_es_un_401_no_un_visitante(client: AsyncClient):
+    """Una cookie que no vale es un 401: no se le trata como visitante."""
     competicion = await _competicion(client, "PUBLIC", stroke_play=False)
     client.cookies.set("access_token", "no-es-un-token")
 
@@ -112,6 +120,7 @@ async def test_con_un_token_que_no_vale_es_un_401_no_un_visitante(client: AsyncC
 async def test_con_un_token_que_no_vale_en_la_cabecera_tambien_401(
     client: AsyncClient, stroke_play
 ):
+    """Igual con el token en la cabecera, en todas las clasificaciones."""
     competicion = await _competicion(client, "PUBLIC", stroke_play)
 
     for ruta in _rutas(competicion, stroke_play):
@@ -120,6 +129,7 @@ async def test_con_un_token_que_no_vale_en_la_cabecera_tambien_401(
 
 
 async def test_en_stroke_play_un_token_que_no_vale_es_un_401(client: AsyncClient):
+    """Igual en las tres clasificaciones de un stroke play."""
     competicion = await _competicion(client, "PUBLIC", stroke_play=True)
     client.cookies.set("access_token", "no-es-un-token")
 

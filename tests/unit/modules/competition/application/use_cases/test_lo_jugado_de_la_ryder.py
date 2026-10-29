@@ -144,6 +144,7 @@ class TestLaClasificacion:
     async def _clasificacion(
         self, user_repo, quien, amigos=None, es_admin=False, visitante=False, publica=False
     ):
+        """La clasificación de la Ryder de dos partidos, vista por `quien` o por un visitante."""
         uow = InMemoryUnitOfWork()
         competition_id, _, rival = await TestConLaLlaveSoloElPartidoDeSuAmigo()._dos_partidos(uow)
         comp = _privada(uow)
@@ -160,11 +161,13 @@ class TestLaClasificacion:
         return await uc.execute(str(competition_id), quien=quien, es_admin=es_admin)
 
     async def test_l1_sin_sesion_una_publica_todos(self, user_repo):
+        """L1: sin sesión, una pública enseña todos sus partidos."""
         vista = await self._clasificacion(user_repo, None, visitante=True, publica=True)
 
         assert sorted(m.match_number for m in vista.matches) == [1, 2]
 
     async def test_sin_sesion_sin_id_de_jugador(self, user_repo):
+        """Al visitante no le llegan los ids de los jugadores."""
         vista = await self._clasificacion(user_repo, None, visitante=True, publica=True)
 
         jugadores = [p for m in vista.matches for p in (*m.team_a_players, *m.team_b_players)]
@@ -172,6 +175,7 @@ class TestLaClasificacion:
         assert all(p.user_id is None for p in jugadores)
 
     async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(self, user_repo):
+        """L3: sin sesión, una privada no se ve, aunque haya un amigo dentro."""
         with pytest.raises(NoPuedeVerloError):
             await self._clasificacion(user_repo, None, "rival", visitante=True)
 
