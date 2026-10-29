@@ -105,6 +105,19 @@ class TestA1AlOrganizador:
         assert aviso.payload["player_name"] == ana.display_name_or_legal(False)
         assert await _de(social, ana, T.PLAYER_JOINED) == []
 
+    @pytest.mark.parametrize("nombre_real", [True, False])
+    async def test_con_el_nombre_que_eligio_para_la_competicion(self, nombre_real):
+        """/code-review (29 oct 2026): como en la lista de inscritos y la sala de draft."""
+        social, avisos, org, ana = await _escenario()
+        ana.update_profile(alias="Anita")
+
+        await avisos.joined(
+            org.id, ana.id, _torneo(), "enr-1", None, waiting=False, use_real_name=nombre_real
+        )
+
+        [aviso] = await _de(social, org, T.PLAYER_JOINED)
+        assert aviso.payload["player_name"] == ("Ana Gil" if nombre_real else "Anita")
+
     async def test_a_la_espera(self):
         social, avisos, org, ana = await _escenario()
 

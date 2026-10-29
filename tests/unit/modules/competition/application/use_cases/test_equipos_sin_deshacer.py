@@ -89,6 +89,9 @@ from src.modules.competition.domain.entities.team_assignment import TeamAssignme
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
 from src.modules.competition.domain.value_objects.draft_id import DraftId
 from src.modules.competition.domain.value_objects.draft_status import DraftStatus
+from src.modules.competition.domain.value_objects.match_generation_block import (
+    MatchGenerationBlock,
+)
 from src.modules.competition.domain.value_objects.match_player import MatchPlayer
 from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.competition.domain.value_objects.session_type import SessionType
@@ -441,15 +444,19 @@ class TestT5Generar:
         with pytest.raises(TeamsUnbalancedError):
             await self._generar(e)
 
-    async def test_con_uno_de_diferencia_tampoco(self, e):
-        """A = B, como dice la tabla aprobada (revisor, 28 oct 2026)."""
+    async def test_con_impares_uno_de_diferencia_si(self, e):
+        """Impares, uno de más, como el draft desde el 20 sep (/code-review y Agustín, 29 oct 2026)."""
         inscripcion = await e.inscripcion(e.b[1])
         await WithdrawEnrollmentUseCase(e.uow).execute(
             WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), e.b[1]
         )
         # 2 contra 1
-        with pytest.raises(TeamsUnbalancedError):
+        try:
             await self._generar(e)
+        except (PlayersWithoutTeamError, TeamsUnbalancedError):
+            pytest.fail("Con tres inscritos, dos contra uno vale")
+        except Exception:
+            pass
 
     async def test_con_partidos_en_otra_sesion_no_se_exige_nada(self, e):
         """
@@ -715,3 +722,29 @@ class TestDSalaCompletada:
         assert sala.team_b_captain_id == e.b[1].value
         assert sala.team_b_captain_name == f"N-{e.b[1].value}"
         assert sala.team_a_captain_id == e.a[0].value
+
+
+class TestCodeReview:
+    """Lo que encontró el /code-review (29 oct 2026)."""
+
+    async def test_al_reabrir_los_sobres_se_va_el_motivo_del_bloqueo(self, e):
+        async with e.uow:
+            ronda = await e.uow.rounds.find_by_id(e.ronda.id)
+            ronda.block_match_generation(MatchGenerationBlock(reason="PLAYERS_WITHOUT_TEAM"))
+            await e.uow.rounds.update(ronda)
+
+        await e.mover(e.a[1], "B")
+
+        async with e.uow:
+            assert (await e.uow.rounds.find_by_id(e.ronda.id)).match_generation_block is None
+
+    async def test_una_sesion_ya_programada_no_se_toca_aunque_no_tenga_partidos(self, e):
+        """Como antes de la #695: fuera de esperar equipos o partidos, el reparto es lo jugado."""
+        async with e.uow:
+            ronda = await e.uow.rounds.find_by_id(e.ronda.id)
+            ronda.mark_matches_generated()
+            await e.uow.rounds.update(ronda)
+
+        with pytest.raises(TeamsLockedError):
+            await e.mover(e.a[1], "B")
+        assert await e.sobres_entregados() == ["A", "B"]

@@ -75,6 +75,8 @@ class RespondToInvitationUseCase:
         invitation_id = InvitationId(request.invitation_id)
         current_user_id = UserId(request.user_id)
         action = request.action.upper()
+        # Los de esta respuesta, no los de una anterior (/code-review)
+        self._capitanes = ()
 
         if action not in ("ACCEPT", "DECLINE"):
             raise ValueError(f"Invalid action: {action}. Must be ACCEPT or DECLINE.")

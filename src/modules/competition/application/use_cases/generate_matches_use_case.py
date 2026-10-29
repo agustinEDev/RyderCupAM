@@ -370,7 +370,7 @@ class GenerateMatchesUseCase:
             raise NoTeamAssignmentError(
                 "No hay asignación de equipos. Use AssignTeamsUseCase primero."
             )
-        # Nadie sin equipo y los equipos a uno de diferencia (T5, 28 oct 2026):
+        # Nadie sin equipo y A = B, o uno de más con impares (T5, 29 oct 2026):
         # desde que entrar o salir ya no los deshace, puede pasar
         await equipos_que_cambian.exigir_equipos_completos(self._uow, competition, team_assignment)
 

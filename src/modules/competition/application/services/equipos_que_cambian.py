@@ -12,8 +12,8 @@ Cambia lo decidido el 27 oct (deshacer el reparto al entrar o salir alguien):
   nunca a un capitán; un subcapitán movido pierde el puesto.
 - **T4** Cualquier cambio devuelve a borrador los dos sobres entregados, y a los
   dos capitanes se les avisa.
-- **T5** Para generar partidos, nadie sin equipo y A = B (contando solo a los
-  inscritos), mientras los equipos se puedan tocar: con partidos ya no se mueve
+- **T5** Para generar partidos, nadie sin equipo y A = B, o uno de más con
+  inscritos impares (contando solo a los inscritos), mientras los equipos se puedan tocar: con partidos ya no se mueve
   a nadie, y quien no tenga equipo no juega, como antes.
 - **A1** Volver a formar los equipos (AssignTeams) es otro cambio: los sobres,
   también los revelados, a borrador y aviso a los capitanes (29 oct 2026).
@@ -30,11 +30,14 @@ from src.modules.competition.domain.repositories.competition_unit_of_work_interf
 )
 from src.modules.competition.domain.value_objects.competition_status import CompetitionStatus
 from src.modules.competition.domain.value_objects.enrollment_status import EnrollmentStatus
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 
-# A = B para generar, como dice la tabla aprobada: formar equipos ya exige un
-# número par, y con uno de diferencia las sesiones por parejas no se rellenan
-DIFERENCIA_MAXIMA = 0
+# Uno de diferencia como mucho (/code-review y Agustín, 29 oct 2026). Con
+# inscritos pares la diferencia es par: A = B. Con impares, uno de más, como
+# deja el draft desde el 20 sep: en individuales uno se queda sin partido, y
+# en parejas la sesión ya avisa de que no cuadra (`los_equipos_cuadran`)
+DIFERENCIA_MAXIMA = 1
 
 
 class CaptainCannotMoveError(Exception):
@@ -56,9 +59,12 @@ class PlayersWithoutTeamError(Exception):
 
 
 class TeamsUnbalancedError(Exception):
-    """Para generar partidos, A y B con los mismos jugadores (T5)."""
+    """Para generar partidos, A y B con los mismos jugadores, o uno de más con impares (T5)."""
 
     error_code = "TEAMS_UNBALANCED"
+
+
+_ESPERANDO = (RoundStatus.PENDING_TEAMS, RoundStatus.PENDING_MATCHES)
 
 
 async def _sesiones_sin_partidos(
@@ -75,7 +81,12 @@ async def _sesiones_sin_partidos(
 async def _reparto_que_se_toca(
     uow: CompetitionUnitOfWorkInterface, competition: Competition
 ) -> tuple[TeamAssignment, list[Round]] | None:
-    """El reparto y sus sesiones, si se puede tocar: Ryder abierta o cerrada, sin partidos."""
+    """
+    El reparto y sus sesiones, si se puede tocar: Ryder abierta o cerrada, sin
+    partidos y con todas las sesiones esperando equipos o partidos. Una sesión
+    ya programada o en juego, aunque se quedara sin partidos, es lo jugado
+    (como antes, /code-review 29 oct 2026).
+    """
     if competition.ryder_cup is None:
         return None
     if competition.status not in (CompetitionStatus.ACTIVE, CompetitionStatus.CLOSED):
@@ -86,13 +97,22 @@ async def _reparto_que_se_toca(
     sesiones = await _sesiones_sin_partidos(uow, competition)
     if sesiones is None:
         return None
+    if any(s.status not in _ESPERANDO for s in sesiones):
+        return None
     return reparto, sesiones
 
 
 async def _reabrir_los_sobres(uow: CompetitionUnitOfWorkInterface, sesiones: list[Round]) -> bool:
-    """Los sobres entregados, a borrador (T4). Si se reabrió alguno."""
+    """
+    Los sobres entregados, a borrador (T4), y fuera el motivo por el que no
+    salían los partidos: era de los equipos de antes, como al reiniciarlos
+    (/code-review, 29 oct 2026). Si se reabrió alguno.
+    """
     alguno = False
     for sesion in sesiones:
+        if sesion.match_generation_block is not None:
+            sesion.clear_match_generation_block()
+            await uow.rounds.update(sesion)
         for sobre in await uow.envelopes.find_by_round(sesion.id):
             if sobre.reabrir():
                 await uow.envelopes.update(sobre)
@@ -211,7 +231,7 @@ async def exigir_equipos_completos(
 
     Raises:
         PlayersWithoutTeamError: Si un inscrito no está en ningún equipo
-        TeamsUnbalancedError: Si A y B no tienen los mismos inscritos
+        TeamsUnbalancedError: Si A y B se llevan más de uno
     """
     if await _reparto_que_se_toca(uow, competition) is None:
         return
@@ -230,4 +250,4 @@ async def exigir_equipos_completos(
     en_a = sum(1 for u in reparto.team_a_player_ids if u in aprobados)
     en_b = sum(1 for u in reparto.team_b_player_ids if u in aprobados)
     if abs(en_a - en_b) > DIFERENCIA_MAXIMA:
-        raise TeamsUnbalancedError("Los equipos no tienen los mismos jugadores: iguálalos.")
+        raise TeamsUnbalancedError("Los equipos se llevan más de un jugador: iguálalos.")
