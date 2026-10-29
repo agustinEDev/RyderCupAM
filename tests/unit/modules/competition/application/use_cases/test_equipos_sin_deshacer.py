@@ -29,6 +29,9 @@ Cambia lo decidido el 27 oct: ni entrar ni salir deshace el reparto.
     D2   ... se retira                                       | en ningún equipo; «se retiró»
     D3   ... se forman de nuevo sin draft                    | los nuevos, y marcado quien cambió
     D4   nadie cambia, o la sala sigue abierta               | sin marcas
+    D    terminada: nombre de todos los de los equipos, nadie disponible y el
+         capitán de ahora (revisor y Agustín, 29 oct 2026)
+    A    con la sala de draft abierta no se forman equipos    | DraftInProgressError
 """
 
 from datetime import UTC, date, datetime
@@ -476,6 +479,25 @@ class TestT5Generar:
             pass
 
 
+class _Usuario:
+    def __init__(self, user_id):
+        self.id = user_id
+        self.handicap = None
+
+    def display_name_or_legal(self, nombre_legal):
+        return f"N-{self.id.value}"
+
+
+class _ConNombres:
+    """Cada usuario se llama `N-<su id>`; sin hándicap, como un recién llegado."""
+
+    async def find_by_ids(self, user_ids):
+        return [_Usuario(u) for u in user_ids]
+
+    async def find_by_id(self, user_id):
+        return None
+
+
 class _SinUsuarios:
     """Nadie en el repositorio de usuarios: los nombres salen vacíos."""
 
@@ -521,6 +543,23 @@ class TestA1VolverAFormarlos:
         sobres = await self._sobres(e)
         assert sobres["A"].entries == ()
         assert sobres["A"].is_submitted() is False
+        assert e.avisados() == [{e.a[0], e.b[0]}]
+
+    async def test_a1_tambien_en_automatico(self, e):
+        await AssignTeamsUseCase(e.uow, _SinUsuarios(), actividad=e.actividad).execute(
+            AssignTeamsRequestDTO(competition_id=e.comp_id.value, mode="AUTOMATIC"), e.creador
+        )
+
+        assert await e.sobres_entregados() == []
+        assert e.avisados() == [{e.a[0], e.b[0]}]
+
+    async def test_con_la_sala_de_draft_abierta_no_se_forman(self):
+        """Revisor (29 oct 2026): al terminar, el draft pisaba esos equipos sin avisar."""
+        e = await _E().montar(draft=DraftStatus.IN_PROGRESS)
+
+        with pytest.raises(DraftInProgressError):
+            await self._formar(e, [e.a[0], e.b[1]], [e.b[0], e.a[1]])
+        assert await e.reparto() == (e.a, e.b)
 
     async def test_a2_la_primera_vez_ni_se_reabre_ni_se_avisa(self, e):
         async with e.uow:
@@ -572,7 +611,7 @@ class TestDSalaCompletada:
 
     async def _sala(self, e):
         sala = await GetDraftUseCase(e.uow, _SinUsuarios()).execute(e.comp_id.value, e.creador)
-        ahora = {p.user_id: p.current_team for p in sala.picks}
+        ahora = {p.user_id: p.now_in_team for p in sala.picks}
         return sala, ahora
 
     async def test_d1_quien_cambia_de_equipo_sale_en_el_nuevo_y_marcado(self, e):
@@ -634,3 +673,45 @@ class TestDSalaCompletada:
 
         assert sala.team_a == [e.a[0].value, e.a[1].value]
         assert ahora == {e.a[1].value: "A", e.b[1].value: "B"}
+
+    async def test_revisor_quien_no_eligieron_tambien_lleva_nombre(self, e):
+        """Revisor: quien entró tras el draft y está en un equipo no salía en ninguna elección."""
+        await self._con_elecciones(e)
+        nuevo = UserId(uuid4())
+        await create_approved_enrollment(e.uow, e.comp_id.value, nuevo)
+        await e.mover(nuevo, "B")
+
+        sala = await GetDraftUseCase(e.uow, _ConNombres()).execute(e.comp_id.value, e.creador)
+
+        assert {**sala.team_names} == {
+            u.value: f"N-{u.value}" for u in (e.a[0], e.a[1], e.b[0], e.b[1], nuevo)
+        }
+
+    async def test_revisor_terminada_nadie_disponible(self, e):
+        """Revisor: quien entró después salía disponible y en un equipo a la vez."""
+        await self._con_elecciones(e)
+        nuevo = UserId(uuid4())
+        await create_approved_enrollment(e.uow, e.comp_id.value, nuevo)
+        await e.mover(nuevo, "B")
+
+        sala, _ = await self._sala(e)
+
+        assert sala.available_players == []
+
+    async def test_el_capitan_de_ahora(self, e):
+        """Se retira el capitán de B y sube su subcapitán: la sala dice el de ahora (29 oct 2026)."""
+        await self._con_elecciones(e)
+        async with e.uow:
+            competicion = await e.uow.competitions.find_by_id(e.comp_id)
+            competicion.name_vice_captain("B", e.b[1], e.b, has_teams=True)
+            await e.uow.competitions.update(competicion)
+        inscripcion = await e.inscripcion(e.b[0])
+        await WithdrawEnrollmentUseCase(e.uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), e.b[0]
+        )
+
+        sala = await GetDraftUseCase(e.uow, _ConNombres()).execute(e.comp_id.value, e.creador)
+
+        assert sala.team_b_captain_id == e.b[1].value
+        assert sala.team_b_captain_name == f"N-{e.b[1].value}"
+        assert sala.team_a_captain_id == e.a[0].value

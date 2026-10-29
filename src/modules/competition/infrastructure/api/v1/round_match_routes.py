@@ -254,6 +254,7 @@ async def create_round(
     - 400: Estado inválido, sesión duplicada, fecha fuera de rango, o campo no asociado
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
+    - 409: `DRAFT_IN_PROGRESS`, con la sala de draft abierta
     """
     try:
         current_user_id = UserId(current_user.id)
@@ -811,6 +812,11 @@ async def assign_teams(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
+    except DraftInProgressError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_MUEVE[e.error_code], "error_code": e.error_code},
+        )
     except (
         AssignTeamsNotClosedError,
         AssignTeamsInsufficientError,

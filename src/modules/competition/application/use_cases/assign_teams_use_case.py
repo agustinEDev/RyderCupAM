@@ -15,6 +15,9 @@ from src.modules.competition.application.ports.competition_activity_publisher_in
 )
 from src.modules.competition.application.services import equipos_que_cambian
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.draft_roster import DraftRoster
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
@@ -94,6 +97,10 @@ class AssignTeamsUseCase:
             # 2. Verificar creador
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede asignar equipos")
+
+            # Con la sala de draft abierta, al terminar pisaría estos equipos sin
+            # reabrir sobres ni avisar (revisor, 29 oct 2026)
+            await exigir_sin_draft_abierto(self._uow, competition.id)
 
             # 3. Verificar estado CLOSED
             if competition.status != CompetitionStatus.CLOSED:

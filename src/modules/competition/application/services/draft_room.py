@@ -10,6 +10,7 @@ donde se entrase.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from src.modules.competition.application.dto.draft_dto import (
@@ -178,23 +179,32 @@ class DraftRoom:
         self, competition: Competition, draft: Draft, elegibles: list[PlayerForDraft]
     ) -> DraftStateDTO:
         """La sala entera, que es lo que la pantalla pinta en directo."""
+        hoy = await self._equipos_de_hoy(competition, draft)
         cogidos = {pick.user_id for pick in draft.picks}
-        disponibles = [p for p in elegibles if p.user_id not in cogidos]
+        # Terminada, ya no se elige: quien entra después va a un equipo o queda
+        # sin él, y como disponible salía también dentro de uno (revisor, 29 oct)
+        disponibles = [] if hoy.terminada else [p for p in elegibles if p.user_id not in cogidos]
         # De todos los que aparecen, en una sola consulta: los disponibles, los
-        # ya elegidos y los dos capitanes. Quien entra a mitad de draft no
-        # tiene de donde sacar esos nombres
+        # ya elegidos, los capitanes y los de los equipos. Quien entra a mitad
+        # de draft no tiene de donde sacar esos nombres, ni quien se puso en un
+        # equipo despues sin que nadie le eligiera
         nombres = await PlayerNames.de_la_competicion(
-            [
-                *(p.user_id for p in disponibles),
-                *cogidos,
-                draft.team_a_captain_id,
-                draft.team_b_captain_id,
-            ],
+            list(
+                dict.fromkeys(
+                    [
+                        *(p.user_id for p in disponibles),
+                        *cogidos,
+                        hoy.capitan_a,
+                        hoy.capitan_b,
+                        *hoy.equipo_a,
+                        *hoy.equipo_b,
+                    ]
+                )
+            ),
             competition.id,
             self._user_repo,
             self._uow,
         )
-        equipo_a, equipo_b, donde_esta = await self._equipos_de_hoy(competition, draft)
         return DraftStateDTO(
             id=draft.id.value,
             competition_id=draft.competition_id.value,
@@ -204,12 +214,13 @@ class DraftRoom:
             turn_started_at=draft.turn_started_at,
             seconds_per_turn=draft.seconds_per_turn,
             server_time=self.ahora,
-            team_a_captain_id=draft.team_a_captain_id.value,
-            team_b_captain_id=draft.team_b_captain_id.value,
-            team_a_captain_name=nombres.get(draft.team_a_captain_id, ""),
-            team_b_captain_name=nombres.get(draft.team_b_captain_id, ""),
-            team_a=[uid.value for uid in equipo_a],
-            team_b=[uid.value for uid in equipo_b],
+            team_a_captain_id=hoy.capitan_a.value,
+            team_b_captain_id=hoy.capitan_b.value,
+            team_a_captain_name=nombres.get(hoy.capitan_a, ""),
+            team_b_captain_name=nombres.get(hoy.capitan_b, ""),
+            team_a=[uid.value for uid in hoy.equipo_a],
+            team_b=[uid.value for uid in hoy.equipo_b],
+            team_names={uid.value: nombres.get(uid, "") for uid in (*hoy.equipo_a, *hoy.equipo_b)},
             picks=[
                 DraftPickDTO(
                     user_id=pick.user_id.value,
@@ -218,7 +229,7 @@ class DraftRoom:
                     order=pick.order,
                     automatic=pick.automatic,
                     last_remaining=pick.last_remaining,
-                    current_team=donde_esta(pick),
+                    now_in_team=hoy.donde_esta(pick),
                 )
                 for pick in draft.picks
             ],
@@ -232,14 +243,14 @@ class DraftRoom:
             ],
         )
 
-    async def _equipos_de_hoy(
-        self, competition: Competition, draft: Draft
-    ) -> tuple[list[UserId], list[UserId], Callable[[DraftPick], str | None]]:
-        """Los dos equipos y dónde está hoy cada elegido.
+    async def _equipos_de_hoy(self, competition: Competition, draft: Draft) -> "_EquiposDeHoy":
+        """Los dos equipos, sus capitanes y dónde está hoy cada elegido.
 
-        Terminada la sala, mandan los equipos guardados: después se mueve, entra
-        o se retira gente, y la sala enseñaba la foto del draft (29 oct 2026).
-        Mientras se elige, los equipos son los del draft.
+        Terminada la sala, mandan los equipos guardados y los capitanes de la
+        competición: después se mueve, entra o se retira gente, y la sala
+        enseñaba la foto del draft (29 oct 2026). Sin capitán (se retiró sin
+        subcapitán) queda el del draft: el contrato no admite vacío.
+        Mientras se elige, todo es del draft.
         """
         reparto = (
             await self._uow.team_assignments.find_by_competition(competition.id)
@@ -248,9 +259,32 @@ class DraftRoom:
         )
         if reparto is None:
             equipo_a, equipo_b = draft.teams()
-            return equipo_a, equipo_b, lambda pick: pick.team
-        return (
+            return _EquiposDeHoy(
+                equipo_a,
+                equipo_b,
+                draft.team_a_captain_id,
+                draft.team_b_captain_id,
+                lambda pick: pick.team,
+                terminada=False,
+            )
+        ryder_cup = competition.require_ryder_cup()
+        return _EquiposDeHoy(
             list(reparto.team_a_player_ids),
             list(reparto.team_b_player_ids),
+            ryder_cup.captain("A") or draft.team_a_captain_id,
+            ryder_cup.captain("B") or draft.team_b_captain_id,
             lambda pick: reparto.get_player_team(pick.user_id),
+            terminada=True,
         )
+
+
+@dataclass(frozen=True)
+class _EquiposDeHoy:
+    """Lo que la sala pinta de los equipos: los del draft o, terminada, los de hoy."""
+
+    equipo_a: list[UserId]
+    equipo_b: list[UserId]
+    capitan_a: UserId
+    capitan_b: UserId
+    donde_esta: Callable[[DraftPick], str | None]
+    terminada: bool

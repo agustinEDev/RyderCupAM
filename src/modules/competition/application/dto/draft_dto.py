@@ -37,7 +37,7 @@ class DraftPickDTO(BaseModel):
     )
     # Tras el draft el reparto sigue cambiando (se mueve o se retira alguien):
     # la eleccion se queda como fue y esto dice donde esta hoy (29 oct 2026)
-    current_team: str | None = Field(
+    now_in_team: str | None = Field(
         None, description="Equipo en el que esta hoy: A, B o None si ya no esta en ninguno."
     )
 
@@ -62,6 +62,11 @@ class DraftStateDTO(BaseModel):
     team_b_captain_name: str = Field(..., description="Nombre del capitan del equipo B.")
     team_a: list[UUID] = Field(default_factory=list, description="Equipo A: capitan y elegidos.")
     team_b: list[UUID] = Field(default_factory=list, description="Equipo B: capitan y elegidos.")
+    # Terminada la sala, en un equipo puede haber quien nadie eligio (entro
+    # despues y el organizador le puso): su nombre no viaja en ninguna eleccion
+    team_names: dict[UUID, str] = Field(
+        default_factory=dict, description="Nombre de cada jugador de team_a y team_b."
+    )
     picks: list[DraftPickDTO] = Field(default_factory=list, description="Las elecciones, en orden.")
     available_players: list[DraftPlayerDTO] = Field(
         default_factory=list, description="Quien queda por elegir."
