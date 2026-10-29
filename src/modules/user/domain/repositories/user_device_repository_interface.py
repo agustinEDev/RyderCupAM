@@ -58,6 +58,19 @@ class UserDeviceRepositoryInterface(ABC):
     """
 
     @abstractmethod
+    async def add_unless_registered(self, device: UserDevice) -> UserDevice:
+        """
+        Da de alta un dispositivo nuevo, salvo que ese usuario ya tenga uno activo
+        con la misma huella: entonces devuelve ese (BE #692, 28 oct 2026).
+
+        Dos inicios de sesión a la vez leían los dos «no está» y lo daban de alta
+        los dos; el índice único parcial rechazaba al segundo con un 500.
+
+        Returns:
+            El que queda dado de alta: el nuevo, o el que ya estaba
+        """
+
+    @abstractmethod
     async def save(self, device: UserDevice) -> None:
         """
         Persiste un dispositivo en el almacenamiento.

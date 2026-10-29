@@ -12,11 +12,13 @@ from src.modules.competition.application.ports.eventos_de_amigos_interface impor
 )
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
     LoJugadoQueVe,
+    NoPuedeVerloError,
     esta_dentro,
     exigir_la_clasificacion,
+    la_ve_un_visitante,
 )
 from src.modules.competition.application.services.player_names import PlayerNames
-from src.modules.competition.domain.entities.competition import TournamentTypeError
+from src.modules.competition.domain.entities.competition import Competition, TournamentTypeError
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -44,8 +46,42 @@ class GetLeaderboardUseCase:
         # La llave de quien está fuera de una privada (27 oct 2026)
         self._eventos = eventos
 
+    async def _dentro(
+        self, competition: Competition, quien: UserId | None, es_admin: bool, visitante: bool
+    ) -> bool:
+        """
+        Con el `uow` abierto y lo ya leído: solo su inscripción, y solo si hace
+        falta (PR 2). Sin sesión, solo una pública (L1, L3, 28 oct 2026).
+        """
+        if visitante:
+            return la_ve_un_visitante(competition)
+        return quien is None or await esta_dentro(self._uow, competition, quien, es_admin=es_admin)
+
+    async def _que_ve(
+        self, competition: Competition, dentro: bool, quien: UserId | None, visitante: bool
+    ) -> LoJugadoQueVe | None:
+        """
+        De fuera, la llave antes de leer rondas y partidos; sin sesión no hay
+        llave que buscar. None: todo.
+
+        Raises:
+            NoPuedeVerloError: Si no puede verla
+        """
+        if dentro:
+            return None
+        if visitante:
+            raise NoPuedeVerloError()
+        if quien is None:
+            return None
+        return await exigir_la_clasificacion(competition.id, quien, self._eventos)
+
     async def execute(
-        self, competition_id_str: str, *, quien: UserId | None = None, es_admin: bool = False
+        self,
+        competition_id_str: str,
+        *,
+        quien: UserId | None = None,
+        es_admin: bool = False,
+        visitante: bool = False,
     ) -> LeaderboardResponseDTO:
         """
         La clasificación. Quien está fuera de una privada, con la llave, ve el
@@ -60,16 +96,8 @@ class GetLeaderboardUseCase:
             competition = await self._uow.competitions.find_by_id(comp_id)
             if not competition:
                 raise CompetitionNotFoundError(f"No existe competicion con ID {competition_id_str}")
-            # Con lo ya leído: solo su inscripción, y solo si hace falta (PR 2)
-            dentro = quien is None or await esta_dentro(
-                self._uow, competition, quien, es_admin=es_admin
-            )
-        # De fuera, la llave antes de leer rondas y partidos
-        ve = (
-            None
-            if dentro or quien is None
-            else await exigir_la_clasificacion(competition.id, quien, self._eventos)
-        )
+            dentro = await self._dentro(competition, quien, es_admin, visitante)
+        ve = await self._que_ve(competition, dentro, quien, visitante)
         async with self._uow:
             # Un Stableford o un Medal no tiene todavía su clasificación: se dice
             # antes de leer rondas y partidos, y con su motivo (Agustín, 4 oct 2026)
@@ -142,14 +170,16 @@ class GetLeaderboardUseCase:
 
                     team_a_players = [
                         LeaderboardPlayerDTO(
-                            user_id=str(p.user_id),
+                            # A un visitante, sin el id interno (code-review, 28 oct)
+                            user_id=None if visitante else str(p.user_id),
                             user_name=user_names.get(p.user_id, ""),
                         )
                         for p in match.team_a_players
                     ]
                     team_b_players = [
                         LeaderboardPlayerDTO(
-                            user_id=str(p.user_id),
+                            # A un visitante, sin el id interno (code-review, 28 oct)
+                            user_id=None if visitante else str(p.user_id),
                             user_name=user_names.get(p.user_id, ""),
                         )
                         for p in match.team_b_players

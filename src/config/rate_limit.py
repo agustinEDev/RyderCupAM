@@ -182,3 +182,13 @@ def record_failed_login(request: Request) -> None:
 # NOTE: headers_enabled=False porque causa conflictos con endpoints que retornan DTOs
 #       Los headers X-RateLimit-* solo aparecen cuando se excede el límite (HTTP 429)
 limiter = Limiter(key_func=get_rate_limit_key, default_limits=["100/minute"])
+
+
+def limite_de_lo_publico(key: str) -> str:
+    """
+    El límite de lo que también ve un visitante (la clasificación por enlace,
+    release social 3). Con sesión, el de siempre, por usuario. Sin ella, todos los
+    visitantes comparten el contador de red en producción (ADR-038): con margen,
+    hasta que cuente la IP real (BE #466). Decidido el 28 oct 2026.
+    """
+    return "30/minute" if key.startswith(_USER_PREFIX) else "600/minute"

@@ -14,13 +14,14 @@ from fastapi.responses import JSONResponse
 from src.config.dependencies import (
     get_concede_match_use_case,
     get_current_user,
+    get_current_user_optional,
     get_get_leaderboard_use_case,
     get_get_scoring_view_use_case,
     get_submit_hole_score_use_case,
     get_submit_scorecard_use_case,
     get_withdraw_match_player_use_case,
 )
-from src.config.rate_limit import limiter
+from src.config.rate_limit import limite_de_lo_publico, limiter
 from src.modules.competition.application.dto.scoring_dto import (
     ConcedeMatchBodyDTO,
     LeaderboardResponseDTO,
@@ -312,11 +313,11 @@ async def submit_scorecard(
     summary="Leaderboard de la competicion",
     tags=["Competitions - Scoring"],
 )
-@limiter.limit("30/minute")
+@limiter.limit(limite_de_lo_publico)
 async def get_leaderboard(
     request: Request,  # noqa: ARG001 - Required by @limiter decorator
     competition_id: UUID,
-    current_user: UserResponseDTO = Depends(get_current_user),
+    current_user: UserResponseDTO | None = Depends(get_current_user_optional),
     use_case: GetLeaderboardUseCase = Depends(get_get_leaderboard_use_case),
 ):
     """
@@ -325,7 +326,8 @@ async def get_leaderboard(
     Muestra todos los partidos con sus estados actuales, standings
     y los puntos totales Ryder Cup por equipo.
 
-    **Auth:** JWT requerido, cualquier usuario autenticado.
+    **Auth:** sin sesión, solo una pública (release social 3, L1 y L3); con sesión,
+    cualquier usuario autenticado.
 
     **Returns:**
     - 200: Leaderboard completo
@@ -335,6 +337,8 @@ async def get_leaderboard(
     """
     try:
         # Con la llave, en la Ryder: el marcador y solo el partido de su amigo
+        if current_user is None:
+            return await use_case.execute(str(competition_id), visitante=True)
         return await use_case.execute(
             str(competition_id), quien=UserId(str(current_user.id)), es_admin=current_user.is_admin
         )

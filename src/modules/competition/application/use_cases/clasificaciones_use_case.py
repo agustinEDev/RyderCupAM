@@ -25,8 +25,10 @@ from src.modules.competition.application.ports.eventos_de_amigos_interface impor
     EventosDeAmigosInterface,
 )
 from src.modules.competition.application.services.lo_jugado_de_una_privada import (
+    NoPuedeVerloError,
     esta_dentro,
     exigir_la_clasificacion,
+    la_ve_un_visitante,
 )
 from src.modules.competition.application.services.participantes_de_la_clasificacion import (
     participantes_de,
@@ -80,20 +82,30 @@ class _Clasificaciones:
         self._eventos = eventos
 
     async def _puede_verla(
-        self, competicion: Competition, quien: UserId | None, es_admin: bool
+        self, competicion: Competition, quien: UserId | None, es_admin: bool, visitante: bool
     ) -> bool:
-        """Con el `uow` abierto: si quien mira está dentro (sin decir quién, sí)."""
+        """
+        Con el `uow` abierto: si quien mira está dentro (sin decir quién, sí). Sin
+        sesión, solo una pública (L2, L3, 28 oct 2026).
+        """
+        if visitante:
+            return la_ve_un_visitante(competicion)
         if quien is None:
             return True
         return await esta_dentro(self._uow, competicion, quien, es_admin=es_admin)
 
-    async def _exigir(self, dentro: bool, competicion: Competition, quien: UserId | None) -> None:
+    async def _exigir(
+        self, dentro: bool, competicion: Competition, quien: UserId | None, visitante: bool
+    ) -> None:
         """
-        Fuera del `uow`: quien está fuera de una privada, con la llave.
+        Fuera del `uow`: quien está fuera de una privada, con la llave. Sin sesión
+        no hay llave que buscar (L3).
 
         Raises:
             NoPuedeVerloError: Sin estar dentro ni tener la llave
         """
+        if not dentro and visitante:
+            raise NoPuedeVerloError()
         if not dentro and quien is not None:
             await exigir_la_clasificacion(competicion.id, quien, self._eventos)
 
@@ -157,6 +169,7 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
         *,
         quien: UserId | None = None,
         es_admin: bool = False,
+        visitante: bool = False,
     ) -> StandingsResponseDTO:
         """
         Raises:
@@ -168,8 +181,8 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
             if franja is None:
                 raise PartidasError(_SOLO_EN_FRANJAS)
             competicion = await self._competicion(franja.competition_id)
-            dentro = await self._puede_verla(competicion, quien, es_admin)
-        await self._exigir(dentro, competicion, quien)
+            dentro = await self._puede_verla(competicion, quien, es_admin, visitante)
+        await self._exigir(dentro, competicion, quien, visitante)
         if franja.hoja_de_salidas is None:
             raise PartidasError(_SOLO_EN_FRANJAS)
         self._solo_stroke_play(competicion)
@@ -180,7 +193,9 @@ class ClasificacionDeLaFranjaUseCase(_Clasificaciones):
             filas, personas = await self._tabla(
                 competicion, partidas, golpes, Escala.NETA, regla, categoria
             )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, personas)
+        return _respuesta(
+            competicion, Escala.NETA, regla, categoria, filas, personas, visitante=visitante
+        )
 
 
 class ClasificacionGeneralUseCase(_Clasificaciones):
@@ -193,6 +208,7 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
         *,
         quien: UserId | None = None,
         es_admin: bool = False,
+        visitante: bool = False,
     ) -> StandingsResponseDTO:
         """
         Raises:
@@ -201,21 +217,28 @@ class ClasificacionGeneralUseCase(_Clasificaciones):
         """
         async with self._uow:
             competicion = await self._competicion(CompetitionId(competition_id))
-            dentro = await self._puede_verla(competicion, quien, es_admin)
-        await self._exigir(dentro, competicion, quien)
+            dentro = await self._puede_verla(competicion, quien, es_admin, visitante)
+        await self._exigir(dentro, competicion, quien, visitante)
         self._solo_stroke_play(competicion)
         async with self._uow:
             regla, filas, personas = await self._de_la_competicion(
                 competicion, Escala.NETA, categoria
             )
-        return _respuesta(competicion, Escala.NETA, regla, categoria, filas, personas)
+        return _respuesta(
+            competicion, Escala.NETA, regla, categoria, filas, personas, visitante=visitante
+        )
 
 
 class ClasificacionScratchUseCase(_Clasificaciones):
     """La scratch, cortada, con la fila de quien mira."""
 
     async def execute(
-        self, competition_id: UUID, quien: UserId, *, es_admin: bool = False
+        self,
+        competition_id: UUID,
+        quien: UserId | None,
+        *,
+        es_admin: bool = False,
+        visitante: bool = False,
     ) -> StandingsResponseDTO:
         """
         Raises:
@@ -224,22 +247,28 @@ class ClasificacionScratchUseCase(_Clasificaciones):
         """
         async with self._uow:
             competicion = await self._competicion(CompetitionId(competition_id))
-            dentro = await self._puede_verla(competicion, quien, es_admin)
-        await self._exigir(dentro, competicion, quien)
+            dentro = await self._puede_verla(competicion, quien, es_admin, visitante)
+        await self._exigir(dentro, competicion, quien, visitante)
         self._solo_stroke_play(competicion)
         async with self._uow:
             regla, filas, personas = await self._de_la_competicion(
                 competicion, Escala.SCRATCH, None
             )
         visibles, mia = Clasificacion.cortar(filas, CORTE_DEL_SCRATCH, quien)
-        return _respuesta(competicion, Escala.SCRATCH, regla, None, visibles, personas, mia)
+        return _respuesta(
+            competicion, Escala.SCRATCH, regla, None, visibles, personas, mia, visitante=visitante
+        )
 
 
-def _fila(fila: Fila, personas: _Personas) -> StandingRowDTO:
+def _fila(fila: Fila, personas: _Personas, visitante: bool = False) -> StandingRowDTO:
+    """
+    Una fila. A un visitante, sin el id interno ni el género de sus barras: el
+    nombre, el hándicap y el resultado (code-review, 28 oct 2026).
+    """
     return StandingRowDTO(
         position=fila.puesto,
         tied=fila.empatado,
-        user_id=fila.user_id.value,
+        user_id=None if visitante else fila.user_id.value,
         name=personas.nombres.get(fila.user_id, ""),
         category=fila.categoria,
         handicap=fila.handicap,
@@ -248,7 +277,7 @@ def _fila(fila: Fila, personas: _Personas) -> StandingRowDTO:
         thru=fila.tras,
         status=fila.estado.value,
         retired=fila.retirado,
-        tee_gender=personas.generos.get(fila.user_id),
+        tee_gender=None if visitante else personas.generos.get(fila.user_id),
     )
 
 
@@ -260,12 +289,14 @@ def _respuesta(
     filas: Sequence[Fila],
     personas: _Personas,
     mia: Fila | None = None,
+    visitante: bool = False,
 ) -> StandingsResponseDTO:
+    """La respuesta de una clasificación; a un visitante, sin ids ni géneros (L2)."""
     return StandingsResponseDTO(
         tournament_type=competicion.tournament_type.value,
         scale=escala.value,
         rule=regla.value,
         category=categoria,
-        rows=[_fila(f, personas) for f in filas],
+        rows=[_fila(f, personas, visitante) for f in filas],
         me=_fila(mia, personas) if mia else None,
     )

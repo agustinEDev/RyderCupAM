@@ -7,7 +7,19 @@ Mapeo imperativo entre la entidad UserDevice y la tabla user_devices.
 
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, Text, event, inspect
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Table,
+    Text,
+    event,
+    inspect,
+    text,
+)
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from src.modules.user.domain.entities.user_device import UserDevice
@@ -78,6 +90,15 @@ user_devices_table = Table(
     Column("is_active", Boolean, nullable=False, server_default="true"),
     Column("last_used_at", DateTime, nullable=False),
     Column("created_at", DateTime, nullable=False),
+    # El de la migración 50ccf425ff32, también aquí: sin él los tests no ven
+    # el choque de dos altas a la vez (BE #692)
+    Index(
+        "ix_user_devices_unique_active_fingerprint",
+        "user_id",
+        "fingerprint_hash",
+        unique=True,
+        postgresql_where=text("is_active = true"),
+    ),
 )
 
 
