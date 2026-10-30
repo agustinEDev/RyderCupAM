@@ -5,6 +5,8 @@ Lo mismo tanto si se retira él como si le quita el organizador: sale de sus
 partidas sin salir, suelta sus plazas en las franjas (que pasan a quien espera),
 si era capitán sube su subcapitán y, si estaba en un equipo formado sin
 partidos, los equipos se deshacen (descompensados, uno se quedaba sin jugar).
+Con los equipos formados el jugador ya no se retira solo (29 oct 2026): eso
+último solo llega cuando le quita el organizador.
 """
 
 from datetime import datetime
@@ -118,7 +120,8 @@ async def sacar_de_la_competicion(
         await uow.competitions.update(competition)
 
     # En un equipo formado sin partidos, los equipos se deshacen (decidido el
-    # 27 oct 2026): descompensados, al generar uno se quedaba sin jugar
+    # 27 oct 2026): descompensados, al generar uno se quedaba sin jugar. Solo
+    # al quitarle el organizador: él solo ya no sale con equipos (29 oct 2026)
     reparto = await uow.team_assignments.find_by_competition(competition.id)
     if reparto is not None and reparto.get_player_team(enrollment.user_id) is not None:
         await TeamAssignmentWriter.deshacer(uow, competition)

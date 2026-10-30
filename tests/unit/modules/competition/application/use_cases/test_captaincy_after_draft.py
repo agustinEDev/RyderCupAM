@@ -9,6 +9,11 @@ ese equipo. Así una baja nunca deja la competición atascada.
 Desde la release social 2 (27 oct 2026), sin partidos generados la baja deshace
 los equipos: entonces no hay equipo donde cubrir, y los capitanes se vuelven a
 nombrar. Cubrir el puesto queda para cuando ya hay partidos (`con_partidos`).
+
+Desde el 29 oct 2026, con los equipos formados el jugador no se retira solo: le
+quita el organizador, y solo sin partidos (`quitar`). Una baja con partidos o en
+juego ya no se da, pero puede estar en la base de antes (`baja_de_antes`), y
+cubrir el puesto sigue sirviendo para ella.
 """
 
 from datetime import date
@@ -22,7 +27,9 @@ from src.modules.competition.application.dto.competition_dto import (
     NameCaptainsRequestDTO,
     NameViceCaptainRequestDTO,
 )
-from src.modules.competition.application.dto.enrollment_dto import WithdrawEnrollmentRequestDTO
+from src.modules.competition.application.dto.enrollment_dto import (
+    RemoveEnrolledPlayerRequestDTO,
+)
 from src.modules.competition.application.dto.round_match_dto import AssignTeamsRequestDTO
 from src.modules.competition.application.exceptions import NotCompetitionCreatorError
 from src.modules.competition.application.use_cases.assign_teams_use_case import (
@@ -38,8 +45,8 @@ from src.modules.competition.application.use_cases.name_vice_captain_use_case im
     NameViceCaptainUseCase,
     NotCaptainOrCreatorError,
 )
-from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
-    WithdrawEnrollmentUseCase,
+from src.modules.competition.application.use_cases.remove_enrolled_player_use_case import (
+    RemoveEnrolledPlayerUseCase,
 )
 from src.modules.competition.domain.entities.competition import (
     TeamsNotAssignedError,
@@ -136,12 +143,26 @@ class Torneo:
             is_admin=admin,
         )
 
-    async def retirar(self, jugador: UserId):
-        """El jugador se da de baja de su propia inscripción."""
-        await WithdrawEnrollmentUseCase(self.uow).execute(
-            WithdrawEnrollmentRequestDTO(enrollment_id=self.inscripciones[jugador].id.value),
-            jugador,
+    async def quitar(self, jugador: UserId):
+        """El organizador le quita: con equipos formados, el único camino (29 oct 2026)."""
+        await RemoveEnrolledPlayerUseCase(self.uow).execute(
+            RemoveEnrolledPlayerRequestDTO(enrollment_id=self.inscripciones[jugador].id.value),
+            self.organizador,
         )
+
+    async def baja_de_antes(self, jugador: UserId):
+        """
+        Una baja con partidos o en juego, de antes del 29 oct 2026: ya no se da,
+        pero puede estar en la base. Lo que hacía la retirada con la capitanía.
+        """
+        async with self.uow:
+            inscripcion = await self.uow.enrollments.find_by_id(self.inscripciones[jugador].id)
+            inscripcion.withdraw()
+            await self.uow.enrollments.update(inscripcion)
+            competicion = await self.uow.competitions.find_by_id(self.comp_id)
+            competicion.handle_withdrawal(jugador)
+            await self.uow.competitions.update(competicion)
+            await self.uow.commit()
 
     async def con_partidos(self) -> "Torneo":
         """
@@ -237,7 +258,7 @@ async def test_quien_se_retiro_ya_no_cuenta_como_de_su_equipo():
     """Con partidos, el reparto guarda la lista tal cual; la baja no la toca."""
     t = await (await Torneo().montar()).con_partidos()
     se_va = t.de_a()
-    await t.retirar(se_va)
+    await t.baja_de_antes(se_va)
 
     with pytest.raises(CaptainOnWrongTeamError):
         await t.subcapitan("A", se_va, t.ana)
@@ -262,14 +283,14 @@ async def test_antes_del_draft_no_hay_subcapitan():
 async def test_si_se_va_la_capitana_asciende_su_subcapitan():
     """
     Given: Ana con subcapitán
-    When: Ana se da de baja
+    When: el organizador la quita (y los equipos se reinician)
     Then: el subcapitán pasa a capitán y su puesto queda libre
     """
     t = await Torneo().montar()
     segundo = t.de_a()
     await t.subcapitan("A", segundo, t.ana)
 
-    await t.retirar(t.ana)
+    await t.quitar(t.ana)
 
     competicion = await t.competicion()
     assert (
@@ -285,7 +306,7 @@ async def test_sin_subcapitan_el_organizador_cubre_el_puesto():
     Then: queda de capitán y la respuesta lo trae
     """
     t = await (await Torneo().montar()).con_partidos()
-    await t.retirar(t.ana)
+    await t.baja_de_antes(t.ana)
     nuevo = t.de_a()
 
     respuesta = await t.cubrir("A", nuevo, t.organizador)
@@ -301,22 +322,23 @@ async def test_cubrir_el_puesto_es_cosa_del_organizador():
     Then: se rechaza
     """
     t = await (await Torneo().montar()).con_partidos()
-    await t.retirar(t.ana)
+    await t.baja_de_antes(t.ana)
 
     with pytest.raises(NotCompetitionCreatorError):
         await t.cubrir("A", t.de_a(), t.bea)
 
 
-async def test_repartir_de_nuevo_deja_libres_los_subcapitanes():
+async def test_quitar_a_alguien_deja_libres_los_subcapitanes():
     """
     Given: Ana con subcapitán
-    When: se vuelven a repartir los equipos
-    Then: el puesto de subcapitán queda libre
+    When: el organizador quita a alguien y se vuelven a repartir los equipos
+    Then: el puesto de subcapitán queda libre (con equipos formados, repartir
+        otra vez sin reiniciar ya no se deja: 29 oct 2026)
     """
     t = await Torneo().montar()
     await t.subcapitan("A", t.de_a(), t.ana)
 
-    await t.repartir()
+    await t.quitar(t.de_b())
 
     assert (await t.competicion()).ryder_cup.team_a_vice_captain_id is None
 
@@ -326,7 +348,7 @@ async def test_bloquean_la_fila_de_la_competicion(accion):
     """Como al nombrar capitanes y al repartir: si no, se pisan entre sí."""
     t = await (await Torneo().montar()).con_partidos()
     if accion == "cubrir":
-        await t.retirar(t.ana)
+        await t.baja_de_antes(t.ana)
     llamadas = []
     original = t.uow.competitions.find_by_id_for_update
 
@@ -352,7 +374,7 @@ async def test_sin_partidos_la_baja_de_la_capitana_deshace_los_equipos_y_se_reno
     hay equipo donde cubrir el puesto, se nombran los capitanes como al principio.
     """
     t = await Torneo().montar()
-    await t.retirar(t.ana)
+    await t.quitar(t.ana)
 
     with pytest.raises(TeamsNotAssignedError):
         await t.subcapitan("B", t.otros[0], t.bea)
@@ -377,7 +399,7 @@ async def test_un_capitan_que_se_fue_en_pleno_torneo_se_puede_sustituir_al_rever
         competicion.start()
         await t.uow.competitions.update(competicion)
         await t.uow.commit()
-    await t.retirar(t.ana)
+    await t.baja_de_antes(t.ana)
     async with t.uow:
         competicion = await t.uow.competitions.find_by_id(t.comp_id)
         assert competicion.ryder_cup.team_a_captain_id == t.ana

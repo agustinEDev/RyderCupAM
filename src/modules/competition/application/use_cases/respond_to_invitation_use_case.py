@@ -17,6 +17,9 @@ from src.modules.competition.application.services.cupo_de_la_competicion import 
     al_entrar_uno,
     exigir_sitio,
 )
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.application.services.genero_obligatorio import exigir_genero
 from src.modules.competition.application.services.handicap_obligatorio import exigir_handicap
 from src.modules.competition.application.services.inscripcion_que_vuelve import (
@@ -26,9 +29,6 @@ from src.modules.competition.application.services.inscripcion_que_vuelve import 
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
     quieren_su_nombre_legal,
-)
-from src.modules.competition.application.services.team_assignment_writer import (
-    TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -248,6 +248,9 @@ class RespondToInvitationUseCase:
             raise CompetitionNotFoundError(f"Competition not found: {invitation.competition_id}")
 
         CompetitionPolicy.can_accept_invitation(competition.status)
+        # Con los equipos formados no se entra por su cuenta: le inscribe el
+        # organizador, y eso los reinicia (29 oct 2026)
+        await exigir_sin_equipos_formados(self._uow, competition.id)
 
         # Sin género no se sabe desde qué barras juega (#710). Antes de aceptar:
         # la invitación se queda pendiente para cuando lo rellene
@@ -292,9 +295,6 @@ class RespondToInvitationUseCase:
                 competition_id=CompetitionId(invitation.competition_id.value),
                 user_id=current_user_id,
             )
-        # Entra con los equipos formados y sin partidos: se deshacen, como al
-        # salir (decidido el 27 oct 2026); si no, se quedaba fuera de los dos
-        await TeamAssignmentWriter.deshacer(self._uow, competition)
         await self._uow.invitations.update(invitation)
 
         cerradas = await al_entrar_uno(self._uow, competition, approved_count)

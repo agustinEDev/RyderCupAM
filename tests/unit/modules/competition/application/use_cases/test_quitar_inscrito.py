@@ -12,7 +12,7 @@ El organizador quita a un inscrito (release social 2, tabla del 27 oct 2026).
 | Q5  | A sí mismo (el organizador)                             | No se deja                             |
 | -   | Una solicitud o una invitación (no aprobada)            | No se quita (es rechazar)              |
 | N1  | Se le avisa                                             | Primero `left`, luego `removed`        |
-| W   | Un jugador de un equipo formado se retira él mismo      | También se deshacen (decidido 27 oct)  |
+| W   | Con equipos formados, un jugador se retira él mismo     | No puede: TEAMS_FORMED (29 oct)        |
 """
 
 from datetime import UTC, datetime
@@ -28,6 +28,7 @@ from src.modules.competition.application.exceptions import (
     EnrollmentNotFoundError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -209,29 +210,29 @@ async def test_q4_con_partidos_en_los_que_juega_no_se_deja():
         assert await uow.team_assignments.find_by_competition(comp_id) is not None
 
 
-async def test_w_quien_se_retira_de_un_equipo_formado_tambien_los_deshace():
+async def test_w_con_equipos_formados_el_jugador_no_se_retira():
+    """Decidido el 29 oct: los equipos quedan así; le quita el organizador."""
     uow, comp_id, _, _, equipo_b = await _montar()
     inscripcion = await _de(uow, comp_id, equipo_b[1])
 
-    await WithdrawEnrollmentUseCase(uow).execute(
-        WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), equipo_b[1]
-    )
+    with pytest.raises(TeamsFormedError):
+        await WithdrawEnrollmentUseCase(uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), equipo_b[1]
+        )
 
     async with uow:
-        assert await uow.team_assignments.find_by_competition(comp_id) is None
+        assert await uow.team_assignments.find_by_competition(comp_id) is not None
 
 
-async def test_w_quien_no_estaba_en_ningun_equipo_no_los_deshace():
+async def test_w_tampoco_quien_no_estaba_en_ningun_equipo():
     uow, comp_id, _, _, _ = await _montar()
     fuera = UserId(uuid4())
     inscripcion = await create_approved_enrollment(uow, comp_id.value, fuera)
 
-    await WithdrawEnrollmentUseCase(uow).execute(
-        WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), fuera
-    )
-
-    async with uow:
-        assert await uow.team_assignments.find_by_competition(comp_id) is not None
+    with pytest.raises(TeamsFormedError):
+        await WithdrawEnrollmentUseCase(uow).execute(
+            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), fuera
+        )
 
 
 async def test_q4_con_partidos_en_los_que_no_juega_tampoco():

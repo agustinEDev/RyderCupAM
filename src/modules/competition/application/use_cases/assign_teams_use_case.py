@@ -10,7 +10,13 @@ from src.modules.competition.application.exceptions import (
     InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.draft_roster import DraftRoster
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
@@ -93,6 +99,10 @@ class AssignTeamsUseCase:
                     f"La competición debe estar en estado CLOSED. "
                     f"Estado actual: {competition.status.value}"
                 )
+            # Con la sala abierta, al terminar pisaría estos equipos (revisor, 29 oct
+            # 2026); y formados, quedan así: se rehacen tras quitar a alguien
+            await exigir_sin_draft_abierto(self._uow, competition_id)
+            await exigir_sin_equipos_formados(self._uow, competition_id)
 
             # 4. Obtener enrollments aprobados
             enrollments = await self._uow.enrollments.find_by_competition_and_status(

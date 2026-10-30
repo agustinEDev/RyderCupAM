@@ -115,6 +115,7 @@ class CompetitionActivityPublisher(CompetitionActivityPublisherInterface):
             str(enrollment.id.value),
             _franja(franja) if franja is not None else None,
             waiting,
+            use_real_name=enrollment.use_real_name,
         )
 
     async def placed_from_waiting_list(

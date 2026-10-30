@@ -101,7 +101,22 @@ class TestA1AlOrganizador:
         assert aviso.payload["session_type"] == "MORNING"
         assert aviso.payload["tee_time"] == "09:00"
         assert aviso.payload["waiting"] is False
+        # Su nombre: la tarjeta decía «Un jugador» porque no le llegaba (29 oct 2026)
+        assert aviso.payload["player_name"] == ana.display_name_or_legal(True)
         assert await _de(social, ana, T.PLAYER_JOINED) == []
+
+    @pytest.mark.parametrize("nombre_real", [True, False])
+    async def test_con_el_nombre_que_eligio_para_la_competicion(self, nombre_real):
+        """Como en la lista de inscritos y la sala de draft (29 oct 2026)."""
+        social, avisos, org, ana = await _escenario()
+        ana.update_profile(alias="Anita")
+
+        await avisos.joined(
+            org.id, ana.id, _torneo(), "enr-1", None, waiting=False, use_real_name=nombre_real
+        )
+
+        [aviso] = await _de(social, org, T.PLAYER_JOINED)
+        assert aviso.payload["player_name"] == ("Ana Gil" if nombre_real else "Anita")
 
     async def test_a_la_espera(self):
         social, avisos, org, ana = await _escenario()

@@ -34,6 +34,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
@@ -282,6 +283,11 @@ async def respond_to_invitation(
                 "detail": InvitationNoRoomViolation.MENSAJE,
                 "error_code": InvitationNoRoomViolation.error_code,
             },
+        )
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
     except InvalidInvitationStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
