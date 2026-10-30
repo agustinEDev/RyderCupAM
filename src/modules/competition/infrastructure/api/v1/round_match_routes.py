@@ -363,12 +363,6 @@ async def update_round(
         ) from e
 
 
-_NO_SE_DESHACEN = {
-    NoTeamsError.error_code: NoTeamsError.MENSAJE,
-    TeamsLockedError.error_code: TeamsLockedError.MENSAJE,
-}
-
-
 @router.delete(
     "/rounds/{round_id}",
     response_model=DeleteRoundResponseDTO,
@@ -807,7 +801,8 @@ async def undo_teams(
     - 204: Deshechos
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
-    - 409: Sin equipos (`NO_TEAMS`), o con partidos o ya empezada (`TEAMS_LOCKED`)
+    - 409: Sin equipos (`NO_TEAMS`), o con partidos, ya empezada o cancelada
+      (`TEAMS_LOCKED`)
     """
     try:
         await use_case.execute(
@@ -824,6 +819,12 @@ async def undo_teams(
             content={"detail": _NO_SE_DESHACEN[e.error_code], "error_code": e.error_code},
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+_NO_SE_DESHACEN = {
+    NoTeamsError.error_code: NoTeamsError.MENSAJE,
+    TeamsLockedError.error_code: TeamsLockedError.MENSAJE,
+}
 
 
 def frase_del_bloqueo(motivo: MatchGenerationBlock) -> str:

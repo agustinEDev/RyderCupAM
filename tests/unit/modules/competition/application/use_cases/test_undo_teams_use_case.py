@@ -8,7 +8,7 @@ quitar a un jugador (`TeamAssignmentWriter.deshacer`).
 | #  | Quién y cuándo                              | Queda                                   |
 |----|---------------------------------------------|-----------------------------------------|
 | U1 | Organizador o admin, sin partidos           | Sin equipos, sala, sobres ni subcapitanes; capitanes, sí |
-| U2 | Con partidos, o la competición ya empezada  | TEAMS_LOCKED, sin tocar nada            |
+| U2 | Con partidos, ya empezada o cancelada       | TEAMS_LOCKED, sin tocar nada            |
 | U3 | Sin equipos formados                        | NO_TEAMS                                |
 | U4 | Otro jugador / competición que no existe    | No es el creador / no encontrada        |
 """
@@ -28,6 +28,7 @@ from src.modules.competition.application.use_cases.undo_teams_use_case import (
 )
 from src.modules.competition.domain.entities.match import Match
 from src.modules.competition.domain.value_objects.competition_id import CompetitionId
+from src.modules.competition.domain.value_objects.round_status import RoundStatus
 from src.modules.user.domain.value_objects.user_id import UserId
 from tests.unit.modules.competition.application.use_cases.test_deshacer_equipos import (
     _deshace,
@@ -49,7 +50,8 @@ async def _equipos(uow, comp_id):
 
 
 async def test_u1_el_organizador_los_deshace():
-    uow, comp_id, round_id, equipo_a, equipo_b = await _montar()
+    # Con la generación de partidos bloqueada: la sesión vuelve sin el bloqueo
+    uow, comp_id, round_id, equipo_a, equipo_b = await _montar(con_bloqueo=True)
 
     await UndoTeamsUseCase(uow).execute(comp_id.value, await _organizador(uow, comp_id))
 
@@ -58,7 +60,11 @@ async def test_u1_el_organizador_los_deshace():
         assert await uow.team_assignments.find_by_competition(comp_id) is None
         assert await uow.drafts.find_by_competition(comp_id) is None
         assert await uow.envelopes.find_by_round(round_id) == []
+        ronda = await uow.rounds.find_by_id(round_id)
+    assert ronda.status == RoundStatus.PENDING_TEAMS
+    assert ronda.match_generation_block is None
     assert competicion.ryder_cup.team_a_vice_captain_id is None
+    assert competicion.ryder_cup.team_b_vice_captain_id is None
     assert competicion.ryder_cup.team_a_captain_id == equipo_a[0]
     assert competicion.ryder_cup.team_b_captain_id == equipo_b[0]
 
@@ -96,6 +102,20 @@ async def test_u2_empezada_no():
     async with uow:
         competicion = await uow.competitions.find_by_id(comp_id)
         competicion.start()
+        await uow.competitions.update(competicion)
+        await uow.commit()
+
+    with pytest.raises(TeamsLockedError):
+        await UndoTeamsUseCase(uow).execute(comp_id.value, await _organizador(uow, comp_id))
+
+    assert await _equipos(uow, comp_id) is not None
+
+
+async def test_u2_cancelada_no():
+    uow, comp_id, *_ = await _montar()
+    async with uow:
+        competicion = await uow.competitions.find_by_id(comp_id)
+        competicion.cancel()
         await uow.competitions.update(competicion)
         await uow.commit()
 

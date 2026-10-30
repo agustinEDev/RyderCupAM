@@ -25,10 +25,10 @@ class NoTeamsError(Exception):
 
 
 class TeamsLockedError(Exception):
-    """Con partidos generados, o ya empezada, los equipos son lo jugado."""
+    """Con partidos generados, o ya empezada o cerrada, los equipos son lo jugado."""
 
     error_code = "TEAMS_LOCKED"
-    MENSAJE = "Matches already exist: the teams can no longer be undone."
+    MENSAJE = "The teams can no longer be undone."
 
 
 class UndoTeamsUseCase:
@@ -56,7 +56,7 @@ class UndoTeamsUseCase:
             CompetitionNotFoundError: Si no existe
             NotCompetitionCreatorError: Si no la organiza ni es admin
             NoTeamsError: Si no tiene equipos formados
-            TeamsLockedError: Si ya hay partidos o ha empezado
+            TeamsLockedError: Si ya hay partidos, o ha empezado o se ha cancelado
         """
         async with self._uow:
             # Con la fila bloqueada, como al formarlos y al quitar a alguien
@@ -67,7 +67,8 @@ class UndoTeamsUseCase:
                 raise CompetitionNotFoundError(f"No existe competición con ID {competition_id}")
             if not is_admin and not competition.is_creator(user_id):
                 raise NotCompetitionCreatorError("Solo el creador puede deshacer los equipos")
+            # `deshacer` también da False sin reparto: aquí se distingue NO_TEAMS
             if await self._uow.team_assignments.find_by_competition(competition.id) is None:
                 raise NoTeamsError("No hay equipos formados")
             if not await TeamAssignmentWriter.deshacer(self._uow, competition):
-                raise TeamsLockedError("Ya hay partidos: los equipos no se pueden deshacer")
+                raise TeamsLockedError("Los equipos ya no se pueden deshacer")

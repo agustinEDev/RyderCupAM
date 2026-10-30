@@ -11,7 +11,11 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_authenticated_user, set_auth_cookies
+from src.modules.competition.application.use_cases.undo_teams_use_case import (
+    NoTeamsError,
+    TeamsLockedError,
+)
+from tests.conftest import create_admin_user, create_authenticated_user, set_auth_cookies
 from tests.integration.api.v1.test_equipos_formados_endpoints import _con_equipos, _con_partidos
 
 pytestmark = pytest.mark.asyncio
@@ -21,9 +25,11 @@ def _deshacer(client: AsyncClient, comp_id: str):
     return client.delete(f"/api/v1/competitions/{comp_id}/teams")
 
 
-def _es(respuesta, codigo: str) -> None:
+def _es(respuesta, error) -> None:
     assert respuesta.status_code == 409, respuesta.text
-    assert respuesta.json()["error_code"] == codigo
+    assert respuesta.json()["error_code"] == error.error_code
+    # Un texto fijo por código, nunca el de la excepción (CodeQL)
+    assert respuesta.json()["detail"] == error.MENSAJE
 
 
 async def test_u1_el_organizador_los_deshace_y_ya_se_invita(client: AsyncClient):
@@ -55,7 +61,7 @@ async def test_u2_con_partidos_no(client: AsyncClient):
     montaje = await _con_partidos(client)
     set_auth_cookies(client, montaje["creador"]["cookies"])
 
-    _es(await _deshacer(client, montaje["comp_id"]), "TEAMS_LOCKED")
+    _es(await _deshacer(client, montaje["comp_id"]), TeamsLockedError)
 
 
 async def test_u3_sin_equipos(client: AsyncClient):
@@ -63,7 +69,7 @@ async def test_u3_sin_equipos(client: AsyncClient):
     set_auth_cookies(client, montaje["creador"]["cookies"])
     await _deshacer(client, montaje["comp"]["id"])
 
-    _es(await _deshacer(client, montaje["comp"]["id"]), "NO_TEAMS")
+    _es(await _deshacer(client, montaje["comp"]["id"]), NoTeamsError)
 
 
 async def test_u4_un_jugador_no(client: AsyncClient):
@@ -82,3 +88,27 @@ async def test_u4_no_existe(client: AsyncClient):
     respuesta = await _deshacer(client, str(uuid4()))
 
     assert respuesta.status_code == 404, respuesta.text
+
+
+async def test_u1_un_admin_tambien(client: AsyncClient):
+    montaje = await _con_equipos(client)
+    admin = await create_admin_user(
+        client, "deshacer-admin@test.com", "P@ssw0rd123!", "Admin", "Deshacer"
+    )
+    set_auth_cookies(client, admin["cookies"])
+
+    respuesta = await _deshacer(client, montaje["comp"]["id"])
+
+    assert respuesta.status_code == 204, respuesta.text
+
+
+async def test_sin_sesion_no(client: AsyncClient):
+    montaje = await _con_equipos(client)
+    client.cookies.clear()
+
+    respuesta = await _deshacer(client, montaje["comp"]["id"])
+
+    assert respuesta.status_code in (401, 403), respuesta.text
+    set_auth_cookies(client, montaje["creador"]["cookies"])
+    ficha = await client.get(f"/api/v1/competitions/{montaje['comp']['id']}")
+    assert ficha.json()["teams_assigned"] is True
