@@ -254,6 +254,9 @@ from src.modules.competition.application.use_cases.submit_hole_score_use_case im
 from src.modules.competition.application.use_cases.submit_scorecard_use_case import (
     SubmitScorecardUseCase,
 )
+from src.modules.competition.application.use_cases.undo_teams_use_case import (
+    UndoTeamsUseCase,
+)
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     UpdateCompetitionUseCase,
 )
@@ -2998,6 +3001,13 @@ def get_assign_teams_use_case(
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
     )
+
+
+def get_undo_teams_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> UndoTeamsUseCase:
+    """Proveedor del caso de uso UndoTeamsUseCase (30 oct 2026)."""
+    return UndoTeamsUseCase(uow=uow)
 
 
 def get_start_draft_use_case(
