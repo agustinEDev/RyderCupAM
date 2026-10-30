@@ -10,7 +10,13 @@ from src.modules.competition.application.exceptions import (
     InsufficientPlayersError,
     NotCompetitionCreatorError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    exigir_sin_draft_abierto,
+)
 from src.modules.competition.application.services.draft_roster import DraftRoster
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.application.services.team_assignment_writer import (
     TeamAssignmentWriter,
 )
@@ -54,7 +60,8 @@ class AssignTeamsUseCase:
     AUTOMATIC: usa SnakeDraftService con handicaps de los jugadores.
     MANUAL: usa las listas proporcionadas, verificando que todos son enrollees.
 
-    Si ya existe una asignación previa, la elimina (re-asignación).
+    Con equipos ya formados no se vuelven a formar (TEAMS_FORMED): tras quitar
+    el organizador a alguien se reinician y se forman otra vez, si quedan pares.
     Transiciona todas las rondas PENDING_TEAMS → PENDING_MATCHES.
     """
 
@@ -93,6 +100,11 @@ class AssignTeamsUseCase:
                     f"La competición debe estar en estado CLOSED. "
                     f"Estado actual: {competition.status.value}"
                 )
+            # Con la sala abierta, al terminar pisaría estos equipos (revisor, 29 oct
+            # 2026); y formados, quedan así: tras quitar a alguien se pueden volver
+            # a formar, si quedan pares
+            await exigir_sin_draft_abierto(self._uow, competition_id)
+            await exigir_sin_equipos_formados(self._uow, competition_id)
 
             # 4. Obtener enrollments aprobados
             enrollments = await self._uow.enrollments.find_by_competition_and_status(

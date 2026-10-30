@@ -371,14 +371,20 @@ class PublishCompetitionNoticesUseCase:
         enrollment_id: str,
         franja: TeeWindowRef | None,
         waiting: bool,
+        use_real_name: bool = True,
     ) -> None:
         """
         «Ana se ha apuntado a Copa X», o a la espera de una franja: para el
         organizador (A1, 28 oct 2026). Uno por inscripcion: si vuelve a
-        apuntarse, se renueva.
+        apuntarse, se renueva. Con el nombre que eligió para esa competición,
+        como en la lista de inscritos (29 oct 2026): sin él, la tarjeta decía
+        «Un jugador».
         """
+        async with self._user_uow:
+            jugador = await self._user_uow.users.find_by_id(player_id)
         extra = {
             "player_id": str(player_id.value),
+            "player_name": jugador.display_name_or_legal(use_real_name) if jugador else None,
             **self._de_la_franja(franja),
             "waiting": waiting,
         }

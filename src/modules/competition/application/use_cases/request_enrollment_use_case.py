@@ -28,6 +28,9 @@ from src.modules.competition.application.services.cupo_de_la_competicion import 
     exigir_sitio,
 )
 from src.modules.competition.application.services.enrollment_opener import EnrollmentOpener
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.application.services.esperas_de_la_competicion import (
     EsperasDeLaCompeticion,
 )
@@ -36,9 +39,6 @@ from src.modules.competition.application.services.handicap_obligatorio import ex
 from src.modules.competition.application.services.inscripcion_que_vuelve import (
     guardar_la_inscripcion,
     viva,
-)
-from src.modules.competition.application.services.team_assignment_writer import (
-    TeamAssignmentWriter,
 )
 from src.modules.competition.domain.entities.competition import Competition
 from src.modules.competition.domain.entities.enrollment import Enrollment
@@ -162,7 +162,7 @@ class RequestEnrollmentUseCase:
             CompetitionNotActiveError, CompetitionFullError, AlreadyEnrolledError,
             EnrollmentClosedError, TooManyEnrollmentsError, InvalidTeeColorError,
             TeeWindowRequiredError, TeeWindowNotFoundError, TeeWindowFullError,
-            TeeWindowHasRoomError
+            TeeWindowHasRoomError, TeamsFormedError
         """
         async with self._uow:
             competition_id = CompetitionId(request.competition_id)
@@ -198,6 +198,9 @@ class RequestEnrollmentUseCase:
                 user_id, competition_id
             )
             await self._exigir_que_puede(competition, user_id, existing_enrollment)
+            # Con los equipos formados nadie entra solo; el organizador sí (29 oct
+            # 2026). Tras lo de ya inscrito: a quien ya está se le dice eso (revisor)
+            await exigir_sin_equipos_formados(self._uow, competition_id)
 
             franjas = [
                 s
@@ -237,9 +240,6 @@ class RequestEnrollmentUseCase:
                 # Entró esperando: si se queda sin plaza ni espera, sale (W2, A4)
                 enrollment.entra_esperando()
                 await self._uow.enrollments.update(enrollment)
-            # Entra con los equipos formados y sin partidos: se deshacen, como en
-            # los demás caminos de entrar (decidido el 27 oct 2026)
-            await TeamAssignmentWriter.deshacer(self._uow, competition)
             aceptada = await self._aceptar_su_invitacion(competition, user_id)
             cerradas = await al_entrar_uno(self._uow, competition, aprobadas_antes)
 

@@ -80,10 +80,14 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError as StatusRoundNotFoundError,
     ScheduleAlreadyInPlayError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+)
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
 )
+from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresSinBarraError,
     JugadoresSinHandicapError,
@@ -712,6 +716,9 @@ async def assign_teams(
       un jugador en los dos equipos, o un capitán fuera de su equipo o sin pareja
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
+    - 409: Con la sala de draft abierta (`DRAFT_IN_PROGRESS`) o con los equipos
+      ya formados (`TEAMS_FORMED`): tras quitar a alguien se pueden volver a
+      formar, si quedan pares
     """
     try:
         current_user_id = UserId(current_user.id)
@@ -733,6 +740,12 @@ async def assign_teams(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
+    except (DraftInProgressError, TeamsFormedError) as e:
+        # Con su código en la raíz y un texto fijo por código (CodeQL)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_FORMAN[e.error_code], "error_code": e.error_code},
+        )
     except (
         AssignTeamsNotClosedError,
         AssignTeamsInsufficientError,
@@ -748,6 +761,12 @@ async def assign_teams(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+
+
+_NO_SE_FORMAN = {
+    DraftInProgressError.error_code: "Wait until the draft is over.",
+    TeamsFormedError.error_code: TeamsFormedError.MENSAJE,
+}
 
 
 def frase_del_bloqueo(motivo: MatchGenerationBlock) -> str:

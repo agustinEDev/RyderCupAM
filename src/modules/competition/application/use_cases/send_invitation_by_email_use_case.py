@@ -21,6 +21,9 @@ from src.modules.competition.application.services.avisos_de_actividad import Avi
 from src.modules.competition.application.services.cupo_de_la_competicion import (
     exigir_sitio,
 )
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
@@ -110,6 +113,8 @@ class SendInvitationByEmailUseCase:
 
             # 3. Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
+            # Con los equipos formados no podría aceptarse (30 oct 2026)
+            await exigir_sin_equipos_formados(self._uow, competition.id)
 
             # 4. Buscar user por email (puede no existir)
             invitee_user_id = None

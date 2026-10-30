@@ -44,6 +44,8 @@ class TeamAssignmentWriter:
         Returns:
             El reparto guardado
         """
+        # Defensivo: desde el 29 oct 2026 no se forman equipos encima de otros
+        # (TEAMS_FORMED), pero si quedara uno, dos repartos no conviven
         anterior = await uow.team_assignments.find_by_competition(competition.id)
         if anterior:
             await uow.team_assignments.delete(anterior.id)

@@ -34,6 +34,7 @@ from src.modules.competition.application.exceptions import (
     NotCompetitionCreatorError,
     NotInviteeError,
 )
+from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_invitation_use_case import (
     CancelInvitationUseCase,
@@ -138,7 +139,7 @@ class RespondInvitationBody(BaseModel):
     "/competitions/{competition_id}/invitations",
     status_code=status.HTTP_201_CREATED,
     summary="Send invitation by user ID",
-    description="Creator sends an invitation to a registered user by their user ID.",
+    description="Creator sends an invitation to a registered user by their user ID 409 `TEAMS_FORMED` once teams are formed.",
 )
 async def send_invitation_by_user_id(
     competition_id: UUID,
@@ -169,6 +170,12 @@ async def send_invitation_by_user_id(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
         return _freno_por_hora(e)
+    # Con los equipos formados no podría aceptarse (30 oct 2026)
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
+        )
     except InvitationCompetitionStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
@@ -185,7 +192,7 @@ async def send_invitation_by_user_id(
     "/competitions/{competition_id}/invitations/by-email",
     status_code=status.HTTP_201_CREATED,
     summary="Send invitation by email",
-    description="Creator sends an invitation to an email address (registered or not).",
+    description="Creator sends an invitation to an email address (registered or not) 409 `TEAMS_FORMED` once teams are formed.",
 )
 async def send_invitation_by_email(
     competition_id: UUID,
@@ -214,6 +221,12 @@ async def send_invitation_by_email(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     except InvitationRateLimitViolation as e:
         return _freno_por_hora(e)
+    # Con los equipos formados no podría aceptarse (30 oct 2026)
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
+        )
     except InvitationCompetitionStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except CompetitionFullViolation as e:
@@ -282,6 +295,11 @@ async def respond_to_invitation(
                 "detail": InvitationNoRoomViolation.MENSAJE,
                 "error_code": InvitationNoRoomViolation.error_code,
             },
+        )
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
         )
     except InvalidInvitationStatusViolation as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e

@@ -71,6 +71,7 @@ from src.modules.competition.application.exceptions import (
     NotCreatorError as HandleNotCreatorError,
     NotCreatorError as RemoveHandicapNotCreatorError,
 )
+from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.genero_obligatorio import PerfilIncompletoError
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
@@ -307,7 +308,8 @@ async def request_enrollment(
     - 201: Inscrito (APPROVED), con su franja o en su espera
     - 400: Inscripciones no abiertas, llena, torneo empezado, límite, perfil
     - 403: Privada
-    - 409: Ya inscrito; o la franja: `TEE_WINDOW_FULL`, `TEE_WINDOW_HAS_ROOM`
+    - 409: Ya inscrito; o la franja: `TEE_WINDOW_FULL`, `TEE_WINDOW_HAS_ROOM`; o
+      `TEAMS_FORMED`: con los equipos formados nadie entra por su cuenta
     - 404: `TEE_WINDOW_NOT_FOUND`: la franja no es de esta competición
     - 422: `TEE_WINDOW_REQUIRED`: con franjas hay que elegir una
     """
@@ -332,6 +334,11 @@ async def request_enrollment(
 
     except RequestCompetitionNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
+        )
     except (
         CompetitionNotActiveError,
         CompetitionFullError,
@@ -367,7 +374,8 @@ async def direct_enroll_player(
     Inscripción directa por el creador.
 
     Solo el creador de la competición puede usar este endpoint.
-    El jugador queda directamente en estado APPROVED.
+    El jugador queda directamente en estado APPROVED. Con los equipos formados
+    se reinician; si ya hay partidos, no entra: 409 `TEAMS_FORMED` (30 oct 2026).
     """
     try:
         # Asegurar que el competition_id del path coincida
@@ -388,6 +396,11 @@ async def direct_enroll_player(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except DirectAlreadyEnrolledError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
+        )
     except InvalidTeeColorError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -463,7 +476,8 @@ async def approve_enrollment(
     """
     Aprueba una solicitud de inscripción.
 
-    Solo el creador de la competición puede aprobar.
+    Solo el creador de la competición puede aprobar. Con los equipos formados
+    se reinician; si ya hay partidos, no entra: 409 `TEAMS_FORMED` (30 oct 2026).
     """
     try:
         request_dto = HandleEnrollmentRequestDTO(enrollment_id=enrollment_id, action="APPROVE")
@@ -478,6 +492,11 @@ async def approve_enrollment(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except (EnrollmentStateError, CompetitionFullError, PerfilIncompletoError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except TeamsFormedError as e:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": TeamsFormedError.MENSAJE, "error_code": e.error_code},
+        )
 
 
 @router.post(
@@ -558,7 +577,8 @@ async def withdraw_enrollment(
     Retirarse de una competición.
 
     Solo el dueño de la inscripción puede retirarse.
-    Solo válido desde estado APPROVED.
+    Solo válido desde estado APPROVED. 409 con `error_code` con la sala de draft
+    abierta (`DRAFT_IN_PROGRESS`) o con los equipos formados (`TEAMS_FORMED`).
     """
     try:
         request_dto = WithdrawEnrollmentRequestDTO(enrollment_id=enrollment_id, reason=reason)
@@ -569,7 +589,7 @@ async def withdraw_enrollment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except WithdrawNotOwnerError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    except DraftInProgressError as e:
+    except (DraftInProgressError, TeamsFormedError) as e:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": _NO_SE_QUITA[e.error_code], "error_code": e.error_code},
@@ -649,6 +669,7 @@ _NO_SE_QUITA = {
     RemovalNotAllowedError.error_code: "The competition has already started.",
     PlayerHasMatchesError.error_code: "There are already generated matches.",
     DraftInProgressError.error_code: "Wait until the draft is over.",
+    TeamsFormedError.error_code: TeamsFormedError.MENSAJE,
 }
 
 

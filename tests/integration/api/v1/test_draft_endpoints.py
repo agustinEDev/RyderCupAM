@@ -230,6 +230,22 @@ class TestLaSalaPorHttp:
         assert repartido.status_code == 400, repartido.text
         assert "draft" in repartido.json()["detail"].lower()
 
+    async def test_con_la_sala_abierta_no_se_forman_equipos(self, client: AsyncClient):
+        """Revisor (29 oct 2026): al terminar, el draft pisaba esos equipos sin avisar."""
+        montaje = await _cerrada_con_capitanes(client, jugadores=6)
+        comp_id = montaje["comp"]["id"]
+        set_auth_cookies(client, montaje["creador"]["cookies"])
+        abierta = await client.post(f"/api/v1/competitions/{comp_id}/draft")
+        assert abierta.status_code == 201, abierta.text
+
+        repartido = await client.post(
+            f"/api/v1/competitions/{comp_id}/teams",
+            json={"competition_id": comp_id, "mode": "AUTOMATIC"},
+        )
+
+        assert repartido.status_code == 409, repartido.text
+        assert repartido.json()["error_code"] == "DRAFT_IN_PROGRESS"
+
     async def test_con_los_equipos_hechos_no_se_vuelve_a_sortear(self, client: AsyncClient):
         """Un draft sobre equipos ya hechos los reharía por detrás."""
         montaje = await _cerrada_con_capitanes(client)
