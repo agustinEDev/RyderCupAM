@@ -717,7 +717,8 @@ async def assign_teams(
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
     - 409: Con la sala de draft abierta (`DRAFT_IN_PROGRESS`) o con los equipos
-      ya formados (`TEAMS_FORMED`): quedan así hasta que se quite a alguien
+      ya formados (`TEAMS_FORMED`): tras quitar a alguien se pueden volver a
+      formar, si quedan pares
     """
     try:
         current_user_id = UserId(current_user.id)

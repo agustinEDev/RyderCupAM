@@ -60,7 +60,8 @@ class AssignTeamsUseCase:
     AUTOMATIC: usa SnakeDraftService con handicaps de los jugadores.
     MANUAL: usa las listas proporcionadas, verificando que todos son enrollees.
 
-    Si ya existe una asignación previa, la elimina (re-asignación).
+    Con equipos ya formados no se vuelven a formar (TEAMS_FORMED): tras quitar
+    el organizador a alguien se reinician y se forman otra vez, si quedan pares.
     Transiciona todas las rondas PENDING_TEAMS → PENDING_MATCHES.
     """
 
@@ -100,7 +101,8 @@ class AssignTeamsUseCase:
                     f"Estado actual: {competition.status.value}"
                 )
             # Con la sala abierta, al terminar pisaría estos equipos (revisor, 29 oct
-            # 2026); y formados, quedan así: se rehacen tras quitar a alguien
+            # 2026); y formados, quedan así: tras quitar a alguien se pueden volver
+            # a formar, si quedan pares
             await exigir_sin_draft_abierto(self._uow, competition_id)
             await exigir_sin_equipos_formados(self._uow, competition_id)
 

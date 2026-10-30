@@ -18,6 +18,12 @@ reinicia (equipos, sala, sobres y subcapitanes), como desde el 27 oct.
 | O4 | El organizador vuelve a formar equipos           | TEAMS_FORMED                      |
 | O5 | El organizador forma equipos con la sala abierta | DRAFT_IN_PROGRESS                 |
 | O6 | El organizador forma equipos tras un reinicio    | Como la primera vez               |
+| E1 | El organizador inscribe a mano, con partidos     | TEAMS_FORMED                      |
+| E3 | El organizador aprueba una solicitud, con partidos | TEAMS_FORMED; rechazarla, sí (E4) |
+| I1 | El organizador invita por id o por email (I2)    | TEAMS_FORMED; sin equipos, sí (I3) |
+
+E2 y E5 (entrar sin partidos reinicia) están en test_entrar_deshace_equipos. El
+organizador que también juega no sale: como cualquier jugador (30 oct 2026).
 """
 
 from datetime import date, timedelta
@@ -28,10 +34,16 @@ import pytest
 
 from src.modules.competition.application.dto.enrollment_dto import (
     CancelEnrollmentRequestDTO,
+    DirectEnrollPlayerRequestDTO,
+    HandleEnrollmentRequestDTO,
     RequestEnrollmentRequestDTO,
     WithdrawEnrollmentRequestDTO,
 )
-from src.modules.competition.application.dto.invitation_dto import RespondInvitationRequestDTO
+from src.modules.competition.application.dto.invitation_dto import (
+    RespondInvitationRequestDTO,
+    SendInvitationByEmailRequestDTO,
+    SendInvitationByUserIdRequestDTO,
+)
 from src.modules.competition.application.dto.round_match_dto import AssignTeamsRequestDTO
 from src.modules.competition.application.services.baja_de_la_competicion import (
     DraftInProgressError,
@@ -46,12 +58,24 @@ from src.modules.competition.application.use_cases.assign_teams_use_case import 
 from src.modules.competition.application.use_cases.cancel_enrollment_use_case import (
     CancelEnrollmentUseCase,
 )
+from src.modules.competition.application.use_cases.direct_enroll_player_use_case import (
+    DirectEnrollPlayerUseCase,
+)
+from src.modules.competition.application.use_cases.handle_enrollment_use_case import (
+    HandleEnrollmentUseCase,
+)
 from src.modules.competition.application.use_cases.request_enrollment_use_case import (
     AlreadyEnrolledError,
     RequestEnrollmentUseCase,
 )
 from src.modules.competition.application.use_cases.respond_to_invitation_use_case import (
     RespondToInvitationUseCase,
+)
+from src.modules.competition.application.use_cases.send_invitation_by_email_use_case import (
+    SendInvitationByEmailUseCase,
+)
+from src.modules.competition.application.use_cases.send_invitation_by_user_id_use_case import (
+    SendInvitationByUserIdUseCase,
 )
 from src.modules.competition.application.use_cases.withdraw_enrollment_use_case import (
     WithdrawEnrollmentUseCase,
@@ -108,6 +132,24 @@ async def _reabierta(*, publica: bool = False):
     return uow, comp_id, round_id, equipo_a, equipo_b
 
 
+async def _con_partidos(uow, round_id, equipo_a, equipo_b) -> None:
+    async with uow:
+        await uow.matches.add(
+            Match.create(
+                round_id=round_id,
+                match_number=1,
+                team_a_players=[_jugador(equipo_a[1])],
+                team_b_players=[_jugador(equipo_b[1])],
+            )
+        )
+        await uow.commit()
+
+
+async def _organizador(uow, comp_id) -> UserId:
+    async with uow:
+        return (await uow.competitions.find_by_id(comp_id)).creator_id
+
+
 async def _equipos(uow, comp_id):
     async with uow:
         return await uow.team_assignments.find_by_competition(comp_id)
@@ -138,16 +180,7 @@ class TestJ1Retirarse:
 
     async def test_tampoco_con_partidos(self):
         uow, comp_id, round_id, equipo_a, equipo_b = await _montar()
-        async with uow:
-            await uow.matches.add(
-                Match.create(
-                    round_id=round_id,
-                    match_number=1,
-                    team_a_players=[_jugador(equipo_a[1])],
-                    team_b_players=[_jugador(equipo_b[1])],
-                )
-            )
-            await uow.commit()
+        await _con_partidos(uow, round_id, equipo_a, equipo_b)
 
         with pytest.raises(TeamsFormedError):
             await _retira(uow, comp_id, equipo_b[1])
@@ -275,16 +308,12 @@ class TestJ5CancelarSuSolicitud:
 
 
 class TestOFormarEquipos:
-    async def _organizador(self, uow, comp_id) -> UserId:
-        async with uow:
-            return (await uow.competitions.find_by_id(comp_id)).creator_id
-
     def _al_azar(self, comp_id):
         return AssignTeamsRequestDTO(competition_id=comp_id.value, mode="AUTOMATIC")
 
     async def test_o4_con_equipos_formados_no_se_vuelven_a_formar(self):
         uow, comp_id, _, equipo_a, equipo_b = await _montar()
-        organizador = await self._organizador(uow, comp_id)
+        organizador = await _organizador(uow, comp_id)
 
         with pytest.raises(TeamsFormedError):
             await AssignTeamsUseCase(uow, _Usuarios()).execute(self._al_azar(comp_id), organizador)
@@ -295,7 +324,7 @@ class TestOFormarEquipos:
 
     async def test_o5_con_la_sala_abierta_no_se_forman(self):
         uow, comp_id, *_ = await _montar()
-        organizador = await self._organizador(uow, comp_id)
+        organizador = await _organizador(uow, comp_id)
         async with uow:
             competicion = await uow.competitions.find_by_id(comp_id)
             await TeamAssignmentWriter.deshacer(uow, competicion)
@@ -318,7 +347,7 @@ class TestOFormarEquipos:
 
     async def test_o6_tras_el_reinicio_se_forman_como_la_primera_vez(self):
         uow, comp_id, *_ = await _montar()
-        organizador = await self._organizador(uow, comp_id)
+        organizador = await _organizador(uow, comp_id)
         async with uow:
             competicion = await uow.competitions.find_by_id(comp_id)
             await TeamAssignmentWriter.deshacer(uow, competicion)
@@ -327,3 +356,128 @@ class TestOFormarEquipos:
         await AssignTeamsUseCase(uow, _Usuarios()).execute(self._al_azar(comp_id), organizador)
 
         assert await _equipos(uow, comp_id) is not None
+
+
+class TestEElOrganizadorMeteAAlguienConPartidos:
+    """Con partidos el reinicio no se hace: quien entrara se quedaba sin equipo."""
+
+    async def _con_partidos(self):
+        uow, comp_id, round_id, equipo_a, equipo_b = await _reabierta()
+        await _con_partidos(uow, round_id, equipo_a, equipo_b)
+        return uow, comp_id, await _organizador(uow, comp_id)
+
+    async def _solicitud(self, uow, comp_id) -> Enrollment:
+        solicitud = Enrollment.request(EnrollmentId.generate(), comp_id, UserId(uuid4()))
+        async with uow:
+            await uow.enrollments.add(solicitud)
+            await uow.commit()
+        return solicitud
+
+    def _decide(self, solicitud, accion):
+        return HandleEnrollmentRequestDTO(enrollment_id=solicitud.id.value, action=accion)
+
+    async def test_e1_inscribirle_a_mano_no(self):
+        uow, comp_id, organizador = await self._con_partidos()
+        nuevo = UserId(uuid4())
+
+        with pytest.raises(TeamsFormedError):
+            await DirectEnrollPlayerUseCase(uow, _Usuarios()).execute(
+                DirectEnrollPlayerRequestDTO(competition_id=comp_id.value, user_id=nuevo.value),
+                organizador,
+            )
+
+        assert await _de(uow, comp_id, nuevo) is None
+        assert await _equipos(uow, comp_id) is not None
+
+    async def test_e3_aprobar_su_solicitud_no(self):
+        uow, comp_id, organizador = await self._con_partidos()
+        solicitud = await self._solicitud(uow, comp_id)
+
+        with pytest.raises(TeamsFormedError):
+            await HandleEnrollmentUseCase(uow, _Usuarios()).execute(
+                self._decide(solicitud, "APPROVE"), organizador
+            )
+
+        assert (await _de(uow, comp_id, solicitud.user_id)).status == EnrollmentStatus.REQUESTED
+
+    async def test_e4_rechazarla_si(self):
+        uow, comp_id, organizador = await self._con_partidos()
+        solicitud = await self._solicitud(uow, comp_id)
+
+        await HandleEnrollmentUseCase(uow, _Usuarios()).execute(
+            self._decide(solicitud, "REJECT"), organizador
+        )
+
+        assert (await _de(uow, comp_id, solicitud.user_id)).status == EnrollmentStatus.REJECTED
+
+
+class TestIInvitar:
+    """Una invitación con los equipos formados no podría aceptarse (J4)."""
+
+    async def _usuarios(self):
+        usuarios = UsuariosEnMemoria()
+        invitado = User.create(
+            first_name="Eva",
+            last_name="Gil",
+            email_str=f"eva_{uuid4().hex[:6]}@example.com",
+            plain_password="SecureP@ssw0rd123",
+            gender=Gender.FEMALE,
+        )
+        async with usuarios:
+            await usuarios.users.save(invitado)
+            await usuarios.commit()
+        return usuarios, invitado
+
+    async def _pendientes(self, uow, comp_id) -> int:
+        async with uow:
+            return len(await uow.invitations.find_by_competition(comp_id))
+
+    async def test_i1_por_id_no(self):
+        uow, comp_id, *_ = await _reabierta()
+        usuarios, invitado = await self._usuarios()
+        antes = await self._pendientes(uow, comp_id)
+
+        with pytest.raises(TeamsFormedError):
+            await SendInvitationByUserIdUseCase(uow, usuarios).execute(
+                SendInvitationByUserIdRequestDTO(
+                    competition_id=comp_id.value,
+                    inviter_id=(await _organizador(uow, comp_id)).value,
+                    invitee_user_id=invitado.id.value,
+                )
+            )
+
+        assert await self._pendientes(uow, comp_id) == antes
+
+    async def test_i2_por_email_no(self):
+        uow, comp_id, *_ = await _reabierta()
+        usuarios, _ = await self._usuarios()
+        antes = await self._pendientes(uow, comp_id)
+
+        with pytest.raises(TeamsFormedError):
+            await SendInvitationByEmailUseCase(uow, usuarios).execute(
+                SendInvitationByEmailRequestDTO(
+                    competition_id=comp_id.value,
+                    inviter_id=(await _organizador(uow, comp_id)).value,
+                    invitee_email=f"nadie_{uuid4().hex[:6]}@example.com",
+                )
+            )
+
+        assert await self._pendientes(uow, comp_id) == antes
+
+    async def test_i3_sin_equipos_si(self):
+        uow, comp_id, *_ = await _reabierta()
+        usuarios, invitado = await self._usuarios()
+        async with uow:
+            competicion = await uow.competitions.find_by_id(comp_id)
+            await TeamAssignmentWriter.deshacer(uow, competicion)
+            await uow.commit()
+
+        invitacion = await SendInvitationByUserIdUseCase(uow, usuarios).execute(
+            SendInvitationByUserIdRequestDTO(
+                competition_id=comp_id.value,
+                inviter_id=(await _organizador(uow, comp_id)).value,
+                invitee_user_id=invitado.id.value,
+            )
+        )
+
+        assert invitacion.status == "PENDING"
