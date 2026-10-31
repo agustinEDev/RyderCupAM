@@ -121,7 +121,7 @@ cryptography==50.0.2
 # - CVE-2025-47273 (Directory Traversal en _download_url - CVSS 6.8 MEDIUM)
 # - CVE-2026-59890 (Improper Handling of Unicode Encoding - MEDIUM)
 # - GHSA-xmj3-9gf7-h52w (Windows path escape via namespace_packages.txt, 23 oct 2026)
-setuptools==84.1.0
+setuptools==84.2.1
 
 # idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
