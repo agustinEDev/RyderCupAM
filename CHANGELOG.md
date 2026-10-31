@@ -5,6 +5,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.43.0] - 2026-10-31
+
+**Release social 3: entrar directamente y equipos que no se mueven.** En una
+competición pública ya no se pide plaza: se entra. La clasificación se puede
+abrir por enlace sin sesión. Y una vez formados los equipos se quedan como
+están: el jugador ya no entra ni sale por su cuenta, y el organizador puede
+deshacerlos mientras no haya partidos. Va con el frontend **2.57.0**.
+
+**Notas de despliegue.**
+
+- **Una migración aditiva** (`b4d6f8a0c2e5`): `enrollments.entered_waiting`,
+  booleana con valor por defecto; no reescribe la tabla.
+- **Backend y frontend seguidos**: el frontend 2.57 usa
+  `GET /competitions/{id}/summary`, `DELETE /competitions/{id}/teams` y los
+  409 `TEAMS_FORMED` / `TEAMS_LOCKED` / `NO_TEAMS`, que el 2.42 no tiene. El
+  frontend 2.56 sigue funcionando con este backend, pero «Pedir plaza» ya
+  entra directamente y los 409 nuevos se pintan como un error genérico.
+
+### Added
+
+- **Entrar directamente en una pública** (#693): `POST
+  /competitions/{id}/enrollments` ya no crea una solicitud, inscribe
+  (`APPROVED`). En un stroke play con franjas hay que elegir una: con sitio se
+  entra con su plaza; llena, 409 `TEE_WINDOW_FULL` o, con `waiting_list: true`,
+  a su lista de espera (`TEE_WINDOW_HAS_ROOM`, `TEE_WINDOW_REQUIRED`,
+  `TEE_WINDOW_NOT_FOUND`). Una invitación pendiente del jugador se acepta al
+  entrar. Con franjas, ningún camino de entrada mira `max_players`.
+- **Quien entró esperando** (#693): `enrollments.entered_waiting`. Si se queda
+  sin plaza y sin espera (deja su última espera, se borra la franja o se
+  cierran las inscripciones) sale de la competición.
+- **Avisos en la app** (#693): `PLAYER_JOINED` al organizador (con
+  `player_name` desde #696), `PLACE_FROM_WAITING_LIST`,
+  `ENROLLMENT_NO_PLACE` al cerrar y `TEE_WINDOW_REMOVED`.
+- **Clasificación sin sesión** (#694): la de la Ryder y las de stroke play
+  admiten visitantes. Pública: la tabla entera, sin `user_id` ni
+  `tee_gender` (`user_id` pasa a ser nulo para el visitante). Privada: 403
+  `PRIVATE_COMPETITION`. Límite de 30/min con sesión y 600/min sin ella; las
+  tres rutas de stroke play no tenían.
+- **Resumen público** (#694): `GET /competitions/{id}/summary` con nombre,
+  tipo, si tiene equipos, estado, visibilidad y fechas, también de una
+  privada.
+- **Deshacer los equipos** (#697): `DELETE /competitions/{id}/teams`, para el
+  organizador o un admin. Se van los equipos, la sala de draft, los sobres
+  (también los abiertos) y los subcapitanes; los capitanes se quedan. 204; 409
+  `NO_TEAMS` sin equipos y `TEAMS_LOCKED` con partidos, empezada o cancelada.
+
+### Changed
+
+- **Equipos formados = congelados** (#696): con los equipos formados, el
+  jugador no se retira, no entra, no pide plaza ni acepta una invitación (409
+  `TEAMS_FORMED`); rechazar una invitación o cancelar su solicitud, sí. El
+  organizador no invita ni vuelve a formarlos (`TEAMS_FORMED`), ni los forma
+  con la sala de draft abierta (`DRAFT_IN_PROGRESS`). Inscribir o aprobar a
+  alguien los deshace si no hay partidos; con partidos, 409 `TEAMS_FORMED`.
+  Quitar a un jugador sigue deshaciéndolos. El organizador que juega tampoco
+  sale.
+
+### Fixed
+
+- **Dos inicios de sesión a la vez desde el mismo dispositivo** (#694, cierra
+  #692): registrar el dispositivo es «añadir si no está», así que el segundo
+  ya no da un 500 por la restricción única.
+
 ## [2.42.0] - 2026-10-28
 
 **Release social 2: quién ve a los inscritos.** Los jugadores ya no ven la

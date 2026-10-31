@@ -7,7 +7,7 @@ el modal se cerraba y el jugador no se enteraba de nada.
 
     #   caso                                   | qué pasa
     ----|--------------------------------------|---------------------------------
-    R1  empieza hoy                            | se pide plaza (REQUESTED)
+    R1  empieza hoy                            | entra (APPROVED, desde el 28 oct 2026)
     R2  empezó ayer y sigue abierta            | EnrollmentClosedError, en español
     R3  está llena                             | CompetitionFullError, en español
     R4  quien pide ya lleva el máximo          | TooManyEnrollmentsError, en español
@@ -63,7 +63,7 @@ class _Usuarios:
 
     async def find_by_id(self, user_id):
         genero = None if user_id in self._sin_genero else self._genero
-        return SimpleNamespace(id=user_id, gender=genero)
+        return SimpleNamespace(id=user_id, gender=genero, email=None)
 
 
 _CON_GENERO = _Usuarios()
@@ -111,7 +111,7 @@ async def test_r1_se_pide_plaza_el_mismo_dia_del_torneo():
 
     respuesta = await RequestEnrollmentUseCase(uow, _CON_GENERO).execute(_pide(competicion))
 
-    assert respuesta.status == "REQUESTED"
+    assert respuesta.status == "APPROVED"
 
 
 async def test_r2_empezado_el_torneo_no_y_lo_dice():

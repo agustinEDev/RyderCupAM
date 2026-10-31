@@ -19,6 +19,12 @@ from src.modules.competition.application.ports.invitation_email_service_interfac
     IInvitationEmailService,
 )
 from src.modules.competition.application.services.avisos_de_actividad import AvisosDeActividad
+from src.modules.competition.application.services.cupo_de_la_competicion import (
+    exigir_sitio,
+)
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.application.services.invitacion_que_impide import pendiente_vigente
 from src.modules.competition.application.services.nombre_de_quien_invita import (
     nombre_de_quien_invita,
@@ -108,6 +114,8 @@ class SendInvitationByUserIdUseCase:
 
             # 3. Validar estado de competicion
             CompetitionPolicy.can_send_invitation(competition.status)
+            # Con los equipos formados no podría aceptarse (30 oct 2026)
+            await exigir_sin_equipos_formados(self._uow, competition.id)
 
             # 4. Buscar invitee user
             async with self._user_uow:
@@ -136,12 +144,8 @@ class SendInvitationByUserIdUseCase:
             # se enteraba al aceptar, sin haber hecho nada mal. Las pendientes no
             # ocupan plaza: cuando una acepta y llena la ultima, las demas se quedan
             # sin plaza (ver RespondToInvitationUseCase)
-            approved_count = await self._uow.enrollments.count_approved_by_competition(
-                competition_id
-            )
-            CompetitionPolicy.validate_capacity(
-                approved_count, competition.max_players, competition_id
-            )
+            # Con franjas, el cupo es de sus plazas: aquí no se mira (28 oct 2026)
+            await exigir_sitio(self._uow, competition)
 
             # Rate limit (min(max_players, MAX_INVITATIONS_PER_HOUR) por hora), despues
             # de las plazas: una competicion llena con el freno agotado decia

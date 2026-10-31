@@ -844,6 +844,34 @@ async def estado_en_bd(competition_id: str) -> str | None:
         await engine.dispose()
 
 
+async def solicitud_pendiente(client: AsyncClient, competition_id: str, **cuerpo) -> dict:
+    """Una solicitud pendiente (REQUESTED) de quien tiene la sesión en el cliente.
+
+    Desde la release social 3 (28 oct 2026) en una pública se entra directamente
+    y la API ya no crea solicitudes. Aprobar, rechazar y cancelar siguen
+    existiendo para las que quedaran: aquí se entra y se devuelve a REQUESTED
+    en la base de datos, como una de antes.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    respuesta = await client.post(
+        f"/api/v1/competitions/{competition_id}/enrollments", json=cuerpo or None
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    inscripcion = respuesta.json()
+    engine = create_async_engine(_URL_DE_LA_BD_DE_TEST["url"])
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("UPDATE enrollments SET status = 'REQUESTED' WHERE id = :id"),
+                {"id": inscripcion["id"]},
+            )
+    finally:
+        await engine.dispose()
+    return {**inscripcion, "status": "REQUESTED"}
+
+
 async def activate_competition(client: AsyncClient, cookies: dict, competition_id: str) -> dict:
     """Helper para dejar una competición con las inscripciones abiertas.
 

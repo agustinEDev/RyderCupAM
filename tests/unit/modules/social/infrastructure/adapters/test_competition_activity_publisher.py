@@ -154,6 +154,26 @@ def avisos():
 
 
 class TestTraduccion:
+    @pytest.mark.parametrize("nombre_real", [True, False])
+    async def test_al_apuntarse_lleva_su_preferencia_de_nombre(self, avisos, nombre_real):
+        """El aviso, con el nombre que pidió para esa competición (29 oct 2026)."""
+        competicion = _competicion()
+        competicion.creator_id = UserId(uuid4())
+        inscripcion = Enrollment(
+            id=EnrollmentId.generate(),
+            competition_id=competicion.id,
+            user_id=UserId(uuid4()),
+            status=EnrollmentStatus.APPROVED,
+            use_real_name=nombre_real,
+        )
+        adaptador = CompetitionActivityPublisher(avisos, _General([]), InMemoryUnitOfWork())
+
+        await adaptador.joined(competicion, inscripcion, None, waiting=False)
+
+        [(nombre, _, kwargs)] = avisos.llamadas
+        assert nombre == "joined"
+        assert kwargs["use_real_name"] is nombre_real
+
     async def test_g_las_salidas_se_releen_de_la_ronda(self, avisos):
         """
         G3. No publica la foto que trae la accion: le da al caso de uso como

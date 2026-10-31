@@ -22,6 +22,7 @@ from tests.conftest import (
     create_golf_course,
     estado_en_bd,
     set_auth_cookies,
+    solicitud_pendiente,
 )
 from tests.integration.api.v1.test_scoring_endpoints import setup_match_in_progress
 
@@ -2324,12 +2325,10 @@ class TestPublicAndPrivate:
         rechazado = await create_authenticated_user(
             client, "rechazado@test.com", "P@ssw0rd123!", "Le", "Rechazan"
         )
-        pedida = await client.post(
-            f"/api/v1/competitions/{competicion_id}/enrollments", cookies=rechazado["cookies"]
-        )
-        assert pedida.status_code == 201, pedida.text
+        set_auth_cookies(client, rechazado["cookies"])
+        pedida = await solicitud_pendiente(client, competicion_id)
         rechazo = await client.post(
-            f"/api/v1/enrollments/{pedida.json()['id']}/reject", cookies=organizador["cookies"]
+            f"/api/v1/enrollments/{pedida['id']}/reject", cookies=organizador["cookies"]
         )
         assert rechazo.status_code == 200, rechazo.text
 
@@ -2629,7 +2628,8 @@ class TestCaptains:
     async def test_la_capitana_elige_subcapitan_y_asciende_si_se_va(self, client: AsyncClient):
         """
         Given: equipos repartidos
-        When: Ana elige a Carla y después se da de baja
+        When: Ana elige a Carla y después el organizador la quita (con equipos
+            formados ella ya no se retira sola, 29 oct 2026)
         Then: Carla pasa a capitana y su puesto de subcapitana queda libre
         """
         creador, comp, ana, _, carla = await self._repartida(client)
@@ -2639,8 +2639,8 @@ class TestCaptains:
             f"/api/v1/competitions/{comp['id']}/teams/A/vice-captain",
             json={"player_id": carla["user"]["id"]},
         )
-        baja = await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
         set_auth_cookies(client, creador["cookies"])
+        baja = await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/remove")
         ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
 
         assert elegido.status_code == 200, elegido.text
@@ -2711,15 +2711,16 @@ class TestCaptains:
         capitanes como al principio. Con partidos, cubrir el puesto sigue igual
         (test_captaincy_after_draft, en unitarios).
 
-        Given: Ana se va tras el draft sin subcapitán y sin partidos
+        Given: el organizador quita a Ana tras el draft, sin subcapitán y sin
+            partidos (con equipos formados ella ya no se retira sola, 29 oct 2026)
         When: el organizador intenta cubrir el puesto, y luego nombra a Carla
         Then: no hay equipos (400) y Carla queda de capitana
         """
         creador, comp, ana, bea, carla = await self._repartida(client)
-        set_auth_cookies(client, ana["cookies"])
-        await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/withdraw", json={})
-
         set_auth_cookies(client, creador["cookies"])
+        quitada = await client.post(f"/api/v1/enrollments/{ana['enrollment_id']}/remove")
+        assert quitada.status_code == 200, quitada.text
+
         ficha = await client.get(f"/api/v1/competitions/{comp['id']}")
         cubierto = await client.put(
             f"/api/v1/competitions/{comp['id']}/teams/A/captain",

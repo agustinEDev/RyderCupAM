@@ -21,6 +21,9 @@ from src.modules.competition.application.services.baja_de_la_competicion import 
     exigir_sin_draft_abierto,
     sacar_de_la_competicion,
 )
+from src.modules.competition.application.services.equipos_formados import (
+    exigir_sin_equipos_formados,
+)
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
     CompetitionUnitOfWorkInterface,
 )
@@ -47,6 +50,8 @@ class WithdrawEnrollmentUseCase:
     Reglas de negocio:
     - Solo el dueño del enrollment puede retirarse
     - Solo se puede retirar desde estado APPROVED
+    - Con la sala de draft abierta, no (DRAFT_IN_PROGRESS)
+    - Con los equipos formados, tampoco (TEAMS_FORMED): le quita el organizador
     - Diferencia con cancel: withdraw es después de estar inscrito
     """
 
@@ -89,6 +94,8 @@ class WithdrawEnrollmentUseCase:
             EnrollmentNotFoundError: Si la inscripción no existe
             NotOwnerError: Si el solicitante no es el dueño
             EnrollmentStateError: Si no se puede retirar desde el estado actual
+            DraftInProgressError: Con la sala de draft abierta
+            TeamsFormedError: Con los equipos formados: le quita el organizador
         """
         async with self._uow:
             enrollment_id = EnrollmentId(request.enrollment_id)
@@ -118,14 +125,22 @@ class WithdrawEnrollmentUseCase:
             # Con la sala de draft abierta nadie sale (decidido el 27 oct 2026)
             if competition is not None:
                 await exigir_sin_draft_abierto(self._uow, competition.id)
+                # Con los equipos formados quedan así: le quita el organizador (29 oct 2026)
+                await exigir_sin_equipos_formados(self._uow, competition.id)
 
             # 4. Withdraw (la entidad valida el estado)
             enrollment.withdraw(request.reason)
 
-            # Sale de todo: partidas, franjas, capitanía y, si hace falta, los
-            # equipos (release social 2)
+            # Sale de todo: partidas y franjas, y la capitanía si la tenía sin
+            # equipos formados (release social 2; con equipos ya no llega aquí)
+            asignadas: list = []
             fotos = await sacar_de_la_competicion(
-                self._uow, competition, enrollment, zonas=self._zonas, ahora=self._reloj()
+                self._uow,
+                competition,
+                enrollment,
+                zonas=self._zonas,
+                ahora=self._reloj(),
+                asignadas=asignadas,
             )
 
             # 5. Persistir cambios
@@ -137,6 +152,8 @@ class WithdrawEnrollmentUseCase:
         if competition is not None:
             for round_id, (antes, despues) in fotos.items():
                 await self._actividad.salidas_cambiadas(competition, round_id, antes, despues)
+            # Y a quien la lista dio su plaza (A3)
+            await self._actividad.desde_la_espera(competition, asignadas)
 
         # 7. Retornar DTO
         return WithdrawEnrollmentResponseDTO(

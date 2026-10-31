@@ -15,6 +15,7 @@ from tests.conftest import (
     create_authenticated_user,
     create_competition,
     set_auth_cookies,
+    solicitud_pendiente,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -30,10 +31,9 @@ async def _con_una_solicitud(client: AsyncClient, prefijo: str) -> tuple[dict, d
     )
     comp = await create_competition(client, creador["cookies"])
     set_auth_cookies(client, jugador["cookies"])
-    pedida = await client.post(f"/api/v1/competitions/{comp['id']}/enrollments")
-    assert pedida.status_code == 201, pedida.text
-    assert pedida.json()["status"] == "REQUESTED"
-    return creador, jugador, comp, pedida.json()["id"]
+    # Una de antes de la inscripción directa (28 oct 2026)
+    pedida = await solicitud_pendiente(client, comp["id"])
+    return creador, jugador, comp, pedida["id"]
 
 
 async def _estado_de_su_inscripcion(client: AsyncClient, creador, jugador, comp) -> str:

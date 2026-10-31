@@ -35,6 +35,10 @@ _AVISOS_DE_TORNEO = frozenset(
         ActivityEventType.TOURNAMENT_FINAL_STANDING,
         ActivityEventType.ENROLLMENT_CONFIRMED,
         ActivityEventType.TEE_TIME_ASSIGNED,
+        ActivityEventType.PLAYER_JOINED,
+        ActivityEventType.PLACE_FROM_WAITING_LIST,
+        ActivityEventType.ENROLLMENT_NO_PLACE,
+        ActivityEventType.TEE_WINDOW_REMOVED,
     }
 )
 
@@ -48,6 +52,11 @@ _SE_RENUEVAN = frozenset(
         ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
         ActivityEventType.ENROLLMENT_REJECTED,
         ActivityEventType.ENROLLMENT_REMOVED,
+        # Otra vez a la espera, o con plaza: el de antes se va (28 oct 2026)
+        ActivityEventType.PLAYER_JOINED,
+        ActivityEventType.PLACE_FROM_WAITING_LIST,
+        ActivityEventType.ENROLLMENT_NO_PLACE,
+        ActivityEventType.TEE_WINDOW_REMOVED,
     }
 )
 
@@ -57,6 +66,8 @@ _DE_NO_ESTAR = (
     ActivityEventType.ENROLLMENT_REQUEST_CLOSED,
     ActivityEventType.ENROLLMENT_REJECTED,
     ActivityEventType.ENROLLMENT_REMOVED,
+    ActivityEventType.ENROLLMENT_NO_PLACE,
+    ActivityEventType.TEE_WINDOW_REMOVED,
 )
 
 # Lo que se va cuando ya no estas en el torneo: que estas apuntado, tu «ya
@@ -66,6 +77,9 @@ _DE_ESTAR_APUNTADO = (
     ActivityEventType.ENROLLMENT_CONFIRMED,
 )
 _SALIDA = ActivityEventType.TEE_TIME_ASSIGNED
+# «Has entrado en la franja de las 9:00»: deja de ser cierto al irse o al
+# borrarse la franja (revisor, 28 oct 2026)
+_PLAZA_DE_LA_ESPERA = ActivityEventType.PLACE_FROM_WAITING_LIST
 
 # Que clase de salida es, para que el cliente no lo deduzca de los nulos
 _GRUPO = "TEE_GROUP"
@@ -88,6 +102,17 @@ class TournamentRef:
     start_date: date
     end_date: date
     is_public: bool
+
+
+@dataclass(frozen=True)
+class TeeWindowRef:
+    """La franja de un stroke play tal como se cuenta: dia, sesion y primera salida."""
+
+    round_id: str
+    round_date: date | None
+    session_type: str
+    # "HH:MM", la primera salida de la franja
+    tee_time: str | None
 
 
 @dataclass(frozen=True)
@@ -251,7 +276,7 @@ class PublishCompetitionNoticesUseCase:
                 competition_id, _DE_ESTAR_APUNTADO, user_id
             )
             await self._social_uow.activity_events.delete_for_competition(
-                competition_id, [_SALIDA], user_id
+                competition_id, [_SALIDA, _PLAZA_DE_LA_ESPERA], user_id
             )
             # Su aviso se fue por la baja, no por un cambio: si vuelve, es nuevo
             await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
@@ -265,7 +290,9 @@ class PublishCompetitionNoticesUseCase:
             await self._social_uow.activity_events.delete_from_source(
                 competition_id, _DE_ESTAR_APUNTADO
             )
-            await self._social_uow.activity_events.delete_for_competition(competition_id, [_SALIDA])
+            await self._social_uow.activity_events.delete_for_competition(
+                competition_id, [_SALIDA, _PLAZA_DE_LA_ESPERA]
+            )
             await self._social_uow.activity_events.forget_withdrawn_tee_times_of_competition(
                 competition_id
             )
@@ -335,6 +362,122 @@ class PublishCompetitionNoticesUseCase:
         await self._publicar(
             [self._aviso(user_id, ActivityEventType.ENROLLMENT_REMOVED, enrollment_id, tournament)]
         )
+
+    async def joined(
+        self,
+        organizer_id: UserId,
+        player_id: UserId,
+        tournament: TournamentRef,
+        enrollment_id: str,
+        franja: TeeWindowRef | None,
+        waiting: bool,
+        use_real_name: bool = True,
+    ) -> None:
+        """
+        «Ana se ha apuntado a Copa X», o a la espera de una franja: para el
+        organizador (A1, 28 oct 2026). Uno por inscripcion: si vuelve a
+        apuntarse, se renueva. Con el nombre que eligió para esa competición,
+        como en la lista de inscritos (29 oct 2026): sin él, la tarjeta decía
+        «Un jugador».
+        """
+        async with self._user_uow:
+            jugador = await self._user_uow.users.find_by_id(player_id)
+        extra = {
+            "player_id": str(player_id.value),
+            "player_name": jugador.display_name_or_legal(use_real_name) if jugador else None,
+            **self._de_la_franja(franja),
+            "waiting": waiting,
+        }
+        # Ha vuelto a entrar: lo que decía que no estaba —rechazada, cerrada, «te
+        # han quitado»— se va también si solo espera (revisor, 28 oct 2026)
+        await self._publicar(
+            [
+                self._aviso(
+                    organizer_id, ActivityEventType.PLAYER_JOINED, enrollment_id, tournament, extra
+                )
+            ],
+            retirar=(enrollment_id, _DE_NO_ESTAR, player_id),
+        )
+
+    async def placed_from_waiting_list(
+        self, user_id: UserId, tournament: TournamentRef, franja: TeeWindowRef
+    ) -> None:
+        """
+        La lista de espera le da plaza: «has entrado en la franja de las 9:00»
+        (A3). Ya juega: como al apuntarse con plaza, «ya estas inscrito» y, en
+        una publica, sus amigos ven que se ha apuntado (A2). Esos dos son uno
+        por torneo: una segunda plaza no los repite.
+        """
+        eventos = [
+            self._aviso(
+                user_id,
+                ActivityEventType.PLACE_FROM_WAITING_LIST,
+                franja.round_id,
+                tournament,
+                self._de_la_franja(franja),
+            ),
+            self._aviso(
+                user_id,
+                ActivityEventType.ENROLLMENT_CONFIRMED,
+                tournament.competition_id,
+                tournament,
+            ),
+        ]
+        if tournament.is_public:
+            eventos.append(
+                self._aviso(
+                    user_id,
+                    ActivityEventType.ENROLLED_IN_TOURNAMENT,
+                    tournament.competition_id,
+                    tournament,
+                )
+            )
+        await self._publicar(eventos)
+
+    async def no_place(
+        self, tournament: TournamentRef, enrollments: Sequence[tuple[UserId, str]]
+    ) -> None:
+        """
+        Se cerraron las inscripciones y seguian solo en espera: «no hubo plaza
+        en X» (A4). Uno por inscripcion; si vuelve a entrar, se va.
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    user_id, ActivityEventType.ENROLLMENT_NO_PLACE, enrollment_id, tournament
+                )
+                for user_id, enrollment_id in enrollments
+            ]
+        )
+
+    async def window_removed(
+        self, user_id: UserId, tournament: TournamentRef, enrollment_id: str, franja: TeeWindowRef
+    ) -> None:
+        """
+        Se borro la franja en cuya espera estaba, la ultima suya, y salio de la
+        competicion: «se ha quitado la franja de las 9:00 de X» (28 oct 2026).
+        """
+        await self._publicar(
+            [
+                self._aviso(
+                    user_id,
+                    ActivityEventType.TEE_WINDOW_REMOVED,
+                    enrollment_id,
+                    tournament,
+                    self._de_la_franja(franja),
+                )
+            ]
+        )
+
+    @staticmethod
+    def _de_la_franja(franja: TeeWindowRef | None) -> dict:
+        """Lo que un aviso cuenta de su franja; sin franja, todo vacío."""
+        return {
+            "round_id": franja.round_id if franja else None,
+            "round_date": franja.round_date.isoformat() if franja and franja.round_date else None,
+            "session_type": franja.session_type if franja else None,
+            "tee_time": franja.tee_time if franja else None,
+        }
 
     # === Resultados ===
 
@@ -507,7 +650,7 @@ class PublishCompetitionNoticesUseCase:
         async with self._social_uow:
             eventos = self._social_uow.activity_events
             await eventos.lock_scope(competition_id)
-            await eventos.delete_from_source(round_id, [_SALIDA])
+            await eventos.delete_from_source(round_id, [_SALIDA, _PLAZA_DE_LA_ESPERA])
             retirados = await eventos.withdrawn_tee_times(round_id)
             if retirados:
                 await eventos.forget_withdrawn_tee_times(round_id, retirados)
@@ -622,13 +765,15 @@ class PublishCompetitionNoticesUseCase:
         tipo: ActivityEventType,
         origen: str,
         tournament: TournamentRef,
+        extra: dict | None = None,
     ) -> ActivityEvent:
+        """Un aviso de torneo para alguien, con lo que se cuenta de él y lo que se añada."""
         return ActivityEvent.create(
             user_id=user_id,
             type=tipo,
             occurred_at=utc_now(),
             source_match_id=origen,
-            payload=self._del_torneo(tournament),
+            payload={**self._del_torneo(tournament), **(extra or {})},
         )
 
     @staticmethod

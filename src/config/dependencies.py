@@ -104,6 +104,9 @@ from src.modules.competition.application.use_cases.fill_captain_use_case import 
 from src.modules.competition.application.use_cases.generate_matches_use_case import (
     GenerateMatchesUseCase,
 )
+from src.modules.competition.application.use_cases.get_competition_summary_use_case import (
+    GetCompetitionSummaryUseCase,
+)
 from src.modules.competition.application.use_cases.get_competition_use_case import (
     GetCompetitionUseCase,
 )
@@ -250,6 +253,9 @@ from src.modules.competition.application.use_cases.submit_hole_score_use_case im
 )
 from src.modules.competition.application.use_cases.submit_scorecard_use_case import (
     SubmitScorecardUseCase,
+)
+from src.modules.competition.application.use_cases.undo_teams_use_case import (
+    UndoTeamsUseCase,
 )
 from src.modules.competition.application.use_cases.update_competition_use_case import (
     UpdateCompetitionUseCase,
@@ -1269,6 +1275,23 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> UserResponseDTO | None:
+    """
+    El usuario de la sesión, o None si no hay sesión (release social 3, 28 oct 2026).
+
+    Para lo que también ve un visitante: la clasificación por enlace. Sin token
+    es un visitante; con un token caducado o inválido, el 401 de siempre, para
+    que la app renueve la sesión en vez de enseñarle la vista de visitante.
+    """
+    if not read_access_token(request):
+        return None
+    return await get_current_user(request, credentials, uow)
+
+
 def get_verify_email_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> VerifyEmailUseCase:
@@ -2103,6 +2126,13 @@ def get_get_competition_use_case(
     )
 
 
+def get_competition_summary_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> GetCompetitionSummaryUseCase:
+    """El resumen público de una competición (release social 3, L5)."""
+    return GetCompetitionSummaryUseCase(uow)
+
+
 def get_delete_competition_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
@@ -2167,9 +2197,10 @@ def get_coger_plaza_use_case(
 
 def get_soltar_plaza_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> SoltarPlazaUseCase:
-    """Soltar la plaza en una franja de stroke play (#251)."""
-    return SoltarPlazaUseCase(uow)
+    """Soltar la plaza en una franja de stroke play (#251); a quien la lista se la da, su aviso."""
+    return SoltarPlazaUseCase(uow, actividad=actividad)
 
 
 def get_reloj_del_servidor() -> Callable[[], datetime]:
@@ -2478,9 +2509,10 @@ def get_esperar_use_case(
 
 def get_dejar_de_esperar_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> DejarDeEsperarUseCase:
-    """Salir de la lista de espera de una franja (#251)."""
-    return DejarDeEsperarUseCase(uow)
+    """Salir de la lista de espera de una franja (#251); sin nada más, sale de la competición."""
+    return DejarDeEsperarUseCase(uow, actividad=actividad)
 
 
 def get_mis_plazas_asignadas_use_case(
@@ -2751,9 +2783,16 @@ def get_reorder_golf_courses_use_case(
 def get_request_enrollment_use_case(
     uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
     user_uow: UserUnitOfWorkInterface = Depends(get_uow),
+    gc_uow: GolfCourseUnitOfWorkInterface = Depends(get_golf_course_uow),
+    actividad: CompetitionActivityPublisherInterface = Depends(get_competition_activity_publisher),
 ) -> RequestEnrollmentUseCase:
-    """Proveedor del caso de uso RequestEnrollmentUseCase."""
-    return RequestEnrollmentUseCase(uow, user_uow.users)
+    """Apuntarse a una pública (28 oct 2026): abre la programada si toca y avisa."""
+    return RequestEnrollmentUseCase(
+        uow,
+        user_uow.users,
+        zonas=CompetitionTimezoneFromCourse(gc_uow.golf_courses, uow.competitions),
+        actividad=actividad,
+    )
 
 
 def get_direct_enroll_player_use_case(
@@ -2962,6 +3001,13 @@ def get_assign_teams_use_case(
         user_repository=user_uow.users,
         snake_draft_service=SnakeDraftService(),
     )
+
+
+def get_undo_teams_use_case(
+    uow: CompetitionUnitOfWorkInterface = Depends(get_competition_uow),
+) -> UndoTeamsUseCase:
+    """Proveedor del caso de uso UndoTeamsUseCase (30 oct 2026)."""
+    return UndoTeamsUseCase(uow=uow)
 
 
 def get_start_draft_use_case(

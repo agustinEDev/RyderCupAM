@@ -8,7 +8,7 @@ del módulo Competition siguiendo Clean Architecture.
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
@@ -28,6 +28,7 @@ from src.config.dependencies import (
     get_mis_plazas_asignadas_use_case,
     get_reassign_match_players_use_case,
     get_soltar_plaza_use_case,
+    get_undo_teams_use_case,
     get_update_match_status_use_case,
     get_update_round_use_case,
 )
@@ -80,10 +81,14 @@ from src.modules.competition.application.exceptions import (
     RoundNotFoundError as StatusRoundNotFoundError,
     ScheduleAlreadyInPlayError,
 )
+from src.modules.competition.application.services.baja_de_la_competicion import (
+    DraftInProgressError,
+)
 from src.modules.competition.application.services.envelope_pairings import (
     EnvelopesDecideThePairingsError,
     EnvelopesNotRevealedError,
 )
+from src.modules.competition.application.services.equipos_formados import TeamsFormedError
 from src.modules.competition.application.services.jugadores_de_la_partida import (
     JugadoresSinBarraError,
     JugadoresSinHandicapError,
@@ -167,6 +172,13 @@ from src.modules.competition.application.use_cases.reassign_match_players_use_ca
     PlayerNotInTeamError,
     ReassignMatchPlayersUseCase,
     WrongNumberOfPlayersError,
+)
+from src.modules.competition.application.use_cases.undo_teams_use_case import (
+    CompetitionNotFoundError as UndoTeamsNotFoundError,
+    NotCompetitionCreatorError as UndoTeamsNotCreatorError,
+    NoTeamsError,
+    TeamsLockedError,
+    UndoTeamsUseCase,
 )
 from src.modules.competition.application.use_cases.update_match_status_use_case import (
     CompetitionNotInProgressError as StatusNotInProgressError,
@@ -712,6 +724,9 @@ async def assign_teams(
       un jugador en los dos equipos, o un capitán fuera de su equipo o sin pareja
     - 403: Usuario no es el creador ni admin
     - 404: Competición no encontrada
+    - 409: Con la sala de draft abierta (`DRAFT_IN_PROGRESS`) o con los equipos
+      ya formados (`TEAMS_FORMED`): tras quitar a alguien se pueden volver a
+      formar, si quedan pares
     """
     try:
         current_user_id = UserId(current_user.id)
@@ -733,6 +748,12 @@ async def assign_teams(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
+    except (DraftInProgressError, TeamsFormedError) as e:
+        # Con su código en la raíz y un texto fijo por código (CodeQL)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_FORMAN[e.error_code], "error_code": e.error_code},
+        )
     except (
         AssignTeamsNotClosedError,
         AssignTeamsInsufficientError,
@@ -748,6 +769,62 @@ async def assign_teams(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
+
+
+_NO_SE_FORMAN = {
+    DraftInProgressError.error_code: "Wait until the draft is over.",
+    TeamsFormedError.error_code: TeamsFormedError.MENSAJE,
+}
+
+
+@router.delete(
+    "/{competition_id}/teams",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Deshacer equipos",
+    tags=["Competitions - Teams"],
+)
+@limiter.limit("10/minute")
+async def undo_teams(
+    request: Request,  # noqa: ARG001 - Required by @limiter decorator
+    competition_id: UUID,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: UndoTeamsUseCase = Depends(get_undo_teams_use_case),
+):
+    """
+    Deshace los equipos para que pueda entrar alguien nuevo (30 oct 2026).
+
+    Con los equipos formados no se invita ni se vuelven a formar. Es el mismo
+    reinicio que al quitar a un jugador: fuera equipos, sala de draft, sobres y
+    subcapitanes; los capitanes se quedan y se repite el draft.
+
+    **Returns:**
+    - 204: Deshechos
+    - 403: Usuario no es el creador ni admin
+    - 404: Competición no encontrada
+    - 409: Sin equipos (`NO_TEAMS`), o con partidos, ya empezada o cancelada
+      (`TEAMS_LOCKED`)
+    """
+    try:
+        await use_case.execute(
+            competition_id, UserId(current_user.id), is_admin=current_user.is_admin
+        )
+    except UndoTeamsNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except UndoTeamsNotCreatorError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except (NoTeamsError, TeamsLockedError) as e:
+        # Con su código en la raíz y un texto fijo por código (CodeQL)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": _NO_SE_DESHACEN[e.error_code], "error_code": e.error_code},
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+_NO_SE_DESHACEN = {
+    NoTeamsError.error_code: NoTeamsError.MENSAJE,
+    TeamsLockedError.error_code: TeamsLockedError.MENSAJE,
+}
 
 
 def frase_del_bloqueo(motivo: MatchGenerationBlock) -> str:

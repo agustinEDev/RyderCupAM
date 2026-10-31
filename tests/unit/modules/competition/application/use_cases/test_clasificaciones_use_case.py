@@ -32,6 +32,7 @@ from src.modules.competition.domain.entities.golpe_de_partida import GolpeDePart
 from src.modules.competition.domain.entities.round import Round
 from src.modules.competition.domain.value_objects.round_id import RoundId
 from src.modules.competition.domain.value_objects.session_type import SessionType
+from src.modules.competition.domain.value_objects.visibility import Visibility
 from src.modules.competition.infrastructure.persistence.in_memory.in_memory_partida_repository import (
     InMemoryPartidaRepository,
 )
@@ -412,3 +413,48 @@ async def test_dentro_de_una_ryder_si_le_dice_que_no_hay_clasificacion(cual):
 
     with pytest.raises(PartidasError):
         await llamadas[cual]()
+
+
+# --- Sin sesión (release social 3, tabla del 28 oct 2026: L2, L3) ------------------
+
+
+def _publica(escenario) -> None:
+    # Ya con partidas no se edita por la ficha: aquí basta con que lo sea
+    """Hace pública la competición del escenario."""
+    escenario.competicion._visibility = Visibility.PUBLIC
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_l2_sin_sesion_una_publica_se_ve_entera(cual):
+    """L2: sin sesión, una pública se ve igual que desde dentro y sin «mi fila»."""
+    escenario, _, b, _ = await _dos_franjas()
+    _publica(escenario)
+
+    visitante = await _las_tres(escenario, _Eventos())[cual](None, visitante=True)
+    dentro = await _las_tres(escenario, _Eventos())[cual](b)
+
+    assert [r.name for r in visitante.rows] == [r.name for r in dentro.rows]
+    assert visitante.me is None
+
+
+@pytest.mark.parametrize("cual", ["franja", "general", "scratch"])
+async def test_l3_sin_sesion_una_privada_no_aunque_haya_llave(cual):
+    """L3: sin sesión, una privada no se ve, aunque haya un amigo dentro."""
+    escenario, a, _, _ = await _dos_franjas()
+
+    with pytest.raises(NoPuedeVerloError):
+        await _las_tres(escenario, _Eventos(a))[cual](None, visitante=True)
+
+
+# En el scratch de este montaje no sale nadie todavía: con las otras dos basta
+@pytest.mark.parametrize("cual", ["franja", "general"])
+async def test_sin_sesion_sin_id_ni_genero_de_barras(cual):
+    """/code-review (28 oct 2026): a un visitante, nombre, hándicap y resultado."""
+    escenario, _, _, _ = await _dos_franjas()
+    _publica(escenario)
+
+    tabla = await _las_tres(escenario, _Eventos())[cual](None, visitante=True)
+
+    assert tabla.rows
+    assert all(r.user_id is None and r.tee_gender is None for r in tabla.rows)
+    assert all(r.name for r in tabla.rows)

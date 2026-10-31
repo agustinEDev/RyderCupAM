@@ -180,6 +180,8 @@ class _Salidas(CompetitionActivityPublisherInterface):
     reopened = made_private = deleted = round_deleted = _nada  # type: ignore[assignment]
     # De la otra rama (revision social, 22 oct): invitaciones respondidas o cerradas solas
     invitation_answered = invitations_closed = _nada  # type: ignore[assignment]
+    # De la inscripcion directa (28 oct 2026)
+    joined = placed_from_waiting_list = no_place = window_removed = _nada  # type: ignore[assignment]
 
 
 class _Roto(_Salidas):
@@ -684,20 +686,25 @@ class TestRevisionFinalSoloBugs:
 
     async def test_a_withdrawn_ryder_player_does_not_get_his_match_back(self):
         """
-        Se da de baja con los partidos ya hechos: sigue en su partido, pero
+        Se dio de baja con los partidos ya hechos: sigue en su partido, pero
         reasignar otro de la sesion no le devuelve el «ya tienes partido».
+
+        Desde el 29 oct 2026 nadie sale con los equipos formados, pero una baja
+        de antes puede estar en la base: se monta como la dejaba la retirada.
         """
         ryder = await _Ryder(MatchFormat.SINGLES, 3).guardar()
         (a1, a2, a3), (b1, b2, _) = ryder.equipo_a, ryder.equipo_b
         actividad, social_uow = _actividad_de_verdad(ryder.uow)
         await ryder.generar(actividad, emparejamientos=[([a1], [b1]), ([a2], [b2])])
         _, segundo = await ryder.partidos()
-        (inscripcion,) = await ryder.uow.enrollments.find_by_user_ids_and_competition(
-            [a1], ryder.competicion.id
-        )
-        await WithdrawEnrollmentUseCase(ryder.uow, actividad=actividad).execute(
-            WithdrawEnrollmentRequestDTO(enrollment_id=inscripcion.id.value), a1
-        )
+        async with ryder.uow:
+            (inscripcion,) = await ryder.uow.enrollments.find_by_user_ids_and_competition(
+                [a1], ryder.competicion.id
+            )
+            inscripcion.withdraw()
+            await ryder.uow.enrollments.update(inscripcion)
+            await ryder.uow.commit()
+        await actividad.left(inscripcion.competition_id, a1)
         assert a1 not in await _publicados(social_uow, [a1])
 
         await ReassignMatchPlayersUseCase(

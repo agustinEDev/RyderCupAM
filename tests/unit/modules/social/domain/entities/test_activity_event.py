@@ -229,4 +229,9 @@ class TestTipos:
             "TEE_TIME_ASSIGNED",
             # «El organizador te ha quitado» (N1, release social 2, 27 oct 2026)
             "ENROLLMENT_REMOVED",
+            # Inscripcion directa en las publicas (release social 3, 28 oct 2026)
+            "PLAYER_JOINED",
+            "PLACE_FROM_WAITING_LIST",
+            "ENROLLMENT_NO_PLACE",
+            "TEE_WINDOW_REMOVED",
         }

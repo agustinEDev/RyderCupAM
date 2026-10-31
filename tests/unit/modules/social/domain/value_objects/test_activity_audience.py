@@ -64,6 +64,11 @@ SOLO_EL_AUTOR = [
     ActivityEventType.TEE_TIME_ASSIGNED,
     # N1 (release social 2): «el organizador te ha quitado», solo tuyo
     ActivityEventType.ENROLLMENT_REMOVED,
+    # Inscripcion directa (28 oct 2026): cada uno, el suyo
+    ActivityEventType.PLAYER_JOINED,
+    ActivityEventType.PLACE_FROM_WAITING_LIST,
+    ActivityEventType.ENROLLMENT_NO_PLACE,
+    ActivityEventType.TEE_WINDOW_REMOVED,
 ]
 
 

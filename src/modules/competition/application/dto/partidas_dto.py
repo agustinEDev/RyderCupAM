@@ -282,7 +282,9 @@ class StandingRowDTO(BaseModel):
 
     position: int | None = Field(..., description="null sin puesto: sin empezar, NR o NP.")
     tied: bool = Field(..., description="Comparte puesto («T3»): no hay desempate automático.")
-    user_id: UUID
+    user_id: UUID | None = Field(
+        ..., description="null para un visitante sin sesión (release social 3)."
+    )
     name: str
     category: int | None
     handicap: Decimal
@@ -302,7 +304,10 @@ class StandingRowDTO(BaseModel):
     status: str = Field(..., description="CLASIFICADO, SIN_EMPEZAR, NR o NP.")
     tee_gender: str | None = Field(
         None,
-        description="El de sus barras (MALE o FEMALE): para «No presentada», «Retirada».",
+        description=(
+            "El de sus barras (MALE o FEMALE): para «No presentada», «Retirada». null para "
+            "un visitante sin sesión."
+        ),
     )
 
 

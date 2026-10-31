@@ -106,6 +106,16 @@ class UpdateRoundUseCase:
     async def execute(
         self, request: UpdateRoundRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateRoundResponseDTO:
+        """
+        Edita una sesión: fecha, campo, formato o su hoja de salidas.
+
+        Si la franja crece, sus plazas nuevas son para los que esperan, y a cada uno
+        se le avisa (A3, 28 oct 2026).
+
+        Raises:
+            RoundNotFoundError, CompetitionNotFoundError, NotCompetitionCreatorError,
+            RoundNotModifiableError y los de la hoja de salidas
+        """
         async with self._uow:
             # 1. Buscar la ronda
             round_id = RoundId(request.round_id)
@@ -139,14 +149,7 @@ class UpdateRoundUseCase:
             comprobar_agenda(competition)
 
             # 5. Verificar campo de golf si se cambia
-            golf_course_id = None
-            if request.golf_course_id:
-                golf_course_id = GolfCourseId(request.golf_course_id)
-                if not competition.has_golf_course(golf_course_id):
-                    raise GolfCourseNotInCompetitionError(
-                        f"El campo de golf {request.golf_course_id} no está "
-                        f"asociado a la competición"
-                    )
+            golf_course_id = self._campo_nuevo(competition, request)
 
             # 6. Verificar sesión duplicada si se cambia fecha o tipo
             # Dentro del torneo, como al crearla: con la agenda abierta desde el
@@ -234,12 +237,9 @@ class UpdateRoundUseCase:
             await self._uow.rounds.update(round_entity)
             # Si la franja creció, sus nuevas plazas para los que esperan (#251); si
             # no hay sitio libre o no es una franja, no hace nada
-            await self._listas_al_dia(competition, round_entity, request)
+            asignadas = await self._listas_al_dia(competition, round_entity, request)
 
-        # Solo a quien le cambia la hora o el dia (G3)
-        await self._actividad.salidas_cambiadas(
-            competition, round_entity.id, antes, de_las_partidas(round_entity, partidas)
-        )
+        await self._avisar(competition, round_entity, antes, partidas, asignadas)
 
         return UpdateRoundResponseDTO(
             id=round_entity.id.value,
@@ -360,9 +360,44 @@ class UpdateRoundUseCase:
             )
         return hoja
 
+    @staticmethod
+    def _campo_nuevo(
+        competition: Competition, request: UpdateRoundRequestDTO
+    ) -> GolfCourseId | None:
+        """
+        El campo al que se cambia, si se cambia.
+
+        Raises:
+            GolfCourseNotInCompetitionError: Si no es uno de los de la competición
+        """
+        if not request.golf_course_id:
+            return None
+        golf_course_id = GolfCourseId(request.golf_course_id)
+        if not competition.has_golf_course(golf_course_id):
+            raise GolfCourseNotInCompetitionError(
+                f"El campo de golf {request.golf_course_id} no está asociado a la competición"
+            )
+        return golf_course_id
+
+    async def _avisar(
+        self,
+        competition: Competition,
+        round_entity: Round,
+        antes: dict,
+        partidas: list[Partida],
+        asignadas: list[tuple[Round, UserId]],
+    ) -> None:
+        """Ya guardado, lo que se cuenta en Actividad."""
+        # Solo a quien le cambia la hora o el dia (G3)
+        await self._actividad.salidas_cambiadas(
+            competition, round_entity.id, antes, de_las_partidas(round_entity, partidas)
+        )
+        # Y a quien la lista dio una de las plazas nuevas (A3)
+        await self._actividad.desde_la_espera(competition, asignadas)
+
     async def _listas_al_dia(
         self, competition: Competition, round_entity: Round, request: UpdateRoundRequestDTO
-    ) -> None:
+    ) -> list[tuple[Round, UserId]]:
         """
         Las plazas que haya ahora libres, para los que esperan (#251); y si la
         franja cambió de día, cambia qué días juega cada uno: listas al día.
@@ -372,3 +407,4 @@ class UpdateRoundUseCase:
             await esperas.rellenar(competition, round_entity.id, datetime.now(UTC))
         if request.round_date:
             await esperas.limpiar(competition)
+        return esperas.asignadas
