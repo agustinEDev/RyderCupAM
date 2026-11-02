@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.44.0] - 2026-11-02
+
+**Solo dependencias.** Se actualizan las librerías del servidor; no cambia
+ningún contrato ni hay migraciones. Va con el frontend **2.58.0**.
+
+### Changed
+
+- **Dependencias** (#700): FastAPI 0.143.3 → 0.161.1, Starlette 1.8.0 →
+  1.9.0, SQLAlchemy 2.1.5 → 2.1.6, Alembic 1.20.0 → 1.20.1, sentry-sdk
+  2.72.0 → 2.73.0, setuptools 84.1.0 → 84.2.1, zipp 4.1.1 → 4.1.2 y ruff
+  0.17.1 → 0.17.2. Revisados los cambios incompatibles de FastAPI 0.145–0.160:
+  ninguno nos afecta.
+
 ## [2.43.0] - 2026-10-31
 
 **Release social 3: entrar directamente y equipos que no se mueven.** En una
