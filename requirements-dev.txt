@@ -18,7 +18,7 @@
 # Versión EXACTA: el CI la usa como check bloqueante, y con un rango cada release
 # nueva de ruff puede traer reglas y poner el CI en rojo sin tocar código (la 0.16
 # añadió PLR0917: 143 avisos). Subirla es una PR propia, que Dependabot propondrá.
-ruff==0.17.1
+ruff==0.17.2
 
 # import-linter - Contratos de arquitectura (capas, dominio puro, módulos), ver .importlinter
 # Versión exacta: el workflow "Architecture & API Contract" instala la que diga esta línea
@@ -35,7 +35,7 @@ import-linter==2.15
 mypy==2.4.0
 
 # Tipos stub para SQLAlchemy (necesario para mypy con SQLAlchemy)
-sqlalchemy[mypy]>=2.1.5
+sqlalchemy[mypy]>=2.1.6
 
 # ================================
 # SEGURIDAD
@@ -72,7 +72,7 @@ msgpack==1.2.3
 # zipp - Pathlib-compatible Zipfile object wrapper (dependencia transitiva de importlib-metadata,
 # que a su vez entra con las herramientas de auditoría: ya no existe en producción)
 # Fijada explícitamente para resolver CVE-2024-5569 (Infinite loop DoS via Path module)
-zipp==4.1.1
+zipp==4.1.2
 
 # ================================
 # TESTING
