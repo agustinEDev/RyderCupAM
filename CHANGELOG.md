@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.45.0] - 2026-11-02
+
+**Solo dependencias.** Sin cambios de contrato ni migraciones. Va con el
+frontend **2.59.0**.
+
+### Changed
+
+- **Dependencias** (#710): FastAPI 0.161.1 → 0.162.0, Starlette 1.9.0 →
+  1.10.0 y tzdata 2026.6; en desarrollo, pytest 9.2, pytest-asyncio 1.4.1,
+  mypy 2.4.1, ruff 0.17.3 y cyclonedx-bom ≥ 7.6. Revisados los cambios
+  incompatibles (booleanos omitidos en formularios en FastAPI; multidicts,
+  `FormMessage`, `Config` y rangos de `FileResponse` en Starlette): ninguno
+  nos afecta. FastAPI trae ahora `opentelemetry-api` como dependencia.
+
 ## [2.44.0] - 2026-11-02
 
 **Solo dependencias.** Se actualizan las librerías del servidor; no cambia
