@@ -13,6 +13,8 @@ La tabla aprobada por Agustin:
   invitado» (nombre nulo).
 - K5: sin acceso, 403.
 - K6: los participantes, igual que siempre.
+- G5 (BE #717): el nombre y los apellidos del invitado, por separado, siguen la
+  misma regla que su nombre: quien no jugo no los ve; quien jugo, si.
 """
 
 from uuid import uuid4
@@ -245,6 +247,14 @@ class TestNamesFollowTheActivityRule:
         invitado = next(p for p in detalle.participants if p.is_guest)
         assert invitado.name is None
 
+    async def test_g5_guest_comes_without_first_or_last_name_either(self, escena):
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
+
+        detalle = await escena.ver()
+
+        invitado = next(p for p in detalle.participants if p.is_guest)
+        assert (invitado.first_name, invitado.last_name) == (None, None)
+
     async def test_friend_of_one_but_blocked_with_another_hides_that_one(self, escena):
         await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
         await _block(escena.social_uow, escena.carlos.id, escena.viewer.id)
@@ -387,6 +397,7 @@ class TestParticipantsKeepTheirView:
         assert escena.nombre_de(detalle, escena.carlos.id.value) == escena.carlos.display_name
         invitado = next(p for p in detalle.participants if p.is_guest)
         assert invitado.name == "Gonzalo Invitado"
+        assert (invitado.first_name, invitado.last_name) == ("Gonzalo", "Invitado")
 
     async def test_the_participant_view_matches_the_regular_detail(self, escena):
         regular = await GetQuickMatchUseCase(

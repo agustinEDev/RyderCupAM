@@ -69,6 +69,10 @@ class QuickMatchDTOMapper:
                     participant_id=p.participant_id.value,
                     user_id=p.user_id.value if p.user_id else None,
                     name=name,
+                    # Solo los lleva un invitado: el dominio no deja ponérselos
+                    # a un registrado (BE #717)
+                    first_name=p.first_name,
+                    last_name=p.last_name,
                     handicap=handicap,
                     team=p.team,
                     is_guest=p.is_guest,
