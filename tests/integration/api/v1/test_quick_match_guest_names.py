@@ -33,6 +33,7 @@ COMPUESTO = {"first_name": "  María José ", "last_name": " de la Fuente  "}
 
 
 async def _partida_con_invitados(client: AsyncClient):
+    """Crea e inicia una partida con dos invitados y un amigo, y la devuelve."""
     creator, friend, course_id = await _escenario(client)
     response = await client.post(
         "/api/v1/quick-matches/start",
@@ -49,6 +50,7 @@ async def _partida_con_invitados(client: AsyncClient):
 
 
 def _nombres(participants: list) -> list:
+    """De cada participante: si es invitado, su nombre, sus apellidos y su nombre completo."""
     return [(p["is_guest"], p["first_name"], p["last_name"], p["name"]) for p in participants]
 
 
@@ -62,6 +64,7 @@ ESPERADOS = [
 
 
 def _compara(participants: list) -> None:
+    """Los nombres de la respuesta, en su orden, son los esperados (G1-G3)."""
     assert _nombres(participants) == ESPERADOS
 
 
