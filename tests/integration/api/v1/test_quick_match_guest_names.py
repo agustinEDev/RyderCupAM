@@ -11,11 +11,12 @@ apellidos. Antes solo llegaba `name` («Pepe Pérez»), y partirlo era adivinar
     ----|---------------------------------------------|---------------------------------
     G1  invitado                                    | first_name y last_name; name igual
     G2  registrado                                  | first_name y last_name a null
-    G3  invitado con nombres compuestos             | tal cual, sin partir ni recortar
-    G4  los endpoints que devuelven la partida      | todos traen los dos campos
-        | (POST /start, GET /{id}, GET /me)           |
+    G3  invitado con nombres compuestos             | sin partir (los espacios de los
+        |                                             | extremos ya los quita el dominio)
+    G4  POST /start, GET /{id} y GET /me            | los tres traen los dos campos (el
+        |                                             | resto sale del mismo mapper)
     G5  vista compartida (quien no jugó)            | sin nombre ni apellidos del invitado
-        | (en test_get_shared_quick_match_use_case)   |
+        | (caso de uso y endpoint /shared)            |
 """
 
 import pytest

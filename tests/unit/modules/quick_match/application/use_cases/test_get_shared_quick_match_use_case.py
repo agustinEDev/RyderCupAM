@@ -247,6 +247,26 @@ class TestNamesFollowTheActivityRule:
         invitado = next(p for p in detalle.participants if p.is_guest)
         assert invitado.name is None
 
+    async def test_g5_a_hidden_guest_carries_nothing_personal(self, escena):
+        # Lista blanca: un campo personal nuevo en el participante que no se
+        # tape en `_hide_names` hace fallar esto, en vez de escaparse (revisor)
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
+        no_personales = {
+            "participant_id",
+            "user_id",
+            "handicap",
+            "team",
+            "is_guest",
+            "tee_color",
+            "tee_gender",
+        }
+
+        detalle = await escena.ver()
+
+        invitado = next(p for p in detalle.participants if p.is_guest)
+        personales = {k: v for k, v in invitado.model_dump().items() if k not in no_personales}
+        assert personales and all(v is None for v in personales.values()), personales
+
     async def test_g5_guest_comes_without_first_or_last_name_either(self, escena):
         await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
 
