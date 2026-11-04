@@ -22,6 +22,9 @@ double-submit de siempre.
   30 A con un JWT de acceso falso | el de B                    | no cuenta: si la de refresh
                                                                   es de A, 403 CSRF
   31 A / ninguna                  | con caracteres no ASCII    | 403 CSRF, no un 500 (revisor)
+  32 acceso de B + refresh de A   | el de B                    | 403 CSRF: una cookie de acceso
+                                                                  plantada no suplanta la sesión
+                                                                  (code-review)
 """
 
 import os
@@ -208,3 +211,11 @@ async def test_31_una_cabecera_no_ascii_es_un_403_no_un_500(client: AsyncClient,
     )
 
     assert _es_rechazo_csrf(respuesta)
+
+
+async def test_32_un_acceso_de_otro_usuario_junto_al_refresh_propio_se_rechaza(dos):
+    client, _, b = dos
+    # La sesión es de A (su refresh); alguien planta el acceso de B y el token de B
+    client.cookies.set("access_token", b["access_token"])
+
+    assert _es_rechazo_csrf(await _toca_el_perfil(client, b["csrf_token"]))

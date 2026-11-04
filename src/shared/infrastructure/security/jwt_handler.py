@@ -235,3 +235,28 @@ def verify_refresh_token(token: str) -> dict | None:
     """
     service = JWTTokenService()
     return service.verify_refresh_token(token)
+
+
+def subject_ignoring_expiry(token: str) -> str | None:
+    """
+    El `sub` de un JWT con la firma de esta API, aunque haya caducado.
+
+    Para saber de quién es una sesión sin autenticarla (el CSRF atado al usuario,
+    BE #724): un acceso caducado sigue diciendo de quién es, y la petición ya
+    dará su 401 donde toque. La firma y el algoritmo SÍ se comprueban, con las
+    mismas reglas que `verify_access_token`.
+
+    Returns:
+        El `sub`, o None si el token no es de esta API o no lo trae.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": False},
+        )
+    except InvalidTokenError:
+        return None
+    sub = payload.get("sub")
+    return sub if isinstance(sub, str) and sub else None

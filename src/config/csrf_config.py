@@ -105,7 +105,8 @@ def es_ruta_exenta(path: str) -> bool:
     `/api/v1/auth/google`, y cualquier ruta nueva que empezara igual quedaba
     exenta sin que nadie lo decidiera.
     """
-    return path in EXEMPT_PATHS
+    # Sin la barra final: `/login/` es `/login` (code-review)
+    return (path.rstrip("/") or "/") in EXEMPT_PATHS
 
 
 # Exempt methods (métodos seguros según RFC 7231)

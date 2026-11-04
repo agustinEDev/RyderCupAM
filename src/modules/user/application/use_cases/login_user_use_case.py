@@ -119,7 +119,9 @@ class LoginUserUseCase:
         """
         async with self._uow:
             bloqueado = await self._uow.users.find_by_id_for_update(user.id)
-            if bloqueado is not None:
+            # Sobre una que otro acaba de bloquear no se cuenta: alargaría el
+            # bloqueo y repetiría su evento por cada intento en vuelo (code-review)
+            if bloqueado is not None and not bloqueado.is_locked():
                 bloqueado.record_failed_login()
                 await self._uow.users.save(bloqueado)
             # Commit automático al salir del contexto
@@ -161,6 +163,11 @@ class LoginUserUseCase:
         """
         async with self._uow:
             releido = await self._uow.users.find_by_id_for_update(user.id)
+            # El cero, DENTRO de la transacción bloqueada: guardado más tarde,
+            # pisaba los fallos que llegaran entre medias (code-review)
+            if releido is not None and not releido.is_locked():
+                releido.reset_failed_attempts()
+                await self._uow.users.save(releido)
         if releido is None:
             self._apunta_que_no_existe(request, ip_address, user_agent)
             return None
@@ -231,8 +238,8 @@ class LoginUserUseCase:
             return None
         user = releido
 
-        # Account Lockout (v1.13.0): Resetear intentos fallidos tras login exitoso
-        user.reset_failed_attempts()
+        # Account Lockout (v1.13.0): los intentos fallidos ya se pusieron a cero
+        # en `_releido_para_entrar`, con la fila bloqueada
 
         # Admin Panel (v2.4.0): Verificar si la cuenta fue desactivada por un admin.
         # Se comprueba DESPUES de validar la contraseña para no filtrar el estado

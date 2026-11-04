@@ -17,6 +17,8 @@ una sola contraseña.
   5  ninguna contraseña entra por el relleno     | siempre False, también la vacía
   6  email inexistente                           | por `run_bcrypt` (#272), fuera
                                                    del bucle de eventos
+  7  cuenta solo de Google (sin contraseña)      | bcrypt UNA vez también: si no,
+                                                   se delata por tiempo (code-review)
 """
 
 from unittest.mock import AsyncMock
@@ -34,6 +36,7 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
+from tests.unit.modules.user.application.use_cases.test_login_user_use_case import _rebuild_user
 
 pytestmark = pytest.mark.asyncio
 
@@ -96,7 +99,7 @@ async def test_2_una_contrasena_mala_tambien_una_vez(caso_de_uso, cuenta_checkpw
 
 def test_3_el_relleno_tiene_el_mismo_coste_que_los_hashes_reales():
     real = Password.from_plain_text("V@l1dP@ss123!").hashed_value
-    relleno = Password.hash_de_relleno()
+    relleno = Password._relleno()
 
     # `$2b$<coste>$...`: el coste es el tercer campo
     assert relleno.split("$")[2] == real.split("$")[2]
@@ -107,7 +110,7 @@ def test_3b_en_produccion_el_coste_es_12(monkeypatch):
     monkeypatch.delenv("TESTING", raising=False)
     Password._relleno.cache_clear()
     try:
-        assert Password.hash_de_relleno().split("$")[2] == "12"
+        assert Password._relleno().split("$")[2] == "12"
     finally:
         Password._relleno.cache_clear()
 
@@ -149,3 +152,23 @@ async def test_6_el_relleno_va_por_run_bcrypt(caso_de_uso, monkeypatch):
     await login.execute(LoginRequestDTO(email="nadie@example.com", password="Lo-Que-Sea-1"))
 
     assert pasadas == [Password.verifica_contra_el_relleno]
+
+
+async def test_7_una_cuenta_solo_de_google_tambien_paga_bcrypt(caso_de_uso, cuenta_checkpw):
+    uow, login = caso_de_uso
+    usuario = User.create(
+        first_name="Ana",
+        last_name="Google",
+        email_str="google@example.com",
+        plain_password="V@l1dP@ss123!",
+    )
+    sin_contrasena = _rebuild_user(usuario, password=None)
+    async with uow:
+        await uow.users.save(sin_contrasena)
+
+    respuesta = await login.execute(
+        LoginRequestDTO(email="google@example.com", password="Lo-Que-Sea-1")
+    )
+
+    assert respuesta is None
+    assert len(cuenta_checkpw) == 1

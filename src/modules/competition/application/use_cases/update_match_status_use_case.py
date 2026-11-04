@@ -95,8 +95,8 @@ class UpdateMatchStatusUseCase:
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
 
-        # La ronda y la competicion, antes del bloqueo: solo sirven para
-        # autorizar. Lo que cambia de estado se decide sobre el partido releido
+        # La ronda y la competicion, antes del bloqueo, para autorizar. Lo que
+        # cambia de estado se decide sobre lo releido tras el bloqueo
         round_entity = await self._uow.rounds.find_by_id(match.round_id)
         if not round_entity:
             raise RoundNotFoundError("La ronda asociada no existe")
@@ -121,6 +121,12 @@ class UpdateMatchStatusUseCase:
         match = await self._uow.matches.find_by_id_for_update(match_id)
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
+        # Y la ronda, releida FRESCA: START y COMPLETE pueden cambiarla y se
+        # guarda. Sin bloquearla, como antes: bloquear ronda tras partido abriria
+        # un interbloqueo con quien bloquea primero la ronda (code-review)
+        round_entity = await self._uow.rounds.find_by_id_fresh(match.round_id)
+        if not round_entity:
+            raise RoundNotFoundError("La ronda asociada no existe")
 
         return match, round_entity, competition
 

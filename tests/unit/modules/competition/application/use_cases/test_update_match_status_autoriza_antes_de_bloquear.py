@@ -21,6 +21,10 @@ lo releído, o la carrera vuelve por el hueco entre las dos lecturas.
   6  entre leer y bloquear, otro lo abrió         | SÍ      | se decide con lo releído:
                                                              START ya no vale
   7  entre leer y bloquear, se borró              | SÍ      | MatchNotFoundError
+  8  la ronda                                     | SÍ      | se relee FRESCA tras el bloqueo
+                                                             y es la que se guarda: la leída
+                                                             para autorizar pudo cambiar
+                                                             (code-review)
 """
 
 from copy import deepcopy
@@ -216,3 +220,33 @@ async def test_7_si_se_borro_entre_medias_no_existe():
 
     with pytest.raises(MatchNotFoundError):
         await UpdateMatchStatusUseCase(uow).execute(_start(partido.id), CREADOR)
+
+
+async def test_8_la_ronda_se_relee_fresca_tras_el_bloqueo_y_es_la_que_se_usa():
+    uow, partido = await _escena()
+    registro = []
+    _espia_el_bloqueo(uow, registro)
+    original = uow.rounds.find_by_id_fresh
+    frescas = []
+
+    async def fresca(round_id):
+        registro.append("ronda fresca")
+        ronda = deepcopy(await original(round_id))
+        frescas.append(ronda)
+        return ronda
+
+    uow.rounds.find_by_id_fresh = fresca
+    guardadas = []
+    actualiza = uow.rounds.update
+
+    async def espia_update(ronda):
+        guardadas.append(ronda)
+        return await actualiza(ronda)
+
+    uow.rounds.update = espia_update
+
+    await UpdateMatchStatusUseCase(uow).execute(_start(partido.id), CREADOR)
+
+    assert registro.index("bloqueo") < registro.index("ronda fresca")
+    # Si el START cambia la ronda, se guarda la releída, no la de autorizar
+    assert all(r is frescas[0] for r in guardadas)

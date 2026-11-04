@@ -21,10 +21,17 @@ releído. El bcrypt va antes y fuera de esa transacción: no la alarga 200 ms.
   6  contraseña buena, pero otro la acaba de      | AccountLockedException: una
      bloquear (lo releído está bloqueado)          | ráfaga no cuela la buena (revisor)
   7  contraseña buena y el usuario desaparece     | None, sin error
+  8  contraseña mala sobre una que otro acaba de   | se rechaza SIN contar: ni alarga
+     bloquear                                      | el bloqueo ni repite el evento
+  9  contraseña buena                              | el cero se guarda DENTRO de la
+                                                   transacción bloqueada, antes de
+                                                   seguir con el dispositivo
   —  N intentos a la vez de verdad               | test de integración, aparte
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -155,3 +162,47 @@ async def test_7_con_la_buena_y_el_usuario_desaparecido_none(escena):
     uow.users.find_by_id_for_update = borrado
 
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA)) is None
+
+
+async def test_8_un_fallo_sobre_una_ya_bloqueada_no_cuenta(escena):
+    uow, usuario, login = escena
+    bloqueada = _rebuild_user(usuario, failed_login_attempts=9)
+    bloqueada.record_failed_login()
+    hasta = bloqueada.locked_until
+    eventos = len(bloqueada.get_domain_events())
+
+    async def releida(_user_id):
+        return bloqueada
+
+    uow.users.find_by_id_for_update = releida
+
+    with pytest.raises(AccountLockedException):
+        await login.execute(LoginRequestDTO(email=EMAIL, password=MALA))
+
+    assert bloqueada.failed_login_attempts == 10
+    assert bloqueada.locked_until == hasta
+    assert len(bloqueada.get_domain_events()) == eventos
+
+
+async def test_9_el_cero_se_guarda_en_la_transaccion_bloqueada(escena):
+    uow, usuario, login = escena
+    registro = []
+    _releido_con(uow, usuario, intentos=3, registro=registro)
+    guardar = uow.users.save
+
+    async def espia_save(user):
+        registro.append(("save", user.failed_login_attempts))
+        return await guardar(user)
+
+    async def dispositivo(*_args, **_kwargs):
+        registro.append("dispositivo")
+        return SimpleNamespace(device_id=str(uuid4()), set_device_cookie=False)
+
+    uow.users.save = espia_save
+    login._register_device_use_case.execute = dispositivo
+
+    await login.execute(
+        LoginRequestDTO(email=EMAIL, password=BUENA, user_agent="Mozilla/5.0 pytest")
+    )
+
+    assert registro.index("bloqueo") < registro.index(("save", 0)) < registro.index("dispositivo")

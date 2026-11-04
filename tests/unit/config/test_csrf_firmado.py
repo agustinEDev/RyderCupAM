@@ -119,6 +119,10 @@ def test_19b_la_firma_es_hmac_sha256_del_usuario_y_el_aleatorio():
         ("/api/v1/auth/google/link", False),
         ("/api/v1/auth/google/unlink", False),
         ("/api/v1/users/profile", False),
+        # Con la barra final, lo mismo que sin ella (code-review)
+        ("/api/v1/auth/login/", True),
+        ("/api/v1/auth/google/link/", False),
+        ("/", False),
     ],
 )
 def test_20_las_rutas_exentas_se_comparan_exactas(ruta, exenta):

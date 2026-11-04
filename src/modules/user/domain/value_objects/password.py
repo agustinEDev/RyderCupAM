@@ -226,11 +226,6 @@ class Password:
         return Password._hash_password(secrets.token_urlsafe(32))
 
     @classmethod
-    def hash_de_relleno(cls) -> str:
-        """El hash de relleno: para comprobar su coste sin exponer la caché."""
-        return cls._relleno()
-
-    @classmethod
     def verifica_contra_el_relleno(cls, plain_password: str) -> bool:
         """
         Paga el mismo bcrypt que una contraseña de verdad y dice siempre que no
