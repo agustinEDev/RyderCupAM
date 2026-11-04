@@ -656,6 +656,7 @@ class TestListMyQuickMatchesByCourse:
 
         assert response.status_code == 200
         assert response.json()["total_count"] == 2
+        assert len(response.json()["quick_matches"]) == 2
 
     @pytest.mark.asyncio
     async def test_f2_with_course_lists_only_that_course(self, client: AsyncClient):

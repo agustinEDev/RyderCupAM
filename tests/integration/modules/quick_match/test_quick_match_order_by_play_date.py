@@ -74,3 +74,34 @@ async def test_f2_by_course_only_that_course_latest_first(db_session, jugadores,
 
     assert [m.id for m in en_el_campo] == [nueva.id, antigua.id]
     assert await repo.count_for_user(yo, golf_course_id=campo.id) == 2
+
+
+async def test_f2_by_course_counts_beyond_the_page(db_session, jugadores, campo):  # noqa: F811
+    """El total es el del campo, no el de la pagina (revisor)."""
+    yo = jugadores[0]
+    for _ in range(3):
+        await _rapida(db_session, campo, yo, [jugadores[1]])
+    repo = SQLAlchemyQuickMatchRepository(db_session)
+
+    pagina = await repo.list_for_user(yo, golf_course_id=campo.id, limit=1)
+
+    assert len(pagina) == 1
+    assert await repo.count_for_user(yo, golf_course_id=campo.id) == 3
+
+
+async def test_f2_by_course_keeps_the_other_filters(db_session, jugadores, campo):  # noqa: F811
+    """Con el campo siguen mandando el estado, las ocultas y ser participante (revisor)."""
+    yo, otro = jugadores[0], jugadores[1]
+    tercero = jugadores[2]
+    jugada = await _rapida(db_session, campo, yo, [otro])
+    await _rapida(db_session, campo, yo, [otro], terminar=False)
+    await _rapida(db_session, campo, yo, [otro], oculta_por=yo)
+    await _rapida(db_session, campo, otro, [tercero])
+    repo = SQLAlchemyQuickMatchRepository(db_session)
+
+    terminadas = await repo.list_for_user(yo, status=jugada.status, golf_course_id=campo.id)
+
+    assert [m.id for m in terminadas] == [jugada.id]
+    assert await repo.count_for_user(yo, status=jugada.status, golf_course_id=campo.id) == 1
+    # Sin estado: la oculta y la ajena siguen fuera
+    assert await repo.count_for_user(yo, golf_course_id=campo.id) == 2
