@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.46.0] - 2026-11-04
+
+Cambio **aditivo** del contrato, sin migraciones. Va con el frontend
+**2.62.0** (repetir partida rápida y el paso 1 simplificado).
+
+### Added
+
+- **Nombre y apellidos del invitado por separado** (#717, #718): el
+  participante de una partida rápida trae `first_name` y `last_name` (los del
+  invitado; `null` en los registrados) en las respuestas de iniciar, detalle y
+  lista. `name` no cambia. En la vista compartida, quien no jugó no recibe
+  ninguno de los dos, como con `name`. Un test de lista blanca impide que un
+  campo personal nuevo se filtre en un participante oculto.
+
 ## [2.45.0] - 2026-11-02
 
 **Solo dependencias.** Sin cambios de contrato ni migraciones. Va con el
