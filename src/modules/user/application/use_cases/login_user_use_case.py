@@ -145,13 +145,29 @@ class LoginUserUseCase:
 
         # Verificar contraseña
         if not await run_bcrypt(user.verify_password, request.password):
-            # Account Lockout (v1.13.0): Registrar intento fallido
-            user.record_failed_login()
-
-            # Persistir cambios (incremento de failed_login_attempts)
+            # Account Lockout (v1.13.0): Registrar intento fallido, sobre el
+            # usuario RELEÍDO con la fila bloqueada (BE #282). Sin el bloqueo,
+            # dos intentos a la vez leían N y escribían N+1, y el bloqueo de los
+            # 10 no saltaba nunca. El bcrypt ya pasó: la transacción es corta
             async with self._uow:
-                await self._uow.users.save(user)
+                bloqueado = await self._uow.users.find_by_id_for_update(user.id)
+                if bloqueado is not None:
+                    bloqueado.record_failed_login()
+                    await self._uow.users.save(bloqueado)
                 # Commit automático al salir del contexto
+
+            if bloqueado is None:
+                # Se borró entre la lectura y el bloqueo: como un email que no existe
+                security_logger.log_login_attempt(
+                    user_id=None,
+                    email=request.email,
+                    success=False,
+                    failure_reason="User not found",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+                return None
+            user = bloqueado
 
             # Si la cuenta quedó bloqueada en este intento, lanzar excepción
             if user.is_locked():
