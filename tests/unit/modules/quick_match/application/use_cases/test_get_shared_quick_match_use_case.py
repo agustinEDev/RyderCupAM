@@ -13,6 +13,8 @@ La tabla aprobada por Agustin:
   invitado» (nombre nulo).
 - K5: sin acceso, 403.
 - K6: los participantes, igual que siempre.
+- G5 (BE #717): el nombre y los apellidos del invitado, por separado, siguen la
+  misma regla que su nombre: quien no jugo no los ve; quien jugo, si.
 """
 
 from uuid import uuid4
@@ -245,6 +247,36 @@ class TestNamesFollowTheActivityRule:
         invitado = next(p for p in detalle.participants if p.is_guest)
         assert invitado.name is None
 
+    async def test_hidden_participants_carry_no_personal_field_in_the_shared_view(self, escena):
+        """
+        Given: quien mira es amigo de Bea, tiene un bloqueo con Carlos y hay un invitado
+        When: ve la partida compartida
+        Then: el invitado y Carlos (ocultos) no llevan ningun campo personal; solo
+            los de la lista blanca. Un campo personal nuevo que `_hide_names` no
+            tape hace fallar esto, en vez de escaparse (G5, BE #717; revisores)
+        """
+        await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
+        await _block(escena.social_uow, escena.carlos.id, escena.viewer.id)
+        no_personales = {
+            "participant_id",
+            "user_id",
+            "handicap",
+            "team",
+            "is_guest",
+            "tee_color",
+            "tee_gender",
+        }
+
+        detalle = await escena.ver()
+
+        ocultos = [
+            p for p in detalle.participants if p.is_guest or p.user_id == escena.carlos.id.value
+        ]
+        assert len(ocultos) == 2
+        for oculto in ocultos:
+            personales = {k: v for k, v in oculto.model_dump().items() if k not in no_personales}
+            assert personales and all(v is None for v in personales.values()), personales
+
     async def test_friend_of_one_but_blocked_with_another_hides_that_one(self, escena):
         await create_accepted_friendship(escena.social_uow, escena.viewer.id, escena.bea.id)
         await _block(escena.social_uow, escena.carlos.id, escena.viewer.id)
@@ -387,6 +419,7 @@ class TestParticipantsKeepTheirView:
         assert escena.nombre_de(detalle, escena.carlos.id.value) == escena.carlos.display_name
         invitado = next(p for p in detalle.participants if p.is_guest)
         assert invitado.name == "Gonzalo Invitado"
+        assert (invitado.first_name, invitado.last_name) == ("Gonzalo", "Invitado")
 
     async def test_the_participant_view_matches_the_regular_detail(self, escena):
         regular = await GetQuickMatchUseCase(

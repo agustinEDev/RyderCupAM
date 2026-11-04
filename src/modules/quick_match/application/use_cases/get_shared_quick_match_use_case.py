@@ -144,6 +144,8 @@ class GetSharedQuickMatchUseCase:
         for participant in shared.participants:
             if participant.participant_id in nameless:
                 participant.name = None
+                participant.first_name = None
+                participant.last_name = None
         for assignment in shared.scoring_assignments:
             if assignment.scorer_participant_id in nameless:
                 assignment.scorer_name = None

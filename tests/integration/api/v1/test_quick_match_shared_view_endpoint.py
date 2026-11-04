@@ -100,6 +100,9 @@ async def test_a_friend_reads_the_finished_match(client: AsyncClient):
     assert [(h["hole_number"], h["score"]) for h in body["hole_scores"]] == [(1, 4)]
     nombres = {p["is_guest"]: p["name"] for p in body["participants"] if p["name"] or p["is_guest"]}
     assert nombres[True] is None
+    # G5 (BE #717): tampoco su nombre y sus apellidos por separado
+    invitado = next(p for p in body["participants"] if p["is_guest"])
+    assert (invitado["first_name"], invitado["last_name"]) == (None, None)
     ana_dto = next(p for p in body["participants"] if p["user_id"] == ana["user"]["id"])
     assert ana_dto["name"] == "Ana Test"
 
@@ -126,7 +129,9 @@ async def test_a_participant_reads_it_with_every_name(client: AsyncClient):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["viewer_is_participant"] is True
-    assert next(p for p in body["participants"] if p["is_guest"])["name"] == "Jane Doe"
+    invitado = next(p for p in body["participants"] if p["is_guest"])
+    assert invitado["name"] == "Jane Doe"
+    assert (invitado["first_name"], invitado["last_name"]) == ("Jane", "Doe")
 
 
 @pytest.mark.asyncio

@@ -251,6 +251,16 @@ class QuickMatchParticipantDTO(BaseModel):
     participant_id: UUID
     user_id: UUID | None = None
     name: str
+    # Para rellenar el asistente al repetir la partida sin partir `name` a ojo
+    # (BE #717, FE #1021)
+    first_name: str | None = Field(
+        default=None,
+        description="Nombre del invitado, como se creo. Nulo en los registrados.",
+    )
+    last_name: str | None = Field(
+        default=None,
+        description="Apellidos del invitado, como se creo. Nulo en los registrados.",
+    )
     handicap: float | None = None
     team: str | None = None
     is_guest: bool = False
@@ -365,6 +375,14 @@ class SharedQuickMatchParticipantDTO(BaseModel):
     participant_id: UUID
     user_id: UUID | None = None
     name: str | None = None
+    first_name: str | None = Field(
+        default=None,
+        description="Nombre del invitado. Nulo en los registrados y, como `name`, si quien mira no puede verlo.",
+    )
+    last_name: str | None = Field(
+        default=None,
+        description="Apellidos del invitado. Nulo en los registrados y, como `name`, si quien mira no puede verlo.",
+    )
     handicap: float | None = None
     team: str | None = None
     is_guest: bool = False
