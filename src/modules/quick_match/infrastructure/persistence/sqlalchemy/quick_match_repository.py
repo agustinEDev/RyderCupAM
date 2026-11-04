@@ -1,6 +1,6 @@
 """QuickMatch Repository - SQLAlchemy Implementation."""
 
-from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy import ColumnElement, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -86,24 +86,26 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         offset: int = 0,
         golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
-        conditions = self._condiciones_de_mis_partidas(user_id, status, golf_course_id)
+        conditions = self._user_list_conditions(user_id, status, golf_course_id)
 
         stmt = (
             select(QuickMatch)
             .where(and_(*conditions))
-            .order_by(self._played_at().desc())
+            # El id desempata: con la misma hora, el orden no cambia entre
+            # llamadas ni repite o salta filas al paginar (`/code-review`)
+            .order_by(self._played_at().desc(), QuickMatch._id.desc())
             .limit(limit)
             .offset(offset)
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    def _condiciones_de_mis_partidas(
+    def _user_list_conditions(
         self,
         user_id: UserId,
         status: QuickMatchStatus | None,
         golf_course_id: GolfCourseId | None,
-    ) -> list:
+    ) -> list[ColumnElement[bool]]:
         """Las mismas para listar y contar: la pagina y su total no se separan."""
         conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
         if status is not None:
@@ -160,7 +162,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None = None,
         golf_course_id: GolfCourseId | None = None,
     ) -> int:
-        conditions = self._condiciones_de_mis_partidas(user_id, status, golf_course_id)
+        conditions = self._user_list_conditions(user_id, status, golf_course_id)
 
         stmt = select(func.count()).select_from(QuickMatch).where(and_(*conditions))
         result = await self._session.execute(stmt)

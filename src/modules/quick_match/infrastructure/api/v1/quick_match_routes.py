@@ -838,7 +838,7 @@ async def list_my_quick_matches(
         status_filter=status_filter,
         page=page,
         limit=limit,
-        golf_course_id=str(golf_course_id) if golf_course_id else None,
+        golf_course_id=golf_course_id,
     )
 
 

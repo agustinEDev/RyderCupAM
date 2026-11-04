@@ -125,7 +125,7 @@ class TestListMyQuickMatchesUseCase:
             await qm_uow.quick_matches.add(en_otro)
 
         result = await ListMyQuickMatchesUseCase(qm_uow, user_uow).execute(
-            str(me.id.value), golf_course_id=str(campo.value), limit=5
+            str(me.id.value), golf_course_id=campo.value, limit=5
         )
 
         assert [m.id for m in result.quick_matches] == [en_el_campo.id.value]

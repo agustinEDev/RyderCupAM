@@ -36,13 +36,18 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         return self._quick_matches.get(quick_match_id)
 
     def _matches_user(
-        self, qm: QuickMatch, user_id: UserId, status: QuickMatchStatus | None
+        self,
+        qm: QuickMatch,
+        user_id: UserId,
+        status: QuickMatchStatus | None,
+        golf_course_id: GolfCourseId | None = None,
     ) -> bool:
         participant_id = ParticipantId(user_id.value)
         return (
             qm.is_participant(participant_id)
             and not qm.is_hidden_for(participant_id)
             and (status is None or qm.status == status)
+            and (golf_course_id is None or qm.golf_course_id == golf_course_id)
         )
 
     async def list_for_stats(
@@ -83,10 +88,9 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         results = [
             qm
             for qm in self._quick_matches.values()
-            if self._matches_user(qm, user_id, status)
-            and (golf_course_id is None or qm.golf_course_id == golf_course_id)
+            if self._matches_user(qm, user_id, status, golf_course_id)
         ]
-        results.sort(key=lambda x: x.played_at, reverse=True)
+        results.sort(key=lambda x: (x.played_at, str(x.id.value)), reverse=True)
         return results[offset : offset + limit]
 
     async def count_for_user(
@@ -98,8 +102,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         return sum(
             1
             for qm in self._quick_matches.values()
-            if self._matches_user(qm, user_id, status)
-            and (golf_course_id is None or qm.golf_course_id == golf_course_id)
+            if self._matches_user(qm, user_id, status, golf_course_id)
         )
 
     async def count_all(self) -> int:

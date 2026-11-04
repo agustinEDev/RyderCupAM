@@ -30,7 +30,7 @@ class ListMyQuickMatchesUseCase:
         status_filter: str | None = None,
         page: int = 1,
         limit: int = 20,
-        golf_course_id: str | None = None,
+        golf_course_id: UUID | None = None,
     ) -> PaginatedQuickMatchResponseDTO:
         """
         Con `golf_course_id`, solo las de ese campo: el asistente de crear
@@ -39,7 +39,7 @@ class ListMyQuickMatchesUseCase:
         user_id = UserId(user_id_raw)
         offset = (page - 1) * limit
         status_vo = QuickMatchStatus(status_filter) if status_filter else None
-        course_vo = GolfCourseId(UUID(golf_course_id)) if golf_course_id else None
+        course_vo = GolfCourseId(golf_course_id) if golf_course_id else None
 
         async with self._uow:
             quick_matches = await self._uow.quick_matches.list_for_user(

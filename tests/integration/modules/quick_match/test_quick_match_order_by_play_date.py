@@ -105,3 +105,20 @@ async def test_f2_by_course_keeps_the_other_filters(db_session, jugadores, campo
     assert await repo.count_for_user(yo, status=jugada.status, golf_course_id=campo.id) == 1
     # Sin estado: la oculta y la ajena siguen fuera
     assert await repo.count_for_user(yo, golf_course_id=campo.id) == 2
+
+
+async def test_same_play_time_is_broken_by_id(db_session, jugadores, campo):  # noqa: F811
+    """Con la misma hora, el id desempata: el orden no cambia al paginar (`/code-review`)."""
+    yo = jugadores[0]
+    una = await _rapida(db_session, campo, yo, [jugadores[1]])
+    otra = await _rapida(db_session, campo, yo, [jugadores[1]])
+    misma_hora = datetime(2026, 6, 1, 9)
+    await _con_fechas(db_session, una, misma_hora, misma_hora)
+    await _con_fechas(db_session, otra, misma_hora, misma_hora)
+    repo = SQLAlchemyQuickMatchRepository(db_session)
+
+    primera = await repo.list_for_user(yo, golf_course_id=campo.id, limit=1)
+    segunda = await repo.list_for_user(yo, golf_course_id=campo.id, limit=1, offset=1)
+
+    esperado = sorted([una.id, otra.id], key=lambda i: str(i.value), reverse=True)
+    assert [primera[0].id, segunda[0].id] == esperado
