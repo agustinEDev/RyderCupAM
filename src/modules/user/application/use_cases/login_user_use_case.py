@@ -30,6 +30,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
+from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
@@ -111,6 +112,9 @@ class LoginUserUseCase:
         user_agent = request.user_agent or "unknown"
 
         if not user:
+            # El mismo bcrypt que una contraseña mala: sin él, responder antes
+            # delataba qué emails están registrados (BE #281, OWASP A07)
+            await run_bcrypt(Password.verifica_contra_el_relleno, request.password)
             # Security Logging: Login fallido (usuario no existe)
             security_logger.log_login_attempt(
                 user_id=None,

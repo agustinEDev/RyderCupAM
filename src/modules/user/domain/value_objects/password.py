@@ -17,8 +17,11 @@ OWASP Coverage:
 - A07: Identification and Authentication Failures
 """
 
+import contextlib
+import functools
 import os
 import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -212,6 +215,36 @@ class Password:
         DEPRECATED: Usar _validate_password_strength para mensajes de error detallados.
         """
         return Password._validate_password_strength(password) is None
+
+    @staticmethod
+    @functools.cache
+    def _relleno() -> str:
+        """
+        Un hash de una contraseña al azar que nadie conoce, calculado UNA vez por
+        proceso y con el mismo coste que los reales (`_hash_password`).
+        """
+        return Password._hash_password(secrets.token_urlsafe(32))
+
+    @classmethod
+    def hash_de_relleno(cls) -> str:
+        """El hash de relleno: para comprobar su coste sin exponer la caché."""
+        return cls._relleno()
+
+    @classmethod
+    def verifica_contra_el_relleno(cls, plain_password: str) -> bool:
+        """
+        Paga el mismo bcrypt que una contraseña de verdad y dice siempre que no
+        (BE #281).
+
+        Para el login con un email que no existe: sin esto respondía ~500 ms
+        antes que con una cuenta real, y el cronómetro decía quién está
+        registrado (OWASP A07). El resultado del hash se descarta: el «no» no
+        depende de que el azar no acierte.
+        """
+        # Mismo trato que `verify` ante un error de bcrypt: no es la respuesta
+        with contextlib.suppress(Exception):
+            bcrypt.checkpw(cls._bcrypt_bytes(plain_password), cls._relleno().encode("utf-8"))
+        return False
 
     def verify(self, plain_password: str) -> bool:
         """Verifica si un password plano coincide con el hash."""
