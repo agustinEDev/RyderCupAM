@@ -617,6 +617,78 @@ class TestQuickMatchFullFlow:
         assert data["total_count"] == 1
 
 
+class TestListMyQuickMatchesByCourse:
+    """
+    GET /quick-matches/me?golf_course_id= (4 nov 2026): el asistente pide solo
+    tus ultimas partidas en un campo, para preelegir la barra, en vez de
+    descargar las 50 ultimas.
+
+      F1  sin golf_course_id           | igual que antes
+      F2  golf_course_id=X             | solo las tuyas en ese campo
+      F3  un id que no es un UUID      | 422
+      F4  un campo donde no has jugado | vacia
+    """
+
+    async def _dos_campos_y_una_partida_en_cada(self, client: AsyncClient, sufijo: str):
+        admin = await create_admin_user(
+            client, f"qm_admin_c{sufijo}@test.com", "P@ssw0rd123!", "Admin", "Campo"
+        )
+        creator = await create_authenticated_user(
+            client, f"qm_creator_c{sufijo}@test.com", "P@ssw0rd123!", "Creator", "Campo"
+        )
+        uno = await _create_approved_golf_course(client, admin, creator)
+        otro = await _create_approved_golf_course(client, admin, creator)
+        set_auth_cookies(client, creator["cookies"])
+        ids = {}
+        for campo in (uno, otro):
+            r = await client.post(
+                "/api/v1/quick-matches", json={"golf_course_id": campo, "match_format": "SINGLES"}
+            )
+            assert r.status_code == 201, r.text
+            ids[campo] = r.json()["id"]
+        return uno, otro, ids
+
+    @pytest.mark.asyncio
+    async def test_f1_without_course_lists_all(self, client: AsyncClient):
+        await self._dos_campos_y_una_partida_en_cada(client, "1")
+
+        response = await client.get("/api/v1/quick-matches/me")
+
+        assert response.status_code == 200
+        assert response.json()["total_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_f2_with_course_lists_only_that_course(self, client: AsyncClient):
+        uno, _otro, ids = await self._dos_campos_y_una_partida_en_cada(client, "2")
+
+        response = await client.get(f"/api/v1/quick-matches/me?golf_course_id={uno}&limit=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [m["id"] for m in data["quick_matches"]] == [ids[uno]]
+        assert data["total_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_f3_invalid_course_id_is_rejected(self, client: AsyncClient):
+        await self._dos_campos_y_una_partida_en_cada(client, "3")
+
+        response = await client.get("/api/v1/quick-matches/me?golf_course_id=no-es-un-uuid")
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_f4_course_without_matches_is_empty(self, client: AsyncClient):
+        await self._dos_campos_y_una_partida_en_cada(client, "4")
+
+        response = await client.get(
+            "/api/v1/quick-matches/me?golf_course_id=00000000-0000-4000-8000-000000000000"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["quick_matches"] == []
+        assert response.json()["total_count"] == 0
+
+
 class TestQuickMatchGuestsAndScoringAssignment:
     """Flujo con jugador invitado (sin cuenta) y anotacion por delegacion."""
 

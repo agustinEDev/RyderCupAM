@@ -15,6 +15,7 @@ from tests.integration.modules.competition.infrastructure.persistence.sqlalchemy
     jugadores,
 )
 from tests.integration.modules.social.infrastructure.test_shared_games_repositories import (  # noqa: F401
+    _campo,
     _rapida,
     campo,
 )
@@ -55,3 +56,21 @@ async def test_one_never_started_counts_by_its_creation(db_session, jugadores, c
     historial = await SQLAlchemyQuickMatchRepository(db_session).list_for_user(yo)
 
     assert [m.id for m in historial] == [jugada.id, sin_empezar.id]
+
+
+async def test_f2_by_course_only_that_course_latest_first(db_session, jugadores, campo):  # noqa: F811
+    """F2 (4 nov 2026): con un campo, solo las de ese campo, la ultima primero."""
+    yo = jugadores[0]
+    otro_campo = await _campo(db_session, yo)
+    antigua = await _rapida(db_session, campo, yo, [jugadores[1]])
+    nueva = await _rapida(db_session, campo, yo, [jugadores[1]])
+    fuera = await _rapida(db_session, otro_campo, yo, [jugadores[1]])
+    await _con_fechas(db_session, antigua, datetime(2026, 6, 1, 9), datetime(2026, 6, 1, 9))
+    await _con_fechas(db_session, nueva, datetime(2026, 6, 3, 9), datetime(2026, 6, 3, 9))
+    await _con_fechas(db_session, fuera, datetime(2026, 6, 5, 9), datetime(2026, 6, 5, 9))
+    repo = SQLAlchemyQuickMatchRepository(db_session)
+
+    en_el_campo = await repo.list_for_user(yo, golf_course_id=campo.id, limit=5)
+
+    assert [m.id for m in en_el_campo] == [nueva.id, antigua.id]
+    assert await repo.count_for_user(yo, golf_course_id=campo.id) == 2

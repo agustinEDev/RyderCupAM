@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_repository_interface import (
     QuickMatchRepositoryInterface,
@@ -83,10 +84,9 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None = None,
         limit: int = 20,
         offset: int = 0,
+        golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
-        conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
-        if status is not None:
-            conditions.append(QuickMatch._status == status)
+        conditions = self._condiciones_de_mis_partidas(user_id, status, golf_course_id)
 
         stmt = (
             select(QuickMatch)
@@ -97,6 +97,20 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    def _condiciones_de_mis_partidas(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None,
+        golf_course_id: GolfCourseId | None,
+    ) -> list:
+        """Las mismas para listar y contar: la pagina y su total no se separan."""
+        conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
+        if status is not None:
+            conditions.append(QuickMatch._status == status)
+        if golf_course_id is not None:
+            conditions.append(QuickMatch._golf_course_id == golf_course_id)
+        return conditions
 
     async def list_for_stats(
         self,
@@ -140,10 +154,13 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
-        conditions = [self._participant_filter(user_id), self._not_hidden_filter(user_id)]
-        if status is not None:
-            conditions.append(QuickMatch._status == status)
+    async def count_for_user(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        golf_course_id: GolfCourseId | None = None,
+    ) -> int:
+        conditions = self._condiciones_de_mis_partidas(user_id, status, golf_course_id)
 
         stmt = select(func.count()).select_from(QuickMatch).where(and_(*conditions))
         result = await self._session.execute(stmt)

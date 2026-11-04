@@ -1,5 +1,6 @@
 """In-Memory QuickMatch Repository para testing."""
 
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_repository_interface import (
     QuickMatchRepositoryInterface,
@@ -77,16 +78,28 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None = None,
         limit: int = 20,
         offset: int = 0,
+        golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
         results = [
-            qm for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
+            qm
+            for qm in self._quick_matches.values()
+            if self._matches_user(qm, user_id, status)
+            and (golf_course_id is None or qm.golf_course_id == golf_course_id)
         ]
         results.sort(key=lambda x: x.played_at, reverse=True)
         return results[offset : offset + limit]
 
-    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
+    async def count_for_user(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        golf_course_id: GolfCourseId | None = None,
+    ) -> int:
         return sum(
-            1 for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
+            1
+            for qm in self._quick_matches.values()
+            if self._matches_user(qm, user_id, status)
+            and (golf_course_id is None or qm.golf_course_id == golf_course_id)
         )
 
     async def count_all(self) -> int:
