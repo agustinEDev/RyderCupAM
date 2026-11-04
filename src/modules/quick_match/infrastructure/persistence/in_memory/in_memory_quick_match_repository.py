@@ -1,5 +1,6 @@
 """In-Memory QuickMatch Repository para testing."""
 
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.domain.entities.quick_match import QuickMatch
 from src.modules.quick_match.domain.repositories.quick_match_repository_interface import (
     QuickMatchRepositoryInterface,
@@ -35,13 +36,19 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         return self._quick_matches.get(quick_match_id)
 
     def _matches_user(
-        self, qm: QuickMatch, user_id: UserId, status: QuickMatchStatus | None
+        self,
+        qm: QuickMatch,
+        user_id: UserId,
+        status: QuickMatchStatus | None,
+        golf_course_id: GolfCourseId | None = None,
     ) -> bool:
+        """Participa, no la oculto y cumple el estado y el campo pedidos: lista y total, iguales."""
         participant_id = ParticipantId(user_id.value)
         return (
             qm.is_participant(participant_id)
             and not qm.is_hidden_for(participant_id)
             and (status is None or qm.status == status)
+            and (golf_course_id is None or qm.golf_course_id == golf_course_id)
         )
 
     async def list_for_stats(
@@ -77,16 +84,28 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None = None,
         limit: int = 20,
         offset: int = 0,
+        golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
+        """Como la de SQLAlchemy: la ultima jugada primero, el id desempata."""
         results = [
-            qm for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
+            qm
+            for qm in self._quick_matches.values()
+            if self._matches_user(qm, user_id, status, golf_course_id)
         ]
-        results.sort(key=lambda x: x.played_at, reverse=True)
+        results.sort(key=lambda x: (x.played_at, str(x.id.value)), reverse=True)
         return results[offset : offset + limit]
 
-    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
+    async def count_for_user(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        golf_course_id: GolfCourseId | None = None,
+    ) -> int:
+        """El total de `list_for_user` con los mismos filtros, sin paginar."""
         return sum(
-            1 for qm in self._quick_matches.values() if self._matches_user(qm, user_id, status)
+            1
+            for qm in self._quick_matches.values()
+            if self._matches_user(qm, user_id, status, golf_course_id)
         )
 
     async def count_all(self) -> int:
