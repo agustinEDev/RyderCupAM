@@ -140,4 +140,6 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return False
 
         # Comparación timing-safe
-        return secrets.compare_digest(header_token, cookie_token)
+        # En bytes: con texto no ASCII, `compare_digest` lanza TypeError y
+        # la petición acababa en 500 en vez de 403 (revisor)
+        return secrets.compare_digest(header_token.encode(), cookie_token.encode())

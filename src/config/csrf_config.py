@@ -66,7 +66,8 @@ def csrf_token_belongs_to(token: str, user_id: str) -> bool:
     if len(partes) != 2 or not all(partes):  # noqa: PLR2004 - aleatorio y firma
         return False
     aleatorio, firma = partes
-    return hmac.compare_digest(firma, _firma(user_id, aleatorio))
+    # En bytes: con texto no ASCII, `compare_digest` lanza TypeError (revisor)
+    return hmac.compare_digest(firma.encode(), _firma(user_id, aleatorio).encode())
 
 
 # Cookie configuration

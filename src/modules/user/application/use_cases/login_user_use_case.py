@@ -9,6 +9,7 @@ CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double
 """
 
 from datetime import UTC, datetime
+from typing import NoReturn
 
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
@@ -25,6 +26,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -72,6 +74,100 @@ class LoginUserUseCase:
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
 
+    @staticmethod
+    def _apunta_que_no_existe(request: LoginRequestDTO, ip_address: str, user_agent: str) -> None:
+        """Security Logging: login fallido porque el usuario no existe."""
+        get_security_logger().log_login_attempt(
+            user_id=None,
+            email=request.email,
+            success=False,
+            failure_reason="User not found",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    @staticmethod
+    def _rechaza_por_bloqueo(
+        user: User, request: LoginRequestDTO, ip_address: str, user_agent: str
+    ) -> NoReturn:
+        """Security Logging del intento sobre una cuenta bloqueada, y la excepción."""
+        locked_until = user.locked_until
+        get_security_logger().log_login_attempt(
+            user_id=str(user.id.value),
+            email=request.email,
+            success=False,
+            failure_reason=f"Account locked until {locked_until.isoformat()}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        raise AccountLockedException(
+            locked_until=locked_until,
+            message=f"Account is locked due to too many failed login attempts. Try again after {locked_until.isoformat()}",
+        )
+
+    async def _apunta_el_fallo(
+        self, user: User, request: LoginRequestDTO, ip_address: str, user_agent: str
+    ) -> None:
+        """
+        Account Lockout (v1.13.0): registra el intento fallido sobre el usuario
+        RELEÍDO con la fila bloqueada (BE #282). Sin el bloqueo, dos intentos a
+        la vez leían N y escribían N+1, y el bloqueo de los 10 no saltaba nunca.
+        El bcrypt ya pasó: la transacción es corta.
+
+        Raises:
+            AccountLockedException: si este intento bloquea la cuenta
+        """
+        async with self._uow:
+            bloqueado = await self._uow.users.find_by_id_for_update(user.id)
+            if bloqueado is not None:
+                bloqueado.record_failed_login()
+                await self._uow.users.save(bloqueado)
+            # Commit automático al salir del contexto
+
+        if bloqueado is None:
+            # Se borró entre la lectura y el bloqueo: como un email que no existe
+            self._apunta_que_no_existe(request, ip_address, user_agent)
+            return
+
+        # Si la cuenta quedó bloqueada en este intento, lanzar excepción
+        if bloqueado.is_locked():
+            self._rechaza_por_bloqueo(bloqueado, request, ip_address, user_agent)
+
+        # Security Logging: Login fallido (contraseña incorrecta)
+        get_security_logger().log_login_attempt(
+            user_id=str(bloqueado.id.value),
+            email=request.email,
+            success=False,
+            failure_reason="Invalid credentials",
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    async def _releido_para_entrar(
+        self, user: User, request: LoginRequestDTO, ip_address: str, user_agent: str
+    ) -> User | None:
+        """
+        Con la contraseña buena, el usuario releído con la fila bloqueada antes de
+        darla por buena (BE #282, revisor). En una ráfaga, todas las peticiones
+        pasaban el `is_locked()` sobre la lectura sin bloqueo: la buena entraba
+        aunque otro intento acabara de bloquear la cuenta, y además deshacía el
+        bloqueo al poner el contador a cero.
+
+        Returns:
+            El usuario releído, o None si se borró entre medias
+
+        Raises:
+            AccountLockedException: si otro intento la acaba de bloquear
+        """
+        async with self._uow:
+            releido = await self._uow.users.find_by_id_for_update(user.id)
+        if releido is None:
+            self._apunta_que_no_existe(request, ip_address, user_agent)
+            return None
+        if releido.is_locked():
+            self._rechaza_por_bloqueo(releido, request, ip_address, user_agent)
+        return releido
+
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
         Ejecuta el caso de uso de login.
@@ -116,84 +212,24 @@ class LoginUserUseCase:
             # delataba qué emails están registrados (BE #281, OWASP A07)
             await run_bcrypt(Password.verifica_contra_el_relleno, request.password)
             # Security Logging: Login fallido (usuario no existe)
-            security_logger.log_login_attempt(
-                user_id=None,
-                email=request.email,
-                success=False,
-                failure_reason="User not found",
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
+            self._apunta_que_no_existe(request, ip_address, user_agent)
             return None
 
         # Account Lockout (v1.13.0): Verificar si la cuenta está bloqueada
         if user.is_locked():
-            # Security Logging: Intento de login en cuenta bloqueada
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=request.email,
-                success=False,
-                failure_reason=f"Account locked until {user.locked_until.isoformat()}",
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
-            # Lanzar excepción con información del bloqueo
-            raise AccountLockedException(
-                locked_until=user.locked_until,
-                message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}",
-            )
+            # Security Logging y excepción con información del bloqueo
+            self._rechaza_por_bloqueo(user, request, ip_address, user_agent)
 
         # Verificar contraseña
         if not await run_bcrypt(user.verify_password, request.password):
-            # Account Lockout (v1.13.0): Registrar intento fallido, sobre el
-            # usuario RELEÍDO con la fila bloqueada (BE #282). Sin el bloqueo,
-            # dos intentos a la vez leían N y escribían N+1, y el bloqueo de los
-            # 10 no saltaba nunca. El bcrypt ya pasó: la transacción es corta
-            async with self._uow:
-                bloqueado = await self._uow.users.find_by_id_for_update(user.id)
-                if bloqueado is not None:
-                    bloqueado.record_failed_login()
-                    await self._uow.users.save(bloqueado)
-                # Commit automático al salir del contexto
-
-            if bloqueado is None:
-                # Se borró entre la lectura y el bloqueo: como un email que no existe
-                security_logger.log_login_attempt(
-                    user_id=None,
-                    email=request.email,
-                    success=False,
-                    failure_reason="User not found",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                )
-                return None
-            user = bloqueado
-
-            # Si la cuenta quedó bloqueada en este intento, lanzar excepción
-            if user.is_locked():
-                security_logger.log_login_attempt(
-                    user_id=str(user.id.value),
-                    email=request.email,
-                    success=False,
-                    failure_reason=f"Account locked until {user.locked_until.isoformat()}",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                )
-                raise AccountLockedException(
-                    locked_until=user.locked_until,
-                    message=f"Account is locked due to too many failed login attempts. Try again after {user.locked_until.isoformat()}",
-                )
-
-            # Security Logging: Login fallido (contraseña incorrecta)
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=request.email,
-                success=False,
-                failure_reason="Invalid credentials",
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
+            await self._apunta_el_fallo(user, request, ip_address, user_agent)
             return None
+
+        # La buena, pero RELEÍDA con la fila bloqueada (BE #282, revisor)
+        releido = await self._releido_para_entrar(user, request, ip_address, user_agent)
+        if releido is None:
+            return None
+        user = releido
 
         # Account Lockout (v1.13.0): Resetear intentos fallidos tras login exitoso
         user.reset_failed_attempts()

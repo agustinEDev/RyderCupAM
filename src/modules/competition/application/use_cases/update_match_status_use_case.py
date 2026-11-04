@@ -95,6 +95,8 @@ class UpdateMatchStatusUseCase:
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
 
+        # La ronda y la competicion, antes del bloqueo: solo sirven para
+        # autorizar. Lo que cambia de estado se decide sobre el partido releido
         round_entity = await self._uow.rounds.find_by_id(match.round_id)
         if not round_entity:
             raise RoundNotFoundError("La ronda asociada no existe")

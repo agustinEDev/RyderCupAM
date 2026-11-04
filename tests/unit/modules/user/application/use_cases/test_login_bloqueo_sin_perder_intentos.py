@@ -16,7 +16,11 @@ releído. El bcrypt va antes y fuera de esa transacción: no la alarga 200 ms.
   2  orden                                       | bcrypt antes del bloqueo
   3  lo releído ya va por 9                      | este intento bloquea la cuenta
   4  el usuario desaparece entre medias          | None, sin error
-  5  contraseña buena                            | no se bloquea la fila
+  5  contraseña buena, cuenta abierta           | se relee con bloqueo y se pone a 0
+                                                   sobre lo RELEÍDO
+  6  contraseña buena, pero otro la acaba de      | AccountLockedException: una
+     bloquear (lo releído está bloqueado)          | ráfaga no cuela la buena (revisor)
+  7  contraseña buena y el usuario desaparece     | None, sin error
   —  N intentos a la vez de verdad               | test de integración, aparte
 """
 
@@ -116,10 +120,38 @@ async def test_4_si_el_usuario_desaparece_entre_medias_none_sin_error(escena):
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=MALA)) is None
 
 
-async def test_5_con_la_contrasena_buena_no_se_bloquea_la_fila(escena):
+async def test_5_con_la_buena_se_pone_a_cero_sobre_lo_releido(escena):
     uow, usuario, login = escena
-    _, pedidos = _releido_con(uow, usuario, intentos=0)
+    copia, pedidos = _releido_con(uow, usuario, intentos=3)
 
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA)) is not None
 
-    assert pedidos == []
+    assert pedidos == [usuario.id]
+    assert copia.failed_login_attempts == 0
+
+
+async def test_6_con_la_buena_pero_recien_bloqueada_no_entra(escena):
+    uow, usuario, login = escena
+    _releido_con(uow, usuario, intentos=9)
+
+    # Lo que dejó otro intento justo antes: el décimo fallo, que la bloquea
+    async def bloqueada(_user_id):
+        copia = _rebuild_user(usuario, failed_login_attempts=9)
+        copia.record_failed_login()
+        return copia
+
+    uow.users.find_by_id_for_update = bloqueada
+
+    with pytest.raises(AccountLockedException):
+        await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA))
+
+
+async def test_7_con_la_buena_y_el_usuario_desaparecido_none(escena):
+    uow, _, login = escena
+
+    async def borrado(_user_id):
+        return None
+
+    uow.users.find_by_id_for_update = borrado
+
+    assert await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA)) is None

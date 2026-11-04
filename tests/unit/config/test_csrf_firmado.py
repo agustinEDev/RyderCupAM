@@ -77,7 +77,7 @@ def test_17_el_formato_antiguo_sin_firma_no_vale():
     assert not csrf_token_belongs_to(secrets.token_urlsafe(32), A)
 
 
-@pytest.mark.parametrize("token", ["", ".", "a.b.c", "solo-aleatorio.", ".solo-firma"])
+@pytest.mark.parametrize("token", ["", ".", "a.b.c", "solo-aleatorio.", ".solo-firma", "ñandú.ñ"])
 def test_18_formatos_raros_no_valen(token):
     assert not csrf_token_belongs_to(token, A)
 

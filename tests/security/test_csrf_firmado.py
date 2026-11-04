@@ -21,6 +21,7 @@ double-submit de siempre.
   29 A por Bearer, sin cookies    | el de B / el de A          | 403 CSRF / pasa
   30 A con un JWT de acceso falso | el de B                    | no cuenta: si la de refresh
                                                                   es de A, 403 CSRF
+  31 A / ninguna                  | con caracteres no ASCII    | 403 CSRF, no un 500 (revisor)
 """
 
 import os
@@ -189,3 +190,21 @@ async def test_30_un_jwt_de_acceso_falso_no_cuenta(dos):
 
     # El falso dice B, pero no se cree: manda la de refresh, que es de A
     assert _es_rechazo_csrf(await _toca_el_perfil(client, b["csrf_token"]))
+
+
+@pytest.mark.parametrize("con_sesion", [True, False])
+async def test_31_una_cabecera_no_ascii_es_un_403_no_un_500(client: AsyncClient, con_sesion):
+    if con_sesion:
+        await _entra(client, "csrf_a@example.com")
+    else:
+        client.cookies.clear()
+    client.cookies.set(CSRF_COOKIE_NAME, "abc")
+
+    respuesta = await client.patch(
+        "/api/v1/users/profile",
+        json={"first_name": "Ana"},
+        # En bytes: httpx no deja mandar texto no ASCII, el navegador sí
+        headers={CSRF_HEADER_NAME: "ñandú.ñ".encode()},
+    )
+
+    assert _es_rechazo_csrf(respuesta)
