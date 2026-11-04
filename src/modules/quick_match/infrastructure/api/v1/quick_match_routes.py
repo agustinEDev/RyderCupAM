@@ -829,9 +829,16 @@ async def list_my_quick_matches(
     status_filter: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    golf_course_id: UUID | None = Query(
+        None, description="Only matches on this golf course (latest played first)."
+    ),
 ):
     return await use_case.execute(
-        str(current_user.id), status_filter=status_filter, page=page, limit=limit
+        str(current_user.id),
+        status_filter=status_filter,
+        page=page,
+        limit=limit,
+        golf_course_id=golf_course_id,
     )
 
 

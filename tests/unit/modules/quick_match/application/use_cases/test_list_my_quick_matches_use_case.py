@@ -103,3 +103,30 @@ class TestListMyQuickMatchesUseCase:
         assert por_id[started.id.value].played_at == datetime(2026, 10, 21, 22, 30, tzinfo=UTC)
         assert por_id[pending.id.value].played_at == datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
         assert por_id[started.id.value].played_at.tzinfo is not None
+
+    async def test_f2_filters_by_golf_course(self, qm_uow, user_uow):
+        """F2 (4 nov 2026): con un campo, solo las del usuario en ese campo."""
+        me = await create_user(user_uow, "me-course@test.com")
+        campo = GolfCourseId(uuid4())
+        en_el_campo = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=me.id,
+            golf_course_id=campo,
+            match_format=MatchFormat.SINGLES,
+        )
+        en_otro = QuickMatch.create(
+            id=QuickMatchId.generate(),
+            creator_id=me.id,
+            golf_course_id=GolfCourseId(uuid4()),
+            match_format=MatchFormat.SINGLES,
+        )
+        async with qm_uow:
+            await qm_uow.quick_matches.add(en_el_campo)
+            await qm_uow.quick_matches.add(en_otro)
+
+        result = await ListMyQuickMatchesUseCase(qm_uow, user_uow).execute(
+            str(me.id.value), golf_course_id=campo.value, limit=5
+        )
+
+        assert [m.id for m in result.quick_matches] == [en_el_campo.id.value]
+        assert result.total_count == 1

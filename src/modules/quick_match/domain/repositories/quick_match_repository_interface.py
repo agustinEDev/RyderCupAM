@@ -4,6 +4,7 @@ QuickMatch Repository Interface - Domain Layer.
 
 from abc import ABC, abstractmethod
 
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.user.domain.value_objects.user_id import UserId
 
 from ..entities.quick_match import QuickMatch
@@ -48,8 +49,12 @@ class QuickMatchRepositoryInterface(ABC):
         status: QuickMatchStatus | None = None,
         limit: int = 20,
         offset: int = 0,
+        golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
-        """Lista partidas rapidas en las que el usuario es participante."""
+        """
+        Lista partidas rapidas en las que el usuario es participante, la ultima
+        jugada primero. Con `golf_course_id`, solo las de ese campo.
+        """
         pass
 
     @abstractmethod
@@ -66,7 +71,12 @@ class QuickMatchRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def count_for_user(self, user_id: UserId, status: QuickMatchStatus | None = None) -> int:
+    async def count_for_user(
+        self,
+        user_id: UserId,
+        status: QuickMatchStatus | None = None,
+        golf_course_id: GolfCourseId | None = None,
+    ) -> int:
         pass
 
     @abstractmethod

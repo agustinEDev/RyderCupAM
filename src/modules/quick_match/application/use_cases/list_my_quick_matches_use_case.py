@@ -1,5 +1,8 @@
 """Caso de Uso: Listar mis Partidas Rapidas."""
 
+from uuid import UUID
+
+from src.modules.golf_course.domain.value_objects.golf_course_id import GolfCourseId
 from src.modules.quick_match.application.dto.quick_match_dto import (
     PaginatedQuickMatchResponseDTO,
 )
@@ -27,16 +30,24 @@ class ListMyQuickMatchesUseCase:
         status_filter: str | None = None,
         page: int = 1,
         limit: int = 20,
+        golf_course_id: UUID | None = None,
     ) -> PaginatedQuickMatchResponseDTO:
+        """
+        Con `golf_course_id`, solo las de ese campo: el asistente de crear
+        partida mira las ultimas para preelegir la barra (4 nov 2026).
+        """
         user_id = UserId(user_id_raw)
         offset = (page - 1) * limit
         status_vo = QuickMatchStatus(status_filter) if status_filter else None
+        course_vo = GolfCourseId(golf_course_id) if golf_course_id else None
 
         async with self._uow:
             quick_matches = await self._uow.quick_matches.list_for_user(
-                user_id, status=status_vo, limit=limit, offset=offset
+                user_id, status=status_vo, limit=limit, offset=offset, golf_course_id=course_vo
             )
-            total_count = await self._uow.quick_matches.count_for_user(user_id, status=status_vo)
+            total_count = await self._uow.quick_matches.count_for_user(
+                user_id, status=status_vo, golf_course_id=course_vo
+            )
 
         participant_ids = list({p.user_id for qm in quick_matches for p in qm.participants})
         async with self._user_uow:
