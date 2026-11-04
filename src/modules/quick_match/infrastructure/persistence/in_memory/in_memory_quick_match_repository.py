@@ -42,6 +42,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None,
         golf_course_id: GolfCourseId | None = None,
     ) -> bool:
+        """Participa, no la oculto y cumple el estado y el campo pedidos: lista y total, iguales."""
         participant_id = ParticipantId(user_id.value)
         return (
             qm.is_participant(participant_id)
@@ -85,6 +86,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         offset: int = 0,
         golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
+        """Como la de SQLAlchemy: la ultima jugada primero, el id desempata."""
         results = [
             qm
             for qm in self._quick_matches.values()
@@ -99,6 +101,7 @@ class InMemoryQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None = None,
         golf_course_id: GolfCourseId | None = None,
     ) -> int:
+        """El total de `list_for_user` con los mismos filtros, sin paginar."""
         return sum(
             1
             for qm in self._quick_matches.values()

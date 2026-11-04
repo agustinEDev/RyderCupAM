@@ -86,6 +86,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         offset: int = 0,
         golf_course_id: GolfCourseId | None = None,
     ) -> list[QuickMatch]:
+        """Las del usuario (participa y no las oculto), la ultima jugada primero; con campo, solo ese."""
         conditions = self._user_list_conditions(user_id, status, golf_course_id)
 
         stmt = (
@@ -162,6 +163,7 @@ class SQLAlchemyQuickMatchRepository(QuickMatchRepositoryInterface):
         status: QuickMatchStatus | None = None,
         golf_course_id: GolfCourseId | None = None,
     ) -> int:
+        """El total de `list_for_user` con los mismos filtros, sin paginar."""
         conditions = self._user_list_conditions(user_id, status, golf_course_id)
 
         stmt = select(func.count()).select_from(QuickMatch).where(and_(*conditions))
