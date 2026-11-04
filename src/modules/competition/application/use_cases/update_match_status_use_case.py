@@ -88,11 +88,9 @@ class UpdateMatchStatusUseCase:
     async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
-        # Con la fila bloqueada: START y la apertura automatica por hora de sesion
-        # (BE #305) hacen lo mismo, y si se cruzan los dos pre-crean los 18 hoyos
-        # de cada jugador y uno se estrella contra `uq_hole_score_match_hole_player`
-        # (CodeRabbit en la PR #307)
-        match = await self._uow.matches.find_by_id_for_update(match_id)
+        # Primero SIN bloqueo, para autorizar: antes cualquiera con sesion que
+        # supiera el id retenia la fila hasta que su peticion se deshacia (BE #309)
+        match = await self._uow.matches.find_by_id(match_id)
 
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
@@ -112,6 +110,15 @@ class UpdateMatchStatusUseCase:
             raise CompetitionNotInProgressError(
                 f"La competicion debe estar IN_PROGRESS. Estado: {competition.status.value}"
             )
+
+        # Autorizado: ahora con la fila bloqueada, y RELEIDO. START y la apertura
+        # automatica por hora de sesion (BE #305) hacen lo mismo, y si se cruzan
+        # los dos pre-crean los 18 hoyos de cada jugador y uno se estrella contra
+        # `uq_hole_score_match_hole_player` (PR #307). El estado se decide sobre
+        # lo releido: lo leido arriba puede haber cambiado entre medias
+        match = await self._uow.matches.find_by_id_for_update(match_id)
+        if not match:
+            raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
 
         return match, round_entity, competition
 
