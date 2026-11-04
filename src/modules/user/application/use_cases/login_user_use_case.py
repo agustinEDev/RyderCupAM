@@ -272,7 +272,7 @@ class LoginUserUseCase:
         )
 
         # Generar token CSRF (256 bits, 15 minutos de duración)
-        csrf_token = generate_csrf_token()
+        csrf_token = generate_csrf_token(str(user.id.value))
 
         # El hándicap ya no se refresca aquí: el login esperaba a la RFEG antes de
         # contestar. Lo pide el frontend después de entrar (RyderCupAM#340).

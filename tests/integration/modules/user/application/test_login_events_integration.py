@@ -138,6 +138,8 @@ class TestLoginUserUseCaseEventIntegration:
 
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user
+        # El fallo relee al usuario con la fila bloqueada para sumar (BE #282)
+        mock_uow.users.find_by_id_for_update.return_value = user
 
         token_service = JWTTokenService()
 

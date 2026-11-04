@@ -14,16 +14,52 @@ Exime GET, HEAD, OPTIONS, rutas de health/docs.
 
 from collections.abc import Callable
 
+import jwt
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
+from jwt.exceptions import InvalidTokenError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config.csrf_config import (
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
     EXEMPT_METHODS,
-    EXEMPT_PATHS,
+    csrf_token_belongs_to,
+    es_ruta_exenta,
 )
+from src.config.settings import settings
+from src.shared.infrastructure.security.cookie_handler import (
+    REFRESH_COOKIE_NAME,
+    read_access_token,
+)
+
+
+def usuario_de_la_sesion(request: Request) -> str | None:
+    """
+    El usuario de la sesión de la petición, para exigir que el token CSRF sea
+    suyo (BE #724). Del JWT de acceso —cookie o Bearer— y, si no, del de
+    refresh. La firma del JWT SÍ se comprueba; la caducidad no: un acceso
+    caducado sigue diciendo de quién es la sesión, y la petición ya dará su 401.
+
+    Returns:
+        El `sub`, o None si no hay sesión que suplantar.
+    """
+    for token in (read_access_token(request), request.cookies.get(REFRESH_COOKIE_NAME)):
+        if not token:
+            continue
+        try:
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM],
+                options={"verify_exp": False},
+            )
+        except InvalidTokenError:
+            continue
+        sub = payload.get("sub")
+        if isinstance(sub, str) and sub:
+            return sub
+    return None
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -59,11 +95,16 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         # Eximir rutas específicas (health, docs)
         path = request.url.path
-        if any(path.startswith(exempt) for exempt in EXEMPT_PATHS):
+        if es_ruta_exenta(path):
             return await call_next(request)
 
-        # Validar token CSRF
-        if not self._validate_csrf_token(request):
+        # Validar token CSRF: cabecera == cookie y, con sesión, firmado para ESE
+        # usuario (BE #724). Sin sesión no hay a quién suplantar
+        usuario = usuario_de_la_sesion(request)
+        token = request.headers.get(CSRF_HEADER_NAME, "")
+        if not self._validate_csrf_token(request) or (
+            usuario is not None and not csrf_token_belongs_to(token, usuario)
+        ):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={

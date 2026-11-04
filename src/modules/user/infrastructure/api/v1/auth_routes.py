@@ -629,7 +629,7 @@ async def verify_email(
         refresh_token = create_refresh_token({"sub": str(user.id.value)})
 
         # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
-        csrf_token = generate_csrf_token()
+        csrf_token = generate_csrf_token(str(user.id.value))
 
         # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
         set_auth_cookie(response, access_token)
