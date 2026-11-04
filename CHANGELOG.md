@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.47.0] - 2026-11-04
+
+Cambio **aditivo** del contrato, sin migraciones. Va con el frontend
+**2.63.0** (barra preelegida con las partidas del campo elegido).
+
+### Added
+
+- **Mis partidas rápidas de un campo** (#721): `GET /api/v1/quick-matches/me`
+  acepta `golf_course_id` (UUID, opcional) y devuelve solo las partidas del
+  usuario en ese campo, la última jugada primero, con su `total_count`. Siguen
+  valiendo los filtros de participante, ocultas y estado. Sin el parámetro no
+  cambia nada; un id mal formado es un 422. El asistente lo usa para preelegir
+  la barra de cada jugador con las 5 últimas partidas del campo, en vez de
+  bajarse las 50 últimas.
+
+### Changed
+
+- **Orden estable de mis partidas rápidas** (#721): a igual fecha, el id
+  desempata, así que una página no cambia entre llamadas ni repite o salta
+  partidas.
+
 ## [2.46.0] - 2026-11-04
 
 Cambio **aditivo** del contrato, sin migraciones. Va con el frontend
