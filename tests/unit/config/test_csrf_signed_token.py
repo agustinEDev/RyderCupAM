@@ -39,8 +39,12 @@ A = "11111111-1111-1111-1111-111111111111"
 B = "22222222-2222-2222-2222-222222222222"
 
 
-def test_13_recien_emitido_vale_para_su_usuario_y_no_se_repite():
-    """Caso 13 de la tabla de la cabecera: recien emitido vale para su usuario y no se repite."""
+def test_generate_csrf_token_for_user_belongs_to_that_user_and_is_unique():
+    """
+    Given: Un usuario
+    When: Se emiten dos tokens para él
+    Then: Los dos le pertenecen y son distintos
+    """
     uno = generate_csrf_token(A)
     dos = generate_csrf_token(A)
 
@@ -52,8 +56,12 @@ def test_13_recien_emitido_vale_para_su_usuario_y_no_se_repite():
     assert firma
 
 
-def test_14_el_de_otro_usuario_no_vale():
-    """Caso 14 de la tabla de la cabecera: el de otro usuario no vale."""
+def test_csrf_token_belongs_to_other_user_is_false():
+    """
+    Given: Un token emitido para A
+    When: Se comprueba contra B
+    Then: No le pertenece
+    """
     assert not csrf_token_belongs_to(generate_csrf_token(B), A)
 
 
@@ -62,35 +70,55 @@ def _cambia_un_caracter(texto: str) -> str:
     return texto[:-1] + ("A" if texto[-1] != "A" else "B")
 
 
-def test_15_con_la_firma_tocada_no_vale():
-    """Caso 15 de la tabla de la cabecera: con la firma tocada no vale."""
+def test_csrf_token_with_tampered_signature_is_rejected():
+    """
+    Given: Un token de A con la firma modificada
+    When: Se comprueba contra A
+    Then: No le pertenece
+    """
     aleatorio, firma = generate_csrf_token(A).split(".")
 
     assert not csrf_token_belongs_to(f"{aleatorio}.{_cambia_un_caracter(firma)}", A)
 
 
-def test_16_con_el_aleatorio_tocado_no_vale():
-    """Caso 16 de la tabla de la cabecera: con el aleatorio tocado no vale."""
+def test_csrf_token_with_tampered_random_is_rejected():
+    """
+    Given: Un token de A con la parte aleatoria modificada
+    When: Se comprueba contra A
+    Then: No le pertenece
+    """
     aleatorio, firma = generate_csrf_token(A).split(".")
 
     assert not csrf_token_belongs_to(f"{_cambia_un_caracter(aleatorio)}.{firma}", A)
 
 
-def test_17_el_formato_antiguo_sin_firma_no_vale():
-    """Caso 17 de la tabla de la cabecera: el formato antiguo sin firma no vale."""
+def test_csrf_token_in_legacy_unsigned_format_is_rejected():
+    """
+    Given: Un token del formato antiguo, sin firma
+    When: Se comprueba contra A
+    Then: No le pertenece
+    """
     import secrets
 
     assert not csrf_token_belongs_to(secrets.token_urlsafe(32), A)
 
 
 @pytest.mark.parametrize("token", ["", ".", "a.b.c", "solo-aleatorio.", ".solo-firma", "ñandú.ñ"])
-def test_18_formatos_raros_no_valen(token):
-    """Caso 18 de la tabla de la cabecera: formatos raros no valen."""
+def test_csrf_token_with_malformed_shape_is_rejected(token):
+    """
+    Given: Un token mal formado
+    When: Se comprueba contra A
+    Then: No le pertenece y no lanza
+    """
     assert not csrf_token_belongs_to(token, A)
 
 
-def test_19_la_clave_es_derivada_y_depende_de_secret_key(monkeypatch):
-    """Caso 19 de la tabla de la cabecera: la clave es derivada y depende de secret key."""
+def test_csrf_key_is_derived_from_secret_key(monkeypatch):
+    """
+    Given: Dos SECRET_KEY distintas
+    When: Se firma el mismo usuario y aleatorio
+    Then: La firma cambia: la clave sale de SECRET_KEY
+    """
     original = csrf_config._clave()
     assert original != csrf_config.settings.SECRET_KEY.encode()
     assert len(original) == hashlib.sha256().digest_size
@@ -106,8 +134,12 @@ def test_19_la_clave_es_derivada_y_depende_de_secret_key(monkeypatch):
         csrf_config._clave.cache_clear()
 
 
-def test_19b_la_firma_es_hmac_sha256_del_usuario_y_el_aleatorio():
-    """Caso 19b de la tabla de la cabecera: la firma es hmac sha256 del usuario y el aleatorio."""
+def test_csrf_signature_is_hmac_sha256_of_user_and_random():
+    """
+    Given: Un usuario y un token emitido
+    When: Se recalcula HMAC-SHA256(clave, usuario!aleatorio)
+    Then: Coincide con la firma del token
+    """
     aleatorio, firma = generate_csrf_token(A).split(".")
     esperada = hmac.new(csrf_config._clave(), f"{A}!{aleatorio}".encode(), hashlib.sha256)
 
@@ -134,6 +166,10 @@ def test_19b_la_firma_es_hmac_sha256_del_usuario_y_el_aleatorio():
         ("/", False),
     ],
 )
-def test_20_las_rutas_exentas_se_comparan_exactas(ruta, exenta):
-    """Caso 20 de la tabla de la cabecera: las rutas exentas se comparan exactas."""
+def test_es_ruta_exenta_matches_exact_paths_only(ruta, exenta):
+    """
+    Given: Una ruta
+    When: Se pregunta si está exenta
+    Then: Solo lo está si coincide exacta, sin contar la barra final
+    """
     assert es_ruta_exenta(ruta) is exenta

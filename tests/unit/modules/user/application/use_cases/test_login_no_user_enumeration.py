@@ -77,8 +77,12 @@ async def _con_usuario(uow) -> User:
     return usuario
 
 
-async def test_1_un_email_inexistente_pasa_por_bcrypt_una_vez(caso_de_uso, cuenta_checkpw):
-    """Caso 1 de la tabla de la cabecera: un email inexistente pasa por bcrypt una vez."""
+async def test_login_unknown_email_runs_bcrypt_once(caso_de_uso, cuenta_checkpw):
+    """
+    Given: Un email que no existe
+    When: Se intenta entrar
+    Then: bcrypt corre una vez, como con un usuario real
+    """
     _, login = caso_de_uso
 
     respuesta = await login.execute(
@@ -89,8 +93,12 @@ async def test_1_un_email_inexistente_pasa_por_bcrypt_una_vez(caso_de_uso, cuent
     assert len(cuenta_checkpw) == 1
 
 
-async def test_2_una_contrasena_mala_tambien_una_vez(caso_de_uso, cuenta_checkpw):
-    """Caso 2 de la tabla de la cabecera: una contrasena mala tambien una vez."""
+async def test_login_wrong_password_runs_bcrypt_once(caso_de_uso, cuenta_checkpw):
+    """
+    Given: Un usuario existente
+    When: Se entra con la contraseña mala
+    Then: bcrypt corre una vez
+    """
     uow, login = caso_de_uso
     await _con_usuario(uow)
 
@@ -102,8 +110,12 @@ async def test_2_una_contrasena_mala_tambien_una_vez(caso_de_uso, cuenta_checkpw
     assert len(cuenta_checkpw) == 1
 
 
-def test_3_el_relleno_tiene_el_mismo_coste_que_los_hashes_reales():
-    """Caso 3 de la tabla de la cabecera: el relleno tiene el mismo coste que los hashes reales."""
+def test_dummy_hash_has_same_cost_as_real_hashes():
+    """
+    Given: El hash de relleno
+    When: Se mira su coste
+    Then: Es el mismo que el de los hashes reales
+    """
     real = Password.from_plain_text("V@l1dP@ss123!").hashed_value
     relleno = Password._relleno()
 
@@ -112,8 +124,12 @@ def test_3_el_relleno_tiene_el_mismo_coste_que_los_hashes_reales():
     assert relleno.startswith("$2")
 
 
-def test_3b_en_produccion_el_coste_es_12(monkeypatch):
-    """Caso 3b de la tabla de la cabecera: en produccion el coste es 12."""
+def test_dummy_hash_in_production_has_cost_12(monkeypatch):
+    """
+    Given: El entorno de producción
+    When: Se calcula el relleno
+    Then: Su coste es 12
+    """
     monkeypatch.delenv("TESTING", raising=False)
     Password._relleno.cache_clear()
     try:
@@ -122,8 +138,12 @@ def test_3b_en_produccion_el_coste_es_12(monkeypatch):
         Password._relleno.cache_clear()
 
 
-async def test_4_el_relleno_se_calcula_una_sola_vez(caso_de_uso, monkeypatch):
-    """Caso 4 de la tabla de la cabecera: el relleno se calcula una sola vez."""
+async def test_dummy_hash_is_computed_once(caso_de_uso, monkeypatch):
+    """
+    Given: Varios logins con email inexistente
+    When: Se procesan
+    Then: El relleno se calcula una sola vez
+    """
     _, login = caso_de_uso
     Password._relleno.cache_clear()
     hechos = []
@@ -143,13 +163,21 @@ async def test_4_el_relleno_se_calcula_una_sola_vez(caso_de_uso, monkeypatch):
 
 
 @pytest.mark.parametrize("intento", ["", "Lo-Que-Sea-1", "x" * 200, "ñandú-🙂"])
-def test_5_ninguna_contrasena_entra_por_el_relleno(intento):
-    """Caso 5 de la tabla de la cabecera: ninguna contrasena entra por el relleno."""
+def test_dummy_hash_never_verifies_any_password(intento):
+    """
+    Given: Una contraseña cualquiera
+    When: Se verifica contra el relleno
+    Then: Siempre es False
+    """
     assert Password.verifica_contra_el_relleno(intento) is False
 
 
-async def test_6_el_relleno_va_por_run_bcrypt(caso_de_uso, monkeypatch):
-    """Caso 6 de la tabla de la cabecera: el relleno va por run bcrypt."""
+async def test_login_unknown_email_verifies_dummy_via_run_bcrypt(caso_de_uso, monkeypatch):
+    """
+    Given: Un email que no existe
+    When: Se intenta entrar
+    Then: La verificación del relleno va por run_bcrypt, fuera del bucle de eventos
+    """
     _, login = caso_de_uso
     pasadas = []
     original = login_user_use_case.run_bcrypt
@@ -166,8 +194,12 @@ async def test_6_el_relleno_va_por_run_bcrypt(caso_de_uso, monkeypatch):
     assert pasadas == [Password.verifica_contra_el_relleno]
 
 
-async def test_7_una_cuenta_solo_de_google_tambien_paga_bcrypt(caso_de_uso, cuenta_checkpw):
-    """Caso 7 de la tabla de la cabecera: una cuenta solo de google tambien paga bcrypt."""
+async def test_login_google_only_account_runs_bcrypt_once(caso_de_uso, cuenta_checkpw):
+    """
+    Given: Una cuenta solo de Google, sin contraseña
+    When: Se intenta entrar con contraseña
+    Then: bcrypt corre una vez igualmente
+    """
     uow, login = caso_de_uso
     usuario = User.create(
         first_name="Ana",

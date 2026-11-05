@@ -101,8 +101,12 @@ def _es_rechazo_csrf(respuesta) -> bool:
     )
 
 
-async def test_21_el_token_de_a_vale_para_a(dos):
-    """Caso 21 de la tabla de la cabecera: el token de a vale para a."""
+async def test_csrf_token_of_a_for_session_of_a_is_accepted(dos):
+    """
+    Given: La sesión de A y un token CSRF emitido para A
+    When: A hace una petición que cambia estado
+    Then: Pasa el CSRF
+    """
     client, a, _ = dos
 
     respuesta = await _toca_el_perfil(client, a["csrf_token"])
@@ -110,22 +114,34 @@ async def test_21_el_token_de_a_vale_para_a(dos):
     assert respuesta.status_code == status.HTTP_200_OK, respuesta.text
 
 
-async def test_22_un_token_sin_firmar_ya_no_vale(dos):
-    """Caso 22 de la tabla de la cabecera: un token sin firmar ya no vale."""
+async def test_csrf_unsigned_token_is_rejected(dos):
+    """
+    Given: La sesión de A y un token sin firmar igual en cabecera y cookie
+    When: A hace una petición que cambia estado
+    Then: 403 CSRF_VALIDATION_FAILED
+    """
     client, _, _ = dos
 
     assert _es_rechazo_csrf(await _toca_el_perfil(client, secrets.token_urlsafe(32)))
 
 
-async def test_23_el_token_de_b_no_vale_para_a(dos):
-    """Caso 23 de la tabla de la cabecera: el token de b no vale para a."""
+async def test_csrf_token_of_b_for_session_of_a_is_rejected(dos):
+    """
+    Given: La sesión de A con el token CSRF de B en cabecera y cookie
+    When: A hace una petición que cambia estado
+    Then: 403
+    """
     client, _, b = dos
 
     assert _es_rechazo_csrf(await _toca_el_perfil(client, b["csrf_token"]))
 
 
-async def test_24_con_el_acceso_caducado_su_usuario_sigue_contando(dos):
-    """Caso 24 de la tabla de la cabecera: con el acceso caducado su usuario sigue contando."""
+async def test_csrf_expired_access_token_still_binds_its_user(dos):
+    """
+    Given: El access JWT de A caducado y sin cookie de refresh
+    When: Llega con el token CSRF de B
+    Then: 403: el usuario del JWT caducado sigue contando
+    """
     client, a, b = dos
     # A mano y en UTC: `create_access_token` calcula `exp` con la hora local sin
     # zona, y con UTC+1 «hace 5 minutos» caducaría dentro de 55
@@ -141,8 +157,12 @@ async def test_24_con_el_acceso_caducado_su_usuario_sigue_contando(dos):
     assert _es_rechazo_csrf(await _toca_el_perfil(client, b["csrf_token"]))
 
 
-async def test_25_solo_con_la_de_refresh(dos):
-    """Caso 25 de la tabla de la cabecera: solo con la de refresh."""
+async def test_csrf_only_refresh_cookie_binds_its_user(dos):
+    """
+    Given: Solo la cookie de refresh de A
+    When: Llega con el token de B y luego con el de A
+    Then: El de B da 403 y el de A pasa
+    """
     client, a, b = dos
     client.cookies.delete("access_token")
 
@@ -150,8 +170,12 @@ async def test_25_solo_con_la_de_refresh(dos):
     assert not _es_rechazo_csrf(await _toca_el_perfil(client, a["csrf_token"]))
 
 
-async def test_26_sin_sesion_queda_el_double_submit_de_siempre(client: AsyncClient):
-    """Caso 26 de la tabla de la cabecera: sin sesion queda el double submit de siempre."""
+async def test_csrf_without_session_keeps_plain_double_submit(client: AsyncClient):
+    """
+    Given: Ninguna sesión
+    When: Llega un token cualquiera igual en cabecera y cookie
+    Then: Pasa el CSRF y la petición acaba en 401
+    """
     client.cookies.clear()
 
     respuesta = await _toca_el_perfil(client, secrets.token_urlsafe(32))
@@ -160,8 +184,12 @@ async def test_26_sin_sesion_queda_el_double_submit_de_siempre(client: AsyncClie
     assert respuesta.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-async def test_27_vincular_google_ya_no_esta_exenta(dos):
-    """Caso 27 de la tabla de la cabecera: vincular google ya no esta exenta."""
+async def test_csrf_google_link_is_no_longer_exempt(dos):
+    """
+    Given: La sesión de A
+    When: Llama a POST /auth/google/link sin token CSRF
+    Then: 403: ya no está exenta por prefijo
+    """
     client, _, _ = dos
 
     respuesta = await client.post(
@@ -171,8 +199,12 @@ async def test_27_vincular_google_ya_no_esta_exenta(dos):
     assert _es_rechazo_csrf(respuesta)
 
 
-async def test_28_tras_renovar_vale_el_token_nuevo(dos):
-    """Caso 28 de la tabla de la cabecera: tras renovar vale el token nuevo."""
+async def test_csrf_after_refresh_new_token_is_accepted(dos):
+    """
+    Given: La sesión de A
+    When: Renueva con /auth/refresh-token
+    Then: El token CSRF nuevo está firmado para A y pasa
+    """
     client, a, _ = dos
     renovada = await client.post("/api/v1/auth/refresh-token")
     assert renovada.status_code == status.HTTP_200_OK, renovada.text
@@ -183,8 +215,12 @@ async def test_28_tras_renovar_vale_el_token_nuevo(dos):
     assert respuesta.status_code == status.HTTP_200_OK, respuesta.text
 
 
-async def test_29_por_bearer_sin_cookies_de_sesion(dos):
-    """Caso 29 de la tabla de la cabecera: por bearer sin cookies de sesion."""
+async def test_csrf_bearer_token_binds_its_user(dos):
+    """
+    Given: Solo un Bearer de A, sin cookies de sesión
+    When: Llega con el token de B y luego con el de A
+    Then: El de B da 403 y el de A pasa
+    """
     client, a, b = dos
     client.cookies.delete("access_token")
     client.cookies.delete("refresh_token")
@@ -195,8 +231,12 @@ async def test_29_por_bearer_sin_cookies_de_sesion(dos):
     assert respuesta.status_code == status.HTTP_200_OK, respuesta.text
 
 
-async def test_30_un_jwt_de_acceso_falso_no_cuenta(dos):
-    """Caso 30 de la tabla de la cabecera: un jwt de acceso falso no cuenta."""
+async def test_csrf_forged_access_jwt_is_ignored_and_refresh_user_counts(dos):
+    """
+    Given: Un access JWT de B firmado con otra clave junto al refresh de A
+    When: Llega con el token de B
+    Then: 403: el JWT falso no cuenta y manda el refresh de A
+    """
     client, _, b = dos
     falso = jwt.encode(
         {"sub": b["user"]["id"], "type": "access"}, "no-es-la-clave", algorithm=settings.ALGORITHM
@@ -208,8 +248,12 @@ async def test_30_un_jwt_de_acceso_falso_no_cuenta(dos):
 
 
 @pytest.mark.parametrize("con_sesion", [True, False])
-async def test_31_una_cabecera_no_ascii_es_un_403_no_un_500(client: AsyncClient, con_sesion):
-    """Caso 31 de la tabla de la cabecera: una cabecera no ascii es un 403 no un 500."""
+async def test_csrf_non_ascii_header_returns_403(client: AsyncClient, con_sesion):
+    """
+    Given: Con sesión o sin ella
+    When: Llega un X-CSRF-Token con bytes no ASCII
+    Then: 403, nunca 500
+    """
     if con_sesion:
         await _entra(client, "csrf_a@example.com")
     else:
@@ -226,8 +270,12 @@ async def test_31_una_cabecera_no_ascii_es_un_403_no_un_500(client: AsyncClient,
     assert _es_rechazo_csrf(respuesta)
 
 
-async def test_32_un_acceso_de_otro_usuario_junto_al_refresh_propio_se_rechaza(dos):
-    """Caso 32 de la tabla de la cabecera: un acceso de otro usuario junto al refresh propio se rechaza."""
+async def test_csrf_access_of_other_user_with_own_refresh_is_rejected(dos):
+    """
+    Given: El access JWT de B junto al refresh de A
+    When: Llega con el token de B
+    Then: 403: el token tiene que valer para todos los usuarios de la sesión
+    """
     client, _, b = dos
     # La sesión es de A (su refresh); alguien planta el acceso de B y el token de B
     client.cookies.set("access_token", b["access_token"])

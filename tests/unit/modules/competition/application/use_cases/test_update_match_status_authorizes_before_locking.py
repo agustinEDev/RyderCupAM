@@ -152,8 +152,12 @@ def _start(partido_id) -> UpdateMatchStatusRequestDTO:
     return UpdateMatchStatusRequestDTO(match_id=str(partido_id), action="START")
 
 
-async def test_1_quien_no_es_el_creador_no_bloquea_nada():
-    """Caso 1 de la tabla de la cabecera: quien no es el creador no bloquea nada."""
+async def test_update_match_status_by_non_creator_raises_without_locking():
+    """
+    Given: Un partido de una competición en curso
+    When: Lo intenta abrir quien no es el creador ni admin
+    Then: NotCompetitionCreatorError sin bloquear la fila
+    """
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -164,8 +168,12 @@ async def test_1_quien_no_es_el_creador_no_bloquea_nada():
     assert "bloqueo" not in registro
 
 
-async def test_2_con_la_competicion_sin_empezar_no_bloquea_nada():
-    """Caso 2 de la tabla de la cabecera: con la competicion sin empezar no bloquea nada."""
+async def test_update_match_status_competition_not_started_raises_without_locking():
+    """
+    Given: Una competición que no está en curso
+    When: El creador intenta abrir el partido
+    Then: CompetitionNotInProgressError sin bloquear
+    """
     uow, partido = await _escena(en_curso=False)
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -176,8 +184,12 @@ async def test_2_con_la_competicion_sin_empezar_no_bloquea_nada():
     assert "bloqueo" not in registro
 
 
-async def test_3_un_partido_que_no_existe_no_bloquea_nada():
-    """Caso 3 de la tabla de la cabecera: un partido que no existe no bloquea nada."""
+async def test_update_match_status_missing_match_raises_without_locking():
+    """
+    Given: Un id de partido que no existe
+    When: El creador lo intenta abrir
+    Then: MatchNotFoundError sin bloquear
+    """
     uow, _ = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -188,8 +200,12 @@ async def test_3_un_partido_que_no_existe_no_bloquea_nada():
     assert "bloqueo" not in registro
 
 
-async def test_4_el_creador_bloquea_una_vez_y_despues_de_autorizar():
-    """Caso 4 de la tabla de la cabecera: el creador bloquea una vez y despues de autorizar."""
+async def test_update_match_status_by_creator_locks_once_after_authorizing():
+    """
+    Given: Un partido programado
+    When: El creador lo abre
+    Then: Arranca, con un solo bloqueo y después de autorizar
+    """
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -201,8 +217,12 @@ async def test_4_el_creador_bloquea_una_vez_y_despues_de_autorizar():
     assert registro.index("autoriza") < registro.index("bloqueo")
 
 
-async def test_5_un_admin_que_no_es_el_creador_tambien():
-    """Caso 5 de la tabla de la cabecera: un admin que no es el creador tambien."""
+async def test_update_match_status_by_admin_starts_match():
+    """
+    Given: Un partido programado
+    When: Lo abre un admin que no es el creador
+    Then: Arranca con un solo bloqueo
+    """
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -215,8 +235,12 @@ async def test_5_un_admin_que_no_es_el_creador_tambien():
     assert registro.count("bloqueo") == 1
 
 
-async def test_6_si_otro_lo_abrio_entre_medias_se_decide_con_lo_releido():
-    """Caso 6 de la tabla de la cabecera: si otro lo abrio entre medias se decide con lo releido."""
+async def test_update_match_status_started_meanwhile_uses_reread_state():
+    """
+    Given: Un partido que otro abre entre la lectura y el bloqueo
+    When: El creador manda START
+    Then: InvalidActionError: se decide con lo releído
+    """
     uow, partido = await _escena()
     _espia_el_bloqueo(uow, [], releido="ya abierto")
 
@@ -224,8 +248,12 @@ async def test_6_si_otro_lo_abrio_entre_medias_se_decide_con_lo_releido():
         await UpdateMatchStatusUseCase(uow).execute(_start(partido.id), CREADOR)
 
 
-async def test_7_si_se_borro_entre_medias_no_existe():
-    """Caso 7 de la tabla de la cabecera: si se borro entre medias no existe."""
+async def test_update_match_status_deleted_meanwhile_raises_not_found():
+    """
+    Given: Un partido que se borra entre la lectura y el bloqueo
+    When: El creador manda START
+    Then: MatchNotFoundError
+    """
     uow, partido = await _escena()
     _espia_el_bloqueo(uow, [], releido="borrado")
 
@@ -233,8 +261,12 @@ async def test_7_si_se_borro_entre_medias_no_existe():
         await UpdateMatchStatusUseCase(uow).execute(_start(partido.id), CREADOR)
 
 
-async def test_8_la_ronda_se_relee_fresca_tras_el_bloqueo_y_es_la_que_se_usa():
-    """Caso 8 de la tabla de la cabecera: la ronda se relee fresca tras el bloqueo y es la que se usa."""
+async def test_update_match_status_rereads_round_after_lock_and_saves_it():
+    """
+    Given: Un partido programado
+    When: El creador lo abre
+    Then: La ronda se relee fresca tras el bloqueo y es la que se guarda
+    """
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)

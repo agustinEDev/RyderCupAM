@@ -29,8 +29,12 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 EMAIL = "diez_a_la_vez@test.com"
 
 
-async def test_diez_fallos_a_la_vez_suman_diez_y_bloquean(db_session):
-    """N intentos concurrentes en N conexiones dejan N apuntados y la cuenta bloqueada."""
+async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session):
+    """
+    Given: Una cuenta con el contador a 0
+    When: Llegan 10 contraseñas malas a la vez, cada una en su conexión
+    Then: El contador queda en 10 y la cuenta bloqueada
+    """
     usuario = User.create(
         first_name="Diez",
         last_name="Intentos",
