@@ -312,6 +312,22 @@ class UserDevice:
         """
         self._last_used_at = datetime.now()
 
+    def update_user_agent(self, user_agent: str) -> None:
+        """
+        El navegador se ha actualizado, o es otro en el mismo dispositivo (BE #737).
+
+        Se guarda el nuevo y su nombre legible. La huella no cambia: ya solo sirve
+        para reconocerlo cuando falta la cookie, y cambiarla podría chocar con el
+        índice único de otro dispositivo activo.
+        """
+        limpio = (user_agent or "").strip()
+        if not limpio or limpio == self._user_agent:
+            return
+        self._user_agent = limpio
+        self._device_name = DeviceFingerprint.create(
+            limpio, self._ip_address or "0.0.0.1"
+        ).device_name
+
     def update_ip_address(self, ip_address: str) -> None:
         """
         Actualiza la dirección IP del dispositivo (audit trail).

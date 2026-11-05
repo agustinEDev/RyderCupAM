@@ -126,6 +126,7 @@ class ListUserDevicesUseCase:
                 UserDeviceDTO(
                     id=str(device.id.value),
                     device_name=device.device_name,
+                    user_agent=device.user_agent,
                     ip_address=device.ip_address,
                     last_used_at=device.last_used_at,
                     created_at=device.created_at,

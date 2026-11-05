@@ -1,5 +1,4 @@
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -11,6 +10,7 @@ from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
     get_logout_user_use_case,
+    get_open_session_use_case,
     get_refresh_access_token_use_case,
     get_register_user_use_case,
     get_request_password_reset_use_case,
@@ -66,6 +66,7 @@ from src.modules.user.application.use_cases.login_user_use_case import LoginUser
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
+from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
     RefreshRejectedError,
@@ -106,21 +107,20 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_user_agent,
 )
 from src.shared.infrastructure.security.cookie_handler import (
+    SEPARADOR_DE_DISPOSITIVOS,
     delete_auth_cookie,
     delete_csrf_cookie,
-    delete_device_id_cookie,
     delete_refresh_token_cookie,
+    es_la_app_instalada,
     get_device_id_cookie_name,
     get_refresh_cookie_name,
+    ids_de_la_cookie_de_dispositivo,
     read_access_token,
     set_auth_cookie,
     set_csrf_cookie,
     set_device_id_cookie,
     set_refresh_token_cookie,
-)
-from src.shared.infrastructure.security.jwt_handler import (
-    create_access_token,
-    create_refresh_token,
+    valor_de_la_cookie_de_dispositivo,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,29 +134,20 @@ router = APIRouter()
 
 def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
     """
-    Valida que el valor de la cookie device_id sea un UUID válido.
+    Los ids válidos de la cookie del dispositivo, unidos por puntos, o None.
 
     Security (v2.0.4): La cookie es controlada por el cliente y debe validarse
-    antes de pasar a DTOs para evitar ValidationError/500 errors.
-
-    Args:
-        cookie_value: Valor de la cookie device_id (puede ser None, vacío o malformado)
-
-    Returns:
-        str: UUID válido como string si la validación es exitosa
-        None: Si el valor es None, vacío o no es un UUID válido
+    antes de pasar a DTOs para evitar ValidationError/500 errors. Desde BE #737
+    guarda los dispositivos de hasta 5 cuentas del mismo navegador.
     """
-    if not cookie_value:
-        return None
-    try:
-        # uuid.UUID valida el formato y lanza ValueError si es inválido
-        validated = uuid.UUID(cookie_value)
-        return str(validated)
-    except (ValueError, AttributeError):
-        logger.debug(
-            f"Invalid device_id cookie format ignored: {cookie_value[:50] if cookie_value else 'None'}..."
-        )
-        return None
+    ids = ids_de_la_cookie_de_dispositivo(cookie_value)
+    return SEPARADOR_DE_DISPOSITIVOS.join(ids) if ids else None
+
+
+def _pon_la_cookie_de_dispositivo(response: Response, device_id: str, request: Request) -> None:
+    """La cookie del dispositivo, con este delante y los de otras cuentas detrás."""
+    anteriores = ids_de_la_cookie_de_dispositivo(request.cookies.get(get_device_id_cookie_name()))
+    set_device_id_cookie(response, valor_de_la_cookie_de_dispositivo(device_id, anteriores))
 
 
 # ============================================================================
@@ -287,6 +278,7 @@ async def login_user(
     login_data.device_id_from_cookie = _validate_device_id_cookie(
         request.cookies.get(device_id_cookie_name)
     )
+    login_data.installed_app = es_la_app_instalada(request)
 
     # Rate limit (#273): antes de buscar al usuario, para que el 429 llegue igual
     # exista el email o no. La red solo cuenta los fallos: los aciertos de un club
@@ -332,10 +324,10 @@ async def login_user(
     # CSRF Token: 15 minutos (sincronizado con access token)
     set_csrf_cookie(response, login_response.csrf_token)
 
-    # ✅ NUEVO (v2.0.4): Establecer cookie device_id si es dispositivo nuevo
-    # Cookie httpOnly con duración de 1 año para identificación persistente
-    if login_response.should_set_device_cookie and login_response.device_id:
-        set_device_id_cookie(response, login_response.device_id)
+    # La cookie del dispositivo, siempre: renovarla la mantiene viva (Safari
+    # recorta a 7 días las de una API en otra dirección) y deja este delante (BE #737)
+    if login_response.device_id:
+        _pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
@@ -459,10 +451,9 @@ async def logout_user(
     # ✅ NUEVO (v1.13.0): Eliminar cookie CSRF
     delete_csrf_cookie(response)
 
-    # ✅ NUEVO (v2.0.4): Eliminar cookie device_id
-    # NOTA: El dispositivo NO se revoca automáticamente, solo se elimina la cookie
-    # El usuario puede revocar dispositivos manualmente desde /users/me/devices
-    delete_device_id_cookie(response)
+    # La cookie del dispositivo NO se borra (BE #737): no da acceso a nada, y
+    # borrarla hacía que el siguiente login en el mismo navegador estrenara otro
+    # dispositivo. El dispositivo se revoca desde /users/me/devices
 
     return logout_response
 
@@ -585,6 +576,7 @@ async def refresh_access_token(
         device_id_from_cookie=_validate_device_id_cookie(
             request.cookies.get(device_id_cookie_name)
         ),
+        installed_app=es_la_app_instalada(request),
     )
     try:
         refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
@@ -599,9 +591,10 @@ async def refresh_access_token(
     # ✅ NUEVO (v1.13.0): Establecer nuevo token CSRF (15 min)
     set_csrf_cookie(response, refresh_response.csrf_token)
 
-    # ✅ NUEVO (v2.0.4): Establecer device_id cookie si es necesario
-    if refresh_response.should_set_device_cookie and refresh_response.device_id:
-        set_device_id_cookie(response, refresh_response.device_id)
+    # La cookie del dispositivo se renueva en cada refresco (BE #737): sin esto
+    # caducaba a los 7 días en Safari y la app creía que el dispositivo estaba revocado
+    if refresh_response.device_id:
+        _pon_la_cookie_de_dispositivo(response, refresh_response.device_id, request)
 
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
@@ -625,10 +618,11 @@ async def refresh_access_token(
 )
 @limiter.limit(VERIFY_EMAIL_LIMIT, key_func=get_client_identifier)  # Por red
 async def verify_email(
-    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    request: Request,
     verify_data: VerifyEmailRequestDTO,
     response: Response,
     use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
+    open_session: OpenSessionUseCase = Depends(get_open_session_use_case),
 ):
     """
     Endpoint para verificar el email del usuario y autenticarlo automáticamente.
@@ -672,9 +666,24 @@ async def verify_email(
         user = await use_case.execute(verify_data.token)
         logger.info("Email verification successful")
 
-        # Generar access token (15 min) + refresh token (7 días) - Session Timeout v1.8.0
-        access_token = create_access_token({"sub": str(user.id.value)})
-        refresh_token = create_refresh_token({"sub": str(user.id.value)})
+        # La sesión, como en el login (BE #737): dispositivo, tokens con su id y el
+        # refresco GUARDADO. Antes no se guardaba, y a los 15 minutos el refresco daba
+        # REFRESH_TOKEN_NOT_FOUND: a cada usuario nuevo le echaban
+        sesion = await open_session.execute(
+            user_id=str(user.id.value),
+            user_agent=get_user_agent(request),
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            device_id_from_cookie=_validate_device_id_cookie(
+                request.cookies.get(get_device_id_cookie_name())
+            ),
+            installed_app=es_la_app_instalada(request),
+        )
+        access_token = sesion.access_token
+        refresh_token = sesion.refresh_token
+        if sesion.device_id:
+            _pon_la_cookie_de_dispositivo(response, sesion.device_id, request)
 
         # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
         csrf_token = generate_csrf_token(str(user.id.value))

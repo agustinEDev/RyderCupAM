@@ -70,9 +70,13 @@ class RegisterDeviceRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         default=None,
         min_length=36,
-        max_length=36,
+        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
+    )
+    installed_app: bool = Field(
+        default=False,
+        description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
     )
 
     model_config = ConfigDict(
@@ -165,6 +169,10 @@ class UserDeviceDTO(BaseModel):
         description="Nombre del dispositivo",
         json_schema_extra={"example": "Chrome 120.0 on macOS"},
     )
+    user_agent: str | None = Field(
+        default=None,
+        description="User-Agent del navegador del dispositivo (BE #737)",
+    )
     ip_address: str = Field(
         ...,
         description="Última dirección IP registrada",
@@ -242,7 +250,7 @@ class ListUserDevicesRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         default=None,
         min_length=36,
-        max_length=36,
+        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4, primary identifier)",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
     )

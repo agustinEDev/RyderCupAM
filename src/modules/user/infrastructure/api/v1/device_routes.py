@@ -33,6 +33,7 @@ from src.modules.user.application.dto.device_dto import (
     RevokeDeviceRequestDTO,
     RevokeDeviceResponseDTO,
 )
+from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
 from src.modules.user.application.use_cases.list_user_devices_use_case import (
     ListUserDevicesUseCase,
 )
@@ -44,7 +45,12 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
-from src.shared.infrastructure.security.cookie_handler import get_device_id_cookie_name
+from src.shared.infrastructure.security.cookie_handler import (
+    get_device_id_cookie_name,
+    ids_de_la_cookie_de_dispositivo,
+    read_access_token,
+)
+from src.shared.infrastructure.security.jwt_handler import verify_access_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,6 +59,17 @@ router = APIRouter()
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+
+
+def _dispositivo_actual(request: Request) -> str | None:
+    """El dispositivo desde el que se hace la petición: el `did` del token de acceso."""
+    token = read_access_token(request)
+    payload = verify_access_token(token) if token else None
+    did = payload.get(CLAIM_DEL_DISPOSITIVO) if payload else None
+    if did:
+        return _validate_device_id_cookie(did)
+    ids = ids_de_la_cookie_de_dispositivo(request.cookies.get(get_device_id_cookie_name()))
+    return ids[0] if ids else None
 
 
 def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
@@ -191,12 +208,10 @@ async def list_user_devices(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
 
-        # Device Fingerprinting (v2.0.4): Leer y validar device_id desde cookie httpOnly
-        # SECURITY: Validar UUID para evitar ValidationError si cookie es malformada
-        device_id_cookie_name = get_device_id_cookie_name()
-        device_id_from_cookie = _validate_device_id_cookie(
-            request.cookies.get(device_id_cookie_name)
-        )
+        # «Este dispositivo» es el del token de acceso (`did`, BE #737): la cookie
+        # puede traer los de varias cuentas del navegador. Sin `did` (un token de
+        # antes de esta versión), el primero de la cookie
+        device_id_from_cookie = _dispositivo_actual(request)
 
         # Crear request DTO con user_id + device_id_from_cookie
         # NOTA: user_agent e ip_address ya no se usan para is_current_device (v2.0.4)

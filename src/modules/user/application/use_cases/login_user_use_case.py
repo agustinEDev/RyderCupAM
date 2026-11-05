@@ -22,6 +22,7 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -263,14 +264,6 @@ class LoginUserUseCase:
             # session_id se podría generar aquí si fuera necesario
         )
 
-        # Generar access token JWT (15 minutos)
-        access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
-
-        # Generar refresh token JWT (7 días)
-        refresh_token_jwt = self._token_service.create_refresh_token(
-            data={"sub": str(user.id.value)}
-        )
-
         # Device Fingerprinting (v2.0.4): Registrar/actualizar dispositivo PRIMERO
         # Cookie-based identification: device_id_from_cookie tiene prioridad
         # Necesitamos el device_id para asociarlo con el refresh token
@@ -282,7 +275,8 @@ class LoginUserUseCase:
                 user_id=str(user.id.value),
                 user_agent=request.user_agent,
                 ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
-                device_id_from_cookie=request.device_id_from_cookie,  # v2.0.4
+                device_id_from_cookie=request.device_id_from_cookie,
+                installed_app=request.installed_app,  # BE #737
             )
             # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
             device_response = await self._register_device_use_case.execute(device_request)
@@ -290,6 +284,15 @@ class LoginUserUseCase:
             device_id = UserDeviceId.from_string(device_response.device_id)
             device_id_str = device_response.device_id
             should_set_device_cookie = device_response.set_device_cookie
+
+        # Los tokens, después del dispositivo: el de acceso lleva su id (`did`), y así
+        # revocarlo se comprueba por id y no por una huella que cambia (BE #737)
+        access_token = self._token_service.create_access_token(
+            data=datos_del_acceso(str(user.id.value), device_id_str)
+        )
+        refresh_token_jwt = self._token_service.create_refresh_token(
+            data={"sub": str(user.id.value)}
+        )
 
         # Crear entidad RefreshToken (hashea el JWT antes de guardar)
         # IMPORTANTE: Asociar con device_id para permitir revocación correcta

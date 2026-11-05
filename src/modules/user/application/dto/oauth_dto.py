@@ -23,6 +23,10 @@ class GoogleLoginRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None, description="Device ID desde cookie httpOnly (inyectado por la ruta)"
     )
+    installed_app: bool = Field(
+        default=False,
+        description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
+    )
 
 
 class GoogleLoginResponseDTO(BaseModel):

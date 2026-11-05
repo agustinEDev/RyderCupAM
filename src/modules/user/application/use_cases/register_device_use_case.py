@@ -110,24 +110,28 @@ class RegisterDeviceUseCase:
             # =========================================================
             # PRIORITY 1: Cookie-based lookup (v2.0.4)
             # =========================================================
-            if request.device_id_from_cookie:
+            # La cookie guarda los dispositivos de hasta 5 cuentas del navegador (BE
+            # #737): vale el primero que sea de este usuario y siga activo
+            for id_de_la_cookie in (request.device_id_from_cookie or "").split("."):
+                if not id_de_la_cookie:
+                    continue
                 try:
-                    device_id = UserDeviceId.from_string(request.device_id_from_cookie)
-                    existing_device = await self._uow.user_devices.find_by_id_and_user(
-                        device_id=device_id,
-                        user_id=user_id,
-                    )
-
-                    if existing_device:
-                        logger.debug(f"Device identified via cookie: {existing_device.device_name}")
-                        # Cookie already valid
-                        return await self._reusa(
-                            existing_device, request.ip_address, poner_cookie=False
-                        )
-
+                    device_id = UserDeviceId.from_string(id_de_la_cookie)
                 except ValueError as e:
                     # Invalid device_id format in cookie - treat as no cookie
                     logger.warning(f"Invalid device_id in cookie: {e}")
+                    continue
+                existing_device = await self._uow.user_devices.find_by_id_and_user(
+                    device_id=device_id,
+                    user_id=user_id,
+                )
+                if existing_device:
+                    logger.debug(f"Device identified via cookie: {existing_device.device_name}")
+                    # El navegador se actualizó, o es otro en este dispositivo
+                    existing_device.update_user_agent(request.user_agent)
+                    return await self._reusa(
+                        existing_device, request.ip_address, poner_cookie=False
+                    )
 
             # =========================================================
             # PRIORITY 2: Fingerprint-based lookup (fallback)
@@ -136,6 +140,7 @@ class RegisterDeviceUseCase:
             fingerprint = DeviceFingerprint.create(
                 user_agent=request.user_agent,
                 ip_address=request.ip_address,
+                installed_app=request.installed_app,
             )
 
             # Check if device already exists by fingerprint (prevents unique index violation)

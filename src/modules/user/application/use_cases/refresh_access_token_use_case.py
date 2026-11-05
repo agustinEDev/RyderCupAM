@@ -21,6 +21,7 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -204,7 +205,8 @@ class RefreshAccessTokenUseCase:
                 user_id=str(user.id.value),
                 user_agent=request.user_agent,
                 ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
-                device_id_from_cookie=request.device_id_from_cookie,  # v2.0.4
+                device_id_from_cookie=request.device_id_from_cookie,
+                installed_app=request.installed_app,  # BE #737
             )
             # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
             device_response = await self._register_device_use_case.execute(device_request)
@@ -212,7 +214,12 @@ class RefreshAccessTokenUseCase:
             should_set_device_cookie = device_response.set_device_cookie
 
         # 6. Generar nuevo access token (15 minutos)
-        new_access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
+        # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737). El
+        # del token de refresco manda; sin él (tokens de antes), el reconocido
+        did = str(dispositivo.id.value) if dispositivo is not None else device_id
+        new_access_token = self._token_service.create_access_token(
+            data=datos_del_acceso(str(user.id.value), did)
+        )
 
         # 7. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token(str(user.id.value))

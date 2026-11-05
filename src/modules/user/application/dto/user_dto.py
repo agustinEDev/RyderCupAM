@@ -398,8 +398,12 @@ class LoginRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None,
         min_length=36,
-        max_length=36,
+        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+    )
+    installed_app: bool = Field(
+        default=False,
+        description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
     )
 
 
@@ -735,8 +739,12 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None,
         min_length=36,
-        max_length=36,
+        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+    )
+    installed_app: bool = Field(
+        default=False,
+        description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
     )
 
 

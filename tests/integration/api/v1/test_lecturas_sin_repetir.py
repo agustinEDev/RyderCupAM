@@ -96,14 +96,17 @@ async def test_ninguna_lectura_repite_consulta(client: AsyncClient, privada, qui
 # Sentencias de cada lectura, medidas tras la PR 2 (27 oct 2026). Antes:
 # ficha 42/30/27, agenda 12/16/18, grupos 14/18/20, inscritos 8/12/11,
 # anotación 21/22/11, general 17/18/9. Si una sube, alguien vuelve a leer de más;
-# si una baja, se baja aquí su tope para que no se pierda lo ganado
+# si una baja, se baja aquí su tope para que no se pierda lo ganado.
+# +1 en todas desde BE #737 (5 nov 2026): la comprobación del dispositivo del token
+# por su id. En producción no es una más: la de antes, por huella, también hacía una
+# consulta en cada petición; en los tests no corría porque no había IP
 TOPES = {
-    "R1 ficha": {"organizador": 22, "aprobado": 19, "fuera": 16},
-    "R2 agenda": {"organizador": 12, "aprobado": 15, "fuera": 17},
-    "R3 grupos": {"organizador": 14, "aprobado": 16, "fuera": 18},
-    "R4 inscritos": {"organizador": 8, "aprobado": 10, "fuera": 9},
-    "R5 anotacion": {"organizador": 13, "aprobado": 13, "fuera": 12},
-    "R6 general": {"organizador": 13, "aprobado": 14, "fuera": 9},
+    "R1 ficha": {"organizador": 23, "aprobado": 20, "fuera": 17},
+    "R2 agenda": {"organizador": 13, "aprobado": 16, "fuera": 18},
+    "R3 grupos": {"organizador": 15, "aprobado": 17, "fuera": 19},
+    "R4 inscritos": {"organizador": 9, "aprobado": 11, "fuera": 10},
+    "R5 anotacion": {"organizador": 14, "aprobado": 14, "fuera": 13},
+    "R6 general": {"organizador": 14, "aprobado": 15, "fuera": 10},
 }
 
 

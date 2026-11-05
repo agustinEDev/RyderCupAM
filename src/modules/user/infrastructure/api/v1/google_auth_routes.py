@@ -8,7 +8,6 @@ Endpoints para autenticación con Google OAuth:
 """
 
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -43,11 +42,15 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_user_agent,
 )
 from src.shared.infrastructure.security.cookie_handler import (
+    SEPARADOR_DE_DISPOSITIVOS,
+    es_la_app_instalada,
     get_device_id_cookie_name,
+    ids_de_la_cookie_de_dispositivo,
     set_auth_cookie,
     set_csrf_cookie,
     set_device_id_cookie,
     set_refresh_token_cookie,
+    valor_de_la_cookie_de_dispositivo,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,14 +58,9 @@ router = APIRouter()
 
 
 def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
-    """Valida que el device_id cookie sea un UUID válido."""
-    if not cookie_value:
-        return None
-    try:
-        validated = uuid.UUID(cookie_value)
-        return str(validated)
-    except (ValueError, AttributeError):
-        return None
+    """Los ids válidos de la cookie del dispositivo, unidos por puntos, o None (BE #737)."""
+    ids = ids_de_la_cookie_de_dispositivo(cookie_value)
+    return SEPARADOR_DE_DISPOSITIVOS.join(ids) if ids else None
 
 
 @router.post(
@@ -91,6 +89,7 @@ async def google_login(
     login_data.device_id_from_cookie = _validate_device_id_cookie(
         request.cookies.get(device_id_cookie_name)
     )
+    login_data.installed_app = es_la_app_instalada(request)
 
     try:
         login_response = await use_case.execute(login_data)
@@ -119,8 +118,14 @@ async def google_login(
     set_refresh_token_cookie(response, login_response.refresh_token)
     set_csrf_cookie(response, login_response.csrf_token)
 
-    if login_response.should_set_device_cookie and login_response.device_id:
-        set_device_id_cookie(response, login_response.device_id)
+    # Siempre: la renueva y deja este dispositivo delante (BE #737)
+    if login_response.device_id:
+        anteriores = ids_de_la_cookie_de_dispositivo(
+            request.cookies.get(get_device_id_cookie_name())
+        )
+        set_device_id_cookie(
+            response, valor_de_la_cookie_de_dispositivo(login_response.device_id, anteriores)
+        )
 
     return login_response
 

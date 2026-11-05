@@ -25,6 +25,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -143,6 +144,7 @@ class GoogleLoginUseCase:
             user_agent=request.user_agent,
             ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
             device_id_from_cookie=request.device_id_from_cookie,
+            installed_app=request.installed_app,
         )
         device_response = await self._register_device_use_case.execute(device_request)
         return (
@@ -201,13 +203,16 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
-        refresh_token_jwt = self._token_service.create_refresh_token(
-            data={"sub": str(user.id.value)}
-        )
-
         device_id, device_id_str, should_set_device_cookie = await self._register_device(
             request, str(user.id.value)
+        )
+
+        # Después del dispositivo: el token de acceso lleva su id (BE #737)
+        access_token = self._token_service.create_access_token(
+            data=datos_del_acceso(str(user.id.value), device_id_str)
+        )
+        refresh_token_jwt = self._token_service.create_refresh_token(
+            data={"sub": str(user.id.value)}
         )
 
         refresh_token_entity = RefreshToken.create(
