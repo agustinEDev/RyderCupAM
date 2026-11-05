@@ -157,3 +157,38 @@ class TestRefrescarSegunElUso:
 
         registro.log_refresh_token_revoked.assert_called_once()
         assert registro.log_refresh_token_revoked.call_args.kwargs["reason"] == "idle"
+
+    @pytest.mark.parametrize(
+        ("usado_hace", "motivo"),
+        [
+            pytest.param(
+                timedelta(hours=25), RefreshRejection.SESSION_IDLE, id="ya-revocado-e-inactivo"
+            ),
+            pytest.param(
+                timedelta(hours=1), RefreshRejection.REFRESH_TOKEN_REVOKED, id="revocado-y-en-uso"
+            ),
+        ],
+    )
+    async def test_r6_ya_revocado_dice_inactivo_si_el_dispositivo_lo_esta(
+        self, user, token_service, usado_hace, motivo
+    ):
+        """
+        Given: Un refresh ya revocado, en un dispositivo inactivo 25 h o usado hace 1 h
+        When: Se intenta renovar otra vez (otra pestaña, o la cookie que se quedó)
+        Then: Inactivo sigue siendo SESSION_IDLE, el final normal; en uso, REVOKED
+              (/code-review, 5 nov: si no, cada visita tras el día sin uso alertaba)
+        """
+        uow = InMemoryUnitOfWork()
+        dispositivo = _dispositivo(user, usado_hace)
+        await uow.users.save(user)
+        await uow.user_devices.save(dispositivo)
+        token = RefreshToken.create(user.id, JWT, device_id=dispositivo.id)
+        token.revoke()
+        await uow.refresh_tokens.save(token)
+
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await RefreshAccessTokenUseCase(uow, token_service, AsyncMock()).execute(
+                RefreshAccessTokenRequestDTO(), JWT
+            )
+
+        assert rechazo.value.motivo is motivo

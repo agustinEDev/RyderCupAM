@@ -234,6 +234,46 @@ class TestRefreshTokenEndpoint:
         # El logout borra la cookie: lo que llega después es un refresco sin ella
         assert data["error_code"] == "REFRESH_TOKEN_MISSING"
 
+    async def test_refresh_token_revoked_and_sent_again_returns_revoked_code_and_clears_cookie(
+        self,
+        client: AsyncClient,
+        test_user_data: dict,
+    ):
+        """
+        Given: Un refresh token revocado por el logout, que alguien vuelve a mandar
+        When: Pide renovar la sesión con él
+        Then: 401 con REFRESH_TOKEN_REVOKED, y la respuesta borra la cookie de refresh:
+              el siguiente intento ya es un REFRESH_TOKEN_MISSING, el final normal
+              (/code-review, 5 nov)
+        """
+        await client.post(
+            "/api/v1/auth/register",
+            json=RegisterUserRequestDTO(
+                accept_terms=True,
+                email=test_user_data["email"],
+                password=test_user_data["password"],
+                first_name=test_user_data["first_name"],
+                last_name=test_user_data["last_name"],
+            ).model_dump(),
+        )
+        await client.post(
+            "/api/v1/auth/login",
+            json={"email": test_user_data["email"], "password": test_user_data["password"]},
+        )
+        refresco = client.cookies.get("refresh_token")
+        assert refresco
+        await client.post("/api/v1/auth/logout", json={})
+
+        client.cookies.set("refresh_token", refresco)
+        response = await client.post("/api/v1/auth/refresh-token")
+
+        assert response.status_code == 401
+        assert response.json()["error_code"] == "REFRESH_TOKEN_REVOKED"
+        borrada = [
+            c for c in response.headers.get_list("set-cookie") if c.startswith("refresh_token=")
+        ]
+        assert borrada and ("Max-Age=0" in borrada[0] or 'refresh_token=""' in borrada[0])
+
     async def test_refresh_token_can_be_used_to_access_protected_endpoints(
         self,
         client: AsyncClient,

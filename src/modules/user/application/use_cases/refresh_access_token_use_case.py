@@ -126,9 +126,8 @@ class RefreshAccessTokenUseCase:
             ...     ip_address="192.168.1.1",
             ...     user_agent="Mozilla/5.0..."
             ... )
-            >>> response = await use_case.execute(request, "eyJ...")
-            >>> if response:
-            >>>     print(response.access_token)  # Nuevo token válido por 15 min
+            >>> response = await use_case.execute(request, "eyJ...")  # o RefreshRejectedError
+            >>> print(response.access_token)  # Nuevo token válido por 15 min
         """
         # Obtener security logger
         security_logger = get_security_logger()
@@ -161,17 +160,7 @@ class RefreshAccessTokenUseCase:
         # El repositorio se encarga de hashear internamente
         refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
 
-        if not refresh_token_entity:
-            # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
-            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_NOT_FOUND)
-
-        if refresh_token_entity.revoked:
-            # Refresh token fue revocado explícitamente (logout)
-            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
-
-        if refresh_token_entity.is_expired():
-            # Refresh token expiró (aunque JWT aún no lo detectara)
-            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+        await self._rechaza_si_no_vale(refresh_token_entity)
 
         # 4. Verificar que el usuario sigue existiendo
         user = await self._uow.users.find_by_id(user_id)
@@ -249,6 +238,25 @@ class RefreshAccessTokenUseCase:
             device_id=device_id,
             should_set_device_cookie=should_set_device_cookie,
         )
+
+    async def _rechaza_si_no_vale(self, refresh_token_entity: RefreshToken | None) -> None:
+        """Rechaza, con su motivo, el token que no existe, está revocado o caducó en BD."""
+        if not refresh_token_entity:
+            # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_NOT_FOUND)
+
+        if refresh_token_entity.revoked:
+            # Revocado por 24 h sin uso sigue siendo el final normal: lo vuelve a
+            # mandar otra pestaña, o la cookie que se quedó (/code-review, 5 nov)
+            dispositivo = await self._dispositivo_del_token(refresh_token_entity)
+            if dispositivo is not None and dispositivo.is_idle():
+                raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
+            # Refresh token fue revocado explícitamente (logout)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
+
+        if refresh_token_entity.is_expired():
+            # Refresh token expiró (aunque JWT aún no lo detectara)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
 
     async def _dispositivo_del_token(self, refresh_token_entity: RefreshToken) -> UserDevice | None:
         if refresh_token_entity.device_id is None:

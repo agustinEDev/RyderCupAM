@@ -100,6 +100,7 @@ from src.modules.user.domain.exceptions import AccountDeactivatedException, Acco
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -466,12 +467,30 @@ async def logout_user(
     return logout_response
 
 
-def _refresco_rechazado(detalle: str, motivo: RefreshRejection) -> JSONResponse:
-    """El 401 del refresco: el texto de siempre y el motivo en `error_code` (FE #1042)."""
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"detail": detalle, "error_code": motivo.value},
+# Los textos del 401 del refresco, los de siempre; el motivo va en `error_code`
+_TEXTOS_DEL_REFRESCO = {
+    motivo.value: (
+        "Refresh token no proporcionado. Por favor, inicia sesión nuevamente."
+        if motivo is RefreshRejection.REFRESH_TOKEN_MISSING
+        else "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente."
     )
+    for motivo in RefreshRejection
+}
+
+
+def _refresco_rechazado(motivo: RefreshRejection) -> JSONResponse:
+    """
+    El 401 del refresco: texto fijo y el motivo en `error_code` (FE #1042).
+
+    Borra la cookie de refresh: un token que ya no vale no se vuelve a mandar, y el
+    siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez de un
+    REVOKED que alertaría en cada visita (/code-review, 5 nov).
+    """
+    respuesta = respuesta_con_codigo(
+        status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, motivo.value
+    )
+    delete_refresh_token_cookie(respuesta)
+    return respuesta
 
 
 @router.post(
@@ -481,6 +500,16 @@ def _refresco_rechazado(detalle: str, motivo: RefreshRejection) -> JSONResponse:
     summary="Renovar access token",
     description="Genera un nuevo access token usando un refresh token válido (httpOnly cookie).",
     tags=["Authentication"],
+    responses={
+        401: {
+            "description": (
+                "La sesión no se renueva. `error_code` dice por qué: REFRESH_TOKEN_MISSING, "
+                "REFRESH_TOKEN_EXPIRED y SESSION_IDLE son el final normal; "
+                "REFRESH_TOKEN_INVALID, REFRESH_TOKEN_NOT_FOUND, REFRESH_TOKEN_REVOKED y "
+                "USER_NOT_FOUND, un rechazo. Borra la cookie de refresh."
+            ),
+        }
+    },
 )
 # Por el usuario del refresh: llega con el acceso caducado (BE #467). Sin cookie
 # válida no cuenta: va a dar 401
@@ -529,18 +558,15 @@ async def refresh_access_token(
     Returns:
         RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
 
-    Raises:
-        HTTPException 401: Si refresh token es inválido, expirado o revocado
+    Returns (401):
+        `detail` fijo y `error_code` con el motivo (RefreshRejection); borra la cookie
     """
     # Leer refresh token desde cookie httpOnly
     refresh_cookie_name = get_refresh_cookie_name()
     refresh_token_jwt = request.cookies.get(refresh_cookie_name)
 
     if not refresh_token_jwt:
-        return _refresco_rechazado(
-            "Refresh token no proporcionado. Por favor, inicia sesión nuevamente.",
-            RefreshRejection.REFRESH_TOKEN_MISSING,
-        )
+        return _refresco_rechazado(RefreshRejection.REFRESH_TOKEN_MISSING)
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
@@ -561,10 +587,7 @@ async def refresh_access_token(
     except RefreshRejectedError as rechazo:
         # Refresh token inválido, expirado o revocado: el mismo texto de siempre, y el
         # motivo para que el front distinga el final normal de un rechazo (FE #1042)
-        return _refresco_rechazado(
-            "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
-            rechazo.motivo,
-        )
+        return _refresco_rechazado(rechazo.motivo)
 
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
     set_auth_cookie(response, refresh_response.access_token)

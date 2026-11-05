@@ -31,20 +31,23 @@ def test_refresh_token_expired_with_good_signature_is_true():
 
 
 @pytest.mark.parametrize(
-    "token",
+    "hazlo",
     [
-        _firmado(sub="u", type="refresh", exp=int(time.time()) + 600),
-        _firmado(sub="u", type="access", exp=int(time.time()) - 60),
-        _firmado(clave="otra-clave-de-32-bytes-como-minimo!!", sub="u", type="refresh", exp=1),
-        _firmado(sub="u", type="refresh"),
-        "basura",
+        lambda: _firmado(sub="u", type="refresh", exp=int(time.time()) + 600),
+        lambda: _firmado(sub="u", type="access", exp=int(time.time()) - 60),
+        lambda: _firmado(
+            clave="otra-clave-de-32-bytes-como-minimo!!", sub="u", type="refresh", exp=1
+        ),
+        lambda: _firmado(sub="u", type="refresh"),
+        lambda: "basura",
     ],
     ids=["vigente", "de-acceso", "otra-firma", "sin-exp", "basura"],
 )
-def test_refresh_token_expired_is_false_for_anything_else(token):
+def test_refresh_token_expired_is_false_for_anything_else(hazlo):
     """
     Given: Un refresh vigente, uno de acceso caducado, otra firma, sin exp o basura
     When: Se pregunta si es un refresh caducado
-    Then: No: o sigue valiendo o es inválido
+    Then: No: o sigue valiendo o es inválido. Se firman al ejecutar el test, no al
+          recogerlo: un «vigente» de 10 minutos no puede caducar en una cola larga
     """
-    assert JWTTokenService().refresh_token_expired(token) is False
+    assert JWTTokenService().refresh_token_expired(hazlo()) is False

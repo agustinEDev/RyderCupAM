@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from jwt.exceptions import InvalidTokenError
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from src.config.settings import settings
 from src.modules.user.application.ports.token_service_interface import ITokenService
@@ -124,23 +124,24 @@ class JWTTokenService(ITokenService):
         Si es un refresh token de esta API, con la firma buena, que ya ha caducado.
 
         El final normal de una sesión; uno que no verifica por otra cosa es inválido
-        (FE #1042). Se comprueba firma y tipo sin mirar la caducidad, y luego esta.
+        (FE #1042). La caducidad la decide PyJWT, con las mismas reglas que
+        `verify_refresh_token`; solo entonces se mira, sin caducidad, que sea de refresh.
         """
         try:
-            payload = jwt.decode(
-                token,
-                settings.SECRET_KEY,
-                algorithms=[settings.ALGORITHM],
-                options={"verify_exp": False},
-            )
+            jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        except ExpiredSignatureError:
+            pass
         except InvalidTokenError:
             return False
-        exp = payload.get("exp")
-        return (
-            payload.get("type") == "refresh"
-            and isinstance(exp, int | float)
-            and exp <= datetime.now(UTC).timestamp()
+        else:
+            return False
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": False},
         )
+        return payload.get("type") == "refresh"
 
     def verify_refresh_token(self, token: str) -> dict | None:
         """
