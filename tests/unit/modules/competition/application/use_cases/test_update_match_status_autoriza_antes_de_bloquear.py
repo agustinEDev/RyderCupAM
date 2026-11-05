@@ -73,6 +73,7 @@ CREADOR = UserId(uuid4())
 
 
 def _jugador():
+    """Ayudante del test: jugador."""
     return MatchPlayer.create(
         user_id=UserId(uuid4()),
         playing_handicap=0,
@@ -126,10 +127,12 @@ def _espia_el_bloqueo(uow, registro, releido="igual"):
     original_competicion = uow.competitions.find_by_id
 
     async def competicion(competition_id):
+        """Ayudante del test: competicion."""
         registro.append("autoriza")
         return await original_competicion(competition_id)
 
     async def bloqueo(match_id):
+        """Ayudante del test: bloqueo."""
         registro.append("bloqueo")
         partido = await original(match_id)
         if releido == "borrado":
@@ -145,10 +148,12 @@ def _espia_el_bloqueo(uow, registro, releido="igual"):
 
 
 def _start(partido_id) -> UpdateMatchStatusRequestDTO:
+    """Ayudante del test: start."""
     return UpdateMatchStatusRequestDTO(match_id=str(partido_id), action="START")
 
 
 async def test_1_quien_no_es_el_creador_no_bloquea_nada():
+    """Caso 1 de la tabla de la cabecera: quien no es el creador no bloquea nada."""
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -160,6 +165,7 @@ async def test_1_quien_no_es_el_creador_no_bloquea_nada():
 
 
 async def test_2_con_la_competicion_sin_empezar_no_bloquea_nada():
+    """Caso 2 de la tabla de la cabecera: con la competicion sin empezar no bloquea nada."""
     uow, partido = await _escena(en_curso=False)
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -171,6 +177,7 @@ async def test_2_con_la_competicion_sin_empezar_no_bloquea_nada():
 
 
 async def test_3_un_partido_que_no_existe_no_bloquea_nada():
+    """Caso 3 de la tabla de la cabecera: un partido que no existe no bloquea nada."""
     uow, _ = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -182,6 +189,7 @@ async def test_3_un_partido_que_no_existe_no_bloquea_nada():
 
 
 async def test_4_el_creador_bloquea_una_vez_y_despues_de_autorizar():
+    """Caso 4 de la tabla de la cabecera: el creador bloquea una vez y despues de autorizar."""
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -194,6 +202,7 @@ async def test_4_el_creador_bloquea_una_vez_y_despues_de_autorizar():
 
 
 async def test_5_un_admin_que_no_es_el_creador_tambien():
+    """Caso 5 de la tabla de la cabecera: un admin que no es el creador tambien."""
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -207,6 +216,7 @@ async def test_5_un_admin_que_no_es_el_creador_tambien():
 
 
 async def test_6_si_otro_lo_abrio_entre_medias_se_decide_con_lo_releido():
+    """Caso 6 de la tabla de la cabecera: si otro lo abrio entre medias se decide con lo releido."""
     uow, partido = await _escena()
     _espia_el_bloqueo(uow, [], releido="ya abierto")
 
@@ -215,6 +225,7 @@ async def test_6_si_otro_lo_abrio_entre_medias_se_decide_con_lo_releido():
 
 
 async def test_7_si_se_borro_entre_medias_no_existe():
+    """Caso 7 de la tabla de la cabecera: si se borro entre medias no existe."""
     uow, partido = await _escena()
     _espia_el_bloqueo(uow, [], releido="borrado")
 
@@ -223,6 +234,7 @@ async def test_7_si_se_borro_entre_medias_no_existe():
 
 
 async def test_8_la_ronda_se_relee_fresca_tras_el_bloqueo_y_es_la_que_se_usa():
+    """Caso 8 de la tabla de la cabecera: la ronda se relee fresca tras el bloqueo y es la que se usa."""
     uow, partido = await _escena()
     registro = []
     _espia_el_bloqueo(uow, registro)
@@ -230,6 +242,7 @@ async def test_8_la_ronda_se_relee_fresca_tras_el_bloqueo_y_es_la_que_se_usa():
     frescas = []
 
     async def fresca(round_id):
+        """Ayudante del test: fresca."""
         registro.append("ronda fresca")
         ronda = deepcopy(await original(round_id))
         frescas.append(ronda)
@@ -240,6 +253,7 @@ async def test_8_la_ronda_se_relee_fresca_tras_el_bloqueo_y_es_la_que_se_usa():
     actualiza = uow.rounds.update
 
     async def espia_update(ronda):
+        """Ayudante del test: espia update."""
         guardadas.append(ronda)
         return await actualiza(ronda)
 

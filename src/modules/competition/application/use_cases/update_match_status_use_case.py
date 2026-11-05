@@ -58,6 +58,12 @@ class UpdateMatchStatusUseCase:
     async def execute(
         self, request: UpdateMatchStatusRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateMatchStatusResponseDTO:
+        """
+        Arranca (START) o cierra (COMPLETE) un partido, solo su creador o un admin.
+
+        Autoriza antes de bloquear la fila del partido, y decide sobre el partido
+        y la ronda releidos tras el bloqueo (BE #309).
+        """
         async with self._uow:
             # 1-4. Validaciones
             match, round_entity, competition = await self._validate(request, user_id, is_admin)

@@ -42,6 +42,7 @@ async def test_diez_fallos_a_la_vez_suman_diez_y_bloquean(db_session):
     sesiones = async_sessionmaker(db_session.bind, class_=AsyncSession, expire_on_commit=False)
 
     async def un_intento():
+        """Ayudante del test: un intento."""
         async with sesiones() as sesion:
             login = LoginUserUseCase(SQLAlchemyUnitOfWork(sesion), JWTTokenService(), AsyncMock())
             return await login.execute(LoginRequestDTO(email=EMAIL, password="Mala-Pass-1!"))

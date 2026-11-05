@@ -48,6 +48,7 @@ def cuenta_checkpw(monkeypatch):
     original = bcrypt.checkpw
 
     def espia(*args, **kwargs):
+        """Ayudante del test: espia."""
         llamadas.append(args)
         return original(*args, **kwargs)
 
@@ -57,12 +58,14 @@ def cuenta_checkpw(monkeypatch):
 
 @pytest.fixture
 def caso_de_uso():
+    """Ayudante del test: caso de uso."""
     uow = InMemoryUnitOfWork()
     dispositivos = AsyncMock()
     return uow, LoginUserUseCase(uow, JWTTokenService(), dispositivos)
 
 
 async def _con_usuario(uow) -> User:
+    """Ayudante del test: con usuario."""
     usuario = User.create(
         first_name="Ana",
         last_name="Existe",
@@ -75,6 +78,7 @@ async def _con_usuario(uow) -> User:
 
 
 async def test_1_un_email_inexistente_pasa_por_bcrypt_una_vez(caso_de_uso, cuenta_checkpw):
+    """Caso 1 de la tabla de la cabecera: un email inexistente pasa por bcrypt una vez."""
     _, login = caso_de_uso
 
     respuesta = await login.execute(
@@ -86,6 +90,7 @@ async def test_1_un_email_inexistente_pasa_por_bcrypt_una_vez(caso_de_uso, cuent
 
 
 async def test_2_una_contrasena_mala_tambien_una_vez(caso_de_uso, cuenta_checkpw):
+    """Caso 2 de la tabla de la cabecera: una contrasena mala tambien una vez."""
     uow, login = caso_de_uso
     await _con_usuario(uow)
 
@@ -98,6 +103,7 @@ async def test_2_una_contrasena_mala_tambien_una_vez(caso_de_uso, cuenta_checkpw
 
 
 def test_3_el_relleno_tiene_el_mismo_coste_que_los_hashes_reales():
+    """Caso 3 de la tabla de la cabecera: el relleno tiene el mismo coste que los hashes reales."""
     real = Password.from_plain_text("V@l1dP@ss123!").hashed_value
     relleno = Password._relleno()
 
@@ -107,6 +113,7 @@ def test_3_el_relleno_tiene_el_mismo_coste_que_los_hashes_reales():
 
 
 def test_3b_en_produccion_el_coste_es_12(monkeypatch):
+    """Caso 3b de la tabla de la cabecera: en produccion el coste es 12."""
     monkeypatch.delenv("TESTING", raising=False)
     Password._relleno.cache_clear()
     try:
@@ -116,12 +123,14 @@ def test_3b_en_produccion_el_coste_es_12(monkeypatch):
 
 
 async def test_4_el_relleno_se_calcula_una_sola_vez(caso_de_uso, monkeypatch):
+    """Caso 4 de la tabla de la cabecera: el relleno se calcula una sola vez."""
     _, login = caso_de_uso
     Password._relleno.cache_clear()
     hechos = []
     original = Password._hash_password
 
     def espia(texto):
+        """Ayudante del test: espia."""
         hechos.append(1)
         return original(texto)
 
@@ -135,15 +144,18 @@ async def test_4_el_relleno_se_calcula_una_sola_vez(caso_de_uso, monkeypatch):
 
 @pytest.mark.parametrize("intento", ["", "Lo-Que-Sea-1", "x" * 200, "ñandú-🙂"])
 def test_5_ninguna_contrasena_entra_por_el_relleno(intento):
+    """Caso 5 de la tabla de la cabecera: ninguna contrasena entra por el relleno."""
     assert Password.verifica_contra_el_relleno(intento) is False
 
 
 async def test_6_el_relleno_va_por_run_bcrypt(caso_de_uso, monkeypatch):
+    """Caso 6 de la tabla de la cabecera: el relleno va por run bcrypt."""
     _, login = caso_de_uso
     pasadas = []
     original = login_user_use_case.run_bcrypt
 
     async def espia(funcion, *args, **kwargs):
+        """Ayudante del test: espia."""
         pasadas.append(funcion)
         return await original(funcion, *args, **kwargs)
 
@@ -155,6 +167,7 @@ async def test_6_el_relleno_va_por_run_bcrypt(caso_de_uso, monkeypatch):
 
 
 async def test_7_una_cuenta_solo_de_google_tambien_paga_bcrypt(caso_de_uso, cuenta_checkpw):
+    """Caso 7 de la tabla de la cabecera: una cuenta solo de google tambien paga bcrypt."""
     uow, login = caso_de_uso
     usuario = User.create(
         first_name="Ana",

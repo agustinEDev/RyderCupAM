@@ -40,6 +40,7 @@ B = "22222222-2222-2222-2222-222222222222"
 
 
 def test_13_recien_emitido_vale_para_su_usuario_y_no_se_repite():
+    """Caso 13 de la tabla de la cabecera: recien emitido vale para su usuario y no se repite."""
     uno = generate_csrf_token(A)
     dos = generate_csrf_token(A)
 
@@ -52,26 +53,31 @@ def test_13_recien_emitido_vale_para_su_usuario_y_no_se_repite():
 
 
 def test_14_el_de_otro_usuario_no_vale():
+    """Caso 14 de la tabla de la cabecera: el de otro usuario no vale."""
     assert not csrf_token_belongs_to(generate_csrf_token(B), A)
 
 
 def _cambia_un_caracter(texto: str) -> str:
+    """Ayudante del test: cambia un caracter."""
     return texto[:-1] + ("A" if texto[-1] != "A" else "B")
 
 
 def test_15_con_la_firma_tocada_no_vale():
+    """Caso 15 de la tabla de la cabecera: con la firma tocada no vale."""
     aleatorio, firma = generate_csrf_token(A).split(".")
 
     assert not csrf_token_belongs_to(f"{aleatorio}.{_cambia_un_caracter(firma)}", A)
 
 
 def test_16_con_el_aleatorio_tocado_no_vale():
+    """Caso 16 de la tabla de la cabecera: con el aleatorio tocado no vale."""
     aleatorio, firma = generate_csrf_token(A).split(".")
 
     assert not csrf_token_belongs_to(f"{_cambia_un_caracter(aleatorio)}.{firma}", A)
 
 
 def test_17_el_formato_antiguo_sin_firma_no_vale():
+    """Caso 17 de la tabla de la cabecera: el formato antiguo sin firma no vale."""
     import secrets
 
     assert not csrf_token_belongs_to(secrets.token_urlsafe(32), A)
@@ -79,10 +85,12 @@ def test_17_el_formato_antiguo_sin_firma_no_vale():
 
 @pytest.mark.parametrize("token", ["", ".", "a.b.c", "solo-aleatorio.", ".solo-firma", "ñandú.ñ"])
 def test_18_formatos_raros_no_valen(token):
+    """Caso 18 de la tabla de la cabecera: formatos raros no valen."""
     assert not csrf_token_belongs_to(token, A)
 
 
 def test_19_la_clave_es_derivada_y_depende_de_secret_key(monkeypatch):
+    """Caso 19 de la tabla de la cabecera: la clave es derivada y depende de secret key."""
     original = csrf_config._clave()
     assert original != csrf_config.settings.SECRET_KEY.encode()
     assert len(original) == hashlib.sha256().digest_size
@@ -99,6 +107,7 @@ def test_19_la_clave_es_derivada_y_depende_de_secret_key(monkeypatch):
 
 
 def test_19b_la_firma_es_hmac_sha256_del_usuario_y_el_aleatorio():
+    """Caso 19b de la tabla de la cabecera: la firma es hmac sha256 del usuario y el aleatorio."""
     aleatorio, firma = generate_csrf_token(A).split(".")
     esperada = hmac.new(csrf_config._clave(), f"{A}!{aleatorio}".encode(), hashlib.sha256)
 
@@ -126,4 +135,5 @@ def test_19b_la_firma_es_hmac_sha256_del_usuario_y_el_aleatorio():
     ],
 )
 def test_20_las_rutas_exentas_se_comparan_exactas(ruta, exenta):
+    """Caso 20 de la tabla de la cabecera: las rutas exentas se comparan exactas."""
     assert es_ruta_exenta(ruta) is exenta
