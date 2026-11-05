@@ -137,6 +137,11 @@ def get_rate_limit_key(request: Request) -> str:
 _USER_PREFIX = "user:"
 
 
+def _clave_de_usuario(user_id: str) -> str:
+    """El contador de un usuario: un identificador interno, nunca se devuelve a nadie."""
+    return _USER_PREFIX + user_id
+
+
 def refresh_token_rate_limit_key(request: Request) -> str:
     """
     Clave del refresco: el usuario de la cookie de refresh, o la red si no es válida.
@@ -150,8 +155,7 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     payload = verify_refresh_token(token) if token else None
     user_id = payload.get("sub") if payload else None
     if user_id:
-        # Una clave del límite, no una ruta: no se devuelve a nadie como HTML
-        return f"{_USER_PREFIX}{user_id}"  # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
+        return _clave_de_usuario(str(user_id))
     return get_client_identifier(request)
 
 
