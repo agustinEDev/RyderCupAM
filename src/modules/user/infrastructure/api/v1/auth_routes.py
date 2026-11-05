@@ -26,14 +26,17 @@ from src.config.rate_limit import (
     EMAIL_SENDING_PER_EMAIL_LIMIT,
     LOGIN_ATTEMPTS_LIMIT,
     LOGIN_ATTEMPTS_PER_EMAIL_LIMIT,
+    REFRESH_TOKEN_LIMIT,
     REGISTER_LIMIT,
     RESET_PASSWORD_LIMIT,
     VALIDATE_RESET_TOKEN_LIMIT,
+    VERIFY_EMAIL_LIMIT,
     count_or_refuse,
     email_rate_limit_key,
     get_client_identifier,
     limiter,
     record_failed_login,
+    refresh_token_rate_limit_key,
     refuse_if_failed_logins_exhausted,
 )
 from src.config.settings import settings
@@ -468,6 +471,8 @@ async def logout_user(
     description="Genera un nuevo access token usando un refresh token válido (httpOnly cookie).",
     tags=["Authentication"],
 )
+# Por el usuario del refresh: llega con el acceso caducado (BE #467)
+@limiter.limit(REFRESH_TOKEN_LIMIT, key_func=refresh_token_rate_limit_key)
 async def refresh_access_token(
     request: Request,
     response: Response,
@@ -574,8 +579,10 @@ async def refresh_access_token(
     ),
     tags=["Authentication"],
 )
+@limiter.limit(VERIFY_EMAIL_LIMIT, key_func=get_client_identifier)  # Por red
 async def verify_email(
-    request: VerifyEmailRequestDTO,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    verify_data: VerifyEmailRequestDTO,
     response: Response,
     use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
 ):
@@ -602,7 +609,8 @@ async def verify_email(
     - httpOnly cookie previene robo de token vía XSS
 
     Args:
-        request: DTO con el token de verificación
+        request: La petición (la necesita el límite por red)
+        verify_data: DTO con el token de verificación
         response: Response de FastAPI (para establecer cookies)
         use_case: Caso de uso de verificación de email
 
@@ -614,14 +622,14 @@ async def verify_email(
     """
     TOKEN_PREVIEW_LENGTH = 8  # noqa: N806 - Constant-like variable in function
     token_preview = (
-        f"{request.token[:TOKEN_PREVIEW_LENGTH]}..."
-        if len(request.token) > TOKEN_PREVIEW_LENGTH
+        f"{verify_data.token[:TOKEN_PREVIEW_LENGTH]}..."
+        if len(verify_data.token) > TOKEN_PREVIEW_LENGTH
         else "***"
     )
     logger.info(f"Email verification attempt with token: {token_preview}")
 
     try:
-        user = await use_case.execute(request.token)
+        user = await use_case.execute(verify_data.token)
         logger.info(f"Email verification successful for token: {token_preview}")
 
         # Generar access token (15 min) + refresh token (7 días) - Session Timeout v1.8.0

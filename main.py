@@ -35,7 +35,7 @@ from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
-from src.config.rate_limit import limiter  # noqa: E402
+from src.config.rate_limit import apply_default_rate_limit, limiter  # noqa: E402
 from src.config.refresco_de_handicaps import (  # noqa: E402
     LanzadorEnSegundoPlano,
     VigilanteDeActualizaciones,
@@ -212,6 +212,9 @@ app = FastAPI(
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
     lifespan=lifespan,
+    # El límite por defecto en toda ruta sin uno propio (BE #467). Va aquí, antes de
+    # incluir los routers, para que lo hereden todas
+    dependencies=[Depends(apply_default_rate_limit)],
 )
 
 # Registrar el limiter en la app para que esté disponible en todos los endpoints

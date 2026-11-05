@@ -9,18 +9,24 @@ Quién cuenta en cada límite (RyderCupAM#273, ADR-038):
   verifica. Es una identidad que pone el servidor: un token inventado no elige
   contador y cae en el de red.
 - **Rutas anónimas**: la red (`get_client_identifier`), declarada en cada ruta. En
-  producción es la IP del proxy de Render, o sea, un contador para toda la app: por
-  eso sus topes están dimensionados para un club entero entrando a la vez.
+  producción es la IP real que da Cloudflare cuando la petición trae su secreto
+  (ADR-041, BE #466), y una IPv6 cuenta por su /64. Sin el secreto, la del proxy de
+  Render: un contador para toda la app, y por eso los topes siguen dimensionados
+  para un club entero entrando a la vez.
+- **Toda ruta sin límite propio**: DEFAULT_LIMIT, como dependencia global de la app
+  (BE #467), salvo las de EXEMPT_FROM_DEFAULT_LIMIT.
 - **Login, forgot-password y resend-verification**: además, por email, contado
   antes de saber si el email existe. Y el login, por red, solo cuenta los fallos:
   los aciertos de un club no lo cierran, y el credential stuffing, que casi solo
   falla, sí.
 
-Ninguna clave sale de una cabecera que escriba el cliente (ADR-038).
+Ninguna clave sale de una cabecera que escriba el cliente (ADR-038): el secreto de
+Cloudflare no lo conoce el cliente (ADR-041).
 """
 
 import hashlib
 import hmac
+import ipaddress
 import os
 
 from limits import parse
@@ -32,8 +38,15 @@ from starlette.requests import Request
 
 from src.config.settings import settings
 from src.modules.user.domain.value_objects.email import Email, InvalidEmailError
-from src.shared.infrastructure.security.cookie_handler import read_access_token
-from src.shared.infrastructure.security.jwt_handler import verify_access_token
+from src.shared.infrastructure.http.http_context_validator import cloudflare_client_ip
+from src.shared.infrastructure.security.cookie_handler import (
+    get_refresh_cookie_name,
+    read_access_token,
+)
+from src.shared.infrastructure.security.jwt_handler import (
+    verify_access_token,
+    verify_refresh_token,
+)
 
 # Topes de las rutas anónimas: por red, que en producción es toda la app
 LOGIN_ATTEMPTS_LIMIT = "60/minute"  # techo de intentos: cada login cuesta un bcrypt
@@ -44,23 +57,44 @@ RESET_PASSWORD_LIMIT = "20/hour"  # nosec B105 - a rate limit, not a password
 VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 CONTACT_LIMIT = "10/hour"
 
+REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token
+VERIFY_EMAIL_LIMIT = "30/hour"
+
+# El de toda ruta sin límite propio (BE #467): por usuario con sesión, por red sin ella
+DEFAULT_LIMIT = "100/minute"
+
 # Topes que no van por red
 LOGIN_ATTEMPTS_PER_EMAIL_LIMIT = "5/minute"
 FAILED_LOGINS_LIMIT = "30/minute"  # por red, solo intentos fallidos
 EMAIL_SENDING_PER_EMAIL_LIMIT = "3/hour"
 
 
+def _clave_de_red(ip: str) -> str:
+    """
+    El contador de una IP: la IPv4 tal cual, y una IPv6 por su /64.
+
+    Cada conexión IPv6 recibe un /64 entero: contar por dirección dejaría a quien
+    llama estrenar contador en cada petición.
+    """
+    direccion = ipaddress.ip_address(ip)
+    if isinstance(direccion, ipaddress.IPv6Address):
+        return str(ipaddress.IPv6Network(f"{direccion}/64", strict=False))
+    return ip
+
+
 def get_client_identifier(request: Request) -> str:
     """
     Identificador de red del cliente.
 
-    En testing/development: Usa el header X-Test-Client-ID si existe (permite simular diferentes clientes).
-    En producción: Usa SOLO la IP real del cliente (ignora headers para evitar bypass).
+    En producción: la IP que da Cloudflare si la petición trae su secreto (BE #466,
+    ADR-041); si no, la del peer, que es el proxy de Render: el contador
+    compartido de siempre, nunca uno que elija quien llama.
+    Fuera de producción: X-Test-Client-ID si existe (simula clientes distintos).
     """
-    # En producción, SIEMPRE usar IP real (ignorar headers por seguridad)
     environment = os.getenv("ENVIRONMENT", "development").lower()
     if environment == "production":
-        return get_remote_address(request)
+        ip = cloudflare_client_ip(request)
+        return _clave_de_red(ip) if ip else get_remote_address(request)
 
     # En testing/development, permitir simular diferentes clientes con un header especial
     test_client_id = request.headers.get("X-Test-Client-ID")
@@ -89,6 +123,23 @@ def get_rate_limit_key(request: Request) -> str:
 
 
 _USER_PREFIX = "user:"
+
+
+def refresh_token_rate_limit_key(request: Request) -> str:
+    """
+    Clave del refresco: el usuario de la cookie de refresh, o la red si no es válida.
+
+    Se refresca cuando el acceso ya caducó, así que la clave de las rutas con
+    sesión caería en la red, que en producción sin la IP real es toda la app: un
+    torneo grande se quedaría sin poder refrescar (BE #467). El refresh se
+    verifica entero (firma, caducidad y tipo): uno inventado no elige contador.
+    """
+    token = request.cookies.get(get_refresh_cookie_name())
+    payload = verify_refresh_token(token) if token else None
+    user_id = payload.get("sub") if payload else None
+    if user_id:
+        return f"{_USER_PREFIX}{user_id}"
+    return get_client_identifier(request)
 
 
 def get_hole_sample_rate_limit_key(request: Request) -> str:
@@ -178,10 +229,58 @@ def record_failed_login(request: Request) -> None:
 # Crear instancia global del limiter
 # - key_func: el usuario en las rutas con sesión; las anónimas declaran
 #   key_func=get_client_identifier (lo exige tests/unit/config/test_rate_limit_routes.py)
-# - default_limits: no se aplica a ninguna ruta, porque no hay SlowAPIMiddleware
+# - Sin default_limits: slowapi solo los aplica desde su middleware, que con
+#   FastAPI 0.162 no encuentra las rutas de los routers. El límite por defecto es
+#   la dependencia global `apply_default_rate_limit` (BE #467)
 # NOTE: headers_enabled=False porque causa conflictos con endpoints que retornan DTOs
 #       Los headers X-RateLimit-* solo aparecen cuando se excede el límite (HTTP 429)
-limiter = Limiter(key_func=get_rate_limit_key, default_limits=["100/minute"])
+limiter = Limiter(key_func=get_rate_limit_key)
+
+
+# Exentas del límite por defecto (5 nov 2026): /health y la raíz las llama Render
+# directo al origen; la documentación; y datos estáticos que se piden en ráfaga
+# (los avatares predefinidos, con sus imágenes, y los países)
+EXEMPT_FROM_DEFAULT_LIMIT = frozenset(
+    {
+        "main.root",
+        "main.health",
+        "main.get_documentation",
+        "main.get_redoc_documentation",
+        "src.modules.user.infrastructure.api.v1.avatar_routes.list_avatar_presets",
+        "src.modules.user.infrastructure.api.v1.avatar_routes.get_avatar_preset_image",
+        "src.shared.infrastructure.api.v1.country_routes.list_countries",
+        "src.shared.infrastructure.api.v1.country_routes.list_adjacent_countries",
+    }
+)
+
+
+def apply_default_rate_limit(request: Request) -> None:
+    """
+    El límite por defecto de toda ruta sin `@limiter.limit` propio (BE #467).
+
+    Va como dependencia global de la app. Cuenta con la clave de siempre (el
+    usuario con sesión, la red sin ella) y responde con el mismo 429 que slowapi.
+    Una ruta con límite propio cuenta solo el suyo; las exentas, ninguno.
+    """
+    if not limiter.enabled:
+        return
+    endpoint = request.scope.get("endpoint")
+    if endpoint is None:
+        return
+    nombre = f"{endpoint.__module__}.{endpoint.__name__}"
+    if (
+        nombre in EXEMPT_FROM_DEFAULT_LIMIT
+        or nombre in limiter._route_limits
+        or nombre in limiter._dynamic_route_limits
+    ):
+        return
+    limite = parse(DEFAULT_LIMIT)
+    clave = get_rate_limit_key(request)
+    if not limiter.limiter.hit(limite, "default", clave):
+        excedido = _exceeded(DEFAULT_LIMIT)
+        # El manejador de slowapi lee el límite que saltó de aquí
+        request.state.view_rate_limit = (limite, [clave, "default"])
+        raise excedido
 
 
 def limite_de_lo_publico(key: str) -> str:
