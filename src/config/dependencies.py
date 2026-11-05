@@ -1231,29 +1231,41 @@ async def get_current_user(
     # El dispositivo del token, por su id (BE #737, cierra #730). Antes se buscaba
     # por una huella de navegador e IP que no se actualizaba: con cada actualización
     # del navegador o cambio de red no lo veía (34 de 60 en producción), y podía
-    # echar a un usuario legítimo con un «revocado» falso. Un token sin `did` es
-    # anterior a esta versión: dura 15 minutos y el siguiente refresco ya lo trae
+    # echar a un usuario legítimo con un «revocado» falso.
+    #
+    # Un token sin `did` ya no vale (auditoría OWASP, A07): toda sesión tiene
+    # dispositivo, y una sin él no se podía revocar. Es un 401 normal, no
+    # «revocado»: la app refresca y el refresco ya trae `did`. Si la BD falla al
+    # comprobarlo, la petición no pasa (decidido el 5 nov 2026)
     did = payload.get(CLAIM_DEL_DISPOSITIVO)
-    if did:
-        try:
-            device_id = UserDeviceId.from_string(did)
-        except (ValueError, TypeError):
-            device_id = None
-        dispositivo = None
-        if device_id is not None:
-            async with uow:
-                dispositivo = await uow.user_devices.find_by_id_and_user(
-                    device_id=device_id, user_id=UserId(user_id_str)
-                )
-        if dispositivo is None:
-            logging.getLogger(__name__).warning(
-                f"Access denied: device {did} revoked or not owned by user {user_id_str}"
+    if not did:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido: falta el dispositivo",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        device_id = UserDeviceId.from_string(did)
+    except (ValueError, TypeError):
+        device_id = None
+    dispositivo = None
+    if device_id is not None:
+        async with uow:
+            dispositivo = await uow.user_devices.find_by_id_and_user(
+                device_id=device_id, user_id=UserId(user_id_str)
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    if dispositivo is None:
+        logging.getLogger(__name__).warning(
+            f"Access denied: device {did} revoked or not owned by user {user_id_str}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # El dispositivo de la petición, ya comprobado: la lista lo marca como el actual
+    # sin volver a leer el token
+    request.state.dispositivo_actual = str(dispositivo.id.value)
 
     # Términos de uso (B6): sin la versión vigente aceptada, 403
     # TERMS_NOT_ACCEPTED en toda ruta con sesión salvo las exentas
@@ -3568,6 +3580,7 @@ def get_list_user_devices_use_case(
 
 def get_revoke_device_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> RevokeDeviceUseCase:
     """
     Proveedor del caso de uso RevokeDeviceUseCase (v1.13.0 - Device Fingerprinting).
@@ -3577,7 +3590,7 @@ def get_revoke_device_use_case(
     2. Crea una instancia de `RevokeDeviceUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint DELETE /users/me/devices/{id}.
     """
-    return RevokeDeviceUseCase(uow)
+    return RevokeDeviceUseCase(uow, security_audit)
 
 
 # ============================================================================

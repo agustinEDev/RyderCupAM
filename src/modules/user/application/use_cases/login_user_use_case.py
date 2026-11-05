@@ -15,6 +15,7 @@ from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
     RegisterDeviceRequestDTO,
+    agente_para_el_registro,
 )
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
@@ -275,22 +276,23 @@ class LoginUserUseCase:
         should_set_device_cookie = False
         device_id_str = None
         es_nuevo = False
-        if request.user_agent:
-            device_request = RegisterDeviceRequestDTO(
-                user_id=str(user.id.value),
-                user_agent=request.user_agent,
-                ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
-                device_id_from_cookie=request.device_id_from_cookie,
-                installed_app=request.installed_app,  # BE #737
-                country_code=request.country_code,
-            )
-            # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
-            device_response = await self._register_device_use_case.execute(device_request)
-            # Obtener device_id para asociar con refresh token
-            device_id = UserDeviceId.from_string(device_response.device_id)
-            device_id_str = device_response.device_id
-            should_set_device_cookie = device_response.set_device_cookie
-            es_nuevo = device_response.is_new_device
+        # Siempre con dispositivo, también sin User-Agent: una sesión sin él no salía en
+        # la lista, no avisaba y no se podía revocar (auditoría OWASP, A07)
+        device_request = RegisterDeviceRequestDTO(
+            user_id=str(user.id.value),
+            user_agent=agente_para_el_registro(request.user_agent),
+            ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
+            device_id_from_cookie=request.device_id_from_cookie,
+            installed_app=request.installed_app,  # BE #737
+            country_code=request.country_code,
+        )
+        # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
+        device_response = await self._register_device_use_case.execute(device_request)
+        # Obtener device_id para asociar con refresh token
+        device_id = UserDeviceId.from_string(device_response.device_id)
+        device_id_str = device_response.device_id
+        should_set_device_cookie = device_response.set_device_cookie
+        es_nuevo = device_response.is_new_device
 
         # Los tokens, después del dispositivo: el de acceso lleva su id (`did`), y así
         # revocarlo se comprueba por id y no por una huella que cambia (BE #737)

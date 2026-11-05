@@ -192,11 +192,14 @@ async def test_d3_did_of_another_user_or_missing_is_rejected(client: AsyncClient
         assert r.status_code == status.HTTP_401_UNAUTHORIZED, did
 
 
-async def test_d4_token_without_did_still_works(client: AsyncClient):
+async def test_d4_token_without_did_is_a_plain_401_and_the_refresh_brings_it(
+    client: AsyncClient,
+):
     """
-    Given: Un access token sin `did`, como los emitidos antes de esta versión
-    When: Se usa
-    Then: Pasa: dura 15 minutos y el siguiente refresco ya trae `did`
+    Given: Un access token sin `did` (los de antes de esta versión, o una sesión sin dispositivo)
+    When: Se usa, y después se refresca
+    Then: 401 normal, no «revocado» (la app refresca sola, no echa al usuario); el refresco
+          da uno con `did` que sí vale (auditoría OWASP, A07; decidido el 5 nov 2026)
     """
     email = f"d4-{uuid.uuid4().hex[:6]}@example.com"
     await _registra(client, email)
@@ -207,14 +210,87 @@ async def test_d4_token_without_did_still_works(client: AsyncClient):
     )["sub"]
     from src.shared.infrastructure.security.jwt_handler import create_access_token
 
-    viejo = create_access_token({"sub": sub})
-    r = await client.get(
+    r = await c.get(
         "/api/v1/users/me/devices",
-        cookies={"access_token": viejo},
+        cookies={"access_token": create_access_token({"sub": sub})},
         headers=_cabeceras(SAFARI_IPHONE),
     )
+    assert r.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "revocado" not in r.json()["detail"].lower()
 
+    refresco = await c.post("/api/v1/auth/refresh-token", headers=_cabeceras(SAFARI_IPHONE))
+    assert refresco.status_code == status.HTTP_200_OK, refresco.text
+    assert _did(c)
+    r = await c.get("/api/v1/users/me/devices", headers=_cabeceras(SAFARI_IPHONE))
     assert r.status_code == status.HTTP_200_OK, r.text
+
+
+async def test_d4b_login_without_user_agent_has_a_device_that_can_be_revoked(
+    client: AsyncClient,
+):
+    """
+    Given: Un login sin User-Agent (p. ej. `curl -A ""`)
+    When: Entra
+    Then: Tiene dispositivo: su token lleva `did`, sale en la lista y al revocarlo cae
+          (antes no salía, no avisaba y no se podía revocar; auditoría OWASP, A07)
+    """
+    email = f"d4b-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    intruso, dueno = _otro(client), _otro(client)
+    await _entra(intruso, email, "")
+    did = _did(intruso)
+    assert did
+
+    await _entra(dueno, email, SAFARI_MAC, "red-oficina")
+    lista = (
+        await dueno.get("/api/v1/users/me/devices", headers=_cabeceras(SAFARI_MAC, "red-oficina"))
+    ).json()
+    assert did in [d["id"] for d in lista["devices"]]
+
+    r = await dueno.delete(
+        f"/api/v1/users/me/devices/{did}",
+        headers={
+            **_cabeceras(SAFARI_MAC, "red-oficina"),
+            "X-CSRF-Token": dueno.cookies.get("csrf_token"),
+        },
+    )
+    assert r.status_code == status.HTTP_200_OK, r.text
+    r = await intruso.get("/api/v1/users/me/devices", headers=_cabeceras(""))
+    assert r.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+async def test_d4c_verify_email_that_cannot_open_the_session_says_it_is_verified(
+    client: AsyncClient,
+):
+    """
+    Given: Un enlace de verificación válido y un fallo al abrir la sesión
+    When: Se verifica
+    Then: 503 «Email verified. Please sign in», no «el enlace no vale»: el correo ya
+          quedó verificado y el enlace gastado (/code-review, BE #737)
+    """
+    from main import app
+    from src.config.dependencies import get_open_session_use_case
+    from tests.conftest import get_user_by_email
+
+    email = f"d4c-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    usuario = await get_user_by_email(client, email)
+
+    class _SinSesion:
+        async def execute(self, _request):
+            raise RuntimeError("la BD se cayó")
+
+    app.dependency_overrides[get_open_session_use_case] = _SinSesion
+    try:
+        r = await client.post(
+            "/api/v1/auth/verify-email", json={"token": usuario.verification_token}
+        )
+    finally:
+        app.dependency_overrides.pop(get_open_session_use_case, None)
+
+    assert r.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert "verified" in r.json()["detail"].lower()
+    assert (await get_user_by_email(client, email)).is_email_verified()
 
 
 async def test_d5_logout_and_login_again_keeps_the_same_device(client: AsyncClient):

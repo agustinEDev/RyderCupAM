@@ -20,12 +20,12 @@ from src.modules.user.application.dto.device_dto import (
     RevokeDeviceRequestDTO,
     RevokeDeviceResponseDTO,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RevokeDeviceUseCase:
@@ -53,7 +53,11 @@ class RevokeDeviceUseCase:
         Dispositivo revocado exitosamente
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        security_audit: ISecurityAuditLogger | None = None,
+    ):
         """
         Inicializa el caso de uso.
 
@@ -61,6 +65,8 @@ class RevokeDeviceUseCase:
             uow: Unit of Work con acceso al user_devices repository
         """
         self._uow = uow
+        # El historial de seguridad, por su puerto (BE #737)
+        self._security_audit = security_audit
 
     async def execute(self, request: RevokeDeviceRequestDTO) -> RevokeDeviceResponseDTO:
         """
@@ -141,14 +147,16 @@ class RevokeDeviceUseCase:
             await self._uow.user_devices.save(device)
 
         # 8. Al historial de seguridad: quién revocó qué y cuántas sesiones cerró
-        # (BE #737; antes solo quedaba un logger.info)
-        get_security_logger().log_refresh_token_revoked(
-            user_id=request.user_id,
-            ip_address=request.ip_address or "unknown",
-            user_agent=request.user_agent or "unknown",
-            tokens_revoked_count=tokens_revoked,
-            reason="device_revoked",
-        )
+        # (BE #737; antes solo quedaba un logger.info). Por su puerto: un caso de uso
+        # no importa infraestructura
+        if self._security_audit is not None:
+            self._security_audit.log_device_revoked(
+                user_id=request.user_id,
+                device_id=str(device_id.value),
+                ip_address=request.ip_address or "unknown",
+                user_agent=request.user_agent or "unknown",
+                tokens_revoked_count=tokens_revoked,
+            )
 
         # 9. Retornar confirmación
         message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."

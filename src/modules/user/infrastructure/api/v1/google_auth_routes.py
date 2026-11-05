@@ -43,25 +43,17 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_user_agent,
 )
 from src.shared.infrastructure.security.cookie_handler import (
-    SEPARADOR_DE_DISPOSITIVOS,
     es_la_app_instalada,
     get_device_id_cookie_name,
-    ids_de_la_cookie_de_dispositivo,
+    ids_validos_de_la_cookie,
+    pon_la_cookie_de_dispositivo,
     set_auth_cookie,
     set_csrf_cookie,
-    set_device_id_cookie,
     set_refresh_token_cookie,
-    valor_de_la_cookie_de_dispositivo,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
-    """Los ids válidos de la cookie del dispositivo, unidos por puntos, o None (BE #737)."""
-    ids = ids_de_la_cookie_de_dispositivo(cookie_value)
-    return SEPARADOR_DE_DISPOSITIVOS.join(ids) if ids else None
 
 
 @router.post(
@@ -87,7 +79,7 @@ async def google_login(
     login_data.user_agent = get_user_agent(request)
 
     device_id_cookie_name = get_device_id_cookie_name()
-    login_data.device_id_from_cookie = _validate_device_id_cookie(
+    login_data.device_id_from_cookie = ids_validos_de_la_cookie(
         request.cookies.get(device_id_cookie_name)
     )
     login_data.installed_app = es_la_app_instalada(request)
@@ -122,12 +114,7 @@ async def google_login(
 
     # Siempre: la renueva y deja este dispositivo delante (BE #737)
     if login_response.device_id:
-        anteriores = ids_de_la_cookie_de_dispositivo(
-            request.cookies.get(get_device_id_cookie_name())
-        )
-        set_device_id_cookie(
-            response, valor_de_la_cookie_de_dispositivo(login_response.device_id, anteriores)
-        )
+        pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     return login_response
 

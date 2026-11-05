@@ -14,6 +14,7 @@ from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
     RegisterDeviceRequestDTO,
+    agente_para_el_registro,
 )
 from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginRequestDTO,
@@ -140,12 +141,10 @@ class GoogleLoginUseCase:
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
         """Register device and return (device_id, device_id_str, should_set_cookie, is_new)."""
-        if not request.user_agent:
-            return None, None, False, False
-
+        # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
-            user_agent=request.user_agent,
+            user_agent=agente_para_el_registro(request.user_agent),
             ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
             device_id_from_cookie=request.device_id_from_cookie,
             installed_app=request.installed_app,
@@ -232,9 +231,12 @@ class GoogleLoginUseCase:
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
         if self._aviso_de_nuevo_inicio is not None:
             # El alta con Google no avisa: es crear la cuenta
+            # Al correo de la CUENTA, no al de Google: si la cuenta se vinculó con
+            # otra dirección, o lo comprometido es la cuenta de Google, el aviso tiene
+            # que llegar a su dueño (auditoría OWASP, 5 nov 2026)
             await self._aviso_de_nuevo_inicio.avisa(
                 user.id,
-                google_info.email,
+                user.email.value if user.email else google_info.email,
                 user.first_name,
                 device_id_str,
                 es_nuevo,

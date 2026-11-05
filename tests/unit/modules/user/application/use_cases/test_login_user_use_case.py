@@ -17,6 +17,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
+from tests.unit.modules.user.application.use_cases._registro_falso import (
+    registro_de_dispositivo_falso,
+)
 
 
 def _rebuild_user(user: User, **overrides) -> User:
@@ -69,9 +72,7 @@ def token_service():
 @pytest.fixture
 def register_device_use_case():
     """Fixture que proporciona un mock del RegisterDeviceUseCase (v1.13.0)."""
-    mock = AsyncMock()
-    mock.execute.return_value = AsyncMock()  # RegisterDeviceResponseDTO mock
-    return mock
+    return registro_de_dispositivo_falso()
 
 
 @pytest.fixture

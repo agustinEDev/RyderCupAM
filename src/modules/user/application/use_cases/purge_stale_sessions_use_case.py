@@ -6,9 +6,12 @@ Hasta ahora no se borraba nada: en producción una cuenta tenía 193 dispositivo
 siempre la IP y el navegador de cada uno, contra la minimización de datos (RGPD).
 """
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 
+from src.modules.user.application.dto.device_dto import (
+    PurgeStaleSessionsRequestDTO,
+    PurgeStaleSessionsResponseDTO,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -20,22 +23,15 @@ DIAS_SIN_USO_PARA_BORRAR_UN_DISPOSITIVO = 30
 DIAS_TRAS_CADUCAR_PARA_BORRAR_UN_REFRESCO = 7
 
 
-@dataclass(frozen=True)
-class SesionesBorradas:
-    """Cuántos dispositivos y refrescos se borraron en una vuelta."""
-
-    dispositivos: int
-    tokens: int
-
-
 class PurgeStaleSessionsUseCase:
     """Borra los dispositivos sin uso desde hace 30 días y los refrescos caducados hace 7."""
 
     def __init__(self, uow: UserUnitOfWorkInterface):
         self._uow = uow
 
-    async def execute(self, ahora: datetime) -> SesionesBorradas:
-        """Una limpieza a la hora `ahora` (UTC, sin huso, como el resto de fechas)."""
+    async def execute(self, request: PurgeStaleSessionsRequestDTO) -> PurgeStaleSessionsResponseDTO:
+        """Una limpieza a la hora `request.ahora` (UTC, sin huso, como el resto de fechas)."""
+        ahora = request.ahora
         async with self._uow:
             dispositivos = await self._uow.user_devices.delete_unused_since(
                 ahora - timedelta(days=DIAS_SIN_USO_PARA_BORRAR_UN_DISPOSITIVO)
@@ -43,4 +39,4 @@ class PurgeStaleSessionsUseCase:
             tokens = await self._uow.refresh_tokens.delete_expired_before(
                 ahora - timedelta(days=DIAS_TRAS_CADUCAR_PARA_BORRAR_UN_REFRESCO)
             )
-        return SesionesBorradas(dispositivos=dispositivos, tokens=tokens)
+        return PurgeStaleSessionsResponseDTO(dispositivos=dispositivos, tokens=tokens)

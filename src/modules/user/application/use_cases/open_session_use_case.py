@@ -7,11 +7,12 @@ refresco daba REFRESH_TOKEN_NOT_FOUND: a cada usuario nuevo le echaban. Aquí se
 abre como en el login: dispositivo, tokens con su id y refresco guardado.
 """
 
-from dataclasses import dataclass
-
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
+    OpenSessionRequestDTO,
+    OpenSessionResponseDTO,
     RegisterDeviceRequestDTO,
+    agente_para_el_registro,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
@@ -24,15 +25,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
-
-
-@dataclass(frozen=True)
-class SesionAbierta:
-    """Los tokens de la sesión y el dispositivo al que pertenece."""
-
-    access_token: str
-    refresh_token: str
-    device_id: str | None
 
 
 class OpenSessionUseCase:
@@ -48,48 +40,38 @@ class OpenSessionUseCase:
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
 
-    async def execute(
-        self,
-        user_id: str,
-        user_agent: str | None,
-        ip_address: str | None,
-        device_id_from_cookie: str | None,
-        installed_app: bool = False,
-        country_code: str | None = None,
-    ) -> SesionAbierta:
+    async def execute(self, request: OpenSessionRequestDTO) -> OpenSessionResponseDTO:
         """
         Abre la sesión y la devuelve.
 
-        Sin User-Agent no hay dispositivo, como en el login: la sesión vale, pero no
-        se puede revocar desde la lista.
+        Siempre con dispositivo, también sin User-Agent: una sesión sin él no salía
+        en la lista, no avisaba y no se podía revocar (auditoría OWASP, A07).
         """
-        device_id: str | None = None
-        if user_agent:
-            registrado = await self._register_device_use_case.execute(
-                RegisterDeviceRequestDTO(
-                    user_id=user_id,
-                    user_agent=user_agent,
-                    ip_address=ip_address or UNRESOLVED_IP_PLACEHOLDER,
-                    device_id_from_cookie=device_id_from_cookie,
-                    installed_app=installed_app,
-                    country_code=country_code,
-                )
+        registrado = await self._register_device_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=request.user_id,
+                user_agent=agente_para_el_registro(request.user_agent),
+                ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
+                device_id_from_cookie=request.device_id_from_cookie,
+                installed_app=request.installed_app,
+                country_code=request.country_code,
             )
-            device_id = registrado.device_id
+        )
+        device_id = registrado.device_id
 
         access_token = self._token_service.create_access_token(
-            data=datos_del_acceso(user_id, device_id)
+            data=datos_del_acceso(request.user_id, device_id)
         )
-        refresh_token = self._token_service.create_refresh_token(data={"sub": user_id})
+        refresh_token = self._token_service.create_refresh_token(data={"sub": request.user_id})
         async with self._uow:
             await self._uow.refresh_tokens.save(
                 RefreshToken.create(
-                    user_id=UserId(user_id),
+                    user_id=UserId(request.user_id),
                     token=refresh_token,
-                    device_id=UserDeviceId.from_string(device_id) if device_id else None,
+                    device_id=UserDeviceId.from_string(device_id),
                     expires_in_days=7,
                 )
             )
-        return SesionAbierta(
+        return OpenSessionResponseDTO(
             access_token=access_token, refresh_token=refresh_token, device_id=device_id
         )

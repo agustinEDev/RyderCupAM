@@ -82,20 +82,17 @@ async def test_r2_revoking_another_device_is_not_the_current_one():
     assert "actual" not in r.message
 
 
-async def test_r3_every_revocation_goes_to_the_security_log(monkeypatch):
+async def test_r3_every_revocation_goes_to_the_security_log():
     """
     Given: Un dispositivo con su sesión
     When: Se revoca
-    Then: Queda en el historial de seguridad, con el motivo «device_revoked» y cuántas sesiones cerró
+    Then: Queda en el historial de seguridad, por su puerto: quién, qué dispositivo y
+          cuántas sesiones cerró
     """
     registro = Mock()
-    monkeypatch.setattr(
-        "src.modules.user.application.use_cases.revoke_device_use_case.get_security_logger",
-        lambda: registro,
-    )
     uow, iphone, mac = await _dos()
 
-    await RevokeDeviceUseCase(uow).execute(
+    await RevokeDeviceUseCase(uow, security_audit=registro).execute(
         RevokeDeviceRequestDTO(
             user_id=USUARIO,
             device_id=iphone,
@@ -105,9 +102,9 @@ async def test_r3_every_revocation_goes_to_the_security_log(monkeypatch):
         )
     )
 
-    registro.log_refresh_token_revoked.assert_called_once()
-    kwargs = registro.log_refresh_token_revoked.call_args.kwargs
-    assert kwargs["reason"] == "device_revoked"
+    registro.log_device_revoked.assert_called_once()
+    kwargs = registro.log_device_revoked.call_args.kwargs
+    assert kwargs["device_id"] == iphone
     assert kwargs["tokens_revoked_count"] == 1
     assert kwargs["user_id"] == USUARIO
 

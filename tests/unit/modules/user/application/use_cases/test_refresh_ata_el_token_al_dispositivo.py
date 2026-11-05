@@ -126,3 +126,44 @@ def test_t4_binding_never_moves_a_token_to_another_device():
 
     assert atado.device_id == suyo
     assert suelto.device_id == otro
+
+
+@pytest.mark.asyncio
+async def test_t5_the_token_device_is_reused_and_put_back_in_the_cookie():
+    """
+    Given: Un refresh token de su iPhone, sin la cookie del dispositivo y desde otra red
+    When: Refresca
+    Then: No se crea otro dispositivo: sigue siendo su iPhone, y se le vuelve a poner la cookie
+    """
+    uow, usuario, dispositivo, refresco = await _escena(con_dispositivo=True)
+
+    respuesta = await refresco.execute(
+        RefreshAccessTokenRequestDTO(user_agent=IPHONE, ip_address="198.51.100.77"), JWT
+    )
+
+    assert respuesta.device_id == str(dispositivo.id.value)
+    assert respuesta.should_set_device_cookie is True
+    assert len(await uow.user_devices.find_all_by_user(usuario.id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_t6_with_its_device_in_the_cookie_the_cookie_is_left_alone():
+    """
+    Given: Un refresh token de su iPhone, con el iPhone en la cookie (junto a otra cuenta)
+    When: Refresca
+    Then: Es su iPhone y la cookie no se toca
+    """
+    _, _, dispositivo, refresco = await _escena(con_dispositivo=True)
+    otra_cuenta = "11111111-1111-4111-8111-111111111111"
+
+    respuesta = await refresco.execute(
+        RefreshAccessTokenRequestDTO(
+            user_agent=IPHONE,
+            ip_address="203.0.113.7",
+            device_id_from_cookie=f"{otra_cuenta}.{dispositivo.id.value}",
+        ),
+        JWT,
+    )
+
+    assert respuesta.device_id == str(dispositivo.id.value)
+    assert respuesta.should_set_device_cookie is False

@@ -129,8 +129,10 @@ class AvisoDeNuevoInicioDeSesion:
             async with self._uow:
                 este.apunta_el_aviso(ahora)
                 await self._uow.user_devices.save(este)
-        except Exception:
-            logger.exception("New sign-in notice failed; the login goes on")
+        except Exception as e:
+            # Solo el tipo: el mensaje de un proveedor de correo puede llevar la
+            # dirección (auditoría OWASP, A09)
+            logger.error("New sign-in notice failed; the login goes on: %s", type(e).__name__)
 
     async def _nombre_del_pais(self, codigo: str | None) -> str | None:
         if not codigo:

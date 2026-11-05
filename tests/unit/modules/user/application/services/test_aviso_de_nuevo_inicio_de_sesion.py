@@ -314,3 +314,22 @@ async def test_n5b_an_email_that_was_not_sent_is_not_recorded():
     await _avisa(aviso, usuario, str(iphone.id.value))
 
     assert iphone.aviso_enviado_at is None
+
+
+async def test_n12_a_failure_logs_only_its_type_not_the_address(caplog):
+    """
+    Given: El proveedor de correo lanza un error que menciona la dirección
+    When: Se avisa
+    Then: El log dice solo el tipo de error, no la dirección (auditoría OWASP, A09)
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    _, correo, aviso = await _escena(mac, iphone)
+    correo.send_new_login_notification.side_effect = RuntimeError("rechazado: ana@example.com")
+
+    with caplog.at_level("DEBUG"):
+        await _avisa(aviso, usuario, str(iphone.id.value))
+
+    assert "RuntimeError" in caplog.text
+    assert "ana@example.com" not in caplog.text

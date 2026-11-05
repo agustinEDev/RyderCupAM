@@ -14,6 +14,7 @@ from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
     RegisterDeviceRequestDTO,
+    agente_para_el_registro,
 )
 from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenRequestDTO,
@@ -26,10 +27,12 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.device_cookie import ids_de_la_cookie_de_dispositivo
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
@@ -189,31 +192,10 @@ class RefreshAccessTokenUseCase:
                 reason="idle",
             )
             raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
-        # Refrescar es usar ESTE dispositivo, el del token. El registro de
-        # dispositivos de más abajo puede reconocer otro (sin cookie, IP nueva) y
-        # entonces el del token caducaría a las 24 h estando en uso
-        if dispositivo is not None:
-            async with self._uow:
-                dispositivo.update_last_used()
-                await self._uow.user_devices.save(dispositivo)
-
-        # 5. Device Fingerprinting (v2.0.4): Actualizar last_used_at y ip_address del dispositivo
-        # Cookie-based identification: device_id_from_cookie tiene prioridad
-        device_id: str | None = None
-        should_set_device_cookie = False
-        if request.user_agent:
-            device_request = RegisterDeviceRequestDTO(
-                user_id=str(user.id.value),
-                user_agent=request.user_agent,
-                ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
-                device_id_from_cookie=request.device_id_from_cookie,
-                installed_app=request.installed_app,  # BE #737
-                country_code=request.country_code,
-            )
-            # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
-            device_response = await self._register_device_use_case.execute(device_request)
-            device_id = device_response.device_id
-            should_set_device_cookie = device_response.set_device_cookie
+        # Refrescar es usar ESTE dispositivo, el del token (ver el método)
+        device_id, should_set_device_cookie = await self._dispositivo_de_la_sesion(
+            request, user, dispositivo
+        )
 
         # Un token sin dispositivo (de antes) se ata al reconocido: si no, revocar
         # ese dispositivo no cerraría la sesión, que seguiría refrescando (BE #737)
@@ -225,7 +207,7 @@ class RefreshAccessTokenUseCase:
         # 6. Generar nuevo access token (15 minutos)
         # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737). El
         # del token de refresco manda; sin él (tokens de antes), el reconocido
-        did = str(dispositivo.id.value) if dispositivo is not None else device_id
+        did = device_id
         new_access_token = self._token_service.create_access_token(
             data=datos_del_acceso(str(user.id.value), did)
         )
@@ -254,6 +236,45 @@ class RefreshAccessTokenUseCase:
             device_id=device_id,
             should_set_device_cookie=should_set_device_cookie,
         )
+
+    async def _dispositivo_de_la_sesion(
+        self,
+        request: RefreshAccessTokenRequestDTO,
+        user: User,
+        dispositivo: UserDevice | None,
+    ) -> tuple[str, bool]:
+        """El dispositivo de este refresco y si hay que volver a ponerlo en la cookie.
+
+        El del token manda: se reutiliza y vuelve a la cookie si no estaba. Antes se
+        registraba otro por su cuenta (sin cookie y con IP nueva, uno nuevo y
+        huérfano) y el `did` y la cookie apuntaban a dos distintos (/code-review,
+        BE #737). Un token sin dispositivo (de antes) registra el reconocido, siempre,
+        también sin User-Agent (auditoría OWASP, A07).
+        """
+        if dispositivo is not None:
+            async with self._uow:
+                dispositivo.update_last_used()
+                dispositivo.update_ip_address(request.ip_address or UNRESOLVED_IP_PLACEHOLDER)
+                dispositivo.update_country(request.country_code)
+                dispositivo.update_installed_app(request.installed_app)
+                if request.user_agent:
+                    dispositivo.update_user_agent(request.user_agent)
+                await self._uow.user_devices.save(dispositivo)
+            device_id = str(dispositivo.id.value)
+            return device_id, device_id not in ids_de_la_cookie_de_dispositivo(
+                request.device_id_from_cookie
+            )
+        device_response = await self._register_device_use_case.execute(
+            RegisterDeviceRequestDTO(
+                user_id=str(user.id.value),
+                user_agent=agente_para_el_registro(request.user_agent),
+                ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
+                device_id_from_cookie=request.device_id_from_cookie,
+                installed_app=request.installed_app,  # BE #737
+                country_code=request.country_code,
+            )
+        )
+        return device_response.device_id, device_response.set_device_cookie
 
     async def _rechaza_si_no_vale(self, refresh_token_entity: RefreshToken | None) -> None:
         """Rechaza, con su motivo, el token que no existe, está revocado o caducó en BD."""

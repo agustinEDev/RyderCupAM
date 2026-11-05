@@ -14,9 +14,12 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.candado_de_postgres import con_candado
+from src.modules.user.application.dto.device_dto import (
+    PurgeStaleSessionsRequestDTO,
+    PurgeStaleSessionsResponseDTO,
+)
 from src.modules.user.application.use_cases.purge_stale_sessions_use_case import (
     PurgeStaleSessionsUseCase,
-    SesionesBorradas,
 )
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
@@ -57,12 +60,12 @@ class LimpiezaDeSesiones:
                 logger.exception("Session cleanup failed; retrying next hour")
             await self._esperar(INTERVALO_SEGUNDOS)
 
-    async def vuelta(self) -> SesionesBorradas | None:
+    async def vuelta(self) -> PurgeStaleSessionsResponseDTO | None:
         """Una vuelta, o None si otro proceso tiene el candado."""
         return await con_candado(self._fabrica.kw["bind"], CANDADO_DE_LA_LIMPIEZA, self._limpia)
 
-    async def _limpia(self) -> SesionesBorradas:
+    async def _limpia(self) -> PurgeStaleSessionsResponseDTO:
         async with self._fabrica() as sesion:
             return await PurgeStaleSessionsUseCase(SQLAlchemyUnitOfWork(sesion)).execute(
-                self._reloj()
+                PurgeStaleSessionsRequestDTO(ahora=self._reloj())
             )

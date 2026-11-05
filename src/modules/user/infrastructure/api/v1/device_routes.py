@@ -17,7 +17,6 @@ Patrón: REST API + Dependency Injection + DTOs
 """
 
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -33,7 +32,6 @@ from src.modules.user.application.dto.device_dto import (
     RevokeDeviceRequestDTO,
     RevokeDeviceResponseDTO,
 )
-from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
 from src.modules.user.application.use_cases.list_user_devices_use_case import (
     ListUserDevicesUseCase,
 )
@@ -45,12 +43,6 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
-from src.shared.infrastructure.security.cookie_handler import (
-    get_device_id_cookie_name,
-    ids_de_la_cookie_de_dispositivo,
-    read_access_token,
-)
-from src.shared.infrastructure.security.jwt_handler import verify_access_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,41 +54,8 @@ router = APIRouter()
 
 
 def _dispositivo_actual(request: Request) -> str | None:
-    """El dispositivo desde el que se hace la petición: el `did` del token de acceso."""
-    token = read_access_token(request)
-    payload = verify_access_token(token) if token else None
-    did = payload.get(CLAIM_DEL_DISPOSITIVO) if payload else None
-    if did:
-        return _validate_device_id_cookie(did)
-    ids = ids_de_la_cookie_de_dispositivo(request.cookies.get(get_device_id_cookie_name()))
-    return ids[0] if ids else None
-
-
-def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
-    """
-    Valida que el valor de la cookie device_id sea un UUID válido.
-
-    Security (v2.0.4): La cookie es controlada por el cliente y debe validarse
-    antes de pasar a DTOs para evitar ValidationError/500 errors.
-
-    Args:
-        cookie_value: Valor de la cookie device_id (puede ser None, vacío o malformado)
-
-    Returns:
-        str: UUID válido como string si la validación es exitosa
-        None: Si el valor es None, vacío o no es un UUID válido
-    """
-    if not cookie_value:
-        return None
-    try:
-        # uuid.UUID valida el formato y lanza ValueError si es inválido
-        validated = uuid.UUID(cookie_value)
-        return str(validated)
-    except (ValueError, AttributeError):
-        logger.debug(
-            f"Invalid device_id cookie format ignored: {cookie_value[:50] if cookie_value else 'None'}..."
-        )
-        return None
+    """El dispositivo desde el que se hace la petición: el que comprobó get_current_user."""
+    return getattr(request.state, "dispositivo_actual", None)
 
 
 # ============================================================================

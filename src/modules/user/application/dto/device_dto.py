@@ -21,6 +21,19 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer
 # logout inmediato. DeviceFingerprint.create() exige una IP sintácticamente
 # válida, de ahí "0.0.0.0" (ya reconocida como sentinel en el resto del código)
 # en vez de un string arbitrario como "unknown".
+# Sin User-Agent (o uno demasiado corto) también hay dispositivo (BE #737, auditoría
+# OWASP A07): sin él la sesión no salía en la lista, no avisaba y no se podía revocar
+UNKNOWN_USER_AGENT = "unknown-user-agent"
+LONGITUD_MINIMA_DEL_USER_AGENT = 10
+
+
+def agente_para_el_registro(user_agent: str | None) -> str:
+    """El User-Agent con el que registrar el dispositivo: el que llegó, o el desconocido."""
+    if user_agent and len(user_agent) >= LONGITUD_MINIMA_DEL_USER_AGENT:
+        return user_agent
+    return UNKNOWN_USER_AGENT
+
+
 UNRESOLVED_IP_PLACEHOLDER = "0.0.0.0"  # nosec B104 - valor de relleno para una IP sin resolver, no una escucha en todas las interfaces
 
 # ======================================================================================
@@ -53,7 +66,7 @@ class RegisterDeviceRequestDTO(BaseModel):
     )
     user_agent: str = Field(
         ...,
-        min_length=10,
+        min_length=LONGITUD_MINIMA_DEL_USER_AGENT,
         max_length=2000,
         description="User-Agent completo del navegador",
         json_schema_extra={
@@ -424,3 +437,35 @@ class RevokeDeviceResponseDTO(BaseModel):
             }
         }
     )
+
+
+class OpenSessionRequestDTO(BaseModel):
+    """Abrir la sesión de un usuario ya autenticado por otra vía (BE #737)."""
+
+    user_id: str
+    user_agent: str | None = None
+    ip_address: str | None = None
+    device_id_from_cookie: str | None = None
+    installed_app: bool = False
+    country_code: str | None = Field(default=None, max_length=2)
+
+
+class OpenSessionResponseDTO(BaseModel):
+    """Los tokens de la sesión y el dispositivo al que pertenece."""
+
+    access_token: str
+    refresh_token: str
+    device_id: str
+
+
+class PurgeStaleSessionsRequestDTO(BaseModel):
+    """Una limpieza a la hora `ahora` (UTC, sin huso, como el resto de fechas)."""
+
+    ahora: datetime
+
+
+class PurgeStaleSessionsResponseDTO(BaseModel):
+    """Cuántos dispositivos y refrescos se borraron en una vuelta."""
+
+    dispositivos: int
+    tokens: int

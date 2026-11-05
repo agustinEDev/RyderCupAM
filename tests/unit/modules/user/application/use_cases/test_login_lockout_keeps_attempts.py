@@ -30,7 +30,6 @@ releído. El bcrypt va antes y fuera de esa transacción: no la alarga 200 ms.
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -44,6 +43,9 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
     InMemoryUnitOfWork,
 )
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
+from tests.unit.modules.user.application.use_cases._registro_falso import (
+    registro_de_dispositivo_falso,
+)
 from tests.unit.modules.user.application.use_cases.test_login_user_use_case import _rebuild_user
 
 pytestmark = pytest.mark.asyncio
@@ -62,7 +64,7 @@ async def escena():
     )
     async with uow:
         await uow.users.save(usuario)
-    return uow, usuario, LoginUserUseCase(uow, JWTTokenService(), AsyncMock())
+    return uow, usuario, LoginUserUseCase(uow, JWTTokenService(), registro_de_dispositivo_falso())
 
 
 def _releido_con(uow, usuario, intentos, registro=None):

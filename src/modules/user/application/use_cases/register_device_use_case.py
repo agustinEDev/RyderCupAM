@@ -130,6 +130,7 @@ class RegisterDeviceUseCase:
                     # El navegador se actualizó, o es otro en este dispositivo
                     existing_device.update_user_agent(request.user_agent)
                     existing_device.update_country(request.country_code)
+                    existing_device.update_installed_app(request.installed_app)
                     return await self._reusa(
                         existing_device, request.ip_address, poner_cookie=False
                     )

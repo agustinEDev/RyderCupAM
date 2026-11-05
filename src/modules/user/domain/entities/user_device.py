@@ -333,6 +333,15 @@ class UserDevice:
         if country_code:
             self._country_code = country_code
 
+    def update_installed_app(self, installed_app: bool) -> None:
+        """Si la última conexión fue desde la app instalada o desde el navegador (BE #737).
+
+        Los dispositivos de antes de esta versión nacieron como navegador; en
+        Android y en escritorio la app y el navegador comparten cookies, así que
+        es el mismo dispositivo y manda la última conexión.
+        """
+        self._installed_app = installed_app
+
     def apunta_el_aviso(self, cuando: datetime) -> None:
         """Apunta que este dispositivo avisó de un nuevo inicio de sesión (BE #737)."""
         self._new_login_notice_at = cuando

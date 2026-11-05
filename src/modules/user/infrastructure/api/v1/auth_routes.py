@@ -41,6 +41,7 @@ from src.config.rate_limit import (
     skip_refresh_limit_without_valid_cookie,
 )
 from src.config.settings import settings
+from src.modules.user.application.dto.device_dto import OpenSessionRequestDTO
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
@@ -108,20 +109,18 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_user_agent,
 )
 from src.shared.infrastructure.security.cookie_handler import (
-    SEPARADOR_DE_DISPOSITIVOS,
     delete_auth_cookie,
     delete_csrf_cookie,
     delete_refresh_token_cookie,
     es_la_app_instalada,
     get_device_id_cookie_name,
     get_refresh_cookie_name,
-    ids_de_la_cookie_de_dispositivo,
+    ids_validos_de_la_cookie,
+    pon_la_cookie_de_dispositivo,
     read_access_token,
     set_auth_cookie,
     set_csrf_cookie,
-    set_device_id_cookie,
     set_refresh_token_cookie,
-    valor_de_la_cookie_de_dispositivo,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,24 +130,6 @@ router = APIRouter()
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
-
-
-def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
-    """
-    Los ids válidos de la cookie del dispositivo, unidos por puntos, o None.
-
-    Security (v2.0.4): La cookie es controlada por el cliente y debe validarse
-    antes de pasar a DTOs para evitar ValidationError/500 errors. Desde BE #737
-    guarda los dispositivos de hasta 5 cuentas del mismo navegador.
-    """
-    ids = ids_de_la_cookie_de_dispositivo(cookie_value)
-    return SEPARADOR_DE_DISPOSITIVOS.join(ids) if ids else None
-
-
-def _pon_la_cookie_de_dispositivo(response: Response, device_id: str, request: Request) -> None:
-    """La cookie del dispositivo, con este delante y los de otras cuentas detrás."""
-    anteriores = ids_de_la_cookie_de_dispositivo(request.cookies.get(get_device_id_cookie_name()))
-    set_device_id_cookie(response, valor_de_la_cookie_de_dispositivo(device_id, anteriores))
 
 
 # ============================================================================
@@ -276,7 +257,7 @@ async def login_user(
     # Device Fingerprinting (v2.0.4): Leer y validar device_id desde cookie httpOnly
     # SECURITY: Validar UUID para evitar ValidationError si cookie es malformada
     device_id_cookie_name = get_device_id_cookie_name()
-    login_data.device_id_from_cookie = _validate_device_id_cookie(
+    login_data.device_id_from_cookie = ids_validos_de_la_cookie(
         request.cookies.get(device_id_cookie_name)
     )
     login_data.installed_app = es_la_app_instalada(request)
@@ -329,7 +310,7 @@ async def login_user(
     # La cookie del dispositivo, siempre: renovarla la mantiene viva (Safari
     # recorta a 7 días las de una API en otra dirección) y deja este delante (BE #737)
     if login_response.device_id:
-        _pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
+        pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
@@ -575,9 +556,7 @@ async def refresh_access_token(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         ),
         user_agent=get_user_agent(request),
-        device_id_from_cookie=_validate_device_id_cookie(
-            request.cookies.get(device_id_cookie_name)
-        ),
+        device_id_from_cookie=ids_validos_de_la_cookie(request.cookies.get(device_id_cookie_name)),
         installed_app=es_la_app_instalada(request),
         country_code=cloudflare_client_country(request),
     )
@@ -597,7 +576,7 @@ async def refresh_access_token(
     # La cookie del dispositivo se renueva en cada refresco (BE #737): sin esto
     # caducaba a los 7 días en Safari y la app creía que el dispositivo estaba revocado
     if refresh_response.device_id:
-        _pon_la_cookie_de_dispositivo(response, refresh_response.device_id, request)
+        pon_la_cookie_de_dispositivo(response, refresh_response.device_id, request)
 
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
@@ -672,22 +651,36 @@ async def verify_email(
         # La sesión, como en el login (BE #737): dispositivo, tokens con su id y el
         # refresco GUARDADO. Antes no se guardaba, y a los 15 minutos el refresco daba
         # REFRESH_TOKEN_NOT_FOUND: a cada usuario nuevo le echaban
-        sesion = await open_session.execute(
-            user_id=str(user.id.value),
-            user_agent=get_user_agent(request),
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            ),
-            device_id_from_cookie=_validate_device_id_cookie(
-                request.cookies.get(get_device_id_cookie_name())
-            ),
-            installed_app=es_la_app_instalada(request),
-            country_code=cloudflare_client_country(request),
-        )
+        try:
+            sesion = await open_session.execute(
+                OpenSessionRequestDTO(
+                    user_id=str(user.id.value),
+                    user_agent=get_user_agent(request),
+                    ip_address=get_trusted_client_ip(
+                        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+                    ),
+                    device_id_from_cookie=ids_validos_de_la_cookie(
+                        request.cookies.get(get_device_id_cookie_name())
+                    ),
+                    installed_app=es_la_app_instalada(request),
+                    country_code=cloudflare_client_country(request),
+                )
+            )
+        except Exception as e:
+            # El correo YA está verificado y el enlace gastado: decir que el enlace no
+            # vale le dejaba sin forma de entrar. Que entre con su contraseña
+            # (/code-review, BE #737)
+            logger.error(
+                f"Session could not be opened after verifying the email: {type(e).__name__}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Email verified. Please sign in to continue.",
+            ) from e
         access_token = sesion.access_token
         refresh_token = sesion.refresh_token
-        if sesion.device_id:
-            _pon_la_cookie_de_dispositivo(response, sesion.device_id, request)
+        pon_la_cookie_de_dispositivo(response, sesion.device_id, request)
 
         # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
         csrf_token = generate_csrf_token(str(user.id.value))
@@ -713,6 +706,8 @@ async def verify_email(
             user=user_dto,
             email_verification_required=False,
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.warning(f"Email verification failed (expected): {type(e).__name__}")
         raise HTTPException(

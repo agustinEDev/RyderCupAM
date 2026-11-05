@@ -14,10 +14,17 @@ Arquitectura:
 """
 
 import os
-import uuid
 
 from fastapi import Request, Response
 from fastapi.security.utils import get_authorization_scheme_param
+
+# La cookie del dispositivo se lee y se escribe con una sola pieza, la del dominio
+from src.modules.user.domain.value_objects.device_cookie import (  # noqa: F401 - se re-exporta
+    MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE,
+    SEPARADOR_DE_DISPOSITIVOS,
+    ids_de_la_cookie_de_dispositivo,
+    valor_de_la_cookie_de_dispositivo,
+)
 
 # Nombres de las cookies
 COOKIE_NAME = "access_token"  # Access token (15 min)
@@ -394,8 +401,6 @@ DEVICE_ID_COOKIE_MAX_AGE = 31536000  # 1 year in seconds
 # La cookie del dispositivo guarda los de hasta 5 cuentas del mismo navegador,
 # separados por puntos y el último usado delante (BE #737): con uno solo, entrar
 # con otra cuenta lo pisaba y la primera estrenaba dispositivo al volver
-SEPARADOR_DE_DISPOSITIVOS = "."
-MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE = 5
 
 
 def es_la_app_instalada(request: Request) -> bool:
@@ -403,30 +408,22 @@ def es_la_app_instalada(request: Request) -> bool:
     return request.headers.get("X-App-Mode", "").strip().lower() == "standalone"
 
 
-def ids_de_la_cookie_de_dispositivo(valor: str | None) -> list[str]:
+def ids_validos_de_la_cookie(valor: str | None) -> str | None:
     """
-    Los ids válidos de la cookie del dispositivo, en orden y sin repetir.
+    Los ids válidos de la cookie del dispositivo, unidos por puntos, o None.
 
-    La cookie la controla el cliente: lo que no sea un UUID se descarta, y nunca
-    más de MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE.
+    La cookie la controla el cliente: se valida antes de pasar a los DTOs para no
+    dar un 500 con un valor malformado (v2.0.4). Desde BE #737 guarda los
+    dispositivos de hasta 5 cuentas del mismo navegador.
     """
-    ids: list[str] = []
-    for parte in (valor or "").split(SEPARADOR_DE_DISPOSITIVOS)[
-        : MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE * 2
-    ]:
-        try:
-            normalizado = str(uuid.UUID(parte.strip()))
-        except (ValueError, AttributeError):
-            continue
-        if normalizado not in ids:
-            ids.append(normalizado)
-    return ids[:MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE]
+    ids = ids_de_la_cookie_de_dispositivo(valor)
+    return SEPARADOR_DE_DISPOSITIVOS.join(ids) if ids else None
 
 
-def valor_de_la_cookie_de_dispositivo(device_id: str, anteriores: list[str] | None = None) -> str:
-    """El valor de la cookie: este dispositivo delante y los demás de antes detrás."""
-    resto = [d for d in (anteriores or []) if d != device_id]
-    return SEPARADOR_DE_DISPOSITIVOS.join([device_id, *resto][:MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE])
+def pon_la_cookie_de_dispositivo(response: Response, device_id: str, request: Request) -> None:
+    """La cookie del dispositivo, con este delante y los de otras cuentas detrás (BE #737)."""
+    anteriores = ids_de_la_cookie_de_dispositivo(request.cookies.get(get_device_id_cookie_name()))
+    set_device_id_cookie(response, valor_de_la_cookie_de_dispositivo(device_id, anteriores))
 
 
 def set_device_id_cookie(response: Response, device_id: str) -> None:

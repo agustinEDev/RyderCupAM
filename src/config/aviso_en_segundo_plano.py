@@ -81,5 +81,6 @@ class AvisoEnSegundoPlano:
                     SQLAlchemyCountryRepository(sesion),
                 )
                 await aviso.avisa(user_id, email, nombre, device_id, es_nuevo, verificado, es_alta)
-        except Exception:
-            logger.exception("New sign-in notice failed in the background")
+        except Exception as e:
+            # Solo el tipo: el mensaje puede llevar la dirección (auditoría OWASP, A09)
+            logger.error("New sign-in notice failed in the background: %s", type(e).__name__)
