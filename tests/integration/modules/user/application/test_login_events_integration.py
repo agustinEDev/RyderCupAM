@@ -46,6 +46,8 @@ class TestLoginUserUseCaseEventIntegration:
         # Mock del UoW
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user
+        # El login relee al usuario con la fila bloqueada, falle o no (BE #282)
+        mock_uow.users.find_by_id_for_update.return_value = user
         mock_uow.users.save = AsyncMock()
         mock_uow.__aenter__ = AsyncMock(return_value=mock_uow)
         mock_uow.__aexit__ = AsyncMock(return_value=None)
@@ -83,8 +85,10 @@ class TestLoginUserUseCaseEventIntegration:
         assert login_event.logged_in_at is not None
         assert login_event.login_method == "email"
 
-        # Verificar que se llamó save para persistir el evento
-        mock_uow.users.save.assert_called_once_with(user)
+        # Verificar que se llamó save para persistir el evento. Dos veces: el
+        # contador a cero va antes, en la transacción con la fila bloqueada (BE #282)
+        mock_uow.users.save.assert_called_with(user)
+        assert mock_uow.users.save.call_count == 2
 
     async def test_login_failed_does_not_register_event(self):
         """
@@ -138,6 +142,8 @@ class TestLoginUserUseCaseEventIntegration:
 
         mock_uow = AsyncMock()
         mock_uow.users.find_by_email.return_value = user
+        # El login relee al usuario con la fila bloqueada, falle o no (BE #282)
+        mock_uow.users.find_by_id_for_update.return_value = user
 
         token_service = JWTTokenService()
 

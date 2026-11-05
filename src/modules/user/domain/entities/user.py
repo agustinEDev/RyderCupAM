@@ -459,7 +459,9 @@ class User:
     def verify_password(self, plain_password: str) -> bool:
         """Verifica si el password plano coincide con el hasheado."""
         if self.password is None:
-            return False
+            # Una cuenta solo de Google: el mismo bcrypt que las demás, o el
+            # tiempo de respuesta delataría que el email está registrado (#281)
+            return Password.verifica_contra_el_relleno(plain_password)
         return self.password.verify(plain_password)
 
     def update_handicap(self, new_handicap: float | None) -> None:

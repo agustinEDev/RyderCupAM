@@ -22,8 +22,32 @@ from src.config.csrf_config import (
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
     EXEMPT_METHODS,
-    EXEMPT_PATHS,
+    csrf_token_belongs_to,
+    es_ruta_exenta,
 )
+from src.shared.infrastructure.security.cookie_handler import (
+    REFRESH_COOKIE_NAME,
+    read_access_token,
+)
+from src.shared.infrastructure.security.jwt_handler import subject_ignoring_expiry
+
+
+def usuarios_de_la_sesion(request: Request) -> set[str]:
+    """
+    Los usuarios que dicen las credenciales de la petición, para exigir que el
+    token CSRF sea del suyo (BE #724): el JWT de acceso —cookie o Bearer— y el
+    de refresh, con su firma comprobada y aunque hayan caducado.
+
+    Más de uno es una sesión incoherente: una cookie de acceso de otra persona
+    plantada junto al refresh propio, con la que el atacante haría que las
+    acciones de la víctima cayeran en su cuenta (code-review). El token tiene
+    que valer para TODOS, y ninguno vale para dos: se rechaza.
+
+    Returns:
+        Vacío si no hay sesión que suplantar; uno, el de la sesión; más, incoherente.
+    """
+    tokens = (read_access_token(request), request.cookies.get(REFRESH_COOKIE_NAME))
+    return {sub for token in tokens if token and (sub := subject_ignoring_expiry(token))}
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -59,11 +83,18 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         # Eximir rutas específicas (health, docs)
         path = request.url.path
-        if any(path.startswith(exempt) for exempt in EXEMPT_PATHS):
+        if es_ruta_exenta(path):
             return await call_next(request)
 
-        # Validar token CSRF
-        if not self._validate_csrf_token(request):
+        # Validar token CSRF: cabecera == cookie y, con sesión, firmado para ESE
+        # usuario (BE #724). Sin sesión no hay a quién suplantar
+        usuarios = usuarios_de_la_sesion(request)
+        token = request.headers.get(CSRF_HEADER_NAME, "")
+        # Con dos usuarios distintos (sesión incoherente) ningún token vale para
+        # los dos, así que también se rechaza
+        if not self._validate_csrf_token(request) or any(
+            not csrf_token_belongs_to(token, usuario) for usuario in usuarios
+        ):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={
@@ -99,4 +130,6 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return False
 
         # Comparación timing-safe
-        return secrets.compare_digest(header_token, cookie_token)
+        # En bytes: con texto no ASCII, `compare_digest` lanza TypeError y
+        # la petición acababa en 500 en vez de 403 (revisor)
+        return secrets.compare_digest(header_token.encode(), cookie_token.encode())
