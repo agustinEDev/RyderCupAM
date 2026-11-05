@@ -7,8 +7,9 @@ from typing import Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config.aviso_en_segundo_plano import AvisoEnSegundoPlano
 from src.config.database import async_session_maker
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
 from src.config.terms_guard import require_current_terms
@@ -553,6 +554,7 @@ from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
     IAvatarPresetProvider,
 )
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
@@ -560,9 +562,6 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
-from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
-    AvisoDeNuevoInicioDeSesion,
-)
 from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
 from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
@@ -941,20 +940,24 @@ def get_register_device_use_case(
     return RegisterDeviceUseCase(uow)
 
 
+def get_fabrica_de_sesiones() -> async_sessionmaker[AsyncSession]:
+    """La fábrica de sesiones de BD para lo que corre fuera de la petición (BE #737)."""
+    return async_session_maker
+
+
 def get_aviso_de_nuevo_inicio_de_sesion(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IEmailService = Depends(get_email_service),
-    paises: CountryRepositoryInterface = Depends(get_country_repository),
-) -> AvisoDeNuevoInicioDeSesion:
-    """El correo de «nuevo inicio de sesión» al propio usuario (BE #737)."""
-    return AvisoDeNuevoInicioDeSesion(uow, email_service, paises)
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
+) -> IAvisoDeNuevoInicio:
+    """El correo de «nuevo inicio de sesión» al propio usuario, en segundo plano (BE #737)."""
+    return AvisoEnSegundoPlano(fabrica, email_service)
 
 
 def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
-    aviso: AvisoDeNuevoInicioDeSesion = Depends(get_aviso_de_nuevo_inicio_de_sesion),
+    aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -3592,7 +3595,7 @@ def get_google_login_use_case(
     token_service: ITokenService = Depends(get_token_service),
     google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
-    aviso: AvisoDeNuevoInicioDeSesion = Depends(get_aviso_de_nuevo_inicio_de_sesion),
+    aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
 ) -> GoogleLoginUseCase:
     """Proveedor del caso de uso GoogleLoginUseCase."""
     return GoogleLoginUseCase(

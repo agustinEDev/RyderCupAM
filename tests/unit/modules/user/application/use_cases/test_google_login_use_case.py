@@ -427,3 +427,38 @@ class TestGoogleLoginUseCaseTokenGeneration:
         register_device_use_case.execute.assert_awaited_once()
         call_kwargs = register_device_use_case.execute.call_args.args[0]
         assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
+
+
+@pytest.mark.asyncio
+class TestGoogleLoginNuevoInicio:
+    """El aviso de nuevo inicio de sesión con Google (BE #737)."""
+
+    async def test_sign_up_with_google_tells_the_notice_it_is_the_sign_up(
+        self,
+        uow,
+        token_service,
+        google_oauth_service,
+        register_device_use_case,
+        google_user_info,
+        login_request,
+    ):
+        """
+        Given: Alguien sin cuenta que entra con Google
+        When: Se crea la cuenta
+        Then: Se le dice al aviso que es el alta (no avisa), con el correo confirmado
+        """
+        aviso = AsyncMock()
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        use_case = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        await use_case.execute(login_request)
+
+        kwargs = aviso.avisa.await_args.kwargs
+        assert kwargs["es_alta"] is True
+        assert kwargs["verificado"] is True

@@ -93,6 +93,8 @@ user_devices_table = Table(
     # La app instalada y el país de la última conexión (BE #737, migración c5e7a9b1d3f6)
     Column("installed_app", Boolean, nullable=False, server_default="false"),
     Column("country_code", String(2), nullable=True),
+    # Cuándo avisó de un nuevo inicio de sesión: el tope de uno por hora (BE #737)
+    Column("new_login_notice_at", DateTime, nullable=True),
     # El de la migración 50ccf425ff32, también aquí: sin él los tests no ven
     # el choque de dos altas a la vez (BE #692)
     Index(
@@ -132,6 +134,7 @@ def start_user_device_mappers():
                 "_created_at": user_devices_table.c.created_at,
                 "_installed_app": user_devices_table.c.installed_app,
                 "_country_code": user_devices_table.c.country_code,
+                "_new_login_notice_at": user_devices_table.c.new_login_notice_at,
             },
         )
 

@@ -410,24 +410,65 @@ async def test_f3c_a_known_device_gets_its_country_updated(client: AsyncClient):
     assert dispositivo["country_code"] == "PT"
 
 
-async def test_n_integration_second_device_login_sends_the_new_login_notice(
+async def _confirma_el_correo(email: str) -> None:
+    """Marca el correo como confirmado en la BD del test, como al pulsar el enlace."""
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.dependencies import get_db_session
+
+    async for sesion in app.dependency_overrides[get_db_session]():
+        await sesion.execute(
+            text("UPDATE users SET email_verified = TRUE WHERE email = :email"), {"email": email}
+        )
+        await sesion.commit()
+
+
+async def test_n_integration_new_device_login_sends_the_notice_in_the_background(
     client: AsyncClient, mock_external_services
 ):
     """
-    Given: Un usuario que ya entró con su Mac
-    When: Entra desde un iPhone nuevo (más de una hora después no hace falta: es el primero nuevo)
-    Then: Se le envía el aviso de nuevo inicio de sesión, a su email, con «iPhone · Safari»;
-          el primer dispositivo no lo envía
+    Given: Un usuario con el correo confirmado
+    When: Entra con su Mac (el primero) y luego desde un iPhone nuevo
+    Then: El aviso del Mac sale en segundo plano, a su correo y con «Mac · Safari»; el del
+          iPhone, un minuto después, no: como mucho uno por hora
     """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
     email = f"n-{uuid.uuid4().hex[:6]}@example.com"
     await _registra(client, email)
+    await _confirma_el_correo(email)
     mac, iphone = _otro(client), _otro(client)
-    await _entra(mac, email, SAFARI_MAC, "red-casa")
-    assert mock_external_services.send_new_login_notification.await_count == 0
 
-    await _entra(iphone, email, SAFARI_IPHONE, "red-movil")
+    await _entra(mac, email, SAFARI_MAC, "red-casa")
+    await espera_los_avisos_pendientes()
 
     mock_external_services.send_new_login_notification.assert_awaited_once()
     kwargs = mock_external_services.send_new_login_notification.await_args.kwargs
     assert kwargs["to_email"] == email
-    assert kwargs["dispositivo"] == "iPhone · Safari"
+    assert kwargs["dispositivo"] == "Mac · Safari"
+
+    await _entra(iphone, email, SAFARI_IPHONE, "red-movil")
+    await espera_los_avisos_pendientes()
+
+    assert mock_external_services.send_new_login_notification.await_count == 1
+
+
+async def test_n_integration_unconfirmed_email_gets_no_notice(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Un usuario que aún no confirmó su correo
+    When: Entra desde dos dispositivos nuevos
+    Then: No le llega ningún aviso: solo el de confirmar
+    """
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+
+    email = f"n-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+
+    await _entra(_otro(client), email, SAFARI_MAC, "red-casa")
+    await _entra(_otro(client), email, SAFARI_IPHONE, "red-movil")
+    await espera_los_avisos_pendientes()
+
+    mock_external_services.send_new_login_notification.assert_not_awaited()

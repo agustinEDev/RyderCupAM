@@ -20,14 +20,12 @@ from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
-from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
-    AvisoDeNuevoInicioDeSesion,
-)
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
@@ -62,7 +60,7 @@ class GoogleLoginUseCase:
         token_service: ITokenService,
         google_oauth_service: IGoogleOAuthService,
         register_device_use_case: RegisterDeviceUseCase,
-        aviso_de_nuevo_inicio: AvisoDeNuevoInicioDeSesion | None = None,
+        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio | None = None,
     ):
         # El correo de «nuevo inicio de sesión» (BE #737); sin él, no se avisa
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
@@ -233,8 +231,15 @@ class GoogleLoginUseCase:
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
         if self._aviso_de_nuevo_inicio is not None:
+            # El alta con Google no avisa: es crear la cuenta
             await self._aviso_de_nuevo_inicio.avisa(
-                user.id, google_info.email, user.first_name, device_id_str, es_nuevo
+                user.id,
+                google_info.email,
+                user.first_name,
+                device_id_str,
+                es_nuevo,
+                verificado=user.is_email_verified(),
+                es_alta=is_new_user,
             )
 
         security_logger.log_login_attempt(

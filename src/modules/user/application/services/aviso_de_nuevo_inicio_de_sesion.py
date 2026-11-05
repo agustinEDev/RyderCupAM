@@ -4,11 +4,14 @@ El correo de «nuevo inicio de sesión», al propio usuario (BE #737).
 Si alguien entra en tu cuenta desde un dispositivo que no conocemos, te llega un
 correo con qué dispositivo es, cuándo y desde qué país, y un botón para revisar
 tus dispositivos. Sin molestar:
-- no se envía con el primer dispositivo, el de quien acaba de registrarse;
-- ni con un dispositivo ya conocido;
-- como mucho uno por hora: si hubo otro dispositivo nuevo hace menos de una hora,
-  ya se avisó entonces.
-Un fallo al enviarlo nunca tumba el login.
+- solo con un dispositivo que no conocíamos, aunque sea el único (tras la limpieza
+  de 30 días también puede ser un intruso);
+- nunca a un correo sin confirmar: solo le llega el de confirmación, y no mandamos
+  correos de seguridad a una dirección que quizá no es suya;
+- ni en el alta con Google, que es crear la cuenta;
+- como mucho uno por hora, contado desde el último correo enviado (no desde la
+  última alta: una alta silenciosa no tapa el aviso).
+Un fallo al enviarlo nunca tumba el login, y no cuenta como enviado.
 """
 
 import logging
@@ -89,31 +92,43 @@ class AvisoDeNuevoInicioDeSesion:
         self._reloj = reloj
 
     async def avisa(
-        self, user_id: UserId, email: str, nombre: str, device_id: str | None, es_nuevo: bool
+        self,
+        user_id: UserId,
+        email: str,
+        nombre: str,
+        device_id: str | None,
+        es_nuevo: bool,
+        verificado: bool,
+        es_alta: bool = False,
     ) -> None:
-        """Avisa si el dispositivo es nuevo, no es el primero y no se avisó en la última hora."""
-        if not es_nuevo or not device_id:
+        """Avisa si el dispositivo es nuevo, el correo está confirmado, no es el alta
+        y no se envió otro aviso en la última hora."""
+        if not es_nuevo or not device_id or not verificado or es_alta:
             return
         try:
             async with self._uow:
                 todos = await self._uow.user_devices.find_all_by_user(user_id)
             este = next((d for d in todos if str(d.id.value) == device_id), None)
-            otros = [d for d in todos if str(d.id.value) != device_id]
-            if este is None or not otros:
+            if este is None:
                 return
-            # Como mucho uno por hora: si otro dispositivo nuevo avisó hace menos de una
-            # hora, este no. El primero de todos nunca avisó (es el del registro)
-            primero = min(todos, key=lambda d: d.created_at)
-            hace_una_hora = self._reloj() - UNA_HORA
-            if any(d is not primero and d.created_at > hace_una_hora for d in otros):
+            ahora = self._reloj()
+            hace_una_hora = ahora - UNA_HORA
+            if any(d.aviso_enviado_at and d.aviso_enviado_at > hace_una_hora for d in todos):
                 return
-            await self._email_service.send_new_login_notification(
+            enviado = await self._email_service.send_new_login_notification(
                 to_email=email,
                 user_name=nombre,
                 dispositivo=nombre_del_dispositivo(este.user_agent, este.installed_app),
                 cuando=cuando_en_espana(este.created_at),
                 pais=await self._nombre_del_pais(este.country_code),
             )
+            # Enviado: cuenta para el tope de uno por hora. Uno que no salió, no
+            if not enviado:
+                logger.warning("New sign-in notice was not sent")
+                return
+            async with self._uow:
+                este.apunta_el_aviso(ahora)
+                await self._uow.user_devices.save(este)
         except Exception:
             logger.exception("New sign-in notice failed; the login goes on")
 

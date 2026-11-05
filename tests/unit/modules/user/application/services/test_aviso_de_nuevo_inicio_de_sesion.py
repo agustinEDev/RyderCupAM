@@ -5,13 +5,18 @@ El correo de «nuevo inicio de sesión», al propio usuario (BE #737, fase 4).
   ----|-------------------------------------------------------|-------------------------------
   N1  entra desde un dispositivo nuevo y ya tenía otros        | sí: tipo, navegador, hora de
                                                                |   España, país y enlace
-  N2  es su primer dispositivo (acaba de registrarse)          | no
+  N2  es su único dispositivo (p. ej. tras la limpieza)        | sí: también puede ser un intruso
   N3  entra desde un dispositivo que ya conocemos              | no
-  N4  otro dispositivo nuevo hace menos de una hora            | no: como mucho uno por hora
-  N5  falla el envío                                           | el login sigue; no lanza
+  N4  otro aviso enviado hace menos de una hora                | no: como mucho uno por hora
+  N4b otro dispositivo nuevo hace 20 min, sin aviso enviado    | sí: cuenta el correo, no el alta
+  N5  falla el envío                                           | el login sigue; no lanza, y no
+                                                               |   queda apuntado como enviado
   N6  la app instalada                                         | «iPhone · app instalada»
   N7  sin país                                                 | el correo no lo menciona
-  N8  se registró hace 5 minutos y entra desde otro dispositivo | sí: el primero no avisó
+  N8  se registró hace 5 minutos y entra desde otro dispositivo | sí
+  N9  su correo aún no está confirmado                         | no: solo le llega el de confirmar
+  N10 el alta con Google                                       | no: acaba de crear la cuenta
+  N11 tras avisar                                              | el dispositivo queda apuntado
 """
 
 from datetime import datetime, timedelta
@@ -47,7 +52,9 @@ class _Paises:
         return None
 
 
-def _dispositivo(user_id, ua, creado_hace=timedelta(days=10), instalada=False, pais=None):
+def _dispositivo(
+    user_id, ua, creado_hace=timedelta(days=10), instalada=False, pais=None, avisado_hace=None
+):
     d = UserDevice.create(
         user_id,
         DeviceFingerprint.create(ua, "203.0.113.7", installed_app=instalada),
@@ -56,7 +63,21 @@ def _dispositivo(user_id, ua, creado_hace=timedelta(days=10), instalada=False, p
     )
     d._created_at = AHORA - creado_hace
     d._last_used_at = d._created_at
+    if avisado_hace is not None:
+        d.apunta_el_aviso(AHORA - avisado_hace)
     return d
+
+
+async def _avisa(aviso, usuario, device_id, es_nuevo=True, verificado=True, es_alta=False):
+    await aviso.avisa(
+        usuario,
+        "ana@example.com",
+        "Ana",
+        device_id,
+        es_nuevo=es_nuevo,
+        verificado=verificado,
+        es_alta=es_alta,
+    )
 
 
 async def _escena(*dispositivos):
@@ -79,7 +100,7 @@ async def test_n1_new_device_when_user_had_others_sends_the_notice():
     iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0), pais="ES")
     _, correo, aviso = await _escena(mac, iphone)
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(iphone.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
 
     correo.send_new_login_notification.assert_awaited_once()
     kwargs = correo.send_new_login_notification.await_args.kwargs
@@ -89,19 +110,19 @@ async def test_n1_new_device_when_user_had_others_sends_the_notice():
     assert kwargs["pais"] == "España"
 
 
-async def test_n2_first_device_after_registering_sends_nothing():
+async def test_n2_only_device_sends_the_notice():
     """
-    Given: Un usuario sin ningún otro dispositivo
-    When: Entra con el primero
-    Then: No hay correo: acaba de registrarse
+    Given: Un usuario sin ningún otro dispositivo (la limpieza borró los de hace 30 días)
+    When: Entra con uno nuevo
+    Then: Le llega el aviso: también puede ser un intruso
     """
     usuario = UserId(uuid4())
     iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
     _, correo, aviso = await _escena(iphone)
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(iphone.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
 
-    correo.send_new_login_notification.assert_not_awaited()
+    correo.send_new_login_notification.assert_awaited_once()
 
 
 async def test_n3_known_device_sends_nothing():
@@ -115,14 +136,14 @@ async def test_n3_known_device_sends_nothing():
     iphone = _dispositivo(usuario, IPHONE)
     _, correo, aviso = await _escena(mac, iphone)
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(iphone.id.value), es_nuevo=False)
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=False)
 
     correo.send_new_login_notification.assert_not_awaited()
 
 
-async def test_n4_another_new_device_in_the_last_hour_sends_nothing():
+async def test_n4_a_notice_sent_in_the_last_hour_sends_nothing():
     """
-    Given: Un Mac viejo y un iPad dado de alta hace 20 minutos
+    Given: Un Mac viejo y un iPad que avisó hace 20 minutos
     When: Entra desde un iPhone nuevo
     Then: No hay correo: como mucho uno por hora
     """
@@ -132,11 +153,12 @@ async def test_n4_another_new_device_in_the_last_hour_sends_nothing():
         usuario,
         IPHONE.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
         creado_hace=timedelta(minutes=20),
+        avisado_hace=timedelta(minutes=20),
     )
     iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
     _, correo, aviso = await _escena(mac, ipad, iphone)
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(iphone.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
 
     correo.send_new_login_notification.assert_not_awaited()
 
@@ -153,7 +175,9 @@ async def test_n5_a_failing_email_does_not_raise():
     _, correo, aviso = await _escena(mac, iphone)
     correo.send_new_login_notification.side_effect = RuntimeError("Mailgun caído")
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(iphone.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
+
+    assert iphone.aviso_enviado_at is None
 
 
 async def test_n6_n7_installed_app_label_and_no_country():
@@ -167,7 +191,7 @@ async def test_n6_n7_installed_app_label_and_no_country():
     app = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0), instalada=True)
     _, correo, aviso = await _escena(mac, app)
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(app.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(app.id.value), es_nuevo=True)
 
     kwargs = correo.send_new_login_notification.await_args.kwargs
     assert kwargs["dispositivo"] == "iPhone · app instalada"
@@ -185,6 +209,108 @@ async def test_n8_just_registered_and_a_second_device_sends_the_notice():
     iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
     _, correo, aviso = await _escena(mac, iphone)
 
-    await aviso.avisa(usuario, "ana@example.com", "Ana", str(iphone.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
 
     correo.send_new_login_notification.assert_awaited_once()
+
+
+async def test_n4b_a_silent_new_device_does_not_hide_the_notice():
+    """
+    Given: Un Mac viejo y un iPad dado de alta hace 20 minutos sin aviso (p. ej. al confirmar el correo)
+    When: Entra desde un iPhone nuevo
+    Then: Le llega el aviso: el tope cuenta los correos, no las altas
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    ipad = _dispositivo(
+        usuario,
+        IPHONE.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
+        creado_hace=timedelta(minutes=20),
+    )
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    _, correo, aviso = await _escena(mac, ipad, iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value))
+
+    correo.send_new_login_notification.assert_awaited_once()
+
+
+async def test_n4c_a_notice_older_than_an_hour_does_not_stop_a_new_one():
+    """
+    Given: Un iPad que avisó hace 61 minutos
+    When: Entra desde un iPhone nuevo
+    Then: Le llega el aviso
+    """
+    usuario = UserId(uuid4())
+    ipad = _dispositivo(usuario, MAC, avisado_hace=timedelta(minutes=61))
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    _, correo, aviso = await _escena(ipad, iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value))
+
+    correo.send_new_login_notification.assert_awaited_once()
+
+
+async def test_n9_unconfirmed_email_sends_nothing():
+    """
+    Given: Un usuario que aún no confirmó su correo
+    When: Entra desde un dispositivo nuevo
+    Then: No hay aviso: solo le llega el de confirmar
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    _, correo, aviso = await _escena(mac, iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value), verificado=False)
+
+    correo.send_new_login_notification.assert_not_awaited()
+
+
+async def test_n10_google_sign_up_sends_nothing():
+    """
+    Given: Alguien que crea la cuenta entrando con Google
+    When: Se avisa
+    Then: No hay correo: acaba de darse de alta
+    """
+    usuario = UserId(uuid4())
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    _, correo, aviso = await _escena(iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value), es_alta=True)
+
+    correo.send_new_login_notification.assert_not_awaited()
+
+
+async def test_n11_the_notice_is_recorded_on_the_device():
+    """
+    Given: Un dispositivo nuevo que avisa
+    When: Se envía el correo
+    Then: El dispositivo queda apuntado con la hora del aviso, guardado
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    uow, _, aviso = await _escena(mac, iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value))
+
+    guardado = await uow.user_devices.find_by_id(iphone.id)
+    assert guardado.aviso_enviado_at == AHORA
+
+
+async def test_n5b_an_email_that_was_not_sent_is_not_recorded():
+    """
+    Given: El proveedor de correo no lo envía (devuelve False, sin lanzar)
+    When: Se avisa
+    Then: El dispositivo no queda apuntado: el siguiente dispositivo nuevo podrá avisar
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
+    _, correo, aviso = await _escena(mac, iphone)
+    correo.send_new_login_notification.return_value = False
+
+    await _avisa(aviso, usuario, str(iphone.id.value))
+
+    assert iphone.aviso_enviado_at is None

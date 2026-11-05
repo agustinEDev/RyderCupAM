@@ -21,10 +21,8 @@ from src.modules.user.application.dto.user_dto import (
     LoginResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.token_service_interface import ITokenService
-from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
-    AvisoDeNuevoInicioDeSesion,
-)
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
@@ -65,7 +63,7 @@ class LoginUserUseCase:
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
         register_device_use_case: RegisterDeviceUseCase,
-        aviso_de_nuevo_inicio: AvisoDeNuevoInicioDeSesion | None = None,
+        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio | None = None,
     ):
         """
         Inicializa el caso de uso.
@@ -329,8 +327,14 @@ class LoginUserUseCase:
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737). No
         # lanza: un fallo del correo no tumba el login
         if self._aviso_de_nuevo_inicio is not None and user.email is not None:
+            # Nunca a un correo sin confirmar: solo le llega el de confirmación
             await self._aviso_de_nuevo_inicio.avisa(
-                user.id, user.email.value, user.first_name, device_id_str, es_nuevo
+                user.id,
+                user.email.value,
+                user.first_name,
+                device_id_str,
+                es_nuevo,
+                verificado=user.is_email_verified(),
             )
 
         # Generar token CSRF (256 bits, 15 minutos de duración)

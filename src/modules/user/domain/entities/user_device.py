@@ -333,6 +333,15 @@ class UserDevice:
         if country_code:
             self._country_code = country_code
 
+    def apunta_el_aviso(self, cuando: datetime) -> None:
+        """Apunta que este dispositivo avisó de un nuevo inicio de sesión (BE #737)."""
+        self._new_login_notice_at = cuando
+
+    @property
+    def aviso_enviado_at(self) -> datetime | None:
+        """Cuándo avisó de un nuevo inicio de sesión, o None si nunca."""
+        return getattr(self, "_new_login_notice_at", None)
+
     @property
     def installed_app(self) -> bool:
         """Si es la app instalada (PWA) y no el navegador."""
