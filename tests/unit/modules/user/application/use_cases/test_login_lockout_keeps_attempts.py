@@ -81,8 +81,12 @@ def _releido_con(uow, usuario, intentos, registro=None):
     return copia, pedidos
 
 
-async def test_1_el_fallo_suma_sobre_lo_releido_con_bloqueo(escena):
-    """Caso 1 de la tabla de la cabecera: el fallo suma sobre lo releido con bloqueo."""
+async def test_login_failure_increments_reread_locked_counter(escena):
+    """
+    Given: Otro intento subió el contador tras la primera lectura
+    When: Llega una contraseña mala
+    Then: Suma sobre lo releído con bloqueo
+    """
     uow, usuario, login = escena
     copia, pedidos = _releido_con(uow, usuario, intentos=5)
 
@@ -94,8 +98,12 @@ async def test_1_el_fallo_suma_sobre_lo_releido_con_bloqueo(escena):
     assert guardado.failed_login_attempts == 6
 
 
-async def test_2_el_bcrypt_va_antes_del_bloqueo(escena, monkeypatch):
-    """Caso 2 de la tabla de la cabecera: el bcrypt va antes del bloqueo."""
+async def test_login_failure_runs_bcrypt_before_locking_row(escena, monkeypatch):
+    """
+    Given: Una contraseña mala
+    When: Se procesa el intento
+    Then: bcrypt corre antes de bloquear la fila
+    """
     uow, usuario, login = escena
     registro = []
     _releido_con(uow, usuario, intentos=0, registro=registro)
@@ -113,8 +121,12 @@ async def test_2_el_bcrypt_va_antes_del_bloqueo(escena, monkeypatch):
     assert registro == ["bcrypt", "bloqueo"]
 
 
-async def test_3_si_lo_releido_va_por_9_este_intento_bloquea(escena):
-    """Caso 3 de la tabla de la cabecera: si lo releido va por 9 este intento bloquea."""
+async def test_login_failure_with_reread_counter_at_nine_locks_account(escena):
+    """
+    Given: Lo releído va por 9 fallos
+    When: Llega otra contraseña mala
+    Then: La cuenta queda bloqueada
+    """
     uow, usuario, login = escena
     _releido_con(uow, usuario, intentos=9)
 
@@ -122,8 +134,12 @@ async def test_3_si_lo_releido_va_por_9_este_intento_bloquea(escena):
         await login.execute(LoginRequestDTO(email=EMAIL, password=MALA))
 
 
-async def test_4_si_el_usuario_desaparece_entre_medias_none_sin_error(escena):
-    """Caso 4 de la tabla de la cabecera: si el usuario desaparece entre medias none sin error."""
+async def test_login_failure_user_deleted_meanwhile_returns_none(escena):
+    """
+    Given: El usuario se borra antes de la relectura
+    When: Llega una contraseña mala
+    Then: Devuelve None sin error
+    """
     uow, _, login = escena
 
     async def borrado(_user_id):
@@ -135,8 +151,12 @@ async def test_4_si_el_usuario_desaparece_entre_medias_none_sin_error(escena):
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=MALA)) is None
 
 
-async def test_5_con_la_buena_se_pone_a_cero_sobre_lo_releido(escena):
-    """Caso 5 de la tabla de la cabecera: con la buena se pone a cero sobre lo releido."""
+async def test_login_success_resets_reread_counter(escena):
+    """
+    Given: Lo releído tiene fallos apuntados
+    When: Llega la contraseña buena
+    Then: El contador vuelve a cero sobre lo releído
+    """
     uow, usuario, login = escena
     copia, pedidos = _releido_con(uow, usuario, intentos=3)
 
@@ -146,8 +166,12 @@ async def test_5_con_la_buena_se_pone_a_cero_sobre_lo_releido(escena):
     assert copia.failed_login_attempts == 0
 
 
-async def test_6_con_la_buena_pero_recien_bloqueada_no_entra(escena):
-    """Caso 6 de la tabla de la cabecera: con la buena pero recien bloqueada no entra."""
+async def test_login_success_on_account_locked_meanwhile_raises_locked(escena):
+    """
+    Given: La cuenta se bloquea entre la lectura y la relectura
+    When: Llega la contraseña buena
+    Then: AccountLockedException: no entra
+    """
     uow, usuario, login = escena
     _releido_con(uow, usuario, intentos=9)
 
@@ -164,8 +188,12 @@ async def test_6_con_la_buena_pero_recien_bloqueada_no_entra(escena):
         await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA))
 
 
-async def test_7_con_la_buena_y_el_usuario_desaparecido_none(escena):
-    """Caso 7 de la tabla de la cabecera: con la buena y el usuario desaparecido none."""
+async def test_login_success_user_deleted_meanwhile_returns_none(escena):
+    """
+    Given: El usuario se borra antes de la relectura
+    When: Llega la contraseña buena
+    Then: Devuelve None
+    """
     uow, _, login = escena
 
     async def borrado(_user_id):
@@ -177,8 +205,12 @@ async def test_7_con_la_buena_y_el_usuario_desaparecido_none(escena):
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA)) is None
 
 
-async def test_8_un_fallo_sobre_una_ya_bloqueada_no_cuenta(escena):
-    """Caso 8 de la tabla de la cabecera: un fallo sobre una ya bloqueada no cuenta."""
+async def test_login_failure_on_locked_account_does_not_count(escena):
+    """
+    Given: Una cuenta ya bloqueada al releer
+    When: Llega una contraseña mala
+    Then: El contador no sube
+    """
     uow, usuario, login = escena
     bloqueada = _rebuild_user(usuario, failed_login_attempts=9)
     bloqueada.record_failed_login()
@@ -199,8 +231,12 @@ async def test_8_un_fallo_sobre_una_ya_bloqueada_no_cuenta(escena):
     assert len(bloqueada.get_domain_events()) == eventos
 
 
-async def test_9_el_cero_se_guarda_en_la_transaccion_bloqueada(escena):
-    """Caso 9 de la tabla de la cabecera: el cero se guarda en la transaccion bloqueada."""
+async def test_login_success_saves_reset_inside_locked_transaction(escena):
+    """
+    Given: La contraseña buena
+    When: Se procesa el intento
+    Then: El cero se guarda en la misma transacción que bloqueó la fila
+    """
     uow, usuario, login = escena
     registro = []
     _releido_con(uow, usuario, intentos=3, registro=registro)

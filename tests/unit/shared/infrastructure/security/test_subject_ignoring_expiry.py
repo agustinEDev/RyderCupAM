@@ -27,38 +27,62 @@ def _firmado(payload, clave=None):
     return jwt.encode(payload, clave or settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def test_1_uno_valido_da_su_sub():
-    """Caso 1 de la tabla de la cabecera: uno valido da su sub."""
+def test_subject_ignoring_expiry_valid_token_returns_sub():
+    """
+    Given: Un JWT válido
+    When: Se lee su usuario
+    Then: Devuelve su sub
+    """
     assert subject_ignoring_expiry(JWTTokenService().create_access_token({"sub": SUB})) == SUB
 
 
-def test_2_caducado_con_la_firma_buena_tambien():
-    """Caso 2 de la tabla de la cabecera: caducado con la firma buena tambien."""
+def test_subject_ignoring_expiry_expired_token_returns_sub():
+    """
+    Given: Un JWT caducado con la firma buena
+    When: Se lee su usuario
+    Then: Devuelve su sub
+    """
     assert subject_ignoring_expiry(_firmado({"sub": SUB, "exp": int(time.time()) - 3600})) == SUB
 
 
-def test_3_con_otra_clave_no():
-    """Caso 3 de la tabla de la cabecera: con otra clave no."""
+def test_subject_ignoring_expiry_other_key_returns_none():
+    """
+    Given: Un JWT firmado con otra clave
+    When: Se lee su usuario
+    Then: None
+    """
     assert (
         subject_ignoring_expiry(_firmado({"sub": SUB}, clave="otra-clave-de-32-bytes-o-mas-xxxxx"))
         is None
     )
 
 
-def test_4_alg_none_no():
-    """Caso 4 de la tabla de la cabecera: alg none no."""
+def test_subject_ignoring_expiry_alg_none_returns_none():
+    """
+    Given: Un JWT con alg none
+    When: Se lee su usuario
+    Then: None
+    """
     sin_firma = jwt.encode({"sub": SUB}, key=None, algorithm="none")
 
     assert subject_ignoring_expiry(sin_firma) is None
 
 
 @pytest.mark.parametrize("payload", [{}, {"sub": 42}, {"sub": ""}])
-def test_5_sin_sub_de_texto_no(payload):
-    """Caso 5 de la tabla de la cabecera: sin sub de texto no."""
+def test_subject_ignoring_expiry_without_string_sub_returns_none(payload):
+    """
+    Given: Un JWT sin sub de texto
+    When: Se lee su usuario
+    Then: None
+    """
     assert subject_ignoring_expiry(_firmado(payload)) is None
 
 
 @pytest.mark.parametrize("basura", ["", "abc", "a.b.c"])
-def test_6_basura_no(basura):
-    """Caso 6 de la tabla de la cabecera: basura no."""
+def test_subject_ignoring_expiry_garbage_returns_none(basura):
+    """
+    Given: Algo que no es un JWT
+    When: Se lee su usuario
+    Then: None
+    """
     assert subject_ignoring_expiry(basura) is None
