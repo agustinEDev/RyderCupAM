@@ -228,8 +228,8 @@ def test_startup_reports_whether_the_origin_secret_is_configured_without_its_val
     """
     Given: El secreto configurado
     When: Arranca la app y lo comprueba
-    Then: Dice que está configurado y su longitud, nunca el valor: un espacio pegado de más
-          se vería en la longitud (revisor, 5 nov)
+    Then: Dice que está configurado, sin el valor ni nada sacado de él (CodeQL,
+          py/clear-text-logging-sensitive-data), y sin avisos
     """
     import logging
 
@@ -241,7 +241,35 @@ def test_startup_reports_whether_the_origin_secret_is_configured_without_its_val
         informa_del_secreto_de_origen()
 
     assert SECRETO not in caplog.text
-    assert f"{len(SECRETO)}" in caplog.text
+    assert str(len(SECRETO)) not in caplog.text
+    assert "configurada" in caplog.text
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+
+@pytest.mark.parametrize("pegado", [f" {SECRETO}", f"{SECRETO}\n", f"{SECRETO} "])
+def test_startup_warns_when_the_origin_secret_has_surrounding_whitespace(
+    monkeypatch, caplog, pegado
+):
+    """
+    Given: El secreto pegado con un espacio o un salto de línea de más
+    When: Arranca la app y lo comprueba
+    Then: Avisa con un warning, sin el valor: nunca coincidiría con el de Cloudflare
+          y todo caería en silencio al contador compartido (revisor, 5 nov)
+    """
+    import logging
+
+    from src.shared.infrastructure.http.http_context_validator import (
+        informa_del_secreto_de_origen,
+    )
+
+    monkeypatch.setenv("CLOUDFLARE_ORIGIN_SECRET", pegado)
+    with caplog.at_level(logging.INFO):
+        informa_del_secreto_de_origen()
+
+    assert SECRETO not in caplog.text
+    assert any(
+        r.levelno == logging.WARNING and "espacios" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_startup_warns_when_the_origin_secret_is_missing_in_production(monkeypatch, caplog):

@@ -150,7 +150,7 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     payload = verify_refresh_token(token) if token else None
     user_id = payload.get("sub") if payload else None
     if user_id:
-        return f"{_USER_PREFIX}{user_id}"
+        return _USER_PREFIX + str(user_id)
     return get_client_identifier(request)
 
 

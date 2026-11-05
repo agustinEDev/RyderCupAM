@@ -46,7 +46,8 @@ cannot find the handlers of included routers: 114 routes had no limit at all.
    does not remove custom headers. `before_send` and `before_send_transaction` remove
    `X-Origin-Verify`, `CF-Connecting-IP` and `True-Client-IP`, and the Sentry user is
    only the id (it also carried the `X-Forwarded-For` IP).
-   - At startup the API logs whether the secret is set and its length, never its value.
+   - At startup the API logs whether the secret is set, and warns if it has surrounding
+     whitespace; never its value or anything computed from it.
 6. **The default limit is a global FastAPI dependency.**
    - It allows 100 requests per minute **per user and per route**.
    - Without a verified user it does not count. Those routes require a session and

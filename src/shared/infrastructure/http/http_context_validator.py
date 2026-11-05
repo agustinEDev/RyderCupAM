@@ -253,21 +253,29 @@ def cloudflare_client_ip(request: Request) -> str | None:
 
 def informa_del_secreto_de_origen() -> None:
     """
-    Dice al arrancar si hay secreto de Cloudflare, y de cuántos caracteres.
+    Dice al arrancar si la cabecera de origen de Cloudflare está configurada (ADR-041).
 
-    Nunca el valor. La longitud delata un espacio o un salto de línea pegados de más,
-    que harían que nunca coincida y todo cayera en silencio al contador compartido.
-    En producción, sin secreto, es un aviso: los límites anónimos son de toda la app.
+    Nunca el valor ni nada calculado con él (CodeQL py/clear-text-logging-sensitive-data):
+    solo si está, y si alguien lo pegó con espacios o saltos de línea de más. Así no
+    coincidiría nunca, y todo caería en silencio al contador compartido. En
+    producción, sin configurar, es un aviso: los límites anónimos son de toda la app.
     """
-    secreto = os.getenv(ORIGIN_SECRET_ENV, "")
-    if secreto:
-        logger.info(f"{ORIGIN_SECRET_ENV} configurado ({len(secreto)} caracteres)")
+    valor = os.getenv(ORIGIN_SECRET_ENV, "")
+    configurada = valor != ""
+    con_espacios = valor != valor.strip()
+    if con_espacios:
+        logger.warning(
+            "Cabecera de origen de Cloudflare configurada con espacios o saltos de línea "
+            "al principio o al final: no coincidirá con la de Cloudflare (ADR-041)"
+        )
+    elif configurada:
+        logger.info("Cabecera de origen de Cloudflare configurada (ADR-041)")
     elif os.getenv("ENVIRONMENT", "development").lower() == "production":
         logger.warning(
-            f"{ORIGIN_SECRET_ENV} sin configurar: la IP real de Cloudflare no se usa (ADR-041)"
+            "Cabecera de origen de Cloudflare sin configurar: la IP real no se usa (ADR-041)"
         )
     else:
-        logger.info(f"{ORIGIN_SECRET_ENV} sin configurar")
+        logger.info("Cabecera de origen de Cloudflare sin configurar")
 
 
 def get_trusted_client_ip(
