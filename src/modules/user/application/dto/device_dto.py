@@ -370,6 +370,10 @@ class RevokeDeviceRequestDTO(BaseModel):
         description="ID del dispositivo a revocar",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
     )
+    current_device_id: str | None = Field(
+        default=None,
+        description="El dispositivo desde el que se pide (el `did` del token, BE #737)",
+    )
     user_agent: str | None = Field(
         default=None,
         min_length=10,

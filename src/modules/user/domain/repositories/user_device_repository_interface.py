@@ -278,3 +278,7 @@ class UserDeviceRepositoryInterface(ABC):
         Borra los dispositivos sin usar desde antes de `antes`, activos o revocados, y
         con ellos sus refresh tokens (BE #737). Devuelve cuántos.
         """
+
+    @abstractmethod
+    async def find_all_by_user(self, user_id: UserId) -> list[UserDevice]:
+        """Todos los dispositivos del usuario, activos y revocados (BE #737)."""

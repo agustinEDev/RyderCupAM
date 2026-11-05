@@ -342,6 +342,7 @@ async def revoke_device(
         revoke_request = RevokeDeviceRequestDTO(
             user_id=str(current_user.id),
             device_id=device_id,
+            current_device_id=_dispositivo_actual(request),
             user_agent=user_agent,
             ip_address=ip_address,
         )

@@ -250,7 +250,7 @@ async def test_login_success_saves_reset_inside_locked_transaction(escena):
     async def dispositivo(*_args, **_kwargs):
         """Ayudante del test: dispositivo."""
         registro.append("dispositivo")
-        return SimpleNamespace(device_id=str(uuid4()), set_device_cookie=False)
+        return SimpleNamespace(device_id=str(uuid4()), set_device_cookie=False, is_new_device=False)
 
     uow.users.save = espia_save
     login._register_device_use_case.execute = dispositivo

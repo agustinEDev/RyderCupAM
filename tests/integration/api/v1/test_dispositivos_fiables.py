@@ -408,3 +408,26 @@ async def test_f3c_a_known_device_gets_its_country_updated(client: AsyncClient):
     dispositivo = (await c.get("/api/v1/users/me/devices", headers=con_pais)).json()["devices"][0]
 
     assert dispositivo["country_code"] == "PT"
+
+
+async def test_n_integration_second_device_login_sends_the_new_login_notice(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Un usuario que ya entró con su Mac
+    When: Entra desde un iPhone nuevo (más de una hora después no hace falta: es el primero nuevo)
+    Then: Se le envía el aviso de nuevo inicio de sesión, a su email, con «iPhone · Safari»;
+          el primer dispositivo no lo envía
+    """
+    email = f"n-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    mac, iphone = _otro(client), _otro(client)
+    await _entra(mac, email, SAFARI_MAC, "red-casa")
+    assert mock_external_services.send_new_login_notification.await_count == 0
+
+    await _entra(iphone, email, SAFARI_IPHONE, "red-movil")
+
+    mock_external_services.send_new_login_notification.assert_awaited_once()
+    kwargs = mock_external_services.send_new_login_notification.await_args.kwargs
+    assert kwargs["to_email"] == email
+    assert kwargs["dispositivo"] == "iPhone · Safari"

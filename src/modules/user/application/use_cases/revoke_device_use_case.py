@@ -23,9 +23,9 @@ from src.modules.user.application.dto.device_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RevokeDeviceUseCase:
@@ -129,23 +129,29 @@ class RevokeDeviceUseCase:
             # Sin este paso, el dispositivo permanecería logueado aunque esté revocado
             tokens_revoked = await self._uow.refresh_tokens.revoke_all_for_device(device_id)
 
-            # 6. Determinar si es el dispositivo actual (para info en respuesta)
-            is_current_device = False
-            if request.user_agent and request.ip_address:
-                current_fingerprint = DeviceFingerprint.create(
-                    user_agent=request.user_agent, ip_address=request.ip_address
-                )
-                is_current_device = device.matches_fingerprint(current_fingerprint)
+            # 6. Si es el dispositivo actual: por el `did` del token (BE #737), no por
+            # una huella que cambia con la red o el navegador
+            is_current_device = request.current_device_id == request.device_id
 
             # 7. Guardar cambios en BD
             await self._uow.user_devices.save(device)
 
-            # 8. Retornar confirmación
-            message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."
-            if is_current_device:
-                message = f"Dispositivo actual revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s). Tu sesión se cerrará."
+        # 8. Al historial de seguridad: quién revocó qué y cuántas sesiones cerró
+        # (BE #737; antes solo quedaba un logger.info)
+        get_security_logger().log_refresh_token_revoked(
+            user_id=request.user_id,
+            ip_address=request.ip_address or "unknown",
+            user_agent=request.user_agent or "unknown",
+            tokens_revoked_count=tokens_revoked,
+            reason="device_revoked",
+        )
 
-            return RevokeDeviceResponseDTO(
-                message=message,
-                device_id=request.device_id,
-            )
+        # 9. Retornar confirmación
+        message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."
+        if is_current_device:
+            message = f"Dispositivo actual revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s). Tu sesión se cerrará."
+
+        return RevokeDeviceResponseDTO(
+            message=message,
+            device_id=request.device_id,
+        )

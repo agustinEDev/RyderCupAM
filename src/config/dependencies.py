@@ -560,6 +560,9 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
+    AvisoDeNuevoInicioDeSesion,
+)
 from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
 from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
@@ -938,10 +941,20 @@ def get_register_device_use_case(
     return RegisterDeviceUseCase(uow)
 
 
+def get_aviso_de_nuevo_inicio_de_sesion(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service),
+    paises: CountryRepositoryInterface = Depends(get_country_repository),
+) -> AvisoDeNuevoInicioDeSesion:
+    """El correo de «nuevo inicio de sesión» al propio usuario (BE #737)."""
+    return AvisoDeNuevoInicioDeSesion(uow, email_service, paises)
+
+
 def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+    aviso: AvisoDeNuevoInicioDeSesion = Depends(get_aviso_de_nuevo_inicio_de_sesion),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -956,7 +969,7 @@ def get_login_user_use_case(
     Ya no recibe el servicio de hándicap: el login no espera a la RFEG
     (RyderCupAM#340); eso lo hace `get_refresh_own_handicap_use_case`.
     """
-    return LoginUserUseCase(uow, token_service, register_device_use_case)
+    return LoginUserUseCase(uow, token_service, register_device_use_case, aviso)
 
 
 def get_logout_user_use_case(
@@ -3579,9 +3592,12 @@ def get_google_login_use_case(
     token_service: ITokenService = Depends(get_token_service),
     google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+    aviso: AvisoDeNuevoInicioDeSesion = Depends(get_aviso_de_nuevo_inicio_de_sesion),
 ) -> GoogleLoginUseCase:
     """Proveedor del caso de uso GoogleLoginUseCase."""
-    return GoogleLoginUseCase(uow, token_service, google_oauth_service, register_device_use_case)
+    return GoogleLoginUseCase(
+        uow, token_service, google_oauth_service, register_device_use_case, aviso
+    )
 
 
 def get_link_google_account_use_case(

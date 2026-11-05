@@ -645,6 +645,10 @@ def mock_external_services():
     # Mock para EmailService
     mock_email = MagicMock()
     mock_email.send_verification_email.return_value = True
+    # El aviso de nuevo inicio de sesión se espera con await (BE #737)
+    from unittest.mock import AsyncMock
+
+    mock_email.send_new_login_notification = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):

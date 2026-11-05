@@ -22,6 +22,9 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
+    AvisoDeNuevoInicioDeSesion,
+)
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
@@ -62,6 +65,7 @@ class LoginUserUseCase:
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
         register_device_use_case: RegisterDeviceUseCase,
+        aviso_de_nuevo_inicio: AvisoDeNuevoInicioDeSesion | None = None,
     ):
         """
         Inicializa el caso de uso.
@@ -74,6 +78,8 @@ class LoginUserUseCase:
         self._uow = uow
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
+        # El correo de «nuevo inicio de sesión» (BE #737); sin él, no se avisa
+        self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
 
     @staticmethod
     def _apunta_que_no_existe(request: LoginRequestDTO, ip_address: str, user_agent: str) -> None:
@@ -270,6 +276,7 @@ class LoginUserUseCase:
         device_id = None
         should_set_device_cookie = False
         device_id_str = None
+        es_nuevo = False
         if request.user_agent:
             device_request = RegisterDeviceRequestDTO(
                 user_id=str(user.id.value),
@@ -285,6 +292,7 @@ class LoginUserUseCase:
             device_id = UserDeviceId.from_string(device_response.device_id)
             device_id_str = device_response.device_id
             should_set_device_cookie = device_response.set_device_cookie
+            es_nuevo = device_response.is_new_device
 
         # Los tokens, después del dispositivo: el de acceso lleva su id (`did`), y así
         # revocarlo se comprueba por id y no por una huella que cambia (BE #737)
@@ -317,6 +325,13 @@ class LoginUserUseCase:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+        # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737). No
+        # lanza: un fallo del correo no tumba el login
+        if self._aviso_de_nuevo_inicio is not None and user.email is not None:
+            await self._aviso_de_nuevo_inicio.avisa(
+                user.id, user.email.value, user.first_name, device_id_str, es_nuevo
+            )
 
         # Generar token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token(str(user.id.value))

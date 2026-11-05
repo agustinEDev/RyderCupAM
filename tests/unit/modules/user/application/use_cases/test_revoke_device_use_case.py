@@ -276,6 +276,8 @@ class TestRevokeDeviceUseCase:
         request = RevokeDeviceRequestDTO(
             user_id=str(user_id.value),
             device_id=register_response.device_id,
+            # El actual es el del `did` del token (BE #737), no el de la huella
+            current_device_id=register_response.device_id,
             user_agent=current_user_agent,  # Mismo user_agent
             ip_address=current_ip,  # Misma IP
         )

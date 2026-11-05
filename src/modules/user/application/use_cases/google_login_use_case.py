@@ -25,6 +25,9 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
+    AvisoDeNuevoInicioDeSesion,
+)
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
@@ -59,7 +62,10 @@ class GoogleLoginUseCase:
         token_service: ITokenService,
         google_oauth_service: IGoogleOAuthService,
         register_device_use_case: RegisterDeviceUseCase,
+        aviso_de_nuevo_inicio: AvisoDeNuevoInicioDeSesion | None = None,
     ):
+        # El correo de «nuevo inicio de sesión» (BE #737); sin él, no se avisa
+        self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
         self._uow = uow
         self._token_service = token_service
         self._google_oauth_service = google_oauth_service
@@ -135,9 +141,9 @@ class GoogleLoginUseCase:
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
-        """Register device and return (device_id, device_id_str, should_set_cookie)."""
+        """Register device and return (device_id, device_id_str, should_set_cookie, is_new)."""
         if not request.user_agent:
-            return None, None, False
+            return None, None, False, False
 
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
@@ -152,6 +158,7 @@ class GoogleLoginUseCase:
             UserDeviceId.from_string(device_response.device_id),
             device_response.device_id,
             device_response.set_device_cookie,
+            device_response.is_new_device,
         )
 
     async def execute(self, request: GoogleLoginRequestDTO) -> GoogleLoginResponseDTO:
@@ -204,7 +211,7 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        device_id, device_id_str, should_set_device_cookie = await self._register_device(
+        device_id, device_id_str, should_set_device_cookie, es_nuevo = await self._register_device(
             request, str(user.id.value)
         )
 
@@ -223,6 +230,12 @@ class GoogleLoginUseCase:
         async with self._uow:
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token_entity)
+
+        # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
+        if self._aviso_de_nuevo_inicio is not None:
+            await self._aviso_de_nuevo_inicio.avisa(
+                user.id, google_info.email, user.first_name, device_id_str, es_nuevo
+            )
 
         security_logger.log_login_attempt(
             user_id=str(user.id.value),
