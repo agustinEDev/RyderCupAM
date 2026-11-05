@@ -110,3 +110,18 @@ async def test_r3_every_revocation_goes_to_the_security_log(monkeypatch):
     assert kwargs["reason"] == "device_revoked"
     assert kwargs["tokens_revoked_count"] == 1
     assert kwargs["user_id"] == USUARIO
+
+
+async def test_r4_the_current_device_is_found_whatever_the_case_of_the_id():
+    """
+    Given: La petición sale del Mac y la ruta trae su id en mayúsculas
+    When: Revoca el Mac
+    Then: Sigue siendo el dispositivo actual
+    """
+    uow, _, mac = await _dos()
+
+    r = await RevokeDeviceUseCase(uow).execute(
+        RevokeDeviceRequestDTO(user_id=USUARIO, device_id=mac.upper(), current_device_id=mac)
+    )
+
+    assert "actual" in r.message

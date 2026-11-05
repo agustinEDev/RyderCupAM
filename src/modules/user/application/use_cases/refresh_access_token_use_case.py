@@ -30,6 +30,7 @@ from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 
@@ -213,6 +214,13 @@ class RefreshAccessTokenUseCase:
             device_response = await self._register_device_use_case.execute(device_request)
             device_id = device_response.device_id
             should_set_device_cookie = device_response.set_device_cookie
+
+        # Un token sin dispositivo (de antes) se ata al reconocido: si no, revocar
+        # ese dispositivo no cerraría la sesión, que seguiría refrescando (BE #737)
+        if refresh_token_entity.device_id is None and device_id:
+            async with self._uow:
+                refresh_token_entity.ata_al_dispositivo(UserDeviceId.from_string(device_id))
+                await self._uow.refresh_tokens.save(refresh_token_entity)
 
         # 6. Generar nuevo access token (15 minutos)
         # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737). El

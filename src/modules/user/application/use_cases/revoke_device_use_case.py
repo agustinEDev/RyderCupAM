@@ -131,7 +131,11 @@ class RevokeDeviceUseCase:
 
             # 6. Si es el dispositivo actual: por el `did` del token (BE #737), no por
             # una huella que cambia con la red o el navegador
-            is_current_device = request.current_device_id == request.device_id
+            # Sin distinguir mayúsculas: la ruta puede traer el id de otra forma
+            is_current_device = (
+                request.current_device_id is not None
+                and request.current_device_id.lower() == request.device_id.lower()
+            )
 
             # 7. Guardar cambios en BD
             await self._uow.user_devices.save(device)
