@@ -23,9 +23,9 @@ from src.config import rate_limit
 from src.config.rate_limit import (
     EXEMPT_FROM_DEFAULT_LIMIT,
     apply_default_rate_limit,
-    limite_del_refresco,
     limiter,
     refresh_token_rate_limit_key,
+    skip_refresh_limit_without_valid_cookie,
 )
 from src.config.settings import settings
 from src.shared.infrastructure.security.jwt_handler import (
@@ -296,12 +296,72 @@ def test_refresh_key_ignores_an_access_token_in_the_refresh_cookie():
     assert refresh_token_rate_limit_key(peticion) == "red-del-test"
 
 
-def test_refresh_limit_is_30_per_user_and_600_per_network():
+def test_refresh_limit_skips_requests_without_a_valid_refresh_cookie():
     """
-    Given: El límite del refresco, que depende de la clave
-    When: Se pide con la clave de un usuario o con la de red
-    Then: 30/minuto por usuario; 600 por red: sin cookie válida van todos los visitantes
-          anónimos, y sin la IP real son un contador para toda la app (revisor, 5 nov)
+    Given: Un refresco sin cookie, con una inventada y con una de verdad
+    When: Se pregunta si se salta el límite del refresco
+    Then: Se salta sin cookie válida (va a dar 401, y por red sería un contador que
+          cualquiera agota para todos); con una de verdad, cuenta (/code-review, 5 nov)
     """
-    assert limite_del_refresco("user:123") == "30/minute"
-    assert limite_del_refresco("10.0.0.1") == "600/minute"
+    refresco = create_refresh_token({"sub": str(uuid4())})
+
+    assert skip_refresh_limit_without_valid_cookie(_peticion_con_cookies())
+    assert skip_refresh_limit_without_valid_cookie(_peticion_con_cookies("refresh_token=basura"))
+    assert not skip_refresh_limit_without_valid_cookie(
+        _peticion_con_cookies(f"refresh_token={refresco}")
+    )
+
+
+def test_scoring_routes_have_a_higher_default_limit():
+    """
+    Given: Las dos rutas de anotar un hoyo de partida rápida, sin límite propio
+    When: Se mira su límite por defecto
+    Then: Es 300/minuto: al volver la cobertura, la cola manda 4 x 18 golpes de golpe, y
+          con 100 parte de ellos esperarían a otro minuto (/code-review, 5 nov)
+    """
+    modulo = "src.modules.quick_match.infrastructure.api.v1.quick_match_routes"
+
+    assert {
+        f"{modulo}.submit_hole_score": "300/minute",
+        f"{modulo}.submit_proxy_hole_score": "300/minute",
+    } == rate_limit.DEFAULT_LIMIT_OVERRIDES
+
+
+def test_default_limit_override_raises_the_limit_of_that_route(cliente, monkeypatch):
+    """
+    Given: El límite por defecto a 3/minuto y una ruta con un tope propio de 5 en la tabla
+    When: El mismo usuario hace 6 peticiones a esa ruta
+    Then: Pasan 5 y la sexta da 429
+    """
+    monkeypatch.setattr(
+        rate_limit, "DEFAULT_LIMIT_OVERRIDES", {f"{__name__}.sin_limite_propio": "5/minute"}
+    )
+    cabeceras = _con_sesion()
+
+    respuestas = [cliente.get("/sin-limite", headers=cabeceras) for _ in range(6)]
+
+    assert [r.status_code for r in respuestas] == [200] * 5 + [429]
+    assert respuestas[-1].json() == {"error": "Rate limit exceeded: 5 per 1 minute"}
+
+
+def test_default_limit_counts_with_slowapi_key_order(cliente, monkeypatch):
+    """
+    Given: Un usuario que hace una petición a una ruta sin límite propio
+    When: Se mira lo que queda apuntado para el 429
+    Then: Clave y ruta van en el orden de slowapi (clave, ámbito): sus cabeceras
+          X-RateLimit leen la ventana con ese orden (/code-review, 5 nov)
+    """
+    apuntes = []
+    original = limiter.limiter.hit
+
+    def espia(limite, *identificadores, **kw):
+        """Apunta los identificadores y cuenta como el de verdad."""
+        apuntes.append(identificadores)
+        return original(limite, *identificadores, **kw)
+
+    monkeypatch.setattr(limiter.limiter, "hit", espia)
+    user_id = str(uuid4())
+
+    cliente.get("/sin-limite", headers=_con_sesion(user_id))
+
+    assert apuntes == [(f"user:{user_id}", f"{__name__}.sin_limite_propio")]

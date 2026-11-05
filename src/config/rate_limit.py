@@ -13,8 +13,10 @@ Quién cuenta en cada límite (RyderCupAM#273, ADR-038):
   (ADR-041, BE #466), y una IPv6 cuenta por su /64. Sin el secreto, la del proxy de
   Render: un contador para toda la app, y por eso los topes siguen dimensionados
   para un club entero entrando a la vez.
-- **Toda ruta sin límite propio**: DEFAULT_LIMIT, como dependencia global de la app
-  (BE #467), salvo las de EXEMPT_FROM_DEFAULT_LIMIT.
+- **Toda ruta con sesión sin límite propio**: DEFAULT_LIMIT por usuario y por ruta,
+  como dependencia global de la app (BE #467), salvo las de EXEMPT_FROM_DEFAULT_LIMIT.
+  Sin usuario verificado no cuenta: una ruta anónima nueva necesita su propio
+  @limiter.limit (lo vigila test_every_route_a_visitor_can_reach_has_a_limit).
 - **Login, forgot-password y resend-verification**: además, por email, contado
   antes de saber si el email existe. Y el login, por red, solo cuenta los fallos:
   los aciertos de un club no lo cierran, y el credential stuffing, que casi solo
@@ -58,9 +60,20 @@ VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 CONTACT_LIMIT = "10/hour"
 
 VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
+REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token
 
-# El de toda ruta sin límite propio (BE #467): por usuario con sesión, por red sin ella
+# El de toda ruta sin límite propio (BE #467): por usuario y por ruta. Sin usuario
+# verificado no cuenta: esas rutas exigen sesión y dan su 401
 DEFAULT_LIMIT = "100/minute"
+
+# Rutas sin límite propio con un tope por defecto más alto: anotar un hoyo de
+# partida rápida. Al volver la cobertura la cola manda 4 x 18 golpes seguidos
+DEFAULT_LIMIT_OVERRIDES = {
+    "src.modules.quick_match.infrastructure.api.v1.quick_match_routes.submit_hole_score": "300/minute",
+    "src.modules.quick_match.infrastructure.api.v1.quick_match_routes.submit_proxy_hole_score": (
+        "300/minute"
+    ),
+}
 
 # Topes que no van por red
 LOGIN_ATTEMPTS_PER_EMAIL_LIMIT = "5/minute"
@@ -141,15 +154,15 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     return get_client_identifier(request)
 
 
-def limite_del_refresco(key: str) -> str:
+def skip_refresh_limit_without_valid_cookie(request: Request) -> bool:
     """
-    El límite del refresco según quién cuenta: 30/minuto por usuario; 600 por red.
+    El refresco sin cookie de refresh válida no cuenta: va a dar su 401.
 
-    Sin cookie válida llega cada visitante anónimo (la sonda de sesión prueba a
-    refrescar), y sin la IP real son un contador para toda la app: con 30 se le
-    agotaría a todos (revisor, 5 nov 2026). Igual que `limite_de_lo_publico`.
+    Lo prueba cada visitante anónimo (la sonda de sesión), y por red, que sin la IP
+    real es toda la app, cualquiera podría agotar el contador de todos y dejar en
+    429 a quien tenga la cookie caducada (revisor y /code-review, 5 nov 2026).
     """
-    return "30/minute" if key.startswith(_USER_PREFIX) else "600/minute"
+    return not refresh_token_rate_limit_key(request).startswith(_USER_PREFIX)
 
 
 def get_hole_sample_rate_limit_key(request: Request) -> str:
@@ -272,6 +285,7 @@ async def apply_default_rate_limit(request: Request) -> None:
     Una ruta con límite propio cuenta solo el suyo; las exentas, ninguno.
 
     - Cuenta **por usuario y por ruta**: un sondeo no deja sin servicio a las demás.
+      Algunas rutas tienen un tope más alto (DEFAULT_LIMIT_OVERRIDES).
     - **Sin usuario verificado no cuenta.** Estas rutas exigen sesión y van a dar su
       401, que es lo que hace al front refrescar. Con la clave de red, que sin la IP
       real es toda la app, un acceso caducado recibía 429 y nunca refrescaba
@@ -292,11 +306,17 @@ async def apply_default_rate_limit(request: Request) -> None:
     clave = get_rate_limit_key(request)
     if not clave.startswith(_USER_PREFIX):
         return
-    limite = parse(DEFAULT_LIMIT)
-    if not limiter.limiter.hit(limite, nombre, clave):
-        excedido = _exceeded(DEFAULT_LIMIT)
+    valor = DEFAULT_LIMIT_OVERRIDES.get(nombre, DEFAULT_LIMIT)
+    limite = parse(valor)
+    # Como slowapi: (clave, ámbito), con su prefijo si lo hubiera. Sus cabeceras
+    # X-RateLimit leen la ventana con estos mismos identificadores
+    identificadores = [clave, nombre]
+    if limiter._key_prefix:
+        identificadores = [limiter._key_prefix, *identificadores]
+    if not limiter.limiter.hit(limite, *identificadores):
+        excedido = _exceeded(valor)
         # El manejador de slowapi lee el límite que saltó de aquí
-        request.state.view_rate_limit = (limite, [clave, nombre])
+        request.state.view_rate_limit = (limite, identificadores)
         raise excedido
 
 

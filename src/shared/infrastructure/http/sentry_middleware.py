@@ -5,14 +5,12 @@ Middleware para capturar contexto de usuario en eventos de Sentry.
 
 Funcionalidad:
 - Extrae JWT token de cookies o headers (Authorization)
-- Decodifica el token para obtener user_id y email
+- Decodifica el token para obtener el user_id
 - Establece contexto de usuario en Sentry (sentry_sdk.set_user)
 - Silencioso: Si falla la decodificación, continúa sin usuario (request anónimo)
 
 Contexto capturado:
-- id: UUID del usuario
-- email: Email del usuario
-- ip_address: IP del cliente (X-Forwarded-For o X-Real-IP)
+- id: UUID del usuario. Solo el id: ni email ni IP salen hacia Sentry (ADR-041)
 
 Beneficios:
 - Errores en Sentry muestran qué usuario fue afectado

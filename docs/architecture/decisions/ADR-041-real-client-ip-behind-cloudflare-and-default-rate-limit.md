@@ -54,10 +54,12 @@ cannot find the handlers of included routers: 114 routes had no limit at all.
      whole app without the real IP) answered 429 to expired sessions instead.
    - A route with its own `@limiter.limit` counts only that limit.
    - An explicit list is exempt: `/`, `/health`, the docs, avatar presets and countries.
+   - Quick-match hole scoring allows 300/min: the offline queue sends 4 x 18 scores at
+     once when coverage returns.
    - `/auth/refresh-token` has its own limit, keyed on the user of the verified refresh
      cookie (30/min), because the access token has already expired when it is called.
-     Without a valid cookie it counts per network at 600/min: every anonymous visitor
-     probes it.
+     Without a valid cookie it does not count: it answers 401, and a network bucket
+     could be drained by anyone.
 
 ## Rotating the secret
 
@@ -78,5 +80,7 @@ bucket, which breaks nothing.
   and whenever it is missing, the behaviour is ADR-038's.
 - Device fingerprints do not change for honest clients: `CF-Connecting-IP` equals the
   leftmost `X-Forwarded-For` that the audit IP used before.
-- A new route is rate limited by default. Exempting one is an explicit change to
-  `EXEMPT_FROM_DEFAULT_LIMIT`, checked by `tests/unit/config/test_rate_limit_routes.py`.
+- A new route with a session is rate limited by default. Exempting one is an explicit
+  change to `EXEMPT_FROM_DEFAULT_LIMIT`, checked by `tests/unit/config/test_rate_limit_routes.py`.
+  A new anonymous route still needs its own `@limiter.limit`; a test checks that every
+  route a visitor can reach has one.

@@ -22,6 +22,7 @@ from src.config.rate_limit import (
     limite_de_lo_publico,
     limiter,
     refresh_token_rate_limit_key,
+    skip_refresh_limit_without_valid_cookie,
 )
 
 # Rutas con sesión que cuentan por usuario sin decir quién en el log (BE #532 y,
@@ -268,19 +269,13 @@ def test_refresh_token_has_its_own_limit_per_refresh_user():
     """
     Given: POST /auth/refresh-token, que llega con el acceso ya caducado
     When: Se miran sus límites
-    Then: Tiene uno propio que cuenta por el usuario del refresh, con el tope según la clave
+    Then: Tiene uno propio de 30/minuto por el usuario del refresh, que no cuenta sin cookie válida
     """
-    limites = _limites_de_la_ruta("refresh_access_token")
+    limites = _limites_de("refresh_access_token")
 
-    assert len(limites) == 1
-    assert limites[0].key_function is refresh_token_rate_limit_key
-    # El tope sale de limite_del_refresco con la clave de la petición
-    from starlette.requests import Request
-
-    sin_cookie = Request(
-        {"type": "http", "method": "POST", "path": "/", "headers": [], "client": ("10.0.0.9", 1)}
-    )
-    assert [str(lim.limit) for lim in limites[0].with_request(sin_cookie)] == ["600 per 1 minute"]
+    assert [str(lim.limit) for lim in limites] == ["30 per 1 minute"]
+    assert all(_clave(lim) is refresh_token_rate_limit_key for lim in limites)
+    assert all(lim.exempt_when is skip_refresh_limit_without_valid_cookie for lim in limites)
 
 
 def test_verify_email_has_its_own_limit_per_network():
@@ -294,3 +289,17 @@ def test_verify_email_has_its_own_limit_per_network():
 
     assert [str(lim.limit) for lim in limites] == ["60 per 1 hour"]
     assert all(_clave(lim) is get_client_identifier for lim in limites)
+
+
+def test_every_default_limit_override_is_a_route_without_own_limit():
+    """
+    Given: La tabla de topes por defecto propios de algunas rutas
+    When: Se busca cada una entre las rutas de la app
+    Then: Todas existen y ninguna tiene límite propio: si no, el tope no se aplicaría nunca
+    """
+    from src.config.rate_limit import DEFAULT_LIMIT_OVERRIDES
+
+    rutas = {f"{r.endpoint.__module__}.{r.endpoint.__name__}" for r in _routes(app.routes)}
+
+    assert rutas >= set(DEFAULT_LIMIT_OVERRIDES)
+    assert not set(DEFAULT_LIMIT_OVERRIDES) & set(limiter._route_limits)

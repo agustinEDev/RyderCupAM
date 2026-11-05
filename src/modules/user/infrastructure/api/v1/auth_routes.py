@@ -26,6 +26,7 @@ from src.config.rate_limit import (
     EMAIL_SENDING_PER_EMAIL_LIMIT,
     LOGIN_ATTEMPTS_LIMIT,
     LOGIN_ATTEMPTS_PER_EMAIL_LIMIT,
+    REFRESH_TOKEN_LIMIT,
     REGISTER_LIMIT,
     RESET_PASSWORD_LIMIT,
     VALIDATE_RESET_TOKEN_LIMIT,
@@ -33,11 +34,11 @@ from src.config.rate_limit import (
     count_or_refuse,
     email_rate_limit_key,
     get_client_identifier,
-    limite_del_refresco,
     limiter,
     record_failed_login,
     refresh_token_rate_limit_key,
     refuse_if_failed_logins_exhausted,
+    skip_refresh_limit_without_valid_cookie,
 )
 from src.config.settings import settings
 from src.modules.user.application.dto.user_dto import (
@@ -471,8 +472,13 @@ async def logout_user(
     description="Genera un nuevo access token usando un refresh token válido (httpOnly cookie).",
     tags=["Authentication"],
 )
-# Por el usuario del refresh: llega con el acceso caducado (BE #467)
-@limiter.limit(limite_del_refresco, key_func=refresh_token_rate_limit_key)
+# Por el usuario del refresh: llega con el acceso caducado (BE #467). Sin cookie
+# válida no cuenta: va a dar 401
+@limiter.limit(
+    REFRESH_TOKEN_LIMIT,
+    key_func=refresh_token_rate_limit_key,
+    exempt_when=skip_refresh_limit_without_valid_cookie,
+)
 async def refresh_access_token(
     request: Request,
     response: Response,
