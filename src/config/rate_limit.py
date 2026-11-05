@@ -150,7 +150,8 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     payload = verify_refresh_token(token) if token else None
     user_id = payload.get("sub") if payload else None
     if user_id:
-        return _USER_PREFIX + str(user_id)
+        # Una clave del límite, no una ruta: no se devuelve a nadie como HTML
+        return f"{_USER_PREFIX}{user_id}"  # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
     return get_client_identifier(request)
 
 
