@@ -8,6 +8,8 @@ CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
 Device Fingerprinting (v1.13.0): Registra/actualiza dispositivo en cada refresh.
 """
 
+from enum import StrEnum
+
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
@@ -29,6 +31,33 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+
+class RefreshRejection(StrEnum):
+    """
+    Por qué no se renueva la sesión: el `error_code` del 401 (FE #1042).
+
+    Le deja al front separar el final normal de una sesión de un rechazo raro, y
+    avisar a Sentry solo de lo segundo.
+    """
+
+    # El final normal
+    REFRESH_TOKEN_MISSING = "REFRESH_TOKEN_MISSING"  # nosec B105 - an error code
+    REFRESH_TOKEN_EXPIRED = "REFRESH_TOKEN_EXPIRED"  # nosec B105 - an error code
+    SESSION_IDLE = "SESSION_IDLE"
+    # Lo raro
+    REFRESH_TOKEN_INVALID = "REFRESH_TOKEN_INVALID"  # nosec B105 - an error code
+    REFRESH_TOKEN_NOT_FOUND = "REFRESH_TOKEN_NOT_FOUND"  # nosec B105 - an error code
+    REFRESH_TOKEN_REVOKED = "REFRESH_TOKEN_REVOKED"  # nosec B105 - an error code
+    USER_NOT_FOUND = "USER_NOT_FOUND"
+
+
+class RefreshRejectedError(Exception):
+    """La sesión no se renueva, con su motivo. La ruta responde 401."""
+
+    def __init__(self, motivo: RefreshRejection):
+        super().__init__(motivo.value)
+        self.motivo = motivo
 
 
 class RefreshAccessTokenUseCase:
@@ -72,9 +101,9 @@ class RefreshAccessTokenUseCase:
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
 
-    async def execute(  # noqa: PLR0911
+    async def execute(
         self, request: RefreshAccessTokenRequestDTO, refresh_token_jwt: str
-    ) -> RefreshAccessTokenResponseDTO | None:
+    ) -> RefreshAccessTokenResponseDTO:
         """
         Ejecuta el caso de uso de renovación de access token.
 
@@ -84,23 +113,21 @@ class RefreshAccessTokenUseCase:
 
         Returns:
             RefreshAccessTokenResponseDTO con nuevo access token si el refresh token es válido
-            None si el refresh token es inválido, revocado o el usuario no existe
+
+        Raises:
+            RefreshRejectedError: con el motivo, si la sesión no se renueva (FE #1042)
 
         Security Logging (v1.8.0):
             - Registra uso exitoso de refresh token
             - Severity LOW (acción normal de renovación)
-
-        Raises:
-            None - Retorna None en caso de error para que el endpoint retorne 401
 
         Example:
             >>> request = RefreshAccessTokenRequestDTO(
             ...     ip_address="192.168.1.1",
             ...     user_agent="Mozilla/5.0..."
             ... )
-            >>> response = await use_case.execute(request, "eyJ...")
-            >>> if response:
-            >>>     print(response.access_token)  # Nuevo token válido por 15 min
+            >>> response = await use_case.execute(request, "eyJ...")  # o RefreshRejectedError
+            >>> print(response.access_token)  # Nuevo token válido por 15 min
         """
         # Obtener security logger
         security_logger = get_security_logger()
@@ -113,43 +140,34 @@ class RefreshAccessTokenUseCase:
         payload = self._token_service.verify_refresh_token(refresh_token_jwt)
 
         if not payload:
-            # Token inválido, expirado o de tipo incorrecto
-            return None
+            # Caducado con la firma buena es el final normal; si no, inválido
+            if self._token_service.refresh_token_expired(refresh_token_jwt):
+                raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_INVALID)
 
         # 2. Extraer user_id del payload
         user_id_str = payload.get("sub")
         if not user_id_str:
-            return None
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_INVALID)
 
         try:
             user_id = UserId(user_id_str)
-        except (ValueError, TypeError, InvalidUserIdError):
-            # Captura ValueError, TypeError, InvalidUserIdError
-            return None
+        except (ValueError, TypeError, InvalidUserIdError) as error:
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_INVALID) from error
 
         # 3. Verificar que el refresh token NO esté revocado en base de datos
         # Nota: find_by_token_hash espera el JWT token original, NO el hash
         # El repositorio se encarga de hashear internamente
         refresh_token_entity = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
 
-        if not refresh_token_entity:
-            # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
-            return None
-
-        if refresh_token_entity.revoked:
-            # Refresh token fue revocado explícitamente (logout)
-            return None
-
-        if refresh_token_entity.is_expired():
-            # Refresh token expiró (aunque JWT aún no lo detectara)
-            return None
+        await self._rechaza_si_no_vale(refresh_token_entity)
 
         # 4. Verificar que el usuario sigue existiendo
         user = await self._uow.users.find_by_id(user_id)
 
         if not user:
             # Usuario fue eliminado
-            return None
+            raise RefreshRejectedError(RefreshRejection.USER_NOT_FOUND)
 
         # 5. La sesión de este dispositivo caduca tras 24 h sin usarse (BE #376,
         # OWASP A07). Se revoca: el token no vuelve a servir aunque llegue de otra
@@ -168,7 +186,7 @@ class RefreshAccessTokenUseCase:
                 tokens_revoked_count=1,
                 reason="idle",
             )
-            return None
+            raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
         # Refrescar es usar ESTE dispositivo, el del token. El registro de
         # dispositivos de más abajo puede reconocer otro (sin cookie, IP nueva) y
         # entonces el del token caducaría a las 24 h estando en uso
@@ -220,6 +238,25 @@ class RefreshAccessTokenUseCase:
             device_id=device_id,
             should_set_device_cookie=should_set_device_cookie,
         )
+
+    async def _rechaza_si_no_vale(self, refresh_token_entity: RefreshToken | None) -> None:
+        """Rechaza, con su motivo, el token que no existe, está revocado o caducó en BD."""
+        if not refresh_token_entity:
+            # Refresh token no existe en BD (nunca fue creado o ya fue eliminado)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_NOT_FOUND)
+
+        if refresh_token_entity.revoked:
+            # Revocado por 24 h sin uso sigue siendo el final normal: lo vuelve a
+            # mandar otra pestaña, o la cookie que se quedó (/code-review, 5 nov)
+            dispositivo = await self._dispositivo_del_token(refresh_token_entity)
+            if dispositivo is not None and dispositivo.is_idle():
+                raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
+            # Refresh token fue revocado explícitamente (logout)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
+
+        if refresh_token_entity.is_expired():
+            # Refresh token expiró (aunque JWT aún no lo detectara)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
 
     async def _dispositivo_del_token(self, refresh_token_entity: RefreshToken) -> UserDevice | None:
         if refresh_token_entity.device_id is None:

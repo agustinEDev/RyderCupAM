@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.49.0] - 2026-11-05
+
+**La IP real del cliente, el límite por defecto que nunca se aplicaba y el motivo
+de cada rechazo del refresco.** Sin migraciones. Va con el frontend **2.64.0**,
+que usa el `error_code` del refresco. Despliegue: primero esta versión, después
+la regla de Cloudflare (abajo). Probado en el Kind en modo desarrollo y en modo
+producción con un secreto de prueba.
+
+### Security
+
+- **IP real del cliente, solo con el secreto de Cloudflare** (#466, ADR-041).
+  - `CF-Connecting-IP` se cree solo si `X-Origin-Verify` coincide con
+    `CLOUDFLARE_ORIGIN_SECRET`, comparado en tiempo constante.
+  - Sin el secreto (o con uno equivocado), nada cambia: el contador compartido
+    de siempre, nunca uno que elija quien llama.
+  - IPv6 cuenta por su /64. Se rechazan las IP sin especificar, de bucle local o
+    con zona.
+  - La IP de auditoría del dispositivo sigue la misma regla.
+  - En el Kind, en modo producción:
+    - con el secreto, dos IP reales llevan contadores distintos, y rotar
+      direcciones dentro de un /64 no da contador nuevo;
+    - sin él, o con uno falso, todo va al compartido;
+    - el dispositivo guarda la IP real.
+- **El límite por defecto se aplica por fin** (#467).
+  - `default_limits` no llegaba a ninguna ruta: el middleware de slowapi no
+    encuentra las de los routers con FastAPI 0.162, y 114 rutas no tenían límite.
+  - Ahora es una dependencia global: 100/min por usuario y por ruta. Anotar un
+    hoyo de partida rápida admite 300/min, para la cola sin conexión.
+  - Sin usuario verificado no cuenta. Esas rutas dan su 401, y es el 401 lo que
+    hace al front renovar la sesión.
+  - En el Kind: la petición 101 da 429; 105 con el acceso caducado dan 401.
+- **Límites propios del refresco y de verify-email.**
+  - El refresco admite 30/min por usuario y token. Sin cookie válida no cuenta,
+    para que nadie agote un contador compartido.
+  - verify-email admite 60/hora por red.
+- **El 401 del refresco dice por qué** (FE #1042): `error_code`
+  `REFRESH_TOKEN_MISSING`, `REFRESH_TOKEN_EXPIRED` o `SESSION_IDLE` (el final
+  normal), y `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_NOT_FOUND`,
+  `REFRESH_TOKEN_REVOKED` o `USER_NOT_FOUND` (un rechazo).
+  - Borra la cookie de refresh si llegó una. Sin cookie no toca nada: si no,
+    una web ajena podría cerrar la sesión con un formulario.
+- **A Sentry no llegan ni el secreto ni la IP del usuario.** Se quitan
+  `X-Origin-Verify`, `CF-Connecting-IP` y `True-Client-IP` de errores y
+  transacciones, y el usuario de Sentry es solo su id.
+- **verify-email ya no escribe en el log el principio del token** (iba a las
+  migas de Sentry).
+- **Al arrancar, la API dice si el secreto está configurado** y avisa si tiene
+  espacios de más, sin el valor.
+
+### Fixed
+
+- **La caducidad del JWT se calcula en UTC** (#727). Con hora local, un token
+  vivía una hora de más en un equipo a UTC+1.
+
+### Despliegue
+
+1. Render ya tiene `CLOUDFLARE_ORIGIN_SECRET`.
+2. Con esta versión en producción, la regla de Cloudflare: **Rules → Transform
+   Rules → Modify Request Header**, `Hostname equals api.rydercupfriends.com`,
+   **Set static** `X-Origin-Verify` con el mismo valor.
+3. Comprobar que cada dispositivo guarda su IP real.
+
 ## [2.48.0] - 2026-11-05
 
 **Endurecimiento de seguridad.** Sin migraciones ni configuración nueva. Pide el

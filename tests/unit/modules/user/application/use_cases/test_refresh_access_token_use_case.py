@@ -21,6 +21,8 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
+    RefreshRejectedError,
+    RefreshRejection,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
@@ -47,6 +49,8 @@ class TestRefreshAccessTokenUseCase:
         # Configurar métodos por defecto
         # verify_refresh_token es SYNC (no async)
         service.verify_refresh_token.return_value = None
+        # Firma buena pero caducado: por defecto, no (BE #1042, motivo del rechazo)
+        service.refresh_token_expired.return_value = False
         # create_access_token es SYNC (no async)
         service.create_access_token.return_value = "new_access_token_jwt"
         return service
@@ -179,7 +183,7 @@ class TestRefreshAccessTokenUseCase:
         call_kwargs = register_device_use_case.execute.call_args.args[0]
         assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
 
-    async def test_execute_with_invalid_jwt_returns_none(
+    async def test_execute_with_invalid_jwt_raises_refresh_token_invalid(
         self,
         use_case,
         token_service,
@@ -189,7 +193,7 @@ class TestRefreshAccessTokenUseCase:
 
         Given: Un refresh token JWT con firma inválida o expirado
         When: Se ejecuta el use case
-        Then: Retorna None (token_service.verify_refresh_token retorna None)
+        Then: Rechaza con el motivo REFRESH_TOKEN_INVALID
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -199,13 +203,30 @@ class TestRefreshAccessTokenUseCase:
         token_service.verify_refresh_token.return_value = None
 
         # When
-        result = await use_case.execute(request, invalid_token)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, invalid_token)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_INVALID
         token_service.verify_refresh_token.assert_called_once_with(invalid_token)
 
-    async def test_execute_with_missing_sub_in_payload_returns_none(
+    async def test_execute_with_expired_jwt_and_good_signature_raises_refresh_token_expired(
+        self, use_case, token_service
+    ):
+        """
+        Given: Un refresh JWT que ya no verifica pero cuya firma es buena y ha caducado
+        When: Se ejecuta el use case
+        Then: Rechaza con REFRESH_TOKEN_EXPIRED, el final normal de la sesión, no como inválido
+        """
+        token_service.verify_refresh_token.return_value = None
+        token_service.refresh_token_expired.return_value = True
+
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(RefreshAccessTokenRequestDTO(), "caducado.jwt")
+
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_EXPIRED
+
+    async def test_execute_with_missing_sub_in_payload_raises_refresh_token_invalid(
         self,
         use_case,
         token_service,
@@ -215,7 +236,7 @@ class TestRefreshAccessTokenUseCase:
 
         Given: Un refresh token JWT válido pero sin claim 'sub'
         When: Se ejecuta el use case
-        Then: Retorna None
+        Then: Rechaza con el motivo REFRESH_TOKEN_INVALID
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -225,12 +246,13 @@ class TestRefreshAccessTokenUseCase:
         token_service.verify_refresh_token.return_value = {"type": "refresh"}
 
         # When
-        result = await use_case.execute(request, token)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, token)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_INVALID
 
-    async def test_execute_with_invalid_user_id_returns_none(
+    async def test_execute_with_invalid_user_id_raises_refresh_token_invalid(
         self,
         use_case,
         token_service,
@@ -240,7 +262,7 @@ class TestRefreshAccessTokenUseCase:
 
         Given: Un refresh token JWT con 'sub' que no es UUID válido
         When: Se ejecuta el use case
-        Then: Retorna None (ValueError al crear UserId)
+        Then: Rechaza con el motivo REFRESH_TOKEN_INVALID
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -252,12 +274,13 @@ class TestRefreshAccessTokenUseCase:
         }
 
         # When
-        result = await use_case.execute(request, token)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, token)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_INVALID
 
-    async def test_execute_with_token_not_in_database_returns_none(
+    async def test_execute_with_token_not_in_database_raises_refresh_token_not_found(
         self,
         use_case,
         uow,
@@ -272,7 +295,7 @@ class TestRefreshAccessTokenUseCase:
             - Pero el token NO está guardado en la base de datos
 
         When: Se ejecuta el use case
-        Then: Retorna None
+        Then: Rechaza con el motivo REFRESH_TOKEN_NOT_FOUND
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -287,12 +310,13 @@ class TestRefreshAccessTokenUseCase:
         await uow.users.save(sample_user)
 
         # When
-        result = await use_case.execute(request, token)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, token)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_NOT_FOUND
 
-    async def test_execute_with_revoked_token_returns_none(
+    async def test_execute_with_revoked_token_raises_refresh_token_revoked(
         self,
         use_case,
         uow,
@@ -309,7 +333,7 @@ class TestRefreshAccessTokenUseCase:
             - Token existe en BD pero está revocado
 
         When: Se ejecuta el use case
-        Then: Retorna None
+        Then: Rechaza con el motivo REFRESH_TOKEN_REVOKED
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -325,12 +349,13 @@ class TestRefreshAccessTokenUseCase:
         await uow.refresh_tokens.save(refresh_token_entity)
 
         # When
-        result = await use_case.execute(request, valid_refresh_token_jwt)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, valid_refresh_token_jwt)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_REVOKED
 
-    async def test_execute_with_expired_token_returns_none(
+    async def test_execute_with_expired_token_raises_refresh_token_expired(
         self,
         use_case,
         uow,
@@ -345,7 +370,7 @@ class TestRefreshAccessTokenUseCase:
             - Token existe en BD pero está expirado
 
         When: Se ejecuta el use case
-        Then: Retorna None
+        Then: Rechaza con el motivo REFRESH_TOKEN_EXPIRED
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -371,12 +396,13 @@ class TestRefreshAccessTokenUseCase:
         await uow.refresh_tokens.save(expired_token)
 
         # When
-        result = await use_case.execute(request, token)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, token)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_EXPIRED
 
-    async def test_execute_when_user_not_exists_returns_none(
+    async def test_execute_when_user_not_exists_raises_user_not_found(
         self,
         use_case,
         uow,
@@ -394,7 +420,7 @@ class TestRefreshAccessTokenUseCase:
             - PERO el usuario fue eliminado
 
         When: Se ejecuta el use case
-        Then: Retorna None
+        Then: Rechaza con el motivo USER_NOT_FOUND
         """
         # Given
         request = RefreshAccessTokenRequestDTO()
@@ -408,10 +434,11 @@ class TestRefreshAccessTokenUseCase:
         await uow.refresh_tokens.save(refresh_token_entity)
 
         # When
-        result = await use_case.execute(request, valid_refresh_token_jwt)
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await use_case.execute(request, valid_refresh_token_jwt)
 
         # Then
-        assert result is None
+        assert rechazo.value.motivo is RefreshRejection.USER_NOT_FOUND
 
     async def test_execute_creates_new_access_token_with_user_id(
         self,

@@ -14,11 +14,15 @@ from fastapi.routing import APIRoute
 from main import app
 from src.config.dependencies import get_current_user, get_current_user_optional
 from src.config.rate_limit import (
+    EXEMPT_FROM_DEFAULT_LIMIT,
+    apply_default_rate_limit,
     get_client_identifier,
     get_hole_sample_rate_limit_key,
     get_rate_limit_key,
     limite_de_lo_publico,
     limiter,
+    refresh_token_rate_limit_key,
+    skip_refresh_limit_without_valid_cookie,
 )
 
 # Rutas con sesión que cuentan por usuario sin decir quién en el log (BE #532 y,
@@ -27,6 +31,11 @@ ANONYMOUS_USER_KEYS = {
     "submit_hole_sample": get_hole_sample_rate_limit_key,
     "submit_hole_report": get_hole_sample_rate_limit_key,
 }
+
+
+# Anónimas que no cuentan por red: el refresco llega con el acceso ya caducado, y
+# por red sería un contador para toda la app en producción (BE #467)
+ANONYMOUS_ROUTE_KEYS = {"refresh_access_token": refresh_token_rate_limit_key}
 
 
 # Públicas que cuentan por usuario si llega un token válido, y si no por red: no
@@ -117,7 +126,11 @@ def test_every_limited_anonymous_route_counts_per_network():
         for route, limits, requires_session in _limited_routes()
         if not requires_session
         and route.endpoint.__name__ not in PUBLICAS_POR_USUARIO
-        and any(_clave(lim) is not get_client_identifier for lim in limits)
+        and any(
+            _clave(lim)
+            is not ANONYMOUS_ROUTE_KEYS.get(route.endpoint.__name__, get_client_identifier)
+            for lim in limits
+        )
     ]
 
     assert wrong == []
@@ -163,3 +176,151 @@ def test_lo_publico_cuenta_distinto_con_y_sin_sesion():
     """
     assert limite_de_lo_publico("user:123") == "30/minute"
     assert limite_de_lo_publico("10.0.0.1") == "600/minute"
+
+
+def _limites_de_la_ruta(nombre: str) -> list:
+    """Los límites que dependen de la clave de la ruta cuyo endpoint se llama así."""
+    for route in _routes(app.routes):
+        if route.endpoint.__name__ == nombre:
+            completo = f"{route.endpoint.__module__}.{nombre}"
+            return limiter._dynamic_route_limits.get(completo) or []
+    raise AssertionError(f"no hay ruta {nombre}")
+
+
+def _limites_de(nombre: str) -> list:
+    """Los límites propios de la ruta cuyo endpoint se llama así."""
+    for route in _routes(app.routes):
+        if route.endpoint.__name__ == nombre:
+            completo = f"{route.endpoint.__module__}.{nombre}"
+            return limiter._route_limits.get(completo) or []
+    raise AssertionError(f"no hay ruta {nombre}")
+
+
+def test_the_default_limit_is_a_global_dependency_of_the_app():
+    """
+    Given: La app montada
+    When: Se miran sus dependencias globales
+    Then: Incluye el límite por defecto: lo heredan todas las rutas, también las nuevas (BE #467)
+    """
+    assert apply_default_rate_limit in [d.dependency for d in app.router.dependencies]
+
+
+def test_an_included_route_without_own_limit_gets_429_from_the_default_limit(monkeypatch):
+    """
+    Given: La app real, el límite por defecto a 3/minuto, una ruta incluida sin límite
+           propio y una clave de usuario (la de verdad pide un usuario en la BD)
+    When: Se pide 5 veces GET /api/v1/users/me/devices
+    Then: Las 3 primeras siguen a su 401 y las siguientes dan 429: la dependencia global
+          llega a las rutas de los routers incluidos (el middleware de slowapi no llegaba)
+    """
+    from fastapi.testclient import TestClient
+
+    from src.config import rate_limit
+
+    monkeypatch.setattr(rate_limit, "DEFAULT_LIMIT", "3/minute")
+    monkeypatch.setattr(rate_limit, "get_rate_limit_key", lambda _: "user:guardian")
+    monkeypatch.setattr(limiter, "enabled", True)
+    limiter.reset()
+    cliente = TestClient(app)
+
+    codigos = [cliente.get("/api/v1/users/me/devices").status_code for _ in range(5)]
+
+    limiter.reset()
+    assert codigos == [401, 401, 401, 429, 429]
+
+
+def test_an_expired_session_keeps_getting_401_not_429(monkeypatch):
+    """
+    Given: La app real, el límite por defecto a 3/minuto y peticiones sin sesión válida
+    When: Se pide 5 veces GET /api/v1/users/me/devices
+    Then: Las 5 dan 401: es el 401 lo que hace al front refrescar la sesión (revisor, 5 nov)
+    """
+    from fastapi.testclient import TestClient
+
+    from src.config import rate_limit
+
+    monkeypatch.setattr(rate_limit, "DEFAULT_LIMIT", "3/minute")
+    monkeypatch.setattr(limiter, "enabled", True)
+    limiter.reset()
+    cliente = TestClient(app)
+    cabeceras = {"X-Test-Client-ID": "sesion-caducada"}
+
+    codigos = [
+        cliente.get("/api/v1/users/me/devices", headers=cabeceras).status_code for _ in range(5)
+    ]
+
+    limiter.reset()
+    assert codigos == [401] * 5
+
+
+def test_every_exempt_route_exists_and_has_no_own_limit():
+    """
+    Given: La lista de exentas del límite por defecto
+    When: Se busca cada una entre las rutas de la app
+    Then: Todas existen (un nombre viejo no exime a nadie en silencio) y ninguna tiene límite propio
+    """
+    rutas = {f"{r.endpoint.__module__}.{r.endpoint.__name__}" for r in _routes(app.routes)}
+
+    assert rutas >= EXEMPT_FROM_DEFAULT_LIMIT
+    assert not EXEMPT_FROM_DEFAULT_LIMIT & set(limiter._route_limits)
+
+
+def test_refresh_token_has_its_own_limit_per_refresh_user():
+    """
+    Given: POST /auth/refresh-token, que llega con el acceso ya caducado
+    When: Se miran sus límites
+    Then: Tiene uno propio de 30/minuto por el usuario del refresh, que no cuenta sin cookie válida
+    """
+    limites = _limites_de("refresh_access_token")
+
+    assert [str(lim.limit) for lim in limites] == ["30 per 1 minute"]
+    assert all(_clave(lim) is refresh_token_rate_limit_key for lim in limites)
+    assert all(lim.exempt_when is skip_refresh_limit_without_valid_cookie for lim in limites)
+
+
+def test_verify_email_has_its_own_limit_per_network():
+    """
+    Given: POST /auth/verify-email, anónima
+    When: Se miran sus límites
+    Then: Tiene uno propio de 60/hora por red: el doble que el registro, que cuenta los
+          enlaces caducados que se reintentan
+    """
+    limites = _limites_de("verify_email")
+
+    assert [str(lim.limit) for lim in limites] == ["60 per 1 hour"]
+    assert all(_clave(lim) is get_client_identifier for lim in limites)
+
+
+def test_every_default_limit_override_is_a_route_without_own_limit():
+    """
+    Given: La tabla de topes por defecto propios de algunas rutas
+    When: Se busca cada una entre las rutas de la app
+    Then: Todas existen y ninguna tiene límite propio: si no, el tope no se aplicaría nunca
+    """
+    from src.config.rate_limit import DEFAULT_LIMIT_OVERRIDES
+
+    rutas = {f"{r.endpoint.__module__}.{r.endpoint.__name__}" for r in _routes(app.routes)}
+
+    assert rutas >= set(DEFAULT_LIMIT_OVERRIDES)
+    assert not set(DEFAULT_LIMIT_OVERRIDES) & set(limiter._route_limits)
+
+
+def test_every_route_without_own_limit_requires_a_session():
+    """
+    Given: Las rutas sin límite propio y fuera de las exentas
+    When: Se miran sus dependencias
+    Then: Todas exigen sesión (get_current_user): el límite por defecto no cuenta sin
+          usuario verificado, así que una ruta anónima nueva sin su @limiter.limit
+          quedaría sin ningún límite (auditoría OWASP, 5 nov 2026)
+    """
+    sin_limite_y_anonimas = []
+    for route in _routes(app.routes):
+        name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
+        if name in EXEMPT_FROM_DEFAULT_LIMIT:
+            continue
+        if limiter._route_limits.get(name) or limiter._dynamic_route_limits.get(name):
+            continue
+        if get_current_user not in set(_dependencies(route.dependant)):
+            sin_limite_y_anonimas.append(_label(route))
+
+    assert sin_limite_y_anonimas == []

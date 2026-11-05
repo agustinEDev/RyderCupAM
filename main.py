@@ -35,7 +35,7 @@ from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
-from src.config.rate_limit import limiter  # noqa: E402
+from src.config.rate_limit import apply_default_rate_limit, limiter  # noqa: E402
 from src.config.refresco_de_handicaps import (  # noqa: E402
     LanzadorEnSegundoPlano,
     VigilanteDeActualizaciones,
@@ -95,6 +95,9 @@ from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
+from src.shared.infrastructure.http.http_context_validator import (  # noqa: E402
+    informa_del_secreto_de_origen,
+)
 from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
@@ -119,6 +122,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
+
+    # Si hay secreto de Cloudflare para la IP real, y de qué longitud (ADR-041)
+    informa_del_secreto_de_origen()
 
     start_all_mappers()  # Todos, en un solo sitio (#565)
 
@@ -212,6 +218,9 @@ app = FastAPI(
     docs_url=None,  # Deshabilitado - usaremos endpoint protegido
     redoc_url=None,  # Deshabilitado - usaremos endpoint protegido
     lifespan=lifespan,
+    # El límite por defecto en toda ruta sin uno propio (BE #467). Va aquí, antes de
+    # incluir los routers, para que lo hereden todas
+    dependencies=[Depends(apply_default_rate_limit)],
 )
 
 # Registrar el limiter en la app para que esté disponible en todos los endpoints

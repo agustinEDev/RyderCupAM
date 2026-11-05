@@ -46,3 +46,20 @@ class ITokenService(ABC):
             Payload del token si es válido, None si es inválido
         """
         pass
+
+    @abstractmethod
+    def verify_refresh_token(self, token: str) -> dict | None:
+        """
+        Verifica y decodifica un refresh token.
+
+        Returns:
+            Payload si es válido (firma, caducidad y tipo), None si no
+        """
+
+    @abstractmethod
+    def refresh_token_expired(self, token: str) -> bool:
+        """
+        Si es un refresh token de esta API, con la firma buena, que ya ha caducado.
+
+        Distingue el final normal de una sesión de un token inválido (FE #1042).
+        """
