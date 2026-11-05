@@ -119,6 +119,29 @@ class JWTTokenService(ITokenService):
         except InvalidTokenError:
             return None
 
+    def refresh_token_expired(self, token: str) -> bool:
+        """
+        Si es un refresh token de esta API, con la firma buena, que ya ha caducado.
+
+        El final normal de una sesión; uno que no verifica por otra cosa es inválido
+        (FE #1042). Se comprueba firma y tipo sin mirar la caducidad, y luego esta.
+        """
+        try:
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM],
+                options={"verify_exp": False},
+            )
+        except InvalidTokenError:
+            return False
+        exp = payload.get("exp")
+        return (
+            payload.get("type") == "refresh"
+            and isinstance(exp, int | float)
+            and exp <= datetime.now(UTC).timestamp()
+        )
+
     def verify_refresh_token(self, token: str) -> dict | None:
         """
         Verifica y decodifica un token JWT de renovación.

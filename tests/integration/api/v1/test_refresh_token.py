@@ -133,6 +133,8 @@ class TestRefreshTokenEndpoint:
             assert response.status_code == 401
             data = response.json()
             assert "detail" in data
+            # El motivo, para que el front distinga una caducidad de un rechazo (FE #1042)
+            assert data["error_code"] == "REFRESH_TOKEN_MISSING"
             # El mensaje puede ser variado dependiendo de la validación
             assert any(
                 keyword in data["detail"].lower()
@@ -169,6 +171,8 @@ class TestRefreshTokenEndpoint:
         assert response.status_code == 401
         data = response.json()
         assert "detail" in data
+        # El motivo, para que el front distinga una caducidad de un rechazo (FE #1042)
+        assert data["error_code"] == "REFRESH_TOKEN_INVALID"
         assert any(
             keyword in data["detail"].lower()
             for keyword in [
@@ -226,6 +230,9 @@ class TestRefreshTokenEndpoint:
         assert response.status_code == 401
         data = response.json()
         assert "detail" in data
+        # El motivo, para que el front distinga una caducidad de un rechazo (FE #1042)
+        # El logout borra la cookie: lo que llega después es un refresco sin ella
+        assert data["error_code"] == "REFRESH_TOKEN_MISSING"
 
     async def test_refresh_token_can_be_used_to_access_protected_endpoints(
         self,

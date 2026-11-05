@@ -68,6 +68,8 @@ from src.modules.user.application.use_cases.logout_user_use_case import (
 )
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
+    RefreshRejectedError,
+    RefreshRejection,
 )
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
@@ -464,6 +466,14 @@ async def logout_user(
     return logout_response
 
 
+def _refresco_rechazado(detalle: str, motivo: RefreshRejection) -> JSONResponse:
+    """El 401 del refresco: el texto de siempre y el motivo en `error_code` (FE #1042)."""
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": detalle, "error_code": motivo.value},
+    )
+
+
 @router.post(
     "/refresh-token",
     response_model=RefreshAccessTokenResponseDTO,
@@ -527,9 +537,9 @@ async def refresh_access_token(
     refresh_token_jwt = request.cookies.get(refresh_cookie_name)
 
     if not refresh_token_jwt:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token no proporcionado. Por favor, inicia sesión nuevamente.",
+        return _refresco_rechazado(
+            "Refresh token no proporcionado. Por favor, inicia sesión nuevamente.",
+            RefreshRejection.REFRESH_TOKEN_MISSING,
         )
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
@@ -546,13 +556,14 @@ async def refresh_access_token(
             request.cookies.get(device_id_cookie_name)
         ),
     )
-    refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
-
-    if not refresh_response:
-        # Refresh token inválido, expirado o revocado
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
+    try:
+        refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
+    except RefreshRejectedError as rechazo:
+        # Refresh token inválido, expirado o revocado: el mismo texto de siempre, y el
+        # motivo para que el front distinga el final normal de un rechazo (FE #1042)
+        return _refresco_rechazado(
+            "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
+            rechazo.motivo,
         )
 
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)

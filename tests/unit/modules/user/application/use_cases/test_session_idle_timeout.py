@@ -25,6 +25,8 @@ import pytest
 from src.modules.user.application.dto.user_dto import RefreshAccessTokenRequestDTO
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
+    RefreshRejectedError,
+    RefreshRejection,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
@@ -113,11 +115,10 @@ class TestRefrescarSegunElUso:
     async def test_r2_veinticinco_horas_sin_usar_no_y_queda_revocado(self, user, token_service):
         uow = InMemoryUnitOfWork()
 
-        respuesta = await self._refresca(
-            uow, token_service, user, _dispositivo(user, timedelta(hours=25))
-        )
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await self._refresca(uow, token_service, user, _dispositivo(user, timedelta(hours=25)))
 
-        assert respuesta is None
+        assert rechazo.value.motivo is RefreshRejection.SESSION_IDLE
         assert (await uow.refresh_tokens.find_by_token_hash(JWT)).revoked is True
 
     async def test_r3_un_token_sin_dispositivo_se_refresca(self, user, token_service):
@@ -151,7 +152,8 @@ class TestRefrescarSegunElUso:
         )
         uow = InMemoryUnitOfWork()
 
-        await self._refresca(uow, token_service, user, _dispositivo(user, timedelta(hours=25)))
+        with pytest.raises(RefreshRejectedError):
+            await self._refresca(uow, token_service, user, _dispositivo(user, timedelta(hours=25)))
 
         registro.log_refresh_token_revoked.assert_called_once()
         assert registro.log_refresh_token_revoked.call_args.kwargs["reason"] == "idle"
