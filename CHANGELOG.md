@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.48.0] - 2026-11-05
+
+**Endurecimiento de seguridad.** Sin migraciones ni configuración nueva. Pide el
+frontend **2.63.1**, que ya está en producción: los tokens CSRF emitidos antes
+del despliegue se rechazan una vez, y esa versión renueva la sesión y repite la
+petición sin cerrarla. Comprobado en el Kind con una sesión abierta contra la
+API anterior: 403 → renovación → 201.
+
+### Security
+
+- **El token CSRF va firmado y atado al usuario** (#724, ADR-040).
+  - Es `aleatorio.HMAC-SHA256(usuario!aleatorio)`, con una clave derivada de
+    `SECRET_KEY` y una etiqueta propia.
+  - Con sesión, tiene que valer para el usuario de los JWT de acceso y de
+    refresh. Se comprueba su firma, no su caducidad.
+  - Una cookie plantada desde otro subdominio («cookie tossing») ya no basta,
+    y tampoco una cookie de acceso de otro usuario junto al refresh propio.
+- **Rutas exentas de CSRF por coincidencia exacta** (#724). Por prefijo,
+  `POST /auth/google/link` y `DELETE /auth/google/unlink`, que necesitan
+  sesión, estaban exentas. La barra final se ignora.
+- **Un email que no existe tarda lo mismo que una contraseña mala** (#281).
+  - El login pasa por un bcrypt de relleno con el mismo coste que los reales.
+  - Lo pagan también las cuentas solo de Google.
+  - Medido en el Kind: 231 ms frente a 229 ms. Antes la diferencia era de
+    ~500 ms.
+- **El contador de intentos fallidos no pierde sumas** (#282).
+  - Cada fallo relee al usuario con la fila bloqueada y suma sobre lo
+    releído.
+  - Diez fallos a la vez dejaban 2 apuntados; ahora dejan 10 y bloquean la
+    cuenta.
+  - Un fallo sobre una cuenta ya bloqueada no cuenta.
+  - La contraseña buena también relee con bloqueo: no entra si otro intento
+    acaba de bloquear la cuenta, y pone el contador a cero en esa misma
+    transacción.
+- **Se autoriza antes de bloquear el partido** (#309). `PUT
+  /matches/{id}/status` ya no retiene la fila para quien no es el creador ni
+  admin. El partido y la ronda se releen tras el bloqueo.
+- **Una cabecera CSRF con caracteres no ASCII da 403, no 500.**
+
 ## [2.47.0] - 2026-11-04
 
 Cambio **aditivo** del contrato, sin migraciones. Va con el frontend
