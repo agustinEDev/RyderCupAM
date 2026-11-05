@@ -144,7 +144,7 @@ def _clave_de_usuario(user_id: str) -> str:
 
 def refresh_token_rate_limit_key(request: Request) -> str:
     """
-    Clave del refresco: el usuario de la cookie de refresh, o la red si no es válida.
+    Clave del refresco: el usuario y el token de la cookie de refresh, o la red.
 
     Se refresca cuando el acceso ya caducó, así que la clave de las rutas con
     sesión caería en la red, que en producción sin la IP real es toda la app: un
@@ -154,8 +154,12 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     token = request.cookies.get(get_refresh_cookie_name())
     payload = verify_refresh_token(token) if token else None
     user_id = payload.get("sub") if payload else None
-    if user_id:
-        return _clave_de_usuario(str(user_id))
+    if token and user_id:
+        # Por usuario y por token: con un refresh suyo ya revocado, nadie agota el
+        # contador de sus otros dispositivos (auditoría OWASP, 5 nov 2026). El token,
+        # en hash: la clave sale en el log de slowapi al pasar del límite
+        huella = hashlib.sha256(token.encode()).hexdigest()[:16]
+        return _clave_de_usuario(f"{user_id}:{huella}")
     return get_client_identifier(request)
 
 

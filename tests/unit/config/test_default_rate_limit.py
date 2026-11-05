@@ -262,14 +262,22 @@ def test_refresh_key_with_valid_refresh_cookie_is_its_user():
     """
     Given: Una cookie de refresh válida (el acceso ya caducó: es cuando se refresca)
     When: Se calcula la clave del límite del refresco
-    Then: Es la del usuario de ese refresh, no la de red (que en producción es toda la app)
+    Then: Es la de ese usuario y ese token, no la de red (que en producción es toda la
+          app): con un refresh suyo ya revocado, nadie agota el contador de sus otros
+          dispositivos (auditoría OWASP, 5 nov 2026)
     """
     user_id = str(uuid4())
-    refresco = create_refresh_token({"sub": user_id})
+    uno = create_refresh_token({"sub": user_id, "jti": "uno"})
+    otro = create_refresh_token({"sub": user_id, "jti": "otro"})
 
-    assert refresh_token_rate_limit_key(_peticion_con_cookies(f"refresh_token={refresco}")) == (
-        f"user:{user_id}"
-    )
+    clave_uno = refresh_token_rate_limit_key(_peticion_con_cookies(f"refresh_token={uno}"))
+    clave_otro = refresh_token_rate_limit_key(_peticion_con_cookies(f"refresh_token={otro}"))
+
+    assert clave_uno.startswith(f"user:{user_id}:")
+    assert clave_otro.startswith(f"user:{user_id}:")
+    assert clave_uno != clave_otro
+    assert uno not in clave_uno
+    assert clave_uno == refresh_token_rate_limit_key(_peticion_con_cookies(f"refresh_token={uno}"))
 
 
 @pytest.mark.parametrize("cookie", ["", "refresh_token=basura"])

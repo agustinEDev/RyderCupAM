@@ -80,3 +80,20 @@ def test_init_sentry_registers_both_scrubbing_hooks(monkeypatch):
     kwargs = init.call_args.kwargs
     assert kwargs["before_send"] is sentry_config.before_send
     assert kwargs["before_send_transaction"] is sentry_config.before_send_transaction
+
+
+def test_init_sentry_does_not_enable_span_streaming(monkeypatch):
+    """
+    Given: Sentry con DSN
+    When: Se inicializa
+    Then: Sin span streaming: con él, el SDK copia cada cabecera a los atributos del span
+          (http.request.header.*) sin pasar por before_send ni before_send_transaction,
+          y el secreto de Cloudflare saldría (auditoría OWASP, 5 nov 2026)
+    """
+    monkeypatch.setattr(sentry_config.settings, "SENTRY_DSN", DSN)
+    with patch.object(sentry_config.sentry_sdk, "init") as init:
+        sentry_config.init_sentry()
+
+    kwargs = init.call_args.kwargs
+    assert kwargs.get("trace_lifecycle") != "stream"
+    assert (kwargs.get("_experiments") or {}).get("trace_lifecycle") != "stream"

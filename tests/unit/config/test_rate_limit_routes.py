@@ -303,3 +303,24 @@ def test_every_default_limit_override_is_a_route_without_own_limit():
 
     assert rutas >= set(DEFAULT_LIMIT_OVERRIDES)
     assert not set(DEFAULT_LIMIT_OVERRIDES) & set(limiter._route_limits)
+
+
+def test_every_route_without_own_limit_requires_a_session():
+    """
+    Given: Las rutas sin límite propio y fuera de las exentas
+    When: Se miran sus dependencias
+    Then: Todas exigen sesión (get_current_user): el límite por defecto no cuenta sin
+          usuario verificado, así que una ruta anónima nueva sin su @limiter.limit
+          quedaría sin ningún límite (auditoría OWASP, 5 nov 2026)
+    """
+    sin_limite_y_anonimas = []
+    for route in _routes(app.routes):
+        name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
+        if name in EXEMPT_FROM_DEFAULT_LIMIT:
+            continue
+        if limiter._route_limits.get(name) or limiter._dynamic_route_limits.get(name):
+            continue
+        if get_current_user not in set(_dependencies(route.dependant)):
+            sin_limite_y_anonimas.append(_label(route))
+
+    assert sin_limite_y_anonimas == []

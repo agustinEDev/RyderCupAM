@@ -102,6 +102,27 @@ class TestRefreshTokenEndpoint:
         assert "access_token=" in set_cookie_header
         assert "HttpOnly" in set_cookie_header
 
+    async def test_refresh_without_cookie_does_not_touch_the_refresh_cookie(
+        self,
+        client: AsyncClient,
+    ):
+        """
+        Given: Un refresco que llega sin cookie de refresh (por ejemplo, un formulario de
+               otra web: SameSite=Lax no la manda)
+        When: Responde el 401
+        Then: No envía ningún Set-Cookie del refresh: si lo borrara, cualquier web podría
+              cerrar la sesión de quien la visite (auditoría OWASP, 5 nov 2026)
+        """
+        client.cookies.clear()
+
+        response = await client.post("/api/v1/auth/refresh-token")
+
+        assert response.status_code == 401
+        assert response.json()["error_code"] == "REFRESH_TOKEN_MISSING"
+        assert not [
+            c for c in response.headers.get_list("set-cookie") if c.startswith("refresh_token=")
+        ]
+
     async def test_refresh_token_without_cookie_returns_401(
         self,
         client: AsyncClient,

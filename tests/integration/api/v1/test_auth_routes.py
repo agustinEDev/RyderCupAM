@@ -489,3 +489,22 @@ class TestValidateResetTokenMalformed:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == {"valid": False, "message": self.MENSAJE_INVALIDO}
+
+
+class TestVerifyEmailNoTokenInLogs:
+    async def test_verify_email_does_not_log_any_part_of_the_token(
+        self, client: AsyncClient, caplog
+    ):
+        """
+        Given: Una verificación de email con un token cualquiera
+        When: Se intenta verificar
+        Then: Ni el token ni su principio salen en el log: con LoggingIntegration a INFO,
+              iban a las migas de Sentry (auditoría OWASP, A09, 5 nov 2026)
+        """
+        import logging
+
+        token = "ZzTokenDePrueba-0123456789abcdef"
+        with caplog.at_level(logging.DEBUG):
+            await client.post("/api/v1/auth/verify-email", json={"token": token})
+
+        assert token[:8] not in caplog.text

@@ -482,14 +482,18 @@ def _refresco_rechazado(motivo: RefreshRejection) -> JSONResponse:
     """
     El 401 del refresco: texto fijo y el motivo en `error_code` (FE #1042).
 
-    Borra la cookie de refresh: un token que ya no vale no se vuelve a mandar, y el
-    siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez de un
-    REVOKED que alertaría en cada visita (/code-review, 5 nov).
+    Borra la cookie de refresh si llegó una: un token que ya no vale no se vuelve a
+    mandar, y el siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez
+    de un REVOKED que alertaría en cada visita (/code-review, 5 nov).
     """
     respuesta = respuesta_con_codigo(
         status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, motivo.value
     )
-    delete_refresh_token_cookie(respuesta)
+    # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
+    # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
+    # cookie (SameSite=Lax) y el Set-Cookie sí se aplica (auditoría OWASP, 5 nov)
+    if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING:
+        delete_refresh_token_cookie(respuesta)
     return respuesta
 
 
@@ -660,17 +664,13 @@ async def verify_email(
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
-    TOKEN_PREVIEW_LENGTH = 8  # noqa: N806 - Constant-like variable in function
-    token_preview = (
-        f"{verify_data.token[:TOKEN_PREVIEW_LENGTH]}..."
-        if len(verify_data.token) > TOKEN_PREVIEW_LENGTH
-        else "***"
-    )
-    logger.info(f"Email verification attempt with token: {token_preview}")
+    # Ni el token ni su principio en el log: con LoggingIntegration a INFO iban a
+    # las migas de Sentry (auditoría OWASP, A09, 5 nov 2026)
+    logger.info("Email verification attempt")
 
     try:
         user = await use_case.execute(verify_data.token)
-        logger.info(f"Email verification successful for token: {token_preview}")
+        logger.info("Email verification successful")
 
         # Generar access token (15 min) + refresh token (7 días) - Session Timeout v1.8.0
         access_token = create_access_token({"sub": str(user.id.value)})
@@ -701,9 +701,7 @@ async def verify_email(
             email_verification_required=False,
         )
     except ValueError as e:
-        logger.warning(
-            f"Email verification failed (expected): {type(e).__name__} - token: {token_preview}"
-        )
+        logger.warning(f"Email verification failed (expected): {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
