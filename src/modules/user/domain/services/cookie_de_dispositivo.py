@@ -10,6 +10,10 @@ import uuid
 
 SEPARADOR_DE_DISPOSITIVOS = "."
 MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE = 5
+# Lo más largo que puede medir: 5 UUID de 36 caracteres y 4 separadores
+LONGITUD_MAXIMA_DE_LA_COOKIE = 36 * MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE + (
+    MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE - 1
+)
 
 
 def ids_de_la_cookie_de_dispositivo(valor: str | None) -> list[str]:

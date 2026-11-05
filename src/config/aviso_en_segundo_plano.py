@@ -12,11 +12,11 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     AvisoDeNuevoInicioDeSesion,
 )
-from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
@@ -44,35 +44,20 @@ class AvisoEnSegundoPlano:
         self._fabrica = fabrica
         self._email_service = email_service
 
-    async def avisa(
-        self,
-        user_id: UserId,
-        email: str,
-        nombre: str,
-        device_id: str | None,
-        es_nuevo: bool,
-        verificado: bool,
-        es_alta: bool = False,
-    ) -> None:
+    async def avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
-        if not es_nuevo or not device_id or not verificado or es_alta:
+        if (
+            not request.desconocido
+            or not request.device_id
+            or not request.verificado
+            or request.es_alta
+        ):
             return
-        tarea = asyncio.create_task(
-            self._avisa(user_id, email, nombre, device_id, es_nuevo, verificado, es_alta)
-        )
+        tarea = asyncio.create_task(self._avisa(request))
         _PENDIENTES.add(tarea)
         tarea.add_done_callback(_PENDIENTES.discard)
 
-    async def _avisa(
-        self,
-        user_id: UserId,
-        email: str,
-        nombre: str,
-        device_id: str,
-        es_nuevo: bool,
-        verificado: bool,
-        es_alta: bool,
-    ) -> None:
+    async def _avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
         try:
             async with self._fabrica() as sesion:
                 aviso = AvisoDeNuevoInicioDeSesion(
@@ -80,7 +65,7 @@ class AvisoEnSegundoPlano:
                     self._email_service,
                     SQLAlchemyCountryRepository(sesion),
                 )
-                await aviso.avisa(user_id, email, nombre, device_id, es_nuevo, verificado, es_alta)
+                await aviso.avisa(request)
         except Exception as e:
             # Solo el tipo: el mensaje puede llevar la dirección (auditoría OWASP, A09)
             logger.error("New sign-in notice failed in the background: %s", type(e).__name__)

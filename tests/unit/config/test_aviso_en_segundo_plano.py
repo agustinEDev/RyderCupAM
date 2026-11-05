@@ -18,7 +18,7 @@ import pytest
 
 from src.config import aviso_en_segundo_plano as modulo
 from src.config.aviso_en_segundo_plano import AvisoEnSegundoPlano, espera_los_avisos_pendientes
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,8 +35,16 @@ def _fabrica(puerta: asyncio.Event, abiertas: list):
 
 
 async def _avisa(aviso, **extra):
-    datos = {"es_nuevo": True, "verificado": True, "es_alta": False} | extra
-    await aviso.avisa(UserId(uuid4()), "ana@example.com", "Ana", str(uuid4()), **datos)
+    datos = {"desconocido": True, "verificado": True, "es_alta": False} | extra
+    await aviso.avisa(
+        AvisoDeNuevoInicioRequestDTO(
+            user_id=str(uuid4()),
+            email="ana@example.com",
+            nombre="Ana",
+            device_id=str(uuid4()),
+            **datos,
+        )
+    )
 
 
 async def test_b1_the_login_does_not_wait_and_the_task_is_kept_until_it_ends():
@@ -58,7 +66,9 @@ async def test_b1_the_login_does_not_wait_and_the_task_is_kept_until_it_ends():
     assert set() == modulo._PENDIENTES
 
 
-@pytest.mark.parametrize("extra", [{"verificado": False}, {"es_alta": True}, {"es_nuevo": False}])
+@pytest.mark.parametrize(
+    "extra", [{"verificado": False}, {"es_alta": True}, {"desconocido": False}]
+)
 async def test_b2_when_there_is_nothing_to_notify_no_task_is_started(extra):
     """
     Given: Un correo sin confirmar, el alta o un dispositivo conocido

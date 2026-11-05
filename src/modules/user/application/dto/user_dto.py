@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from src.modules.user.domain.services.cookie_de_dispositivo import LONGITUD_MAXIMA_DE_LA_COOKIE
 from src.modules.user.domain.services.terms_of_service import (
     current_terms_version,
     require_utc,
@@ -398,7 +399,7 @@ class LoginRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None,
         min_length=36,
-        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
+        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
     )
     installed_app: bool = Field(
@@ -744,7 +745,7 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None,
         min_length=36,
-        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
+        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
     )
     installed_app: bool = Field(

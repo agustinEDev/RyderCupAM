@@ -19,7 +19,7 @@ from fastapi import Request, Response
 from fastapi.security.utils import get_authorization_scheme_param
 
 # La cookie del dispositivo se lee y se escribe con una sola pieza, la del dominio
-from src.modules.user.domain.value_objects.device_cookie import (  # noqa: F401 - se re-exporta
+from src.modules.user.domain.services.cookie_de_dispositivo import (  # noqa: F401 - se re-exporta
     MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE,
     SEPARADOR_DE_DISPOSITIVOS,
     ids_de_la_cookie_de_dispositivo,

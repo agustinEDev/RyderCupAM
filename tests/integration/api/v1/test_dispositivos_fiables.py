@@ -507,7 +507,7 @@ async def test_n_integration_new_device_login_sends_the_notice_in_the_background
     Given: Un usuario con el correo confirmado
     When: Entra con su Mac (el primero) y luego desde un iPhone nuevo
     Then: El aviso del Mac sale en segundo plano, a su correo y con «Mac · Safari»; el del
-          iPhone, un minuto después, no: como mucho uno por hora
+          iPhone también: uno por dispositivo y hora, el de uno no tapa el de otro
     """
     from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
 
@@ -527,7 +527,51 @@ async def test_n_integration_new_device_login_sends_the_notice_in_the_background
     await _entra(iphone, email, SAFARI_IPHONE, "red-movil")
     await espera_los_avisos_pendientes()
 
-    assert mock_external_services.send_new_login_notification.await_count == 1
+    assert mock_external_services.send_new_login_notification.await_count == 2
+
+
+async def test_n_integration_fingerprint_without_cookie_notifies_with_cookie_does_not(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Un usuario confirmado que entró con su iPhone hace más de una hora
+    When: Alguien entra sin cookie, mismo iPhone y misma red (la huella lo reconoce),
+          y luego el dueño entra con su cookie
+    Then: El primero avisa (la huella no distingue a otra persona); el del dueño, con su
+          cookie, no (decidido el 6 nov 2026)
+    """
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import text
+
+    from main import app
+    from src.config.aviso_en_segundo_plano import espera_los_avisos_pendientes
+    from src.config.dependencies import get_db_session
+
+    email = f"n-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    await _confirma_el_correo(email)
+    dueno = _otro(client)
+    primero = (await _entra(dueno, email, SAFARI_IPHONE, "red-casa")).json()["device_id"]
+    await espera_los_avisos_pendientes()
+    # Su aviso fue hace dos horas: el tope de una hora ya no cuenta
+    async for sesion in app.dependency_overrides[get_db_session]():
+        await sesion.execute(
+            text("UPDATE user_devices SET new_login_notice_at = :antes WHERE id = :id"),
+            {"antes": datetime.now() - timedelta(hours=2), "id": primero},
+        )
+        await sesion.commit()
+    mock_external_services.send_new_login_notification.reset_mock()
+
+    otro = (await _entra(_otro(client), email, SAFARI_IPHONE, "red-casa")).json()["device_id"]
+    await espera_los_avisos_pendientes()
+    assert otro == primero
+    mock_external_services.send_new_login_notification.assert_awaited_once()
+
+    mock_external_services.send_new_login_notification.reset_mock()
+    await _entra(dueno, email, SAFARI_IPHONE, "red-casa")
+    await espera_los_avisos_pendientes()
+    mock_external_services.send_new_login_notification.assert_not_awaited()
 
 
 async def test_n_integration_unconfirmed_email_gets_no_notice(

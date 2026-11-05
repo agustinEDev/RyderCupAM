@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
 
 
 class IAvisoDeNuevoInicio(Protocol):
@@ -12,15 +12,6 @@ class IAvisoDeNuevoInicio(Protocol):
     plano. Nunca lanza.
     """
 
-    async def avisa(
-        self,
-        user_id: UserId,
-        email: str,
-        nombre: str,
-        device_id: str | None,
-        es_nuevo: bool,
-        verificado: bool,
-        es_alta: bool = False,
-    ) -> None:
-        """Avisa, si toca, del inicio de sesión desde `device_id`."""
+    async def avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
+        """Avisa, si toca, del inicio de sesión desde `request.device_id`."""
         ...

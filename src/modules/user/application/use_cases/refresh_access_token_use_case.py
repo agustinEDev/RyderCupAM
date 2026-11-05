@@ -32,7 +32,7 @@ from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.modules.user.domain.value_objects.device_cookie import ids_de_la_cookie_de_dispositivo
+from src.modules.user.domain.services.cookie_de_dispositivo import ids_de_la_cookie_de_dispositivo
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger

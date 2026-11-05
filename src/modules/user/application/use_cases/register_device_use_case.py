@@ -32,6 +32,7 @@ from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.services.cookie_de_dispositivo import ids_de_la_cookie_de_dispositivo
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -112,15 +113,8 @@ class RegisterDeviceUseCase:
             # =========================================================
             # La cookie guarda los dispositivos de hasta 5 cuentas del navegador (BE
             # #737): vale el primero que sea de este usuario y siga activo
-            for id_de_la_cookie in (request.device_id_from_cookie or "").split("."):
-                if not id_de_la_cookie:
-                    continue
-                try:
-                    device_id = UserDeviceId.from_string(id_de_la_cookie)
-                except ValueError as e:
-                    # Invalid device_id format in cookie - treat as no cookie
-                    logger.warning(f"Invalid device_id in cookie: {e}")
-                    continue
+            for id_de_la_cookie in ids_de_la_cookie_de_dispositivo(request.device_id_from_cookie):
+                device_id = UserDeviceId.from_string(id_de_la_cookie)
                 existing_device = await self._uow.user_devices.find_by_id_and_user(
                     device_id=device_id,
                     user_id=user_id,
@@ -132,7 +126,7 @@ class RegisterDeviceUseCase:
                     existing_device.update_country(request.country_code)
                     existing_device.update_installed_app(request.installed_app)
                     return await self._reusa(
-                        existing_device, request.ip_address, poner_cookie=False
+                        existing_device, request.ip_address, poner_cookie=False, por_su_cookie=True
                     )
 
             # =========================================================
@@ -191,6 +185,7 @@ class RegisterDeviceUseCase:
         ip_address: str,
         poner_cookie: bool = True,
         country_code: str | None = None,
+        por_su_cookie: bool = False,
     ) -> RegisterDeviceResponseDTO:
         """El que ya estaba, al día; si no traía su cookie, el que llama se la pone."""
         await self._reanuda(device)
@@ -202,6 +197,7 @@ class RegisterDeviceUseCase:
             is_new_device=False,
             message=f"Dispositivo actualizado: {device.device_name}",
             set_device_cookie=poner_cookie,
+            recognized_by_cookie=por_su_cookie,
         )
 
     async def _reanuda(self, device: UserDevice) -> None:

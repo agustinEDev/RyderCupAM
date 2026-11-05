@@ -13,6 +13,7 @@ from datetime import datetime
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
+    AvisoDeNuevoInicioRequestDTO,
     RegisterDeviceRequestDTO,
     agente_para_el_registro,
 )
@@ -155,7 +156,8 @@ class GoogleLoginUseCase:
             UserDeviceId.from_string(device_response.device_id),
             device_response.device_id,
             device_response.set_device_cookie,
-            device_response.is_new_device,
+            # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
+            device_response.is_new_device or not device_response.recognized_by_cookie,
         )
 
     async def execute(self, request: GoogleLoginRequestDTO) -> GoogleLoginResponseDTO:
@@ -235,13 +237,15 @@ class GoogleLoginUseCase:
             # otra dirección, o lo comprometido es la cuenta de Google, el aviso tiene
             # que llegar a su dueño (auditoría OWASP, 5 nov 2026)
             await self._aviso_de_nuevo_inicio.avisa(
-                user.id,
-                user.email.value if user.email else google_info.email,
-                user.first_name,
-                device_id_str,
-                es_nuevo,
-                verificado=user.is_email_verified(),
-                es_alta=is_new_user,
+                AvisoDeNuevoInicioRequestDTO(
+                    user_id=str(user.id.value),
+                    email=user.email.value if user.email else google_info.email,
+                    nombre=user.first_name,
+                    device_id=device_id_str,
+                    desconocido=es_nuevo,
+                    verificado=user.is_email_verified(),
+                    es_alta=is_new_user,
+                )
             )
 
         security_logger.log_login_attempt(

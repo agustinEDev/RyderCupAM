@@ -58,3 +58,26 @@ async def test_rg2_rg3_with_the_cookie_the_last_connection_says_app_or_browser()
 
     await alta.execute(_peticion(False, cookie=str(viejo.id.value)))
     assert (await uow.user_devices.find_by_id(viejo.id)).installed_app is False
+
+
+async def test_rg4_it_says_whether_the_device_came_by_its_cookie():
+    """
+    Given: Un dispositivo conocido
+    When: Entra con su cookie, y luego sin ella (la huella lo reconoce), y uno nuevo
+    Then: Solo el primero viene «por su cookie»: los otros dos avisan (BE #737)
+    """
+    uow, viejo = await _de_antes()
+    alta = RegisterDeviceUseCase(uow)
+
+    con_cookie = await alta.execute(_peticion(False, cookie=str(viejo.id.value)))
+    por_huella = await alta.execute(_peticion(False))
+    nuevo = await alta.execute(
+        RegisterDeviceRequestDTO(
+            user_id=USUARIO, user_agent=IPHONE.replace("18_1", "17_0"), ip_address="198.51.100.9"
+        )
+    )
+
+    assert con_cookie.recognized_by_cookie is True
+    assert por_huella.recognized_by_cookie is False
+    assert por_huella.device_id == str(viejo.id.value)
+    assert nuevo.recognized_by_cookie is False

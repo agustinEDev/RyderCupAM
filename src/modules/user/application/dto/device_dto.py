@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
+from src.modules.user.domain.services.cookie_de_dispositivo import LONGITUD_MAXIMA_DE_LA_COOKIE
+
 # Placeholder usado cuando get_trusted_client_ip() no puede resolver una IP real
 # (p.ej. tráfico vía kubectl port-forward, donde el peer siempre es 127.0.0.1 y
 # validate_ip_address() lo rechaza como sentinel). Sin esto, el registro de
@@ -83,7 +85,7 @@ class RegisterDeviceRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         default=None,
         min_length=36,
-        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
+        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
     )
@@ -142,6 +144,14 @@ class RegisterDeviceResponseDTO(BaseModel):
         default=False,
         description="True si el caller debe setear la cookie device_id (v2.0.4)",
         json_schema_extra={"example": True},
+    )
+    recognized_by_cookie: bool = Field(
+        default=False,
+        description=(
+            "True si llegó con su cookie. Sin ella (nuevo, o reconocido solo por la huella) "
+            "el login avisa: con el mismo móvil y la misma red, la huella no distingue a "
+            "otra persona (BE #737)"
+        ),
     )
 
     model_config = ConfigDict(
@@ -296,7 +306,7 @@ class ListUserDevicesRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         default=None,
         min_length=36,
-        max_length=36 * 5 + 4,  # hasta 5 ids separados por puntos (BE #737)
+        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4, primary identifier)",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
     )
@@ -469,3 +479,16 @@ class PurgeStaleSessionsResponseDTO(BaseModel):
 
     dispositivos: int
     tokens: int
+
+
+class AvisoDeNuevoInicioRequestDTO(BaseModel):
+    """Los datos del login que deciden el aviso de nuevo inicio de sesión (BE #737)."""
+
+    user_id: str
+    email: str
+    nombre: str
+    device_id: str | None
+    # Sin su cookie: nuevo, o reconocido solo por la huella
+    desconocido: bool
+    verificado: bool
+    es_alta: bool = False

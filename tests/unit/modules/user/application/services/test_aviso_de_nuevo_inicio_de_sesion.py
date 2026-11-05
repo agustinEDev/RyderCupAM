@@ -3,12 +3,15 @@ El correo de «nuevo inicio de sesión», al propio usuario (BE #737, fase 4).
 
   #   caso                                                     | ¿correo?
   ----|-------------------------------------------------------|-------------------------------
-  N1  entra desde un dispositivo nuevo y ya tenía otros        | sí: tipo, navegador, hora de
+  N1  entra desde un dispositivo desconocido y ya tenía otros  | sí: tipo, navegador, hora de
                                                                |   España, país y enlace
   N2  es su único dispositivo (p. ej. tras la limpieza)        | sí: también puede ser un intruso
-  N3  entra desde un dispositivo que ya conocemos              | no
-  N4  otro aviso enviado hace menos de una hora                | no: como mucho uno por hora
-  N4b otro dispositivo nuevo hace 20 min, sin aviso enviado    | sí: cuenta el correo, no el alta
+  N3  entra con la cookie de un dispositivo que ya conocemos   | no
+  N3b entra SIN cookie y la huella lo reconoce                 | sí: puede ser otro con el mismo
+                                                               |   móvil y la misma red
+  N4  este dispositivo avisó hace menos de una hora            | no: uno por dispositivo y hora
+  N4b otro dispositivo avisó hace 20 min                       | sí: el aviso de uno no tapa el
+                                                               |   de otro
   N5  falla el envío                                           | el login sigue; no lanza, y no
                                                                |   queda apuntado como enviado
   N6  la app instalada                                         | «iPhone · app instalada»
@@ -25,6 +28,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     AvisoDeNuevoInicioDeSesion,
 )
@@ -70,13 +74,15 @@ def _dispositivo(
 
 async def _avisa(aviso, usuario, device_id, es_nuevo=True, verificado=True, es_alta=False):
     await aviso.avisa(
-        usuario,
-        "ana@example.com",
-        "Ana",
-        device_id,
-        es_nuevo=es_nuevo,
-        verificado=verificado,
-        es_alta=es_alta,
+        AvisoDeNuevoInicioRequestDTO(
+            user_id=str(usuario.value),
+            email="ana@example.com",
+            nombre="Ana",
+            device_id=device_id,
+            desconocido=es_nuevo,
+            verificado=verificado,
+            es_alta=es_alta,
+        )
     )
 
 
@@ -141,24 +147,18 @@ async def test_n3_known_device_sends_nothing():
     correo.send_new_login_notification.assert_not_awaited()
 
 
-async def test_n4_a_notice_sent_in_the_last_hour_sends_nothing():
+async def test_n4_this_device_notified_in_the_last_hour_sends_nothing():
     """
-    Given: Un Mac viejo y un iPad que avisó hace 20 minutos
-    When: Entra desde un iPhone nuevo
-    Then: No hay correo: como mucho uno por hora
+    Given: Un iPhone desconocido que ya avisó hace 20 minutos
+    When: Vuelve a entrar sin cookie
+    Then: No hay correo: como mucho uno por dispositivo y hora
     """
     usuario = UserId(uuid4())
     mac = _dispositivo(usuario, MAC)
-    ipad = _dispositivo(
-        usuario,
-        IPHONE.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
-        creado_hace=timedelta(minutes=20),
-        avisado_hace=timedelta(minutes=20),
-    )
-    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
-    _, correo, aviso = await _escena(mac, ipad, iphone)
+    iphone = _dispositivo(usuario, IPHONE, avisado_hace=timedelta(minutes=20))
+    _, correo, aviso = await _escena(mac, iphone)
 
-    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
+    await _avisa(aviso, usuario, str(iphone.id.value))
 
     correo.send_new_login_notification.assert_not_awaited()
 
@@ -214,11 +214,11 @@ async def test_n8_just_registered_and_a_second_device_sends_the_notice():
     correo.send_new_login_notification.assert_awaited_once()
 
 
-async def test_n4b_a_silent_new_device_does_not_hide_the_notice():
+async def test_n4b_another_device_notice_does_not_hide_this_one():
     """
-    Given: Un Mac viejo y un iPad dado de alta hace 20 minutos sin aviso (p. ej. al confirmar el correo)
-    When: Entra desde un iPhone nuevo
-    Then: Le llega el aviso: el tope cuenta los correos, no las altas
+    Given: Un iPad que avisó hace 20 minutos (por ejemplo, tu portátil nuevo)
+    When: Entra desde un iPhone desconocido
+    Then: Le llega el aviso: el de un dispositivo no tapa el de otro
     """
     usuario = UserId(uuid4())
     mac = _dispositivo(usuario, MAC)
@@ -226,11 +226,28 @@ async def test_n4b_a_silent_new_device_does_not_hide_the_notice():
         usuario,
         IPHONE.replace("iPhone; CPU iPhone OS", "iPad; CPU OS"),
         creado_hace=timedelta(minutes=20),
+        avisado_hace=timedelta(minutes=20),
     )
     iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(0))
     _, correo, aviso = await _escena(mac, ipad, iphone)
 
     await _avisa(aviso, usuario, str(iphone.id.value))
+
+    correo.send_new_login_notification.assert_awaited_once()
+
+
+async def test_n3b_a_device_recognized_only_by_fingerprint_notifies():
+    """
+    Given: Un iPhone conocido de hace 10 días, sin aviso reciente
+    When: Entra sin su cookie y la huella lo reconoce (desconocido=True)
+    Then: Le llega el aviso: puede ser otro con el mismo móvil y la misma red
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    iphone = _dispositivo(usuario, IPHONE)
+    _, correo, aviso = await _escena(mac, iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value), es_nuevo=True)
 
     correo.send_new_login_notification.assert_awaited_once()
 

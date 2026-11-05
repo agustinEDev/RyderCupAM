@@ -14,6 +14,7 @@ from typing import NoReturn
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
+    AvisoDeNuevoInicioRequestDTO,
     RegisterDeviceRequestDTO,
     agente_para_el_registro,
 )
@@ -292,7 +293,8 @@ class LoginUserUseCase:
         device_id = UserDeviceId.from_string(device_response.device_id)
         device_id_str = device_response.device_id
         should_set_device_cookie = device_response.set_device_cookie
-        es_nuevo = device_response.is_new_device
+        # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
+        es_nuevo = device_response.is_new_device or not device_response.recognized_by_cookie
 
         # Los tokens, después del dispositivo: el de acceso lleva su id (`did`), y así
         # revocarlo se comprueba por id y no por una huella que cambia (BE #737)
@@ -331,12 +333,14 @@ class LoginUserUseCase:
         if self._aviso_de_nuevo_inicio is not None and user.email is not None:
             # Nunca a un correo sin confirmar: solo le llega el de confirmación
             await self._aviso_de_nuevo_inicio.avisa(
-                user.id,
-                user.email.value,
-                user.first_name,
-                device_id_str,
-                es_nuevo,
-                verificado=user.is_email_verified(),
+                AvisoDeNuevoInicioRequestDTO(
+                    user_id=str(user.id.value),
+                    email=user.email.value,
+                    nombre=user.first_name,
+                    device_id=device_id_str,
+                    desconocido=es_nuevo,
+                    verificado=user.is_email_verified(),
+                )
             )
 
         # Generar token CSRF (256 bits, 15 minutos de duración)

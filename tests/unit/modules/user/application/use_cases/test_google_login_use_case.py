@@ -467,9 +467,9 @@ class TestGoogleLoginNuevoInicio:
 
         await use_case.execute(login_request)
 
-        kwargs = aviso.avisa.await_args.kwargs
-        assert kwargs["es_alta"] is True
-        assert kwargs["verificado"] is True
+        enviado = aviso.avisa.await_args.args[0]
+        assert enviado.es_alta is True
+        assert enviado.verificado is True
 
     async def test_the_notice_goes_to_the_account_email_not_the_google_one(
         self,
@@ -511,5 +511,44 @@ class TestGoogleLoginNuevoInicio:
 
         await use_case.execute(login_request)
 
-        assert aviso.avisa.await_args.args[1] == "ana@example.com"
-        assert aviso.avisa.await_args.kwargs["es_alta"] is False
+        enviado = aviso.avisa.await_args.args[0]
+        assert enviado.email == "ana@example.com"
+        assert enviado.es_alta is False
+
+    @pytest.mark.parametrize(("por_su_cookie", "desconocido"), [(False, True), (True, False)])
+    async def test_a_known_device_without_its_cookie_is_notified(
+        self,
+        uow,
+        token_service,
+        google_oauth_service,
+        google_user_info,
+        login_request,
+        por_su_cookie,
+        desconocido,
+    ):
+        """
+        Given: Un dispositivo ya conocido, que llega sin su cookie (solo la huella) o con ella
+        When: Entra con Google
+        Then: Sin su cookie se avisa; con ella, no (decidido el 6 nov 2026)
+        """
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        registro = AsyncMock()
+        registro.execute.return_value = RegisterDeviceResponseDTO(
+            device_id="550e8400-e29b-41d4-a716-446655440099",
+            is_new_device=False,
+            message="Dispositivo actualizado",
+            set_device_cookie=not por_su_cookie,
+            recognized_by_cookie=por_su_cookie,
+        )
+        aviso = AsyncMock()
+        use_case = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=registro,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        await use_case.execute(login_request)
+
+        assert aviso.avisa.await_args.args[0].desconocido is desconocido

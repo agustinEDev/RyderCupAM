@@ -4,13 +4,15 @@ El correo de «nuevo inicio de sesión», al propio usuario (BE #737).
 Si alguien entra en tu cuenta desde un dispositivo que no conocemos, te llega un
 correo con qué dispositivo es, cuándo y desde qué país, y un botón para revisar
 tus dispositivos. Sin molestar:
-- solo con un dispositivo que no conocíamos, aunque sea el único (tras la limpieza
-  de 30 días también puede ser un intruso);
+- solo con un dispositivo que llega sin su cookie: uno nuevo, aunque sea el único
+  (tras la limpieza de 30 días también puede ser un intruso), o uno que reconoce
+  solo la huella (con el mismo móvil y la misma red, la huella no distingue a otra
+  persona);
 - nunca a un correo sin confirmar: solo le llega el de confirmación, y no mandamos
   correos de seguridad a una dirección que quizá no es suya;
 - ni en el alta con Google, que es crear la cuenta;
-- como mucho uno por hora, contado desde el último correo enviado (no desde la
-  última alta: una alta silenciosa no tapa el aviso).
+- como mucho uno por dispositivo y hora, contado desde su último correo enviado:
+  el aviso de un dispositivo no tapa el de otro.
 Un fallo al enviarlo nunca tumba el login, y no cuenta como enviado.
 """
 
@@ -19,6 +21,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -91,33 +94,30 @@ class AvisoDeNuevoInicioDeSesion:
         self._paises = paises
         self._reloj = reloj
 
-    async def avisa(
-        self,
-        user_id: UserId,
-        email: str,
-        nombre: str,
-        device_id: str | None,
-        es_nuevo: bool,
-        verificado: bool,
-        es_alta: bool = False,
-    ) -> None:
-        """Avisa si el dispositivo es nuevo, el correo está confirmado, no es el alta
-        y no se envió otro aviso en la última hora."""
-        if not es_nuevo or not device_id or not verificado or es_alta:
+    async def avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
+        """Avisa si el dispositivo llegó sin su cookie, el correo está confirmado, no es
+        el alta y este dispositivo no avisó en la última hora."""
+        if (
+            not request.desconocido
+            or not request.device_id
+            or not request.verificado
+            or request.es_alta
+        ):
             return
         try:
             async with self._uow:
-                todos = await self._uow.user_devices.find_all_by_user(user_id)
-            este = next((d for d in todos if str(d.id.value) == device_id), None)
+                todos = await self._uow.user_devices.find_all_by_user(UserId(request.user_id))
+            este = next((d for d in todos if str(d.id.value) == request.device_id), None)
             if este is None:
                 return
             ahora = self._reloj()
             hace_una_hora = ahora - UNA_HORA
-            if any(d.aviso_enviado_at and d.aviso_enviado_at > hace_una_hora for d in todos):
+            # Uno por dispositivo y hora: el aviso de uno no tapa el de otro
+            if este.aviso_enviado_at and este.aviso_enviado_at > hace_una_hora:
                 return
             enviado = await self._email_service.send_new_login_notification(
-                to_email=email,
-                user_name=nombre,
+                to_email=request.email,
+                user_name=request.nombre,
                 dispositivo=nombre_del_dispositivo(este.user_agent, este.installed_app),
                 cuando=cuando_en_espana(este.created_at),
                 pais=await self._nombre_del_pais(este.country_code),
