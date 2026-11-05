@@ -26,7 +26,6 @@ from src.config.rate_limit import (
     EMAIL_SENDING_PER_EMAIL_LIMIT,
     LOGIN_ATTEMPTS_LIMIT,
     LOGIN_ATTEMPTS_PER_EMAIL_LIMIT,
-    REFRESH_TOKEN_LIMIT,
     REGISTER_LIMIT,
     RESET_PASSWORD_LIMIT,
     VALIDATE_RESET_TOKEN_LIMIT,
@@ -34,6 +33,7 @@ from src.config.rate_limit import (
     count_or_refuse,
     email_rate_limit_key,
     get_client_identifier,
+    limite_del_refresco,
     limiter,
     record_failed_login,
     refresh_token_rate_limit_key,
@@ -472,7 +472,7 @@ async def logout_user(
     tags=["Authentication"],
 )
 # Por el usuario del refresh: llega con el acceso caducado (BE #467)
-@limiter.limit(REFRESH_TOKEN_LIMIT, key_func=refresh_token_rate_limit_key)
+@limiter.limit(limite_del_refresco, key_func=refresh_token_rate_limit_key)
 async def refresh_access_token(
     request: Request,
     response: Response,

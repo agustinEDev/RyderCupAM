@@ -8,8 +8,11 @@ ruta sin `@limiter.limit` propio cuenta contra DEFAULT_LIMIT, con la clave de
 siempre (el usuario con sesión, la red sin ella), salvo las exentas a propósito.
 """
 
+import inspect
+import time
 from uuid import uuid4
 
+import jwt
 import pytest
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
@@ -20,9 +23,11 @@ from src.config import rate_limit
 from src.config.rate_limit import (
     EXEMPT_FROM_DEFAULT_LIMIT,
     apply_default_rate_limit,
+    limite_del_refresco,
     limiter,
     refresh_token_rate_limit_key,
 )
+from src.config.settings import settings
 from src.shared.infrastructure.security.jwt_handler import (
     create_access_token,
     create_refresh_token,
@@ -44,6 +49,11 @@ def _app() -> FastAPI:
     @limiter.limit("50/minute")
     async def con_limite_propio(request: Request):
         """Una ruta con su propio límite, más alto que el de por defecto del test."""
+        return {"ok": True}
+
+    @app.get("/otra-sin-limite")
+    async def otra_sin_limite_propio():
+        """Otra ruta sin límite propio."""
         return {"ok": True}
 
     @app.get("/exenta")
@@ -115,17 +125,50 @@ def test_default_limit_counts_each_user_separately(cliente):
     assert cliente.get("/sin-limite", headers=otro).status_code == 200
 
 
-def test_default_limit_without_session_counts_per_network(cliente):
+def test_default_limit_without_verified_user_is_not_counted(cliente):
     """
-    Given: Peticiones sin sesión desde dos redes (X-Test-Client-ID fuera de producción)
-    When: La primera red agota el límite por defecto
-    Then: Esa red da 429 y la otra pasa
+    Given: Peticiones sin sesión o con el acceso caducado, todas desde la misma red
+    When: Se hacen 6, por encima del límite por defecto de 3/minuto
+    Then: Ninguna da 429: sin usuario verificado no se cuenta (revisor, 5 nov). Con la
+          clave de red, que sin la IP real es toda la app, un acceso caducado recibía 429
+          en vez de su 401 y el front nunca refrescaba la sesión
     """
-    for _ in range(3):
-        cliente.get("/sin-limite", headers={"X-Test-Client-ID": "red-a"})
+    caducado = jwt.encode(
+        {"sub": str(uuid4()), "type": "access", "exp": int(time.time()) - 60},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+    sin_sesion = {"X-Test-Client-ID": "red-a"}
+    con_caducado = {"X-Test-Client-ID": "red-a", "cookie": f"access_token={caducado}"}
 
-    assert cliente.get("/sin-limite", headers={"X-Test-Client-ID": "red-a"}).status_code == 429
-    assert cliente.get("/sin-limite", headers={"X-Test-Client-ID": "red-b"}).status_code == 200
+    codigos = {
+        cliente.get("/sin-limite", headers=h).status_code for h in [sin_sesion, con_caducado] * 3
+    }
+
+    assert codigos == {200}
+
+
+def test_default_limit_counts_each_route_separately(cliente):
+    """
+    Given: Un usuario que agota el límite por defecto en una ruta
+    When: Pide otra ruta sin límite propio
+    Then: Pasa: cada ruta tiene su contador, y un sondeo no deja sin servicio a las demás
+    """
+    cabeceras = _con_sesion()
+    for _ in range(3):
+        cliente.get("/sin-limite", headers=cabeceras)
+
+    assert cliente.get("/sin-limite", headers=cabeceras).status_code == 429
+    assert cliente.get("/otra-sin-limite", headers=cabeceras).status_code == 200
+
+
+def test_default_limit_dependency_is_async():
+    """
+    Given: La dependencia del límite por defecto
+    When: Se mira cómo la ejecuta FastAPI
+    Then: Es async: una síncrona saltaría al pool de hilos en cada petición, y PRO va justo de CPU
+    """
+    assert inspect.iscoroutinefunction(apply_default_rate_limit)
 
 
 def test_default_limit_skips_exempt_routes(cliente):
@@ -251,3 +294,14 @@ def test_refresh_key_ignores_an_access_token_in_the_refresh_cookie():
     peticion = _peticion_con_cookies(f"refresh_token={acceso}", cliente="red-del-test")
 
     assert refresh_token_rate_limit_key(peticion) == "red-del-test"
+
+
+def test_refresh_limit_is_30_per_user_and_600_per_network():
+    """
+    Given: El límite del refresco, que depende de la clave
+    When: Se pide con la clave de un usuario o con la de red
+    Then: 30/minuto por usuario; 600 por red: sin cookie válida van todos los visitantes
+          anónimos, y sin la IP real son un contador para toda la app (revisor, 5 nov)
+    """
+    assert limite_del_refresco("user:123") == "30/minute"
+    assert limite_del_refresco("10.0.0.1") == "600/minute"

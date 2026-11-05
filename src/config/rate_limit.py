@@ -57,8 +57,7 @@ RESET_PASSWORD_LIMIT = "20/hour"  # nosec B105 - a rate limit, not a password
 VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 CONTACT_LIMIT = "10/hour"
 
-REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token
-VERIFY_EMAIL_LIMIT = "30/hour"
+VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
 
 # El de toda ruta sin límite propio (BE #467): por usuario con sesión, por red sin ella
 DEFAULT_LIMIT = "100/minute"
@@ -140,6 +139,17 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     if user_id:
         return f"{_USER_PREFIX}{user_id}"
     return get_client_identifier(request)
+
+
+def limite_del_refresco(key: str) -> str:
+    """
+    El límite del refresco según quién cuenta: 30/minuto por usuario; 600 por red.
+
+    Sin cookie válida llega cada visitante anónimo (la sonda de sesión prueba a
+    refrescar), y sin la IP real son un contador para toda la app: con 30 se le
+    agotaría a todos (revisor, 5 nov 2026). Igual que `limite_de_lo_publico`.
+    """
+    return "30/minute" if key.startswith(_USER_PREFIX) else "600/minute"
 
 
 def get_hole_sample_rate_limit_key(request: Request) -> str:
@@ -254,13 +264,18 @@ EXEMPT_FROM_DEFAULT_LIMIT = frozenset(
 )
 
 
-def apply_default_rate_limit(request: Request) -> None:
+async def apply_default_rate_limit(request: Request) -> None:
     """
     El límite por defecto de toda ruta sin `@limiter.limit` propio (BE #467).
 
-    Va como dependencia global de la app. Cuenta con la clave de siempre (el
-    usuario con sesión, la red sin ella) y responde con el mismo 429 que slowapi.
+    Va como dependencia global de la app y responde con el mismo 429 que slowapi.
     Una ruta con límite propio cuenta solo el suyo; las exentas, ninguno.
+
+    - Cuenta **por usuario y por ruta**: un sondeo no deja sin servicio a las demás.
+    - **Sin usuario verificado no cuenta.** Estas rutas exigen sesión y van a dar su
+      401, que es lo que hace al front refrescar. Con la clave de red, que sin la IP
+      real es toda la app, un acceso caducado recibía 429 y nunca refrescaba
+      (revisor, 5 nov 2026). Es async: síncrona saltaría al pool de hilos cada vez.
     """
     if not limiter.enabled:
         return
@@ -274,12 +289,14 @@ def apply_default_rate_limit(request: Request) -> None:
         or nombre in limiter._dynamic_route_limits
     ):
         return
-    limite = parse(DEFAULT_LIMIT)
     clave = get_rate_limit_key(request)
-    if not limiter.limiter.hit(limite, "default", clave):
+    if not clave.startswith(_USER_PREFIX):
+        return
+    limite = parse(DEFAULT_LIMIT)
+    if not limiter.limiter.hit(limite, nombre, clave):
         excedido = _exceeded(DEFAULT_LIMIT)
         # El manejador de slowapi lee el límite que saltó de aquí
-        request.state.view_rate_limit = (limite, [clave, "default"])
+        request.state.view_rate_limit = (limite, [clave, nombre])
         raise excedido
 
 

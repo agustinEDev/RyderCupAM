@@ -208,3 +208,56 @@ def test_audit_ip_with_ipv4_mapped_cloudflare_address_is_ipv4():
     Then: Es la IPv4
     """
     assert get_trusted_client_ip(_de_cloudflare("::ffff:198.51.100.9"), [], False) == "198.51.100.9"
+
+
+@pytest.mark.parametrize("rara", ["0.0.0.0", "127.0.0.1", "127.0.0.2", "::", "::1", "fe80::1%eth0"])
+def test_cloudflare_ip_that_is_a_sentinel_or_loopback_is_not_trusted(rara):
+    """
+    Given: El secreto correcto y una CF-Connecting-IP que no es de un cliente real
+    When: Se busca la IP de Cloudflare y la de red
+    Then: No hay IP de Cloudflare y cuenta la del proxy: la auditoría no guarda 0.0.0.0,
+          un bucle local ni una zona IPv6 (revisor, 5 nov)
+    """
+    peticion = _de_cloudflare(rara)
+
+    assert cloudflare_client_ip(peticion) is None
+    assert get_client_identifier(peticion) == PEER
+
+
+def test_startup_reports_whether_the_origin_secret_is_configured_without_its_value(caplog):
+    """
+    Given: El secreto configurado
+    When: Arranca la app y lo comprueba
+    Then: Dice que está configurado y su longitud, nunca el valor: un espacio pegado de más
+          se vería en la longitud (revisor, 5 nov)
+    """
+    import logging
+
+    from src.shared.infrastructure.http.http_context_validator import (
+        informa_del_secreto_de_origen,
+    )
+
+    with caplog.at_level(logging.INFO):
+        informa_del_secreto_de_origen()
+
+    assert SECRETO not in caplog.text
+    assert f"{len(SECRETO)}" in caplog.text
+
+
+def test_startup_warns_when_the_origin_secret_is_missing_in_production(monkeypatch, caplog):
+    """
+    Given: Producción sin CLOUDFLARE_ORIGIN_SECRET
+    When: Arranca la app y lo comprueba
+    Then: Avisa con un warning: sin él, los límites anónimos son de toda la app
+    """
+    import logging
+
+    from src.shared.infrastructure.http.http_context_validator import (
+        informa_del_secreto_de_origen,
+    )
+
+    monkeypatch.delenv("CLOUDFLARE_ORIGIN_SECRET", raising=False)
+    with caplog.at_level(logging.INFO):
+        informa_del_secreto_de_origen()
+
+    assert any(r.levelno == logging.WARNING for r in caplog.records)

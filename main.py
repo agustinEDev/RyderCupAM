@@ -95,6 +95,9 @@ from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
+from src.shared.infrastructure.http.http_context_validator import (  # noqa: E402
+    informa_del_secreto_de_origen,
+)
 from src.shared.infrastructure.http.security_headers import apply_security_headers  # noqa: E402
 from src.shared.infrastructure.http.sentry_middleware import (  # noqa: E402
     SentryUserContextMiddleware,
@@ -119,6 +122,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
 
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
+
+    # Si hay secreto de Cloudflare para la IP real, y de qué longitud (ADR-041)
+    informa_del_secreto_de_origen()
 
     start_all_mappers()  # Todos, en un solo sitio (#565)
 

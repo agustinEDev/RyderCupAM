@@ -31,7 +31,8 @@ cannot find the handlers of included routers: 114 routes had no limit at all.
      `X-Origin-Verify: <secret>` on every request.
    - Render holds the same value in `CLOUDFLARE_ORIGIN_SECRET`.
    - `CF-Connecting-IP` is believed only when the header matches, compared with
-     `hmac.compare_digest` on bytes.
+     `hmac.compare_digest` on bytes, and only if it is a real address: not
+     unspecified, loopback or with an IPv6 zone.
 2. **Fail-closed, never fail-open.**
    - A missing, wrong or empty secret, or an invalid `CF-Connecting-IP`, falls back to
      ADR-038's behaviour: the peer address for limits, today's logic for audit.
@@ -43,14 +44,20 @@ cannot find the handlers of included routers: 114 routes had no limit at all.
 4. **The IP is an input for limits and audit only, never for authorisation** (A01).
 5. **Neither the secret nor the client IP reaches Sentry.** `send_default_pii=False`
    does not remove custom headers. `before_send` and `before_send_transaction` remove
-   `X-Origin-Verify`, `CF-Connecting-IP` and `True-Client-IP`.
+   `X-Origin-Verify`, `CF-Connecting-IP` and `True-Client-IP`, and the Sentry user is
+   only the id (it also carried the `X-Forwarded-For` IP).
+   - At startup the API logs whether the secret is set and its length, never its value.
 6. **The default limit is a global FastAPI dependency.**
-   - It allows 100 requests per minute, counted per user with a session and per network
-     without one.
+   - It allows 100 requests per minute **per user and per route**.
+   - Without a verified user it does not count. Those routes require a session and
+     answer 401, which is what makes the frontend refresh; counting by network (the
+     whole app without the real IP) answered 429 to expired sessions instead.
    - A route with its own `@limiter.limit` counts only that limit.
    - An explicit list is exempt: `/`, `/health`, the docs, avatar presets and countries.
    - `/auth/refresh-token` has its own limit, keyed on the user of the verified refresh
-     cookie, because the access token has already expired when it is called.
+     cookie (30/min), because the access token has already expired when it is called.
+     Without a valid cookie it counts per network at 600/min: every anonymous visitor
+     probes it.
 
 ## Rotating the secret
 

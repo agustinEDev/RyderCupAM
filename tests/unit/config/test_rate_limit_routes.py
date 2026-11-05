@@ -177,6 +177,15 @@ def test_lo_publico_cuenta_distinto_con_y_sin_sesion():
     assert limite_de_lo_publico("10.0.0.1") == "600/minute"
 
 
+def _limites_de_la_ruta(nombre: str) -> list:
+    """Los límites que dependen de la clave de la ruta cuyo endpoint se llama así."""
+    for route in _routes(app.routes):
+        if route.endpoint.__name__ == nombre:
+            completo = f"{route.endpoint.__module__}.{nombre}"
+            return limiter._dynamic_route_limits.get(completo) or []
+    raise AssertionError(f"no hay ruta {nombre}")
+
+
 def _limites_de(nombre: str) -> list:
     """Los límites propios de la ruta cuyo endpoint se llama así."""
     for route in _routes(app.routes):
@@ -197,10 +206,33 @@ def test_the_default_limit_is_a_global_dependency_of_the_app():
 
 def test_an_included_route_without_own_limit_gets_429_from_the_default_limit(monkeypatch):
     """
-    Given: La app real, el límite por defecto a 3/minuto y una ruta incluida sin límite propio
-    When: La misma red pide 5 veces GET /api/v1/users/me/devices sin sesión
-    Then: Las 3 primeras dan su 401 y las siguientes 429: la dependencia global llega a las
-          rutas de los routers incluidos (el middleware de slowapi no llegaba)
+    Given: La app real, el límite por defecto a 3/minuto, una ruta incluida sin límite
+           propio y una clave de usuario (la de verdad pide un usuario en la BD)
+    When: Se pide 5 veces GET /api/v1/users/me/devices
+    Then: Las 3 primeras siguen a su 401 y las siguientes dan 429: la dependencia global
+          llega a las rutas de los routers incluidos (el middleware de slowapi no llegaba)
+    """
+    from fastapi.testclient import TestClient
+
+    from src.config import rate_limit
+
+    monkeypatch.setattr(rate_limit, "DEFAULT_LIMIT", "3/minute")
+    monkeypatch.setattr(rate_limit, "get_rate_limit_key", lambda _: "user:guardian")
+    monkeypatch.setattr(limiter, "enabled", True)
+    limiter.reset()
+    cliente = TestClient(app)
+
+    codigos = [cliente.get("/api/v1/users/me/devices").status_code for _ in range(5)]
+
+    limiter.reset()
+    assert codigos == [401, 401, 401, 429, 429]
+
+
+def test_an_expired_session_keeps_getting_401_not_429(monkeypatch):
+    """
+    Given: La app real, el límite por defecto a 3/minuto y peticiones sin sesión válida
+    When: Se pide 5 veces GET /api/v1/users/me/devices
+    Then: Las 5 dan 401: es el 401 lo que hace al front refrescar la sesión (revisor, 5 nov)
     """
     from fastapi.testclient import TestClient
 
@@ -210,14 +242,14 @@ def test_an_included_route_without_own_limit_gets_429_from_the_default_limit(mon
     monkeypatch.setattr(limiter, "enabled", True)
     limiter.reset()
     cliente = TestClient(app)
-    cabeceras = {"X-Test-Client-ID": "guardian-del-limite-por-defecto"}
+    cabeceras = {"X-Test-Client-ID": "sesion-caducada"}
 
     codigos = [
         cliente.get("/api/v1/users/me/devices", headers=cabeceras).status_code for _ in range(5)
     ]
 
     limiter.reset()
-    assert codigos == [401, 401, 401, 429, 429]
+    assert codigos == [401] * 5
 
 
 def test_every_exempt_route_exists_and_has_no_own_limit():
@@ -236,21 +268,29 @@ def test_refresh_token_has_its_own_limit_per_refresh_user():
     """
     Given: POST /auth/refresh-token, que llega con el acceso ya caducado
     When: Se miran sus límites
-    Then: Tiene uno propio de 30/minuto que cuenta por el usuario del refresh
+    Then: Tiene uno propio que cuenta por el usuario del refresh, con el tope según la clave
     """
-    limites = _limites_de("refresh_access_token")
+    limites = _limites_de_la_ruta("refresh_access_token")
 
-    assert [str(lim.limit) for lim in limites] == ["30 per 1 minute"]
-    assert all(_clave(lim) is refresh_token_rate_limit_key for lim in limites)
+    assert len(limites) == 1
+    assert limites[0].key_function is refresh_token_rate_limit_key
+    # El tope sale de limite_del_refresco con la clave de la petición
+    from starlette.requests import Request
+
+    sin_cookie = Request(
+        {"type": "http", "method": "POST", "path": "/", "headers": [], "client": ("10.0.0.9", 1)}
+    )
+    assert [str(lim.limit) for lim in limites[0].with_request(sin_cookie)] == ["600 per 1 minute"]
 
 
 def test_verify_email_has_its_own_limit_per_network():
     """
     Given: POST /auth/verify-email, anónima
     When: Se miran sus límites
-    Then: Tiene uno propio de 30/hora por red, como reset-password
+    Then: Tiene uno propio de 60/hora por red: el doble que el registro, que cuenta los
+          enlaces caducados que se reintentan
     """
     limites = _limites_de("verify_email")
 
-    assert [str(lim.limit) for lim in limites] == ["30 per 1 hour"]
+    assert [str(lim.limit) for lim in limites] == ["60 per 1 hour"]
     assert all(_clave(lim) is get_client_identifier for lim in limites)

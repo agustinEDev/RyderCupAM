@@ -243,8 +243,31 @@ def cloudflare_client_ip(request: Request) -> str | None:
     except ValueError:
         return None
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
-        return str(ip.ipv4_mapped)
+        ip = ip.ipv4_mapped
+    # Ni sin especificar (0.0.0.0, ::), ni bucle local (todo 127/8 y ::1), ni con
+    # zona IPv6 (%eth0): validate_ip_address deja pasar ::, 127.0.0.2 y las zonas
+    if ip.is_unspecified or ip.is_loopback or getattr(ip, "scope_id", None):
+        return None
     return str(ip)
+
+
+def informa_del_secreto_de_origen() -> None:
+    """
+    Dice al arrancar si hay secreto de Cloudflare, y de cuántos caracteres.
+
+    Nunca el valor. La longitud delata un espacio o un salto de línea pegados de más,
+    que harían que nunca coincida y todo cayera en silencio al contador compartido.
+    En producción, sin secreto, es un aviso: los límites anónimos son de toda la app.
+    """
+    secreto = os.getenv(ORIGIN_SECRET_ENV, "")
+    if secreto:
+        logger.info(f"{ORIGIN_SECRET_ENV} configurado ({len(secreto)} caracteres)")
+    elif os.getenv("ENVIRONMENT", "development").lower() == "production":
+        logger.warning(
+            f"{ORIGIN_SECRET_ENV} sin configurar: la IP real de Cloudflare no se usa (ADR-041)"
+        )
+    else:
+        logger.info(f"{ORIGIN_SECRET_ENV} sin configurar")
 
 
 def get_trusted_client_ip(
