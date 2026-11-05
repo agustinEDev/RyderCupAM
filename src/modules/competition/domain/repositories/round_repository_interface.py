@@ -36,6 +36,15 @@ class RoundRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_id_fresh(self, round_id: RoundId) -> Round | None:
+        """Busca una ronda SIN bloquearla, pero con lo que hay en la base de datos.
+
+        Para quien ya la leyó antes y la vuelve a necesitar tras esperar otro
+        bloqueo: `find_by_id` le devolvería la copia de la sesión (BE #309).
+        """
+        pass
+
+    @abstractmethod
     async def find_by_competition(self, competition_id: CompetitionId) -> list[Round]:
         """Busca todas las rondas de una competicion."""
         pass

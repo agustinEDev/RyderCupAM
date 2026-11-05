@@ -197,7 +197,7 @@ class RefreshAccessTokenUseCase:
         new_access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
 
         # 7. Generar nuevo token CSRF (256 bits, 15 minutos de duración)
-        csrf_token = generate_csrf_token()
+        csrf_token = generate_csrf_token(str(user.id.value))
 
         # 8. Security Logging: Uso exitoso de refresh token
         security_logger.log_refresh_token_used(

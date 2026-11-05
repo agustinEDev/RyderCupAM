@@ -58,6 +58,12 @@ class UpdateMatchStatusUseCase:
     async def execute(
         self, request: UpdateMatchStatusRequestDTO, user_id: UserId, is_admin: bool = False
     ) -> UpdateMatchStatusResponseDTO:
+        """
+        Arranca (START) o cierra (COMPLETE) un partido, solo su creador o un admin.
+
+        Autoriza antes de bloquear la fila del partido, y decide sobre el partido
+        y la ronda releidos tras el bloqueo (BE #309).
+        """
         async with self._uow:
             # 1-4. Validaciones
             match, round_entity, competition = await self._validate(request, user_id, is_admin)
@@ -88,15 +94,15 @@ class UpdateMatchStatusUseCase:
     async def _validate(self, request, user_id, is_admin: bool = False):
         """Validaciones: buscar match, ronda, competicion, verificar creador y estado."""
         match_id = MatchId(request.match_id)
-        # Con la fila bloqueada: START y la apertura automatica por hora de sesion
-        # (BE #305) hacen lo mismo, y si se cruzan los dos pre-crean los 18 hoyos
-        # de cada jugador y uno se estrella contra `uq_hole_score_match_hole_player`
-        # (CodeRabbit en la PR #307)
-        match = await self._uow.matches.find_by_id_for_update(match_id)
+        # Primero SIN bloqueo, para autorizar: antes cualquiera con sesion que
+        # supiera el id retenia la fila hasta que su peticion se deshacia (BE #309)
+        match = await self._uow.matches.find_by_id(match_id)
 
         if not match:
             raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
 
+        # La ronda y la competicion, antes del bloqueo, para autorizar. Lo que
+        # cambia de estado se decide sobre lo releido tras el bloqueo
         round_entity = await self._uow.rounds.find_by_id(match.round_id)
         if not round_entity:
             raise RoundNotFoundError("La ronda asociada no existe")
@@ -112,6 +118,21 @@ class UpdateMatchStatusUseCase:
             raise CompetitionNotInProgressError(
                 f"La competicion debe estar IN_PROGRESS. Estado: {competition.status.value}"
             )
+
+        # Autorizado: ahora con la fila bloqueada, y RELEIDO. START y la apertura
+        # automatica por hora de sesion (BE #305) hacen lo mismo, y si se cruzan
+        # los dos pre-crean los 18 hoyos de cada jugador y uno se estrella contra
+        # `uq_hole_score_match_hole_player` (PR #307). El estado se decide sobre
+        # lo releido: lo leido arriba puede haber cambiado entre medias
+        match = await self._uow.matches.find_by_id_for_update(match_id)
+        if not match:
+            raise MatchNotFoundError(f"No existe partido con ID {request.match_id}")
+        # Y la ronda, releida FRESCA: START y COMPLETE pueden cambiarla y se
+        # guarda. Sin bloquearla, como antes: bloquear ronda tras partido abriria
+        # un interbloqueo con quien bloquea primero la ronda (code-review)
+        round_entity = await self._uow.rounds.find_by_id_fresh(match.round_id)
+        if not round_entity:
+            raise RoundNotFoundError("La ronda asociada no existe")
 
         return match, round_entity, competition
 
