@@ -6,7 +6,7 @@ Implementa autenticación basada en tokens con algoritmo HS256.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -44,9 +44,9 @@ class JWTTokenService(ITokenService):
         to_encode = data.copy()
 
         if expires_delta:
-            expire = datetime.now() + expires_delta
+            expire = datetime.now(UTC) + expires_delta
         else:
-            expire = datetime.now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
         to_encode.update({"exp": expire, "type": "access"})
 
@@ -79,9 +79,9 @@ class JWTTokenService(ITokenService):
         to_encode = data.copy()
 
         if expires_delta:
-            expire = datetime.now() + expires_delta
+            expire = datetime.now(UTC) + expires_delta
         else:
-            expire = datetime.now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
         # Agregar jti (JWT ID) único para garantizar unicidad del token
         # Esto previene colisiones de hash cuando se generan múltiples tokens al mismo tiempo
