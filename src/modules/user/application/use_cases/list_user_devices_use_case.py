@@ -22,6 +22,7 @@ Patrón: Use Case Pattern + Unit of Work + DTO Mapper
 """
 
 import logging
+from datetime import datetime
 
 from src.modules.user.application.dto.device_dto import (
     ListUserDevicesRequestDTO,
@@ -109,8 +110,16 @@ class ListUserDevicesUseCase:
             # 1. Parsear user_id de string a UserId
             user_id = UserId(request.user_id)
 
-            # 2. Buscar todos los dispositivos activos del usuario
-            devices = await self._uow.user_devices.find_active_by_user(user_id)
+            # 2. Los que tienen la sesión abierta de verdad (BE #737): activos, usados
+            # en las últimas 24 h y con algún refresco vivo. Antes salían todos los
+            # activos: en producción, 58 de 60 llevaban días con la sesión muerta
+            ahora = datetime.now()
+            con_sesion = await self._uow.refresh_tokens.device_ids_with_live_tokens(user_id, ahora)
+            devices = [
+                device
+                for device in await self._uow.user_devices.find_active_by_user(user_id)
+                if device.id in con_sesion and not device.is_idle(ahora)
+            ]
 
             # 3. Determinar device_id actual desde cookie (v2.0.4)
             # Cookie-based identification: device_id_from_cookie es el primary identifier

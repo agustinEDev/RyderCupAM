@@ -271,3 +271,10 @@ class UserDeviceRepositoryInterface(ABC):
             >>> await repo.revoke(device_id)
         """
         pass
+
+    @abstractmethod
+    async def delete_unused_since(self, antes: datetime) -> int:
+        """
+        Borra los dispositivos sin usar desde antes de `antes`, activos o revocados, y
+        con ellos sus refresh tokens (BE #737). Devuelve cuántos.
+        """

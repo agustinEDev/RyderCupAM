@@ -17,15 +17,17 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
+from tests.unit.modules.user.application.use_cases._sesion_al_registrar import (
+    uow_con_sesion_al_registrar,
 )
 
 
 @pytest.fixture
 def uow():
     """Fixture que proporciona un Unit of Work en memoria."""
-    return InMemoryUnitOfWork()
+    # Dar de alta un dispositivo es entrar con él: la lista solo enseña los que
+    # tienen sesión (BE #737)
+    return uow_con_sesion_al_registrar()
 
 
 @pytest.mark.asyncio

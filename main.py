@@ -34,6 +34,7 @@ from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
+from src.config.limpieza_de_sesiones import LimpiezaDeSesiones  # noqa: E402
 from src.config.mappers import start_all_mappers  # noqa: E402
 from src.config.rate_limit import apply_default_rate_limit, limiter  # noqa: E402
 from src.config.refresco_de_handicaps import (  # noqa: E402
@@ -138,6 +139,8 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     # 2026). En PRO y en el Kind; en los tests no
     if cierre_activado(os.environ):
         tareas.append(asyncio.create_task(CierreDePartidasRapidas(async_session_maker).vigilar()))
+        # Y la limpieza de dispositivos y refrescos viejos, también cada hora (BE #737)
+        tareas.append(asyncio.create_task(LimpiezaDeSesiones(async_session_maker).vigilar()))
     yield
     for tarea in tareas:
         tarea.cancel()
