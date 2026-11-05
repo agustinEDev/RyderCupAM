@@ -103,6 +103,7 @@ from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
+    cloudflare_client_country,
     get_trusted_client_ip,
     get_user_agent,
 )
@@ -279,6 +280,7 @@ async def login_user(
         request.cookies.get(device_id_cookie_name)
     )
     login_data.installed_app = es_la_app_instalada(request)
+    login_data.country_code = cloudflare_client_country(request)
 
     # Rate limit (#273): antes de buscar al usuario, para que el 429 llegue igual
     # exista el email o no. La red solo cuenta los fallos: los aciertos de un club
@@ -577,6 +579,7 @@ async def refresh_access_token(
             request.cookies.get(device_id_cookie_name)
         ),
         installed_app=es_la_app_instalada(request),
+        country_code=cloudflare_client_country(request),
     )
     try:
         refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
@@ -679,6 +682,7 @@ async def verify_email(
                 request.cookies.get(get_device_id_cookie_name())
             ),
             installed_app=es_la_app_instalada(request),
+            country_code=cloudflare_client_country(request),
         )
         access_token = sesion.access_token
         refresh_token = sesion.refresh_token

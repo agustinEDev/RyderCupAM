@@ -405,6 +405,11 @@ class LoginRequestDTO(BaseModel):
         default=False,
         description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
     )
+    country_code: str | None = Field(
+        default=None,
+        max_length=2,
+        description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
+    )
 
 
 class LoginResponseDTO(BaseModel):
@@ -745,6 +750,11 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     installed_app: bool = Field(
         default=False,
         description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
+    )
+    country_code: str | None = Field(
+        default=None,
+        max_length=2,
+        description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
 
 

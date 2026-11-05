@@ -55,6 +55,7 @@ class OpenSessionUseCase:
         ip_address: str | None,
         device_id_from_cookie: str | None,
         installed_app: bool = False,
+        country_code: str | None = None,
     ) -> SesionAbierta:
         """
         Abre la sesión y la devuelve.
@@ -71,6 +72,7 @@ class OpenSessionUseCase:
                     ip_address=ip_address or UNRESOLVED_IP_PLACEHOLDER,
                     device_id_from_cookie=device_id_from_cookie,
                     installed_app=installed_app,
+                    country_code=country_code,
                 )
             )
             device_id = registrado.device_id

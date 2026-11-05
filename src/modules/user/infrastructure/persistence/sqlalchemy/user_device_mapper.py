@@ -90,6 +90,9 @@ user_devices_table = Table(
     Column("is_active", Boolean, nullable=False, server_default="true"),
     Column("last_used_at", DateTime, nullable=False),
     Column("created_at", DateTime, nullable=False),
+    # La app instalada y el país de la última conexión (BE #737, migración c5e7a9b1d3f6)
+    Column("installed_app", Boolean, nullable=False, server_default="false"),
+    Column("country_code", String(2), nullable=True),
     # El de la migración 50ccf425ff32, también aquí: sin él los tests no ven
     # el choque de dos altas a la vez (BE #692)
     Index(
@@ -127,6 +130,8 @@ def start_user_device_mappers():
                 "_is_active": user_devices_table.c.is_active,
                 "_last_used_at": user_devices_table.c.last_used_at,
                 "_created_at": user_devices_table.c.created_at,
+                "_installed_app": user_devices_table.c.installed_app,
+                "_country_code": user_devices_table.c.country_code,
             },
         )
 

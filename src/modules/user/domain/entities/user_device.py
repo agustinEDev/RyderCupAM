@@ -81,6 +81,8 @@ class UserDevice:
         is_active: bool,
         last_used_at: datetime,
         created_at: datetime,
+        installed_app: bool = False,
+        country_code: str | None = None,
     ) -> None:
         """
         Constructor privado de UserDevice.
@@ -109,10 +111,18 @@ class UserDevice:
         self._is_active = is_active
         self._last_used_at = last_used_at
         self._created_at = created_at
+        # La app instalada (PWA) y el país de la última conexión (BE #737)
+        self._installed_app = installed_app
+        self._country_code = country_code
         self._domain_events: list[DomainEvent] = []
 
     @staticmethod
-    def create(user_id: UserId, fingerprint: DeviceFingerprint) -> "UserDevice":
+    def create(
+        user_id: UserId,
+        fingerprint: DeviceFingerprint,
+        installed_app: bool = False,
+        country_code: str | None = None,
+    ) -> "UserDevice":
         """
         Factory method para crear un nuevo dispositivo.
 
@@ -162,6 +172,8 @@ class UserDevice:
             is_active=True,
             last_used_at=now,
             created_at=now,
+            installed_app=installed_app,
+            country_code=country_code,
         )
 
         # Disparar evento de dominio
@@ -186,6 +198,8 @@ class UserDevice:
         is_active: bool,
         last_used_at: datetime,
         created_at: datetime,
+        installed_app: bool = False,
+        country_code: str | None = None,
     ) -> "UserDevice":
         """
         Factory method para reconstruir un dispositivo desde la base de datos.
@@ -217,6 +231,8 @@ class UserDevice:
             is_active=is_active,
             last_used_at=last_used_at,
             created_at=created_at,
+            installed_app=installed_app,
+            country_code=country_code,
         )
         # NO disparar eventos (ya existía)
         return device
@@ -311,6 +327,21 @@ class UserDevice:
             True
         """
         self._last_used_at = datetime.now()
+
+    def update_country(self, country_code: str | None) -> None:
+        """El país de la última conexión, si Cloudflare lo dio (BE #737)."""
+        if country_code:
+            self._country_code = country_code
+
+    @property
+    def installed_app(self) -> bool:
+        """Si es la app instalada (PWA) y no el navegador."""
+        return getattr(self, "_installed_app", False) or False
+
+    @property
+    def country_code(self) -> str | None:
+        """El país (ISO 3166 alfa-2) de la última conexión, o None."""
+        return getattr(self, "_country_code", None)
 
     def update_user_agent(self, user_agent: str) -> None:
         """

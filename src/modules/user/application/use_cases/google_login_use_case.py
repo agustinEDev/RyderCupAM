@@ -145,6 +145,7 @@ class GoogleLoginUseCase:
             ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
             device_id_from_cookie=request.device_id_from_cookie,
             installed_app=request.installed_app,
+            country_code=request.country_code,
         )
         device_response = await self._register_device_use_case.execute(device_request)
         return (

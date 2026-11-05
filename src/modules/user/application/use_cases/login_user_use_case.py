@@ -277,6 +277,7 @@ class LoginUserUseCase:
                 ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
                 device_id_from_cookie=request.device_id_from_cookie,
                 installed_app=request.installed_app,  # BE #737
+                country_code=request.country_code,
             )
             # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
             device_response = await self._register_device_use_case.execute(device_request)

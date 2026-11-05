@@ -8,9 +8,9 @@ Validan datos de entrada/salida de los Use Cases.
 Patrón: DTO Pattern + Pydantic Validation
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 # Placeholder usado cuando get_trusted_client_ip() no puede resolver una IP real
 # (p.ej. tráfico vía kubectl port-forward, donde el peer siempre es 127.0.0.1 y
@@ -77,6 +77,11 @@ class RegisterDeviceRequestDTO(BaseModel):
     installed_app: bool = Field(
         default=False,
         description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
+    )
+    country_code: str | None = Field(
+        default=None,
+        max_length=2,
+        description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
 
     model_config = ConfigDict(
@@ -188,6 +193,27 @@ class UserDeviceDTO(BaseModel):
         description="Fecha de creación del dispositivo",
         json_schema_extra={"example": "2026-01-08T14:20:00Z"},
     )
+    device_type: str = Field(
+        default="unknown",
+        description="Tipo para el icono: phone, tablet, computer o unknown (BE #737)",
+    )
+    platform: str = Field(
+        default="unknown",
+        description="iphone, ipad, mac, android, windows, chromebook, linux o unknown (BE #737)",
+    )
+    browser: str = Field(
+        default="unknown",
+        description="safari, chrome, firefox, edge, opera, samsung, instagram, google, "
+        "facebook o unknown (BE #737)",
+    )
+    installed_app: bool = Field(
+        default=False,
+        description="Si es la app instalada (PWA) y no el navegador (BE #737)",
+    )
+    country_code: str | None = Field(
+        default=None,
+        description="País aproximado de la última conexión, ISO 3166 alfa-2 (BE #737)",
+    )
     is_active: bool = Field(
         ...,
         description="Estado del dispositivo (True=activo, False=revocado)",
@@ -213,6 +239,13 @@ class UserDeviceDTO(BaseModel):
             }
         },
     )
+
+    @field_serializer("last_used_at", "created_at")
+    def _en_utc(self, valor: datetime) -> str:
+        """En UTC con su «Z»: sin huso, el navegador la leía como hora local (BE #737)."""
+        if valor.tzinfo is None:
+            return valor.isoformat() + "Z"
+        return valor.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 class ListUserDevicesRequestDTO(BaseModel):

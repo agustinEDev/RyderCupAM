@@ -38,6 +38,7 @@ from src.modules.user.application.use_cases.unlink_google_account_use_case impor
 )
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.shared.infrastructure.http.http_context_validator import (
+    cloudflare_client_country,
     get_trusted_client_ip,
     get_user_agent,
 )
@@ -90,6 +91,7 @@ async def google_login(
         request.cookies.get(device_id_cookie_name)
     )
     login_data.installed_app = es_la_app_instalada(request)
+    login_data.country_code = cloudflare_client_country(request)
 
     try:
         login_response = await use_case.execute(login_data)

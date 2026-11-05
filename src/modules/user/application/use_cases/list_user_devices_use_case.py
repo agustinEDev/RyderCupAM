@@ -32,6 +32,10 @@ from src.modules.user.application.dto.device_dto import (
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.services.descripcion_del_dispositivo import (
+    describe_el_dispositivo,
+    ip_tapada,
+)
 from src.modules.user.domain.value_objects.user_id import UserId
 
 logger = logging.getLogger(__name__)
@@ -136,7 +140,13 @@ class ListUserDevicesUseCase:
                     id=str(device.id.value),
                     device_name=device.device_name,
                     user_agent=device.user_agent,
-                    ip_address=device.ip_address,
+                    # Tapada: la completa se queda para auditoría (BE #737)
+                    ip_address=ip_tapada(device.ip_address) or "",
+                    device_type=descripcion.tipo,
+                    platform=descripcion.plataforma,
+                    browser=descripcion.navegador,
+                    installed_app=device.installed_app,
+                    country_code=device.country_code,
                     last_used_at=device.last_used_at,
                     created_at=device.created_at,
                     is_active=device.is_active,
@@ -145,6 +155,7 @@ class ListUserDevicesUseCase:
                     ),
                 )
                 for device in devices
+                for descripcion in (describe_el_dispositivo(device.user_agent),)
             ]
 
             # 5. Retornar respuesta con lista + contador

@@ -129,6 +129,7 @@ class RegisterDeviceUseCase:
                     logger.debug(f"Device identified via cookie: {existing_device.device_name}")
                     # El navegador se actualizó, o es otro en este dispositivo
                     existing_device.update_user_agent(request.user_agent)
+                    existing_device.update_country(request.country_code)
                     return await self._reusa(
                         existing_device, request.ip_address, poner_cookie=False
                     )
@@ -154,7 +155,9 @@ class RegisterDeviceUseCase:
                     f"Device identified via fingerprint (cookie missing): {existing_device.device_name}"
                 )
                 # Cookie was missing, caller must set it
-                return await self._reusa(existing_device, request.ip_address)
+                return await self._reusa(
+                    existing_device, request.ip_address, country_code=request.country_code
+                )
 
             # =========================================================
             # PRIORITY 3: Create new device
@@ -162,11 +165,15 @@ class RegisterDeviceUseCase:
             new_device = UserDevice.create(
                 user_id=user_id,
                 fingerprint=fingerprint,
+                installed_app=request.installed_app,
+                country_code=request.country_code,
             )
             # Si otro inicio de sesión a la vez lo dio de alta, el suyo (BE #692)
             guardado = await self._uow.user_devices.add_unless_registered(new_device)
             if guardado is not new_device:
-                return await self._reusa(guardado, request.ip_address)
+                return await self._reusa(
+                    guardado, request.ip_address, country_code=request.country_code
+                )
 
             logger.info(f"New device registered: {new_device.device_name}")
 
@@ -178,11 +185,16 @@ class RegisterDeviceUseCase:
             )
 
     async def _reusa(
-        self, device: UserDevice, ip_address: str, poner_cookie: bool = True
+        self,
+        device: UserDevice,
+        ip_address: str,
+        poner_cookie: bool = True,
+        country_code: str | None = None,
     ) -> RegisterDeviceResponseDTO:
         """El que ya estaba, al día; si no traía su cookie, el que llama se la pone."""
         await self._reanuda(device)
         device.update_ip_address(ip_address)
+        device.update_country(country_code)
         await self._uow.user_devices.save(device)
         return RegisterDeviceResponseDTO(
             device_id=str(device.id.value),

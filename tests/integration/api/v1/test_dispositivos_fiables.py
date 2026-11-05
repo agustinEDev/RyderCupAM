@@ -337,3 +337,74 @@ async def test_d10_verify_email_opens_a_session_whose_refresh_works(client: Asyn
 
     r = await c.post("/api/v1/auth/refresh-token", headers=_cabeceras(SAFARI_IPHONE))
     assert r.status_code == status.HTTP_200_OK, r.text
+
+
+async def test_f3_the_list_describes_each_device_for_the_screen(client: AsyncClient):
+    """
+    Given: Un iPhone con la app instalada que entra desde España por Cloudflare
+    When: Mira su lista de dispositivos
+    Then: Lleva tipo, plataforma y navegador, si es la app instalada, el país de Cloudflare,
+          la IP con el final tapado y las fechas en UTC con su «Z» (BE #737, fase 3)
+    """
+    email = f"f3-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    c = _otro(client)
+    cabeceras = {**_cabeceras(SAFARI_IPHONE, "red-casa", modo="standalone"), "CF-IPCountry": "ES"}
+    r = await c.post(
+        "/api/v1/auth/login", json={"email": email, "password": CLAVE}, headers=cabeceras
+    )
+    assert r.status_code == status.HTTP_200_OK, r.text
+
+    r = await c.get("/api/v1/users/me/devices", headers=cabeceras)
+    dispositivo = r.json()["devices"][0]
+
+    assert (dispositivo["device_type"], dispositivo["platform"], dispositivo["browser"]) == (
+        "phone",
+        "iphone",
+        "safari",
+    )
+    assert dispositivo["installed_app"] is True
+    assert dispositivo["country_code"] == "ES"
+    assert dispositivo["ip_address"] == "203.0.113.***"
+    assert dispositivo["last_used_at"].endswith("Z") and dispositivo["created_at"].endswith("Z")
+
+
+async def test_f3b_country_is_ignored_without_the_cloudflare_secret(client: AsyncClient):
+    """
+    Given: Una petición con CF-IPCountry pero sin el secreto de Cloudflare
+    When: Entra y mira su lista
+    Then: No hay país: esa cabecera la puede escribir cualquiera que llame al origen
+    """
+    email = f"f3b-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    c = _otro(client)
+    cabeceras = {"User-Agent": SAFARI_MAC, "X-Test-Client-ID": "sin-secreto", "CF-IPCountry": "FR"}
+    r = await c.post(
+        "/api/v1/auth/login", json={"email": email, "password": CLAVE}, headers=cabeceras
+    )
+    assert r.status_code == status.HTTP_200_OK, r.text
+
+    dispositivo = (await c.get("/api/v1/users/me/devices", headers=cabeceras)).json()["devices"][0]
+
+    assert dispositivo["country_code"] is None
+
+
+async def test_f3c_a_known_device_gets_its_country_updated(client: AsyncClient):
+    """
+    Given: Un Mac que entró sin país (sin Cloudflare)
+    When: Vuelve a entrar por Cloudflare desde Portugal
+    Then: El mismo dispositivo, ahora con país PT
+    """
+    email = f"f3c-{uuid.uuid4().hex[:6]}@example.com"
+    await _registra(client, email)
+    c = _otro(client)
+    primero = (await _entra(c, email, SAFARI_MAC, "red-casa")).json()["device_id"]
+    con_pais = {**_cabeceras(SAFARI_MAC, "red-movil"), "CF-IPCountry": "PT"}
+    r = await c.post(
+        "/api/v1/auth/login", json={"email": email, "password": CLAVE}, headers=con_pais
+    )
+    assert r.json()["device_id"] == primero
+
+    dispositivo = (await c.get("/api/v1/users/me/devices", headers=con_pais)).json()["devices"][0]
+
+    assert dispositivo["country_code"] == "PT"

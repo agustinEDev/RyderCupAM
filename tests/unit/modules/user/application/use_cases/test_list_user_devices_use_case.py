@@ -201,7 +201,8 @@ class TestListUserDevicesUseCase:
         device = response.devices[0]
         assert device.id is not None
         assert device.device_name == "Firefox on Windows 10/11"
-        assert device.ip_address == "192.168.1.102"
+        # Tapada para la pantalla (BE #737)
+        assert device.ip_address == "192.168.1.***"
         assert device.last_used_at is not None
         assert device.created_at is not None
         assert device.is_active is True

@@ -251,6 +251,24 @@ def cloudflare_client_ip(request: Request) -> str | None:
     return str(ip)
 
 
+LONGITUD_DE_UN_PAIS = 2  # ISO 3166 alfa-2
+
+
+def cloudflare_client_country(request: Request) -> str | None:
+    """
+    El país del cliente que da Cloudflare (CF-IPCountry), solo con su secreto (BE #737).
+
+    Sin el secreto, la cabecera la puede escribir cualquiera que llame al origen.
+    «XX» (sin país) y «T1» (Tor) no son un país.
+    """
+    if not _viene_de_cloudflare(request):
+        return None
+    pais = request.headers.get("CF-IPCountry", "").strip().upper()
+    if len(pais) != LONGITUD_DE_UN_PAIS or not pais.isalpha() or pais in {"XX", "T1"}:
+        return None
+    return pais
+
+
 def informa_del_secreto_de_origen() -> None:
     """
     Dice al arrancar si la cabecera de origen de Cloudflare está configurada (ADR-041).
