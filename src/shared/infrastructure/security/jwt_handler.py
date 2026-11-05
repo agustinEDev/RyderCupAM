@@ -6,10 +6,10 @@ Implementa autenticación basada en tokens con algoritmo HS256.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import jwt
-from jwt.exceptions import InvalidTokenError
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 
 from src.config.settings import settings
 from src.modules.user.application.ports.token_service_interface import ITokenService
@@ -44,9 +44,9 @@ class JWTTokenService(ITokenService):
         to_encode = data.copy()
 
         if expires_delta:
-            expire = datetime.now() + expires_delta
+            expire = datetime.now(UTC) + expires_delta
         else:
-            expire = datetime.now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
         to_encode.update({"exp": expire, "type": "access"})
 
@@ -79,9 +79,9 @@ class JWTTokenService(ITokenService):
         to_encode = data.copy()
 
         if expires_delta:
-            expire = datetime.now() + expires_delta
+            expire = datetime.now(UTC) + expires_delta
         else:
-            expire = datetime.now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
         # Agregar jti (JWT ID) único para garantizar unicidad del token
         # Esto previene colisiones de hash cuando se generan múltiples tokens al mismo tiempo
@@ -118,6 +118,30 @@ class JWTTokenService(ITokenService):
             return payload
         except InvalidTokenError:
             return None
+
+    def refresh_token_expired(self, token: str) -> bool:
+        """
+        Si es un refresh token de esta API, con la firma buena, que ya ha caducado.
+
+        El final normal de una sesión; uno que no verifica por otra cosa es inválido
+        (FE #1042). La caducidad la decide PyJWT, con las mismas reglas que
+        `verify_refresh_token`; solo entonces se mira, sin caducidad, que sea de refresh.
+        """
+        try:
+            jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        except ExpiredSignatureError:
+            pass
+        except InvalidTokenError:
+            return False
+        else:
+            return False
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": False},
+        )
+        return payload.get("type") == "refresh"
 
     def verify_refresh_token(self, token: str) -> dict | None:
         """

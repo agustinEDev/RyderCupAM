@@ -26,15 +26,19 @@ from src.config.rate_limit import (
     EMAIL_SENDING_PER_EMAIL_LIMIT,
     LOGIN_ATTEMPTS_LIMIT,
     LOGIN_ATTEMPTS_PER_EMAIL_LIMIT,
+    REFRESH_TOKEN_LIMIT,
     REGISTER_LIMIT,
     RESET_PASSWORD_LIMIT,
     VALIDATE_RESET_TOKEN_LIMIT,
+    VERIFY_EMAIL_LIMIT,
     count_or_refuse,
     email_rate_limit_key,
     get_client_identifier,
     limiter,
     record_failed_login,
+    refresh_token_rate_limit_key,
     refuse_if_failed_logins_exhausted,
+    skip_refresh_limit_without_valid_cookie,
 )
 from src.config.settings import settings
 from src.modules.user.application.dto.user_dto import (
@@ -64,6 +68,8 @@ from src.modules.user.application.use_cases.logout_user_use_case import (
 )
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
+    RefreshRejectedError,
+    RefreshRejection,
 )
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
@@ -94,6 +100,7 @@ from src.modules.user.domain.exceptions import AccountDeactivatedException, Acco
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -460,6 +467,36 @@ async def logout_user(
     return logout_response
 
 
+# Los textos del 401 del refresco, los de siempre; el motivo va en `error_code`
+_TEXTOS_DEL_REFRESCO = {
+    motivo.value: (
+        "Refresh token no proporcionado. Por favor, inicia sesión nuevamente."
+        if motivo is RefreshRejection.REFRESH_TOKEN_MISSING
+        else "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente."
+    )
+    for motivo in RefreshRejection
+}
+
+
+def _refresco_rechazado(motivo: RefreshRejection) -> JSONResponse:
+    """
+    El 401 del refresco: texto fijo y el motivo en `error_code` (FE #1042).
+
+    Borra la cookie de refresh si llegó una: un token que ya no vale no se vuelve a
+    mandar, y el siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez
+    de un REVOKED que alertaría en cada visita (/code-review, 5 nov).
+    """
+    respuesta = respuesta_con_codigo(
+        status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, motivo.value
+    )
+    # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
+    # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
+    # cookie (SameSite=Lax) y el Set-Cookie sí se aplica (auditoría OWASP, 5 nov)
+    if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING:
+        delete_refresh_token_cookie(respuesta)
+    return respuesta
+
+
 @router.post(
     "/refresh-token",
     response_model=RefreshAccessTokenResponseDTO,
@@ -467,6 +504,23 @@ async def logout_user(
     summary="Renovar access token",
     description="Genera un nuevo access token usando un refresh token válido (httpOnly cookie).",
     tags=["Authentication"],
+    responses={
+        401: {
+            "description": (
+                "La sesión no se renueva. `error_code` dice por qué: REFRESH_TOKEN_MISSING, "
+                "REFRESH_TOKEN_EXPIRED y SESSION_IDLE son el final normal; "
+                "REFRESH_TOKEN_INVALID, REFRESH_TOKEN_NOT_FOUND, REFRESH_TOKEN_REVOKED y "
+                "USER_NOT_FOUND, un rechazo. Borra la cookie de refresh."
+            ),
+        }
+    },
+)
+# Por el usuario del refresh: llega con el acceso caducado (BE #467). Sin cookie
+# válida no cuenta: va a dar 401
+@limiter.limit(
+    REFRESH_TOKEN_LIMIT,
+    key_func=refresh_token_rate_limit_key,
+    exempt_when=skip_refresh_limit_without_valid_cookie,
 )
 async def refresh_access_token(
     request: Request,
@@ -508,18 +562,15 @@ async def refresh_access_token(
     Returns:
         RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
 
-    Raises:
-        HTTPException 401: Si refresh token es inválido, expirado o revocado
+    Returns (401):
+        `detail` fijo y `error_code` con el motivo (RefreshRejection); borra la cookie
     """
     # Leer refresh token desde cookie httpOnly
     refresh_cookie_name = get_refresh_cookie_name()
     refresh_token_jwt = request.cookies.get(refresh_cookie_name)
 
     if not refresh_token_jwt:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token no proporcionado. Por favor, inicia sesión nuevamente.",
-        )
+        return _refresco_rechazado(RefreshRejection.REFRESH_TOKEN_MISSING)
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
@@ -535,14 +586,12 @@ async def refresh_access_token(
             request.cookies.get(device_id_cookie_name)
         ),
     )
-    refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
-
-    if not refresh_response:
-        # Refresh token inválido, expirado o revocado
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
-        )
+    try:
+        refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
+    except RefreshRejectedError as rechazo:
+        # Refresh token inválido, expirado o revocado: el mismo texto de siempre, y el
+        # motivo para que el front distinga el final normal de un rechazo (FE #1042)
+        return _refresco_rechazado(rechazo.motivo)
 
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
     set_auth_cookie(response, refresh_response.access_token)
@@ -574,8 +623,10 @@ async def refresh_access_token(
     ),
     tags=["Authentication"],
 )
+@limiter.limit(VERIFY_EMAIL_LIMIT, key_func=get_client_identifier)  # Por red
 async def verify_email(
-    request: VerifyEmailRequestDTO,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    verify_data: VerifyEmailRequestDTO,
     response: Response,
     use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
 ):
@@ -602,7 +653,8 @@ async def verify_email(
     - httpOnly cookie previene robo de token vía XSS
 
     Args:
-        request: DTO con el token de verificación
+        request: La petición (la necesita el límite por red)
+        verify_data: DTO con el token de verificación
         response: Response de FastAPI (para establecer cookies)
         use_case: Caso de uso de verificación de email
 
@@ -612,17 +664,13 @@ async def verify_email(
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
     """
-    TOKEN_PREVIEW_LENGTH = 8  # noqa: N806 - Constant-like variable in function
-    token_preview = (
-        f"{request.token[:TOKEN_PREVIEW_LENGTH]}..."
-        if len(request.token) > TOKEN_PREVIEW_LENGTH
-        else "***"
-    )
-    logger.info(f"Email verification attempt with token: {token_preview}")
+    # Ni el token ni su principio en el log: con LoggingIntegration a INFO iban a
+    # las migas de Sentry (auditoría OWASP, A09, 5 nov 2026)
+    logger.info("Email verification attempt")
 
     try:
-        user = await use_case.execute(request.token)
-        logger.info(f"Email verification successful for token: {token_preview}")
+        user = await use_case.execute(verify_data.token)
+        logger.info("Email verification successful")
 
         # Generar access token (15 min) + refresh token (7 días) - Session Timeout v1.8.0
         access_token = create_access_token({"sub": str(user.id.value)})
@@ -653,9 +701,7 @@ async def verify_email(
             email_verification_required=False,
         )
     except ValueError as e:
-        logger.warning(
-            f"Email verification failed (expected): {type(e).__name__} - token: {token_preview}"
-        )
+        logger.warning(f"Email verification failed (expected): {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",

@@ -22,8 +22,10 @@ Casos de uso:
 Patrones: Defensive Programming + Fail-Safe Defaults
 """
 
+import hmac
 import ipaddress
 import logging
+import os
 
 from fastapi import Request
 
@@ -204,6 +206,78 @@ def _is_trusted_proxy(proxy_ip: str, trusted_proxies: list[str]) -> bool:
     return False
 
 
+ORIGIN_VERIFY_HEADER = "X-Origin-Verify"
+"""La cabecera con el secreto que añade la regla de Cloudflare (BE #466)."""
+
+ORIGIN_SECRET_ENV = "CLOUDFLARE_ORIGIN_SECRET"  # nosec B105 - env var name, not a secret
+
+
+def _viene_de_cloudflare(request: Request) -> bool:
+    """
+    Si la petición trae el secreto que solo conocen Cloudflare y la API.
+
+    Sin secreto configurado, nunca: uno vacío no puede coincidir con una cabecera
+    vacía. Se compara en bytes y en tiempo constante; la cabecera llega como
+    latin-1, así que cualquier byte se puede codificar sin lanzar.
+    """
+    secreto = os.getenv(ORIGIN_SECRET_ENV, "")
+    recibido = request.headers.get(ORIGIN_VERIFY_HEADER)
+    if not secreto or recibido is None:
+        return False
+    return hmac.compare_digest(recibido.encode("latin-1"), secreto.encode("utf-8"))
+
+
+def cloudflare_client_ip(request: Request) -> str | None:
+    """
+    La IP del cliente que da Cloudflare, solo si la petición viene de Cloudflare.
+
+    Sin el secreto, `CF-Connecting-IP` la puede escribir cualquiera que llame
+    directo al origen de Render, y no se cree (ADR-041). Una IPv4 mapeada en IPv6
+    se devuelve como IPv4. La IP sirve para límites y auditoría, nunca para
+    autorizar.
+    """
+    if not _viene_de_cloudflare(request):
+        return None
+    try:
+        ip = ipaddress.ip_address(request.headers.get("CF-Connecting-IP", "").strip())
+    except ValueError:
+        return None
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    # Ni sin especificar (0.0.0.0, ::), ni bucle local (todo 127/8 y ::1), ni con
+    # zona IPv6 (%eth0): validate_ip_address deja pasar ::, 127.0.0.2 y las zonas
+    if ip.is_unspecified or ip.is_loopback or getattr(ip, "scope_id", None):
+        return None
+    return str(ip)
+
+
+def informa_del_secreto_de_origen() -> None:
+    """
+    Dice al arrancar si la cabecera de origen de Cloudflare está configurada (ADR-041).
+
+    Nunca el valor ni nada calculado con él (CodeQL py/clear-text-logging-sensitive-data):
+    solo si está, y si alguien lo pegó con espacios o saltos de línea de más. Así no
+    coincidiría nunca, y todo caería en silencio al contador compartido. En
+    producción, sin configurar, es un aviso: los límites anónimos son de toda la app.
+    """
+    valor = os.getenv(ORIGIN_SECRET_ENV, "")
+    configurada = valor != ""
+    con_espacios = valor != valor.strip()
+    if con_espacios:
+        logger.warning(
+            "Cabecera de origen de Cloudflare configurada con espacios o saltos de línea "
+            "al principio o al final: no coincidirá con la de Cloudflare (ADR-041)"
+        )
+    elif configurada:
+        logger.info("Cabecera de origen de Cloudflare configurada (ADR-041)")
+    elif os.getenv("ENVIRONMENT", "development").lower() == "production":
+        logger.warning(
+            "Cabecera de origen de Cloudflare sin configurar: la IP real no se usa (ADR-041)"
+        )
+    else:
+        logger.info("Cabecera de origen de Cloudflare sin configurar")
+
+
 def get_trusted_client_ip(
     request: Request,
     trusted_proxies: list[str] | None = None,
@@ -262,6 +336,19 @@ def get_trusted_client_ip(
         - Fallback seguro a request.client.host si hay duda
         - Aplica validate_ip_address() al final (rechaza sentinel)
     """
+    # Viene de Cloudflare con su secreto: su IP es la buena (BE #466). Sin el
+    # secreto, lo de siempre, para que las huellas de los dispositivos no cambien
+    return cloudflare_client_ip(request) or _ip_tras_los_proxies(
+        request, trusted_proxies, trust_cloudflare_headers
+    )
+
+
+def _ip_tras_los_proxies(
+    request: Request,
+    trusted_proxies: list[str] | None,
+    trust_cloudflare_headers: bool,
+) -> str | None:
+    """La IP de las cabeceras de proxy, como antes de BE #466 (ver get_trusted_client_ip)."""
     # 1. Determinar IP del proxy (quien envió el request directamente)
     proxy_ip = request.client.host if request.client else None
 

@@ -5,14 +5,12 @@ Middleware para capturar contexto de usuario en eventos de Sentry.
 
 Funcionalidad:
 - Extrae JWT token de cookies o headers (Authorization)
-- Decodifica el token para obtener user_id y email
+- Decodifica el token para obtener el user_id
 - Establece contexto de usuario en Sentry (sentry_sdk.set_user)
 - Silencioso: Si falla la decodificación, continúa sin usuario (request anónimo)
 
 Contexto capturado:
-- id: UUID del usuario
-- email: Email del usuario
-- ip_address: IP del cliente (X-Forwarded-For o X-Real-IP)
+- id: UUID del usuario. Solo el id: ni email ni IP salen hacia Sentry (ADR-041)
 
 Beneficios:
 - Errores en Sentry muestran qué usuario fue afectado
@@ -96,38 +94,6 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Failed to decode JWT token for Sentry context: {e}")
             return None
 
-    def _get_client_ip(self, request: Request) -> str | None:
-        """
-        Extrae la IP del cliente del request.
-
-        Orden de prioridad:
-        1. X-Forwarded-For (proxy/load balancer)
-        2. X-Real-IP (Nginx)
-        3. request.client.host (directo)
-
-        Args:
-            request: Request de FastAPI
-
-        Returns:
-            IP del cliente o None
-        """
-        # X-Forwarded-For puede contener múltiples IPs: "client, proxy1, proxy2"
-        # Tomamos la primera (IP real del cliente)
-        x_forwarded_for = request.headers.get("X-Forwarded-For")
-        if x_forwarded_for:
-            return x_forwarded_for.split(",")[0].strip()
-
-        # X-Real-IP header usado por Nginx
-        x_real_ip = request.headers.get("X-Real-IP")
-        if x_real_ip:
-            return x_real_ip
-
-        # Fallback: IP directa del cliente
-        if request.client:
-            return request.client.host
-
-        return None
-
     async def dispatch(self, request: Request, call_next):
         """
         Procesa el request y añade contexto de usuario a Sentry.
@@ -152,13 +118,9 @@ class SentryUserContextMiddleware(BaseHTTPMiddleware):
 
             if payload:
                 # Establecer contexto de usuario en Sentry
-                sentry_sdk.set_user(
-                    {
-                        "id": payload.get("sub"),  # UUID del usuario
-                        "email": payload.get("email"),  # Email del usuario
-                        "ip_address": self._get_client_ip(request),  # IP del cliente
-                    }
-                )
+                # Solo el id: ni email ni IP salen hacia Sentry (ADR-041),
+                # igual que en el front desde el 25 oct 2026
+                sentry_sdk.set_user({"id": payload.get("sub")})
             else:
                 # Token inválido o expirado -> request anónimo
                 sentry_sdk.set_user(None)

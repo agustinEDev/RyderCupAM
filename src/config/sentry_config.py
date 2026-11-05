@@ -39,6 +39,26 @@ from src.config.settings import settings
 logger = logging.getLogger(__name__)
 
 
+# Lo que el SDK no quita solo (BE #466): el secreto de la regla de Cloudflare y
+# la IP del usuario. `send_default_pii=False` solo conoce Authorization, Cookie,
+# X-Forwarded-For y pocas más
+_CABECERAS_QUE_NO_SALEN = frozenset({"x-origin-verify", "cf-connecting-ip", "true-client-ip"})
+
+
+def _quita_cabeceras_de_origen(event: Event) -> Event:
+    """Borra del evento las cabeceras del secreto y de la IP, en cualquier grafía."""
+    cabeceras = (event.get("request") or {}).get("headers")
+    if isinstance(cabeceras, dict):
+        for nombre in [n for n in cabeceras if n.lower() in _CABECERAS_QUE_NO_SALEN]:
+            del cabeceras[nombre]
+    return event
+
+
+def before_send_transaction(event: Event, _hint: Hint) -> Event | None:
+    """Las transacciones también llevan la petición: salen sin el secreto ni la IP."""
+    return _quita_cabeceras_de_origen(event)
+
+
 def before_send(event: Event, hint: Hint) -> Event | None:
     """
     Hook ejecutado antes de enviar eventos a Sentry.
@@ -56,6 +76,8 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     Returns:
         Event modificado (o None para descartarlo)
     """
+    _quita_cabeceras_de_origen(event)
+
     # Filtrar health checks del endpoint "/"
     if event.get("request", {}).get("url", "").endswith("/"):
         return None
@@ -133,6 +155,7 @@ def init_sentry() -> None:
         profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
         # Hook para filtrar/modificar eventos
         before_send=before_send,
+        before_send_transaction=before_send_transaction,
         # Metadata
         release=release,  # Misma versión que expone /health
         # Request data (incluir en eventos)
