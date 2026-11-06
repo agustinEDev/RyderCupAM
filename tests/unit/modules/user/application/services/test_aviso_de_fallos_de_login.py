@@ -15,6 +15,7 @@ El correo de «intentos fallidos» al dueño de la cuenta (BE #732).
   A8  la cuenta ya no existe                                | no
   A9  el tope global de avisos (20/hora) está lleno          | no, y no queda apuntado
   A11 falla el guardado de la reserva                        | el hueco del tope vuelve
+  A11b falla al confirmar la reserva (commit)                | el hueco del tope vuelve también
   A10 la reserva se hace con la fila bloqueada, ANTES de     | dos a la vez no mandan dos
       enviar                                                 |   (la prueba de verdad, en
                                                              |   integración)
@@ -311,6 +312,26 @@ async def test_a11_si_falla_el_guardado_de_la_reserva_el_hueco_vuelve():
     uow.users.save = roto
 
     await aviso.avisa(_pide(_ana))
+
+    correo.send_failed_logins_notification.assert_not_awaited()
+    assert getattr(cupo, "devueltos", 0) == 1
+
+
+async def test_a11b_si_falla_al_confirmar_la_reserva_el_hueco_vuelve():
+    """
+    Given: Ana sin avisos, y la BD que falla al confirmar (commit), no al guardar
+    When: Se avisa
+    Then: No hay correo, y el hueco del tope global se devuelve (CodeRabbit)
+    """
+    cupo = _Cupo()
+    uow, ana, correo, aviso = await _escena(cupo=cupo)
+
+    async def commit_roto():
+        raise RuntimeError("la BD no confirma")
+
+    uow.commit = commit_roto
+
+    await aviso.avisa(_pide(ana))
 
     correo.send_failed_logins_notification.assert_not_awaited()
     assert getattr(cupo, "devueltos", 0) == 1

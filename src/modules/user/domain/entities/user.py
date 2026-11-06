@@ -1195,25 +1195,36 @@ class User:
         self._failed_login_day_attempts += 1
 
         if self._failed_login_day_attempts >= MAX_FAILED_ATTEMPTS_PER_DAY:
-            self._bloquea(now, now + DAY_LOCKOUT)
+            self._bloquea(now, now + DAY_LOCKOUT, self._failed_login_day_attempts)
             return "dia"
         if self._failed_login_attempts >= MAX_FAILED_ATTEMPTS:
-            self._bloquea(now, now + timedelta(minutes=LOCKOUT_DURATION_MINUTES))
+            self._bloquea(
+                now, now + timedelta(minutes=LOCKOUT_DURATION_MINUTES), self._failed_login_attempts
+            )
             return "respaldo"
         if self._failed_login_attempts == FAILED_ATTEMPTS_EARLY_NOTICE:
             return "aviso"
         return None
 
-    def _bloquea(self, ahora: datetime, hasta: datetime) -> None:
+    def _bloquea(self, ahora: datetime, hasta: datetime, fallos: int) -> None:
+        """Bloquea el respaldo hasta `hasta`, con los fallos del contador que lo bloqueó."""
         self._locked_until = hasta
         self._add_domain_event(
             AccountLockedEvent(
                 user_id=str(self.id.value),
                 locked_until=hasta,
-                failed_attempts=self._failed_login_attempts,
+                failed_attempts=fallos,
                 locked_at=ahora,
             )
         )
+
+    @property
+    def failed_login_attempts_for_audit(self) -> int:
+        """Los fallos que cuentan para la auditoría: el mayor de la hora y del día.
+
+        Con el bloqueo de 24 horas, la hora puede llevar 3 y el día 150 (CodeRabbit).
+        """
+        return max(self._failed_login_attempts, self._failed_login_day_attempts)
 
     def is_locked(self, ahora: datetime | None = None) -> bool:
         """
@@ -1258,7 +1269,7 @@ class User:
 
         now = datetime.now()
         old_locked_until = self.locked_until
-        old_failed_attempts = self.failed_login_attempts
+        old_failed_attempts = self.failed_login_attempts_for_audit
 
         # Resetear estado de bloqueo
         self._failed_login_attempts = 0

@@ -90,7 +90,7 @@ class UnlockAccountUseCase:
             user = await self._uow.users.find_by_id_for_update(UserId(request.user_id))
             if not user:
                 raise ValueError(f"User with ID {request.user_id} not found")
-            fallos = user.failed_login_attempts
+            fallos = user.failed_login_attempts_for_audit
             email = user.email.value if user.email else None
             # Los bloqueos de cada red para esta cuenta (BE #732): se miran sin borrar
             # nada, y se borran solo después de guardar

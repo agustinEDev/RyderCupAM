@@ -49,6 +49,7 @@ class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
     """Lanza el aviso sin que el login lo espere."""
 
     def __init__(self, fabrica: async_sessionmaker[AsyncSession], email_service: IEmailService):
+        """Con la fábrica de sesiones y el servicio de correo."""
         self._fabrica = fabrica
         self._email_service = email_service
 
@@ -61,6 +62,7 @@ class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
         tarea.add_done_callback(_PENDIENTES.discard)
 
     async def _avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
+        """El aviso, con su propia sesión de BD: la de la petición ya se cerró."""
         try:
             async with self._fabrica() as sesion:
                 aviso = AvisoDeNuevoInicioDeSesion(
@@ -83,6 +85,7 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
         email_service: IEmailService,
         cupo: ICupoDeAvisos,
     ):
+        """Con la fábrica de sesiones y el servicio de correo."""
         self._fabrica = fabrica
         self._email_service = email_service
         self._cupo = cupo
@@ -96,6 +99,7 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
         tarea.add_done_callback(_PENDIENTES.discard)
 
     async def _avisa(self, request: AvisoDeFallosRequestDTO) -> None:
+        """El aviso, con su propia sesión de BD: la de la petición ya se cerró."""
         try:
             async with self._fabrica() as sesion:
                 aviso = AvisoDeFallosDeLogin(

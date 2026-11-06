@@ -28,14 +28,17 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
     """Los avisos enviados en el último día, por tipo."""
 
     def __init__(self, reloj: Callable[[], datetime] = datetime.now):
+        """El tope, vacío, con su reloj."""
         self._reloj = reloj
         self._de_red: deque[datetime] = deque()
         self._graves: deque[datetime] = deque()
 
     def _de(self, motivo: str) -> deque[datetime]:
+        """La cola de este motivo: la de red, o la de los graves."""
         return self._de_red if motivo == "red" else self._graves
 
     def reserva(self, motivo: str) -> bool:
+        """Reserva un aviso de este motivo; False si su tope está lleno."""
         ahora = self._reloj()
         enviados = self._de(motivo)
         while enviados and enviados[0] <= ahora - UN_DIA:
@@ -50,6 +53,7 @@ class CupoDeAvisosEnMemoria(ICupoDeAvisos):
         return True
 
     def devuelve(self, motivo: str) -> None:
+        """Devuelve el último aviso reservado de este motivo, que no salió."""
         enviados = self._de(motivo)
         if enviados:
             enviados.pop()

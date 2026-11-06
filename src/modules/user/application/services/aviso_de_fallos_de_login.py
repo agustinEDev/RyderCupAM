@@ -114,23 +114,27 @@ class AvisoDeFallosDeLogin(IAvisoDeFallos):
             False si no toca (sin cuenta, avisó en la última hora o el tope global
             está lleno); si no, el aviso anterior, para liberar si no sale.
         """
-        async with self._uow:
-            user = await self._uow.users.find_by_id_for_update(UserId(request.user_id))
-            if user is None:
-                return False
-            anterior = user.failed_login_notice_at
-            if anterior and anterior > ahora - UNA_HORA:
-                return False
-            if not self._cupo.reserva(request.motivo):
-                logger.warning("Failed sign-ins notice skipped: the budget is full")
-                return False
-            try:
+        reservado = False
+        try:
+            async with self._uow:
+                user = await self._uow.users.find_by_id_for_update(UserId(request.user_id))
+                if user is None:
+                    return False
+                anterior = user.failed_login_notice_at
+                if anterior and anterior > ahora - UNA_HORA:
+                    return False
+                if not self._cupo.reserva(request.motivo):
+                    logger.warning("Failed sign-ins notice skipped: the budget is full")
+                    return False
+                reservado = True
                 user.apunta_el_aviso_de_fallos(ahora)
                 await self._uow.users.save(user)
-            except Exception:
-                # Sin guardar la reserva, el hueco del tope vuelve
+        except Exception:
+            # Sin guardar ni confirmar la reserva (el commit va al salir del contexto),
+            # el hueco del tope vuelve (CodeRabbit)
+            if reservado:
                 self._cupo.devuelve(request.motivo)
-                raise
+            raise
         return anterior
 
     async def _libera(

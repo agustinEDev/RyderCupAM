@@ -57,6 +57,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         limita_intentos: Callable[[], bool] = lambda: limiter.enabled,
         maximo_de_parejas: int = MAXIMO_DE_PAREJAS,
     ):
+        """El freno, con su reloj, su interruptor del cupo y su tope de memoria."""
         self._reloj = reloj
         # El cupo de intentos es un rate limit: se apaga con él (los tests). El
         # bloqueo por fallos es seguridad y no se apaga nunca
@@ -68,6 +69,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
 
     @staticmethod
     def _clave(email: str, origen: str) -> tuple[str, str]:
+        """La clave de una pareja: el correo normalizado y el origen, los dos en hash."""
         # El origen también en hash: lleva la IP, y la clave puede acabar en un volcado
         return email_rate_limit_key(email), hashlib.sha256(origen.encode()).hexdigest()
 
@@ -95,17 +97,20 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         return tabla[clave]
 
     def tiene_bloqueos(self, email: str) -> bool:
+        """Si algún origen está bloqueado ahora para este correo. No borra nada."""
         cuenta = email_rate_limit_key(email)
         ahora = self._reloj()
         return any(c[0] == cuenta and hasta > ahora for c, hasta in self._bloqueos.items())
 
     def _recientes(self, tabla: dict, clave, desde: datetime) -> deque[datetime]:
+        """Las marcas de la pareja desde `desde`, ya llevada al final por su uso."""
         marcas = self._al_final(tabla, clave, deque)
         while marcas and marcas[0] <= desde:
             marcas.popleft()
         return marcas
 
     def admite_intento(self, email: str, origen: str) -> bool:
+        """Cuenta un intento; False si el origen agotó los de este minuto."""
         ahora = self._reloj()
         self._barre(ahora)
         if not self._limita_intentos():
@@ -117,6 +122,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         return True
 
     def bloqueado_hasta(self, email: str, origen: str) -> datetime | None:
+        """Hasta cuándo está bloqueado este origen para este correo, o None."""
         clave = self._clave(email, origen)
         hasta = self._bloqueos.get(clave)
         if hasta is None:
@@ -127,6 +133,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         return hasta
 
     def apunta_fallo(self, email: str, origen: str) -> datetime | None:
+        """Apunta un fallo; si con él se bloquea el origen, hasta cuándo."""
         ahora = self._reloj()
         self._barre(ahora)
         clave = self._clave(email, origen)
@@ -144,16 +151,20 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         return hasta
 
     def olvida(self, email: str, origen: str) -> None:
+        """Tras entrar: los fallos de este origen vuelven a cero."""
         self._fallos.pop(self._clave(email, origen), None)
 
     def techo_de_la_red_agotado(self, red: str) -> bool:
+        """Si la red agotó su techo de fallos (el de slowapi, #273)."""
         # El de siempre (#273), en el almacenamiento de slowapi: se apaga con él
         return rate_limit.failed_logins_exhausted(red)
 
     def apunta_fallo_en_la_red(self, red: str) -> None:
+        """Apunta un fallo en el techo de su red."""
         rate_limit.record_failed_login(red)
 
     def olvida_la_cuenta(self, email: str) -> bool:
+        """El desbloqueo del administrador: borra todo lo de este correo."""
         cuenta = email_rate_limit_key(email)
         habia = self.tiene_bloqueos(email)
         for tabla in (self._intentos, self._fallos, self._bloqueos):

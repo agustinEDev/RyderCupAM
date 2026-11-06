@@ -19,6 +19,8 @@ hora, la cuenta se bloquea 30 minutos para los dispositivos desconocidos.
   R9  el fallo 25 de la hora                                | «aviso»: el dueño se entera sin bloquear
   R10 150 fallos en 24 h (sin llegar a 50 en ninguna hora)  | bloqueo de 24 h, «dia»
   R11 lo que devuelve cada fallo                            | None, «aviso», «respaldo» o «dia»
+  R13 el evento y el desbloqueo de un bloqueo de 24 h       | cuentan los fallos del día (150), no
+                                                            |   los de la hora
 """
 
 from datetime import datetime, timedelta
@@ -285,3 +287,24 @@ def test_r12_pasadas_24_horas_el_contador_diario_empieza_de_nuevo():
 
     assert user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=24)) is None
     assert user.locked_until is None
+
+
+def test_r13_el_bloqueo_diario_cuenta_los_fallos_del_dia():
+    """
+    Given: Un ataque lento que llega a 150 en el día con 3 en la última hora
+    When: Se bloquea 24 horas y un administrador lo desbloquea
+    Then: El evento del bloqueo y el del desbloqueo dicen 150, no 3
+    """
+    from src.modules.user.domain.events.account_unlocked_event import AccountUnlockedEvent
+
+    user = _usuario()
+    ahora = datetime.now() - timedelta(hours=4)
+    for hora in range(4):
+        for i in range(49 if hora < 3 else 3):
+            user.record_failed_login(ahora=ahora + timedelta(hours=hora, seconds=i))
+
+    bloqueo = [e for e in user.get_domain_events() if isinstance(e, AccountLockedEvent)][-1]
+    assert bloqueo.failed_attempts == 150
+    user.unlock(unlocked_by_user_id="admin")
+    desbloqueo = [e for e in user.get_domain_events() if isinstance(e, AccountUnlockedEvent)][-1]
+    assert desbloqueo.previous_failed_attempts == 150
