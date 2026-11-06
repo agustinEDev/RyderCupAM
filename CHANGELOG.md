@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.50.1] - 2026-11-06
+
+**Hotfix: solo un administrador puede desbloquear una cuenta.** Sin migraciones ni
+cambios en el frontend.
+
+### Security
+
+- **`/auth/unlock-account` exige ser administrador** (403 al resto). Solo pedía
+  sesión: cualquier usuario podía quitar el bloqueo por fallos de otra cuenta y seguir
+  probando su contraseña (OWASP A01/A07). Lo encontró la auditoría OWASP de #732.
+
 ## [2.50.0] - 2026-11-06
 
 **Dispositivos de fiar: la revocación por el id del dispositivo, la lista solo con
