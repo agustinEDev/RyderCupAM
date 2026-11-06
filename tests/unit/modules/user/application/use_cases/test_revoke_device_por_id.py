@@ -7,6 +7,8 @@ Revocar un dispositivo (BE #737, fase 4).
                                                           |   por el `did`, no por la huella
   R2  revocar otro                                        | mensaje de otro
   R3  cada revocación                                     | queda en el historial de seguridad
+  R4  el historial falla al apuntarla                     | la revocación ya está hecha: responde
+                                                          |   bien y deja el fallo en el log
 """
 
 from unittest.mock import Mock
@@ -122,3 +124,25 @@ async def test_r4_the_current_device_is_found_whatever_the_case_of_the_id():
     )
 
     assert "actual" in r.message
+
+
+async def test_r4_a_failing_security_log_does_not_undo_a_committed_revocation(caplog):
+    """
+    Given: Un dispositivo con su sesión, y el historial de seguridad falla al escribir
+    When: Se revoca
+    Then: Responde bien (la revocación ya está guardada: un 500 haría reintentar y dar
+          409) y el fallo queda en el log, sin el mensaje de la excepción
+    """
+    uow, iphone, _ = await _dos()
+    historial = Mock()
+    historial.log_device_revoked.side_effect = RuntimeError("disco lleno: secreto")
+
+    with caplog.at_level("ERROR"):
+        r = await RevokeDeviceUseCase(uow, historial).execute(
+            RevokeDeviceRequestDTO(user_id=USUARIO, device_id=iphone)
+        )
+
+    assert "revocado" in r.message
+    historial.log_device_revoked.assert_called_once()
+    assert "RuntimeError" in caplog.text
+    assert "secreto" not in caplog.text

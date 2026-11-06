@@ -8,7 +8,8 @@ Dispositivos fiables, fase 1: reconocer y revocar (BE #737, #730).
   D2  revocar otro dispositivo                                | su siguiente petición: 401 «revocado»,
                                                               |   aunque cambie de red (sin huella)
   D3  un `did` de otro usuario o que no existe                | 401
-  D4  un token sin `did` (anterior a esta versión)            | pasa, como hasta ahora
+  D4  un token sin `did` (anterior a esta versión)            | 401 sin más; el refresco da uno
+                                                              |   con `did` y vuelve a pasar
   D5  cerrar sesión y volver a entrar desde el mismo navegador| el mismo dispositivo, sin duplicado
   D6  el refresco                                             | renueva la cookie del dispositivo y
                                                               |   el `did` del token nuevo

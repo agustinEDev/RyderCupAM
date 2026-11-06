@@ -133,6 +133,10 @@ async def test_p1_to_p5_cleanup_removes_old_devices_and_expired_tokens_only(clie
     cuantos_antes = (
         await _sql("select count(*) from refresh_tokens where device_id = :id", id=reciente)
     ).scalar()
+    # P5: sus tokens no han caducado; la limpieza no los toca aunque esté revocado
+    del_otro_viejo_antes = (
+        await _sql("select count(*) from refresh_tokens where device_id = :id", id=otro_viejo)
+    ).scalar()
 
     resumen = await LimpiezaDeSesiones(await _fabrica()).vuelta()
 
@@ -146,6 +150,10 @@ async def test_p1_to_p5_cleanup_removes_old_devices_and_expired_tokens_only(clie
     assert (
         await _sql("select count(*) from refresh_tokens where device_id = :id", id=reciente)
     ).scalar() == 0, "P3"
+    assert del_otro_viejo_antes >= 1
+    assert (
+        await _sql("select count(*) from refresh_tokens where device_id = :id", id=otro_viejo)
+    ).scalar() == del_otro_viejo_antes, "P5: sus tokens sin caducar se quedan"
     assert resumen.dispositivos >= 1 and resumen.tokens >= 1
 
 

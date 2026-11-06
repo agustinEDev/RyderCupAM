@@ -16,6 +16,8 @@ Llamado desde:
 Patrón: Use Case Pattern + Unit of Work + Domain Events
 """
 
+import logging
+
 from src.modules.user.application.dto.device_dto import (
     RevokeDeviceRequestDTO,
     RevokeDeviceResponseDTO,
@@ -26,6 +28,8 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 
 class RevokeDeviceUseCase:
@@ -149,13 +153,18 @@ class RevokeDeviceUseCase:
         # 8. Al historial de seguridad: quién revocó qué y cuántas sesiones cerró
         # (BE #737; antes solo quedaba un logger.info). Por su puerto: un caso de uso
         # no importa infraestructura
-        self._security_audit.log_device_revoked(
-            user_id=request.user_id,
-            device_id=str(device_id.value),
-            ip_address=request.ip_address or "unknown",
-            user_agent=request.user_agent or "unknown",
-            tokens_revoked_count=tokens_revoked,
-        )
+        # La revocación ya está guardada: si el historial falla, se responde bien igual
+        # (un 500 haría reintentar y dar 409). Solo el tipo del error, no su mensaje
+        try:
+            self._security_audit.log_device_revoked(
+                user_id=request.user_id,
+                device_id=str(device_id.value),
+                ip_address=request.ip_address or "unknown",
+                user_agent=request.user_agent or "unknown",
+                tokens_revoked_count=tokens_revoked,
+            )
+        except Exception as e:
+            logger.error("Device revocation audit event failed: %s", type(e).__name__)
 
         # 9. Retornar confirmación
         message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."
