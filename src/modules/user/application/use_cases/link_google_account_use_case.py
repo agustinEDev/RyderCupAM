@@ -75,6 +75,12 @@ class LinkGoogleAccountUseCase:
 
         # Lecturas y escritura en una sola transacción (previene TOCTOU)
         async with self._uow:
+            # Otra vez, con la fila bloqueada: un cambio de correo a la vez la habría
+            # dejado sin verificar entre la primera comprobación y el vínculo
+            cuenta = await self._uow.users.find_by_id_for_update(uid)
+            if cuenta is None or not cuenta.email_verified:
+                raise GoogleLinkNeedsVerifiedEmailError("Verify your email before linking Google")
+
             # Verificar que la cuenta Google no está vinculada a otro usuario
             existing = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
                 OAuthProvider.GOOGLE, google_info.google_user_id

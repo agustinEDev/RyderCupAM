@@ -35,6 +35,15 @@
    `should_set_device_cookie` field is removed (breaking change, `api-breaking`), since
    the device cookie is set on every login and refresh.
 
+5. **An unverified account belongs to whoever proves its email** (pre-account
+   takeover). Signing in with a Google that verified the address, or resetting the
+   password with the link sent to it, claims the account: verified, every earlier
+   device and session revoked, any linked Google removed (and, through Google, the
+   unproven password too). Linking Google from the profile needs a verified email
+   (`403 GOOGLE_LINK_NEEDS_VERIFIED_EMAIL`), Google sign-up and auto-link need Google's
+   `email_verified`. A password login saves its session only if, with the row locked,
+   the account still has the checked password and is active.
+
 ## Consequences
 
 **Positive:**

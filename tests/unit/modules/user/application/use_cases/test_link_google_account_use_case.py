@@ -63,7 +63,7 @@ async def existing_user(uow):
         plain_password="V@l1dP@ss123!",
     )
     # Verificada: vincular Google la pide (revisión de la pre-captura, #749)
-    user.verify_email_from_oauth()
+    user.confirm_email_ownership()
     async with uow:
         await uow.users.save(user)
     return user
@@ -193,5 +193,41 @@ async def test_an_unverified_account_cannot_link_google(
     async with uow:
         assert (
             await uow.oauth_accounts.find_by_user_id_and_provider(user.id, OAuthProvider.GOOGLE)
+            is None
+        )
+    # Sin gastar el código con Google: se mira antes
+    google_oauth_service.exchange_code_for_user_info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_verified_email_is_checked_again_when_linking(
+    use_case, uow, google_oauth_service, google_user_info, existing_user
+):
+    """
+    Given: Una cuenta verificada que, mientras se habla con Google, cambia de correo y
+           queda sin verificar (otra petición a la vez)
+    When: Se guarda el vínculo
+    Then: GoogleLinkNeedsVerifiedEmailError: se vuelve a mirar con la fila bloqueada
+    """
+    import copy
+
+    async def cambia_a_mitad(_code):
+        otra = copy.deepcopy(uow.users._users[existing_user.id])
+        otra.change_email("otro.correo@example.com")
+        uow.users._users[existing_user.id] = otra
+        return google_user_info
+
+    google_oauth_service.exchange_code_for_user_info.side_effect = cambia_a_mitad
+
+    with pytest.raises(GoogleLinkNeedsVerifiedEmailError):
+        await use_case.execute(
+            LinkGoogleAccountRequestDTO(authorization_code="code"), str(existing_user.id.value)
+        )
+
+    async with uow:
+        assert (
+            await uow.oauth_accounts.find_by_user_id_and_provider(
+                existing_user.id, OAuthProvider.GOOGLE
+            )
             is None
         )

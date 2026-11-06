@@ -835,7 +835,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
             plain_password="SecureP@ssw0rd123!",
         )
         if verificada:
-            cuenta.verify_email_from_oauth()
+            cuenta.confirm_email_ownership()
         dispositivo = UserDevice.create(
             user_id=cuenta.id,
             fingerprint=DeviceFingerprint.create(
@@ -1051,6 +1051,60 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         cuenta.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
         async with uow:
             await uow.users.save(cuenta)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        with pytest.raises(AccountDeactivatedException):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+
+    async def test_g8_the_claim_reads_the_account_with_the_row_locked(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar
+        When: Google se la queda
+        Then: La relee con la fila bloqueada: un login con contraseña a la vez espera
+        """
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        pedidos = []
+        original = uow.users.find_by_id_for_update
+
+        async def espia(user_id):
+            pedidos.append(user_id)
+            return await original(user_id)
+
+        uow.users.find_by_id_for_update = espia
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert pedidos == [cuenta.id]
+
+    async def test_g9_deactivated_right_before_the_lock_is_not_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar, que un administrador desactiva justo antes de
+               que Google la bloquee
+        When: Google iba a quedársela
+        Then: 403 y la cuenta como estaba: un login rechazado no cambia la cuenta
+        """
+        import copy
+
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
+
+        async def desactivada(user_id):
+            otra = copy.deepcopy(uow.users._users[user_id])
+            otra.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+            uow.users._users[user_id] = otra
+            return otra
+
+        uow.users.find_by_id_for_update = desactivada
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         with pytest.raises(AccountDeactivatedException):

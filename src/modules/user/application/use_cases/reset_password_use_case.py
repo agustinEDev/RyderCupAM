@@ -18,18 +18,26 @@ Post-Conditions:
 - Email de confirmación enviado al usuario
 """
 
+import logging
+
 from src.modules.user.application.dto.user_dto import (
     ResetPasswordRequestDTO,
     ResetPasswordResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    cierra_lo_que_no_se_probo,
+)
 from src.modules.user.domain.entities.password_history import PasswordHistory
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+
+logger = logging.getLogger(__name__)
 
 
 class ResetPasswordUseCase:
@@ -63,6 +71,27 @@ class ResetPasswordUseCase:
         """
         self._uow = uow
         self._email_service = email_service
+
+    @staticmethod
+    def _apunta_la_toma(
+        user: User,
+        cerrado: tuple[int, int, int],
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """La toma, al log de seguridad, ya guardada: si el log falla, vale igual."""
+        try:
+            get_security_logger().log_unverified_account_claimed(
+                user_id=str(user.id.value),
+                devices_revoked=cerrado[0],
+                tokens_revoked=cerrado[1],
+                google_unlinked=cerrado[2],
+                via="password_reset",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception as error:
+            logger.error("Account claim audit event failed: %s", type(error).__name__)
 
     async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """
@@ -118,6 +147,10 @@ class ResetPasswordUseCase:
             )
             raise InvalidResetTokenError()
 
+        # Sin verificar: quien usa el enlace de su buzón demuestra que el correo es
+        # suyo, y se queda la cuenta (#749, pre-captura)
+        sin_verificar = not user.email_verified
+
         # Validar token y expiración usando lógica de dominio
         try:
             # reset_password() internamente llama a can_reset_password()
@@ -153,13 +186,23 @@ class ResetPasswordUseCase:
             )
             await self._uow.password_history.save(password_history)
 
-            # Revocar TODOS los refresh tokens del usuario (logout forzado)
-            # Esto asegura que todas las sesiones activas se cierren
-            await self._uow.refresh_tokens.revoke_all_for_user(user.id)
+            if sin_verificar:
+                # Lo que dejó quien la creó o le cambió el correo, fuera: dispositivos,
+                # sesiones y su Google
+                user.confirm_email_ownership()
+                cerrado = await cierra_lo_que_no_se_probo(self._uow, user.id)
+            else:
+                # Revocar TODOS los refresh tokens del usuario (logout forzado)
+                # Esto asegura que todas las sesiones activas se cierren
+                await self._uow.refresh_tokens.revoke_all_for_user(user.id)
+                cerrado = None
 
             # Guardar usuario con nueva contraseña y token invalidado
             await self._uow.users.save(user)
             # Commit automático al salir del contexto (todas las operaciones atomicas)
+
+        if cerrado is not None:
+            self._apunta_la_toma(user, cerrado, ip_address, user_agent)
 
         # Enviar email de confirmación
         await self._email_service.send_password_changed_notification(

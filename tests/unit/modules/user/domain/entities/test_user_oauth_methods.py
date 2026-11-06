@@ -252,7 +252,7 @@ class TestClaimWithVerifiedOAuth:
         )
         user.generate_verification_token()
         if verificada:
-            user.verify_email_from_oauth()
+            user.confirm_email_ownership()
         return user
 
     def test_an_unverified_account_loses_its_unproven_password(self):

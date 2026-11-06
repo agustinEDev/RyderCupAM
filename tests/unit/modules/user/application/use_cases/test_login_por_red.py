@@ -100,7 +100,7 @@ class Escena:
     async def usuario(self, email=ANA, verificado=True) -> User:
         u = User.create(first_name="Ana", last_name="Red", email_str=email, plain_password=BUENA)
         if verificado:
-            u.verify_email_from_oauth()
+            u.confirm_email_ownership()
         async with self.uow:
             await self.uow.users.save(u)
         return u
@@ -614,19 +614,42 @@ async def test_u19_sin_cookie_el_429_no_toca_la_base_de_datos(monkeypatch, motiv
     assert busquedas == []
 
 
-async def _a_mitad_del_login(e: Escena, que_pasa) -> None:
+async def _a_mitad_del_login(e: Escena, que_pasa) -> str:
     """Hace `que_pasa` con la cuenta justo después de comprobar la contraseña (al
-    registrar el dispositivo), como otra petición que llega a la vez."""
+    registrar el dispositivo), como otra petición que llega a la vez.
+
+    Guarda OTRO objeto (una copia), como la BD tras otra transacción: el login solo lo
+    ve si relee la cuenta. Y da de alta de verdad el dispositivo de este login, para
+    ver que se revoca. Devuelve su id.
+    """
+    import copy
+
     respuesta = e.caso._register_device_use_case.execute.return_value
+    cuenta = await e.uow.users.find_by_email(Email(ANA))
+    dispositivo = UserDevice.create(
+        user_id=cuenta.id, fingerprint=DeviceFingerprint.create(IPHONE, RED_A)
+    )
+    respuesta.device_id = str(dispositivo.id.value)
 
     async def a_la_vez(*_a, **_k):
         async with e.uow:
-            cuenta = await e.uow.users.find_by_email(Email(ANA))
-            que_pasa(cuenta)
-            await e.uow.users.save(cuenta)
+            await e.uow.user_devices.save(dispositivo)
+            otra = copy.deepcopy(await e.uow.users.find_by_email(Email(ANA)))
+            que_pasa(otra)
+            e.uow.users._users[otra.id] = otra
         return respuesta
 
     e.caso._register_device_use_case.execute.side_effect = a_la_vez
+    return str(dispositivo.id.value)
+
+
+async def _sin_sesion_ni_dispositivo(e: Escena, ana: User, dispositivo_id: str) -> None:
+    from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+        dispositivo = await e.uow.user_devices.find_by_id(UserDeviceId.from_string(dispositivo_id))
+        assert not dispositivo.is_active
 
 
 async def test_u20_si_google_se_queda_la_cuenta_a_mitad_del_login_no_hay_sesion():
@@ -638,12 +661,11 @@ async def test_u20_si_google_se_queda_la_cuenta_a_mitad_del_login_no_hay_sesion(
     """
     e = Escena()
     ana = await e.usuario(verificado=False)
-    await _a_mitad_del_login(e, lambda cuenta: cuenta.claim_with_verified_oauth())
+    dispositivo = await _a_mitad_del_login(e, lambda cuenta: cuenta.claim_with_verified_oauth())
 
     assert await e.entra() is None
 
-    async with e.uow:
-        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+    await _sin_sesion_ni_dispositivo(e, ana, dispositivo)
 
 
 async def test_u21_si_la_desactivan_a_mitad_del_login_no_hay_sesion():
@@ -654,15 +676,14 @@ async def test_u21_si_la_desactivan_a_mitad_del_login_no_hay_sesion():
     """
     e = Escena()
     ana = await e.usuario()
-    await _a_mitad_del_login(
+    dispositivo = await _a_mitad_del_login(
         e, lambda cuenta: cuenta.deactivate(deactivated_by_user_id=str(uuid4()))
     )
 
     with pytest.raises(AccountDeactivatedException):
         await e.entra()
 
-    async with e.uow:
-        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+    await _sin_sesion_ni_dispositivo(e, ana, dispositivo)
 
 
 async def test_u22_si_cambia_la_contrasena_a_mitad_del_login_no_hay_sesion():
@@ -673,9 +694,36 @@ async def test_u22_si_cambia_la_contrasena_a_mitad_del_login_no_hay_sesion():
     """
     e = Escena()
     ana = await e.usuario()
+    dispositivo = await _a_mitad_del_login(
+        e, lambda cuenta: cuenta.change_password("OtraClave#2026segura")
+    )
+
+    assert await e.entra() is None
+
+    await _sin_sesion_ni_dispositivo(e, ana, dispositivo)
+
+
+async def test_u23_el_rechazo_a_mitad_apunta_al_usuario_y_no_borra_los_fallos(monkeypatch):
+    """
+    Given: Ana, y su contraseña cambiada a mitad del login
+    When: El login se rechaza
+    Then: El log apunta su usuario, y los fallos de esa red NO vuelven a cero: no fue
+          un login bueno
+    """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    apuntes = []
+    monkeypatch.setattr(
+        modulo.SecurityLogger, "log_login_attempt", lambda self, **kw: apuntes.append(kw)
+    )
+    e = Escena()
+    ana = await e.usuario()
+    olvidos = []
+    monkeypatch.setattr(e.freno, "olvida", lambda *a: olvidos.append(a))
     await _a_mitad_del_login(e, lambda cuenta: cuenta.change_password("OtraClave#2026segura"))
 
     assert await e.entra() is None
 
-    async with e.uow:
-        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+    assert apuntes[-1]["user_id"] == str(ana.id.value)
+    assert apuntes[-1]["failure_reason"] == "Password changed during login"
+    assert olvidos == []

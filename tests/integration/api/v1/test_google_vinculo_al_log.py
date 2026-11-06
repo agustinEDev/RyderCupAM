@@ -196,3 +196,44 @@ async def test_g1_the_creator_google_link_does_not_survive_the_claim(client: Asy
         {"e": email},
     )
     assert [fila[0] for fila in vinculos] == [f"google-{email}"]
+
+
+async def test_r1_resetting_after_an_email_change_takes_the_creator_google_away(
+    client: AsyncClient,
+):
+    """
+    Given: Una cuenta verificada con SU Google, a la que su dueño le cambió el correo por
+           el de otra persona (queda sin verificar y con ese Google)
+    When: La otra persona usa «Olvidé mi contraseña» con el enlace de su buzón
+    Then: La cuenta queda verificada y sin aquel Google: ya no entra con él
+    """
+    from tests.conftest import get_user_by_email
+    from tests.integration.api.v1.test_terms_acceptance_endpoints import _sql
+
+    antes, despues = "creador.cambio@example.com", "victima.cambio@example.com"
+    await create_authenticated_user(client, antes, CLAVE, "Ana", "Lopez")
+    await _sql(
+        "insert into user_oauth_accounts (id, user_id, provider, provider_user_id, "
+        "provider_email, created_at) select gen_random_uuid()::text, id, 'google', "
+        "'google-del-creador', 'creador@example.com', now() from users where email = :e",
+        {"e": antes},
+    )
+    await _sql(
+        "update users set email = :d, email_verified = false where email = :a",
+        {"a": antes, "d": despues},
+    )
+    client.cookies.clear()
+    await client.post("/api/v1/auth/forgot-password", json={"email": despues})
+    token = (await get_user_by_email(client, despues)).password_reset_token
+
+    r = await client.post(
+        "/api/v1/auth/reset-password", json={"token": token, "new_password": "OtraClave#2026segura"}
+    )
+
+    assert r.status_code == 200
+    filas = await _sql(
+        "select u.email_verified, (select count(*) from user_oauth_accounts o "
+        "where o.user_id = u.id) from users u where u.email = :e",
+        {"e": despues},
+    )
+    assert filas == [(True, 0)]

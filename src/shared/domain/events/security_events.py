@@ -526,8 +526,13 @@ class AccountReactivatedAuditEvent(SecurityAuditEvent):
 
 @dataclass(frozen=True)
 class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
-    """Google, que verificó el correo, se quedó una cuenta sin verificar (pre-captura)."""
+    """Quien demostró el correo se quedó una cuenta sin verificar (pre-captura, #749).
 
+    `via`: «google» (entró con un Google que lo verificó) o «password_reset» (usó el
+    enlace de restablecer que llegó a su buzón).
+    """
+
+    via: str = "google"
     devices_revoked: int = 0
     tokens_revoked: int = 0
     google_unlinked: int = 0
@@ -540,7 +545,7 @@ class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
     def resumen(self, user_info: str) -> str:
         """La línea del log."""
         return (
-            f"UNVERIFIED ACCOUNT CLAIMED BY GOOGLE | {user_info} | "
+            f"UNVERIFIED ACCOUNT CLAIMED VIA {self.via.upper()} | {user_info} | "
             f"devices revoked: {self.devices_revoked} | tokens revoked: {self.tokens_revoked} | "
             f"earlier Google unlinked: {self.google_unlinked}"
         )
@@ -550,6 +555,7 @@ class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
         base = super().to_dict()
         base.update(
             {
+                "via": self.via,
                 "devices_revoked": self.devices_revoked,
                 "tokens_revoked": self.tokens_revoked,
                 "google_unlinked": self.google_unlinked,

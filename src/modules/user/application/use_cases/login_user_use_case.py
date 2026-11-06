@@ -371,11 +371,11 @@ class LoginUserUseCase:
             await self._uow.user_devices.save(dispositivo)
 
     def _rechaza_el_cambio_a_mitad(
-        self, cambio: str, request: LoginRequestDTO, contexto: tuple[str, str]
+        self, cambio: str, user: User, request: LoginRequestDTO, contexto: tuple[str, str]
     ) -> None:
         """Al log; una cuenta desactivada responde como siempre (403), lo demás 401."""
         get_security_logger().log_login_attempt(
-            user_id=None,
+            user_id=str(user.id.value),
             email=request.email,
             success=False,
             failure_reason=cambio,
@@ -487,10 +487,6 @@ class LoginUserUseCase:
             )
             raise AccountDeactivatedException()
 
-        # Entra: los fallos de ESTE origen vuelven a cero; los de los demás, no. Solo
-        # con una cuenta activa: acertar en una desactivada no es entrar
-        self._freno.olvida(request.email, origen)
-
         # Registrar evento de login exitoso (Clean Architecture)
         login_time = datetime.now(UTC)
         user.record_login(
@@ -541,8 +537,13 @@ class LoginUserUseCase:
         # OWASP y revisor de #749)
         cambio = await self._guarda_la_sesion(user, comprobada, refresh_token_entity, device_id)
         if cambio is not None:
-            self._rechaza_el_cambio_a_mitad(cambio, request, contexto)
+            self._rechaza_el_cambio_a_mitad(cambio, user, request, contexto)
             return None
+
+        # Entra: los fallos de ESTE origen vuelven a cero; los de los demás, no. Solo
+        # con la sesión ya guardada: acertar en una desactivada, o en una que cambió a
+        # mitad, no es entrar
+        self._freno.olvida(request.email, origen)
 
         # Security Logging: Login exitoso
         security_logger.log_login_attempt(

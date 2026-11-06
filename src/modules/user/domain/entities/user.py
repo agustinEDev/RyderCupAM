@@ -687,16 +687,15 @@ class User:
             self._domain_events = []
         return len(self._domain_events) > 0
 
-    def verify_email_from_oauth(self) -> None:
+    def confirm_email_ownership(self) -> None:
         """
-        Marca el email como verificado tras auto-link con cuenta OAuth.
-
-        Google ya verificó el email del usuario, por lo que podemos
-        confirmar la verificación sin token.
-        Solo actúa si el email aún no está verificado.
+        Da el correo por verificado, sin token: alguien demostró que es suyo por otro
+        camino (un Google que lo verificó, o el enlace de restablecer que llegó a su
+        buzón). Solo actúa si aún no lo estaba.
         """
         if not self.email_verified:
             self._email_verified = True
+            self._verification_token = None
             self._updated_at = datetime.now()
 
     def claim_with_verified_oauth(self) -> bool:
@@ -714,12 +713,10 @@ class User:
         if self.email_verified:
             return False
         self._password = None
-        self._verification_token = None
         # Un «Olvidé mi contraseña» de antes del cambio de manos, tampoco
         self._password_reset_token = None
         self._reset_token_expires_at = None
-        self._email_verified = True
-        self._updated_at = datetime.now()
+        self.confirm_email_ownership()
         return True
 
     def record_google_unlinked(self, provider: str, unlinked_at: datetime) -> None:

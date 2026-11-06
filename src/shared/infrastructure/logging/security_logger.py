@@ -473,13 +473,15 @@ class SecurityLogger:
         devices_revoked: int,
         tokens_revoked: int,
         google_unlinked: int = 0,
+        via: str = "google",
         ip_address: str = "unknown",
         user_agent: str = "unknown",
     ) -> None:
-        """Helper rápido: Google se quedó una cuenta sin verificar (pre-captura)."""
+        """Helper rápido: se quedó una cuenta sin verificar quien demostró el correo."""
         self.log_security_event(
             UnverifiedAccountClaimedAuditEvent(
                 user_id=user_id,
+                via=via,
                 ip_address=ip_address,
                 user_agent=user_agent,
                 devices_revoked=devices_revoked,

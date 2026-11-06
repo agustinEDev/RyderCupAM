@@ -92,7 +92,7 @@ class TestAdminListUsersUseCase:
         await self._create_user(uow, "Unverified", "User", "unverified@test.com")
         verified = await self._create_user(uow, "Verified", "User", "verified@test.com")
         async with uow:
-            verified.verify_email_from_oauth()
+            verified.confirm_email_ownership()
             await uow.users.save(verified)
 
         use_case = AdminListUsersUseCase(uow)

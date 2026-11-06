@@ -4,8 +4,10 @@ Google Login Use Case - Application Layer
 Caso de uso para login/registro con Google OAuth.
 Soporta tres flujos:
 1. Usuario OAuth existente → login directo
-2. Usuario email existente → auto-link + login
+2. Usuario email existente → auto-link + login; si su correo no estaba verificado,
+   Google se la queda sin lo que no se probó (contraseña, sesiones, otro Google; #749)
 3. Usuario nuevo → auto-register + login
+Los flujos 2 y 3, solo con el correo verificado por Google.
 """
 
 import logging
@@ -29,8 +31,10 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    cierra_lo_que_no_se_probo,
+)
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
-from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -65,7 +69,7 @@ class GoogleLoginUseCase:
     Flujo:
     1. Intercambiar authorization code por user info de Google
     2. Buscar OAuth account existente → login directo
-    3. Buscar usuario por email → auto-link + login
+    3. Buscar usuario por email → auto-link + login (o la toma, si no estaba verificada)
     4. Crear usuario nuevo → auto-register + login
     """
 
@@ -117,6 +121,14 @@ class GoogleLoginUseCase:
             user = await self._uow.users.find_by_email(email)
 
             if user:
+                if not user.email_verified:
+                    # Google se la va a quedar: con la fila bloqueada, para que un
+                    # login con contraseña a la vez espere y vea el cambio, y para ver
+                    # si la desactivaron justo antes (revisor de #749)
+                    bloqueada = await self._uow.users.find_by_id_for_update(user.id)
+                    if bloqueada is None:
+                        raise ValueError("User not found")
+                    user = bloqueada
                 # Desactivada: sin vincular Google ni verificar el correo. Un login
                 # rechazado no cambia la cuenta (/code-review); execute da el 403
                 if not user.is_active:
@@ -142,13 +154,8 @@ class GoogleLoginUseCase:
             se la quedó
         """
         revocados = None
-        if not user.email_verified:
-            # Con la fila bloqueada: un login con contraseña a la vez espera, y al
-            # acabar ve que la contraseña ya no es la que comprobó
-            user = await self._uow.users.find_by_id_for_update(user.id) or user
         if user.claim_with_verified_oauth():
-            dispositivos, tokens = await revoca_sus_sesiones(self._uow, user.id)
-            revocados = (dispositivos, tokens, await self._quita_el_google_de_antes(user))
+            revocados = await cierra_lo_que_no_se_probo(self._uow, user.id)
         new_oauth = UserOAuthAccount.create(
             user_id=user.id,
             provider=OAuthProvider.GOOGLE,
@@ -159,16 +166,6 @@ class GoogleLoginUseCase:
 
         await self._uow.users.save(user)
         return user, revocados
-
-    async def _quita_el_google_de_antes(self, user: User) -> int:
-        """El Google que vinculó quien creó la cuenta sin verificar, fuera. Cuántos."""
-        anterior = await self._uow.oauth_accounts.find_by_user_id_and_provider(
-            user.id, OAuthProvider.GOOGLE
-        )
-        if anterior is None:
-            return 0
-        await self._uow.oauth_accounts.delete(anterior)
-        return 1
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
         """

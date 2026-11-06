@@ -257,7 +257,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 ### Three Login Flows
 
 1. **Existing OAuth account** → Direct login (`is_new_user=false`)
-2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`), only if Google verified the email
+2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`), only if Google verified the email. If the account's email was **unverified** (anyone could have created it with that address), Google **claims** it: the email is verified, the password and any pending reset token are removed, every earlier device and refresh token is revoked and any Google linked before is unlinked. The owner can set a password with the password reset
 3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`), only if Google verified the email
 
 **Errors** (`detail` plus `error_code` at the root):
@@ -268,6 +268,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 
 **POST /auth/google/link** - Requires JWT auth + CSRF header (`X-CSRF-Token`)
 - Links Google account to the authenticated user
+- Requires a verified account email: otherwise `403` with `error_code: GOOGLE_LINK_NEEDS_VERIFIED_EMAIL`
 - Errors if Google account already linked to another user, or user already has Google linked
 
 **DELETE /auth/google/unlink** - Requires JWT auth + CSRF header (`X-CSRF-Token`)
@@ -280,6 +281,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 |------|---------|
 | 400 | Invalid/expired authorization code, already linked, no Google linked |
 | 401 | Not authenticated (link/unlink only) |
+| 403 | `ACCOUNT_DEACTIVATED` (login) or `GOOGLE_LINK_NEEDS_VERIFIED_EMAIL` (link) |
 | 423 | Account locked (brute force protection) |
 | 429 | Rate limit exceeded (login only) |
 
