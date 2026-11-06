@@ -742,3 +742,78 @@ class TestGoogleConElCorreoSinVerificar:
         respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
 
         assert respuesta.user.email == "oauth@example.com"
+
+
+@pytest.mark.asyncio
+class TestElVinculoAutomaticoAlLog:
+    """El vínculo automático va al log después de guardar, con la red, sin romper nada."""
+
+    async def _cuenta(self, uow):
+        cuenta = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+        return cuenta
+
+    async def test_it_logs_the_link_with_the_network(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: Una cuenta con el correo de un Google verificado, sin vincular
+        When: Entra con ese Google desde una IP y un navegador
+        Then: El log de seguridad apunta el vínculo automático con esa IP y ese navegador
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_google_account_linked",
+            lambda self, **kw: apuntes.append(kw),
+        )
+        cuenta = await self._cuenta(uow)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(
+            GoogleLoginRequestDTO(
+                authorization_code="code", ip_address="203.0.113.7", user_agent="Navegador"
+            )
+        )
+
+        assert apuntes == [
+            {
+                "user_id": str(cuenta.id.value),
+                "automatic": True,
+                "ip_address": "203.0.113.7",
+                "user_agent": "Navegador",
+            }
+        ]
+
+    async def test_a_broken_log_does_not_undo_the_link_nor_the_login(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: El log de seguridad falla
+        When: Alguien entra con un Google que se vincula solo
+        Then: Entra y el vínculo queda guardado: el log nunca cambia la respuesta
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        def roto(self, **kw):
+            raise RuntimeError("disco lleno")
+
+        monkeypatch.setattr(modulo.SecurityLogger, "log_google_account_linked", roto)
+        await self._cuenta(uow)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.user.email == "oauth@example.com"
+        async with uow:
+            assert await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_user_info.google_user_id
+            )

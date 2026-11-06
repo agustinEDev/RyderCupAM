@@ -49,8 +49,9 @@ class OpenSessionUseCase:
         en la lista, no avisaba y no se podía revocar (auditoría OWASP, A07).
 
         Raises:
-            AccountDeactivatedException: si la cuenta está desactivada (BE #744): la
-                regla vive aquí, y vale para cualquier camino que abra una sesión
+            AccountDeactivatedException: si la cuenta está desactivada o ya no
+                existe (BE #744). Hoy lo usa verificar el correo; el login con
+                contraseña y el de Google comprueban lo mismo por su cuenta
         """
         user = await self._uow.users.find_by_id(UserId(request.user_id))
         if user is None or not user.is_active:

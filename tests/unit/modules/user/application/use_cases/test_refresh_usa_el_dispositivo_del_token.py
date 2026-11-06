@@ -148,3 +148,26 @@ async def test_t9_un_token_sin_revocar_de_un_dispositivo_revocado_se_rechaza_y_s
         await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
     assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_REVOKED
     assert (await uow.refresh_tokens.find_by_token_hash(JWT)).revoked
+
+
+async def test_t10_la_revocacion_por_dispositivo_revocado_queda_en_el_log(monkeypatch):
+    """
+    Given: Un token sin revocar de un dispositivo revocado
+    When: Refresca
+    Then: El log apunta la revocación con su motivo propio (device_revoked), que la
+          distingue de reusar un token ya revocado
+    """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    apuntes = []
+    monkeypatch.setattr(
+        modulo.SecurityLogger, "log_refresh_token_revoked", lambda self, **kw: apuntes.append(kw)
+    )
+    uow, _usuario, dispositivo, refresco = await _escena()
+    dispositivo.revoke()
+    await uow.user_devices.save(dispositivo)
+
+    with pytest.raises(RefreshRejectedError):
+        await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
+
+    assert [a["reason"] for a in apuntes] == ["device_revoked"]

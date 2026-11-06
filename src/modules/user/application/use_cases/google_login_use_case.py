@@ -8,6 +8,7 @@ Soporta tres flujos:
 3. Usuario nuevo → auto-register + login
 """
 
+import logging
 from datetime import datetime
 
 from src.config.csrf_config import generate_csrf_token
@@ -43,6 +44,8 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleEmailNotVerifiedError(ValueError):
@@ -80,13 +83,13 @@ class GoogleLoginUseCase:
         self._google_oauth_service = google_oauth_service
         self._register_device_use_case = register_device_use_case
 
-    async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool]:
+    async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool, bool]:
         """
         Resuelve el usuario para el login de Google.
         Todas las lecturas y escrituras se ejecutan dentro de una sola transacción UoW.
 
         Returns:
-            Tuple of (user, is_new_user)
+            Tuple of (user, is_new_user, linked): linked, si se vinculó por el correo
         """
         async with self._uow:
             # Buscar OAuth account existente
@@ -98,7 +101,7 @@ class GoogleLoginUseCase:
                 user = await self._uow.users.find_by_id(oauth_account.user_id)
                 if not user:
                     raise ValueError("User associated with OAuth account not found")
-                return user, False
+                return user, False, False
 
             # Sin cuenta vinculada: un alta o un vínculo por correo. Solo con el correo
             # verificado por Google: si no, la dirección no es necesariamente suya
@@ -113,10 +116,10 @@ class GoogleLoginUseCase:
                 # Desactivada: sin vincular Google ni verificar el correo. Un login
                 # rechazado no cambia la cuenta (/code-review); execute da el 403
                 if not user.is_active:
-                    return user, False
-                return await self._auto_link_existing_user(user, google_info), False
+                    return user, False, False
+                return await self._auto_link_existing_user(user, google_info), False, True
 
-            return await self._auto_register_new_user(google_info), True
+            return await self._auto_register_new_user(google_info), True, False
 
     async def _auto_link_existing_user(self, user: User, google_info: GoogleUserInfo) -> User:
         """
@@ -136,9 +139,6 @@ class GoogleLoginUseCase:
             user.verify_email_from_oauth()
 
         await self._uow.users.save(user)
-        # Que quede rastro: un Google vinculado solo, por el correo, da acceso a la
-        # cuenta (revisión del registro con Google)
-        get_security_logger().log_google_account_linked(user_id=str(user.id.value), automatic=True)
         return user
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
@@ -204,7 +204,19 @@ class GoogleLoginUseCase:
         )
 
         # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
-        user, is_new_user = await self._resolve_user(google_info)
+        user, is_new_user, vinculada = await self._resolve_user(google_info)
+        if vinculada:
+            # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
+            # el correo, da acceso a la cuenta. El log nunca cambia la respuesta
+            try:
+                security_logger.log_google_account_linked(
+                    user_id=str(user.id.value),
+                    automatic=True,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except Exception as error:
+                logger.error("Google link audit event failed: %s", type(error).__name__)
 
         # Una cuenta desactivada no entra (BE #744, auditoría OWASP): ni sesión, ni
         # dispositivo, ni correo de «nuevo inicio», como con la contraseña

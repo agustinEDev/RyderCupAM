@@ -49,6 +49,7 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.cookie_handler import (
     get_device_id_cookie_name,
     set_auth_cookie,
@@ -140,6 +141,25 @@ async def google_login(
     return login_response
 
 
+def _apunta_el_vinculo(request: Request, user_id: str) -> None:
+    """Un Google vinculado desde el perfil da acceso a la cuenta: al log, con la red.
+
+    Ya guardado; el log nunca cambia la respuesta (revisión del registro con Google).
+    """
+    try:
+        get_security_logger().log_google_account_linked(
+            user_id=user_id,
+            automatic=False,
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            )
+            or "unknown",
+            user_agent=get_user_agent(request) or "unknown",
+        )
+    except Exception as error:
+        logger.error("Google link audit event failed: %s", type(error).__name__)
+
+
 @router.post(
     "/google/link",
     response_model=LinkGoogleAccountResponseDTO,
@@ -149,14 +169,16 @@ async def google_login(
     tags=["Authentication"],
 )
 async def link_google_account(
-    request: Request,  # noqa: ARG001
+    request: Request,
     link_data: LinkGoogleAccountRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: LinkGoogleAccountUseCase = Depends(get_link_google_account_use_case),
 ):
     """Vincula cuenta Google a usuario autenticado."""
     try:
-        return await use_case.execute(link_data, str(current_user.id))
+        vinculo = await use_case.execute(link_data, str(current_user.id))
+        _apunta_el_vinculo(request, str(current_user.id))
+        return vinculo
     except ValueError as e:
         error_msg = str(e)
         safe_messages = {

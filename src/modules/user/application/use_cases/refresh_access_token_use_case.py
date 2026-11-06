@@ -221,6 +221,14 @@ class RefreshAccessTokenUseCase:
             async with self._uow:
                 refresh_token_entity.revoke()
                 await self._uow.refresh_tokens.save(refresh_token_entity)
+            # Con su motivo: en el log se distingue de reusar un token ya revocado
+            security_logger.log_refresh_token_revoked(
+                user_id=user_id_str,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                tokens_revoked_count=1,
+                reason="device_revoked",
+            )
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
         # La sesión de este dispositivo caduca tras 24 h sin usarse (BE #376, OWASP
         # A07). Se revoca: el token no vuelve a servir aunque llegue de otra forma

@@ -56,7 +56,8 @@ class AdminSetUserActiveUseCase:
         reactivada: int | None = None
 
         async with self._uow:
-            # Con la fila bloqueada: un login a la vez espera a la desactivación
+            # Con la fila bloqueada: dos cambios del administrador a la vez no se
+            # pisan. Lo que un login cuele a la vez se revoca al reactivar
             user = await self._uow.users.find_by_id_for_update(user_id)
             if not user:
                 raise UserNotFoundError(f"User not found: {user_id_str}")
