@@ -1,0 +1,212 @@
+"""
+El correo de «intentos fallidos» al dueño de la cuenta (BE #732).
+
+  #   caso                                                 | ¿correo?
+  ----|-----------------------------------------------------|--------------------------------
+  A1  una red queda bloqueada para su cuenta, desde España  | sí: motivo «red», el país en
+                                                            |   castellano y la hora de España
+  A2  salta el respaldo                                     | sí: motivo «respaldo»
+  A3  ya avisó hace menos de una hora                       | no: uno por hora y cuenta
+  A3b avisó hace más de una hora                            | sí
+  A4  su correo aún no está confirmado                      | no
+  A5  falla el envío                                        | no lanza, y no cuenta para el tope
+  A6  tras avisar                                           | la cuenta queda apuntada
+  A7  sin país                                              | el correo no lo menciona
+  A8  la cuenta ya no existe                                | no
+"""
+
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock
+
+import pytest
+
+from src.modules.user.application.dto.user_dto import AvisoDeFallosRequestDTO
+from src.modules.user.application.services.aviso_de_fallos_de_login import AvisoDeFallosDeLogin
+from src.modules.user.domain.entities.user import User
+from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
+from src.shared.domain.entities.country import Country
+from src.shared.domain.value_objects.country_code import CountryCode
+
+pytestmark = pytest.mark.asyncio
+
+# 6 nov 2026, 9:30 UTC = 10:30 en la península
+AHORA = datetime(2026, 11, 6, 9, 30)
+
+
+class _Paises:
+    async def find_by_code(self, code: CountryCode):
+        if code.value == "ES":
+            return Country(code=CountryCode("ES"), name_en="Spain", name_es="España")
+        return None
+
+
+async def _escena(avisado_hace=None, enviado=True):
+    uow = InMemoryUnitOfWork()
+    ana = User.create(
+        first_name="Ana",
+        last_name="Red",
+        email_str="ana@example.com",
+        plain_password="V@l1dP@ss123!",
+    )
+    ana.verify_email_from_oauth()
+    if avisado_hace is not None:
+        ana.apunta_el_aviso_de_fallos(AHORA - avisado_hace)
+    async with uow:
+        await uow.users.save(ana)
+    correo = AsyncMock()
+    correo.send_failed_logins_notification = AsyncMock(return_value=enviado)
+    return uow, ana, correo, AvisoDeFallosDeLogin(uow, correo, _Paises(), reloj=lambda: AHORA)
+
+
+def _pide(ana, motivo="red", pais="ES", verificado=True):
+    return AvisoDeFallosRequestDTO(
+        user_id=str(ana.id.value),
+        email="ana@example.com",
+        nombre="Ana",
+        verificado=verificado,
+        country_code=pais,
+        motivo=motivo,
+    )
+
+
+async def test_a1_una_red_bloqueada_avisa_con_el_pais_y_la_hora_de_espana():
+    """
+    Given: Ana, con el correo confirmado y sin avisos
+    When: Una red de España queda bloqueada para su cuenta
+    Then: Le llega el correo: motivo «red», «España» y las 10:30 (hora de España)
+    """
+    _uow, ana, correo, aviso = await _escena()
+
+    await aviso.avisa(_pide(ana))
+
+    kw = correo.send_failed_logins_notification.await_args.kwargs
+    assert kw["to_email"] == "ana@example.com" and kw["user_name"] == "Ana"
+    assert kw["motivo"] == "red" and kw["pais"] == "España"
+    assert kw["cuando"] == "6 nov 2026, 10:30 (hora de España)"
+
+
+async def test_a2_salta_el_respaldo_y_avisa_con_su_motivo():
+    """
+    Given: Ana sin avisos
+    When: Salta el respaldo de su cuenta
+    Then: El correo va con motivo «respaldo»
+    """
+    _uow, ana, correo, aviso = await _escena()
+
+    await aviso.avisa(_pide(ana, motivo="respaldo"))
+
+    assert correo.send_failed_logins_notification.await_args.kwargs["motivo"] == "respaldo"
+
+
+async def test_a3_uno_por_hora_y_cuenta():
+    """
+    Given: Ana, avisada hace 20 minutos
+    When: Se bloquea otra red
+    Then: No hay correo
+    """
+    _uow, ana, correo, aviso = await _escena(avisado_hace=timedelta(minutes=20))
+
+    await aviso.avisa(_pide(ana))
+
+    correo.send_failed_logins_notification.assert_not_awaited()
+
+
+async def test_a3b_pasada_la_hora_vuelve_a_avisar():
+    """
+    Given: Ana, avisada hace una hora y un minuto
+    When: Se bloquea otra red
+    Then: Le llega el correo
+    """
+    _uow, ana, correo, aviso = await _escena(avisado_hace=timedelta(hours=1, minutes=1))
+
+    await aviso.avisa(_pide(ana))
+
+    correo.send_failed_logins_notification.assert_awaited_once()
+
+
+async def test_a4_nunca_a_un_correo_sin_confirmar():
+    """
+    Given: Ana con el correo sin confirmar
+    When: Se bloquea una red
+    Then: No hay correo
+    """
+    _uow, ana, correo, aviso = await _escena()
+
+    await aviso.avisa(_pide(ana, verificado=False))
+
+    correo.send_failed_logins_notification.assert_not_awaited()
+
+
+async def test_a5_un_fallo_del_envio_no_lanza_ni_cuenta(caplog):
+    """
+    Given: El proveedor de correo falla (con la dirección en su mensaje)
+    When: Se avisa
+    Then: No lanza; no queda apuntado; el log lleva el tipo, no el mensaje
+    """
+    uow, ana, correo, aviso = await _escena()
+    correo.send_failed_logins_notification.side_effect = RuntimeError("ana@example.com rechazada")
+
+    await aviso.avisa(_pide(ana))
+
+    async with uow:
+        assert (await uow.users.find_by_id(ana.id)).failed_login_notice_at is None
+    assert "RuntimeError" in caplog.text and "ana@example.com" not in caplog.text
+
+
+async def test_a5b_un_envio_que_no_sale_no_cuenta():
+    """
+    Given: El proveedor devuelve que no se envió
+    When: Se avisa
+    Then: No queda apuntado: el siguiente bloqueo podrá avisar
+    """
+    uow, ana, _correo, aviso = await _escena(enviado=False)
+
+    await aviso.avisa(_pide(ana))
+
+    async with uow:
+        assert (await uow.users.find_by_id(ana.id)).failed_login_notice_at is None
+
+
+async def test_a6_tras_avisar_la_cuenta_queda_apuntada():
+    """
+    Given: Ana sin avisos
+    When: Se le avisa
+    Then: Queda apuntada la hora del aviso
+    """
+    uow, ana, _correo, aviso = await _escena()
+
+    await aviso.avisa(_pide(ana))
+
+    async with uow:
+        assert (await uow.users.find_by_id(ana.id)).failed_login_notice_at == AHORA
+
+
+async def test_a7_sin_pais_el_correo_no_lo_menciona():
+    """
+    Given: Una red sin país (sin Cloudflare)
+    When: Se avisa
+    Then: El correo va sin país
+    """
+    _uow, ana, correo, aviso = await _escena()
+
+    await aviso.avisa(_pide(ana, pais=None))
+
+    assert correo.send_failed_logins_notification.await_args.kwargs["pais"] is None
+
+
+async def test_a8_una_cuenta_que_ya_no_existe_no_recibe_nada():
+    """
+    Given: Un aviso de una cuenta que se borró entre medias
+    When: Se avisa
+    Then: No hay correo ni error
+    """
+    _uow, _ana, correo, aviso = await _escena()
+    otro = User.create(
+        first_name="X", last_name="Y", email_str="x@example.com", plain_password="V@l1dP@ss123!"
+    )
+
+    await aviso.avisa(_pide(otro))
+
+    correo.send_failed_logins_notification.assert_not_awaited()

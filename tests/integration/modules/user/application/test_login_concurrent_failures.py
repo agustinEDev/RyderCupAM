@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config.freno_del_login import FrenoDelLoginEnMemoria
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import MAX_FAILED_ATTEMPTS, User
@@ -48,8 +49,15 @@ async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session):
     async def un_intento():
         """Ayudante del test: un intento."""
         async with sesiones() as sesion:
+            # Un freno propio por intento: aquí se prueba el respaldo de la BD, no
+            # el freno por red, que cortaría la ráfaga en el quinto (BE #732)
             login = LoginUserUseCase(
-                SQLAlchemyUnitOfWork(sesion), JWTTokenService(), AsyncMock(), AsyncMock()
+                SQLAlchemyUnitOfWork(sesion),
+                JWTTokenService(),
+                AsyncMock(),
+                AsyncMock(),
+                FrenoDelLoginEnMemoria(),
+                AsyncMock(),
             )
             return await login.execute(LoginRequestDTO(email=EMAIL, password="Mala-Pass-1!"))
 

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.config.freno_del_login import FrenoDelLoginEnMemoria
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import User
@@ -61,7 +62,14 @@ class TestLoginUserUseCaseEventIntegration:
         # Toda sesión registra su dispositivo (BE #737): una respuesta válida
         mock_register_device = registro_de_dispositivo_falso()
 
-        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device, AsyncMock())
+        use_case = LoginUserUseCase(
+            mock_uow,
+            token_service,
+            mock_register_device,
+            AsyncMock(),
+            FrenoDelLoginEnMemoria(),
+            AsyncMock(),
+        )
 
         request = LoginRequestDTO(email="test@example.com", password="P@ssw0rd123!")
 
@@ -88,10 +96,10 @@ class TestLoginUserUseCaseEventIntegration:
         assert login_event.logged_in_at is not None
         assert login_event.login_method == "email"
 
-        # Verificar que se llamó save para persistir el evento. Dos veces: el
-        # contador a cero va antes, en la transacción con la fila bloqueada (BE #282)
+        # Verificar que se llamó save para persistir el evento. Una vez: acertar ya no
+        # pone el respaldo a cero (BE #732), así que no hay otro guardado antes
         mock_uow.users.save.assert_called_with(user)
-        assert mock_uow.users.save.call_count == 2
+        assert mock_uow.users.save.call_count == 1
 
     async def test_login_failed_does_not_register_event(self):
         """
@@ -109,7 +117,14 @@ class TestLoginUserUseCaseEventIntegration:
         # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
         mock_register_device = AsyncMock()
 
-        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device, AsyncMock())
+        use_case = LoginUserUseCase(
+            mock_uow,
+            token_service,
+            mock_register_device,
+            AsyncMock(),
+            FrenoDelLoginEnMemoria(),
+            AsyncMock(),
+        )
 
         request = LoginRequestDTO(email="noexiste@example.com", password="P@ssw0rd123!")
 
@@ -153,7 +168,14 @@ class TestLoginUserUseCaseEventIntegration:
         # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
         mock_register_device = AsyncMock()
 
-        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device, AsyncMock())
+        use_case = LoginUserUseCase(
+            mock_uow,
+            token_service,
+            mock_register_device,
+            AsyncMock(),
+            FrenoDelLoginEnMemoria(),
+            AsyncMock(),
+        )
 
         request = LoginRequestDTO(
             email="test@example.com",

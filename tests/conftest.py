@@ -653,6 +653,8 @@ def mock_external_services():
     from unittest.mock import AsyncMock
 
     mock_email.send_new_login_notification = AsyncMock(return_value=True)
+    # Y el de intentos fallidos (BE #732)
+    mock_email.send_failed_logins_notification = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):
@@ -668,11 +670,15 @@ def reset_rate_limits():
     los de email (login, forgot-password) y los de usuario no (RyderCupAM#273): dos
     tests con el mismo email se pisarían dentro del mismo minuto.
     """
+    from src.config.freno_del_login import freno_del_login
     from src.config.rate_limit import limiter
 
+    # Y el freno del login por correo + red (BE #732), que vive aparte
     limiter.reset()
+    freno_del_login.reinicia()
     yield
     limiter.reset()
+    freno_del_login.reinicia()
 
 
 # ======================================================================================

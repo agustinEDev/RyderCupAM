@@ -4,7 +4,10 @@ Login User Use Case
 Caso de uso para autenticar un usuario y generar un token JWT.
 Session Timeout (v1.8.0): Genera access token (15 min) + refresh token (7 días).
 Security Logging (v1.8.0): Registra todos los intentos de login (exitosos y fallidos).
-Account Lockout (v1.13.0): Bloquea cuenta tras 10 intentos fallidos por 30 minutos.
+Freno por correo y origen (BE #732, ADR-043): 5 intentos por minuto y 10 fallos
+bloquean 30 min ese origen (la red, o el dispositivo fiable) para ese correo. El
+respaldo de la cuenta (50 en una hora, todas las redes) solo frena a los
+dispositivos desconocidos: los fallos de otro no dejan fuera al dueño.
 CSRF Protection (v1.13.0): Genera token CSRF de 256 bits para validación double-submit.
 """
 
@@ -19,11 +22,18 @@ from src.modules.user.application.dto.device_dto import (
     agente_para_el_registro,
 )
 from src.modules.user.application.dto.user_dto import (
+    AvisoDeFallosRequestDTO,
     LoginRequestDTO,
     LoginResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.freno_del_login_port import (
+    IFrenoDelLogin,
+    origen_de_dispositivo,
+    origen_de_red,
+)
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
@@ -31,9 +41,16 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
-from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
+from src.modules.user.domain.exceptions import (
+    AccountDeactivatedException,
+    AccountLockedException,
+    LoginAttemptsExceededException,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
+)
+from src.modules.user.domain.services.cookie_de_dispositivo import (
+    ids_de_la_cookie_de_dispositivo,
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
@@ -66,6 +83,8 @@ class LoginUserUseCase:
         token_service: ITokenService,
         register_device_use_case: RegisterDeviceUseCase,
         aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
+        freno: IFrenoDelLogin,
+        aviso_de_fallos: IAvisoDeFallos,
     ):
         """
         Inicializa el caso de uso.
@@ -80,6 +99,9 @@ class LoginUserUseCase:
         self._register_device_use_case = register_device_use_case
         # El correo de «nuevo inicio de sesión» (BE #737)
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
+        # El freno por correo y origen, y el correo de intentos fallidos (BE #732)
+        self._freno = freno
+        self._aviso_de_fallos = aviso_de_fallos
 
     @staticmethod
     def _apunta_que_no_existe(request: LoginRequestDTO, ip_address: str, user_agent: str) -> None:
@@ -94,53 +116,165 @@ class LoginUserUseCase:
         )
 
     @staticmethod
-    def _rechaza_por_bloqueo(
-        user: User, request: LoginRequestDTO, ip_address: str, user_agent: str
+    def _rechaza(
+        hasta: datetime,
+        motivo: str,
+        user: User | None,
+        request: LoginRequestDTO,
+        ip_address: str,
+        user_agent: str,
     ) -> NoReturn:
-        """Security Logging del intento sobre una cuenta bloqueada, y la excepción."""
-        locked_until = user.locked_until
+        """Security Logging del intento bloqueado, y la excepción (el 423)."""
         get_security_logger().log_login_attempt(
-            user_id=str(user.id.value),
+            user_id=str(user.id.value) if user else None,
             email=request.email,
             success=False,
-            failure_reason=f"Account locked until {locked_until.isoformat()}",
+            failure_reason=f"{motivo} until {hasta.isoformat()}",
             ip_address=ip_address,
             user_agent=user_agent,
         )
         raise AccountLockedException(
-            locked_until=locked_until,
-            message=f"Account is locked due to too many failed login attempts. Try again after {locked_until.isoformat()}",
+            locked_until=hasta,
+            message=f"Account is locked due to too many failed login attempts. Try again after {hasta.isoformat()}",
+        )
+
+    async def _dispositivo_fiable(self, user: User, cookie: str | None) -> str | None:
+        """Un dispositivo ACTIVO de esta cuenta que vino en la cookie, o None.
+
+        La cookie la controla el cliente: un id inventado, de otra cuenta o de uno
+        revocado no da pase (BE #732).
+        """
+        for device_id in ids_de_la_cookie_de_dispositivo(cookie):
+            async with self._uow:
+                dispositivo = await self._uow.user_devices.find_by_id_and_user(
+                    device_id=UserDeviceId.from_string(device_id), user_id=user.id
+                )
+            # El repositorio ya da solo los activos y de este usuario
+            if dispositivo is not None:
+                return device_id
+        return None
+
+    async def _origen_del_intento(
+        self, user: User | None, request: LoginRequestDTO
+    ) -> tuple[str, bool]:
+        """
+        Desde dónde se cuenta este intento, y si es un dispositivo fiable.
+
+        Con un dispositivo activo de la cuenta en la cookie, ese dispositivo: los
+        fallos de otras redes no lo bloquean. Si él mismo agotó sus fallos, pierde
+        el pase y cuenta como su red. Sin él, la red.
+        """
+        red = origen_de_red(request.red or request.ip_address or "unknown")
+        if user is None:
+            return red, False
+        dispositivo = await self._dispositivo_fiable(user, request.device_id_from_cookie)
+        if dispositivo is None:
+            return red, False
+        origen = origen_de_dispositivo(dispositivo)
+        if self._freno.bloqueado_hasta(request.email, origen) is not None:
+            return red, False
+        return origen, True
+
+    def _comprueba_la_puerta(
+        self,
+        user: User | None,
+        request: LoginRequestDTO,
+        origen: str,
+        fiable: bool,
+        contexto: tuple[str, str],
+    ) -> None:
+        """
+        Antes del bcrypt: el cupo del minuto (429), el bloqueo de este origen y el
+        respaldo de la cuenta (423). Bloqueado, la contraseña no se llega a
+        comprobar: no se puede seguir probando. Igual exista el correo o no.
+        """
+        ip_address, user_agent = contexto
+        if not self._freno.admite_intento(request.email, origen):
+            raise LoginAttemptsExceededException()
+        hasta = self._freno.bloqueado_hasta(request.email, origen)
+        if hasta is not None:
+            self._rechaza(hasta, "Locked for this network", user, request, ip_address, user_agent)
+        # El respaldo solo frena a los desconocidos: el fiable entra igual
+        if user is not None and not fiable and user.is_locked() and user.locked_until:
+            self._rechaza(
+                user.locked_until, "Account locked", user, request, ip_address, user_agent
+            )
+
+    def _apunta_el_fallo_sin_cuenta(
+        self, request: LoginRequestDTO, origen: str, contexto: tuple[str, str]
+    ) -> None:
+        """Un correo que no existe cuenta en su red igual: el mismo 423 (BE #281)."""
+        ip_address, user_agent = contexto
+        self._apunta_que_no_existe(request, ip_address, user_agent)
+        hasta = self._freno.apunta_fallo(request.email, origen)
+        if hasta is not None:
+            self._rechaza(hasta, "Locked for this network", None, request, ip_address, user_agent)
+
+    async def _avisa_de_los_fallos(self, user: User, request: LoginRequestDTO, motivo) -> None:
+        """El correo al dueño (BE #732). En segundo plano: no lanza ni espera."""
+        if user.email is None:
+            return
+        await self._aviso_de_fallos.avisa(
+            AvisoDeFallosRequestDTO(
+                user_id=str(user.id.value),
+                email=user.email.value,
+                nombre=user.first_name,
+                verificado=user.is_email_verified(),
+                country_code=request.country_code,
+                motivo=motivo,
+            )
         )
 
     async def _apunta_el_fallo(
-        self, user: User, request: LoginRequestDTO, ip_address: str, user_agent: str
+        self,
+        user: User,
+        request: LoginRequestDTO,
+        origen: str,
+        fiable: bool,
+        contexto: tuple[str, str],
     ) -> None:
         """
-        Account Lockout (v1.13.0): registra el intento fallido sobre el usuario
-        RELEÍDO con la fila bloqueada (BE #282). Sin el bloqueo, dos intentos a
-        la vez leían N y escribían N+1, y el bloqueo de los 10 no saltaba nunca.
-        El bcrypt ya pasó: la transacción es corta.
+        Un fallo cuenta en su origen (memoria) y en el respaldo de la cuenta (BD).
+
+        El respaldo se suma sobre el usuario RELEÍDO con la fila bloqueada (BE #282):
+        sin el bloqueo, dos intentos a la vez leían N y escribían N+1. El bcrypt ya
+        pasó: la transacción es corta. Si este fallo bloquea su red o hace saltar
+        el respaldo, se avisa al dueño y se responde 423.
 
         Raises:
-            AccountLockedException: si este intento bloquea la cuenta
+            AccountLockedException: si este intento bloquea su origen o, para un
+                dispositivo desconocido, el respaldo
         """
+        ip_address, user_agent = contexto
+        respaldo_salta = False
         async with self._uow:
             bloqueado = await self._uow.users.find_by_id_for_update(user.id)
-            # Sobre una que otro acaba de bloquear no se cuenta: alargaría el
+            # Sobre un respaldo que otro acaba de bloquear no se cuenta: alargaría el
             # bloqueo y repetiría su evento por cada intento en vuelo (code-review)
             if bloqueado is not None and not bloqueado.is_locked():
                 bloqueado.record_failed_login()
+                respaldo_salta = bloqueado.is_locked()
                 await self._uow.users.save(bloqueado)
-            # Commit automático al salir del contexto
 
         if bloqueado is None:
             # Se borró entre la lectura y el bloqueo: como un email que no existe
-            self._apunta_que_no_existe(request, ip_address, user_agent)
+            self._apunta_el_fallo_sin_cuenta(request, origen, contexto)
             return
 
-        # Si la cuenta quedó bloqueada en este intento, lanzar excepción
-        if bloqueado.is_locked():
-            self._rechaza_por_bloqueo(bloqueado, request, ip_address, user_agent)
+        hasta = self._freno.apunta_fallo(request.email, origen)
+        if hasta is not None and not fiable:
+            await self._avisa_de_los_fallos(bloqueado, request, "red")
+        if respaldo_salta:
+            await self._avisa_de_los_fallos(bloqueado, request, "respaldo")
+
+        if hasta is not None:
+            self._rechaza(
+                hasta, "Locked for this network", bloqueado, request, ip_address, user_agent
+            )
+        if not fiable and bloqueado.is_locked() and bloqueado.locked_until:
+            self._rechaza(
+                bloqueado.locked_until, "Account locked", bloqueado, request, ip_address, user_agent
+            )
 
         # Security Logging: Login fallido (contraseña incorrecta)
         get_security_logger().log_login_attempt(
@@ -153,33 +287,34 @@ class LoginUserUseCase:
         )
 
     async def _releido_para_entrar(
-        self, user: User, request: LoginRequestDTO, ip_address: str, user_agent: str
+        self, user: User, request: LoginRequestDTO, fiable: bool, contexto: tuple[str, str]
     ) -> User | None:
         """
         Con la contraseña buena, el usuario releído con la fila bloqueada antes de
         darla por buena (BE #282, revisor). En una ráfaga, todas las peticiones
         pasaban el `is_locked()` sobre la lectura sin bloqueo: la buena entraba
-        aunque otro intento acabara de bloquear la cuenta, y además deshacía el
-        bloqueo al poner el contador a cero.
+        aunque otro intento acabara de hacer saltar el respaldo.
+
+        Acertar ya no pone a cero el respaldo (BE #732): suma todas las redes, y el
+        dueño entrando no puede borrar los fallos de un ataque repartido. Se acaba
+        con su hora.
 
         Returns:
             El usuario releído, o None si se borró entre medias
 
         Raises:
-            AccountLockedException: si otro intento la acaba de bloquear
+            AccountLockedException: si el respaldo acaba de saltar y no es fiable
         """
+        ip_address, user_agent = contexto
         async with self._uow:
             releido = await self._uow.users.find_by_id_for_update(user.id)
-            # El cero, DENTRO de la transacción bloqueada: guardado más tarde,
-            # pisaba los fallos que llegaran entre medias (code-review)
-            if releido is not None and not releido.is_locked():
-                releido.reset_failed_attempts()
-                await self._uow.users.save(releido)
         if releido is None:
             self._apunta_que_no_existe(request, ip_address, user_agent)
             return None
-        if releido.is_locked():
-            self._rechaza_por_bloqueo(releido, request, ip_address, user_agent)
+        if not fiable and releido.is_locked() and releido.locked_until:
+            self._rechaza(
+                releido.locked_until, "Account locked", releido, request, ip_address, user_agent
+            )
         return releido
 
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
@@ -221,32 +356,31 @@ class LoginUserUseCase:
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
 
+        contexto = (ip_address, user_agent)
+
+        # El freno por correo y origen, antes del bcrypt (BE #732)
+        origen, fiable = await self._origen_del_intento(user, request)
+        self._comprueba_la_puerta(user, request, origen, fiable, contexto)
+
         if not user:
             # El mismo bcrypt que una contraseña mala: sin él, responder antes
             # delataba qué emails están registrados (BE #281, OWASP A07)
             await run_bcrypt(Password.verifica_contra_el_relleno, request.password)
-            # Security Logging: Login fallido (usuario no existe)
-            self._apunta_que_no_existe(request, ip_address, user_agent)
+            self._apunta_el_fallo_sin_cuenta(request, origen, contexto)
             return None
-
-        # Account Lockout (v1.13.0): Verificar si la cuenta está bloqueada
-        if user.is_locked():
-            # Security Logging y excepción con información del bloqueo
-            self._rechaza_por_bloqueo(user, request, ip_address, user_agent)
 
         # Verificar contraseña
         if not await run_bcrypt(user.verify_password, request.password):
-            await self._apunta_el_fallo(user, request, ip_address, user_agent)
+            await self._apunta_el_fallo(user, request, origen, fiable, contexto)
             return None
 
         # La buena, pero RELEÍDA con la fila bloqueada (BE #282, revisor)
-        releido = await self._releido_para_entrar(user, request, ip_address, user_agent)
+        releido = await self._releido_para_entrar(user, request, fiable, contexto)
         if releido is None:
             return None
         user = releido
-
-        # Account Lockout (v1.13.0): los intentos fallidos ya se pusieron a cero
-        # en `_releido_para_entrar`, con la fila bloqueada
+        # Acertó: los fallos de ESTE origen vuelven a cero; los de los demás, no
+        self._freno.olvida(request.email, origen)
 
         # Admin Panel (v2.4.0): Verificar si la cuenta fue desactivada por un admin.
         # Se comprueba DESPUES de validar la contraseña para no filtrar el estado

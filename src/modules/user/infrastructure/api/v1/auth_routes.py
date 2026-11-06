@@ -25,7 +25,6 @@ from src.config.rate_limit import (
     EMAIL_SENDING_LIMIT,
     EMAIL_SENDING_PER_EMAIL_LIMIT,
     LOGIN_ATTEMPTS_LIMIT,
-    LOGIN_ATTEMPTS_PER_EMAIL_LIMIT,
     REFRESH_TOKEN_LIMIT,
     REGISTER_LIMIT,
     RESET_PASSWORD_LIMIT,
@@ -39,6 +38,7 @@ from src.config.rate_limit import (
     refresh_token_rate_limit_key,
     refuse_if_failed_logins_exhausted,
     skip_refresh_limit_without_valid_cookie,
+    too_many_login_attempts,
 )
 from src.config.settings import settings
 from src.modules.user.application.dto.device_dto import OpenSessionRequestDTO
@@ -98,7 +98,11 @@ from src.modules.user.domain.errors.user_errors import (
     TermsAcceptanceRequiredError,
     UserAlreadyExistsError,
 )
-from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
+from src.modules.user.domain.exceptions import (
+    AccountDeactivatedException,
+    AccountLockedException,
+    LoginAttemptsExceededException,
+)
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
@@ -264,17 +268,19 @@ async def login_user(
     )
     login_data.installed_app = es_la_app_instalada(request)
     login_data.country_code = cloudflare_client_country(request)
+    # La red del intento: el freno del correo cuenta por correo + red (BE #732)
+    login_data.red = get_client_identifier(request)
 
-    # Rate limit (#273): antes de buscar al usuario, para que el 429 llegue igual
-    # exista el email o no. La red solo cuenta los fallos: los aciertos de un club
-    # entrando a la vez no cierran el login
+    # El techo de fallos de la red, sea cual sea el correo (#273). Los aciertos de
+    # un club entrando a la vez no cierran el login
     refuse_if_failed_logins_exhausted(request)
-    count_or_refuse(
-        LOGIN_ATTEMPTS_PER_EMAIL_LIMIT, "login-email", email_rate_limit_key(login_data.email)
-    )
 
     try:
         login_response = await use_case.execute(login_data)
+    except LoginAttemptsExceededException as e:
+        # 5 por minuto por correo + red (o dispositivo fiable): el mismo 429 que
+        # cualquier límite, exista el correo o no (BE #732)
+        raise too_many_login_attempts() from e
     except AccountLockedException as e:
         record_failed_login(request)
         # Account Lockout (v1.13.0): Cuenta bloqueada por intentos fallidos

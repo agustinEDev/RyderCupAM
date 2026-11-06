@@ -411,6 +411,27 @@ class LoginRequestDTO(BaseModel):
         max_length=2,
         description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
+    red: str | None = Field(
+        default=None,
+        max_length=100,
+        description="La red del intento, la misma clave que los límites por red (BE #732)",
+    )
+
+
+class AvisoDeFallosRequestDTO(BaseModel):
+    """El correo de «intentos fallidos» al dueño de la cuenta (BE #732)."""
+
+    user_id: str = Field(..., min_length=1, max_length=36)
+    email: str = Field(..., max_length=FieldLimits.EMAIL_MAX_LENGTH)
+    nombre: str = Field(..., max_length=100)
+    verificado: bool
+    country_code: str | None = Field(default=None, max_length=2)
+    # «red»: una red quedó bloqueada para la cuenta; «respaldo»: saltó el de todas
+    motivo: Literal["red", "respaldo"]
+
+    def toca_avisar(self) -> bool:
+        """Nunca a un correo sin confirmar: quizá no es suyo."""
+        return self.verificado
 
 
 class LoginResponseDTO(BaseModel):

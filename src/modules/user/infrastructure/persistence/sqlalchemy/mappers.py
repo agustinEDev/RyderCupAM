@@ -171,6 +171,9 @@ users_table = Table(
     # Account Lockout fields (v1.13.0)
     Column("failed_login_attempts", Integer, nullable=False, default=0),
     Column("locked_until", DateTime, nullable=True),
+    # El respaldo de todas las redes y su aviso (BE #732)
+    Column("failed_login_window_started_at", DateTime, nullable=True),
+    Column("failed_login_notice_at", DateTime, nullable=True),
     # RBAC field (v2.0.0)
     Column("is_admin", Boolean, nullable=False, default=False),
     # Admin panel: deactivation (v2.4.0)
@@ -258,6 +261,8 @@ def start_mappers():
                 "_reset_token_expires_at": users_table.c.reset_token_expires_at,
                 "_failed_login_attempts": users_table.c.failed_login_attempts,
                 "_locked_until": users_table.c.locked_until,
+                "_failed_login_window_started_at": users_table.c.failed_login_window_started_at,
+                "_failed_login_notice_at": users_table.c.failed_login_notice_at,
                 "_is_admin": users_table.c.is_admin,
                 "_is_active": users_table.c.is_active,
                 "_gender": users_table.c.gender,

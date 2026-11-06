@@ -9,6 +9,7 @@ from src.modules.user.application.dto.user_dto import (
     UnlockAccountRequestDTO,
     UnlockAccountResponseDTO,
 )
+from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -35,7 +36,7 @@ class UnlockAccountUseCase:
     - La validación de rol se hace en API Layer (auth_routes.py)
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, freno: IFrenoDelLogin):
         """
         Inicializa el caso de uso.
 
@@ -43,6 +44,8 @@ class UnlockAccountUseCase:
             uow: Unit of Work para acceso a repositorios
         """
         self._uow = uow
+        # Los bloqueos por correo + red (BE #732): también se limpian
+        self._freno = freno
 
     async def execute(self, request: UnlockAccountRequestDTO) -> UnlockAccountResponseDTO:
         """
@@ -73,14 +76,19 @@ class UnlockAccountUseCase:
         if not user:
             raise ValueError(f"User with ID {request.user_id} not found")
 
-        # Desbloquear cuenta (lanza ValueError si no está bloqueada)
-        user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
-
-        # Persistir cambios usando Unit of Work
-        async with self._uow:
-            await self._uow.users.save(user)
-            # Commit automático al salir del contexto
-            # AccountUnlockedEvent se emitirá automáticamente
+        # Los bloqueos de cada red para esta cuenta (BE #732), y luego el respaldo
+        habia_en_redes = self._freno.olvida_la_cuenta(user.email.value) if user.email else False
+        try:
+            user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
+        except ValueError:
+            # El respaldo estaba limpio: error solo si tampoco había ninguna red
+            if not habia_en_redes:
+                raise
+        else:
+            async with self._uow:
+                await self._uow.users.save(user)
+                # Commit automático al salir del contexto
+                # AccountUnlockedEvent se emitirá automáticamente
 
         return UnlockAccountResponseDTO(
             success=True,

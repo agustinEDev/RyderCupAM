@@ -76,6 +76,8 @@ DEFAULT_LIMIT_OVERRIDES = {
 }
 
 # Topes que no van por red
+# Por correo + origen (la red, o el dispositivo fiable), no por correo solo: cinco
+# intentos ajenos dejaban al dueño en 429 (BE #732). Lo cuenta el freno del login
 LOGIN_ATTEMPTS_PER_EMAIL_LIMIT = "5/minute"
 FAILED_LOGINS_LIMIT = "30/minute"  # por red, solo intentos fallidos
 EMAIL_SENDING_PER_EMAIL_LIMIT = "3/hour"
@@ -237,6 +239,11 @@ def count_or_refuse(limit_value: str, scope: str, identifier: str) -> None:
         return
     if not limiter.limiter.hit(parse(limit_value), scope, identifier):
         raise _exceeded(limit_value)
+
+
+def too_many_login_attempts() -> RateLimitExceeded:
+    """El 429 del freno del login (BE #732): el mismo que cualquier otro límite."""
+    return _exceeded(LOGIN_ATTEMPTS_PER_EMAIL_LIMIT)
 
 
 def refuse_if_failed_logins_exhausted(request: Request) -> None:

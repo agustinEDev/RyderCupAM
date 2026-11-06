@@ -400,6 +400,84 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
 
         return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
+    async def send_failed_logins_notification(
+        self, to_email: str, user_name: str, motivo: str, cuando: str, pais: str | None
+    ) -> bool:
+        """
+        Aviso de intentos fallidos de entrar en la cuenta (BE #732).
+
+        Bilingüe (ES/EN), con la plantilla común. Dice que el dueño puede seguir
+        entrando desde sus dispositivos, y el botón lleva a cambiar la contraseña.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        donde = f"desde {pais}" if pais else "desde otra red"
+        if motivo == "respaldo":
+            que_pasa = (
+                "alguien está fallando tu contraseña desde muchas redes a la vez. Hemos "
+                "bloqueado 30 minutos la entrada desde dispositivos nuevos."
+            )
+            en = "from many networks. Sign-ins from new devices are paused for 30 minutes."
+        else:
+            que_pasa = (
+                f"alguien ha fallado tu contraseña 10 veces {donde}. Hemos bloqueado esos "
+                "intentos 30 minutos."
+            )
+            en = f"10 times {'from ' + pais if pais else 'from another network'}. Those attempts are blocked for 30 minutes."
+        subject = (
+            "Intentos fallidos de entrar en tu cuenta - Ryder Cup Friends | "
+            "Failed sign-in attempts to your account"
+        )
+        cambiar = f"{settings.FRONTEND_URL}/profile/edit"
+
+        text_body = f"""
+Hola {safe_user_name},
+
+{que_pasa[0].upper() + que_pasa[1:]}
+{cuando}
+
+Tú puedes seguir entrando con normalidad desde tus dispositivos de siempre.
+
+Si sospechas que alguien conoce tu contraseña, cámbiala:
+{cambiar}
+
+---
+
+Hello {safe_user_name},
+
+Someone failed your Ryder Cup Friends password {en}
+You can still sign in from your usual devices. If you think someone knows your
+password, change it: {cambiar}
+        """
+
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Intentos fallidos de entrar en tu cuenta · Failed sign-in attempts",
+            etiqueta="Seguridad",
+            titulo="Intentos fallidos",
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), ", ", que_pasa),
+                parrafo(cuando),
+                parrafo(
+                    "Tú puedes seguir entrando con normalidad desde tus dispositivos de siempre."
+                ),
+                aviso(
+                    negrita("¿Crees que alguien conoce tu contraseña? "),
+                    "Cámbiala ahora.",
+                ),
+            ],
+            boton=Boton("Cambiar mi contraseña", cambiar),
+            ingles=Ingles(
+                frase(
+                    negrita("Failed sign-in attempts"),
+                    f": someone failed your password {en} You can still sign in from your usual devices.",
+                ),
+                Boton("Change my password", cambiar),
+            ),
+            pie="Te avisamos como mucho una vez por hora. We let you know at most once an hour.",
+        )
+
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
         return (
