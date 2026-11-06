@@ -1054,7 +1054,6 @@ async def unlock_account(
     Security (OWASP A01, A09):
     - Solo Admin puede ejecutar este endpoint (403 al resto, hotfix 2.50.1)
     - Requiere autenticación JWT válida
-    - Registra quién desbloqueó en evento de auditoría
 
     Args:
         request: Request de FastAPI

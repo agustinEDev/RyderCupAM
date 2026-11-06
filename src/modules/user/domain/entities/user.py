@@ -1211,7 +1211,7 @@ class User:
 
         Security:
             - Solo accesible por Admin (lo comprueba la ruta con require_admin)
-            - Evento de auditoría registra quién desbloqueó
+            - Quién desbloqueó queda en el log de seguridad (lo escribe el caso de uso)
             - Previene abuso de auto-desbloqueo
 
         Ejemplo:

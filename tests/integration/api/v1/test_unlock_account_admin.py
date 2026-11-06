@@ -13,6 +13,7 @@ el bloqueo por fallos de otra cuenta y seguir probando contraseñas contra ella
   U3  un administrador desbloquea                   | 200, y la dueña ya puede entrar
   U4  el intento sin permiso y el desbloqueo        | los dos quedan en el log de seguridad
   U5  el log falla con un no administrador          | 403 igual, no 500
+  U6  el cuerpo dice que desbloquea otro admin      | se apunta al que llama, no al del cuerpo
 """
 
 import uuid
@@ -62,12 +63,12 @@ async def _bloqueada(client: AsyncClient) -> dict:
     return victima
 
 
-async def _desbloquea(client: AsyncClient, quien: dict, user_id: str):
+async def _desbloquea(client: AsyncClient, quien: dict, user_id: str, firma: str | None = None):
     set_auth_cookies(client, quien["cookies"])
     r = await client.post(
         "/api/v1/auth/unlock-account",
         # El contrato lo pide, pero la ruta pone siempre a quien llama
-        json={"user_id": user_id, "unlocked_by_user_id": quien["user"]["id"]},
+        json={"user_id": user_id, "unlocked_by_user_id": firma or quien["user"]["id"]},
         headers={"X-CSRF-Token": quien["cookies"].get("csrf_token", "")},
     )
     client.cookies.clear()
@@ -196,3 +197,27 @@ async def test_u5_si_falla_el_log_el_no_administrador_sigue_recibiendo_403(
     r = await _desbloquea(client, yo, yo["user"]["id"])
 
     assert r.status_code == 403, r.text
+
+
+async def test_u6_quien_desbloquea_sale_de_la_sesion_no_del_cuerpo(
+    client: AsyncClient, monkeypatch
+):
+    """
+    Given: Una cuenta bloqueada y un administrador
+    When: Desbloquea mandando en el cuerpo el id de otra persona como autor
+    Then: La respuesta y el log apuntan al administrador que llama
+    """
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    desbloqueos = []
+    monkeypatch.setattr(
+        SecurityLogger, "log_account_unlocked", lambda self, **kw: desbloqueos.append(kw)
+    )
+    victima = await _bloqueada(client)
+    admin = await create_admin_user(client, _email("admin"), CLAVE, "Ad", "Min")
+
+    r = await _desbloquea(client, admin, victima["user"]["id"], firma=str(uuid.uuid4()))
+
+    assert r.status_code == 200, r.text
+    assert r.json()["unlocked_by"] == admin["user"]["id"]
+    assert desbloqueos[0]["user_id"] == admin["user"]["id"]
