@@ -15,6 +15,10 @@ cambios en el frontend.
 - **`/auth/unlock-account` exige ser administrador** (403 al resto). Solo pedía
   sesión: cualquier usuario podía quitar el bloqueo por fallos de otra cuenta y seguir
   probando su contraseña (OWASP A01/A07). Lo encontró la auditoría OWASP de #732.
+  - El permiso se mira antes de buscar la cuenta: un 403 no dice si el id existe.
+- **Cada desbloqueo queda en el log de seguridad** (OWASP A09): quién, a qué cuenta,
+  desde qué IP y navegador, y cuántos fallos llevaba. También el intento sin permiso.
+  El evento del dominio no lo leía nadie: solo quedaba en la respuesta HTTP.
 
 ## [2.50.0] - 2026-11-06
 

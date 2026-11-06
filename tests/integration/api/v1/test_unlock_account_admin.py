@@ -9,7 +9,9 @@ el bloqueo por fallos de otra cuenta y seguir probando contraseñas contra ella
   ----|--------------------------------------------|----------------------------------
   U1  un usuario normal desbloquea otra cuenta      | 403, y la cuenta sigue bloqueada
   U2  un usuario normal intenta su propia cuenta    | 403
+  U2b un usuario normal con un id que no existe     | 403 también: no dice si existe
   U3  un administrador desbloquea                   | 200, y la dueña ya puede entrar
+  U4  el intento sin permiso y el desbloqueo        | los dos quedan en el log de seguridad
 """
 
 import uuid
@@ -23,6 +25,7 @@ from tests.conftest import create_admin_user, create_authenticated_user, set_aut
 pytestmark = pytest.mark.asyncio
 
 CLAVE = "ValidPassword123!"
+SIN_PERMISO = "You do not have administrator privileges"
 
 
 @pytest.fixture(autouse=True)
@@ -93,6 +96,7 @@ async def test_u1_un_usuario_normal_no_desbloquea_otra_cuenta(client: AsyncClien
     r = await _desbloquea(client, atacante, victima["user"]["id"])
 
     assert r.status_code == 403, r.text
+    assert r.json()["detail"] == SIN_PERMISO
     assert (await _entra(client, victima["user"]["email"])).status_code == 423
 
 
@@ -107,6 +111,21 @@ async def test_u2_un_usuario_normal_tampoco_su_propia_cuenta(client: AsyncClient
     r = await _desbloquea(client, yo, yo["user"]["id"])
 
     assert r.status_code == 403, r.text
+    assert r.json()["detail"] == SIN_PERMISO
+
+
+async def test_u2b_un_id_que_no_existe_tambien_da_403(client: AsyncClient):
+    """
+    Given: Un usuario normal con sesión
+    When: Pide desbloquear un id que no existe
+    Then: 403, no 400: el permiso se mira antes de buscar la cuenta
+    """
+    yo = await create_authenticated_user(client, _email("yo"), CLAVE, "Yo", "Mismo")
+
+    r = await _desbloquea(client, yo, str(uuid.uuid4()))
+
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"] == SIN_PERMISO
 
 
 async def test_u3_un_administrador_desbloquea(client: AsyncClient):
@@ -122,3 +141,36 @@ async def test_u3_un_administrador_desbloquea(client: AsyncClient):
 
     assert r.status_code == 200, r.text
     assert (await _entra(client, victima["user"]["email"])).status_code == 200
+
+
+async def test_u4_el_intento_sin_permiso_y_el_desbloqueo_quedan_en_el_log(
+    client: AsyncClient, monkeypatch
+):
+    """
+    Given: Una cuenta bloqueada, un usuario normal y un administrador
+    When: El normal intenta desbloquearla y luego la desbloquea el administrador
+    Then: El log de seguridad recibe el acceso denegado y el desbloqueo, con quién
+    """
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    denegados, desbloqueos = [], []
+    monkeypatch.setattr(
+        SecurityLogger, "log_access_denied", lambda self, **kw: denegados.append(kw)
+    )
+    monkeypatch.setattr(
+        SecurityLogger, "log_account_unlocked", lambda self, **kw: desbloqueos.append(kw)
+    )
+    victima = await _bloqueada(client)
+    atacante = await create_authenticated_user(client, _email("atacante"), CLAVE, "Ata", "Cante")
+    admin = await create_admin_user(client, _email("admin"), CLAVE, "Ad", "Min")
+
+    await _desbloquea(client, atacante, victima["user"]["id"])
+    await _desbloquea(client, admin, victima["user"]["id"])
+
+    assert [(d["user_id"], d["action_attempted"], d["denial_reason"]) for d in denegados] == [
+        (atacante["user"]["id"], "unlock", "not_admin")
+    ]
+    assert [(d["user_id"], d["unlocked_user_id"]) for d in desbloqueos] == [
+        (admin["user"]["id"], victima["user"]["id"])
+    ]
+    assert desbloqueos[0]["previous_failed_attempts"] == 10

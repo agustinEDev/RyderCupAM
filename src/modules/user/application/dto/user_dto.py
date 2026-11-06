@@ -949,8 +949,8 @@ class UnlockAccountRequestDTO(BaseModel):
     DTO de entrada para desbloquear manualmente una cuenta (solo Admin).
 
     Security (OWASP A01, A09):
-    - Solo Admin puede ejecutar este endpoint
-    - Se registra quién desbloqueó en AccountUnlockedEvent
+    - Solo Admin puede ejecutar este endpoint (lo comprueba la ruta)
+    - Cada desbloqueo queda en el log de seguridad: quién, a quién y desde dónde
     """
 
     user_id: str = Field(
@@ -965,6 +965,9 @@ class UnlockAccountRequestDTO(BaseModel):
         max_length=36,
         description="UUID del admin que realiza el desbloqueo (para auditoría).",
     )
+    # Los pone la ruta, para el log de seguridad (hotfix 2.50.1)
+    ip_address: str | None = Field(default=None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
+    user_agent: str | None = Field(default=None, max_length=500, description=USER_AGENT_DESCRIPTION)
 
 
 class UnlockAccountResponseDTO(BaseModel):

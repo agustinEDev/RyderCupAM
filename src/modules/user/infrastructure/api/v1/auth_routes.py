@@ -113,6 +113,7 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.authorization import require_admin
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
@@ -1036,7 +1037,7 @@ async def validate_reset_token(
     tags=["Authentication", "Admin"],
 )
 async def unlock_account(
-    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    request: Request,
     unlock_data: UnlockAccountRequestDTO,
     use_case: UnlockAccountUseCase = Depends(get_unlock_account_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -1067,15 +1068,34 @@ async def unlock_account(
     Raises:
         HTTPException 401: Si no está autenticado
         HTTPException 403: Si no es Admin
-        HTTPException 404: Si el usuario no existe
-        HTTPException 400: Si la cuenta no está bloqueada
+        HTTPException 400: Si el usuario no existe o la cuenta no está bloqueada
     """
-    # Solo administradores (hotfix 2.50.1): con solo pedir sesión, cualquiera podía
-    # quitar el bloqueo de otra cuenta y seguir probando contraseñas (OWASP A01/A07)
-    require_admin(current_user)
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
+    user_agent = get_user_agent(request)
 
-    # Establecer unlocked_by_user_id del usuario autenticado
+    # Solo administradores (hotfix 2.50.1): con solo pedir sesión, cualquiera podía
+    # quitar el bloqueo de otra cuenta y seguir probando contraseñas (OWASP A01/A07).
+    # Antes de buscar la cuenta: un 403 no dice si el id existe. El intento, al log
+    try:
+        require_admin(current_user)
+    except HTTPException:
+        get_security_logger().log_access_denied(
+            user_id=str(current_user.id),
+            ip_address=ip_address or "unknown",
+            user_agent=user_agent or "unknown",
+            resource_type="account_lock",
+            resource_id=unlock_data.user_id,
+            action_attempted="unlock",
+            denial_reason="not_admin",
+        )
+        raise
+
+    # Quién y desde dónde, del usuario autenticado y de la petición: nunca del cuerpo
     unlock_data.unlocked_by_user_id = str(current_user.id)
+    unlock_data.ip_address = ip_address
+    unlock_data.user_agent = user_agent
 
     try:
         response = await use_case.execute(unlock_data)

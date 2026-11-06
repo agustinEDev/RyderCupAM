@@ -21,6 +21,7 @@ from pathlib import Path
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
+    AccountUnlockedAuditEvent,
     EmailChangedEvent,
     LoginAttemptEvent,
     LogoutEvent,
@@ -222,6 +223,12 @@ class SecurityLogger:
         if isinstance(event, EmailChangedEvent):
             return f"📧 EMAIL CHANGED | {user_info} | Verification required: {event.email_verification_required}"
 
+        if isinstance(event, AccountUnlockedAuditEvent):
+            return (
+                f"🔓 ACCOUNT UNLOCKED | {user_info} | Unlocked: {event.unlocked_user_id}"
+                f" | Previous failures: {event.previous_failed_attempts}"
+            )
+
         if isinstance(event, AccessDeniedEvent):
             return f"⛔ ACCESS DENIED | {user_info} | Resource: {event.resource_type} | Action: {event.action_attempted}"
 
@@ -394,6 +401,33 @@ class SecurityLogger:
             ip_address=ip_address,
             user_agent=user_agent,
             email_verification_required=email_verification_required,
+        )
+        self.log_security_event(event)
+
+    def log_account_unlocked(
+        self,
+        user_id: str,
+        unlocked_user_id: str,
+        ip_address: str,
+        user_agent: str,
+        previous_failed_attempts: int,
+    ) -> None:
+        """
+        Helper rápido para registrar un desbloqueo manual de cuenta (hotfix 2.50.1).
+
+        Args:
+            user_id: ID del administrador que desbloquea
+            unlocked_user_id: ID de la cuenta desbloqueada
+            ip_address: IP del administrador
+            user_agent: User-Agent del administrador
+            previous_failed_attempts: Fallos que llevaba la cuenta
+        """
+        event = AccountUnlockedAuditEvent(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            unlocked_user_id=unlocked_user_id,
+            previous_failed_attempts=previous_failed_attempts,
         )
         self.log_security_event(event)
 

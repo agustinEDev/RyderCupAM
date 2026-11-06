@@ -5,7 +5,7 @@ Tests the complete flow:
 - Failed login attempts increment counter
 - Account locks after 10 failed attempts
 - Login blocked with HTTP 423 when locked
-- Admin can manually unlock account
+- Admin unlock: tests/integration/api/v1/test_unlock_account_admin.py
 - Successful login resets counter
 """
 
@@ -196,27 +196,6 @@ async def test_successful_login_resets_failed_attempts_counter(client: AsyncClie
             headers={"X-Test-Client-ID": f"test-client-3-{i + 10}"},
         )
         assert response.status_code == 401  # No bloqueado aún
-
-
-@pytest.mark.asyncio
-@pytest.mark.skip(reason="Admin role system not implemented yet (v2.1.0)")
-async def test_admin_can_unlock_account_manually(client: AsyncClient):
-    """
-    Test que un admin puede desbloquear una cuenta manualmente.
-
-    Given: Cuenta bloqueada (10 intentos fallidos)
-    When: Admin llama POST /api/v1/auth/unlock-account
-    Then:
-        - HTTP 200 OK
-        - failed_login_attempts = 0
-        - locked_until = None
-        - Puede hacer login exitoso inmediatamente
-
-    NOTE: Skipped porque el sistema de roles no está implementado aún.
-    Este test se habilitará en v2.1.0 cuando se implemente el sistema de roles.
-    """
-    # TODO (v2.1.0): Implementar cuando exista sistema de roles
-    pass
 
 
 # ============================================================================
