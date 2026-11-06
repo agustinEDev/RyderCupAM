@@ -227,7 +227,8 @@ class RefreshAccessTokenUseCase:
                 ip_address=ip_address,
                 user_agent=user_agent,
                 tokens_revoked_count=1,
-                reason="device_revoked",
+                reason="refresh_on_revoked_device",
+                device_id=str(dispositivo.id.value),
             )
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
         # La sesión de este dispositivo caduca tras 24 h sin usarse (BE #376, OWASP
@@ -243,6 +244,7 @@ class RefreshAccessTokenUseCase:
                 user_agent=user_agent,
                 tokens_revoked_count=1,
                 reason="idle",
+                device_id=str(dispositivo.id.value),
             )
             raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
         # Refrescar es usar ESTE dispositivo, el del token (ver el método)

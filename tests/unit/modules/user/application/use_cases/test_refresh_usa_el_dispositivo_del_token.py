@@ -154,8 +154,8 @@ async def test_t10_la_revocacion_por_dispositivo_revocado_queda_en_el_log(monkey
     """
     Given: Un token sin revocar de un dispositivo revocado
     When: Refresca
-    Then: El log apunta la revocación con su motivo propio (device_revoked), que la
-          distingue de reusar un token ya revocado
+    Then: El log apunta la revocación con su motivo propio y el dispositivo: no se
+          confunde con reusar un token revocado ni con revocar un dispositivo
     """
     from src.shared.infrastructure.logging import security_logger as modulo
 
@@ -170,4 +170,6 @@ async def test_t10_la_revocacion_por_dispositivo_revocado_queda_en_el_log(monkey
     with pytest.raises(RefreshRejectedError):
         await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
 
-    assert [a["reason"] for a in apuntes] == ["device_revoked"]
+    assert [(a["reason"], a["device_id"]) for a in apuntes] == [
+        ("refresh_on_revoked_device", str(dispositivo.id.value))
+    ]
