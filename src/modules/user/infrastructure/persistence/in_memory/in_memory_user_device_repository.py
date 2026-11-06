@@ -169,3 +169,10 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
 
         device.revoke()
         await self.save(device)  # Update in memory
+
+    async def delete_unused_since(self, antes: datetime) -> int:
+        """Borra los dispositivos sin usar desde antes de `antes`."""
+        viejos = [clave for clave, d in self._devices.items() if d.last_used_at < antes]
+        for clave in viejos:
+            del self._devices[clave]
+        return len(viejos)

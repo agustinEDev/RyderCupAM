@@ -16,7 +16,7 @@ Patrón: Repository Pattern + Async SQLAlchemy
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,9 @@ from src.modules.user.domain.repositories.user_device_repository_interface impor
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
+    user_devices_table,
+)
 
 
 class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
@@ -261,3 +264,11 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
         device.revoke()
         # No necesitamos save() explícito: el objeto ya está en la sesión
         # y SQLAlchemy detectará los cambios al commit
+
+    async def delete_unused_since(self, antes: datetime) -> int:
+        """Borra los dispositivos sin usar desde antes de `antes`; sus tokens caen en cascada."""
+        result = await self._session.execute(
+            delete(user_devices_table).where(user_devices_table.c.last_used_at < antes)
+        )
+        await self._session.flush()
+        return result.rowcount or 0

@@ -36,7 +36,7 @@ from main import app as fastapi_app
 from src.config.database import (
     DATABASE_URL as APP_DATABASE_URL,  # Renombramos para evitar conflicto
 )
-from src.config.dependencies import get_db_session, get_handicap_service
+from src.config.dependencies import get_db_session, get_fabrica_de_sesiones, get_handicap_service
 from src.config.mappers import start_all_mappers
 from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import (
     metadata,
@@ -248,6 +248,8 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+    # Lo que corre fuera de la petición (el aviso de nuevo inicio, BE #737), también
+    fastapi_app.dependency_overrides[get_fabrica_de_sesiones] = lambda: test_session_local
     _sin_la_rfeg_de_verdad()
 
     # Publicada para los tests que necesitan comprobar que algo se PERSISTIO:
@@ -323,6 +325,8 @@ async def module_client() -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     fastapi_app.dependency_overrides[get_db_session] = override_get_db_session
+    # Lo que corre fuera de la petición (el aviso de nuevo inicio, BE #737), también
+    fastapi_app.dependency_overrides[get_fabrica_de_sesiones] = lambda: test_session_local
     _sin_la_rfeg_de_verdad()
 
     test_client_id = f"test-module-{uuid.uuid4()}"
@@ -645,6 +649,10 @@ def mock_external_services():
     # Mock para EmailService
     mock_email = MagicMock()
     mock_email.send_verification_email.return_value = True
+    # El aviso de nuevo inicio de sesión se espera con await (BE #737)
+    from unittest.mock import AsyncMock
+
+    mock_email.send_new_login_notification = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):

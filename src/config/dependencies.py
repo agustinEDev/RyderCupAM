@@ -7,12 +7,11 @@ from typing import Any, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config.aviso_en_segundo_plano import AvisoEnSegundoPlano
 from src.config.database import async_session_maker
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
-from src.config.settings import settings
 from src.config.terms_guard import require_current_terms
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
 from src.modules.competition.application.ports.competition_activity_publisher_interface import (
@@ -555,6 +554,7 @@ from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
     IAvatarPresetProvider,
 )
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
@@ -562,6 +562,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 from src.modules.user.application.ports.image_processor_interface import IImageProcessor
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.datos_del_acceso import CLAIM_DEL_DISPOSITIVO
 from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
 from src.modules.user.application.use_cases.activate_uploaded_avatar_use_case import (
     ActivateUploadedAvatarUseCase,
@@ -619,6 +620,7 @@ from src.modules.user.application.use_cases.login_user_use_case import LoginUser
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
+from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
@@ -676,12 +678,11 @@ from src.modules.user.application.use_cases.validate_reset_token_use_case import
 from src.modules.user.application.use_cases.verify_email_use_case import (
     VerifyEmailUseCase,
 )
-from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.handicap_service import HandicapService
-from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.external.filesystem_avatar_preset_provider import (
     FileSystemAvatarPresetProvider,
@@ -698,9 +699,6 @@ from src.modules.user.infrastructure.external.rfeg_handicap_service import (
 from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
     SQLAlchemyUnitOfWork,
 )
-from src.modules.user.infrastructure.persistence.sqlalchemy.user_device_mapper import (
-    user_devices_table,
-)
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -710,7 +708,6 @@ from src.shared.domain.services.playing_handicap_calculator import (
     PlayingHandicapCalculator,
 )
 from src.shared.infrastructure.email.email_service import EmailService
-from src.shared.infrastructure.http.http_context_validator import get_trusted_client_ip
 from src.shared.infrastructure.persistence.sqlalchemy.country_repository import (
     SQLAlchemyCountryRepository,
 )
@@ -943,10 +940,24 @@ def get_register_device_use_case(
     return RegisterDeviceUseCase(uow)
 
 
+def get_fabrica_de_sesiones() -> async_sessionmaker[AsyncSession]:
+    """La fábrica de sesiones de BD para lo que corre fuera de la petición (BE #737)."""
+    return async_session_maker
+
+
+def get_aviso_de_nuevo_inicio_de_sesion(
+    email_service: IEmailService = Depends(get_email_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
+) -> IAvisoDeNuevoInicio:
+    """El correo de «nuevo inicio de sesión» al propio usuario, en segundo plano (BE #737)."""
+    return AvisoEnSegundoPlano(fabrica, email_service)
+
+
 def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+    aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -961,7 +972,7 @@ def get_login_user_use_case(
     Ya no recibe el servicio de hándicap: el login no espera a la RFEG
     (RyderCupAM#340); eso lo hace `get_refresh_own_handicap_use_case`.
     """
-    return LoginUserUseCase(uow, token_service, register_device_use_case)
+    return LoginUserUseCase(uow, token_service, register_device_use_case, aviso)
 
 
 def get_logout_user_use_case(
@@ -994,6 +1005,15 @@ def get_refresh_access_token_use_case(
     5. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
     """
     return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
+
+
+def get_open_session_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    token_service: ITokenService = Depends(get_token_service),
+    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+) -> OpenSessionUseCase:
+    """Proveedor de OpenSessionUseCase: abrir sesión tras verificar el email (BE #737)."""
+    return OpenSessionUseCase(uow, token_service, register_device_use_case)
 
 
 def get_update_profile_use_case(
@@ -1208,63 +1228,44 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Device Fingerprinting Security Check (v1.13.0):
-    # Verificar que el dispositivo actual NO esté revocado
-    # Si el dispositivo fue revocado, el token es inválido aunque técnicamente sea válido
-    logger = logging.getLogger(__name__)
-
-    user_agent = request.headers.get("User-Agent", "unknown")
-
-    # Extraer IP real del cliente (usa shared helper con soporte Cloudflare + proxies)
-    ip_address = get_trusted_client_ip(
-        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-    )
-
-    if user_agent != "unknown" and ip_address:
-        try:
-            # Crear fingerprint del dispositivo actual
-            current_fingerprint = DeviceFingerprint.create(
-                user_agent=user_agent, ip_address=ip_address
+    # El dispositivo del token, por su id (BE #737, cierra #730). Antes se buscaba
+    # por una huella de navegador e IP que no se actualizaba: con cada actualización
+    # del navegador o cambio de red no lo veía (34 de 60 en producción), y podía
+    # echar a un usuario legítimo con un «revocado» falso.
+    #
+    # Un token sin `did` ya no vale (auditoría OWASP, A07): toda sesión tiene
+    # dispositivo, y una sin él no se podía revocar. Es un 401 normal, no
+    # «revocado»: la app refresca y el refresco ya trae `did`. Si la BD falla al
+    # comprobarlo, la petición no pasa (decidido el 5 nov 2026)
+    did = payload.get(CLAIM_DEL_DISPOSITIVO)
+    if not did:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido: falta el dispositivo",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        device_id = UserDeviceId.from_string(did)
+    except (ValueError, TypeError):
+        device_id = None
+    dispositivo = None
+    if device_id is not None:
+        async with uow:
+            dispositivo = await uow.user_devices.find_by_id_and_user(
+                device_id=device_id, user_id=UserId(user_id_str)
             )
-
-            # Buscar dispositivo por fingerprint (usando nueva transacción)
-            # IMPORTANTE: NO usamos find_by_user_and_fingerprint porque filtra por is_active=True
-            # Necesitamos encontrar el dispositivo AUNQUE esté revocado para bloquearlo
-            user_id_vo = UserId(user_id_str)
-            async with uow:
-                # Query directo sin filtrar por is_active
-                statement = (
-                    select(UserDevice)
-                    .where(UserDevice.user_id == user_id_vo)  # type: ignore[arg-type]
-                    .where(UserDevice.fingerprint_hash == current_fingerprint.fingerprint_hash)  # type: ignore[arg-type]
-                    # NO filtramos por is_active para encontrar dispositivos revocados
-                    # Ordenamos por is_active DESC para que si hay múltiples, tome el activo primero
-                    .order_by(user_devices_table.c.is_active.desc())
-                    .limit(1)
-                )
-                result = await uow._session.execute(statement)
-                device = result.scalar_one_or_none()
-
-                # Si el dispositivo existe pero está revocado, denegar acceso
-                if device and not device.is_active:
-                    logger.warning(
-                        f"Access denied: Revoked device {device.id} attempted access for user {user_id_str}"
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-        except HTTPException:
-            # Re-lanzar HTTPException para que FastAPI la maneje
-            raise
-        except Exception as e:
-            # Si hay error al crear fingerprint o consultar BD, continuar (no bloquear por errores técnicos)
-            # Esto previene que un error en device fingerprinting bloquee a todos los usuarios
-            logger.error(
-                f"Error during device validation for user {user_id_str}: {type(e).__name__}: {e}"
-            )
-            pass
+    if dispositivo is None:
+        logging.getLogger(__name__).warning(
+            f"Access denied: device {did} revoked or not owned by user {user_id_str}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Dispositivo revocado. Por favor, inicia sesión nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # El dispositivo de la petición, ya comprobado: la lista lo marca como el actual
+    # sin volver a leer el token
+    request.state.dispositivo_actual = str(dispositivo.id.value)
 
     # Términos de uso (B6): sin la versión vigente aceptada, 403
     # TERMS_NOT_ACCEPTED en toda ruta con sesión salvo las exentas
@@ -3579,6 +3580,7 @@ def get_list_user_devices_use_case(
 
 def get_revoke_device_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> RevokeDeviceUseCase:
     """
     Proveedor del caso de uso RevokeDeviceUseCase (v1.13.0 - Device Fingerprinting).
@@ -3588,7 +3590,7 @@ def get_revoke_device_use_case(
     2. Crea una instancia de `RevokeDeviceUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint DELETE /users/me/devices/{id}.
     """
-    return RevokeDeviceUseCase(uow)
+    return RevokeDeviceUseCase(uow, security_audit)
 
 
 # ============================================================================
@@ -3606,9 +3608,12 @@ def get_google_login_use_case(
     token_service: ITokenService = Depends(get_token_service),
     google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
+    aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
 ) -> GoogleLoginUseCase:
     """Proveedor del caso de uso GoogleLoginUseCase."""
-    return GoogleLoginUseCase(uow, token_service, google_oauth_service, register_device_use_case)
+    return GoogleLoginUseCase(
+        uow, token_service, google_oauth_service, register_device_use_case, aviso
+    )
 
 
 def get_link_google_account_use_case(

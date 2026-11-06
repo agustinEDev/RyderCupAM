@@ -390,6 +390,11 @@ DEVICE_ID_COOKIE_NAME = "device_id"  # Device identifier (1 year)
 DEVICE_ID_COOKIE_MAX_AGE = 31536000  # 1 year in seconds
 
 
+# La cookie del dispositivo guarda los de hasta 5 cuentas del mismo navegador,
+# separados por puntos y el último usado delante (BE #737): con uno solo, entrar
+# con otra cuenta lo pisaba y la primera estrenaba dispositivo al volver
+
+
 def set_device_id_cookie(response: Response, device_id: str) -> None:
     """
     Establece una cookie httpOnly con el device_id (UUID).
@@ -433,36 +438,6 @@ def set_device_id_cookie(response: Response, device_id: str) -> None:
         max_age=DEVICE_ID_COOKIE_MAX_AGE,  # ✅ Expira en 1 año
         path="/",  # ✅ Disponible en toda la app
         domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
-    )
-
-
-def delete_device_id_cookie(response: Response) -> None:
-    """
-    Elimina la cookie de device_id (revocación de dispositivo).
-
-    Esta función invalida la cookie estableciendo su valor vacío y
-    expiración en 0 (eliminación inmediata).
-
-    Args:
-        response: Objeto Response de FastAPI donde se eliminará la cookie
-
-    Example:
-        >>> from fastapi import Response
-        >>> response = Response()
-        >>> delete_device_id_cookie(response)
-        >>> # Cookie device_id eliminada del navegador
-
-    Note:
-        Esta función se usa cuando un dispositivo es revocado.
-        El usuario deberá hacer login nuevamente, generando un nuevo device_id.
-    """
-    response.delete_cookie(
-        key=DEVICE_ID_COOKIE_NAME,
-        path="/",  # Mismo path que al crear la cookie
-        httponly=True,  # Mismo httponly que al crear
-        secure=is_production(),  # Mismo secure que al crear
-        samesite="lax",  # Mismo samesite que al crear
-        domain=get_cookie_domain(),  # Mismo domain que al crear
     )
 
 

@@ -255,6 +255,7 @@ class TestAltaConGoogle:
             token_service=JWTTokenService(),
             google_oauth_service=google,
             register_device_use_case=dispositivos,
+            aviso_de_nuevo_inicio=AsyncMock(),
         )
 
         respuesta = await use_case.execute(

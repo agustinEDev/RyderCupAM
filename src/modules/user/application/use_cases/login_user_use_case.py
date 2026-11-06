@@ -14,14 +14,18 @@ from typing import NoReturn
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
+    AvisoDeNuevoInicioRequestDTO,
     RegisterDeviceRequestDTO,
+    agente_para_el_registro,
 )
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -61,6 +65,7 @@ class LoginUserUseCase:
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
         register_device_use_case: RegisterDeviceUseCase,
+        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
     ):
         """
         Inicializa el caso de uso.
@@ -73,6 +78,8 @@ class LoginUserUseCase:
         self._uow = uow
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
+        # El correo de «nuevo inicio de sesión» (BE #737)
+        self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
 
     @staticmethod
     def _apunta_que_no_existe(request: LoginRequestDTO, ip_address: str, user_agent: str) -> None:
@@ -263,33 +270,36 @@ class LoginUserUseCase:
             # session_id se podría generar aquí si fuera necesario
         )
 
-        # Generar access token JWT (15 minutos)
-        access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
-
-        # Generar refresh token JWT (7 días)
-        refresh_token_jwt = self._token_service.create_refresh_token(
-            data={"sub": str(user.id.value)}
-        )
-
         # Device Fingerprinting (v2.0.4): Registrar/actualizar dispositivo PRIMERO
         # Cookie-based identification: device_id_from_cookie tiene prioridad
         # Necesitamos el device_id para asociarlo con el refresh token
-        device_id = None
-        should_set_device_cookie = False
-        device_id_str = None
-        if request.user_agent:
-            device_request = RegisterDeviceRequestDTO(
-                user_id=str(user.id.value),
-                user_agent=request.user_agent,
-                ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
-                device_id_from_cookie=request.device_id_from_cookie,  # v2.0.4
-            )
-            # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
-            device_response = await self._register_device_use_case.execute(device_request)
-            # Obtener device_id para asociar con refresh token
-            device_id = UserDeviceId.from_string(device_response.device_id)
-            device_id_str = device_response.device_id
-            should_set_device_cookie = device_response.set_device_cookie
+        # Siempre con dispositivo, también sin User-Agent: una sesión sin él no salía en
+        # la lista, no avisaba y no se podía revocar (auditoría OWASP, A07)
+        device_request = RegisterDeviceRequestDTO(
+            user_id=str(user.id.value),
+            user_agent=agente_para_el_registro(request.user_agent),
+            ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
+            device_id_from_cookie=request.device_id_from_cookie,
+            installed_app=request.installed_app,  # BE #737
+            country_code=request.country_code,
+        )
+        # Registrar dispositivo (crea nuevo o actualiza last_used_at + ip_address)
+        device_response = await self._register_device_use_case.execute(device_request)
+        # Obtener device_id para asociar con refresh token
+        device_id = UserDeviceId.from_string(device_response.device_id)
+        device_id_str = device_response.device_id
+        should_set_device_cookie = device_response.set_device_cookie
+        # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
+        es_nuevo = device_response.is_new_device or not device_response.recognized_by_cookie
+
+        # Los tokens, después del dispositivo: el de acceso lleva su id (`did`), y así
+        # revocarlo se comprueba por id y no por una huella que cambia (BE #737)
+        access_token = self._token_service.create_access_token(
+            data=datos_del_acceso(str(user.id.value), device_id_str)
+        )
+        refresh_token_jwt = self._token_service.create_refresh_token(
+            data={"sub": str(user.id.value)}
+        )
 
         # Crear entidad RefreshToken (hashea el JWT antes de guardar)
         # IMPORTANTE: Asociar con device_id para permitir revocación correcta
@@ -313,6 +323,21 @@ class LoginUserUseCase:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+        # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737). No
+        # lanza: un fallo del correo no tumba el login
+        if user.email is not None:
+            # Nunca a un correo sin confirmar: solo le llega el de confirmación
+            await self._aviso_de_nuevo_inicio.avisa(
+                AvisoDeNuevoInicioRequestDTO(
+                    user_id=str(user.id.value),
+                    email=user.email.value,
+                    nombre=user.first_name,
+                    device_id=device_id_str,
+                    desconocido=es_nuevo,
+                    verificado=user.is_email_verified(),
+                )
+            )
 
         # Generar token CSRF (256 bits, 15 minutos de duración)
         csrf_token = generate_csrf_token(str(user.id.value))

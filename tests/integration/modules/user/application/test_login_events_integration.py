@@ -17,6 +17,9 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
+from tests.unit.modules.user.application.use_cases._registro_falso import (
+    registro_de_dispositivo_falso,
+)
 
 
 @pytest.mark.asyncio
@@ -55,10 +58,10 @@ class TestLoginUserUseCaseEventIntegration:
         token_service = JWTTokenService()
 
         # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
-        mock_register_device = AsyncMock()
-        mock_register_device.execute.return_value = AsyncMock()
+        # Toda sesión registra su dispositivo (BE #737): una respuesta válida
+        mock_register_device = registro_de_dispositivo_falso()
 
-        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device, AsyncMock())
 
         request = LoginRequestDTO(email="test@example.com", password="P@ssw0rd123!")
 
@@ -106,7 +109,7 @@ class TestLoginUserUseCaseEventIntegration:
         # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
         mock_register_device = AsyncMock()
 
-        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device, AsyncMock())
 
         request = LoginRequestDTO(email="noexiste@example.com", password="P@ssw0rd123!")
 
@@ -150,7 +153,7 @@ class TestLoginUserUseCaseEventIntegration:
         # Mock del RegisterDeviceUseCase (v1.13.0 - Device Fingerprinting)
         mock_register_device = AsyncMock()
 
-        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device)
+        use_case = LoginUserUseCase(mock_uow, token_service, mock_register_device, AsyncMock())
 
         request = LoginRequestDTO(
             email="test@example.com",

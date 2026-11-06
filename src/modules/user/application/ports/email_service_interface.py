@@ -61,6 +61,22 @@ class IEmailService(ABC):
         pass
 
     @abstractmethod
+    async def send_new_login_notification(
+        self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
+    ) -> bool:
+        """
+        Avisa al usuario de que alguien ha entrado en su cuenta desde un dispositivo
+        nuevo (BE #737), con un botón para revisar sus dispositivos.
+
+        Args:
+            to_email: El email del usuario
+            user_name: Su nombre
+            dispositivo: Lo que es, ya en texto («iPhone · Safari»)
+            cuando: La fecha y la hora, ya en texto y en hora de España
+            pais: El país aproximado, o None
+        """
+
+    @abstractmethod
     async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.

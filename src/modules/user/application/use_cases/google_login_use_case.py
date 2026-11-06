@@ -13,18 +13,22 @@ from datetime import datetime
 from src.config.csrf_config import generate_csrf_token
 from src.modules.user.application.dto.device_dto import (
     UNRESOLVED_IP_PLACEHOLDER,
+    AvisoDeNuevoInicioRequestDTO,
     RegisterDeviceRequestDTO,
+    agente_para_el_registro,
 )
 from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginRequestDTO,
     GoogleLoginResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -58,7 +62,10 @@ class GoogleLoginUseCase:
         token_service: ITokenService,
         google_oauth_service: IGoogleOAuthService,
         register_device_use_case: RegisterDeviceUseCase,
+        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
     ):
+        # El correo de «nuevo inicio de sesión» (BE #737)
+        self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
         self._uow = uow
         self._token_service = token_service
         self._google_oauth_service = google_oauth_service
@@ -134,21 +141,23 @@ class GoogleLoginUseCase:
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
-        """Register device and return (device_id, device_id_str, should_set_cookie)."""
-        if not request.user_agent:
-            return None, None, False
-
+        """Register device and return (device_id, device_id_str, should_set_cookie, is_new)."""
+        # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
-            user_agent=request.user_agent,
+            user_agent=agente_para_el_registro(request.user_agent),
             ip_address=request.ip_address or UNRESOLVED_IP_PLACEHOLDER,
             device_id_from_cookie=request.device_id_from_cookie,
+            installed_app=request.installed_app,
+            country_code=request.country_code,
         )
         device_response = await self._register_device_use_case.execute(device_request)
         return (
             UserDeviceId.from_string(device_response.device_id),
             device_response.device_id,
             device_response.set_device_cookie,
+            # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
+            device_response.is_new_device or not device_response.recognized_by_cookie,
         )
 
     async def execute(self, request: GoogleLoginRequestDTO) -> GoogleLoginResponseDTO:
@@ -201,13 +210,16 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        access_token = self._token_service.create_access_token(data={"sub": str(user.id.value)})
-        refresh_token_jwt = self._token_service.create_refresh_token(
-            data={"sub": str(user.id.value)}
+        device_id, device_id_str, should_set_device_cookie, es_nuevo = await self._register_device(
+            request, str(user.id.value)
         )
 
-        device_id, device_id_str, should_set_device_cookie = await self._register_device(
-            request, str(user.id.value)
+        # Después del dispositivo: el token de acceso lleva su id (BE #737)
+        access_token = self._token_service.create_access_token(
+            data=datos_del_acceso(str(user.id.value), device_id_str)
+        )
+        refresh_token_jwt = self._token_service.create_refresh_token(
+            data={"sub": str(user.id.value)}
         )
 
         refresh_token_entity = RefreshToken.create(
@@ -217,6 +229,23 @@ class GoogleLoginUseCase:
         async with self._uow:
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token_entity)
+
+        # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
+        # El alta con Google no avisa: es crear la cuenta
+        # Al correo de la CUENTA, no al de Google: si la cuenta se vinculó con
+        # otra dirección, o lo comprometido es la cuenta de Google, el aviso tiene
+        # que llegar a su dueño (auditoría OWASP, 5 nov 2026)
+        await self._aviso_de_nuevo_inicio.avisa(
+            AvisoDeNuevoInicioRequestDTO(
+                user_id=str(user.id.value),
+                email=user.email.value if user.email else google_info.email,
+                nombre=user.first_name,
+                device_id=device_id_str,
+                desconocido=es_nuevo,
+                verificado=user.is_email_verified(),
+                es_alta=is_new_user,
+            )
+        )
 
         security_logger.log_login_attempt(
             user_id=str(user.id.value),

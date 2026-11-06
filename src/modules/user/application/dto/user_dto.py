@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from src.modules.user.domain.services.cookie_de_dispositivo import LONGITUD_MAXIMA_DE_LA_COOKIE
 from src.modules.user.domain.services.terms_of_service import (
     current_terms_version,
     require_utc,
@@ -398,8 +399,17 @@ class LoginRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None,
         min_length=36,
-        max_length=36,
+        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+    )
+    installed_app: bool = Field(
+        default=False,
+        description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
+    )
+    country_code: str | None = Field(
+        default=None,
+        max_length=2,
+        description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
 
 
@@ -735,8 +745,17 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     device_id_from_cookie: str | None = Field(
         None,
         min_length=36,
-        max_length=36,
+        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
         description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
+    )
+    installed_app: bool = Field(
+        default=False,
+        description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
+    )
+    country_code: str | None = Field(
+        default=None,
+        max_length=2,
+        description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
 
 

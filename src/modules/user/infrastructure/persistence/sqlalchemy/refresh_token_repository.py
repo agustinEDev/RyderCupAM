@@ -216,3 +216,28 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         result = await self._session.execute(stmt)
         await self._session.flush()
         return result.rowcount or 0
+
+    async def device_ids_with_live_tokens(
+        self, user_id: UserId, ahora: datetime
+    ) -> set[UserDeviceId]:
+        """Los dispositivos del usuario con algún refresh token sin revocar ni caducar."""
+        stmt = (
+            select(refresh_tokens_table.c.device_id)
+            .where(
+                refresh_tokens_table.c.user_id == str(user_id.value),
+                refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.expires_at > ahora,
+                refresh_tokens_table.c.device_id.is_not(None),
+            )
+            .distinct()
+        )
+        result = await self._session.execute(stmt)
+        return {UserDeviceId.from_string(str(fila[0])) for fila in result.all()}
+
+    async def delete_expired_before(self, antes: datetime) -> int:
+        """Borra los refresh tokens caducados antes de `antes`."""
+        result = await self._session.execute(
+            delete(refresh_tokens_table).where(refresh_tokens_table.c.expires_at < antes)
+        )
+        await self._session.flush()
+        return result.rowcount or 0

@@ -5,6 +5,7 @@ Define el contrato para persistencia de refresh tokens.
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
@@ -207,3 +208,16 @@ class RefreshTokenRepositoryInterface(ABC):
             >>> # iPhone se desloguea al intentar refrescar el access token
         """
         pass
+
+    @abstractmethod
+    async def device_ids_with_live_tokens(
+        self, user_id: UserId, ahora: datetime
+    ) -> set[UserDeviceId]:
+        """
+        Los dispositivos del usuario con algún refresh token vivo: sin revocar y sin
+        caducar a `ahora` (BE #737). Son los que tienen una sesión abierta de verdad.
+        """
+
+    @abstractmethod
+    async def delete_expired_before(self, antes: datetime) -> int:
+        """Borra los refresh tokens caducados antes de `antes`; devuelve cuántos (BE #737)."""

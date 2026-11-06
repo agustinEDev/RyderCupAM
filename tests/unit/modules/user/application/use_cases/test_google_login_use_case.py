@@ -10,7 +10,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.modules.user.application.dto.device_dto import RegisterDeviceResponseDTO
+from src.modules.user.application.dto.device_dto import (
+    UNKNOWN_USER_AGENT,
+    RegisterDeviceResponseDTO,
+)
 from src.modules.user.application.dto.oauth_dto import GoogleLoginRequestDTO
 from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
@@ -110,6 +113,7 @@ def use_case(uow, token_service, google_oauth_service, register_device_use_case)
         token_service=token_service,
         google_oauth_service=google_oauth_service,
         register_device_use_case=register_device_use_case,
+        aviso_de_nuevo_inicio=AsyncMock(),
     )
 
 
@@ -384,10 +388,15 @@ class TestGoogleLoginUseCaseTokenGeneration:
         with pytest.raises(ValueError, match="Invalid or expired"):
             await use_case.execute(login_request)
 
-    async def test_no_device_registration_without_user_agent(
+    async def test_registers_a_device_even_without_user_agent(
         self, use_case, uow, google_oauth_service, google_user_info, register_device_use_case
     ):
-        """No debe registrar dispositivo si falta user_agent."""
+        """
+        Given: Un login con Google sin User-Agent
+        When: Se ejecuta
+        Then: Registra igualmente un dispositivo, con el agente desconocido: una sesión
+              sin dispositivo no salía en la lista ni se podía revocar (auditoría OWASP, A07)
+        """
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         request = GoogleLoginRequestDTO(
@@ -398,9 +407,9 @@ class TestGoogleLoginUseCaseTokenGeneration:
 
         response = await use_case.execute(request)
 
-        assert response.device_id is None
-        assert response.should_set_device_cookie is False
-        register_device_use_case.execute.assert_not_called()
+        assert response.device_id is not None
+        enviado = register_device_use_case.execute.await_args.args[0]
+        assert enviado.user_agent == UNKNOWN_USER_AGENT
 
     async def test_registers_device_with_placeholder_ip_when_ip_unresolved(
         self, use_case, google_oauth_service, google_user_info, register_device_use_case
@@ -427,3 +436,120 @@ class TestGoogleLoginUseCaseTokenGeneration:
         register_device_use_case.execute.assert_awaited_once()
         call_kwargs = register_device_use_case.execute.call_args.args[0]
         assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
+
+
+@pytest.mark.asyncio
+class TestGoogleLoginNuevoInicio:
+    """El aviso de nuevo inicio de sesión con Google (BE #737)."""
+
+    async def test_sign_up_with_google_tells_the_notice_it_is_the_sign_up(
+        self,
+        uow,
+        token_service,
+        google_oauth_service,
+        register_device_use_case,
+        google_user_info,
+        login_request,
+    ):
+        """
+        Given: Alguien sin cuenta que entra con Google
+        When: Se crea la cuenta
+        Then: Se le dice al aviso que es el alta (no avisa), con el correo confirmado
+        """
+        aviso = AsyncMock()
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        use_case = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        await use_case.execute(login_request)
+
+        enviado = aviso.avisa.await_args.args[0]
+        assert enviado.es_alta is True
+        assert enviado.verificado is True
+
+    async def test_the_notice_goes_to_the_account_email_not_the_google_one(
+        self,
+        uow,
+        token_service,
+        google_oauth_service,
+        register_device_use_case,
+        google_user_info,
+        login_request,
+    ):
+        """
+        Given: Una cuenta con su correo, vinculada a una cuenta de Google con otra dirección
+        When: Entra con Google
+        Then: El aviso va al correo de la cuenta: si lo comprometido es la cuenta de Google,
+              el aviso no puede llegar a quien la controla (auditoría OWASP, 5 nov 2026)
+        """
+        user = User.create_from_oauth(
+            first_name="Ana", last_name="Golf", email_str="ana@example.com"
+        )
+        async with uow:
+            await uow.users.save(user)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-id-12345",
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        aviso = AsyncMock()
+        use_case = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        await use_case.execute(login_request)
+
+        enviado = aviso.avisa.await_args.args[0]
+        assert enviado.email == "ana@example.com"
+        assert enviado.es_alta is False
+
+    @pytest.mark.parametrize(("por_su_cookie", "desconocido"), [(False, True), (True, False)])
+    async def test_a_known_device_without_its_cookie_is_notified(
+        self,
+        uow,
+        token_service,
+        google_oauth_service,
+        google_user_info,
+        login_request,
+        por_su_cookie,
+        desconocido,
+    ):
+        """
+        Given: Un dispositivo ya conocido, que llega sin su cookie (solo la huella) o con ella
+        When: Entra con Google
+        Then: Sin su cookie se avisa; con ella, no (decidido el 6 nov 2026)
+        """
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        registro = AsyncMock()
+        registro.execute.return_value = RegisterDeviceResponseDTO(
+            device_id="550e8400-e29b-41d4-a716-446655440099",
+            is_new_device=False,
+            message="Dispositivo actualizado",
+            set_device_cookie=not por_su_cookie,
+            recognized_by_cookie=por_su_cookie,
+        )
+        aviso = AsyncMock()
+        use_case = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=registro,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        await use_case.execute(login_request)
+
+        assert aviso.avisa.await_args.args[0].desconocido is desconocido

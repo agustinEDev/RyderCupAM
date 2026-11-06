@@ -164,3 +164,23 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
                 token.revoke()
                 count += 1
         return count
+
+    async def device_ids_with_live_tokens(
+        self, user_id: UserId, ahora: datetime
+    ) -> set[UserDeviceId]:
+        """Los dispositivos del usuario con algún refresh token sin revocar ni caducar."""
+        return {
+            token.device_id
+            for token in self._tokens.values()
+            if token.user_id == user_id
+            and not token.revoked
+            and token.expires_at > ahora
+            and token.device_id is not None
+        }
+
+    async def delete_expired_before(self, antes: datetime) -> int:
+        """Borra los refresh tokens caducados antes de `antes`."""
+        viejos = [token_id for token_id, token in self._tokens.items() if token.expires_at < antes]
+        for token_id in viejos:
+            del self._tokens[token_id]
+        return len(viejos)

@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 """
 Tests para RevokeDeviceUseCase
 
@@ -18,15 +20,17 @@ from src.modules.user.application.use_cases.revoke_device_use_case import (
 )
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
+from tests.unit.modules.user.application.use_cases._sesion_al_registrar import (
+    uow_con_sesion_al_registrar,
 )
 
 
 @pytest.fixture
 def uow():
     """Fixture que proporciona un Unit of Work en memoria."""
-    return InMemoryUnitOfWork()
+    # Dar de alta un dispositivo es entrar con él: la lista solo enseña los que
+    # tienen sesión (BE #737)
+    return uow_con_sesion_al_registrar()
 
 
 @pytest.mark.asyncio
@@ -42,7 +46,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Registrar dispositivo
@@ -83,7 +87,7 @@ class TestRevokeDeviceUseCase:
         Then: Lanza ValueError
         """
         # Arrange
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
         non_existent_device_id = UserDeviceId.generate()
 
@@ -107,7 +111,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id1 = UserId.generate()
         user_id2 = UserId.generate()
 
@@ -142,7 +146,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Registrar dispositivo
@@ -177,7 +181,7 @@ class TestRevokeDeviceUseCase:
         Then: Lanza ValueError
         """
         # Arrange
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         request = RevokeDeviceRequestDTO(
@@ -205,7 +209,7 @@ class TestRevokeDeviceUseCase:
         )
 
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         list_use_case = ListUserDevicesUseCase(uow)
         user_id = UserId.generate()
 
@@ -254,7 +258,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Contexto HTTP del dispositivo actual
@@ -274,6 +278,8 @@ class TestRevokeDeviceUseCase:
         request = RevokeDeviceRequestDTO(
             user_id=str(user_id.value),
             device_id=register_response.device_id,
+            # El actual es el del `did` del token (BE #737), no el de la huella
+            current_device_id=register_response.device_id,
             user_agent=current_user_agent,  # Mismo user_agent
             ip_address=current_ip,  # Misma IP
         )
@@ -301,7 +307,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Dispositivo A (actual - desde donde se hace la revocación)
