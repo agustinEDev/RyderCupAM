@@ -14,6 +14,7 @@ El correo de «intentos fallidos» al dueño de la cuenta (BE #732).
   A7  sin país                                              | el correo no lo menciona
   A8  la cuenta ya no existe                                | no
   A9  el tope global de avisos (20/hora) está lleno          | no, y no queda apuntado
+  A11 falla el guardado de la reserva                        | el hueco del tope vuelve
   A10 la reserva se hace con la fila bloqueada, ANTES de     | dos a la vez no mandan dos
       enviar                                                 |   (la prueba de verdad, en
                                                              |   integración)
@@ -293,3 +294,23 @@ async def test_a10_reserva_con_la_fila_bloqueada_antes_de_enviar():
     await aviso.avisa(_pide(ana))
 
     assert orden == ["bloqueo", ("envío", AHORA)]
+
+
+async def test_a11_si_falla_el_guardado_de_la_reserva_el_hueco_vuelve():
+    """
+    Given: Ana sin avisos, y la BD que falla al guardar la reserva
+    When: Se avisa
+    Then: No hay correo, y el hueco del tope global se devuelve
+    """
+    cupo = _Cupo()
+    uow, _ana, correo, aviso = await _escena(cupo=cupo)
+
+    async def roto(_user):
+        raise RuntimeError("la BD no responde")
+
+    uow.users.save = roto
+
+    await aviso.avisa(_pide(_ana))
+
+    correo.send_failed_logins_notification.assert_not_awaited()
+    assert getattr(cupo, "devueltos", 0) == 1

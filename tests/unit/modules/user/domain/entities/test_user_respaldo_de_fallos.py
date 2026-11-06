@@ -270,3 +270,18 @@ def test_r7b_y_con_otros_50_en_la_hora_nueva_si():
     _falla(user, 50, despues, cada=timedelta(seconds=1))
 
     assert user.is_locked(ahora=despues + timedelta(minutes=1))
+
+
+def test_r12_pasadas_24_horas_el_contador_diario_empieza_de_nuevo():
+    """
+    Given: 149 fallos en el día, nunca 50 en una hora
+    When: El siguiente llega 24 horas después del primero
+    Then: No bloquea: es otro día
+    """
+    user = _usuario()
+    for hora in range(4):
+        for i in range(49 if hora < 3 else 2):
+            user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=hora, seconds=i))
+
+    assert user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=24)) is None
+    assert user.locked_until is None
