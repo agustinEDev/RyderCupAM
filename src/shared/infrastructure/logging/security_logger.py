@@ -472,6 +472,7 @@ class SecurityLogger:
         user_id: str,
         devices_revoked: int,
         tokens_revoked: int,
+        google_unlinked: int = 0,
         ip_address: str = "unknown",
         user_agent: str = "unknown",
     ) -> None:
@@ -483,6 +484,7 @@ class SecurityLogger:
                 user_agent=user_agent,
                 devices_revoked=devices_revoked,
                 tokens_revoked=tokens_revoked,
+                google_unlinked=google_unlinked,
             )
         )
 

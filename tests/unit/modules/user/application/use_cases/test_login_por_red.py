@@ -63,6 +63,7 @@ from src.modules.user.domain.exceptions import (
     LoginAttemptsExceededException,
 )
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -611,3 +612,70 @@ async def test_u19_sin_cookie_el_429_no_toca_la_base_de_datos(monkeypatch, motiv
     with pytest.raises(LoginAttemptsExceededException):
         await e.entra(red=RED_A)
     assert busquedas == []
+
+
+async def _a_mitad_del_login(e: Escena, que_pasa) -> None:
+    """Hace `que_pasa` con la cuenta justo después de comprobar la contraseña (al
+    registrar el dispositivo), como otra petición que llega a la vez."""
+    respuesta = e.caso._register_device_use_case.execute.return_value
+
+    async def a_la_vez(*_a, **_k):
+        async with e.uow:
+            cuenta = await e.uow.users.find_by_email(Email(ANA))
+            que_pasa(cuenta)
+            await e.uow.users.save(cuenta)
+        return respuesta
+
+    e.caso._register_device_use_case.execute.side_effect = a_la_vez
+
+
+async def test_u20_si_google_se_queda_la_cuenta_a_mitad_del_login_no_hay_sesion():
+    """
+    Given: Una cuenta sin verificar y su contraseña buena (quien la creó)
+    When: Mientras se comprueba, Google se la queda (quita la contraseña)
+    Then: 401 (None) y ningún refresh token: la sesión no se cuela tras la toma
+          (auditoría OWASP y revisor de #749)
+    """
+    e = Escena()
+    ana = await e.usuario(verificado=False)
+    await _a_mitad_del_login(e, lambda cuenta: cuenta.claim_with_verified_oauth())
+
+    assert await e.entra() is None
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+
+
+async def test_u21_si_la_desactivan_a_mitad_del_login_no_hay_sesion():
+    """
+    Given: Ana con su contraseña buena
+    When: Mientras se comprueba, un administrador la desactiva
+    Then: AccountDeactivatedException y ningún refresh token
+    """
+    e = Escena()
+    ana = await e.usuario()
+    await _a_mitad_del_login(
+        e, lambda cuenta: cuenta.deactivate(deactivated_by_user_id=str(uuid4()))
+    )
+
+    with pytest.raises(AccountDeactivatedException):
+        await e.entra()
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+
+
+async def test_u22_si_cambia_la_contrasena_a_mitad_del_login_no_hay_sesion():
+    """
+    Given: Ana con su contraseña buena
+    When: Mientras se comprueba, la cambia otra petición (un restablecimiento)
+    Then: 401 (None): la contraseña comprobada ya no es la suya
+    """
+    e = Escena()
+    ana = await e.usuario()
+    await _a_mitad_del_login(e, lambda cuenta: cuenta.change_password("OtraClave#2026segura"))
+
+    assert await e.entra() is None
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []

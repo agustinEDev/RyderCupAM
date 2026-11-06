@@ -329,6 +329,62 @@ class LoginUserUseCase:
         self._rechaza_si_el_respaldo_frena(releido, fiable, request, contexto)
         return releido
 
+    async def _guarda_la_sesion(
+        self,
+        user: User,
+        comprobada: Password | None,
+        refresh_token: RefreshToken,
+        device_id: UserDeviceId,
+    ) -> str | None:
+        """La sesión, en una transacción con la fila bloqueada, si la cuenta sigue igual.
+
+        Returns:
+            None si se guardó; si no, qué cambió (y el dispositivo de este login,
+            revocado)
+        """
+        async with self._uow:
+            actual = await self._uow.users.find_by_id_for_update(user.id)
+            cambio = self._cambio_a_mitad(actual, comprobada)
+            if cambio is None:
+                await self._uow.users.save(user)
+                await self._uow.refresh_tokens.save(refresh_token)
+            else:
+                await self._revoca_el_dispositivo(device_id)
+        return cambio
+
+    @staticmethod
+    def _cambio_a_mitad(actual: User | None, comprobada: Password | None) -> str | None:
+        """Qué cambió en la cuenta desde que se comprobó la contraseña, o None."""
+        if actual is None:
+            return "Account deleted during login"
+        if not actual.is_active:
+            return "Account deactivated by admin"
+        if actual.password is None or actual.password != comprobada:
+            return "Password changed during login"
+        return None
+
+    async def _revoca_el_dispositivo(self, device_id: UserDeviceId) -> None:
+        """El dispositivo que dio de alta este login, que ya no entra, revocado."""
+        dispositivo = await self._uow.user_devices.find_by_id(device_id)
+        if dispositivo is not None and dispositivo.is_active:
+            dispositivo.revoke()
+            await self._uow.user_devices.save(dispositivo)
+
+    def _rechaza_el_cambio_a_mitad(
+        self, cambio: str, request: LoginRequestDTO, contexto: tuple[str, str]
+    ) -> None:
+        """Al log; una cuenta desactivada responde como siempre (403), lo demás 401."""
+        get_security_logger().log_login_attempt(
+            user_id=None,
+            email=request.email,
+            success=False,
+            failure_reason=cambio,
+            ip_address=contexto[0],
+            user_agent=contexto[1],
+        )
+        if cambio == "Account deactivated by admin":
+            raise AccountDeactivatedException()
+
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
         El login, y cada fallo apuntado en el techo de su red (#273): una contraseña
@@ -408,6 +464,9 @@ class LoginUserUseCase:
             await self._apunta_el_fallo(user, request, origen, fiable, contexto)
             return None
 
+        # La que se comprobó: al guardar la sesión, la cuenta tiene que tenerla aún
+        comprobada = user.password
+
         # La buena, pero RELEÍDA con la fila bloqueada (BE #282, revisor)
         releido = await self._releido_para_entrar(user, request, fiable, contexto)
         if releido is None:
@@ -476,12 +535,14 @@ class LoginUserUseCase:
             user_id=user.id, token=refresh_token_jwt, device_id=device_id, expires_in_days=7
         )
 
-        # Persistir usuario + refresh token usando Unit of Work
-        async with self._uow:
-            await self._uow.users.save(user)
-            await self._uow.refresh_tokens.save(refresh_token_entity)
-            # Commit automático al salir del contexto
-            # Nota: Device ya fue persistido en su propio UoW dentro de RegisterDeviceUseCase
+        # Persistir usuario + refresh token usando Unit of Work, con la fila
+        # bloqueada y la cuenta como cuando se comprobó: si a la vez Google se la
+        # quedó, la desactivaron o cambió la contraseña, no hay sesión (auditoría
+        # OWASP y revisor de #749)
+        cambio = await self._guarda_la_sesion(user, comprobada, refresh_token_entity, device_id)
+        if cambio is not None:
+            self._rechaza_el_cambio_a_mitad(cambio, request, contexto)
+            return None
 
         # Security Logging: Login exitoso
         security_logger.log_login_attempt(

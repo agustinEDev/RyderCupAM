@@ -715,6 +715,9 @@ class User:
             return False
         self._password = None
         self._verification_token = None
+        # Un «Olvidé mi contraseña» de antes del cambio de manos, tampoco
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
         self._email_verified = True
         self._updated_at = datetime.now()
         return True

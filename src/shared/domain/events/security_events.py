@@ -530,6 +530,7 @@ class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
 
     devices_revoked: int = 0
     tokens_revoked: int = 0
+    google_unlinked: int = 0
 
     def __post_init__(self):
         """Validación y severidad: una cuenta que cambia de manos es HIGH."""
@@ -539,15 +540,20 @@ class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
     def resumen(self, user_info: str) -> str:
         """La línea del log."""
         return (
-            f"UNVERIFIED ACCOUNT CLAIMED BY GOOGLE | {user_info} | password removed | "
-            f"devices revoked: {self.devices_revoked} | tokens revoked: {self.tokens_revoked}"
+            f"UNVERIFIED ACCOUNT CLAIMED BY GOOGLE | {user_info} | "
+            f"devices revoked: {self.devices_revoked} | tokens revoked: {self.tokens_revoked} | "
+            f"earlier Google unlinked: {self.google_unlinked}"
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa con lo que se cerró."""
         base = super().to_dict()
         base.update(
-            {"devices_revoked": self.devices_revoked, "tokens_revoked": self.tokens_revoked}
+            {
+                "devices_revoked": self.devices_revoked,
+                "tokens_revoked": self.tokens_revoked,
+                "google_unlinked": self.google_unlinked,
+            }
         )
         return base
 

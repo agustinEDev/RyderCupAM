@@ -32,8 +32,17 @@ def _google(email: str) -> None:
     app.dependency_overrides[get_google_oauth_service] = lambda: google
 
 
-async def _vincula(client: AsyncClient, email: str):
+async def _verifica(email: str) -> None:
+    from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+
+    await _sql("update users set email_verified = true where email = :e", e=email)
+
+
+async def _vincula(client: AsyncClient, email: str, verificada: bool = True):
     datos = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    if verificada:
+        # Vincular Google pide el correo verificado (#749)
+        await _verifica(email)
     set_auth_cookies(client, datos["cookies"])
     _google(email)
     respuesta = await client.post(
@@ -144,3 +153,46 @@ async def test_g2_google_takes_an_unverified_account_from_whoever_had_it(client:
     assert contrasena.status_code == 401
     assert suya.status_code == 200
     assert suya.json()["email_verified"] is True
+
+
+async def test_linking_google_needs_a_verified_email(client: AsyncClient):
+    """
+    Given: Un usuario con sesión y el correo SIN verificar
+    When: Vincula Google desde su perfil
+    Then: 403 con GOOGLE_LINK_NEEDS_VERIFIED_EMAIL y sin vínculo
+    """
+    _datos, respuesta = await _vincula(client, "sin.verificar.link@example.com", verificada=False)
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["error_code"] == "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL"
+
+
+async def test_g1_the_creator_google_link_does_not_survive_the_claim(client: AsyncClient):
+    """
+    Given: Una cuenta sin verificar a la que su creador vinculó SU Google (antes de
+           la regla de hoy, o con la cuenta verificada y luego otro correo)
+    When: Entra el Google que verificó el correo de la cuenta
+    Then: 200 contra la restricción real de la BD (un Google por cuenta), el Google
+          del creador ya no da esa cuenta y el del dueño sí
+    """
+    from tests.integration.api.v1.test_terms_acceptance_endpoints import _sql
+
+    email = "precaptura.google@example.com"
+    await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    await _sql(
+        "insert into user_oauth_accounts (id, user_id, provider, provider_user_id, "
+        "provider_email, created_at) select gen_random_uuid()::text, id, 'google', "
+        "'google-del-creador', 'creador@example.com', now() from users where email = :e",
+        {"e": email},
+    )
+    _google(email)
+
+    duenno = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+
+    assert duenno.status_code == 200
+    vinculos = await _sql(
+        "select o.provider_user_id from user_oauth_accounts o join users u "
+        "on u.id = o.user_id where u.email = :e",
+        {"e": email},
+    )
+    assert [fila[0] for fila in vinculos] == [f"google-{email}"]

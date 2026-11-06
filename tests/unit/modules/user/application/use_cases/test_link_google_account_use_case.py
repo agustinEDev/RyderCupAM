@@ -13,6 +13,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
 )
 from src.modules.user.application.use_cases.link_google_account_use_case import (
+    GoogleLinkNeedsVerifiedEmailError,
     LinkGoogleAccountUseCase,
 )
 from src.modules.user.domain.entities.user import User
@@ -61,6 +62,8 @@ async def existing_user(uow):
         email_str="existing@example.com",
         plain_password="V@l1dP@ss123!",
     )
+    # Verificada: vincular Google la pide (revisión de la pre-captura, #749)
+    user.verify_email_from_oauth()
     async with uow:
         await uow.users.save(user)
     return user
@@ -160,3 +163,35 @@ class TestLinkGoogleAccountUseCase:
         assert oauth.provider_user_id == "google-link-123"
         assert oauth.provider_email == "link@gmail.com"
         assert oauth.user_id == existing_user.id
+
+
+@pytest.mark.asyncio
+async def test_an_unverified_account_cannot_link_google(
+    use_case, uow, google_oauth_service, google_user_info
+):
+    """
+    Given: Una cuenta con sesión y el correo SIN verificar (la pudo crear cualquiera)
+    When: Vincula Google desde el perfil
+    Then: GoogleLinkNeedsVerifiedEmailError y ningún vínculo: si no, quien la creó
+          metería su propio Google y se lo quedaría aunque el dueño la recupere
+    """
+    user = User.create(
+        first_name="Sin",
+        last_name="Verificar",
+        email_str="sinverificar@example.com",
+        plain_password="V@l1dP@ss123!",
+    )
+    async with uow:
+        await uow.users.save(user)
+    google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+    with pytest.raises(GoogleLinkNeedsVerifiedEmailError):
+        await use_case.execute(
+            LinkGoogleAccountRequestDTO(authorization_code="code"), str(user.id.value)
+        )
+
+    async with uow:
+        assert (
+            await uow.oauth_accounts.find_by_user_id_and_provider(user.id, OAuthProvider.GOOGLE)
+            is None
+        )

@@ -269,6 +269,19 @@ class TestClaimWithVerifiedOAuth:
         assert user.email_verified
         assert user.verification_token is None
 
+    def test_a_pending_password_reset_is_dropped_too(self):
+        """
+        Given: Una cuenta sin verificar con un «Olvidé mi contraseña» pedido antes
+        When: Google se la queda
+        Then: El token de restablecer, fuera: es de antes del cambio de manos
+        """
+        user = self._cuenta(verificada=False)
+        user.generate_password_reset_token()
+
+        user.claim_with_verified_oauth()
+
+        assert user.password_reset_token is None
+
     def test_a_verified_account_is_left_as_it_is(self):
         """
         Given: Una cuenta ya verificada, con contraseña

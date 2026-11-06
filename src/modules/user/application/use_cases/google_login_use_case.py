@@ -86,7 +86,7 @@ class GoogleLoginUseCase:
 
     async def _resolve_user(
         self, google_info: GoogleUserInfo
-    ) -> tuple[User, bool, bool, tuple[int, int] | None]:
+    ) -> tuple[User, bool, bool, tuple[int, int, int] | None]:
         """
         Resuelve el usuario para el login de Google.
         Todas las lecturas y escrituras se ejecutan dentro de una sola transacción UoW.
@@ -128,7 +128,7 @@ class GoogleLoginUseCase:
 
     async def _auto_link_existing_user(
         self, user: User, google_info: GoogleUserInfo
-    ) -> tuple[User, tuple[int, int] | None]:
+    ) -> tuple[User, tuple[int, int, int] | None]:
         """
         Auto-link Google account to existing user found by email.
         Ejecuta dentro del contexto UoW del caller (sin abrir transacción propia).
@@ -138,11 +138,17 @@ class GoogleLoginUseCase:
         sus sesiones de antes (pre-captura, CodeRabbit en #749).
 
         Returns:
-            (user, revocados): revocados, (dispositivos, tokens) si se la quedó
+            (user, revocados): revocados, (dispositivos, tokens, googles quitados) si
+            se la quedó
         """
         revocados = None
+        if not user.email_verified:
+            # Con la fila bloqueada: un login con contraseña a la vez espera, y al
+            # acabar ve que la contraseña ya no es la que comprobó
+            user = await self._uow.users.find_by_id_for_update(user.id) or user
         if user.claim_with_verified_oauth():
-            revocados = await revoca_sus_sesiones(self._uow, user.id)
+            dispositivos, tokens = await revoca_sus_sesiones(self._uow, user.id)
+            revocados = (dispositivos, tokens, await self._quita_el_google_de_antes(user))
         new_oauth = UserOAuthAccount.create(
             user_id=user.id,
             provider=OAuthProvider.GOOGLE,
@@ -153,6 +159,16 @@ class GoogleLoginUseCase:
 
         await self._uow.users.save(user)
         return user, revocados
+
+    async def _quita_el_google_de_antes(self, user: User) -> int:
+        """El Google que vinculó quien creó la cuenta sin verificar, fuera. Cuántos."""
+        anterior = await self._uow.oauth_accounts.find_by_user_id_and_provider(
+            user.id, OAuthProvider.GOOGLE
+        )
+        if anterior is None:
+            return 0
+        await self._uow.oauth_accounts.delete(anterior)
+        return 1
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
         """
@@ -226,6 +242,7 @@ class GoogleLoginUseCase:
                     user_id=str(user.id.value),
                     devices_revoked=revocados[0],
                     tokens_revoked=revocados[1],
+                    google_unlinked=revocados[2],
                     ip_address=ip_address,
                     user_agent=user_agent,
                 )

@@ -944,6 +944,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
                 "user_id": str(cuenta.id.value),
                 "devices_revoked": 1,
                 "tokens_revoked": 1,
+                "google_unlinked": 0,
                 "ip_address": "203.0.113.7",
                 "user_agent": "Navegador",
             }
@@ -973,3 +974,88 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         assert respuesta.user.email == "oauth@example.com"
         async with uow:
             assert not (await uow.users.find_by_id(cuenta.id)).has_password
+
+    async def test_g1_a_google_the_creator_linked_is_removed(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: La cuenta sin verificar, con OTRO Google vinculado por quien la creó
+        When: Entra el Google que verificó el correo
+        Then: Se queda solo el suyo: el otro se quita (tampoco se probó) y va al log
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_unverified_account_claimed",
+            lambda self, **kw: apuntes.append(kw),
+        )
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        async with uow:
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=cuenta.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-del-atacante",
+                    provider_email="atacante@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, "google-del-atacante"
+                )
+                is None
+            )
+            suyo = await uow.oauth_accounts.find_by_user_id_and_provider(
+                cuenta.id, OAuthProvider.GOOGLE
+            )
+            assert suyo.provider_user_id == google_user_info.google_user_id
+        assert apuntes[0]["google_unlinked"] == 1
+
+    async def test_g3_a_verified_account_is_not_logged_as_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """Una verificada se vincula sin apuntar ninguna toma."""
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_unverified_account_claimed",
+            lambda self, **kw: apuntes.append(kw),
+        )
+        await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert apuntes == []
+
+    async def test_g4_a_deactivated_unverified_account_is_not_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar, desactivada por un administrador
+        When: Entra con Google
+        Then: 403, y conserva contraseña y sesiones: un login rechazado no cambia nada
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
+        cuenta.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(cuenta)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        with pytest.raises(AccountDeactivatedException):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
