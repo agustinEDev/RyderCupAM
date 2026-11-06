@@ -614,7 +614,7 @@ async def test_u19_sin_cookie_el_429_no_toca_la_base_de_datos(monkeypatch, motiv
     assert busquedas == []
 
 
-async def _a_mitad_del_login(e: Escena, que_pasa) -> str:
+async def _a_mitad_del_login(e: Escena, que_pasa, nuevo: bool = True) -> str:
     """Hace `que_pasa` con la cuenta justo después de comprobar la contraseña (al
     registrar el dispositivo), como otra petición que llega a la vez.
 
@@ -625,6 +625,7 @@ async def _a_mitad_del_login(e: Escena, que_pasa) -> str:
     import copy
 
     respuesta = e.caso._register_device_use_case.execute.return_value
+    respuesta.is_new_device = nuevo
     cuenta = await e.uow.users.find_by_email(Email(ANA))
     dispositivo = UserDevice.create(
         user_id=cuenta.id, fingerprint=DeviceFingerprint.create(IPHONE, RED_A)
@@ -727,3 +728,26 @@ async def test_u23_el_rechazo_a_mitad_apunta_al_usuario_y_no_borra_los_fallos(mo
     assert apuntes[-1]["user_id"] == str(ana.id.value)
     assert apuntes[-1]["failure_reason"] == "Password changed during login"
     assert olvidos == []
+
+
+async def test_u24_un_dispositivo_que_ya_existia_no_se_revoca_por_el_rechazo():
+    """
+    Given: Ana entra desde su dispositivo de siempre (otra pestaña cambia la contraseña)
+    When: El login se rechaza a mitad
+    Then: Sin sesión nueva, pero su dispositivo sigue activo: no lo dio de alta este login
+    """
+    from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
+    e = Escena()
+    ana = await e.usuario()
+    dispositivo = await _a_mitad_del_login(
+        e, lambda cuenta: cuenta.change_password("OtraClave#2026segura"), nuevo=False
+    )
+
+    assert await e.entra() is None
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+        assert (
+            await e.uow.user_devices.find_by_id(UserDeviceId.from_string(dispositivo))
+        ).is_active

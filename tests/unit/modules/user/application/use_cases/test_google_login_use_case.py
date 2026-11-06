@@ -1113,3 +1113,32 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         async with uow:
             assert (await uow.users.find_by_id(cuenta.id)).has_password
             assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+
+    async def test_g10_an_email_changed_right_before_the_lock_is_not_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar con el correo de Google, que cambia de correo justo
+               antes de que Google la bloquee
+        When: Google iba a quedársela
+        Then: No se la queda (ya no es la cuenta de ese correo): error, y conserva la
+              contraseña
+        """
+        import copy
+
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+
+        async def otro_correo(user_id):
+            otra = copy.deepcopy(uow.users._users[user_id])
+            otra.change_email("otro.correo@example.com")
+            uow.users._users[user_id] = otra
+            return otra
+
+        uow.users.find_by_id_for_update = otro_correo
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        with pytest.raises(ValueError):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password

@@ -872,6 +872,10 @@ class User:
 
         self._email = new_email_vo
         self._email_verified = False  # Requiere nueva verificación
+        # Un «Olvidé mi contraseña» pedido para el correo de antes no vale para este:
+        # verificaría el nuevo sin que nadie lo haya demostrado (#749)
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
         self._updated_at = datetime.now()
 
         self._add_domain_event(

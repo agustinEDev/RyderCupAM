@@ -166,3 +166,34 @@ async def test_r3_a_broken_log_does_not_undo_the_reset(monkeypatch):
 
     async with uow:
         assert (await uow.users.find_by_id(cuenta.id)).verify_password(NUEVA)
+
+
+async def test_r4_a_claim_right_before_the_lock_wins_over_the_reset():
+    """
+    Given: Una cuenta sin verificar con su enlace de restablecer
+    When: Justo antes de que el restablecimiento bloquee la fila, Google se la queda
+          (borra el token)
+    Then: El enlace ya no vale (token inválido) y lo de Google se queda: el
+          restablecimiento no le quita el Google recién vinculado
+    """
+    import copy
+
+    from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
+
+    uow, cuenta, _d, caso, token = await _escena(verificada=False)
+
+    async def tomada(user_id):
+        otra = copy.deepcopy(uow.users._users[user_id])
+        otra.claim_with_verified_oauth()
+        uow.users._users[user_id] = otra
+        return otra
+
+    uow.users.find_by_id_for_update = tomada
+
+    with pytest.raises(InvalidResetTokenError):
+        await _restablece(caso, token)
+
+    async with uow:
+        assert await uow.oauth_accounts.find_by_user_id_and_provider(
+            cuenta.id, OAuthProvider.GOOGLE
+        )

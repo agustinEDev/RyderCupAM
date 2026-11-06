@@ -308,3 +308,26 @@ class TestClaimWithVerifiedOAuth:
         user.reset_password(token, "OtraClave#2026segura")
 
         assert user.verify_password("OtraClave#2026segura")
+
+
+class TestChangeEmailDropsThePendingReset:
+    """Un enlace de restablecer pedido para un correo no vale para el siguiente (#749)."""
+
+    def test_changing_the_email_drops_a_pending_password_reset(self):
+        """
+        Given: Una cuenta con un «Olvidé mi contraseña» pedido (el enlace fue a su correo)
+        When: Cambia el correo por otro
+        Then: El token ya no existe: si no, verificaría el correo nuevo sin que nadie
+              lo haya demostrado
+        """
+        user = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="ana@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        user.generate_password_reset_token()
+
+        user.change_email("otra@example.com")
+
+        assert user.password_reset_token is None

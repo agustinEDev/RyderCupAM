@@ -334,13 +334,13 @@ class LoginUserUseCase:
         user: User,
         comprobada: Password | None,
         refresh_token: RefreshToken,
-        device_id: UserDeviceId,
+        dispositivo_nuevo: UserDeviceId | None,
     ) -> str | None:
         """La sesión, en una transacción con la fila bloqueada, si la cuenta sigue igual.
 
         Returns:
-            None si se guardó; si no, qué cambió (y el dispositivo de este login,
-            revocado)
+            None si se guardó; si no, qué cambió (y el dispositivo que dio de alta
+            este login, si lo hizo, revocado)
         """
         async with self._uow:
             actual = await self._uow.users.find_by_id_for_update(user.id)
@@ -348,8 +348,8 @@ class LoginUserUseCase:
             if cambio is None:
                 await self._uow.users.save(user)
                 await self._uow.refresh_tokens.save(refresh_token)
-            else:
-                await self._revoca_el_dispositivo(device_id)
+            elif dispositivo_nuevo is not None:
+                await self._revoca_el_dispositivo(dispositivo_nuevo)
         return cambio
 
     @staticmethod
@@ -535,7 +535,9 @@ class LoginUserUseCase:
         # bloqueada y la cuenta como cuando se comprobó: si a la vez Google se la
         # quedó, la desactivaron o cambió la contraseña, no hay sesión (auditoría
         # OWASP y revisor de #749)
-        cambio = await self._guarda_la_sesion(user, comprobada, refresh_token_entity, device_id)
+        # El dispositivo solo se revoca si lo dio de alta este login (no el de siempre)
+        nuevo = device_id if device_response.is_new_device else None
+        cambio = await self._guarda_la_sesion(user, comprobada, refresh_token_entity, nuevo)
         if cambio is not None:
             self._rechaza_el_cambio_a_mitad(cambio, user, request, contexto)
             return None

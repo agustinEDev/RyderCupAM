@@ -147,37 +147,53 @@ class ResetPasswordUseCase:
             )
             raise InvalidResetTokenError()
 
-        # Sin verificar: quien usa el enlace de su buzón demuestra que el correo es
-        # suyo, y se queda la cuenta (#749, pre-captura)
-        sin_verificar = not user.email_verified
-
-        # Validar token y expiración usando lógica de dominio
-        try:
-            # reset_password() internamente llama a can_reset_password()
-            # Si el token es inválido/expirado, lanza ValueError
-            await run_bcrypt(
-                user.reset_password,
-                token=request.token,
-                new_password=request.new_password,
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
-        except ValueError as e:
-            # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
-            security_logger.log_password_reset_completed(
-                user_id=str(user.id.value),
-                email=str(user.email.value),
-                success=False,
-                failure_reason=str(e),
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
-            raise  # Re-lanzar la excepción para que el API layer la maneje
-
-        # Guardar usuario con nueva contraseña, historial y revocar todos los refresh tokens
-        # Todas las operaciones se ejecutan en la MISMA transacción para garantizar atomicidad
+        # Todo con la fila bloqueada (revisión de #749): una toma por Google a la vez
+        # borra el token, y entonces el enlace ya no vale; sin el bloqueo, el
+        # restablecimiento seguía con la lectura de antes y deshacía la toma
+        token_leido = user.password_reset_token
         async with self._uow:
-            # Guardar el nuevo hash en el historial de contraseñas
+            bloqueada = await self._uow.users.find_by_id_for_update(user.id)
+            if bloqueada is None or bloqueada.password_reset_token != token_leido:
+                security_logger.log_password_reset_completed(
+                    user_id=str(user.id.value),
+                    email=str(user.email.value),
+                    success=False,
+                    failure_reason="Reset token changed during reset",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+                raise InvalidResetTokenError()
+            user = bloqueada
+
+            # Sin verificar: quien usa el enlace de su buzón demuestra que el correo
+            # es suyo, y se queda la cuenta (#749, pre-captura)
+            sin_verificar = not user.email_verified
+
+            # Validar token y expiración usando lógica de dominio
+            try:
+                # reset_password() internamente llama a can_reset_password()
+                # Si el token es inválido/expirado, lanza ValueError
+                await run_bcrypt(
+                    user.reset_password,
+                    token=request.token,
+                    new_password=request.new_password,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except ValueError as e:
+                # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
+                security_logger.log_password_reset_completed(
+                    user_id=str(user.id.value),
+                    email=str(user.email.value),
+                    success=False,
+                    failure_reason=str(e),
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+                raise  # Re-lanzar la excepción para que el API layer la maneje
+
+            # Guardar el nuevo hash en el historial de contraseñas, revocar las
+            # sesiones y guardar el usuario, en la MISMA transacción
             total_history_count = await self._uow.password_history.count_by_user(user.id) + 1
             password_history = PasswordHistory.create(
                 user_id=user.id,
