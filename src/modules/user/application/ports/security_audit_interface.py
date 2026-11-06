@@ -24,6 +24,25 @@ class ISecurityAuditLogger(ABC):
         """Deja constancia de que se revocó un dispositivo y cuántas sesiones cerró (BE #737)."""
 
     @abstractmethod
+    def log_account_unlocked(
+        self,
+        user_id: str,
+        unlocked_user_id: str,
+        ip_address: str,
+        user_agent: str,
+        previous_failed_attempts: int,
+    ) -> None:
+        """Deja constancia de que un administrador desbloqueó una cuenta (hotfix 2.50.1).
+
+        Args:
+            user_id: ID del administrador
+            unlocked_user_id: ID de la cuenta desbloqueada
+            ip_address: IP del administrador ("unknown" si no se conoce)
+            user_agent: Navegador ("unknown" si no se conoce)
+            previous_failed_attempts: Fallos que llevaba la cuenta
+        """
+
+    @abstractmethod
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:

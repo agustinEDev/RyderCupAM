@@ -381,6 +381,34 @@ class EmailChangedEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class AccountUnlockedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador desbloqueó a mano una cuenta bloqueada por fallos (hotfix 2.50.1).
+
+    `user_id` es el administrador; `unlocked_user_id`, la cuenta desbloqueada.
+    """
+
+    unlocked_user_id: str = ""
+    previous_failed_attempts: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: quitar un bloqueo de seguridad es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con los campos del desbloqueo."""
+        base = super().to_dict()
+        base.update(
+            {
+                "unlocked_user_id": self.unlocked_user_id,
+                "previous_failed_attempts": self.previous_failed_attempts,
+            }
+        )
+        return base
+
+
+@dataclass(frozen=True)
 class AccessDeniedEvent(SecurityAuditEvent):
     """
     Evento de acceso denegado (HTTP 403).

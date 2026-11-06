@@ -113,6 +113,8 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.logging.security_logger import get_security_logger
+from src.shared.infrastructure.security.authorization import require_admin
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
@@ -1035,7 +1037,7 @@ async def validate_reset_token(
     tags=["Authentication", "Admin"],
 )
 async def unlock_account(
-    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
+    request: Request,
     unlock_data: UnlockAccountRequestDTO,
     use_case: UnlockAccountUseCase = Depends(get_unlock_account_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -1047,13 +1049,11 @@ async def unlock_account(
     - Permite desbloquear cuentas antes de expiración automática (30 min)
     - Resetea failed_login_attempts a 0
     - Elimina locked_until (None)
-    - Emite AccountUnlockedEvent para auditoría
+    - Deja el desbloqueo en el log de seguridad (y el intento sin permiso)
 
     Security (OWASP A01, A09):
-    - Solo Admin puede ejecutar este endpoint
+    - Solo Admin puede ejecutar este endpoint (403 al resto, hotfix 2.50.1)
     - Requiere autenticación JWT válida
-    - Registra quién desbloqueó en evento de auditoría
-    - TODO: Verificar rol Admin cuando se implemente sistema de roles (v2.1.0)
 
     Args:
         request: Request de FastAPI
@@ -1066,16 +1066,39 @@ async def unlock_account(
 
     Raises:
         HTTPException 401: Si no está autenticado
-        HTTPException 403: Si no es Admin (cuando se implemente verificación de rol)
-        HTTPException 404: Si el usuario no existe
-        HTTPException 400: Si la cuenta no está bloqueada
+        HTTPException 403: Si no es Admin
+        HTTPException 400: Si el usuario no existe o la cuenta no está bloqueada
     """
-    # TODO (v2.1.0): Verificar que current_user tiene rol ADMIN
-    # Por ahora, cualquier usuario autenticado puede desbloquear (MVP)
-    # TODO: When roles are implemented, restrict to ADMIN only
+    ip_address = get_trusted_client_ip(
+        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+    )
+    user_agent = get_user_agent(request)
 
-    # Establecer unlocked_by_user_id del usuario autenticado
+    # Solo administradores (hotfix 2.50.1): con solo pedir sesión, cualquiera podía
+    # quitar el bloqueo de otra cuenta y seguir probando contraseñas (OWASP A01/A07).
+    # Antes de buscar la cuenta: un 403 no dice si el id existe. El intento, al log
+    try:
+        require_admin(current_user)
+    except HTTPException:
+        # El log, sin tumbar el 403: si falla, solo el tipo del error
+        try:
+            get_security_logger().log_access_denied(
+                user_id=str(current_user.id),
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
+                resource_type="account_lock",
+                resource_id=unlock_data.user_id,
+                action_attempted="unlock",
+                denial_reason="not_admin",
+            )
+        except Exception as log_error:
+            logger.error("Access denied audit event failed: %s", type(log_error).__name__)
+        raise
+
+    # Quién y desde dónde, del usuario autenticado y de la petición: nunca del cuerpo
     unlock_data.unlocked_by_user_id = str(current_user.id)
+    unlock_data.ip_address = ip_address
+    unlock_data.user_agent = user_agent
 
     try:
         response = await use_case.execute(unlock_data)
