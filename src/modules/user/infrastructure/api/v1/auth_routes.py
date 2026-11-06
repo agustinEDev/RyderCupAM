@@ -1049,7 +1049,7 @@ async def unlock_account(
     - Permite desbloquear cuentas antes de expiración automática (30 min)
     - Resetea failed_login_attempts a 0
     - Elimina locked_until (None)
-    - Emite AccountUnlockedEvent para auditoría
+    - Deja el desbloqueo en el log de seguridad (y el intento sin permiso)
 
     Security (OWASP A01, A09):
     - Solo Admin puede ejecutar este endpoint (403 al resto, hotfix 2.50.1)
@@ -1081,15 +1081,19 @@ async def unlock_account(
     try:
         require_admin(current_user)
     except HTTPException:
-        get_security_logger().log_access_denied(
-            user_id=str(current_user.id),
-            ip_address=ip_address or "unknown",
-            user_agent=user_agent or "unknown",
-            resource_type="account_lock",
-            resource_id=unlock_data.user_id,
-            action_attempted="unlock",
-            denial_reason="not_admin",
-        )
+        # El log, sin tumbar el 403: si falla, solo el tipo del error
+        try:
+            get_security_logger().log_access_denied(
+                user_id=str(current_user.id),
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
+                resource_type="account_lock",
+                resource_id=unlock_data.user_id,
+                action_attempted="unlock",
+                denial_reason="not_admin",
+            )
+        except Exception as log_error:
+            logger.error("Access denied audit event failed: %s", type(log_error).__name__)
         raise
 
     # Quién y desde dónde, del usuario autenticado y de la petición: nunca del cuerpo

@@ -12,6 +12,7 @@ el bloqueo por fallos de otra cuenta y seguir probando contraseñas contra ella
   U2b un usuario normal con un id que no existe     | 403 también: no dice si existe
   U3  un administrador desbloquea                   | 200, y la dueña ya puede entrar
   U4  el intento sin permiso y el desbloqueo        | los dos quedan en el log de seguridad
+  U5  el log falla con un no administrador          | 403 igual, no 500
 """
 
 import uuid
@@ -174,3 +175,24 @@ async def test_u4_el_intento_sin_permiso_y_el_desbloqueo_quedan_en_el_log(
         (admin["user"]["id"], victima["user"]["id"])
     ]
     assert desbloqueos[0]["previous_failed_attempts"] == 10
+
+
+async def test_u5_si_falla_el_log_el_no_administrador_sigue_recibiendo_403(
+    client: AsyncClient, monkeypatch
+):
+    """
+    Given: Un usuario normal, y el log de seguridad que falla al escribir
+    When: Intenta desbloquear una cuenta
+    Then: 403, no 500: el log nunca cambia la respuesta
+    """
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    def roto(self, **kw):
+        raise RuntimeError("disco lleno")
+
+    monkeypatch.setattr(SecurityLogger, "log_access_denied", roto)
+    yo = await create_authenticated_user(client, _email("yo"), CLAVE, "Yo", "Mismo")
+
+    r = await _desbloquea(client, yo, yo["user"]["id"])
+
+    assert r.status_code == 403, r.text

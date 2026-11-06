@@ -46,6 +46,7 @@ class UnlockAccountUseCase:
 
         Args:
             uow: Unit of Work para acceso a repositorios
+            security_audit: El log de seguridad, donde queda cada desbloqueo
         """
         self._uow = uow
         # El log de seguridad, por su puerto: un caso de uso no importa infraestructura
@@ -73,19 +74,16 @@ class UnlockAccountUseCase:
             >>> print(response.success)  # True
             >>> print(response.message)  # "Account unlocked successfully"
         """
-        # Buscar usuario por ID
-        user_id = UserId(request.user_id)
-        user = await self._uow.users.find_by_id(user_id)
-
-        if not user:
-            raise ValueError(f"User with ID {request.user_id} not found")
-
-        # Desbloquear cuenta (lanza ValueError si no está bloqueada)
-        fallos = user.failed_login_attempts
-        user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
-
-        # Persistir cambios usando Unit of Work
+        # Leer, desbloquear y guardar en UNA transacción, con la fila bloqueada (como
+        # el login, BE #282): un fallo de login que llegara entre medias se perdía, y
+        # el log apuntaba unos fallos que ya no eran los que se borraban
         async with self._uow:
+            user = await self._uow.users.find_by_id_for_update(UserId(request.user_id))
+            if not user:
+                raise ValueError(f"User with ID {request.user_id} not found")
+            # Desbloquear cuenta (lanza ValueError si no está bloqueada)
+            fallos = user.failed_login_attempts
+            user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
             await self._uow.users.save(user)
             # Commit automático al salir del contexto
 

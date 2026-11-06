@@ -225,7 +225,7 @@ class SecurityLogger:
 
         if isinstance(event, AccountUnlockedAuditEvent):
             return (
-                f"🔓 ACCOUNT UNLOCKED | {user_info} | Unlocked: {event.unlocked_user_id}"
+                f"ACCOUNT UNLOCKED | {user_info} | Unlocked: {event.unlocked_user_id}"
                 f" | Previous failures: {event.previous_failed_attempts}"
             )
 
