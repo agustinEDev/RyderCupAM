@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.51.0] - 2026-11-06
+
+**Los fallos de otro ya no dejan fuera al dueño de la cuenta** (#732, ADR-043, que
+modifica el ADR-027). Una migración, que se aplica sola al arrancar. Va con el
+frontend **2.66.0**, que traduce el nuevo 423: hay que desplegar antes esta versión.
+Probado en el Kind con develop.
+
+### Security
+
+- **El login se frena por correo y red**, no por correo solo. Antes, 5 intentos por
+  minuto con tu correo desde cualquier red te dejaban en 429, y 10 contraseñas malas
+  bloqueaban tu cuenta 30 minutos para todo el mundo.
+  - 5 intentos por minuto y 10 fallos en 30 minutos bloquean **esa red** 30 minutos
+    para esa cuenta (423). Las demás redes, y las demás cuentas desde esa red, entran.
+  - En memoria, como los demás límites, con tope; un bloqueo vivo no se expulsa.
+  - Sin cookie de dispositivo se decide en memoria, antes de consultar la BD.
+- **El dispositivo fiable del dueño** (la cookie de un dispositivo activo de la
+  cuenta) no se bloquea por los fallos de otros ni por el techo de fallos de su red:
+  entra también en la wifi del club con el atacante dentro. Con 10 fallos suyos
+  pierde el pase 30 minutos.
+- **El respaldo de la cuenta**, contra un ataque repartido entre muchas redes, solo
+  frena a los dispositivos desconocidos: aviso al dueño a los 25 fallos en una hora,
+  bloqueo de 30 minutos a los 50 y de 24 horas a los 150 en un día. Acertar la
+  contraseña ya no lo pone a cero.
+- **El login con Google no lo frena** el bloqueo por fallos de contraseña.
+- **Correo de «intentos fallidos» al dueño** cuando se bloquea una red para su cuenta,
+  o salta el respaldo. Solo a correos confirmados, uno por hora y cuenta, reservado
+  con la fila bloqueada para que dos a la vez no manden dos. Tope global: 20 por hora
+  y 30 al día los de red, y 10 al día propios para los graves, para no gastar el cupo
+  de la verificación y la recuperación de contraseña.
+- **El desbloqueo del administrador** también limpia los bloqueos por red.
+- **`X-Test-Client-ID`** solo vale en desarrollo y en los tests: sin `ENVIRONMENT`, ya
+  no se toma por desarrollo.
+- El techo de la ruta del login por red sube de 60 a 120 por minuto (solo protege la
+  CPU; la fuerza bruta la acota el freno).
+- Migración `e1a3c5d7f9b2`: cuatro columnas en `users` (la hora y el día del respaldo
+  y el último aviso).
+
 ## [2.50.1] - 2026-11-06
 
 **Hotfix: solo un administrador puede desbloquear una cuenta.** Sin migraciones ni

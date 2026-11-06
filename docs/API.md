@@ -14,7 +14,7 @@
 ```text
 Authentication (11 endpoints)
 ├── POST /api/v1/auth/register           # User registration
-├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies, lockout after 10 attempts)
+├── POST /api/v1/auth/login              # JWT authentication (httpOnly cookies, brake per email + network)
 ├── GET  /api/v1/auth/current-user       # Get authenticated user info
 ├── POST /api/v1/auth/logout             # Session logout (revoke refresh tokens)
 ├── POST /api/v1/auth/verify-email       # Email verification
@@ -137,7 +137,7 @@ Support (1 endpoint) ⭐ v2.0.8
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/auth/register` | POST | No | User registration + email verification |
-| `/auth/login` | POST | No | Login with JWT (httpOnly cookies) - **Lockout after 10 failed attempts** |
+| `/auth/login` | POST | No | Login with JWT (httpOnly cookies) - **10 failures lock that network for that email (423), ADR-043** |
 | `/auth/current-user` | GET | Yes | Get authenticated user |
 | `/auth/logout` | POST | Yes | Logout with refresh token revocation |
 | `/auth/refresh-token` | POST | No | Renew access token (uses refresh cookie) |
@@ -224,7 +224,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 - **Forgot/Reset:** Generic message, never reveals if email exists (prevents user enumeration)
 - **Reset Token:** Single-use token, expires in 24h, invalidates all active sessions after change
 - **Refresh Tokens:** SHA256 hash in DB, revocable on logout
-- **Account Lockout (v1.13.0):** 10 failed attempts → 30 min lockout, auto-unlock, HTTP 423 Locked
+- **Login brake (ADR-043, BE #732):** per email + network, 5 attempts/min (429) and 10 failures → that network locked 30 min (423). A trusted device (active device cookie of the account) is never locked out by failures elsewhere. Account backstop for unknown devices: 50 failures/hour → 30 min, 150/24 h → 24 h. Google sign-in is not affected.
 
 **📋 See details:** `docs/modules/user-management.md`, `docs/SECURITY_IMPLEMENTATION.md`
 

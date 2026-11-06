@@ -84,6 +84,16 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
             return device
         return None
 
+    async def find_active_ids_of_user(
+        self, device_ids: list[UserDeviceId], user_id: UserId
+    ) -> list[UserDeviceId]:
+        """De estos ids, los de dispositivos activos de este usuario."""
+        return [
+            d.id
+            for i in device_ids
+            if (d := await self.find_by_id(i)) and d.user_id == user_id and d.is_active
+        ]
+
     async def find_by_user_and_fingerprint(
         self, user_id: UserId, fingerprint_hash: str
     ) -> UserDevice | None:

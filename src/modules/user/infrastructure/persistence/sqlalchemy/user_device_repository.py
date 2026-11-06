@@ -156,6 +156,22 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def find_active_ids_of_user(
+        self, device_ids: list[UserDeviceId], user_id: UserId
+    ) -> list[UserDeviceId]:
+        """De estos ids, los de dispositivos activos de este usuario, en una consulta."""
+        if not device_ids:
+            return []
+        columnas = user_devices_table.c
+        statement = (
+            select(columnas.id)
+            .where(columnas.id.in_(device_ids))
+            .where(columnas.user_id == user_id)
+            .where(columnas.is_active.is_(True))
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def find_by_user_and_fingerprint(
         self, user_id: UserId, fingerprint_hash: str
     ) -> UserDevice | None:

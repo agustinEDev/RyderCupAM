@@ -11,8 +11,10 @@ class AccountLockedEvent(DomainEvent):
     debido a múltiples intentos fallidos de login.
 
     Este evento se dispara automáticamente cuando:
-    - failed_login_attempts alcanza MAX_FAILED_ATTEMPTS (10)
+    - el respaldo de la cuenta llega a MAX_FAILED_ATTEMPTS (50 en una hora, todas
+      las redes; BE #732)
     - locked_until es asignado (NOW + 30 minutos)
+    Los bloqueos de cada red los lleva el freno del login, en memoria, sin evento
 
     Security (OWASP A09):
         - Severity: HIGH (indica potencial ataque de fuerza bruta)

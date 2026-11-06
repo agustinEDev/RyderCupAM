@@ -36,7 +36,6 @@ from src.modules.user.application.use_cases.link_google_account_use_case import 
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
-from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_validos_de_la_cookie,
@@ -87,13 +86,9 @@ async def google_login(
     login_data.installed_app = es_la_app_instalada(request)
     login_data.country_code = cloudflare_client_country(request)
 
+    # Sin 423: el bloqueo por fallos de contraseña no frena a Google (BE #732)
     try:
         login_response = await use_case.execute(login_data)
-    except AccountLockedException as e:
-        raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail="Account temporarily locked. Please try again later.",
-        ) from e
     except ValueError as e:
         error_msg = str(e)
         # Map known errors to safe client-facing messages

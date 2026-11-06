@@ -51,7 +51,11 @@ from src.shared.infrastructure.security.jwt_handler import (
 )
 
 # Topes de las rutas anónimas: por red, que en producción es toda la app
-LOGIN_ATTEMPTS_LIMIT = "60/minute"  # techo de intentos: cada login cuesta un bcrypt
+# Techo de intentos por red, de cualquier correo: protege la CPU (cada login que pasa
+# el freno cuesta un bcrypt). 120 desde BE #732: un atacante en la misma red que el
+# dueño (la wifi del club) le deja en 429 mientras dure; al doble, le cuesta el doble.
+# La fuerza bruta la acota el freno del login (5/min por correo, 30 fallos/min por red)
+LOGIN_ATTEMPTS_LIMIT = "120/minute"
 GOOGLE_LOGIN_LIMIT = "30/minute"
 REGISTER_LIMIT = "30/hour"
 EMAIL_SENDING_LIMIT = "30/hour"  # forgot-password y resend-verification
@@ -76,6 +80,8 @@ DEFAULT_LIMIT_OVERRIDES = {
 }
 
 # Topes que no van por red
+# Por correo + origen (la red, o el dispositivo fiable), no por correo solo: cinco
+# intentos ajenos dejaban al dueño en 429 (BE #732). Lo cuenta el freno del login
 LOGIN_ATTEMPTS_PER_EMAIL_LIMIT = "5/minute"
 FAILED_LOGINS_LIMIT = "30/minute"  # por red, solo intentos fallidos
 EMAIL_SENDING_PER_EMAIL_LIMIT = "3/hour"
@@ -101,20 +107,40 @@ def get_client_identifier(request: Request) -> str:
     En producción: la IP que da Cloudflare si la petición trae su secreto (BE #466,
     ADR-041); si no, la del peer, que es el proxy de Render: el contador
     compartido de siempre, nunca uno que elija quien llama.
-    Fuera de producción: X-Test-Client-ID si existe (simula clientes distintos).
+    En desarrollo y en los tests: X-Test-Client-ID si existe (simula clientes
+    distintos). Sin ENVIRONMENT, o con un valor desconocido, como en producción.
     """
-    environment = os.getenv("ENVIRONMENT", "development").lower()
-    if environment == "production":
+    if not _admite_el_cliente_de_prueba():
         ip = cloudflare_client_ip(request)
         return _clave_de_red(ip) if ip else get_remote_address(request)
 
-    # En testing/development, permitir simular diferentes clientes con un header especial
+    # En los tests y en desarrollo, simular clientes distintos con una cabecera
     test_client_id = request.headers.get("X-Test-Client-ID")
     if test_client_id:
         return test_client_id
 
     # Fallback: usar IP real
     return get_remote_address(request)
+
+
+# El entorno que dice expresamente que no es producción (no hay staging)
+_ENTORNOS_DE_PRUEBA = frozenset({"development"})
+
+
+def _admite_el_cliente_de_prueba() -> bool:
+    """
+    Si vale X-Test-Client-ID: solo cuando el entorno dice que NO es producción.
+
+    Antes, sin ENVIRONMENT se tomaba por desarrollo: una producción mal configurada
+    dejaba a quien llama elegir su red, y con ella el freno del login (auditoría
+    OWASP de BE #732, A05). Un valor desconocido cuenta como producción.
+    """
+    environment = os.getenv("ENVIRONMENT", "").lower()
+    if environment == "production":
+        return False
+    if os.getenv("TESTING", "").lower() == "true":
+        return True
+    return environment in _ENTORNOS_DE_PRUEBA
 
 
 def get_rate_limit_key(request: Request) -> str:
@@ -239,23 +265,33 @@ def count_or_refuse(limit_value: str, scope: str, identifier: str) -> None:
         raise _exceeded(limit_value)
 
 
-def refuse_if_failed_logins_exhausted(request: Request) -> None:
-    """Rechaza el login con 429 si su red ha agotado el tope de fallos."""
+def too_many_login_attempts() -> RateLimitExceeded:
+    """El 429 del freno del login (BE #732): el mismo que cualquier otro límite."""
+    return _exceeded(LOGIN_ATTEMPTS_PER_EMAIL_LIMIT)
+
+
+def too_many_failed_logins_from_network() -> RateLimitExceeded:
+    """El 429 del techo de fallos de una red (#273): el mismo que cualquier límite."""
+    return _exceeded(FAILED_LOGINS_LIMIT)
+
+
+def failed_logins_exhausted(red: str) -> bool:
+    """
+    Si la red (la clave de get_client_identifier) agotó el techo de fallos del login.
+
+    Lo pregunta el freno del login, y no la ruta, desde BE #732: un dispositivo
+    fiable de la cuenta no lo sufre (en la wifi del club con un atacante dentro).
+    """
     if not limiter.enabled:
-        return
-    if not limiter.limiter.test(
-        parse(FAILED_LOGINS_LIMIT), "login-failures", get_client_identifier(request)
-    ):
-        raise _exceeded(FAILED_LOGINS_LIMIT)
+        return False
+    return not limiter.limiter.test(parse(FAILED_LOGINS_LIMIT), "login-failures", red)
 
 
-def record_failed_login(request: Request) -> None:
+def record_failed_login(red: str) -> None:
     """Apunta un login fallido a su red, exista o no el email."""
     if not limiter.enabled:
         return
-    limiter.limiter.hit(
-        parse(FAILED_LOGINS_LIMIT), "login-failures", get_client_identifier(request)
-    )
+    limiter.limiter.hit(parse(FAILED_LOGINS_LIMIT), "login-failures", red)
 
 
 # Crear instancia global del limiter

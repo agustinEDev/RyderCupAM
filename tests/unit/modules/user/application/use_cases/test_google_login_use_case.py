@@ -23,7 +23,6 @@ from src.modules.user.application.use_cases.google_login_use_case import (
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
-from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -324,10 +323,15 @@ class TestGoogleLoginUseCaseAutoLink:
 class TestGoogleLoginUseCaseLockout:
     """Tests para protección de cuenta bloqueada."""
 
-    async def test_locked_account_raises_exception(
+    async def test_a_tripped_backstop_does_not_stop_google_sign_in(
         self, use_case, uow, google_oauth_service, google_user_info, login_request
     ):
-        """Debe lanzar AccountLockedException si la cuenta está bloqueada."""
+        """
+        Given: El respaldo de la cuenta bloqueado por fallos de contraseña (BE #732)
+        When: Entra con Google
+        Then: Entra, y el respaldo sigue igual: Google ya demuestra que es él, y una
+              cuenta solo de Google no tiene contraseña buena con la que defenderse
+        """
         user = User.create_from_oauth(
             first_name="Locked",
             last_name="User",
@@ -356,8 +360,13 @@ class TestGoogleLoginUseCaseLockout:
 
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        with pytest.raises(AccountLockedException):
-            await use_case.execute(login_request)
+        respuesta = await use_case.execute(login_request)
+
+        assert respuesta.access_token
+        async with uow:
+            guardado = await uow.users.find_by_id(user.id)
+        assert guardado.failed_login_attempts == 10
+        assert guardado.locked_until is not None
 
 
 @pytest.mark.asyncio

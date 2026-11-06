@@ -521,3 +521,38 @@ class TestTheScheduledUpdateSkippedEmail:
         )
         _, _, _, cuerpo = _enviado(correo)
         assert "<b>x</b>" not in cuerpo
+
+
+@pytest.mark.parametrize(
+    ("motivo", "fallos", "minutos", "dice", "en_ingles"),
+    [
+        ("red", 10, 30, "10 veces desde España", "10 times from España"),
+        ("aviso", 25, 0, "Todavía no hemos bloqueado nada", "Nothing is blocked yet"),
+        ("respaldo", 50, 30, "bloqueado 30 minutos la entrada", "paused for 30 minutes"),
+        ("dia", 150, 1440, "bloqueado 24 horas la entrada", "paused for 24 hours"),
+    ],
+)
+async def test_el_correo_de_intentos_fallidos_dice_lo_que_paso(
+    correo, motivo, fallos, minutos, dice, en_ingles
+):
+    """
+    Given: El correo de intentos fallidos de cada motivo (BE #732)
+    When: Se envía
+    Then: Cuenta lo que pasó con sus números, en castellano y en inglés, y el botón
+          lleva a cambiar la contraseña
+    """
+    await correo.send_failed_logins_notification(
+        to_email="ana@example.com",
+        user_name="Ana",
+        motivo=motivo,
+        cuando="6 nov 2026, 10:30 (hora de España)",
+        pais="España",
+        fallos=fallos,
+        minutos=minutos,
+    )
+
+    _, asunto, texto, html = _enviado(correo)
+    assert "Intentos fallidos" in asunto
+    assert dice in texto and dice in html
+    assert en_ingles in texto
+    assert _botones(html)[0] == f"{WEB}/profile/edit"

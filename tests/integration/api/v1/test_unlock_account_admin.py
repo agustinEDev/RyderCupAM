@@ -43,20 +43,25 @@ def _email(prefijo: str) -> str:
     return f"{prefijo}-{uuid.uuid4().hex[:8]}@example.com"
 
 
+# La red desde la que se bloquea: desde BE #732 el bloqueo es de correo + red
+RED_BLOQUEADA = "red-del-atacante"
+
+
 async def _bloqueada(client: AsyncClient) -> dict:
-    """Una cuenta bloqueada por fallos."""
+    """Una cuenta bloqueada por 10 fallos desde una red."""
     victima = await create_authenticated_user(client, _email("victima"), CLAVE, "Vic", "Tima")
-    for i in range(10):
+    client.cookies.clear()
+    for _ in range(10):
         await client.post(
             "/api/v1/auth/login",
             json={"email": victima["user"]["email"], "password": "WrongPassword123!"},
-            headers={"X-Test-Client-ID": f"bloqueo-{i}"},
+            headers={"X-Test-Client-ID": RED_BLOQUEADA},
         )
     client.cookies.clear()
     r = await client.post(
         "/api/v1/auth/login",
         json={"email": victima["user"]["email"], "password": CLAVE},
-        headers={"X-Test-Client-ID": "comprueba"},
+        headers={"X-Test-Client-ID": RED_BLOQUEADA},
     )
     assert r.status_code == 423, r.text
     client.cookies.clear()
@@ -76,11 +81,12 @@ async def _desbloquea(client: AsyncClient, quien: dict, user_id: str, firma: str
 
 
 async def _entra(client: AsyncClient, email: str):
+    """Entra desde la red bloqueada: la que importa antes y después del desbloqueo."""
     client.cookies.clear()
     r = await client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": CLAVE},
-        headers={"X-Test-Client-ID": f"entra-{uuid.uuid4().hex[:6]}"},
+        headers={"X-Test-Client-ID": RED_BLOQUEADA},
     )
     client.cookies.clear()
     return r

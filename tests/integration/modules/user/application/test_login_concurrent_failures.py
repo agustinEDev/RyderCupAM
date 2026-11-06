@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.config.freno_del_login import FrenoDelLoginEnMemoria
+from src.config.rate_limit import limiter
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.domain.entities.user import MAX_FAILED_ATTEMPTS, User
@@ -29,12 +31,15 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 EMAIL = "diez_a_la_vez@test.com"
 
 
-async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session):
+async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session, monkeypatch):
     """
     Given: Una cuenta con el contador a 0
     When: Llegan 10 contraseñas malas a la vez, cada una en su conexión
     Then: El contador queda en 10 y la cuenta bloqueada
     """
+    # Aquí se prueba el respaldo de la BD con concurrencia, no el techo de fallos de
+    # la red (30/min), que desde BE #732 aplica el caso de uso y cortaría la ráfaga
+    monkeypatch.setattr(limiter, "enabled", False)
     usuario = User.create(
         first_name="Diez",
         last_name="Intentos",
@@ -48,8 +53,15 @@ async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session):
     async def un_intento():
         """Ayudante del test: un intento."""
         async with sesiones() as sesion:
+            # Un freno propio por intento: aquí se prueba el respaldo de la BD, no
+            # el freno por red, que cortaría la ráfaga en el quinto (BE #732)
             login = LoginUserUseCase(
-                SQLAlchemyUnitOfWork(sesion), JWTTokenService(), AsyncMock(), AsyncMock()
+                SQLAlchemyUnitOfWork(sesion),
+                JWTTokenService(),
+                AsyncMock(),
+                AsyncMock(),
+                FrenoDelLoginEnMemoria(),
+                AsyncMock(),
             )
             return await login.execute(LoginRequestDTO(email=EMAIL, password="Mala-Pass-1!"))
 
@@ -61,5 +73,7 @@ async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session):
     assert all(r is None or isinstance(r, AccountLockedException) for r in resultados), resultados
     async with sesiones() as sesion:
         final = await SQLAlchemyUserRepository(sesion).find_by_id(usuario.id)
-        assert final.failed_login_attempts == MAX_FAILED_ATTEMPTS
+        # Si se perdiera una suma, no llegaría a 50 y no se bloquearía
         assert final.is_locked()
+        assert final.failed_login_attempts == MAX_FAILED_ATTEMPTS
+    assert sum(isinstance(r, AccountLockedException) for r in resultados) >= 1

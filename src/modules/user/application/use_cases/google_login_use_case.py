@@ -35,7 +35,6 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
-from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -172,7 +171,6 @@ class GoogleLoginUseCase:
 
         Raises:
             ValueError: Si el authorization code es inválido
-            AccountLockedException: Si la cuenta está bloqueada
         """
         security_logger = get_security_logger()
         ip_address = request.ip_address or "unknown"
@@ -186,23 +184,12 @@ class GoogleLoginUseCase:
         # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
         user, is_new_user = await self._resolve_user(google_info)
 
-        # 3. Check lockout
-        if user.is_locked():
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=google_info.email,
-                success=False,
-                failure_reason=f"Account locked until {user.locked_until.isoformat()}",
-                ip_address=ip_address,
-                user_agent=user_agent,
-            )
-            raise AccountLockedException(
-                locked_until=user.locked_until,
-                message=f"Account is locked. Try again after {user.locked_until.isoformat()}",
-            )
+        # 3. Sin mirar el bloqueo por fallos de contraseña (BE #732): Google ya
+        # demuestra que es él, y una cuenta solo de Google no tiene contraseña buena
+        # con la que defenderse. Tampoco pone el respaldo a cero: suma todas las
+        # redes y se acaba con su hora
 
         # 4. Login flow
-        user.reset_failed_attempts()
         user.record_login(
             logged_in_at=datetime.now(),
             ip_address=ip_address,

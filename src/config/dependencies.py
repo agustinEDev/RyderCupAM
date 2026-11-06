@@ -9,8 +9,10 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.aviso_en_segundo_plano import AvisoEnSegundoPlano
+from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.database import async_session_maker
+from src.config.freno_del_login import freno_del_login
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
 from src.config.terms_guard import require_current_terms
 from src.modules.competition.application.ports.amigos_interface import AmigosInterface
@@ -554,8 +556,10 @@ from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
     IAvatarPresetProvider,
 )
+from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
@@ -953,11 +957,26 @@ def get_aviso_de_nuevo_inicio_de_sesion(
     return AvisoEnSegundoPlano(fabrica, email_service)
 
 
+def get_freno_del_login() -> IFrenoDelLogin:
+    """El freno del login por correo y origen, uno para todo el proceso (BE #732)."""
+    return freno_del_login
+
+
+def get_aviso_de_fallos(
+    email_service: IEmailService = Depends(get_email_service),
+    fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
+) -> IAvisoDeFallos:
+    """El correo de «intentos fallidos» al dueño, en segundo plano, con su tope global (BE #732)."""
+    return AvisoDeFallosEnSegundoPlano(fabrica, email_service, cupo_de_avisos)
+
+
 def get_login_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
     aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
+    freno: IFrenoDelLogin = Depends(get_freno_del_login),
+    aviso_de_fallos: IAvisoDeFallos = Depends(get_aviso_de_fallos),
 ) -> LoginUserUseCase:
     """
     Proveedor del caso de uso LoginUserUseCase.
@@ -972,7 +991,9 @@ def get_login_user_use_case(
     Ya no recibe el servicio de hándicap: el login no espera a la RFEG
     (RyderCupAM#340); eso lo hace `get_refresh_own_handicap_use_case`.
     """
-    return LoginUserUseCase(uow, token_service, register_device_use_case, aviso)
+    return LoginUserUseCase(
+        uow, token_service, register_device_use_case, aviso, freno, aviso_de_fallos
+    )
 
 
 def get_logout_user_use_case(
@@ -3339,10 +3360,11 @@ def get_withdraw_match_player_use_case(
 
 def get_unlock_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    freno: IFrenoDelLogin = Depends(get_freno_del_login),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> UnlockAccountUseCase:
-    """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0; con su log desde 2.50.1)."""
-    return UnlockAccountUseCase(uow, security_audit)
+    """Proveedor de UnlockAccountUseCase (v1.13.0; log desde 2.50.1, por red desde BE #732)."""
+    return UnlockAccountUseCase(uow, freno, security_audit)
 
 
 # ============================================================================
