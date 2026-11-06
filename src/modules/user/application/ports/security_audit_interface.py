@@ -44,7 +44,13 @@ class ISecurityAuditLogger(ABC):
 
     @abstractmethod
     def log_account_deactivated(
-        self, user_id: str, deactivated_user_id: str, devices_revoked: int, tokens_revoked: int
+        self,
+        user_id: str,
+        deactivated_user_id: str,
+        devices_revoked: int,
+        tokens_revoked: int,
+        ip_address: str,
+        user_agent: str,
     ) -> None:
         """Deja constancia de que un administrador desactivó una cuenta y cerró sus
         sesiones (BE #744).
@@ -54,6 +60,27 @@ class ISecurityAuditLogger(ABC):
             deactivated_user_id: ID de la cuenta desactivada
             devices_revoked: Dispositivos revocados
             tokens_revoked: Sesiones (tokens de refresco) revocadas
+            ip_address: IP del administrador ("unknown" si no se conoce)
+            user_agent: Navegador del administrador ("unknown" si no se conoce)
+        """
+
+    @abstractmethod
+    def log_account_reactivated(
+        self,
+        user_id: str,
+        reactivated_user_id: str,
+        tokens_revoked: int,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """Deja constancia de que un administrador reactivó una cuenta (BE #744).
+
+        Args:
+            user_id: ID del administrador
+            reactivated_user_id: ID de la cuenta reactivada
+            tokens_revoked: Sesiones que se habían colado y se revocan al reactivarla
+            ip_address: IP del administrador ("unknown" si no se conoce)
+            user_agent: Navegador del administrador ("unknown" si no se conoce)
         """
 
     @abstractmethod

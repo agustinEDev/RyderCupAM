@@ -396,6 +396,13 @@ class AccountUnlockedAuditEvent(SecurityAuditEvent):
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
 
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"ACCOUNT UNLOCKED | {user_info} | Unlocked: {self.unlocked_user_id}"
+            f" | Previous failures: {self.previous_failed_attempts}"
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """Serializa con los campos del desbloqueo."""
         base = super().to_dict()
@@ -424,6 +431,13 @@ class AccountDeactivatedAuditEvent(SecurityAuditEvent):
         """Validación y severidad: dejar a alguien fuera de su cuenta es HIGH."""
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"ACCOUNT DEACTIVATED | {user_info} | Deactivated: {self.deactivated_user_id}"
+            f" | Devices revoked: {self.devices_revoked} | Sessions revoked: {self.tokens_revoked}"
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa con los campos de la desactivación."""
@@ -462,10 +476,47 @@ class RefreshRejectedAuditEvent(SecurityAuditEvent):
         """Un rechazo cuenta como fallo (rastro en WARNING); el final normal, no."""
         return self.rejected
 
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        estado = "REJECTED" if self.rejected else "ENDED"
+        return f"REFRESH {estado} | {user_info} | Reason: {self.reason} | IP: {self.ip_address}"
+
     def to_dict(self) -> dict[str, Any]:
         """Serializa con el motivo."""
         base = super().to_dict()
         base.update({"reason": self.reason, "rejected": self.rejected})
+        return base
+
+
+@dataclass(frozen=True)
+class AccountReactivatedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador reactivó una cuenta (BE #744). Sus sesiones viejas no vuelven.
+
+    `user_id` es el administrador; `reactivated_user_id`, la cuenta.
+    """
+
+    reactivated_user_id: str = ""
+    tokens_revoked: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: devolver el acceso a una cuenta es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"ACCOUNT REACTIVATED | {user_info} | Reactivated: {self.reactivated_user_id}"
+            f" | Sessions revoked: {self.tokens_revoked}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con los campos de la reactivación."""
+        base = super().to_dict()
+        base.update(
+            {"reactivated_user_id": self.reactivated_user_id, "tokens_revoked": self.tokens_revoked}
+        )
         return base
 
 

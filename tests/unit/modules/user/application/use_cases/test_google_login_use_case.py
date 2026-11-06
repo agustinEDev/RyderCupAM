@@ -557,3 +557,52 @@ class TestGoogleLoginNuevoInicio:
         await use_case.execute(login_request)
 
         assert aviso.avisa.await_args.args[0].desconocido is desconocido
+
+
+@pytest.mark.asyncio
+class TestGoogleLoginCuentaDesactivada:
+    """Una cuenta desactivada no entra con Google (BE #744, auditoría OWASP)."""
+
+    async def test_a_deactivated_account_gets_no_session_device_or_email(
+        self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Given: Una cuenta vinculada a Google, desactivada por un administrador
+        When: Entra con Google
+        Then: AccountDeactivatedException, y ni dispositivo, ni token, ni correo
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        user = User.create_from_oauth(
+            first_name="Baja", last_name="Google", email_str="oauth@example.com"
+        )
+        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(user)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-id-12345",
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        aviso = AsyncMock()
+        caso = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        with pytest.raises(AccountDeactivatedException):
+            await caso.execute(
+                GoogleLoginRequestDTO(authorization_code="code", ip_address="203.0.113.7")
+            )
+
+        register_device_use_case.execute.assert_not_awaited()
+        aviso.avisa.assert_not_awaited()
+        async with uow:
+            assert await uow.refresh_tokens.find_all_by_user(user.id) == []

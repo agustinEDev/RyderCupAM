@@ -457,7 +457,11 @@ _TEXTOS_DEL_REFRESCO = dict.fromkeys(
 )
 
 
-def _refresco_rechazado(motivo: RefreshRejection, request: Request) -> JSONResponse:
+def _refresco_rechazado(
+    motivo: RefreshRejection,
+    contexto: tuple[str | None, str | None] = (None, None),
+    user_id: str | None = None,
+) -> JSONResponse:
     """
     El 401 del refresco: texto fijo y en `error_code` solo SESSION_ENDED (el final
     normal) o SESSION_REJECTED (BE #733). El motivo exacto va al log de seguridad:
@@ -467,20 +471,18 @@ def _refresco_rechazado(motivo: RefreshRejection, request: Request) -> JSONRespo
     mandar, y el siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez
     de un REVOKED que alertaría en cada visita (/code-review, 5 nov).
     """
+    codigo = codigo_publico(motivo)
     if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING:
         # Sin cookie es cualquier visitante anónimo: no se apunta, solo haría ruido
+        ip_address, user_agent = contexto
         get_security_logger().log_refresh_rejected(
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            )
-            or "unknown",
-            user_agent=get_user_agent(request) or "unknown",
+            ip_address=ip_address or "unknown",
+            user_agent=user_agent or "unknown",
             reason=motivo.value,
-            rejected=codigo_publico(motivo) == SESSION_REJECTED,
+            rejected=codigo == SESSION_REJECTED,
+            user_id=user_id,
         )
-    respuesta = respuesta_con_codigo(
-        status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, codigo_publico(motivo)
-    )
+    respuesta = respuesta_con_codigo(status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, codigo)
     # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
     # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
     # cookie (SameSite=Lax) y el Set-Cookie sí se aplica (auditoría OWASP, 5 nov)
@@ -561,7 +563,7 @@ async def refresh_access_token(
     refresh_token_jwt = request.cookies.get(refresh_cookie_name)
 
     if not refresh_token_jwt:
-        return _refresco_rechazado(RefreshRejection.REFRESH_TOKEN_MISSING, request)
+        return _refresco_rechazado(RefreshRejection.REFRESH_TOKEN_MISSING)
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
@@ -582,7 +584,11 @@ async def refresh_access_token(
     except RefreshRejectedError as rechazo:
         # Refresh token inválido, expirado o revocado: el mismo texto de siempre, y el
         # motivo para que el front distinga el final normal de un rechazo (FE #1042)
-        return _refresco_rechazado(rechazo.motivo, request)
+        return _refresco_rechazado(
+            rechazo.motivo,
+            (refresh_request.ip_address, refresh_request.user_agent),
+            rechazo.user_id,
+        )
 
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
     set_auth_cookie(response, refresh_response.access_token)
@@ -663,6 +669,14 @@ async def verify_email(
     try:
         user = await use_case.execute(verify_data.token)
         logger.info("Email verification successful")
+
+        # Una cuenta desactivada verifica su correo, pero no entra (BE #744, auditoría
+        # OWASP): ni sesión, ni dispositivo. La misma respuesta que el login
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been deactivated. Contact an administrator.",
+            )
 
         # La sesión, como en el login (BE #737): dispositivo, tokens con su id y el
         # refresco GUARDADO. Antes no se guardaba, y a los 15 minutos el refresco daba

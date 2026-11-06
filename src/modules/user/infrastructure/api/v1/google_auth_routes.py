@@ -36,6 +36,7 @@ from src.modules.user.application.use_cases.link_google_account_use_case import 
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_validos_de_la_cookie,
@@ -89,6 +90,12 @@ async def google_login(
     # Sin 423: el bloqueo por fallos de contraseña no frena a Google (BE #732)
     try:
         login_response = await use_case.execute(login_data)
+    except AccountDeactivatedException as e:
+        # La misma respuesta que el login con contraseña (BE #744)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated. Contact an administrator.",
+        ) from e
     except ValueError as e:
         error_msg = str(e)
         # Map known errors to safe client-facing messages

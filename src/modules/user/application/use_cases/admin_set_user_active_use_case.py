@@ -33,13 +33,26 @@ class AdminSetUserActiveUseCase:
         self._uow = uow
         self._security_audit = security_audit
 
-    async def execute(self, user_id_str: str, is_active: bool, actor_user_id: str) -> None:
-        """(Des)activa la cuenta. Desactivarla revoca sus sesiones y lo deja en el log."""
+    async def execute(
+        self,
+        user_id_str: str,
+        is_active: bool,
+        actor_user_id: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """(Des)activa la cuenta y lo deja en el log de seguridad.
+
+        Desactivarla revoca sus sesiones. Reactivarla revoca también las que se
+        hubieran colado (un login a la vez que la desactivación): tiene que volver a
+        entrar (auditoría OWASP).
+        """
         if not is_active and user_id_str == actor_user_id:
             raise ValueError("Admins cannot deactivate their own account")
 
         user_id = UserId(user_id_str)
         revocados: tuple[int, int] | None = None
+        reactivada: int | None = None
 
         async with self._uow:
             user = await self._uow.users.find_by_id(user_id)
@@ -49,14 +62,33 @@ class AdminSetUserActiveUseCase:
             if is_active:
                 if not user.is_active:
                     user.reactivate(reactivated_by_user_id=actor_user_id)
+                    reactivada = await self._uow.refresh_tokens.revoke_all_for_user(user_id)
             elif user.is_active:
                 user.deactivate(deactivated_by_user_id=actor_user_id)
                 revocados = await self._revoca_sus_sesiones(user_id)
 
             await self._uow.users.save(user)
 
+        contexto = (ip_address or "unknown", user_agent or "unknown")
         if revocados is not None:
-            self._apunta_la_desactivacion(user_id_str, actor_user_id, *revocados)
+            self._apunta(
+                self._security_audit.log_account_deactivated,
+                user_id=actor_user_id,
+                deactivated_user_id=user_id_str,
+                devices_revoked=revocados[0],
+                tokens_revoked=revocados[1],
+                ip_address=contexto[0],
+                user_agent=contexto[1],
+            )
+        if reactivada is not None:
+            self._apunta(
+                self._security_audit.log_account_reactivated,
+                user_id=actor_user_id,
+                reactivated_user_id=user_id_str,
+                tokens_revoked=reactivada,
+                ip_address=contexto[0],
+                user_agent=contexto[1],
+            )
 
     async def _revoca_sus_sesiones(self, user_id: UserId) -> tuple[int, int]:
         """Revoca sus dispositivos y sus tokens de refresco. Devuelve cuántos de cada."""
@@ -67,17 +99,11 @@ class AdminSetUserActiveUseCase:
         tokens = await self._uow.refresh_tokens.revoke_all_for_user(user_id)
         return len(dispositivos), tokens
 
-    def _apunta_la_desactivacion(
-        self, user_id: str, actor: str, dispositivos: int, tokens: int
-    ) -> None:
-        """Al log de seguridad, ya guardada: si el log falla, la desactivación vale igual."""
+    @staticmethod
+    def _apunta(registra, **datos) -> None:
+        """Al log de seguridad, ya guardada: si el log falla, el cambio vale igual."""
         try:
-            self._security_audit.log_account_deactivated(
-                user_id=actor,
-                deactivated_user_id=user_id,
-                devices_revoked=dispositivos,
-                tokens_revoked=tokens,
-            )
+            registra(**datos)
         except Exception as e:
             # Solo el tipo del error, no su mensaje
-            logger.error("Account deactivation audit event failed: %s", type(e).__name__)
+            logger.error("Account status audit event failed: %s", type(e).__name__)

@@ -109,3 +109,25 @@ async def test_t7_un_token_sin_dispositivo_se_rechaza():
     with pytest.raises(RefreshRejectedError) as rechazo:
         await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
     assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_INVALID
+
+
+async def test_t8_un_dispositivo_revocado_y_ademas_inactivo_es_un_rechazo():
+    """
+    Given: El token revocado de un dispositivo revocado que lleva 25 h sin usarse
+    When: Refresca
+    Then: REFRESH_TOKEN_REVOKED (SESSION_REJECTED), no SESSION_IDLE: revocar no es
+          el final normal de una sesión, aunque además estuviera inactiva
+    """
+    from datetime import datetime, timedelta
+
+    uow, _usuario, dispositivo, refresco = await _escena()
+    token = await uow.refresh_tokens.find_by_token_hash(JWT)
+    token.revoke()
+    await uow.refresh_tokens.save(token)
+    dispositivo.revoke()
+    dispositivo._last_used_at = datetime.now() - timedelta(hours=25)
+    await uow.user_devices.save(dispositivo)
+
+    with pytest.raises(RefreshRejectedError) as rechazo:
+        await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
+    assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_REVOKED

@@ -41,13 +41,37 @@ class SecurityAuditLogger(ISecurityAuditLogger):
         )
 
     def log_account_deactivated(
-        self, user_id: str, deactivated_user_id: str, devices_revoked: int, tokens_revoked: int
+        self,
+        user_id: str,
+        deactivated_user_id: str,
+        devices_revoked: int,
+        tokens_revoked: int,
+        ip_address: str,
+        user_agent: str,
     ) -> None:
         get_security_logger().log_account_deactivated(
             user_id=user_id,
             deactivated_user_id=deactivated_user_id,
             devices_revoked=devices_revoked,
             tokens_revoked=tokens_revoked,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    def log_account_reactivated(
+        self,
+        user_id: str,
+        reactivated_user_id: str,
+        tokens_revoked: int,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        get_security_logger().log_account_reactivated(
+            user_id=user_id,
+            reactivated_user_id=reactivated_user_id,
+            tokens_revoked=tokens_revoked,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
 
     def log_terms_accepted(

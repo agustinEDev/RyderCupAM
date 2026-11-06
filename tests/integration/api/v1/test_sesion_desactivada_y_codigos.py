@@ -10,7 +10,12 @@ Cuentas desactivadas sin sesión (BE #744) y los dos códigos del refresco (BE #
   A4  la reactivan                                        | su sesión vieja no vuelve: 401
   C1  un token revocado y uno que ya no existe            | la misma respuesta: no dice si la
                                                           |   cuenta se borró o cerró sesión
-  C2  el motivo exacto                                    | va al log de seguridad
+  C2  el motivo exacto                                    | va al log de seguridad, con el
+                                                          |   usuario
+  C3  un refresco sin cookie (cualquier visitante)        | no se apunta: solo haría ruido
+  C4  un final normal (token caducado)                    | se apunta como «ended», no rechazo
+  A5  una cuenta desactivada verifica su correo           | el correo queda verificado, pero
+                                                          |   403 y ninguna sesión ni cookie
 """
 
 import uuid
@@ -161,3 +166,82 @@ async def test_c2_el_motivo_exacto_va_al_log_de_seguridad(client: AsyncClient, m
 
     assert r.json()["error_code"] == "SESSION_REJECTED"
     assert [(a["reason"], a["rejected"]) for a in apuntados] == [("REFRESH_TOKEN_NOT_FOUND", True)]
+    assert apuntados[0]["user_id"] == yo["user"]["id"]
+
+
+def _apunta_los_rechazos(monkeypatch) -> list:
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    apuntados = []
+    monkeypatch.setattr(
+        SecurityLogger, "log_refresh_rejected", lambda self, **kw: apuntados.append(kw)
+    )
+    return apuntados
+
+
+async def test_c3_un_refresco_sin_cookie_no_se_apunta(client: AsyncClient, monkeypatch):
+    """
+    Given: Un visitante sin sesión
+    When: Prueba a refrescar (lo hace la sonda de sesión en cada visita)
+    Then: 401 SESSION_ENDED, y nada en el log de seguridad
+    """
+    apuntados = _apunta_los_rechazos(monkeypatch)
+    client.cookies.clear()
+
+    r = await client.post("/api/v1/auth/refresh-token")
+
+    assert r.json()["error_code"] == "SESSION_ENDED"
+    assert apuntados == []
+
+
+async def test_c4_un_final_normal_se_apunta_como_ended(client: AsyncClient, monkeypatch):
+    """
+    Given: Una sesión cuyo token de refresco caducó
+    When: Refresca
+    Then: SESSION_ENDED, y en el log como final normal (rejected False)
+    """
+    apuntados = _apunta_los_rechazos(monkeypatch)
+    yo = await create_authenticated_user(client, _email("cad"), CLAVE, "Ca", "Ducada")
+    await _sql(
+        "update refresh_tokens set expires_at = now() - interval '1 hour' where user_id = :u",
+        u=yo["user"]["id"],
+    )
+
+    r = await _refresca(client, yo)
+
+    assert r.json()["error_code"] == "SESSION_ENDED"
+    assert [(a["reason"], a["rejected"]) for a in apuntados] == [("REFRESH_TOKEN_EXPIRED", False)]
+
+
+async def test_a5_una_cuenta_desactivada_que_verifica_su_correo_no_entra(client: AsyncClient):
+    """
+    Given: Una cuenta sin verificar, desactivada por un administrador
+    When: Abre el enlace de verificación
+    Then: El correo queda verificado, pero 403 y sin cookies de sesión
+    """
+    email = _email("sinverificar")
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": CLAVE,
+            "first_name": "Sin",
+            "last_name": "Verificar",
+            "accept_terms": True,
+        },
+        headers={"X-Test-Client-ID": f"alta-{uuid.uuid4().hex[:6]}"},
+    )
+    assert r.status_code == 201, r.text
+    usuario = r.json()
+    admin = await create_admin_user(client, _email("admin"), CLAVE, "Ad", "Min")
+    await _desactiva(client, admin, usuario["id"])
+    token = (await _sql("select verification_token from users where email = :e", e=email)).scalar()
+    client.cookies.clear()
+
+    r = await client.post("/api/v1/auth/verify-email", json={"token": token})
+
+    assert r.status_code == 403, r.text
+    assert "deactivated" in r.json()["detail"]
+    assert "refresh_token" not in r.cookies and "access_token" not in r.cookies
+    verificado = (await _sql("select email_verified from users where email = :e", e=email)).scalar()
+    assert verificado is True

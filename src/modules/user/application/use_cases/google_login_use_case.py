@@ -35,6 +35,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -182,6 +183,19 @@ class GoogleLoginUseCase:
 
         # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
         user, is_new_user = await self._resolve_user(google_info)
+
+        # Una cuenta desactivada no entra (BE #744, auditoría OWASP): ni sesión, ni
+        # dispositivo, ni correo de «nuevo inicio», como con la contraseña
+        if not user.is_active:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=False,
+                failure_reason="Account deactivated by admin",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise AccountDeactivatedException()
 
         # 3. Sin mirar el bloqueo por fallos de contraseña (BE #732): Google ya
         # demuestra que es él, y una cuenta solo de Google no tiene contraseña buena

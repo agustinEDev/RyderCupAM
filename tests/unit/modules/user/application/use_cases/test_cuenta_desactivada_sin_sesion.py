@@ -16,6 +16,12 @@ pasando las rutas de administración.
   S5  se reactiva                                     | las sesiones viejas no vuelven
   S6  falla el log de seguridad                       | la desactivación responde bien igual
   S7  activar una cuenta que ya está activa           | sus sesiones siguen: no se revoca nada
+  S8  el refresco de una desactivada                  | revoca ese token (no vale al reactivar)
+  S9  reactivar                                       | revoca cualquier sesión que se colara
+                                                      |   (un login a la vez que la desactivación)
+  S10 el refresco de una desactivada, ya revocado     | el motivo es USER_INACTIVE, no REVOKED
+  S11 el rechazo del refresco                         | lleva el usuario (para el log)
+  S12 desactivar y reactivar, desde una IP y navegador| los dos quedan en el log con ellos
 """
 
 from unittest.mock import Mock
@@ -105,6 +111,8 @@ async def test_s2_la_desactivacion_queda_en_el_log_de_seguridad():
         deactivated_user_id=str(ana.id.value),
         devices_revoked=2,
         tokens_revoked=2,
+        ip_address="unknown",
+        user_agent="unknown",
     )
 
 
@@ -184,3 +192,103 @@ async def test_s7_activar_una_cuenta_activa_no_le_quita_la_sesion():
         assert len(await uow.user_devices.find_active_by_user(ana.id)) == 2
         assert not any(t.revoked for t in await uow.refresh_tokens.find_all_by_user(ana.id))
     auditoria.log_account_deactivated.assert_not_called()
+
+
+async def test_s8_el_refresco_de_una_desactivada_revoca_ese_token():
+    """
+    Given: Ana desactivada, con un token de refresco que se coló sin revocar
+    When: Refresca
+    Then: Rechazado, y ese token queda revocado: no volverá a valer al reactivarla
+    """
+    uow, ana, _d, jwts, _a, _caso = await _escena()
+    ana.deactivate(deactivated_by_user_id=ADMIN)
+    async with uow:
+        await uow.users.save(ana)
+
+    with pytest.raises(RefreshRejectedError):
+        await RefreshAccessTokenUseCase(uow, JWTTokenService()).execute(
+            RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0]
+        )
+
+    async with uow:
+        assert (await uow.refresh_tokens.find_by_token_hash(jwts[0])).revoked
+
+
+async def test_s9_reactivar_revoca_lo_que_se_colara():
+    """
+    Given: Ana desactivada, y un token suyo sin revocar (un login a la vez que la
+           desactivación)
+    When: Un administrador la reactiva
+    Then: Ese token queda revocado: reactivar no devuelve ninguna sesión
+    """
+    uow, ana, _d, _jwts, _a, caso = await _escena()
+    ana.deactivate(deactivated_by_user_id=ADMIN)
+    async with uow:
+        await uow.users.save(ana)
+
+    await caso.execute(str(ana.id.value), is_active=True, actor_user_id=ADMIN)
+
+    async with uow:
+        assert all(t.revoked for t in await uow.refresh_tokens.find_all_by_user(ana.id))
+
+
+async def test_s10_con_el_token_ya_revocado_el_motivo_es_la_cuenta_desactivada():
+    """
+    Given: Ana desactivada por un administrador (sus tokens, revocados)
+    When: Refresca
+    Then: El motivo es USER_INACTIVE: el log dirá «desactivada», no «revocado»
+    """
+    uow, ana, _d, jwts, _a, caso = await _escena()
+    await caso.execute(str(ana.id.value), is_active=False, actor_user_id=ADMIN)
+
+    with pytest.raises(RefreshRejectedError) as rechazo:
+        await RefreshAccessTokenUseCase(uow, JWTTokenService()).execute(
+            RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0]
+        )
+    assert rechazo.value.motivo is RefreshRejection.USER_INACTIVE
+
+
+async def test_s11_el_rechazo_lleva_el_usuario_para_el_log():
+    """
+    Given: Ana desactivada
+    When: Refresca
+    Then: El rechazo lleva su id (va al log de seguridad, nunca al cliente)
+    """
+    uow, ana, _d, jwts, _a, caso = await _escena()
+    await caso.execute(str(ana.id.value), is_active=False, actor_user_id=ADMIN)
+
+    with pytest.raises(RefreshRejectedError) as rechazo:
+        await RefreshAccessTokenUseCase(uow, JWTTokenService()).execute(
+            RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0]
+        )
+    assert rechazo.value.user_id == str(ana.id.value)
+
+
+async def test_s12_desactivar_y_reactivar_quedan_en_el_log_con_ip_y_navegador():
+    """
+    Given: Ana, y un administrador con su IP y su navegador
+    When: La desactiva y la reactiva
+    Then: Los dos cambios quedan en el log de seguridad, con su IP y su navegador
+    """
+    _uow, ana, _d, _j, auditoria, caso = await _escena()
+
+    await caso.execute(
+        str(ana.id.value),
+        is_active=False,
+        actor_user_id=ADMIN,
+        ip_address="203.0.113.9",
+        user_agent="Admin UA",
+    )
+    await caso.execute(
+        str(ana.id.value),
+        is_active=True,
+        actor_user_id=ADMIN,
+        ip_address="203.0.113.9",
+        user_agent="Admin UA",
+    )
+
+    baja = auditoria.log_account_deactivated.call_args.kwargs
+    alta = auditoria.log_account_reactivated.call_args.kwargs
+    assert (baja["ip_address"], baja["user_agent"]) == ("203.0.113.9", "Admin UA")
+    assert (alta["user_id"], alta["reactivated_user_id"]) == (ADMIN, str(ana.id.value))
+    assert (alta["ip_address"], alta["user_agent"]) == ("203.0.113.9", "Admin UA")
