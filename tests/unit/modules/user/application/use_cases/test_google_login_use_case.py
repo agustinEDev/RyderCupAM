@@ -1066,7 +1066,8 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         """
         Given: La cuenta sin verificar
         When: Google se la queda
-        Then: La relee con la fila bloqueada: un login con contraseña a la vez espera
+        Then: La relee con la fila bloqueada: un login con contraseña a la vez espera.
+              Dos veces: al quedársela y al guardar la sesión (tabla de caminos)
         """
         cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
         pedidos = []
@@ -1081,7 +1082,7 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
 
         await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
 
-        assert pedidos == [cuenta.id]
+        assert pedidos == [cuenta.id, cuenta.id]
 
     async def test_g9_deactivated_right_before_the_lock_is_not_claimed(
         self, use_case, uow, google_oauth_service, google_user_info
@@ -1137,8 +1138,14 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
         uow.users.find_by_id_for_update = otro_correo
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Account changed during Google sign-in"):
             await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
 
         async with uow:
             assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_user_info.google_user_id
+                )
+                is None
+            )

@@ -1,6 +1,10 @@
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from src.modules.user.domain.exceptions.email_change_exceptions import (
+    EmailChangeExpiredError,
+    EmailChangeInvalidError,
+)
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -141,6 +145,9 @@ class User:
         country_code: CountryCode | None = None,
         password_reset_token: str | None = None,
         reset_token_expires_at: datetime | None = None,
+        pending_email: str | None = None,
+        pending_email_token: str | None = None,
+        pending_email_expires_at: datetime | None = None,
         failed_login_attempts: int = 0,
         locked_until: datetime | None = None,
         failed_login_window_started_at: datetime | None = None,
@@ -175,6 +182,10 @@ class User:
         self._country_code = country_code
         self._password_reset_token = password_reset_token
         self._reset_token_expires_at = reset_token_expires_at
+        # El correo nuevo, hasta que se confirme desde la dirección nueva (#749)
+        self._pending_email = pending_email
+        self._pending_email_token = pending_email_token
+        self._pending_email_expires_at = pending_email_expires_at
         self._failed_login_attempts = failed_login_attempts
         self._locked_until = locked_until
         self._failed_login_window_started_at = failed_login_window_started_at
@@ -253,6 +264,28 @@ class User:
     @property
     def password_reset_token(self) -> str | None:
         return self._password_reset_token
+
+    @property
+    def pending_email_token(self) -> str | None:
+        """El token del enlace que confirma el correo nuevo, si hay cambio pendiente."""
+        return getattr(self, "_pending_email_token", None)
+
+    @property
+    def pending_email_expires_at(self) -> datetime | None:
+        """Hasta cuándo vale el cambio pendiente."""
+        return getattr(self, "_pending_email_expires_at", None)
+
+    def pending_email_at(self, ahora: datetime) -> str | None:
+        """El correo pendiente, si lo hay y no ha caducado a esa hora."""
+        pendiente = getattr(self, "_pending_email", None)
+        if pendiente is None or self.pending_email_expires_at is None:
+            return None
+        return pendiente if ahora <= self.pending_email_expires_at else None
+
+    @property
+    def pending_email(self) -> str | None:
+        """El correo pendiente ahora (para la respuesta del perfil)."""
+        return self.pending_email_at(datetime.now())
 
     @property
     def reset_token_expires_at(self) -> datetime | None:
@@ -849,6 +882,73 @@ class User:
             )
         )
 
+    # Cuánto vale el enlace que confirma un correo nuevo
+    HORAS_PARA_CONFIRMAR_EL_CORREO = 24
+
+    def request_email_change(self, new_email: str, ahora: datetime) -> str:
+        """
+        Pide cambiar el correo: el nuevo queda pendiente y la cuenta sigue con el de
+        antes (y verificada, si lo estaba) hasta confirmarlo desde la dirección nueva.
+
+        Pedir otro sustituye al pendiente: su token deja de valer.
+
+        Returns:
+            El token del enlace que va al correo nuevo
+
+        Raises:
+            ValueError: si es el mismo correo que ya tiene
+        """
+        nuevo = Email(new_email)
+        if self.email is not None and nuevo == self.email:
+            raise ValueError("El correo nuevo es el mismo que el actual")
+        self._pending_email = str(nuevo.value)
+        self._pending_email_token = secrets.token_urlsafe(32)
+        self._pending_email_expires_at = ahora + timedelta(
+            hours=self.HORAS_PARA_CONFIRMAR_EL_CORREO
+        )
+        self._updated_at = datetime.now()
+        return self._pending_email_token
+
+    def confirm_email_change(self, token: str, ahora: datetime) -> None:
+        """
+        Confirma el correo pendiente con el token de su enlace: pasa a ser el de la
+        cuenta, verificado. Un «Olvidé mi contraseña» pedido para el de antes no vale.
+
+        Raises:
+            EmailChangeInvalidError: si no hay ese cambio pendiente (otro token)
+            EmailChangeExpiredError: si caducó (y se anula)
+        """
+        pendiente = getattr(self, "_pending_email", None)
+        if pendiente is None or not secrets.compare_digest(
+            self.pending_email_token or "", token or ""
+        ):
+            raise EmailChangeInvalidError("No pending email change with that token")
+        if self.pending_email_expires_at is None or ahora > self.pending_email_expires_at:
+            self.cancel_email_change()
+            raise EmailChangeExpiredError("The pending email change expired")
+        viejo = str(self.email.value) if self.email else ""
+        self._email = Email(pendiente)
+        self._email_verified = True
+        self._verification_token = None
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
+        self.cancel_email_change()
+        self._add_domain_event(
+            UserEmailChangedEvent(
+                user_id=str(self.id.value),
+                old_email=viejo,
+                new_email=pendiente,
+                changed_at=self._updated_at,
+            )
+        )
+
+    def cancel_email_change(self) -> None:
+        """Anula el cambio de correo pendiente: su enlace deja de valer."""
+        self._pending_email = None
+        self._pending_email_token = None
+        self._pending_email_expires_at = None
+        self._updated_at = datetime.now()
+
     def change_email(self, new_email: str) -> None:
         """
         Cambia el email del usuario y resetea la verificación.
@@ -872,6 +972,8 @@ class User:
 
         self._email = new_email_vo
         self._email_verified = False  # Requiere nueva verificación
+        # El enlace de verificación del correo de antes tampoco vale para este
+        self._verification_token = None
         # Un «Olvidé mi contraseña» pedido para el correo de antes no vale para este:
         # verificaría el nuevo sin que nadie lo haya demostrado (#749)
         self._password_reset_token = None

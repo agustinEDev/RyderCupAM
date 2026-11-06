@@ -28,6 +28,7 @@ from src.modules.user.application.ports.email_service_interface import IEmailSer
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     cierra_lo_que_no_se_probo,
 )
+from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
@@ -150,15 +151,15 @@ class ResetPasswordUseCase:
         # Todo con la fila bloqueada (revisión de #749): una toma por Google a la vez
         # borra el token, y entonces el enlace ya no vale; sin el bloqueo, el
         # restablecimiento seguía con la lectura de antes y deshacía la toma
-        token_leido = user.password_reset_token
         async with self._uow:
             bloqueada = await self._uow.users.find_by_id_for_update(user.id)
-            if bloqueada is None or bloqueada.password_reset_token != token_leido:
+            # El token se vuelve a validar sobre la fila bloqueada, en reset_password
+            if bloqueada is None:
                 security_logger.log_password_reset_completed(
                     user_id=str(user.id.value),
                     email=str(user.email.value),
                     success=False,
-                    failure_reason="Reset token changed during reset",
+                    failure_reason="Account deleted during reset",
                     ip_address=ip_address,
                     user_agent=user_agent,
                 )
@@ -208,9 +209,9 @@ class ResetPasswordUseCase:
                 user.confirm_email_ownership()
                 cerrado = await cierra_lo_que_no_se_probo(self._uow, user.id)
             else:
-                # Revocar TODOS los refresh tokens del usuario (logout forzado)
-                # Esto asegura que todas las sesiones activas se cierren
-                await self._uow.refresh_tokens.revoke_all_for_user(user.id)
+                # Sesiones Y dispositivos: un acceso robado no sigue valiendo hasta que
+                # caduque (OWASP A07; tabla de caminos de #749)
+                await revoca_sus_sesiones(self._uow, user.id)
                 cerrado = None
 
             # Guardar usuario con nueva contraseña y token invalidado

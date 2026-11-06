@@ -35,6 +35,11 @@ from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     cierra_lo_que_no_se_probo,
 )
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.guarda_la_sesion import (
+    CUENTA_DESACTIVADA,
+    activa,
+    guarda_la_sesion,
+)
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -121,18 +126,17 @@ class GoogleLoginUseCase:
             user = await self._uow.users.find_by_email(email)
 
             if user:
-                if not user.email_verified:
-                    # Google se la va a quedar: con la fila bloqueada, para que un
-                    # login con contraseña a la vez espere y vea el cambio, y para ver
-                    # si la desactivaron justo antes (revisor de #749)
-                    bloqueada = await self._uow.users.find_by_id_for_update(user.id)
-                    if bloqueada is None:
-                        raise ValueError("User not found")
-                    # Y que siga siendo la cuenta de ESE correo: si lo cambió justo
-                    # antes, Google no tiene nada que demostrar sobre ella
-                    if bloqueada.email is None or bloqueada.email != email:
-                        raise ValueError("Account changed during Google sign-in")
-                    user = bloqueada
+                # Con la fila bloqueada, también si está verificada: un login con
+                # contraseña a la vez espera y ve el cambio, y se ve si la desactivaron
+                # o le cambiaron el correo justo antes (revisor de #749, tabla)
+                bloqueada = await self._uow.users.find_by_id_for_update(user.id)
+                if bloqueada is None:
+                    raise ValueError("User not found")
+                # Y que siga siendo la cuenta de ESE correo: si lo cambió justo antes,
+                # Google no tiene nada que demostrar sobre ella
+                if bloqueada.email is None or bloqueada.email != email:
+                    raise ValueError("Account changed during Google sign-in")
+                user = bloqueada
                 # Desactivada: sin vincular Google ni verificar el correo. Un login
                 # rechazado no cambia la cuenta (/code-review); execute da el 403
                 if not user.is_active:
@@ -193,7 +197,7 @@ class GoogleLoginUseCase:
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
-        """Register device and return (device_id, device_id_str, is_new)."""
+        """Register device: (device_id, device_id_str, avisa, lo dio de alta este login)."""
         # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
@@ -209,6 +213,7 @@ class GoogleLoginUseCase:
             device_response.device_id,
             # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
             device_response.is_new_device or not device_response.recognized_by_cookie,
+            device_response.is_new_device,
         )
 
     async def execute(self, request: GoogleLoginRequestDTO) -> GoogleLoginResponseDTO:
@@ -288,7 +293,7 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        device_id, device_id_str, es_nuevo = await self._register_device(
+        device_id, device_id_str, es_nuevo, dado_de_alta = await self._register_device(
             request, str(user.id.value)
         )
 
@@ -304,9 +309,38 @@ class GoogleLoginUseCase:
             user_id=user.id, token=refresh_token_jwt, device_id=device_id, expires_in_days=7
         )
 
-        async with self._uow:
+        # Con la fila bloqueada y la cuenta como al resolverla: activa y con ESTE Google
+        # (a la vez, una toma pudo quitárselo; #749, tabla de caminos)
+        async def comprueba(actual: User | None) -> str | None:
+            motivo = await activa(actual)
+            if motivo is not None:
+                return motivo
+            vinculo = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_info.google_user_id
+            )
+            if vinculo is None or vinculo.user_id != user.id:
+                return "Google unlinked during sign-in"
+            return None
+
+        async def guarda() -> None:
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token_entity)
+
+        motivo = await guarda_la_sesion(
+            self._uow, user.id, comprueba, guarda, device_id if dado_de_alta else None
+        )
+        if motivo is not None:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=False,
+                failure_reason=motivo,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            if motivo == CUENTA_DESACTIVADA:
+                raise AccountDeactivatedException()
+            raise ValueError(motivo)
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
         # El alta con Google no avisa: es crear la cuenta

@@ -49,8 +49,9 @@ class UnlinkGoogleAccountUseCase:
             if not oauth_account:
                 raise ValueError("No Google account linked to this user")
 
-            # Guard: verificar que el usuario tiene password
-            user = await self._uow.users.find_by_id(uid)
+            # Guard: verificar que el usuario tiene password, con la fila bloqueada: una
+            # toma a la vez la quita (tabla de caminos de #749)
+            user = await self._uow.users.find_by_id_for_update(uid)
             if not user:
                 raise ValueError("User not found")
 

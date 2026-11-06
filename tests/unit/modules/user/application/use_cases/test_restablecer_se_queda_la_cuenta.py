@@ -9,7 +9,8 @@ vinculado, sus dispositivos, sus sesiones) no se probó y se quita.
   ----|--------------------------------------------|---------------------------------------
   R1  sin verificar, con un Google ajeno, sesiones | verificada, la contraseña nueva, sin ese
                                                    |   Google, dispositivos y sesiones fuera
-  R2  ya verificada, con su Google                 | como siempre: conserva Google y dispositivos
+  R2  ya verificada, con su Google                 | conserva su Google; sesiones y dispositivos,
+                                                   |   fuera (tabla de caminos)
   R3  la toma                                      | al log de seguridad, con lo que se cerró;
                                                    |   un log roto no cambia el restablecimiento
 """
@@ -107,11 +108,11 @@ async def test_r1_an_unverified_account_is_claimed_by_whoever_resets_it():
         assert (await uow.refresh_tokens.find_by_token_hash("sesion-de-antes")).revoked
 
 
-async def test_r2_a_verified_account_keeps_its_google_and_devices():
+async def test_r2_a_verified_account_keeps_its_google():
     """
     Given: Una cuenta verificada, con su Google y un dispositivo
     When: Se restablece la contraseña
-    Then: Como siempre: sesiones revocadas, pero conserva su Google y su dispositivo
+    Then: Conserva su Google (es suyo); sesiones y dispositivos, revocados
     """
     uow, cuenta, dispositivo, caso, token = await _escena(verificada=True)
 
@@ -121,7 +122,7 @@ async def test_r2_a_verified_account_keeps_its_google_and_devices():
         assert await uow.oauth_accounts.find_by_user_id_and_provider(
             cuenta.id, OAuthProvider.GOOGLE
         )
-        assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+        assert not (await uow.user_devices.find_by_id(dispositivo.id)).is_active
         assert (await uow.refresh_tokens.find_by_token_hash("sesion-de-antes")).revoked
 
 
@@ -183,9 +184,22 @@ async def test_r4_a_claim_right_before_the_lock_wins_over_the_reset():
     uow, cuenta, _d, caso, token = await _escena(verificada=False)
 
     async def tomada(user_id):
+        # La toma de Google, a la vez: se queda la cuenta y vincula SU Google
         otra = copy.deepcopy(uow.users._users[user_id])
         otra.claim_with_verified_oauth()
         uow.users._users[user_id] = otra
+        anterior = await uow.oauth_accounts.find_by_user_id_and_provider(
+            user_id, OAuthProvider.GOOGLE
+        )
+        await uow.oauth_accounts.delete(anterior)
+        await uow.oauth_accounts.save(
+            UserOAuthAccount.create(
+                user_id=user_id,
+                provider=OAuthProvider.GOOGLE,
+                provider_user_id="google-del-dueno",
+                provider_email="ana@example.com",
+            )
+        )
         return otra
 
     uow.users.find_by_id_for_update = tomada
@@ -194,6 +208,7 @@ async def test_r4_a_claim_right_before_the_lock_wins_over_the_reset():
         await _restablece(caso, token)
 
     async with uow:
-        assert await uow.oauth_accounts.find_by_user_id_and_provider(
+        suyo = await uow.oauth_accounts.find_by_user_id_and_provider(
             cuenta.id, OAuthProvider.GOOGLE
         )
+        assert suyo.provider_user_id == "google-del-dueno"

@@ -36,6 +36,10 @@ from src.modules.user.application.ports.freno_del_login_port import (
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.guarda_la_sesion import (
+    CUENTA_DESACTIVADA,
+    guarda_la_sesion,
+)
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -342,15 +346,15 @@ class LoginUserUseCase:
             None si se guardó; si no, qué cambió (y el dispositivo que dio de alta
             este login, si lo hizo, revocado)
         """
-        async with self._uow:
-            actual = await self._uow.users.find_by_id_for_update(user.id)
-            cambio = self._cambio_a_mitad(actual, comprobada)
-            if cambio is None:
-                await self._uow.users.save(user)
-                await self._uow.refresh_tokens.save(refresh_token)
-            elif dispositivo_nuevo is not None:
-                await self._revoca_el_dispositivo(dispositivo_nuevo)
-        return cambio
+
+        async def comprueba(actual: User | None) -> str | None:
+            return self._cambio_a_mitad(actual, comprobada)
+
+        async def guarda() -> None:
+            await self._uow.users.save(user)
+            await self._uow.refresh_tokens.save(refresh_token)
+
+        return await guarda_la_sesion(self._uow, user.id, comprueba, guarda, dispositivo_nuevo)
 
     @staticmethod
     def _cambio_a_mitad(actual: User | None, comprobada: Password | None) -> str | None:
@@ -358,17 +362,10 @@ class LoginUserUseCase:
         if actual is None:
             return "Account deleted during login"
         if not actual.is_active:
-            return "Account deactivated by admin"
+            return CUENTA_DESACTIVADA
         if actual.password is None or actual.password != comprobada:
             return "Password changed during login"
         return None
-
-    async def _revoca_el_dispositivo(self, device_id: UserDeviceId) -> None:
-        """El dispositivo que dio de alta este login, que ya no entra, revocado."""
-        dispositivo = await self._uow.user_devices.find_by_id(device_id)
-        if dispositivo is not None and dispositivo.is_active:
-            dispositivo.revoke()
-            await self._uow.user_devices.save(dispositivo)
 
     def _rechaza_el_cambio_a_mitad(
         self, cambio: str, user: User, request: LoginRequestDTO, contexto: tuple[str, str]
@@ -382,7 +379,7 @@ class LoginUserUseCase:
             ip_address=contexto[0],
             user_agent=contexto[1],
         )
-        if cambio == "Account deactivated by admin":
+        if cambio == CUENTA_DESACTIVADA:
             raise AccountDeactivatedException()
 
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
