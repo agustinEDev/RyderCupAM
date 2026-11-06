@@ -264,11 +264,15 @@ class UserDeviceDTO(BaseModel):
     )
 
     @field_serializer("last_used_at", "created_at")
-    def _en_utc(self, valor: datetime) -> str:
-        """En UTC con su «Z»: sin huso, el navegador la leía como hora local (BE #737)."""
+    def _en_utc(self, valor: datetime) -> datetime:
+        """En UTC con su «Z»: sin huso, el navegador la leía como hora local (BE #737).
+
+        Devuelve un datetime con huso (Pydantic lo escribe con «Z»), no un texto: así el
+        esquema de la API sigue diciendo `date-time` y el contrato no cambia.
+        """
         if valor.tzinfo is None:
-            return valor.isoformat() + "Z"
-        return valor.astimezone(UTC).isoformat().replace("+00:00", "Z")
+            return valor.replace(tzinfo=UTC)
+        return valor.astimezone(UTC)
 
 
 class ListUserDevicesRequestDTO(BaseModel):
