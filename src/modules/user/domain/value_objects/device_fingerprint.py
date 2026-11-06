@@ -58,7 +58,9 @@ class DeviceFingerprint:
     device_name: str
 
     @staticmethod
-    def create(user_agent: str, ip_address: str) -> "DeviceFingerprint":
+    def create(
+        user_agent: str, ip_address: str, installed_app: bool = False
+    ) -> "DeviceFingerprint":
         """
         Crea un DeviceFingerprint a partir de User-Agent e IP.
 
@@ -100,6 +102,10 @@ class DeviceFingerprint:
         # Generar hash SHA256 con IP normalizada a nivel de red
         # Esto permite que IPs del mismo /24 o /64 generen el mismo hash
         fingerprint_str = f"{user_agent.strip()}|{normalized_ip_fingerprint}"
+        # La app instalada y el navegador del mismo móvil son dos dispositivos: cada
+        # uno tiene sus cookies, y con la misma huella se fundían en uno (BE #737)
+        if installed_app:
+            fingerprint_str += "|app"
         hash_value = hashlib.sha256(fingerprint_str.encode("utf-8")).hexdigest()
 
         # Generar nombre legible

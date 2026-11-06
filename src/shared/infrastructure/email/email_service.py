@@ -331,6 +331,75 @@ The Ryder Cup Friends Team
 
         return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
+    async def send_new_login_notification(
+        self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
+    ) -> bool:
+        """
+        Aviso de un inicio de sesión desde un dispositivo nuevo (BE #737).
+
+        Bilingüe (ES/EN), con la plantilla común. El botón lleva a la lista de
+        dispositivos, donde se puede revocar el que no reconozca.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        donde = f"{dispositivo} · {pais}" if pais else dispositivo
+        subject = (
+            "Nuevo inicio de sesión en tu cuenta - Ryder Cup Friends | New sign-in to your account"
+        )
+
+        text_body = f"""
+Hola {safe_user_name},
+
+Alguien ha entrado en tu cuenta de Ryder Cup Friends desde un dispositivo nuevo:
+
+{donde}
+{cuando}
+
+Si has sido tú, no tienes que hacer nada.
+
+Si NO has sido tú, revoca ese dispositivo y cambia tu contraseña:
+{settings.FRONTEND_URL}/profile/devices
+
+---
+
+Hello {safe_user_name},
+
+Someone signed in to your Ryder Cup Friends account from a new device: {donde}, {cuando}.
+If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/profile/devices
+        """
+
+        mis_dispositivos = f"{settings.FRONTEND_URL}/profile/devices"
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Nuevo inicio de sesión en tu cuenta · New sign-in to your account",
+            etiqueta="Seguridad",
+            titulo="Nuevo inicio de sesión",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", alguien ha entrado en tu cuenta desde un dispositivo nuevo:",
+                ),
+                parrafo(negrita(donde), " · ", cuando),
+                parrafo("Si has sido tú, no tienes que hacer nada."),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Revoca ese dispositivo y cambia tu contraseña ahora.",
+                ),
+            ],
+            boton=Boton("Revisar mis dispositivos", mis_dispositivos),
+            ingles=Ingles(
+                frase(
+                    negrita("New sign-in to your account"),
+                    f" from {donde}. If it wasn't you, revoke it and change your password.",
+                ),
+                Boton("Review my devices", mis_dispositivos),
+            ),
+            pie="Te avisamos cada vez que se entra desde un dispositivo nuevo. "
+            "We let you know whenever a new device signs in.",
+        )
+
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
         return (

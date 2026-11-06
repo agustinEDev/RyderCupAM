@@ -32,6 +32,7 @@ from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.services.cookie_de_dispositivo import ids_de_la_cookie_de_dispositivo
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
@@ -110,24 +111,23 @@ class RegisterDeviceUseCase:
             # =========================================================
             # PRIORITY 1: Cookie-based lookup (v2.0.4)
             # =========================================================
-            if request.device_id_from_cookie:
-                try:
-                    device_id = UserDeviceId.from_string(request.device_id_from_cookie)
-                    existing_device = await self._uow.user_devices.find_by_id_and_user(
-                        device_id=device_id,
-                        user_id=user_id,
+            # La cookie guarda los dispositivos de hasta 5 cuentas del navegador (BE
+            # #737): vale el primero que sea de este usuario y siga activo
+            for id_de_la_cookie in ids_de_la_cookie_de_dispositivo(request.device_id_from_cookie):
+                device_id = UserDeviceId.from_string(id_de_la_cookie)
+                existing_device = await self._uow.user_devices.find_by_id_and_user(
+                    device_id=device_id,
+                    user_id=user_id,
+                )
+                if existing_device:
+                    logger.debug(f"Device identified via cookie: {existing_device.device_name}")
+                    # El navegador se actualizó, o es otro en este dispositivo
+                    existing_device.update_user_agent(request.user_agent)
+                    existing_device.update_country(request.country_code)
+                    existing_device.update_installed_app(request.installed_app)
+                    return await self._reusa(
+                        existing_device, request.ip_address, poner_cookie=False, por_su_cookie=True
                     )
-
-                    if existing_device:
-                        logger.debug(f"Device identified via cookie: {existing_device.device_name}")
-                        # Cookie already valid
-                        return await self._reusa(
-                            existing_device, request.ip_address, poner_cookie=False
-                        )
-
-                except ValueError as e:
-                    # Invalid device_id format in cookie - treat as no cookie
-                    logger.warning(f"Invalid device_id in cookie: {e}")
 
             # =========================================================
             # PRIORITY 2: Fingerprint-based lookup (fallback)
@@ -136,6 +136,7 @@ class RegisterDeviceUseCase:
             fingerprint = DeviceFingerprint.create(
                 user_agent=request.user_agent,
                 ip_address=request.ip_address,
+                installed_app=request.installed_app,
             )
 
             # Check if device already exists by fingerprint (prevents unique index violation)
@@ -149,7 +150,9 @@ class RegisterDeviceUseCase:
                     f"Device identified via fingerprint (cookie missing): {existing_device.device_name}"
                 )
                 # Cookie was missing, caller must set it
-                return await self._reusa(existing_device, request.ip_address)
+                return await self._reusa(
+                    existing_device, request.ip_address, country_code=request.country_code
+                )
 
             # =========================================================
             # PRIORITY 3: Create new device
@@ -157,11 +160,15 @@ class RegisterDeviceUseCase:
             new_device = UserDevice.create(
                 user_id=user_id,
                 fingerprint=fingerprint,
+                installed_app=request.installed_app,
+                country_code=request.country_code,
             )
             # Si otro inicio de sesión a la vez lo dio de alta, el suyo (BE #692)
             guardado = await self._uow.user_devices.add_unless_registered(new_device)
             if guardado is not new_device:
-                return await self._reusa(guardado, request.ip_address)
+                return await self._reusa(
+                    guardado, request.ip_address, country_code=request.country_code
+                )
 
             logger.info(f"New device registered: {new_device.device_name}")
 
@@ -173,17 +180,24 @@ class RegisterDeviceUseCase:
             )
 
     async def _reusa(
-        self, device: UserDevice, ip_address: str, poner_cookie: bool = True
+        self,
+        device: UserDevice,
+        ip_address: str,
+        poner_cookie: bool = True,
+        country_code: str | None = None,
+        por_su_cookie: bool = False,
     ) -> RegisterDeviceResponseDTO:
         """El que ya estaba, al día; si no traía su cookie, el que llama se la pone."""
         await self._reanuda(device)
         device.update_ip_address(ip_address)
+        device.update_country(country_code)
         await self._uow.user_devices.save(device)
         return RegisterDeviceResponseDTO(
             device_id=str(device.id.value),
             is_new_device=False,
             message=f"Dispositivo actualizado: {device.device_name}",
             set_device_cookie=poner_cookie,
+            recognized_by_cookie=por_su_cookie,
         )
 
     async def _reanuda(self, device: UserDevice) -> None:

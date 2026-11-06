@@ -8,7 +8,6 @@ Endpoints para autenticación con Google OAuth:
 """
 
 import logging
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -38,7 +37,13 @@ from src.modules.user.application.use_cases.unlink_google_account_use_case impor
     UnlinkGoogleAccountUseCase,
 )
 from src.modules.user.domain.exceptions import AccountLockedException
+from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
+    es_la_app_instalada,
+    ids_validos_de_la_cookie,
+    pon_la_cookie_de_dispositivo,
+)
 from src.shared.infrastructure.http.http_context_validator import (
+    cloudflare_client_country,
     get_trusted_client_ip,
     get_user_agent,
 )
@@ -46,23 +51,11 @@ from src.shared.infrastructure.security.cookie_handler import (
     get_device_id_cookie_name,
     set_auth_cookie,
     set_csrf_cookie,
-    set_device_id_cookie,
     set_refresh_token_cookie,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def _validate_device_id_cookie(cookie_value: str | None) -> str | None:
-    """Valida que el device_id cookie sea un UUID válido."""
-    if not cookie_value:
-        return None
-    try:
-        validated = uuid.UUID(cookie_value)
-        return str(validated)
-    except (ValueError, AttributeError):
-        return None
 
 
 @router.post(
@@ -88,9 +81,11 @@ async def google_login(
     login_data.user_agent = get_user_agent(request)
 
     device_id_cookie_name = get_device_id_cookie_name()
-    login_data.device_id_from_cookie = _validate_device_id_cookie(
+    login_data.device_id_from_cookie = ids_validos_de_la_cookie(
         request.cookies.get(device_id_cookie_name)
     )
+    login_data.installed_app = es_la_app_instalada(request)
+    login_data.country_code = cloudflare_client_country(request)
 
     try:
         login_response = await use_case.execute(login_data)
@@ -119,8 +114,9 @@ async def google_login(
     set_refresh_token_cookie(response, login_response.refresh_token)
     set_csrf_cookie(response, login_response.csrf_token)
 
-    if login_response.should_set_device_cookie and login_response.device_id:
-        set_device_id_cookie(response, login_response.device_id)
+    # Siempre: la renueva y deja este dispositivo delante (BE #737)
+    if login_response.device_id:
+        pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     return login_response
 

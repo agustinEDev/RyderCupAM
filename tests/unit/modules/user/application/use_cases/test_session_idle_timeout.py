@@ -17,7 +17,7 @@ dispositivos. Ahora lo decide el servidor, por dispositivo, al refrescar.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -34,6 +34,9 @@ from src.modules.user.domain.entities.user_device import SESSION_IDLE_TIMEOUT, U
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
+)
+from tests.unit.modules.user.application.use_cases._registro_falso import (
+    registro_de_dispositivo_falso,
 )
 
 JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.movil"
@@ -100,7 +103,7 @@ class TestRefrescarSegunElUso:
         await uow.refresh_tokens.save(
             RefreshToken.create(user.id, JWT, device_id=dispositivo.id if dispositivo else None)
         )
-        caso = RefreshAccessTokenUseCase(uow, token_service, AsyncMock())
+        caso = RefreshAccessTokenUseCase(uow, token_service, registro_de_dispositivo_falso())
         return await caso.execute(RefreshAccessTokenRequestDTO(), JWT)
 
     async def test_r1_usado_hace_una_hora_se_refresca(self, user, token_service):
@@ -187,8 +190,8 @@ class TestRefrescarSegunElUso:
         await uow.refresh_tokens.save(token)
 
         with pytest.raises(RefreshRejectedError) as rechazo:
-            await RefreshAccessTokenUseCase(uow, token_service, AsyncMock()).execute(
-                RefreshAccessTokenRequestDTO(), JWT
-            )
+            await RefreshAccessTokenUseCase(
+                uow, token_service, registro_de_dispositivo_falso()
+            ).execute(RefreshAccessTokenRequestDTO(), JWT)
 
         assert rechazo.value.motivo is motivo

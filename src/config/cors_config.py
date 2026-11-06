@@ -247,6 +247,7 @@ def get_cors_config() -> dict:
             "X-Requested-With",
             "X-Correlation-ID",
             "X-CSRF-Token",  # v1.13.0: CSRF Protection
+            "X-App-Mode",  # La app instalada se distingue del navegador (BE #737)
             # Sentry headers para tracing distribuido
             "sentry-trace",
             "baggage",

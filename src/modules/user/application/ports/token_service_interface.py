@@ -63,3 +63,7 @@ class ITokenService(ABC):
 
         Distingue el final normal de una sesión de un token inválido (FE #1042).
         """
+
+    @abstractmethod
+    def create_refresh_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+        """Crea un refresh token (7 días por defecto)."""

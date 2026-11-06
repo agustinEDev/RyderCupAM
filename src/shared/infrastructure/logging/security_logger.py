@@ -497,6 +497,7 @@ class SecurityLogger:
         user_agent: str,
         tokens_revoked_count: int,
         reason: str,
+        device_id: str | None = None,
     ) -> None:
         """
         Helper rápido para registrar revocación de refresh tokens.
@@ -514,6 +515,7 @@ class SecurityLogger:
             user_agent=user_agent,
             tokens_revoked_count=tokens_revoked_count,
             reason=reason,
+            device_id=device_id,
         )
         self.log_security_event(event)
 

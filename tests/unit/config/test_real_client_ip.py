@@ -289,3 +289,30 @@ def test_startup_warns_when_the_origin_secret_is_missing_in_production(monkeypat
         informa_del_secreto_de_origen()
 
     assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("pais", "esperado"),
+    [
+        ("ES", "ES"),
+        ("es", "ES"),
+        (" fr ", "FR"),
+        ("XX", None),
+        ("T1", None),
+        ("E1", None),
+        ("ESP", None),
+        ("", None),
+    ],
+)
+def test_cloudflare_country_only_real_iso_codes(pais, esperado):
+    """
+    Given: El secreto correcto y un CF-IPCountry
+    When: Se lee el país
+    Then: Solo un código ISO de dos letras; «XX» (sin país) y «T1» (Tor) no son un país
+    """
+    from src.shared.infrastructure.http.http_context_validator import cloudflare_client_country
+
+    assert (
+        cloudflare_client_country(_de_cloudflare("203.0.113.7", **{"CF-IPCountry": pais}))
+        == esperado
+    )

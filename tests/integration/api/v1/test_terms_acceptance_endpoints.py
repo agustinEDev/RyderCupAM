@@ -21,6 +21,7 @@ from main import app
 from src.config.dependencies import get_accept_terms_use_case, get_google_oauth_service
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.modules.user.domain.services import terms_of_service
+from src.modules.user.domain.services.descripcion_del_dispositivo import ip_tapada
 from tests.conftest import (
     _URL_DE_LA_BD_DE_TEST,
     create_admin_user,
@@ -389,7 +390,8 @@ class TestHistorial:
         assert aceptado_en == (await _terminos_en_bd(email))[0]
         assert navegador == client.headers["User-Agent"]
         assert ip is not None
-        assert ip == dispositivos[0]["ip_address"]
+        # La lista enseña la IP tapada (BE #737); el historial guarda la completa
+        assert ip_tapada(ip) == dispositivos[0]["ip_address"]
 
     async def test_accepting_the_same_version_adds_no_row(self, client: AsyncClient):
         """
@@ -447,7 +449,8 @@ class TestHistorial:
         _, _, ip, navegador = filas[0]
         assert navegador == client.headers["User-Agent"]
         assert ip is not None
-        assert ip == dispositivos[0]["ip_address"]
+        # La lista enseña la IP tapada (BE #737); el historial guarda la completa
+        assert ip_tapada(ip) == dispositivos[0]["ip_address"]
 
 
 class TestDispositivosSinAceptar:

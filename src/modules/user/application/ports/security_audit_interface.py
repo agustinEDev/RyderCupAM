@@ -13,6 +13,17 @@ class ISecurityAuditLogger(ABC):
     """Lo que la capa de aplicación deja en el log de auditoría de seguridad."""
 
     @abstractmethod
+    def log_device_revoked(
+        self,
+        user_id: str,
+        device_id: str,
+        ip_address: str,
+        user_agent: str,
+        tokens_revoked_count: int,
+    ) -> None:
+        """Deja constancia de que se revocó un dispositivo y cuántas sesiones cerró (BE #737)."""
+
+    @abstractmethod
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:

@@ -269,6 +269,8 @@ class RefreshTokenRevokedEvent(SecurityAuditEvent):
 
     tokens_revoked_count: int = 0  # Requerido, validado en __post_init__
     reason: str = ""  # Requerido, validado en __post_init__
+    # Qué dispositivo se revocó, cuando es una revocación de dispositivo (BE #737)
+    device_id: str | None = None
 
     def __post_init__(self):
         """Validación y configuración de severity"""
@@ -300,6 +302,7 @@ class RefreshTokenRevokedEvent(SecurityAuditEvent):
             {
                 "tokens_revoked_count": self.tokens_revoked_count,
                 "reason": self.reason,
+                "device_id": self.device_id,
             }
         )
         return base

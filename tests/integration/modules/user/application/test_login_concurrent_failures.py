@@ -48,7 +48,9 @@ async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session):
     async def un_intento():
         """Ayudante del test: un intento."""
         async with sesiones() as sesion:
-            login = LoginUserUseCase(SQLAlchemyUnitOfWork(sesion), JWTTokenService(), AsyncMock())
+            login = LoginUserUseCase(
+                SQLAlchemyUnitOfWork(sesion), JWTTokenService(), AsyncMock(), AsyncMock()
+            )
             return await login.execute(LoginRequestDTO(email=EMAIL, password="Mala-Pass-1!"))
 
     resultados = await asyncio.gather(

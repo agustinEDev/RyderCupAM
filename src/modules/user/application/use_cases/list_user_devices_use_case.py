@@ -9,7 +9,7 @@ Responsabilidades:
 - Mapear entidades a DTOs
 - Ordenar por last_used_at desc (más recientes primero)
 - Retornar lista + contador
-- Marcar dispositivo actual via device_id_from_cookie (v2.0.4)
+- Marcar el dispositivo actual: el `did` del token, ya comprobado (BE #737)
 
 Llamado desde:
 - GET /api/v1/users/me/devices (endpoint protegido)
@@ -22,6 +22,7 @@ Patrón: Use Case Pattern + Unit of Work + DTO Mapper
 """
 
 import logging
+from datetime import datetime
 
 from src.modules.user.application.dto.device_dto import (
     ListUserDevicesRequestDTO,
@@ -30,6 +31,10 @@ from src.modules.user.application.dto.device_dto import (
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
+)
+from src.modules.user.domain.services.descripcion_del_dispositivo import (
+    describe_el_dispositivo,
+    ip_tapada,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
 
@@ -109,24 +114,34 @@ class ListUserDevicesUseCase:
             # 1. Parsear user_id de string a UserId
             user_id = UserId(request.user_id)
 
-            # 2. Buscar todos los dispositivos activos del usuario
-            devices = await self._uow.user_devices.find_active_by_user(user_id)
+            # 2. Los que tienen la sesión abierta de verdad (BE #737): activos, usados
+            # en las últimas 24 h y con algún refresco vivo. Antes salían todos los
+            # activos: en producción, 58 de 60 llevaban días con la sesión muerta
+            ahora = datetime.now()
+            con_sesion = await self._uow.refresh_tokens.device_ids_with_live_tokens(user_id, ahora)
+            devices = [
+                device
+                for device in await self._uow.user_devices.find_active_by_user(user_id)
+                if device.id in con_sesion and not device.is_idle(ahora)
+            ]
 
-            # 3. Determinar device_id actual desde cookie (v2.0.4)
-            # Cookie-based identification: device_id_from_cookie es el primary identifier
-            # Si no hay cookie, ningún dispositivo se marca como current
-            current_device_id = request.device_id_from_cookie
-            if current_device_id:
-                logger.debug(f"Current device identified via cookie: {current_device_id}")
-            else:
-                logger.debug("No device_id cookie found, no device will be marked as current")
+            # 3. El dispositivo actual: el `did` del token, que get_current_user ya
+            # comprobó (BE #737)
+            current_device_id = request.current_device_id
 
-            # 4. Mapear entidades a DTOs (con is_current_device calculado via cookie)
+            # 4. Mapear entidades a DTOs (con is_current_device por el `did`)
             device_dtos = [
                 UserDeviceDTO(
                     id=str(device.id.value),
                     device_name=device.device_name,
-                    ip_address=device.ip_address,
+                    user_agent=device.user_agent,
+                    # Tapada: la completa se queda para auditoría (BE #737)
+                    ip_address=ip_tapada(device.ip_address) or "",
+                    device_type=descripcion.tipo,
+                    platform=descripcion.plataforma,
+                    browser=descripcion.navegador,
+                    installed_app=device.installed_app,
+                    country_code=device.country_code,
                     last_used_at=device.last_used_at,
                     created_at=device.created_at,
                     is_active=device.is_active,
@@ -135,6 +150,7 @@ class ListUserDevicesUseCase:
                     ),
                 )
                 for device in devices
+                for descripcion in (describe_el_dispositivo(device.user_agent),)
             ]
 
             # 5. Retornar respuesta con lista + contador
