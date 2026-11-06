@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.50.0] - 2026-11-06
+
+**Dispositivos de fiar: la revocación por el id del dispositivo, la lista solo con
+sesiones vivas y un correo al dueño cuando se entra desde un dispositivo nuevo**
+(#737, #730, ADR-042). Dos migraciones, que se aplican solas al arrancar. Va con el
+frontend **2.65.0**: primero esta versión, que acepta su cabecera `X-App-Mode` en
+CORS. Probado en el Kind: 37 casos por la API y la pantalla a 360 px.
+
+### Security
+
+- **El token de acceso lleva su dispositivo (`did`)** y cada petición lo busca por
+  id. Revocado: 401 «Dispositivo revocado», también desde otra red.
+  - Antes se comprobaba por una huella de navegador e IP que nunca se
+    actualizaba: en producción no encontraba 34 de 60 dispositivos, y podía echar
+    a un usuario legítimo con un falso «revocado».
+  - Un token sin `did` (de antes de esta versión) da un 401 y el refresco lo
+    repone. Si la consulta falla, no pasa nada.
+- **Toda sesión tiene dispositivo**: login, Google, verify-email y refresco,
+  también sin User-Agent. El refresco usa el dispositivo de su token y ata a él
+  los tokens antiguos.
+- **Correo de «nuevo inicio de sesión» al dueño** cuando un login (contraseña o
+  Google) llega sin la cookie del dispositivo: uno nuevo, o uno que solo reconoce
+  la huella.
+  - Nunca a un correo sin confirmar ni en el alta con Google.
+  - Como mucho uno por dispositivo y hora.
+  - Se envía en segundo plano y nunca tumba el login. Dice la hora del acceso.
+- **Cada revocación va al historial de seguridad** con el id del dispositivo. Si
+  el historial falla, la revocación ya guardada responde bien igual.
+
+### Added
+
+- **La lista de dispositivos dice qué es cada uno**: tipo, plataforma, navegador,
+  si es la app instalada y el país (de Cloudflare). La IP va tapada por el final.
+- **La cookie del dispositivo guarda hasta 5 ids**, uno por cuenta del navegador,
+  y cerrar sesión no la borra. Se renueva en cada login y refresco, para que
+  Safari no la caduque a los 7 días.
+- **`X-App-Mode: standalone`** separa la app instalada del iPhone de Safari.
+- **Limpieza cada hora**: dispositivos sin usar en 30 días y refrescos caducados
+  hace más de 7.
+- Migraciones `c5e7a9b1d3f6` (`installed_app`, `country_code`) y `d6f8b0c2e4a7`
+  (`new_login_notice_at`) en `user_devices`.
+
+### Fixed
+
+- **La lista solo enseña sesiones vivas.** Antes salían dispositivos muertos
+  hace días.
+- **Sin duplicados** al cerrar sesión y volver a entrar, al cambiar de red o al
+  actualizar el navegador.
+- **Las fechas de la lista salen en UTC con su «Z»**: sin huso, el navegador las
+  leía como hora local y salían con una hora menos.
+
 ## [2.49.0] - 2026-11-05
 
 **La IP real del cliente, el límite por defecto que nunca se aplicaba y el motivo
