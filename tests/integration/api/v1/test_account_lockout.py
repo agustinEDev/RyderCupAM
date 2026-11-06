@@ -20,6 +20,8 @@ de la cuenta, 50 fallos en una hora desde cualquier red, solo para desconocidos.
   I9   acertar desde A                                       | A vuelve a cero: 9 fallos más, 401
   I10  una red se bloquea, con el correo confirmado          | llega el correo de intentos fallidos
   I10b con el correo sin confirmar                           | no llega
+  I11  la red A agotó su techo de fallos (30/min, cualquier  | un desconocido desde A: 429; el
+       correo: el atacante en la wifi del club)              |   dispositivo de Ana desde A: 200
 """
 
 import uuid
@@ -235,3 +237,20 @@ async def test_i10_avisa_al_dueno_si_su_correo_esta_confirmado(
     destinos = [c.kwargs["to_email"] for c in aviso.await_args_list]
     assert destinos == [ana]
     assert aviso.await_args.kwargs["motivo"] == "red"
+
+
+async def test_i11_con_el_techo_de_la_red_agotado_el_dispositivo_del_dueno_entra(client):
+    """
+    Given: Ana con un dispositivo suyo, y la red A con 30 fallos en este minuto contra
+           correos cualquiera (el atacante en la wifi del club)
+    When: Entra un desconocido desde A, y Ana con su dispositivo desde A
+    Then: 429 al desconocido; 200 a Ana
+    """
+    ana = await _registra(client, "i11")
+    red_a = f"a-{uuid.uuid4().hex[:6]}"
+    movil = await _dispositivo(client, ana, f"casa-{uuid.uuid4().hex[:6]}")
+    for i in range(30):
+        await _login(client, f"cualquiera{i}-{uuid.uuid4().hex[:4]}@example.com", red_a, MALA)
+
+    assert (await _login(client, ana, red_a)).status_code == 429
+    assert (await _login(client, ana, red_a, cookie=movil)).status_code == 200

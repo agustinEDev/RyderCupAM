@@ -35,18 +35,23 @@ IP arrives from Cloudflare (ADR-041), and since 2.50 devices are checked by id
    - An id from another account, a revoked device or a made-up id gives no pass.
 3. **The account backstop** stays in the `users` table. It counts failures from all
    networks: 50 in one hour lock the account for 30 minutes, for unknown devices only.
-   A correct password no longer resets it, so the owner signing in cannot erase a
-   distributed attack. It ends with its hour.
-4. **The per-network ceiling** (30 failures per minute, any email) is unchanged.
-5. **Email to the owner** when a network is locked for their account, or the
-   backstop trips.
-   - Only to a confirmed email, at most one per hour per account, sent in the
-     background.
+   When it locks, a new hour starts at zero once the lock ends. A correct password,
+   and a Google sign-in, no longer reset it: the owner cannot erase a distributed attack.
+4. **The per-network ceiling** (30 failures per minute, any email) moves into the use
+   case, so a trusted device is not stopped by an attacker on the same network.
+5. **Google sign-in is never stopped by the password brakes**: Google proves who it is,
+   and a Google-only account has no right password to defend itself with.
+6. **Email to the owner** when a network is locked for their account, or the backstop
+   trips: one per failure (the backstop first).
+   - Only to a confirmed email. At most one per hour per account, reserved with the
+     user row locked before sending, and at most 20 per hour app-wide, to protect the
+     mail quota that verification and password reset share. In the background.
    - It says the country, that they can still sign in from their devices, and links
      to changing the password.
-6. **Same answers for an unknown email:** the same 401, 423 and 429, and the same
-   bcrypt (BE #281). A locked origin is refused before bcrypt.
-7. **Admin unlock** clears the backstop and every per-network lock of that account.
+7. **Same answers for an unknown email:** the same 401, 423 and 429, the same bcrypt
+   (BE #281) and the same one device lookup. A locked origin is refused before bcrypt.
+8. **Admin unlock** (admins only since 2.50.1) clears the backstop and every
+   per-network lock of that account, and goes to the security log.
 
 ## Brute-force bounds
 
@@ -59,17 +64,19 @@ IP arrives from Cloudflare (ADR-041), and since 2.50 devices are checked by id
 ## Consequences
 
 **Positive:**
-- Failed logins from another network cannot keep the owner out (A04/A07).
-- At a club's shared wifi with an attacker inside, the owner's device still signs in.
+- Failed logins from another network cannot keep the owner out (A04/A07), also on a
+  club's shared wifi with the attacker inside, if the owner signs in from their device.
 
 **Negative / residual risk:**
-- **The per-network state lives in memory**, like the other limits. The API runs as
-  one process. A deploy or restart resets it: an attacker gains at most another 10
-  guesses per network. Running several instances would need a shared store.
-- **Without the real IP** (no Cloudflare secret), every request is one network:
-  behaviour falls back to today's shared counter. Documented in ADR-041.
-- **A tripped backstop also stops a Google login from an unknown device**, as the
-  account lock always did (`google_login_use_case`).
+- **The per-network state lives in memory** (capped at 50,000 pairs per table, old
+  ones first out), like the other limits. One process; a restart resets it (at most
+  another 10 guesses per network). Several instances would need a shared store.
+- **Without the real IP** (no Cloudflare secret), every request is one network. A
+  missing `ENVIRONMENT` no longer lets the caller pick its network (`X-Test-Client-ID`).
+- **Safari without the device cookie** (cleared, or capped at 7 days) is an unknown
+  device: a distributed attack can keep it out for 30 minutes at a time.
+- **After 50 distributed failures** an existing email answers 423 from a new network and
+  an unknown one 401. It costs 50 guesses and notifies the owner; the old 10-failure
+  lock had the same signal.
 - Attempts already past the gate when their origin locks still finish their bcrypt.
-  The 5 per minute bounds how many can be in flight. Each memory operation has no
-  `await`, so it is atomic in the event loop and the 10th failure locks once.
+  The 5 per minute bounds them; each memory operation has no `await`, so it is atomic.
