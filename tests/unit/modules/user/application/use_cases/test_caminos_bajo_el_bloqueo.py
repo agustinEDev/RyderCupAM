@@ -270,3 +270,42 @@ def test_b7_changing_the_email_drops_the_old_verification_link():
     ana.change_email("otra@example.com")
 
     assert ana.verification_token is None
+
+
+async def test_a2_google_relinked_to_another_account_mid_login_gets_no_session():
+    """
+    Given: Ana con su Google vinculado
+    When: Mientras entra, ese Google pasa a estar vinculado a OTRA cuenta
+    Then: Sin sesión en la de Ana: el Google ya no es de su cuenta
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow, con_google=True)
+    otra = User.create(
+        first_name="Otra",
+        last_name="Cuenta",
+        email_str="otra@example.com",
+        plain_password="SecureP@ssw0rd123!",
+    )
+    async with uow:
+        await uow.users.save(otra)
+
+    async def pasa_a_otra(_copia):
+        vinculo = await uow.oauth_accounts.find_by_user_id_and_provider(
+            ana.id, OAuthProvider.GOOGLE
+        )
+        await uow.oauth_accounts.delete(vinculo)
+        await uow.oauth_accounts.save(
+            UserOAuthAccount.create(
+                user_id=otra.id,
+                provider=OAuthProvider.GOOGLE,
+                provider_user_id=INFO.google_user_id,
+                provider_email=INFO.email,
+            )
+        )
+
+    registro, dispositivo = _registro_que_a_la_vez(uow, ana, pasa_a_otra)
+
+    with pytest.raises(ValueError, match="Google unlinked during sign-in"):
+        await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+    await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
