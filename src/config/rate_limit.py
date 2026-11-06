@@ -62,6 +62,9 @@ EMAIL_SENDING_LIMIT = "30/hour"  # forgot-password y resend-verification
 RESET_PASSWORD_LIMIT = "20/hour"  # nosec B105 - a rate limit, not a password
 VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
 CONTACT_LIMIT = "10/hour"
+# Por red y día (auditoría OWASP, 6 nov 2026): con el tope de 20 al día de la app,
+# una red sola no puede cerrar el formulario a todos
+CONTACT_DAILY_LIMIT = "3/day"
 
 VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
 REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token

@@ -671,6 +671,7 @@ def reset_rate_limits():
     tests con el mismo email se pisarían dentro del mismo minuto.
     """
     from src.config.cupo_de_avisos import cupo_de_avisos
+    from src.config.cupo_de_contacto import cupo_de_contacto
     from src.config.freno_del_login import freno_del_login
     from src.config.rate_limit import limiter
 
@@ -678,10 +679,12 @@ def reset_rate_limits():
     limiter.reset()
     freno_del_login.reinicia()
     cupo_de_avisos.reinicia()
+    cupo_de_contacto.reinicia()
     yield
     limiter.reset()
     freno_del_login.reinicia()
     cupo_de_avisos.reinicia()
+    cupo_de_contacto.reinicia()
 
 
 # ======================================================================================

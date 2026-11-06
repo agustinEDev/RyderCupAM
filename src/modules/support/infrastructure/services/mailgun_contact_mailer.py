@@ -40,21 +40,22 @@ class MailgunContactMailer(IContactMailer):
         if not self._api_key:
             logger.error("MAILGUN_API_KEY is not set: contact message not sent")
             return False
+        datos = {"from": self._from_email, "to": self._to_email, "subject": subject, "text": text}
+        # Una dirección con tildes no se puede poner en una cabecera: sin «Responder a»
+        # (la dirección ya va en el cuerpo)
+        if reply_to.isascii():
+            datos["h:Reply-To"] = reply_to
         try:
             async with httpx.AsyncClient(timeout=10.0) as cliente:
                 respuesta = await cliente.post(
                     f"{self._api_url}/{self._domain}/messages",
                     auth=("api", self._api_key),
-                    data={
-                        "from": self._from_email,
-                        "to": self._to_email,
-                        "subject": subject,
-                        "text": text,
-                        "h:Reply-To": reply_to,
-                    },
+                    data=datos,
                 )
-        except httpx.HTTPError as error:
-            logger.error("Contact message: Mailgun unreachable (%s)", type(error).__name__)
+        except Exception as error:
+            # También lo que no es de red (una URL mal puesta): solo el tipo, nunca el
+            # mensaje, que podría llevar la URL
+            logger.error("Contact message: Mailgun call failed (%s)", type(error).__name__)
             return False
         if respuesta.status_code != HTTP_OK:
             # Sin el cuerpo de la respuesta: podría repetir datos del mensaje

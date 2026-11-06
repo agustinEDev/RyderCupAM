@@ -82,3 +82,23 @@ async def test_without_api_key_nothing_is_sent():
     with patch(f"{MODULO}.httpx.AsyncClient") as cliente:
         assert await mailer.send(subject="s", text="t", reply_to="a@example.com") is False
     cliente.assert_not_called()
+
+
+async def test_a_non_ascii_address_goes_without_reply_to():
+    """
+    Given: Un correo con tildes (EmailStr lo acepta; en una cabecera no se puede codificar)
+    When: Se manda
+    Then: Sin h:Reply-To, para que Mailgun no lo rechace; el correo ya va en el cuerpo
+    """
+    cliente = _cliente()
+    with patch(f"{MODULO}.httpx.AsyncClient", return_value=cliente):
+        assert await _mailer().send(subject="s", text="t", reply_to="josé@example.com") is True
+
+    assert "h:Reply-To" not in cliente.post.call_args.kwargs["data"]
+
+
+async def test_an_unexpected_error_is_false():
+    """Un error que no es de red (una URL mal puesta): False, sin excepción."""
+    error = httpx.InvalidURL("mal")
+    with patch(f"{MODULO}.httpx.AsyncClient", return_value=_cliente(error=error)):
+        assert await _mailer().send(subject="s", text="t", reply_to="a@example.com") is False

@@ -8,6 +8,7 @@ from httpx import AsyncClient
 from main import app
 from src.config.cupo_de_contacto import cupo_de_contacto
 from src.config.dependencies import get_contact_mailer
+from src.config.settings import settings
 
 pytestmark = pytest.mark.asyncio
 
@@ -49,13 +50,12 @@ async def test_c1_the_message_goes_by_email(client: AsyncClient, buzon):
     r = await client.post("/api/v1/support/contact", json=MENSAJE)
 
     assert r.status_code == 200
-    assert buzon.enviados == [
-        {
-            "subject": "[Contacto · Pregunta] Duda con el hándicap",
-            "text": buzon.enviados[0]["text"],
-            "reply_to": "ana@example.com",
-        }
-    ]
+    assert len(buzon.enviados) == 1
+    enviado = buzon.enviados[0]
+    assert enviado["subject"] == "[Contacto · Pregunta] Duda con el hándicap"
+    assert enviado["reply_to"] == "ana@example.com"
+    for dato in ("Ana López", "ana@example.com", "Pregunta", MENSAJE["message"]):
+        assert dato in enviado["text"]
 
 
 async def test_c4_a_full_daily_quota_answers_429_with_its_code(client: AsyncClient, buzon):
@@ -71,7 +71,7 @@ async def test_c4_a_full_daily_quota_answers_429_with_its_code(client: AsyncClie
 
     assert r.status_code == 429
     assert r.json()["error_code"] == "CONTACT_QUOTA_EXCEEDED"
-    assert "admin@rydercupfriends.com" in r.json()["detail"]
+    assert settings.CONTACT_EMAIL in r.json()["detail"]
     assert buzon.enviados == []
 
 
@@ -87,3 +87,34 @@ async def test_c5_a_refused_email_answers_502(client: AsyncClient, buzon):
 
     assert r.status_code == 502
     assert r.json()["detail"] == "Unable to process your request. Please try again later."
+    # El hueco del tope, devuelto: no salió
+    assert cupo_de_contacto.reserva() is True and len(cupo_de_contacto._enviados) == 1
+
+
+async def test_the_quota_text_names_the_configured_mailbox(client: AsyncClient, buzon, monkeypatch):
+    """Si se cambia CONTACT_EMAIL, el 429 manda a escribir a ese buzón, no a otro."""
+    monkeypatch.setattr(settings, "CONTACT_EMAIL", "otro.buzon@example.com")
+    while cupo_de_contacto.reserva():
+        pass
+
+    r = await client.post("/api/v1/support/contact", json=MENSAJE)
+
+    assert "otro.buzon@example.com" in r.json()["detail"]
+
+
+async def test_one_network_sends_at_most_three_a_day(client: AsyncClient, buzon):
+    """
+    Given: Una red que ya mandó 3 mensajes hoy
+    When: Manda el cuarto
+    Then: 429 del límite por red (no el del tope de la app), y solo salieron 3: una red
+          sola ya no cierra el formulario a todos (auditoría OWASP)
+    """
+    cabecera = {"X-Test-Client-ID": "contacto-una-red"}
+    respuestas = [
+        await client.post("/api/v1/support/contact", json=MENSAJE, headers=cabecera)
+        for _ in range(4)
+    ]
+
+    assert [r.status_code for r in respuestas] == [200, 200, 200, 429]
+    assert respuestas[3].json().get("error_code") != "CONTACT_QUOTA_EXCEEDED"
+    assert len(buzon.enviados) == 3

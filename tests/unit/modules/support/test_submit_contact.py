@@ -271,3 +271,87 @@ class TestSubmitContactUseCase:
 
         cupo.reserva.assert_called_once()
         cupo.devuelve.assert_not_called()
+
+
+class TestSubmitContactUseCaseRevision:
+    """Lo que pidieron las revisiones del cambio a correo (revisor y auditoría OWASP)."""
+
+    def _caso(self, envia=True):
+        mailer = AsyncMock()
+        mailer.send.return_value = envia
+        cupo = Mock()
+        cupo.reserva.return_value = True
+        return SubmitContactUseCase(mailer, cupo), mailer, cupo
+
+    def _peticion(self, **cambios):
+        datos = {
+            "name": "Ana López",
+            "email": "ana@example.com",
+            "category": ContactCategory.BUG,
+            "subject": "Algo falla",
+            "message": "La tarjeta no guarda el golpe del hoyo 7.",
+        }
+        datos.update(cambios)
+        return ContactRequestDTO(**datos)
+
+    async def test_an_exception_while_sending_gives_the_slot_back(self):
+        """
+        Given: El envío lanza una excepción inesperada
+        When: Se envía
+        Then: ContactDeliveryError y el hueco se devuelve: veinte fallos así no
+              cierran el formulario un día
+        """
+        caso, mailer, cupo = self._caso()
+        mailer.send.side_effect = RuntimeError("fallo raro")
+
+        with pytest.raises(ContactDeliveryError):
+            await caso.execute(self._peticion())
+
+        cupo.devuelve.assert_called_once()
+
+    async def test_control_characters_leave_the_body(self):
+        """El cuerpo pierde los caracteres de control, salvo saltos y tabuladores."""
+        caso, mailer, _cupo = self._caso()
+
+        await caso.execute(self._peticion(message="Hola\x00 que\x1b tal\n\tbien"))
+
+        assert "Hola que tal\n\tbien" in mailer.send.call_args.kwargs["text"]
+
+    async def test_invisible_and_bidi_characters_leave_the_subject_and_name(self):
+        """
+        Given: Asunto y nombre con caracteres invisibles o que dan la vuelta al texto
+        When: Se envía
+        Then: Salen limpios: no se puede disfrazar el asunto en el buzón
+        """
+        caso, mailer, _cupo = self._caso()
+
+        await caso.execute(
+            self._peticion(subject="Pago\u202e pendiente\u200b ya", name="Ana\u200d López")
+        )
+
+        kw = mailer.send.call_args.kwargs
+        assert kw["subject"] == "[Contacto · Error] Pago pendiente ya"
+        assert "Nombre: Ana López\n" in kw["text"]
+
+    async def test_a_subject_of_only_invisible_characters_says_so(self):
+        """Un asunto que se queda vacío al limpiarlo sale como «(sin asunto)»."""
+        caso, mailer, _cupo = self._caso()
+
+        await caso.execute(self._peticion(subject="\u200b\u200b\u200b\u200b"))
+
+        assert mailer.send.call_args.kwargs["subject"] == "[Contacto · Error] (sin asunto)"
+
+    async def test_the_body_warns_that_the_address_is_unverified(self):
+        """
+        Given: Un mensaje
+        When: Llega al buzón
+        Then: Bajo el correo, que no está verificado: no responder a ciegas a un tercero
+        """
+        caso, mailer, _cupo = self._caso()
+
+        await caso.execute(self._peticion())
+
+        assert (
+            "Correo: ana@example.com\n(sin verificar: lo escribió quien envía el formulario)\n"
+            in mailer.send.call_args.kwargs["text"]
+        )

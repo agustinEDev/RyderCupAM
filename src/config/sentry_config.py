@@ -54,9 +54,23 @@ def _quita_cabeceras_de_origen(event: Event) -> Event:
     return event
 
 
+# El cuerpo de estas rutas lleva datos de quien escribe (nombre, correo, mensaje), y
+# el SDK lo adjunta a cada error aunque send_default_pii=False (auditoría OWASP, A09)
+_RUTAS_SIN_CUERPO = ("/api/v1/support/contact",)
+
+
+def _quita_el_cuerpo_de_las_rutas_con_datos(event: Event) -> Event:
+    """Borra el cuerpo de la petición en las rutas de _RUTAS_SIN_CUERPO."""
+    peticion = event.get("request") or {}
+    url = str(peticion.get("url") or "").split("?")[0]
+    if url.endswith(_RUTAS_SIN_CUERPO):
+        peticion.pop("data", None)
+    return event
+
+
 def before_send_transaction(event: Event, _hint: Hint) -> Event | None:
     """Las transacciones también llevan la petición: salen sin el secreto ni la IP."""
-    return _quita_cabeceras_de_origen(event)
+    return _quita_el_cuerpo_de_las_rutas_con_datos(_quita_cabeceras_de_origen(event))
 
 
 def before_send(event: Event, hint: Hint) -> Event | None:
@@ -77,6 +91,7 @@ def before_send(event: Event, hint: Hint) -> Event | None:
         Event modificado (o None para descartarlo)
     """
     _quita_cabeceras_de_origen(event)
+    _quita_el_cuerpo_de_las_rutas_con_datos(event)
 
     # Filtrar health checks del endpoint "/"
     if event.get("request", {}).get("url", "").endswith("/"):

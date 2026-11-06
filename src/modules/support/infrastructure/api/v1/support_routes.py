@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 
 from src.config.dependencies import get_submit_contact_use_case
-from src.config.rate_limit import CONTACT_LIMIT, get_client_identifier, limiter
+from src.config.rate_limit import (
+    CONTACT_DAILY_LIMIT,
+    CONTACT_LIMIT,
+    get_client_identifier,
+    limiter,
+)
+from src.config.settings import settings
 from src.modules.support.application.dto.contact_dto import (
     ContactRequestDTO,
     ContactResponseDTO,
@@ -25,11 +31,16 @@ from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_cod
 logger = logging.getLogger(__name__)
 
 CONTACT_QUOTA_EXCEEDED = "CONTACT_QUOTA_EXCEEDED"
-_TEXTOS_DEL_CONTACTO = {
-    CONTACT_QUOTA_EXCEEDED: (
-        "We cannot receive more messages right now. Please write to admin@rydercupfriends.com."
-    )
-}
+
+
+def _textos_del_contacto() -> dict[str, str]:
+    """El texto del 429, con el buzón configurado: el mismo al que llega el formulario."""
+    return {
+        CONTACT_QUOTA_EXCEEDED: (
+            f"We cannot receive more messages right now. Please write to {settings.CONTACT_EMAIL}."
+        )
+    }
+
 
 router = APIRouter()
 
@@ -41,10 +52,12 @@ router = APIRouter()
     summary="Submit contact form",
     description=(
         "Emails a contact form message to the app's mailbox. Rate limited to 10 per hour "
-        "per network and 20 per day app-wide (429 CONTACT_QUOTA_EXCEEDED)."
+        "and 3 per day per network, and 20 per day app-wide (429 CONTACT_QUOTA_EXCEEDED)."
     ),
 )
 @limiter.limit(CONTACT_LIMIT, key_func=get_client_identifier)
+# Y por día: una red sola no llena el tope de la app (auditoría OWASP)
+@limiter.limit(CONTACT_DAILY_LIMIT, key_func=get_client_identifier)
 async def submit_contact_form(
     request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
     contact_request: ContactRequestDTO,
@@ -61,7 +74,7 @@ async def submit_contact_form(
     except ContactQuotaExceededError:
         # El tope diario de la app: que escriban directamente
         return respuesta_con_codigo(
-            status.HTTP_429_TOO_MANY_REQUESTS, _TEXTOS_DEL_CONTACTO, CONTACT_QUOTA_EXCEEDED
+            status.HTTP_429_TOO_MANY_REQUESTS, _textos_del_contacto(), CONTACT_QUOTA_EXCEEDED
         )
     except ContactDeliveryError:
         return JSONResponse(

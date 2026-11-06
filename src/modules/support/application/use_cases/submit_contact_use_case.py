@@ -7,6 +7,7 @@ una issue en un repositorio público de GitHub, con el nombre y el correo a la v
 
 import logging
 import re
+import unicodedata
 
 from src.modules.support.application.dto.contact_dto import (
     ContactRequestDTO,
@@ -39,9 +40,12 @@ class ContactDeliveryError(Exception):
     """El proveedor de correo no aceptó el mensaje."""
 
 
-def _en_una_linea(texto: str) -> str:
-    """Sin saltos de línea ni caracteres de control, y sin espacios dobles."""
-    return " ".join(_CONTROL.sub(" ", texto).split())
+def _en_una_linea(texto: str, si_queda_vacio: str) -> str:
+    """Sin saltos, caracteres de control ni invisibles (Cc, Cf: los que dan la vuelta
+    al texto o no se ven), y sin espacios dobles. Si no queda nada, `si_queda_vacio`."""
+    sin_control = _CONTROL.sub(" ", texto)
+    visible = "".join(c for c in sin_control if unicodedata.category(c) not in ("Cc", "Cf"))
+    return " ".join(visible.split()) or si_queda_vacio
 
 
 class SubmitContactUseCase:
@@ -65,18 +69,25 @@ class SubmitContactUseCase:
             raise ContactQuotaExceededError()
 
         categoria = NOMBRE_DE_LA_CATEGORIA[request.category]
-        nombre = _en_una_linea(request.name)
+        nombre = _en_una_linea(request.name, "(sin nombre)")
         texto = (
             f"Nombre: {nombre}\n"
             f"Correo: {request.email}\n"
+            # «Responder» va a esta dirección, y nadie la ha comprobado
+            "(sin verificar: lo escribió quien envía el formulario)\n"
             f"Categoría: {categoria}\n\n"
             f"{_CONTROL_EN_EL_CUERPO.sub('', request.message)}\n"
         )
-        enviado = await self._mailer.send(
-            subject=f"[Contacto · {categoria}] {_en_una_linea(request.subject)}",
-            text=texto,
-            reply_to=str(request.email),
-        )
+        try:
+            enviado = await self._mailer.send(
+                subject=f"[Contacto · {categoria}] {_en_una_linea(request.subject, '(sin asunto)')}",
+                text=texto,
+                reply_to=str(request.email),
+            )
+        except Exception as error:
+            # Un fallo inesperado tampoco gasta el hueco: veinte así cerrarían el día
+            logger.error("Contact form email failed: %s", type(error).__name__)
+            enviado = False
         if not enviado:
             self._cupo.devuelve()
             # Sin datos de quien escribe: el log no es sitio para su correo

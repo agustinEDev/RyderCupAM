@@ -1057,7 +1057,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 | Endpoint | Method | Auth | Rate Limit | Description |
 |----------|--------|------|------------|-------------|
-| `/support/contact` | POST | No | 10/hour per network, 20/day app-wide | Submit contact form (emails the app's mailbox) |
+| `/support/contact` | POST | No | 10/hour and 3/day per network, 20/day app-wide | Submit contact form (emails the app's mailbox) |
 
 ### Main Fields
 
@@ -1084,9 +1084,9 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 - **Public endpoint**: No authentication required
 - **CSRF exempt**: No session to protect
-- **Rate limited**: 10 requests/hour per network (SlowAPI, `CONTACT_LIMIT`)
+- **Rate limited**: 10 requests/hour and 3/day per network (SlowAPI, `CONTACT_LIMIT`, `CONTACT_DAILY_LIMIT`)
 - **Daily quota**: at most 20 messages a day app-wide (in memory); then `429` with `error_code: CONTACT_QUOTA_EXCEEDED`, so the shared mail quota stays for verification and password reset
-- **Email**: plain text to `CONTACT_EMAIL` (default `admin@rydercupfriends.com`) through Mailgun (EU), subject `[Contacto · <category>] <subject>` in one line (control characters removed), `Reply-To` the sender. Until 2.52 it opened a GitHub issue
+- **Email**: plain text to `CONTACT_EMAIL` (default `admin@rydercupfriends.com`) through Mailgun (EU), subject `[Contacto · <category>] <subject>` in one line (control characters removed), `Reply-To` the sender. Since 2.52; before, it opened a GitHub issue
 - **Error handling**: Returns 502 Bad Gateway if Mailgun refuses the message (the quota slot is given back)
 
 ### Architecture (Clean Architecture)
