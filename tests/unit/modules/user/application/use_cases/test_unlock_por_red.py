@@ -9,6 +9,7 @@ El desbloqueo del administrador también limpia los bloqueos por red (BE #732).
 """
 
 from datetime import datetime
+from unittest.mock import Mock
 
 import pytest
 
@@ -41,7 +42,7 @@ async def _escena(respaldo=False, red=False):
     if red:
         for _ in range(10):
             freno.apunta_fallo(ANA, RED_A)
-    caso = UnlockAccountUseCase(uow, freno)
+    caso = UnlockAccountUseCase(uow, freno, Mock())
     pide = UnlockAccountRequestDTO(
         user_id=str(ana.id.value), unlocked_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b"
     )

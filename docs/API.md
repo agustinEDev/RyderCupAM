@@ -206,7 +206,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 
 **Unlock Account Request:**
 - `user_id` (string, required, UUID) - ID of user to unlock
-- `unlocked_by_user_id` (string, auto-extracted from JWT) - ID of admin unlocking
+- `unlocked_by_user_id` (string, required, UUID) - Ignored: the route always sets the signed-in admin's id
 
 **Unlock Account Response:**
 - `success` (bool) - Indicates if unlock was successful

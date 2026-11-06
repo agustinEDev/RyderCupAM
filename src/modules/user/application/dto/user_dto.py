@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from src.modules.user.domain.services.cookie_de_dispositivo import LONGITUD_MAXIMA_DE_LA_COOKIE
 from src.modules.user.domain.services.terms_of_service import (
@@ -970,8 +971,8 @@ class UnlockAccountRequestDTO(BaseModel):
     DTO de entrada para desbloquear manualmente una cuenta (solo Admin).
 
     Security (OWASP A01, A09):
-    - Solo Admin puede ejecutar este endpoint
-    - Se registra quién desbloqueó en AccountUnlockedEvent
+    - Solo Admin puede ejecutar este endpoint (lo comprueba la ruta)
+    - Cada desbloqueo queda en el log de seguridad: quién, a quién y desde dónde
     """
 
     user_id: str = Field(
@@ -986,6 +987,10 @@ class UnlockAccountRequestDTO(BaseModel):
         max_length=36,
         description="UUID del admin que realiza el desbloqueo (para auditoría).",
     )
+    # Los pone la ruta, para el log de seguridad (hotfix 2.50.1): fuera del esquema
+    # público, y la ruta los pisa siempre con los de la petición
+    ip_address: SkipJsonSchema[str | None] = Field(default=None, max_length=45)
+    user_agent: SkipJsonSchema[str | None] = Field(default=None, max_length=500)
 
 
 class UnlockAccountResponseDTO(BaseModel):

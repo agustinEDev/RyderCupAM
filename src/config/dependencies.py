@@ -3361,9 +3361,10 @@ def get_withdraw_match_player_use_case(
 def get_unlock_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     freno: IFrenoDelLogin = Depends(get_freno_del_login),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> UnlockAccountUseCase:
-    """Proveedor del caso de uso UnlockAccountUseCase (v1.13.0; por red desde BE #732)."""
-    return UnlockAccountUseCase(uow, freno)
+    """Proveedor de UnlockAccountUseCase (v1.13.0; log desde 2.50.1, por red desde BE #732)."""
+    return UnlockAccountUseCase(uow, freno, security_audit)
 
 
 # ============================================================================
