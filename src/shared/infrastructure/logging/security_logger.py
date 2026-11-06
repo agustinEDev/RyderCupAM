@@ -36,6 +36,7 @@ from ...domain.events.security_events import (
     SecurityAuditEvent,
     SecuritySeverity,
     TermsAcceptedEvent,
+    UnverifiedAccountClaimedAuditEvent,
 )
 from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
@@ -461,6 +462,25 @@ class SecurityLogger:
                 ip_address=ip_address,
                 user_agent=user_agent,
                 deactivated_user_id=deactivated_user_id,
+                devices_revoked=devices_revoked,
+                tokens_revoked=tokens_revoked,
+            )
+        )
+
+    def log_unverified_account_claimed(
+        self,
+        user_id: str,
+        devices_revoked: int,
+        tokens_revoked: int,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: Google se quedó una cuenta sin verificar (pre-captura)."""
+        self.log_security_event(
+            UnverifiedAccountClaimedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
                 devices_revoked=devices_revoked,
                 tokens_revoked=tokens_revoked,
             )

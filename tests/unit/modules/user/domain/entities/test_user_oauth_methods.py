@@ -3,7 +3,7 @@ Tests unitarios para los métodos OAuth de la entidad User.
 
 Este archivo contiene tests que verifican:
 - create_from_oauth() factory method
-- has_password() para usuarios OAuth vs normales
+- has_password para usuarios OAuth vs normales
 - is_valid() para usuarios OAuth sin password
 - record_login() con método Google
 """
@@ -238,3 +238,60 @@ class TestUserRecordLoginOAuth:
         events = user.get_domain_events()
         assert len(events) == 1
         assert events[0].login_method == "email"
+
+
+class TestClaimWithVerifiedOAuth:
+    """Un proveedor que verificó el correo se queda una cuenta sin verificar (G1, G3)."""
+
+    def _cuenta(self, verificada: bool) -> User:
+        user = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="ana@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        user.generate_verification_token()
+        if verificada:
+            user.verify_email_from_oauth()
+        return user
+
+    def test_an_unverified_account_loses_its_unproven_password(self):
+        """
+        Given: Una cuenta con contraseña y el correo sin verificar (la pudo crear cualquiera)
+        When: Google, que verificó ese correo, se la queda
+        Then: True; sin contraseña, verificada y sin token de verificación pendiente
+        """
+        user = self._cuenta(verificada=False)
+
+        assert user.claim_with_verified_oauth() is True
+
+        assert not user.has_password
+        assert user.email_verified
+        assert user.verification_token is None
+
+    def test_a_verified_account_is_left_as_it_is(self):
+        """
+        Given: Una cuenta ya verificada, con contraseña
+        When: Se intenta quedar con ella un proveedor
+        Then: False y conserva la contraseña: ya se demostró que es del dueño del correo
+        """
+        user = self._cuenta(verificada=True)
+
+        assert user.claim_with_verified_oauth() is False
+
+        assert user.has_password
+        assert user.verify_password("SecureP@ssw0rd123!")
+
+    def test_the_owner_can_set_a_password_afterwards(self):
+        """
+        Given: Una cuenta que se quedó sin contraseña así
+        When: El dueño la pone con «Olvidé mi contraseña» (G6)
+        Then: Entra con la nueva
+        """
+        user = self._cuenta(verificada=False)
+        user.claim_with_verified_oauth()
+        token = user.generate_password_reset_token()
+
+        user.reset_password(token, "OtraClave#2026segura")
+
+        assert user.verify_password("OtraClave#2026segura")

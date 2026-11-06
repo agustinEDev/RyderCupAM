@@ -8,6 +8,14 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
+def _todo_el_log() -> str:
+    """El log de seguridad con sus rotados: con varios workers, otro puede rotarlo
+    justo después de que este test escriba, y la línea se va a security_audit.log.1."""
+    return "".join(
+        f.read_text(errors="replace") for f in sorted(Path("logs").glob("security_audit.log*"))
+    )
+
+
 class TestSecurityAuditTrail:
     """Tests end-to-end del audit trail de seguridad"""
 
@@ -33,11 +41,10 @@ class TestSecurityAuditTrail:
         assert response.status_code == 200
 
         # Verificar que existe security_audit.log
-        log_file = Path("logs/security_audit.log")
-        assert log_file.exists()
+        assert Path("logs/security_audit.log").exists()
 
         # Verificar que contiene LoginAttemptEvent
-        content = log_file.read_text()
+        content = _todo_el_log()
         assert "LoginAttemptEvent" in content
         assert "audit.test@example.com" in content
 
@@ -52,8 +59,7 @@ class TestSecurityAuditTrail:
         assert response.status_code == 401
 
         # Verificar log contiene failure
-        log_file = Path("logs/security_audit.log")
-        content = log_file.read_text()
+        content = _todo_el_log()
         assert "LOGIN FAILED" in content or 'success": false' in content
 
     async def test_logout_creates_logout_and_revocation_events(self, client: AsyncClient):
@@ -87,8 +93,7 @@ class TestSecurityAuditTrail:
         assert logout_response.status_code == 200
 
         # Verificar logs
-        log_file = Path("logs/security_audit.log")
-        content = log_file.read_text()
+        content = _todo_el_log()
         assert "LOGOUT" in content
         assert "REFRESH TOKENS REVOKED" in content or "RefreshTokenRevokedEvent" in content
 
@@ -117,8 +122,7 @@ class TestSecurityAuditTrail:
         await client.post("/api/v1/auth/refresh-token")
 
         # Verificar log
-        log_file = Path("logs/security_audit.log")
-        content = log_file.read_text()
+        content = _todo_el_log()
         assert "REFRESH TOKEN USED" in content or "RefreshTokenUsedEvent" in content
 
     async def test_audit_log_entries_are_valid_json(self, client: AsyncClient):

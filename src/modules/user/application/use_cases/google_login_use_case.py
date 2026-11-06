@@ -30,6 +30,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -83,13 +84,16 @@ class GoogleLoginUseCase:
         self._google_oauth_service = google_oauth_service
         self._register_device_use_case = register_device_use_case
 
-    async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool, bool]:
+    async def _resolve_user(
+        self, google_info: GoogleUserInfo
+    ) -> tuple[User, bool, bool, tuple[int, int] | None]:
         """
         Resuelve el usuario para el login de Google.
         Todas las lecturas y escrituras se ejecutan dentro de una sola transacción UoW.
 
         Returns:
-            Tuple of (user, is_new_user, linked): linked, si se vinculó por el correo
+            Tuple of (user, is_new_user, linked, revocados): linked, si se vinculó por
+            el correo; revocados, lo que se cerró si se quedó una cuenta sin verificar
         """
         async with self._uow:
             # Buscar OAuth account existente
@@ -101,7 +105,7 @@ class GoogleLoginUseCase:
                 user = await self._uow.users.find_by_id(oauth_account.user_id)
                 if not user:
                     raise ValueError("User associated with OAuth account not found")
-                return user, False, False
+                return user, False, False, None
 
             # Sin cuenta vinculada: un alta o un vínculo por correo. Solo con el correo
             # verificado por Google: si no, la dirección no es necesariamente suya
@@ -116,16 +120,29 @@ class GoogleLoginUseCase:
                 # Desactivada: sin vincular Google ni verificar el correo. Un login
                 # rechazado no cambia la cuenta (/code-review); execute da el 403
                 if not user.is_active:
-                    return user, False, False
-                return await self._auto_link_existing_user(user, google_info), False, True
+                    return user, False, False, None
+                user, revocados = await self._auto_link_existing_user(user, google_info)
+                return user, False, True, revocados
 
-            return await self._auto_register_new_user(google_info), True, False
+            return await self._auto_register_new_user(google_info), True, False, None
 
-    async def _auto_link_existing_user(self, user: User, google_info: GoogleUserInfo) -> User:
+    async def _auto_link_existing_user(
+        self, user: User, google_info: GoogleUserInfo
+    ) -> tuple[User, tuple[int, int] | None]:
         """
         Auto-link Google account to existing user found by email.
         Ejecuta dentro del contexto UoW del caller (sin abrir transacción propia).
+
+        Una cuenta SIN verificar la pudo crear cualquiera con este correo: Google,
+        que lo verificó, se la queda; sin la contraseña que nunca se demostró y sin
+        sus sesiones de antes (pre-captura, CodeRabbit en #749).
+
+        Returns:
+            (user, revocados): revocados, (dispositivos, tokens) si se la quedó
         """
+        revocados = None
+        if user.claim_with_verified_oauth():
+            revocados = await revoca_sus_sesiones(self._uow, user.id)
         new_oauth = UserOAuthAccount.create(
             user_id=user.id,
             provider=OAuthProvider.GOOGLE,
@@ -134,12 +151,8 @@ class GoogleLoginUseCase:
         )
         await self._uow.oauth_accounts.save(new_oauth)
 
-        # Google ha verificado el correo (si no, no se llega aquí)
-        if not user.email_verified:
-            user.verify_email_from_oauth()
-
         await self._uow.users.save(user)
-        return user
+        return user, revocados
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
         """
@@ -204,7 +217,20 @@ class GoogleLoginUseCase:
         )
 
         # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
-        user, is_new_user, vinculada = await self._resolve_user(google_info)
+        user, is_new_user, vinculada, revocados = await self._resolve_user(google_info)
+        if revocados is not None:
+            # La toma de una cuenta sin verificar, al log, ya guardada y sin cambiar
+            # la respuesta
+            try:
+                security_logger.log_unverified_account_claimed(
+                    user_id=str(user.id.value),
+                    devices_revoked=revocados[0],
+                    tokens_revoked=revocados[1],
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except Exception as error:
+                logger.error("Account claim audit event failed: %s", type(error).__name__)
         if vinculada:
             # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
             # el correo, da acceso a la cuenta. El log nunca cambia la respuesta

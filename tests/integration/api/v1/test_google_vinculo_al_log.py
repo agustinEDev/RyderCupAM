@@ -39,7 +39,7 @@ async def _vincula(client: AsyncClient, email: str):
     respuesta = await client.post(
         "/api/v1/auth/google/link",
         json={"authorization_code": "code"},
-        headers={"User-Agent": "Navegador de prueba"},
+        headers={"User-Agent": "Navegador de prueba", "X-Forwarded-For": "203.0.113.100"},
     )
     return datos, respuesta
 
@@ -64,7 +64,7 @@ async def test_linking_google_from_the_profile_is_logged_with_the_network(
     assert apuntes[0]["user_id"] == datos["user"]["id"]
     assert apuntes[0]["automatic"] is False
     assert apuntes[0]["user_agent"] == "Navegador de prueba"
-    assert apuntes[0]["ip_address"]
+    assert apuntes[0]["ip_address"] == "203.0.113.100"
 
 
 async def test_a_broken_log_does_not_change_the_link_answer(client: AsyncClient, monkeypatch):
@@ -108,3 +108,39 @@ async def test_a_deactivated_account_gets_its_own_code_on_google(client: AsyncCl
     assert respuesta.json()["detail"] == (
         "This account has been deactivated. Contact an administrator."
     )
+
+
+async def test_g2_google_takes_an_unverified_account_from_whoever_had_it(client: AsyncClient):
+    """
+    Given: Una cuenta creada con contraseña y sin verificar, con su sesión abierta
+           (la pudo crear cualquiera con ese correo)
+    When: Entra un Google que verificó ese correo
+    Then: La sesión de antes queda fuera al momento (acceso y refresco, 401) y la
+          contraseña ya no entra; la sesión de Google sí
+    """
+    email = "precaptura@example.com"
+    otro = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    assert otro["user"]["email_verified"] is False
+    _google(email)
+    google = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+    assert google.status_code == 200
+    de_google = dict(google.cookies)
+    client.cookies.clear()
+
+    set_auth_cookies(client, otro["cookies"])
+    acceso = await client.get("/api/v1/auth/current-user")
+    refresco = await client.post("/api/v1/auth/refresh-token")
+    client.cookies.clear()
+    contrasena = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": CLAVE},
+        headers={"X-Test-Client-ID": "precaptura-login"},
+    )
+    set_auth_cookies(client, de_google)
+    suya = await client.get("/api/v1/auth/current-user")
+
+    assert acceso.status_code == 401
+    assert refresco.status_code == 401
+    assert contrasena.status_code == 401
+    assert suya.status_code == 200
+    assert suya.json()["email_verified"] is True

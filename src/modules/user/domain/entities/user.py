@@ -699,6 +699,26 @@ class User:
             self._email_verified = True
             self._updated_at = datetime.now()
 
+    def claim_with_verified_oauth(self) -> bool:
+        """
+        Un proveedor que verificó el correo se queda una cuenta SIN verificar.
+
+        Esa cuenta la pudo crear cualquiera con este correo (pre-captura): su
+        contraseña nunca se demostró del dueño del correo, así que se quita, y la
+        cuenta queda verificada. El que llama cierra sus sesiones. El dueño puede
+        ponerse contraseña con «Olvidé mi contraseña».
+
+        Returns:
+            True si se la quedó; False si ya estaba verificada (no cambia nada)
+        """
+        if self.email_verified:
+            return False
+        self._password = None
+        self._verification_token = None
+        self._email_verified = True
+        self._updated_at = datetime.now()
+        return True
+
     def record_google_unlinked(self, provider: str, unlinked_at: datetime) -> None:
         """
         Registra un evento de desvinculación de cuenta Google.

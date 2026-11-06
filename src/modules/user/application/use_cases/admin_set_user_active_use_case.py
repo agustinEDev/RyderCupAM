@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -66,10 +67,10 @@ class AdminSetUserActiveUseCase:
                 if not user.is_active:
                     user.reactivate(reactivated_by_user_id=actor_user_id)
                     # Lo que se colara (un login a la vez que la desactivación), fuera
-                    reactivada = (await self._revoca_sus_sesiones(user_id))[1]
+                    reactivada = (await revoca_sus_sesiones(self._uow, user_id))[1]
             elif user.is_active:
                 user.deactivate(deactivated_by_user_id=actor_user_id)
-                revocados = await self._revoca_sus_sesiones(user_id)
+                revocados = await revoca_sus_sesiones(self._uow, user_id)
 
             await self._uow.users.save(user)
 
@@ -93,15 +94,6 @@ class AdminSetUserActiveUseCase:
                 ip_address=contexto[0],
                 user_agent=contexto[1],
             )
-
-    async def _revoca_sus_sesiones(self, user_id: UserId) -> tuple[int, int]:
-        """Revoca sus dispositivos y sus tokens de refresco. Devuelve cuántos de cada."""
-        dispositivos = await self._uow.user_devices.find_active_by_user(user_id)
-        for dispositivo in dispositivos:
-            dispositivo.revoke()
-            await self._uow.user_devices.save(dispositivo)
-        tokens = await self._uow.refresh_tokens.revoke_all_for_user(user_id)
-        return len(dispositivos), tokens
 
     @staticmethod
     def _apunta(registra: Callable[..., None], **datos: object) -> None:
