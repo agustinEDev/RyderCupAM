@@ -34,10 +34,9 @@ from src.config.rate_limit import (
     email_rate_limit_key,
     get_client_identifier,
     limiter,
-    record_failed_login,
     refresh_token_rate_limit_key,
-    refuse_if_failed_logins_exhausted,
     skip_refresh_limit_without_valid_cookie,
+    too_many_failed_logins_from_network,
     too_many_login_attempts,
 )
 from src.config.settings import settings
@@ -269,27 +268,25 @@ async def login_user(
     login_data.installed_app = es_la_app_instalada(request)
     login_data.country_code = cloudflare_client_country(request)
     # La red del intento: el freno del correo cuenta por correo + red (BE #732)
-    login_data.red = get_client_identifier(request)
-
-    # El techo de fallos de la red, sea cual sea el correo (#273). Los aciertos de
-    # un club entrando a la vez no cierran el login
-    refuse_if_failed_logins_exhausted(request)
+    # Recortada al tamaño del DTO: fuera de producción la elige X-Test-Client-ID
+    login_data.red = get_client_identifier(request)[:100]
 
     try:
         login_response = await use_case.execute(login_data)
     except LoginAttemptsExceededException as e:
-        # 5 por minuto por correo + red (o dispositivo fiable): el mismo 429 que
-        # cualquier límite, exista el correo o no (BE #732)
+        # 5 por minuto por correo + red (o dispositivo fiable), o el techo de fallos
+        # de la red (#273): el mismo 429 que cualquier límite, exista el correo o no.
+        # Los fallos, y el techo, los cuenta el caso de uso (BE #732)
+        if e.techo_de_red:
+            raise too_many_failed_logins_from_network() from e
         raise too_many_login_attempts() from e
     except AccountLockedException as e:
-        record_failed_login(request)
         # Account Lockout (v1.13.0): Cuenta bloqueada por intentos fallidos
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
         ) from e
     except AccountDeactivatedException as e:
-        record_failed_login(request)
         # Admin Panel (v2.4.0): Cuenta desactivada por un administrador
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -297,7 +294,6 @@ async def login_user(
         ) from e
 
     if not login_response:
-        record_failed_login(request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",

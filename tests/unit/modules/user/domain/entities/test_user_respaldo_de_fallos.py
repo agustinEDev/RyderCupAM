@@ -128,7 +128,8 @@ def test_r5_el_desbloqueo_limpia_contador_ventana_y_bloqueo():
     Then: Contador a 0, sin bloqueo y sin ventana: el siguiente fallo empieza otra
     """
     user = _usuario()
-    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+    # Ahora de verdad: el desbloqueo mira si sigue bloqueado con la hora del reloj
+    _falla(user, 50, datetime.now(), cada=timedelta(seconds=0))
     user.unlock(unlocked_by_user_id="admin")
 
     assert user.failed_login_attempts == 0
@@ -162,3 +163,36 @@ def test_r3c_justo_a_la_hora_empieza_otra_ventana():
 
     assert user.failed_login_attempts == 1
     assert user.locked_until is None
+
+
+def test_r7_acabado_el_bloqueo_un_fallo_no_vuelve_a_bloquear():
+    """
+    Given: El respaldo bloqueado con 50 fallos a las 10:00 (hasta las 10:30)
+    When: A las 10:31 llega un fallo, y luego 48 más
+    Then: No se vuelve a bloquear: hacen falta otros 50, en una hora nueva
+          (antes, un solo fallo lo alargaba otros 30 minutos)
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+    despues = LAS_DIEZ + timedelta(minutes=31)
+
+    user.record_failed_login(ahora=despues)
+    assert not user.is_locked(ahora=despues)
+    _falla(user, 48, despues, cada=timedelta(seconds=1))
+    assert not user.is_locked(ahora=despues + timedelta(minutes=1))
+    assert user.failed_login_attempts == 49
+
+
+def test_r7b_y_con_otros_50_en_la_hora_nueva_si():
+    """
+    Given: El respaldo bloqueado y ya acabado
+    When: Llegan otros 50 fallos
+    Then: Se vuelve a bloquear
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+    despues = LAS_DIEZ + timedelta(minutes=31)
+
+    _falla(user, 50, despues, cada=timedelta(seconds=1))
+
+    assert user.is_locked(ahora=despues + timedelta(minutes=1))

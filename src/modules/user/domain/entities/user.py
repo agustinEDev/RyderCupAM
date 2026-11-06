@@ -266,9 +266,13 @@ class User:
         return self._failed_login_notice_at
 
     def apunta_el_aviso_de_fallos(self, ahora: datetime) -> None:
-        """Apunta que se envió el correo de intentos fallidos."""
+        """Reserva el correo de intentos fallidos: cuenta para el tope de uno por hora."""
         self._failed_login_notice_at = ahora
         self._updated_at = ahora
+
+    def devuelve_el_aviso_de_fallos(self, anterior: datetime | None) -> None:
+        """Un aviso reservado que no salió: vuelve el que había antes."""
+        self._failed_login_notice_at = anterior
 
     @property
     def is_admin(self) -> bool:
@@ -1170,6 +1174,10 @@ class User:
                     locked_at=now,
                 )
             )
+            # La hora siguiente empieza al acabar el bloqueo, y a cero: sin esto, un
+            # solo fallo al acabar lo volvía a bloquear otros 30 minutos (revisor)
+            self._failed_login_attempts = 0
+            self._failed_login_window_started_at = locked_until
 
     def is_locked(self, ahora: datetime | None = None) -> bool:
         """

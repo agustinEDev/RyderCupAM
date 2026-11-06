@@ -16,6 +16,9 @@ El freno del login en memoria (BE #732, ADR-043).
   F10 el correo, con mayúsculas o espacios                  | el mismo contador
   F11 con el rate limit apagado (tests)                     | admite siempre; el bloqueo sigue
   F12 muchas parejas viejas                                 | se limpian solas: la memoria no crece
+  F13 más parejas vivas que el tope                         | se van las más viejas; la memoria
+                                                            |   tiene techo
+  F14 una pareja vieja que se vuelve a usar                 | pasa al final: no es la que se va
 """
 
 from datetime import datetime, timedelta
@@ -47,9 +50,10 @@ class Reloj:
         self.ahora += timedelta(**kw)
 
 
-def _freno(activo=True):
+def _freno(activo=True, tope=None):
     reloj = Reloj()
-    return FrenoDelLoginEnMemoria(reloj=reloj, limita_intentos=lambda: activo), reloj
+    extra = {"maximo_de_parejas": tope} if tope else {}
+    return FrenoDelLoginEnMemoria(reloj=reloj, limita_intentos=lambda: activo, **extra), reloj
 
 
 def test_los_numeros():
@@ -230,3 +234,37 @@ def test_el_dispositivo_es_el_mismo_con_mayusculas():
     Then: Es el mismo
     """
     assert origen_de_dispositivo("ABC-1") == origen_de_dispositivo("abc-1")
+
+
+def test_f13_con_mas_parejas_que_el_tope_se_van_las_mas_viejas():
+    """
+    Given: Un tope de 100 parejas
+    When: Fallan 150 correos distintos, uno detrás de otro
+    Then: Guarda como mucho 100, y son las últimas
+    """
+    freno, reloj = _freno(tope=100)
+    for i in range(150):
+        reloj.avanza(seconds=1)
+        freno.apunta_fallo(f"u{i}@example.com", A)
+
+    assert freno.parejas_guardadas() <= 100
+    for _ in range(9):
+        freno.apunta_fallo("u149@example.com", A)
+    assert freno.bloqueado_hasta("u149@example.com", A) is not None
+
+
+def test_f14_una_pareja_que_se_vuelve_a_usar_no_es_la_que_se_va():
+    """
+    Given: Un tope de 3 parejas y Ana con 9 fallos, la primera en llegar
+    When: Ana falla otra vez (pasa al final) y llegan otras dos parejas
+    Then: Ana sigue guardada: su décimo fallo la bloquea
+    """
+    freno, _reloj = _freno(tope=3)
+    for _ in range(8):
+        freno.apunta_fallo(ANA, A)
+    freno.apunta_fallo("b@example.com", A)
+    freno.apunta_fallo(ANA, A)  # Ana pasa al final
+    freno.apunta_fallo("c@example.com", A)
+    freno.apunta_fallo("d@example.com", A)  # se va b, no Ana
+
+    assert freno.apunta_fallo(ANA, A) is not None

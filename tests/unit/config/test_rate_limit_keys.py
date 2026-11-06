@@ -19,11 +19,11 @@ from src.config import rate_limit
 from src.config.rate_limit import (
     count_or_refuse,
     email_rate_limit_key,
+    failed_logins_exhausted,
     get_client_identifier,
     get_rate_limit_key,
     limiter,
     record_failed_login,
-    refuse_if_failed_logins_exhausted,
 )
 from src.config.settings import settings
 from src.shared.infrastructure.security.jwt_handler import (
@@ -191,12 +191,11 @@ def test_manual_counters_respect_a_disabled_limiter(monkeypatch):
     """
     monkeypatch.setattr(limiter, "enabled", False)
     monkeypatch.setattr(rate_limit, "FAILED_LOGINS_LIMIT", "1/minute")
-    request = _request()
 
     for _ in range(3):
         count_or_refuse("1/minute", "test-disabled", "same-key")
-        record_failed_login(request)
-    refuse_if_failed_logins_exhausted(request)
+        record_failed_login("una-red")
+    assert not failed_logins_exhausted("una-red")
 
 
 def test_manual_counters_refuse_over_the_limit_when_enabled(monkeypatch):
@@ -206,14 +205,59 @@ def test_manual_counters_refuse_over_the_limit_when_enabled(monkeypatch):
     Then: La segunda cuenta y el siguiente login dan 429 (contraprueba del anterior)
     """
     monkeypatch.setattr(rate_limit, "FAILED_LOGINS_LIMIT", "1/minute")
-    request = _request()
     limiter.reset()
 
     count_or_refuse("1/minute", "test-enabled", "same-key")
     with pytest.raises(RateLimitExceeded):
         count_or_refuse("1/minute", "test-enabled", "same-key")
 
-    record_failed_login(request)
-    with pytest.raises(RateLimitExceeded):
-        refuse_if_failed_logins_exhausted(request)
+    record_failed_login("una-red")
+    assert failed_logins_exhausted("una-red")
+    assert not failed_logins_exhausted("otra-red")
     limiter.reset()
+
+
+def _con_cliente_de_prueba() -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/",
+            "query_string": b"",
+            "headers": [(b"x-test-client-id", b"elegido-por-quien-llama")],
+            "client": (PEER, 12345),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("environment", "testing", "lo_acepta"),
+    [
+        (None, None, False),  # sin ENVIRONMENT: ya no se toma por desarrollo
+        ("production", None, False),
+        ("PRODUCTION", "true", False),  # producción manda, aunque diga TESTING
+        ("development", None, True),
+        ("staging", None, True),
+        (None, "true", True),  # la suite de tests
+        ("preproduccion", None, False),  # un valor raro: como producción
+    ],
+)
+def test_x_test_client_id_only_when_the_environment_says_it_is_not_production(
+    monkeypatch, environment, testing, lo_acepta
+):
+    """
+    Given: Una petición con X-Test-Client-ID, y el entorno de cada caso
+    When: Se calcula su red
+    Then: La cabecera solo cuenta si el entorno dice expresamente que no es
+          producción; si falta ENVIRONMENT, quien llama ya no elige su red
+          (auditoría OWASP de BE #732, A05)
+    """
+    for nombre, valor in (("ENVIRONMENT", environment), ("TESTING", testing)):
+        if valor is None:
+            monkeypatch.delenv(nombre, raising=False)
+        else:
+            monkeypatch.setenv(nombre, valor)
+
+    red = rate_limit.get_client_identifier(_con_cliente_de_prueba())
+
+    assert (red == "elegido-por-quien-llama") is lo_acepta

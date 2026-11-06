@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.database import async_session_maker
 from src.config.freno_del_login import freno_del_login
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
@@ -965,8 +966,8 @@ def get_aviso_de_fallos(
     email_service: IEmailService = Depends(get_email_service),
     fabrica: async_sessionmaker[AsyncSession] = Depends(get_fabrica_de_sesiones),
 ) -> IAvisoDeFallos:
-    """El correo de «intentos fallidos» al dueño, en segundo plano (BE #732)."""
-    return AvisoDeFallosEnSegundoPlano(fabrica, email_service)
+    """El correo de «intentos fallidos» al dueño, en segundo plano, con su tope global (BE #732)."""
+    return AvisoDeFallosEnSegundoPlano(fabrica, email_service, cupo_de_avisos)
 
 
 def get_login_user_use_case(

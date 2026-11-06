@@ -105,18 +105,37 @@ def get_client_identifier(request: Request) -> str:
     compartido de siempre, nunca uno que elija quien llama.
     Fuera de producción: X-Test-Client-ID si existe (simula clientes distintos).
     """
-    environment = os.getenv("ENVIRONMENT", "development").lower()
-    if environment == "production":
+    if not _admite_el_cliente_de_prueba():
         ip = cloudflare_client_ip(request)
         return _clave_de_red(ip) if ip else get_remote_address(request)
 
-    # En testing/development, permitir simular diferentes clientes con un header especial
+    # En los tests y en desarrollo, simular clientes distintos con una cabecera
     test_client_id = request.headers.get("X-Test-Client-ID")
     if test_client_id:
         return test_client_id
 
     # Fallback: usar IP real
     return get_remote_address(request)
+
+
+# Los entornos que dicen expresamente que no son producción
+_ENTORNOS_DE_PRUEBA = frozenset({"development", "staging"})
+
+
+def _admite_el_cliente_de_prueba() -> bool:
+    """
+    Si vale X-Test-Client-ID: solo cuando el entorno dice que NO es producción.
+
+    Antes, sin ENVIRONMENT se tomaba por desarrollo: una producción mal configurada
+    dejaba a quien llama elegir su red, y con ella el freno del login (auditoría
+    OWASP de BE #732, A05). Un valor desconocido cuenta como producción.
+    """
+    environment = os.getenv("ENVIRONMENT", "").lower()
+    if environment == "production":
+        return False
+    if os.getenv("TESTING", "").lower() == "true":
+        return True
+    return environment in _ENTORNOS_DE_PRUEBA
 
 
 def get_rate_limit_key(request: Request) -> str:
@@ -246,23 +265,28 @@ def too_many_login_attempts() -> RateLimitExceeded:
     return _exceeded(LOGIN_ATTEMPTS_PER_EMAIL_LIMIT)
 
 
-def refuse_if_failed_logins_exhausted(request: Request) -> None:
-    """Rechaza el login con 429 si su red ha agotado el tope de fallos."""
+def too_many_failed_logins_from_network() -> RateLimitExceeded:
+    """El 429 del techo de fallos de una red (#273): el mismo que cualquier límite."""
+    return _exceeded(FAILED_LOGINS_LIMIT)
+
+
+def failed_logins_exhausted(red: str) -> bool:
+    """
+    Si la red (la clave de get_client_identifier) agotó el techo de fallos del login.
+
+    Lo pregunta el freno del login, y no la ruta, desde BE #732: un dispositivo
+    fiable de la cuenta no lo sufre (en la wifi del club con un atacante dentro).
+    """
     if not limiter.enabled:
-        return
-    if not limiter.limiter.test(
-        parse(FAILED_LOGINS_LIMIT), "login-failures", get_client_identifier(request)
-    ):
-        raise _exceeded(FAILED_LOGINS_LIMIT)
+        return False
+    return not limiter.limiter.test(parse(FAILED_LOGINS_LIMIT), "login-failures", red)
 
 
-def record_failed_login(request: Request) -> None:
+def record_failed_login(red: str) -> None:
     """Apunta un login fallido a su red, exista o no el email."""
     if not limiter.enabled:
         return
-    limiter.limiter.hit(
-        parse(FAILED_LOGINS_LIMIT), "login-failures", get_client_identifier(request)
-    )
+    limiter.limiter.hit(parse(FAILED_LOGINS_LIMIT), "login-failures", red)
 
 
 # Crear instancia global del limiter

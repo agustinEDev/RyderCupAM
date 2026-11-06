@@ -12,6 +12,11 @@ red. El respaldo de la cuenta (50 en una hora, todas las redes) sí está en la 
 
 El correo se guarda en hash, como en los demás contadores. Todo es síncrono y sin
 `await`: dentro del bucle de asyncio cada operación es atómica.
+
+Con techo de memoria (auditoría OWASP, A04): como mucho MAXIMO_DE_PAREJAS por tabla.
+Cada pareja que se usa pasa al final, así que las del principio son las más viejas:
+cada operación borra las que ya no cuentan desde el principio (sin recorrer todo), y
+con el tope lleno se va la más vieja.
 """
 
 import hashlib
@@ -21,18 +26,23 @@ from datetime import datetime, timedelta
 
 from limits import parse
 
+from src.config import rate_limit
 from src.config.rate_limit import LOGIN_ATTEMPTS_PER_EMAIL_LIMIT, email_rate_limit_key, limiter
 from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
+from src.modules.user.domain.services.freno_del_login import (
+    FALLOS_POR_ORIGEN,
+    MINUTOS_DE_BLOQUEO_POR_ORIGEN,
+)
 
 INTENTOS_POR_MINUTO = parse(LOGIN_ATTEMPTS_PER_EMAIL_LIMIT).amount
-FALLOS_QUE_BLOQUEAN = 10
-MINUTOS_DE_BLOQUEO = 30
+FALLOS_QUE_BLOQUEAN = FALLOS_POR_ORIGEN
+MINUTOS_DE_BLOQUEO = MINUTOS_DE_BLOQUEO_POR_ORIGEN
 
 UN_MINUTO = timedelta(minutes=1)
 VENTANA_DE_FALLOS = timedelta(minutes=MINUTOS_DE_BLOQUEO)
 BLOQUEO = timedelta(minutes=MINUTOS_DE_BLOQUEO)
-# Cada cuánto se barren las parejas que ya no cuentan nada
-CADA_CUANTO_SE_LIMPIA = timedelta(minutes=1)
+# Unas 2 KB por pareja: 50.000 por tabla son ~100 MB como mucho entre las tres
+MAXIMO_DE_PAREJAS = 50_000
 
 
 class FrenoDelLoginEnMemoria(IFrenoDelLogin):
@@ -42,6 +52,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         self,
         reloj: Callable[[], datetime] = datetime.now,
         limita_intentos: Callable[[], bool] = lambda: limiter.enabled,
+        maximo_de_parejas: int = MAXIMO_DE_PAREJAS,
     ):
         self._reloj = reloj
         # El cupo de intentos es un rate limit: se apaga con él (los tests). El
@@ -50,7 +61,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         self._intentos: dict[tuple[str, str], deque[datetime]] = {}
         self._fallos: dict[tuple[str, str], deque[datetime]] = {}
         self._bloqueos: dict[tuple[str, str], datetime] = {}
-        self._ultimo_barrido = reloj()
+        self._maximo = maximo_de_parejas
 
     @staticmethod
     def _clave(email: str, origen: str) -> tuple[str, str]:
@@ -58,20 +69,30 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         return email_rate_limit_key(email), hashlib.sha256(origen.encode()).hexdigest()
 
     def _barre(self, ahora: datetime) -> None:
-        if ahora - self._ultimo_barrido < CADA_CUANTO_SE_LIMPIA:
-            return
-        self._ultimo_barrido = ahora
+        """Borra desde el principio (las más viejas) las parejas que ya no cuentan."""
         for tabla, ventana in ((self._intentos, UN_MINUTO), (self._fallos, VENTANA_DE_FALLOS)):
-            for clave in [
-                c for c, marcas in tabla.items() if not marcas or marcas[-1] <= ahora - ventana
-            ]:
+            while tabla:
+                clave, marcas = next(iter(tabla.items()))
+                if marcas and marcas[-1] > ahora - ventana:
+                    break
                 del tabla[clave]
-        for clave in [c for c, hasta in self._bloqueos.items() if hasta <= ahora]:
+        # Los bloqueos duran todos lo mismo: el primero en entrar es el primero en acabar
+        while self._bloqueos:
+            clave, hasta = next(iter(self._bloqueos.items()))
+            if hasta > ahora:
+                break
             del self._bloqueos[clave]
 
-    @staticmethod
-    def _recientes(tabla: dict, clave, desde: datetime) -> deque[datetime]:
-        marcas = tabla.setdefault(clave, deque())
+    def _al_final(self, tabla: dict, clave, nuevo):
+        """Lleva la pareja al final (la más reciente) y respeta el tope."""
+        valor = tabla.pop(clave, None)
+        tabla[clave] = nuevo() if valor is None else valor
+        while len(tabla) > self._maximo:
+            del tabla[next(iter(tabla))]
+        return tabla[clave]
+
+    def _recientes(self, tabla: dict, clave, desde: datetime) -> deque[datetime]:
+        marcas = self._al_final(tabla, clave, deque)
         while marcas and marcas[0] <= desde:
             marcas.popleft()
         return marcas
@@ -108,11 +129,19 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         # Bloqueado: el contador empieza de cero cuando el bloqueo acabe
         del self._fallos[clave]
         hasta = ahora + BLOQUEO
+        self._al_final(self._bloqueos, clave, lambda: hasta)
         self._bloqueos[clave] = hasta
         return hasta
 
     def olvida(self, email: str, origen: str) -> None:
         self._fallos.pop(self._clave(email, origen), None)
+
+    def techo_de_la_red_agotado(self, red: str) -> bool:
+        # El de siempre (#273), en el almacenamiento de slowapi: se apaga con él
+        return rate_limit.failed_logins_exhausted(red)
+
+    def apunta_fallo_en_la_red(self, red: str) -> None:
+        rate_limit.record_failed_login(red)
 
     def olvida_la_cuenta(self, email: str) -> bool:
         cuenta = email_rate_limit_key(email)

@@ -13,6 +13,10 @@ El correo de «intentos fallidos» al dueño de la cuenta (BE #732).
   A6  tras avisar                                           | la cuenta queda apuntada
   A7  sin país                                              | el correo no lo menciona
   A8  la cuenta ya no existe                                | no
+  A9  el tope global de avisos (20/hora) está lleno          | no, y no queda apuntado
+  A10 la reserva se hace con la fila bloqueada, ANTES de     | dos a la vez no mandan dos
+      enviar                                                 |   (la prueba de verdad, en
+                                                             |   integración)
 """
 
 from datetime import datetime, timedelta
@@ -42,7 +46,20 @@ class _Paises:
         return None
 
 
-async def _escena(avisado_hace=None, enviado=True):
+class _Cupo:
+    def __init__(self, libre=True):
+        self.libre = libre
+        self.pedidos = 0
+
+    def reserva(self) -> bool:
+        self.pedidos += 1
+        return self.libre
+
+    def devuelve(self) -> None:
+        self.devueltos = getattr(self, "devueltos", 0) + 1
+
+
+async def _escena(avisado_hace=None, enviado=True, cupo=None):
     uow = InMemoryUnitOfWork()
     ana = User.create(
         first_name="Ana",
@@ -57,7 +74,12 @@ async def _escena(avisado_hace=None, enviado=True):
         await uow.users.save(ana)
     correo = AsyncMock()
     correo.send_failed_logins_notification = AsyncMock(return_value=enviado)
-    return uow, ana, correo, AvisoDeFallosDeLogin(uow, correo, _Paises(), reloj=lambda: AHORA)
+    return (
+        uow,
+        ana,
+        correo,
+        AvisoDeFallosDeLogin(uow, correo, _Paises(), cupo or _Cupo(), reloj=lambda: AHORA),
+    )
 
 
 def _pide(ana, motivo="red", pais="ES", verificado=True):
@@ -85,6 +107,7 @@ async def test_a1_una_red_bloqueada_avisa_con_el_pais_y_la_hora_de_espana():
     assert kw["to_email"] == "ana@example.com" and kw["user_name"] == "Ana"
     assert kw["motivo"] == "red" and kw["pais"] == "España"
     assert kw["cuando"] == "6 nov 2026, 10:30 (hora de España)"
+    assert (kw["fallos"], kw["minutos"]) == (10, 30)
 
 
 async def test_a2_salta_el_respaldo_y_avisa_con_su_motivo():
@@ -98,6 +121,8 @@ async def test_a2_salta_el_respaldo_y_avisa_con_su_motivo():
     await aviso.avisa(_pide(ana, motivo="respaldo"))
 
     assert correo.send_failed_logins_notification.await_args.kwargs["motivo"] == "respaldo"
+    kw = correo.send_failed_logins_notification.await_args.kwargs
+    assert (kw["fallos"], kw["minutos"]) == (50, 30)
 
 
 async def test_a3_uno_por_hora_y_cuenta():
@@ -210,3 +235,60 @@ async def test_a8_una_cuenta_que_ya_no_existe_no_recibe_nada():
     await aviso.avisa(_pide(otro))
 
     correo.send_failed_logins_notification.assert_not_awaited()
+
+
+async def test_a9_con_el_tope_global_lleno_no_se_envia_ni_se_apunta():
+    """
+    Given: El tope global de avisos de fallos de esta hora, lleno
+    When: Se bloquea una red para Ana
+    Then: No hay correo, y Ana no queda apuntada: el siguiente podrá avisar
+    """
+    uow, ana, correo, aviso = await _escena(cupo=_Cupo(libre=False))
+
+    await aviso.avisa(_pide(ana))
+
+    correo.send_failed_logins_notification.assert_not_awaited()
+    async with uow:
+        assert (await uow.users.find_by_id(ana.id)).failed_login_notice_at is None
+
+
+async def test_a9b_el_tope_no_se_gasta_si_ya_aviso_en_la_hora():
+    """
+    Given: Ana avisada hace 20 minutos
+    When: Se bloquea otra red
+    Then: No se pide hueco en el tope global: no hay nada que enviar
+    """
+    cupo = _Cupo()
+    _uow, ana, _correo, aviso = await _escena(avisado_hace=timedelta(minutes=20), cupo=cupo)
+
+    await aviso.avisa(_pide(ana))
+
+    assert cupo.pedidos == 0
+
+
+async def test_a10_reserva_con_la_fila_bloqueada_antes_de_enviar():
+    """
+    Given: Ana sin avisos
+    When: Se avisa
+    Then: Se relee con la fila bloqueada, y queda apuntada ANTES del envío
+    """
+    uow, ana, correo, aviso = await _escena()
+    orden = []
+    original = uow.users.find_by_id_for_update
+
+    async def bloqueada(user_id):
+        orden.append("bloqueo")
+        return await original(user_id)
+
+    async def envia(**_kw):
+        async with uow:
+            apuntada = (await uow.users.find_by_id(ana.id)).failed_login_notice_at
+        orden.append(("envío", apuntada))
+        return True
+
+    uow.users.find_by_id_for_update = bloqueada
+    correo.send_failed_logins_notification = envia
+
+    await aviso.avisa(_pide(ana))
+
+    assert orden == ["bloqueo", ("envío", AHORA)]

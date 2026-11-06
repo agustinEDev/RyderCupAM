@@ -40,6 +40,14 @@ class IFrenoDelLogin(ABC):
         """Tras acertar: los fallos de este origen vuelven a cero."""
 
     @abstractmethod
+    def techo_de_la_red_agotado(self, red: str) -> bool:
+        """Si la red agotó su techo de fallos (30 por minuto, sea cual sea el correo)."""
+
+    @abstractmethod
+    def apunta_fallo_en_la_red(self, red: str) -> None:
+        """Apunta un login fallido en el techo de su red."""
+
+    @abstractmethod
     def olvida_la_cuenta(self, email: str) -> bool:
         """El desbloqueo del administrador: borra todo lo de este correo.
 

@@ -17,6 +17,7 @@ from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioReques
 from src.modules.user.application.dto.user_dto import AvisoDeFallosRequestDTO
 from src.modules.user.application.ports.aviso_de_fallos_port import IAvisoDeFallos
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_fallos_de_login import (
     AvisoDeFallosDeLogin,
@@ -76,9 +77,15 @@ class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
 class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
     """Lanza el aviso de intentos fallidos sin que el login lo espere (BE #732)."""
 
-    def __init__(self, fabrica: async_sessionmaker[AsyncSession], email_service: IEmailService):
+    def __init__(
+        self,
+        fabrica: async_sessionmaker[AsyncSession],
+        email_service: IEmailService,
+        cupo: ICupoDeAvisos,
+    ):
         self._fabrica = fabrica
         self._email_service = email_service
+        self._cupo = cupo
 
     async def avisa(self, request: AvisoDeFallosRequestDTO) -> None:
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
@@ -95,6 +102,7 @@ class AvisoDeFallosEnSegundoPlano(IAvisoDeFallos):
                     SQLAlchemyUnitOfWork(sesion),
                     self._email_service,
                     SQLAlchemyCountryRepository(sesion),
+                    self._cupo,
                 )
                 await aviso.avisa(request)
         except Exception as e:

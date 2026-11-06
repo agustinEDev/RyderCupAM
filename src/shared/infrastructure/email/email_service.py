@@ -401,7 +401,14 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
         return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
     async def send_failed_logins_notification(
-        self, to_email: str, user_name: str, motivo: str, cuando: str, pais: str | None
+        self,
+        to_email: str,
+        user_name: str,
+        motivo: str,
+        cuando: str,
+        pais: str | None,
+        fallos: int,
+        minutos: int,
     ) -> bool:
         """
         Aviso de intentos fallidos de entrar en la cuenta (BE #732).
@@ -411,18 +418,22 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
         """
         safe_user_name = self._sanitize_name(user_name)
         donde = f"desde {pais}" if pais else "desde otra red"
+        from_where = f"from {pais}" if pais else "from another network"
         if motivo == "respaldo":
             que_pasa = (
-                "alguien está fallando tu contraseña desde muchas redes a la vez. Hemos "
-                "bloqueado 30 minutos la entrada desde dispositivos nuevos."
+                f"alguien ha fallado tu contraseña {fallos} veces desde muchas redes a la "
+                f"vez. Hemos bloqueado {minutos} minutos la entrada desde dispositivos nuevos."
             )
-            en = "from many networks. Sign-ins from new devices are paused for 30 minutes."
+            en = (
+                f"{fallos} times from many networks. Sign-ins from new devices are paused "
+                f"for {minutos} minutes."
+            )
         else:
             que_pasa = (
-                f"alguien ha fallado tu contraseña 10 veces {donde}. Hemos bloqueado esos "
-                "intentos 30 minutos."
+                f"alguien ha fallado tu contraseña {fallos} veces {donde}. Hemos bloqueado "
+                f"esos intentos {minutos} minutos."
             )
-            en = f"10 times {'from ' + pais if pais else 'from another network'}. Those attempts are blocked for 30 minutes."
+            en = f"{fallos} times {from_where}. Those attempts are blocked for {minutos} minutes."
         subject = (
             "Intentos fallidos de entrar en tu cuenta - Ryder Cup Friends | "
             "Failed sign-in attempts to your account"

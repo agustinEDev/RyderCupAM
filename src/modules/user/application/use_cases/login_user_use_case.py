@@ -55,8 +55,14 @@ from src.modules.user.domain.services.cookie_de_dispositivo import (
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+
+
+def _red_de(request: LoginRequestDTO) -> str:
+    """La red del intento: la clave de los límites por red, o su IP."""
+    return request.red or request.ip_address or "unknown"
 
 
 class LoginUserUseCase:
@@ -138,21 +144,30 @@ class LoginUserUseCase:
             message=f"Account is locked due to too many failed login attempts. Try again after {hasta.isoformat()}",
         )
 
-    async def _dispositivo_fiable(self, user: User, cookie: str | None) -> str | None:
+    def _rechaza_si_el_respaldo_frena(
+        self, user: User, fiable: bool, request: LoginRequestDTO, contexto: tuple[str, str]
+    ) -> None:
+        """El 423 del respaldo de la cuenta, que solo frena a los desconocidos."""
+        if not fiable and user.is_locked() and user.locked_until:
+            self._rechaza(user.locked_until, "Account locked", user, request, *contexto)
+
+    async def _dispositivo_fiable(self, user: User | None, cookie: str | None) -> str | None:
         """Un dispositivo ACTIVO de esta cuenta que vino en la cookie, o None.
 
         La cookie la controla el cliente: un id inventado, de otra cuenta o de uno
-        revocado no da pase (BE #732).
+        revocado no da pase (BE #732). Una sola consulta, y también con un correo
+        que no existe (contra un usuario que no existe): el tiempo no delata cuál
+        existe.
         """
-        for device_id in ids_de_la_cookie_de_dispositivo(cookie):
-            async with self._uow:
-                dispositivo = await self._uow.user_devices.find_by_id_and_user(
-                    device_id=UserDeviceId.from_string(device_id), user_id=user.id
-                )
-            # El repositorio ya da solo los activos y de este usuario
-            if dispositivo is not None:
-                return device_id
-        return None
+        ids = [UserDeviceId.from_string(i) for i in ids_de_la_cookie_de_dispositivo(cookie)]
+        if not ids:
+            return None
+        async with self._uow:
+            activos = await self._uow.user_devices.find_active_ids_of_user(
+                ids, user.id if user else UserId.generate()
+            )
+        # El primero de la cookie que sea suyo y activo
+        return next((str(i.value) for i in ids if i in activos), None)
 
     async def _origen_del_intento(
         self, user: User | None, request: LoginRequestDTO
@@ -164,11 +179,9 @@ class LoginUserUseCase:
         fallos de otras redes no lo bloquean. Si él mismo agotó sus fallos, pierde
         el pase y cuenta como su red. Sin él, la red.
         """
-        red = origen_de_red(request.red or request.ip_address or "unknown")
-        if user is None:
-            return red, False
+        red = origen_de_red(_red_de(request))
         dispositivo = await self._dispositivo_fiable(user, request.device_id_from_cookie)
-        if dispositivo is None:
+        if user is None or dispositivo is None:
             return red, False
         origen = origen_de_dispositivo(dispositivo)
         if self._freno.bloqueado_hasta(request.email, origen) is not None:
@@ -189,16 +202,18 @@ class LoginUserUseCase:
         comprobar: no se puede seguir probando. Igual exista el correo o no.
         """
         ip_address, user_agent = contexto
+        # El techo de fallos de la red (30/min, todos los correos), salvo el fiable:
+        # el atacante en la wifi del club no deja fuera al móvil del dueño
+        if not fiable and self._freno.techo_de_la_red_agotado(_red_de(request)):
+            raise LoginAttemptsExceededException(techo_de_red=True)
         if not self._freno.admite_intento(request.email, origen):
             raise LoginAttemptsExceededException()
         hasta = self._freno.bloqueado_hasta(request.email, origen)
         if hasta is not None:
             self._rechaza(hasta, "Locked for this network", user, request, ip_address, user_agent)
         # El respaldo solo frena a los desconocidos: el fiable entra igual
-        if user is not None and not fiable and user.is_locked() and user.locked_until:
-            self._rechaza(
-                user.locked_until, "Account locked", user, request, ip_address, user_agent
-            )
+        if user is not None:
+            self._rechaza_si_el_respaldo_frena(user, fiable, request, contexto)
 
     def _apunta_el_fallo_sin_cuenta(
         self, request: LoginRequestDTO, origen: str, contexto: tuple[str, str]
@@ -262,19 +277,17 @@ class LoginUserUseCase:
             return
 
         hasta = self._freno.apunta_fallo(request.email, origen)
-        if hasta is not None and not fiable:
-            await self._avisa_de_los_fallos(bloqueado, request, "red")
+        # Un solo aviso por fallo, el más grave: dos a la vez mandaban dos correos
         if respaldo_salta:
             await self._avisa_de_los_fallos(bloqueado, request, "respaldo")
+        elif hasta is not None and not fiable:
+            await self._avisa_de_los_fallos(bloqueado, request, "red")
 
         if hasta is not None:
             self._rechaza(
                 hasta, "Locked for this network", bloqueado, request, ip_address, user_agent
             )
-        if not fiable and bloqueado.is_locked() and bloqueado.locked_until:
-            self._rechaza(
-                bloqueado.locked_until, "Account locked", bloqueado, request, ip_address, user_agent
-            )
+        self._rechaza_si_el_respaldo_frena(bloqueado, fiable, request, contexto)
 
         # Security Logging: Login fallido (contraseña incorrecta)
         get_security_logger().log_login_attempt(
@@ -311,13 +324,25 @@ class LoginUserUseCase:
         if releido is None:
             self._apunta_que_no_existe(request, ip_address, user_agent)
             return None
-        if not fiable and releido.is_locked() and releido.locked_until:
-            self._rechaza(
-                releido.locked_until, "Account locked", releido, request, ip_address, user_agent
-            )
+        self._rechaza_si_el_respaldo_frena(releido, fiable, request, contexto)
         return releido
 
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
+        """
+        El login, y cada fallo apuntado en el techo de su red (#273): una contraseña
+        mala, un bloqueo (423) o una cuenta desactivada. Un rechazo por cupo (429)
+        no cuenta, como antes en la ruta.
+        """
+        try:
+            respuesta = await self._entra(request)
+        except (AccountLockedException, AccountDeactivatedException):
+            self._freno.apunta_fallo_en_la_red(_red_de(request))
+            raise
+        if respuesta is None:
+            self._freno.apunta_fallo_en_la_red(_red_de(request))
+        return respuesta
+
+    async def _entra(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
         Ejecuta el caso de uso de login.
 
@@ -379,8 +404,6 @@ class LoginUserUseCase:
         if releido is None:
             return None
         user = releido
-        # Acertó: los fallos de ESTE origen vuelven a cero; los de los demás, no
-        self._freno.olvida(request.email, origen)
 
         # Admin Panel (v2.4.0): Verificar si la cuenta fue desactivada por un admin.
         # Se comprueba DESPUES de validar la contraseña para no filtrar el estado
@@ -395,6 +418,10 @@ class LoginUserUseCase:
                 user_agent=user_agent,
             )
             raise AccountDeactivatedException()
+
+        # Entra: los fallos de ESTE origen vuelven a cero; los de los demás, no. Solo
+        # con una cuenta activa: acertar en una desactivada no es entrar
+        self._freno.olvida(request.email, origen)
 
         # Registrar evento de login exitoso (Clean Architecture)
         login_time = datetime.now(UTC)

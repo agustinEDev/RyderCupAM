@@ -78,7 +78,14 @@ class IEmailService(ABC):
 
     @abstractmethod
     async def send_failed_logins_notification(
-        self, to_email: str, user_name: str, motivo: str, cuando: str, pais: str | None
+        self,
+        to_email: str,
+        user_name: str,
+        motivo: str,
+        cuando: str,
+        pais: str | None,
+        fallos: int,
+        minutos: int,
     ) -> bool:
         """
         Avisa al usuario de que alguien está fallando su contraseña (BE #732): una red
@@ -90,6 +97,8 @@ class IEmailService(ABC):
             motivo: «red» o «respaldo»
             cuando: La fecha y la hora, ya en texto y en hora de España
             pais: El país aproximado, o None
+            fallos: Cuántos fallos lo bloquearon (los del freno o los del respaldo)
+            minutos: Cuánto dura el bloqueo
         """
 
     @abstractmethod

@@ -27,10 +27,20 @@ solo frena a los dispositivos desconocidos. Los números de la tabla aprobada.
   U11  cada fallo                                            | suma en el respaldo de la cuenta
   U12  una red se bloquea / salta el respaldo                | avisa al dueño con su motivo y país
   U12b un correo que no existe se bloquea                    | sin aviso
+  U12c un mismo fallo bloquea la red y hace saltar el        | UN aviso, el del respaldo
+       respaldo                                              |
+  U13  la red agotó su techo de fallos (30/min, todos los    | un desconocido: rechazo (429);
+       correos)                                              |   el fiable de la cuenta entra
+  U14  cada fallo (401, 423, cuenta desactivada)             | cuenta en el techo de su red;
+                                                             |   un rechazo por cupo (429), no
+  U16  la contraseña buena de una cuenta desactivada         | no pone a cero los fallos de su red
+  U15  una cookie con 5 ids, con un correo que existe y con  | UNA consulta en los dos casos:
+       uno que no                                            |   el tiempo no delata cuál existe
 """
 
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -44,6 +54,7 @@ from src.modules.user.application.use_cases.login_user_use_case import LoginUser
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.exceptions import (
+    AccountDeactivatedException,
     AccountLockedException,
     LoginAttemptsExceededException,
 )
@@ -400,3 +411,122 @@ async def test_u7b_el_fiable_sin_pase_entra_como_desconocido_si_su_red_esta_limp
     await e.falla(10, red=RED_A, cookie=movil)
 
     assert (await e.entra(red=RED_B, cookie=movil)) is not None
+
+
+async def test_u13_la_red_agotada_frena_a_los_desconocidos_pero_no_al_fiable(monkeypatch):
+    """
+    Given: La red A agotó su techo de fallos (el atacante en la wifi del club), y Ana
+           tiene un dispositivo suyo
+    When: Entra un desconocido desde A, y Ana con su dispositivo desde A
+    Then: El desconocido se rechaza por el techo de la red; Ana entra
+    """
+    from src.config import rate_limit
+
+    monkeypatch.setattr(rate_limit, "FAILED_LOGINS_LIMIT", "3/minute")
+    e = Escena()
+    ana = await e.usuario()
+    movil = await e.dispositivo(ana)
+    for _i in range(3):
+        rate_limit.record_failed_login(RED_A)
+
+    with pytest.raises(LoginAttemptsExceededException) as rechazo:
+        await e.entra(red=RED_A)
+    assert rechazo.value.techo_de_red
+    assert (await e.entra(red=RED_A, cookie=movil)) is not None
+
+
+async def test_u14_cada_fallo_cuenta_en_el_techo_de_su_red_y_el_cupo_no(monkeypatch):
+    """
+    Given: Ana, una cuenta desactivada y la red A sin fallos
+    When: Falla 9 veces, la 10ª la bloquea (423), la desactivada entra con la buena
+          (403) y luego 5 intentos llenan el cupo y el siguiente se rechaza (429)
+    Then: El techo de A lleva 11 fallos: los 429 no cuentan
+    """
+    from src.config import rate_limit
+
+    apuntados = []
+    monkeypatch.setattr(rate_limit, "record_failed_login", apuntados.append)
+    e = Escena()
+    await e.usuario()
+    baja = await e.usuario(email=LUIS)
+    baja.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+    async with e.uow:
+        await e.uow.users.save(baja)
+
+    await e.falla(10, red=RED_A)
+    with pytest.raises(AccountDeactivatedException):
+        await e.entra(email=LUIS, red=RED_A)
+    for _ in range(5):
+        await e.entra(email="nadie.mas@example.com", clave=MALA, red=RED_B)
+    with pytest.raises(LoginAttemptsExceededException):
+        await e.entra(email="nadie.mas@example.com", red=RED_B)
+
+    assert apuntados.count(RED_A) == 11
+    assert apuntados.count(RED_B) == 5
+
+
+async def test_u12c_un_fallo_que_bloquea_la_red_y_salta_el_respaldo_da_un_aviso():
+    """
+    Given: Ana con 9 fallos desde A y 49 en el respaldo, en la última hora
+    When: Falla otra vez desde A
+    Then: Un solo aviso, con motivo «respaldo»: el más grave
+    """
+    e = Escena()
+    ana = await e.usuario()
+    await e.falla(9, red=RED_A)
+    releida = await e.releido(ana)
+    releida._failed_login_attempts = 49
+    releida._failed_login_window_started_at = datetime.now() - timedelta(minutes=5)
+    async with e.uow:
+        await e.uow.users.save(releida)
+
+    await e.falla(1, red=RED_A)
+
+    assert e.aviso_de_fallos.avisa.await_count == 1
+    assert e.aviso_de_fallos.avisa.await_args.args[0].motivo == "respaldo"
+
+
+@pytest.mark.parametrize("existe", [True, False])
+async def test_u15_una_sola_consulta_de_dispositivos_exista_el_correo_o_no(existe):
+    """
+    Given: Una cookie con 5 ids inventados
+    When: Entra con un correo que existe, y con uno que no
+    Then: Una sola consulta de dispositivos en los dos casos
+    """
+    e = Escena()
+    if existe:
+        await e.usuario()
+    consultas = []
+    original = e.uow.user_devices.find_active_ids_of_user
+
+    async def cuenta(ids, user_id):
+        consultas.append(len(ids))
+        return await original(ids, user_id)
+
+    e.uow.user_devices.find_active_ids_of_user = cuenta
+    cookie = ".".join(str(uuid4()) for _ in range(5))
+
+    await e.entra(email=ANA if existe else "nadie@example.com", clave=MALA, cookie=cookie)
+
+    assert consultas == [5]
+
+
+async def test_u16_acertar_en_una_cuenta_desactivada_no_borra_los_fallos():
+    """
+    Given: Luis desactivado, con 9 fallos desde A
+    When: Llega su contraseña buena desde A (403, desactivada) y luego otro fallo
+    Then: Ese fallo bloquea A: acertar en una cuenta desactivada no es entrar
+    """
+    e = Escena()
+    luis = await e.usuario(email=LUIS)
+    luis.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+    async with e.uow:
+        await e.uow.users.save(luis)
+    for _ in range(9):
+        await e.entra(email=LUIS, clave=MALA, red=RED_A)
+        e.freno._intentos.clear()
+
+    with pytest.raises(AccountDeactivatedException):
+        await e.entra(email=LUIS, red=RED_A)
+
+    assert e.freno.apunta_fallo(LUIS, origen_de_red(RED_A)) is not None

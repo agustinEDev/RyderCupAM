@@ -670,15 +670,18 @@ def reset_rate_limits():
     los de email (login, forgot-password) y los de usuario no (RyderCupAM#273): dos
     tests con el mismo email se pisarían dentro del mismo minuto.
     """
+    from src.config.cupo_de_avisos import cupo_de_avisos
     from src.config.freno_del_login import freno_del_login
     from src.config.rate_limit import limiter
 
     # Y el freno del login por correo + red (BE #732), que vive aparte
     limiter.reset()
     freno_del_login.reinicia()
+    cupo_de_avisos.reinicia()
     yield
     limiter.reset()
     freno_del_login.reinicia()
+    cupo_de_avisos.reinicia()
 
 
 # ======================================================================================

@@ -245,6 +245,7 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
     )
     bloqueada.record_failed_login()
     hasta = bloqueada.locked_until
+    fallos = bloqueada.failed_login_attempts
     eventos = len(bloqueada.get_domain_events())
 
     async def releida(_user_id):
@@ -256,7 +257,7 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
     with pytest.raises(AccountLockedException):
         await login.execute(LoginRequestDTO(email=EMAIL, password=MALA))
 
-    assert bloqueada.failed_login_attempts == MAX_FAILED_ATTEMPTS
+    assert bloqueada.failed_login_attempts == fallos
     assert bloqueada.locked_until == hasta
     assert len(bloqueada.get_domain_events()) == eventos
 
