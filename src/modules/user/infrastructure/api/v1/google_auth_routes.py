@@ -59,11 +59,13 @@ from src.shared.infrastructure.security.cookie_handler import (
 
 logger = logging.getLogger(__name__)
 GOOGLE_EMAIL_NOT_VERIFIED = "GOOGLE_EMAIL_NOT_VERIFIED"
+ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED"
 _TEXTOS_DE_GOOGLE = {
+    ACCOUNT_DEACTIVATED: "This account has been deactivated. Contact an administrator.",
     GOOGLE_EMAIL_NOT_VERIFIED: (
         "Your Google account email is not verified. Verify it with Google, or sign up "
         "with your email and a password."
-    )
+    ),
 }
 
 router = APIRouter()
@@ -109,12 +111,12 @@ async def google_login(
             _TEXTOS_DE_GOOGLE,
             GOOGLE_EMAIL_NOT_VERIFIED,
         )
-    except AccountDeactivatedException as e:
-        # La misma respuesta que el login con contraseña (BE #744)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated. Contact an administrator.",
-        ) from e
+    except AccountDeactivatedException:
+        # El mismo texto que el login con contraseña (BE #744), con su código: la app
+        # dice que está desactivada en vez de invitar a reintentar
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_GOOGLE, ACCOUNT_DEACTIVATED
+        )
     except ValueError as e:
         error_msg = str(e)
         # Map known errors to safe client-facing messages

@@ -257,8 +257,12 @@ Returned in all endpoints that include user data (login, current-user, register,
 ### Three Login Flows
 
 1. **Existing OAuth account** → Direct login (`is_new_user=false`)
-2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`)
-3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`)
+2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`), only if Google verified the email
+3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`), only if Google verified the email
+
+**Errors** (`detail` plus `error_code` at the root):
+- `400 GOOGLE_EMAIL_NOT_VERIFIED` - Google has not verified the email: no sign-up and no auto-link (flows 2 and 3). An already linked Google still signs in.
+- `403 ACCOUNT_DEACTIVATED` - The account was deactivated by an administrator.
 
 ### Link/Unlink Google Account
 

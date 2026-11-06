@@ -82,3 +82,29 @@ async def test_a_broken_log_does_not_change_the_link_answer(client: AsyncClient,
     _datos, respuesta = await _vincula(client, "vinculo.roto@example.com")
 
     assert respuesta.status_code == 200
+
+
+async def test_a_deactivated_account_gets_its_own_code_on_google(client: AsyncClient):
+    """
+    Given: Una cuenta vinculada a Google y desactivada por un administrador
+    When: Entra con Google
+    Then: 403 con error_code ACCOUNT_DEACTIVATED, para que la app diga que está
+          desactivada en vez de invitar a reintentar
+    """
+    from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
+
+    email = "desactivada.google@example.com"
+    await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
+    _google(email)
+    primera = await client.post("/api/v1/auth/google", json={"authorization_code": "c1"})
+    assert primera.status_code == 200
+    await _sql("update users set is_active = false where email = :e", e=email)
+    client.cookies.clear()
+
+    respuesta = await client.post("/api/v1/auth/google", json={"authorization_code": "c2"})
+
+    assert respuesta.status_code == 403
+    assert respuesta.json()["error_code"] == "ACCOUNT_DEACTIVATED"
+    assert respuesta.json()["detail"] == (
+        "This account has been deactivated. Contact an administrator."
+    )
