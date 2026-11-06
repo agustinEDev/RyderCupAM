@@ -48,6 +48,10 @@ class IFrenoDelLogin(ABC):
         """Apunta un login fallido en el techo de su red."""
 
     @abstractmethod
+    def tiene_bloqueos(self, email: str) -> bool:
+        """Si algún origen está bloqueado ahora para este correo. No borra nada."""
+
+    @abstractmethod
     def olvida_la_cuenta(self, email: str) -> bool:
         """El desbloqueo del administrador: borra todo lo de este correo.
 

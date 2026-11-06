@@ -174,6 +174,8 @@ users_table = Table(
     # El respaldo de todas las redes y su aviso (BE #732)
     Column("failed_login_window_started_at", DateTime, nullable=True),
     Column("failed_login_notice_at", DateTime, nullable=True),
+    Column("failed_login_day_attempts", Integer, nullable=False, default=0, server_default="0"),
+    Column("failed_login_day_window_started_at", DateTime, nullable=True),
     # RBAC field (v2.0.0)
     Column("is_admin", Boolean, nullable=False, default=False),
     # Admin panel: deactivation (v2.4.0)
@@ -263,6 +265,10 @@ def start_mappers():
                 "_locked_until": users_table.c.locked_until,
                 "_failed_login_window_started_at": users_table.c.failed_login_window_started_at,
                 "_failed_login_notice_at": users_table.c.failed_login_notice_at,
+                "_failed_login_day_attempts": users_table.c.failed_login_day_attempts,
+                "_failed_login_day_window_started_at": (
+                    users_table.c.failed_login_day_window_started_at
+                ),
                 "_is_admin": users_table.c.is_admin,
                 "_is_active": users_table.c.is_active,
                 "_gender": users_table.c.gender,

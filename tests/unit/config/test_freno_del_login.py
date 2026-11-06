@@ -19,6 +19,9 @@ El freno del login en memoria (BE #732, ADR-043).
   F13 más parejas vivas que el tope                         | se van las más viejas; la memoria
                                                             |   tiene techo
   F14 una pareja vieja que se vuelve a usar                 | pasa al final: no es la que se va
+  F15 con el tope lleno de parejas nuevas                   | un bloqueo vivo NO se va: llenar el
+                                                            |   freno de basura no lo levanta
+  F16 preguntar si una cuenta tiene bloqueos                | no borra nada
 """
 
 from datetime import datetime, timedelta
@@ -268,3 +271,39 @@ def test_f14_una_pareja_que_se_vuelve_a_usar_no_es_la_que_se_va():
     freno.apunta_fallo("d@example.com", A)  # se va b, no Ana
 
     assert freno.apunta_fallo(ANA, A) is not None
+
+
+def test_f15_un_bloqueo_vivo_no_se_expulsa_aunque_se_llene_el_tope():
+    """
+    Given: Un tope de 3 parejas y la red A bloqueada para Ana
+    When: Se bloquean otras 5 parejas
+    Then: Ana sigue bloqueada: un atacante no levanta un bloqueo llenando el freno
+    """
+    freno, _reloj = _freno(tope=3)
+    for _ in range(10):
+        freno.apunta_fallo(ANA, A)
+    for i in range(5):
+        for _ in range(10):
+            freno.apunta_fallo(f"basura{i}@example.com", A)
+
+    assert freno.bloqueado_hasta(ANA, A) is not None
+
+
+def test_f16_tiene_bloqueos_no_borra_nada():
+    """
+    Given: La red A bloqueada para Ana, y 3 fallos de B
+    When: Se pregunta si Ana tiene bloqueos, y por Luis
+    Then: Ana sí, Luis no, y lo de Ana sigue igual
+    """
+    freno, _reloj = _freno()
+    for _ in range(10):
+        freno.apunta_fallo(ANA, A)
+    for _ in range(3):
+        freno.apunta_fallo(ANA, B)
+
+    assert freno.tiene_bloqueos(ANA)
+    assert not freno.tiene_bloqueos("luis@example.com")
+    assert freno.bloqueado_hasta(ANA, A) is not None
+    for _ in range(6):
+        assert freno.apunta_fallo(ANA, B) is None
+    assert freno.apunta_fallo(ANA, B) is not None

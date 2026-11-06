@@ -199,7 +199,7 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 ### Security Features (v1.13.1)
 - ✅ **httpOnly Cookies** - XSS prevention for tokens
 - ✅ **Session Timeout** - 15min access tokens, 7-day refresh tokens
-- ✅ **Account Lockout** - 10 failed attempts, 30min auto-unlock
+- ✅ **Login brake** - per email + network: 10 failures lock that network 30 min; the owner's trusted device is never locked out (ADR-043)
 - ✅ **CSRF Protection** - Triple-layer (header + cookie + SameSite)
 - ✅ **Password History** - Prevents reuse of last 5 passwords
 - ✅ **Device Fingerprinting** - SHA256 fingerprints, device management

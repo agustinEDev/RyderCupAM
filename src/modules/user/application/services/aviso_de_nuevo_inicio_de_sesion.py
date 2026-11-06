@@ -81,6 +81,14 @@ def cuando_en_espana(instante_utc: datetime) -> str:
     return f"{local.day} {MESES[local.month - 1]} {local.year}, {local:%H:%M} (hora de España)"
 
 
+async def nombre_del_pais(paises: CountryRepositoryInterface, codigo: str | None) -> str | None:
+    """El nombre en castellano de un país ISO 3166 alfa-2, el código si no está, o None."""
+    if not codigo:
+        return None
+    pais = await paises.find_by_code(CountryCode(codigo))
+    return pais.name_es if pais else codigo
+
+
 class AvisoDeNuevoInicioDeSesion(IAvisoDeNuevoInicio):
     """Decide si toca avisar de un nuevo inicio de sesión y, si toca, envía el correo."""
 
@@ -121,7 +129,7 @@ class AvisoDeNuevoInicioDeSesion(IAvisoDeNuevoInicio):
                 # La hora del acceso, no la del alta: con un dispositivo reconocido por la
                 # huella, la del alta haría parecer viejo lo que acaba de pasar
                 cuando=cuando_en_espana(ahora),
-                pais=await self._nombre_del_pais(este.country_code),
+                pais=await nombre_del_pais(self._paises, este.country_code),
             )
             # Enviado: cuenta para el tope de uno por hora. Uno que no salió, no
             if not enviado:
@@ -134,9 +142,3 @@ class AvisoDeNuevoInicioDeSesion(IAvisoDeNuevoInicio):
             # Solo el tipo: el mensaje de un proveedor de correo puede llevar la
             # dirección (auditoría OWASP, A09)
             logger.error("New sign-in notice failed; the login goes on: %s", type(e).__name__)
-
-    async def _nombre_del_pais(self, codigo: str | None) -> str | None:
-        if not codigo:
-            return None
-        pais = await self._paises.find_by_code(CountryCode(codigo))
-        return pais.name_es if pais else codigo

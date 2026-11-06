@@ -23,8 +23,15 @@ from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     cuando_en_espana,
+    nombre_del_pais,
 )
-from src.modules.user.domain.entities.user import LOCKOUT_DURATION_MINUTES, MAX_FAILED_ATTEMPTS
+from src.modules.user.domain.entities.user import (
+    DAY_LOCKOUT,
+    FAILED_ATTEMPTS_EARLY_NOTICE,
+    LOCKOUT_DURATION_MINUTES,
+    MAX_FAILED_ATTEMPTS,
+    MAX_FAILED_ATTEMPTS_PER_DAY,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -36,11 +43,17 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
 )
-from src.shared.domain.value_objects.country_code import CountryCode
 
 logger = logging.getLogger(__name__)
 
 UNA_HORA = timedelta(hours=1)
+# Cuántos fallos, y cuántos minutos de bloqueo, cuenta cada aviso (0: sin bloqueo)
+NUMEROS = {
+    "red": (FALLOS_POR_ORIGEN, MINUTOS_DE_BLOQUEO_POR_ORIGEN),
+    "aviso": (FAILED_ATTEMPTS_EARLY_NOTICE, 0),
+    "respaldo": (MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_MINUTES),
+    "dia": (MAX_FAILED_ATTEMPTS_PER_DAY, int(DAY_LOCKOUT.total_seconds() // 60)),
+}
 
 
 class AvisoDeFallosDeLogin(IAvisoDeFallos):
@@ -68,10 +81,7 @@ class AvisoDeFallosDeLogin(IAvisoDeFallos):
         try:
             ahora = self._reloj()
             # Los números de verdad, no copiados en el texto
-            if request.motivo == "respaldo":
-                fallos, minutos = MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_MINUTES
-            else:
-                fallos, minutos = FALLOS_POR_ORIGEN, MINUTOS_DE_BLOQUEO_POR_ORIGEN
+            fallos, minutos = NUMEROS[request.motivo]
             anterior = await self._reserva(request, ahora)
             if anterior is False:
                 return
@@ -81,7 +91,7 @@ class AvisoDeFallosDeLogin(IAvisoDeFallos):
                     user_name=request.nombre,
                     motivo=request.motivo,
                     cuando=cuando_en_espana(ahora),
-                    pais=await self._nombre_del_pais(request.country_code),
+                    pais=await nombre_del_pais(self._paises, request.country_code),
                     fallos=fallos,
                     minutos=minutos,
                 )
@@ -111,18 +121,23 @@ class AvisoDeFallosDeLogin(IAvisoDeFallos):
             anterior = user.failed_login_notice_at
             if anterior and anterior > ahora - UNA_HORA:
                 return False
-            if not self._cupo.reserva():
-                logger.warning("Failed sign-ins notice skipped: hourly budget is full")
+            if not self._cupo.reserva(request.motivo):
+                logger.warning("Failed sign-ins notice skipped: the budget is full")
                 return False
-            user.apunta_el_aviso_de_fallos(ahora)
-            await self._uow.users.save(user)
+            try:
+                user.apunta_el_aviso_de_fallos(ahora)
+                await self._uow.users.save(user)
+            except Exception:
+                # Sin guardar la reserva, el hueco del tope vuelve
+                self._cupo.devuelve(request.motivo)
+                raise
         return anterior
 
     async def _libera(
         self, request: AvisoDeFallosRequestDTO, ahora: datetime, anterior: datetime | None
     ) -> None:
         """Un aviso reservado que no salió: no cuenta para la hora ni para el tope."""
-        self._cupo.devuelve()
+        self._cupo.devuelve(request.motivo)
         try:
             async with self._uow:
                 user = await self._uow.users.find_by_id_for_update(UserId(request.user_id))
@@ -131,9 +146,3 @@ class AvisoDeFallosDeLogin(IAvisoDeFallos):
                     await self._uow.users.save(user)
         except Exception as e:
             logger.error("Failed sign-ins notice release failed: %s", type(e).__name__)
-
-    async def _nombre_del_pais(self, codigo: str | None) -> str | None:
-        if not codigo:
-            return None
-        pais = await self._paises.find_by_code(CountryCode(codigo))
-        return pais.name_es if pais else codigo

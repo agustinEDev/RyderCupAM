@@ -51,7 +51,11 @@ from src.shared.infrastructure.security.jwt_handler import (
 )
 
 # Topes de las rutas anónimas: por red, que en producción es toda la app
-LOGIN_ATTEMPTS_LIMIT = "60/minute"  # techo de intentos: cada login cuesta un bcrypt
+# Techo de intentos por red, de cualquier correo: protege la CPU (cada login que pasa
+# el freno cuesta un bcrypt). 120 desde BE #732: un atacante en la misma red que el
+# dueño (la wifi del club) le deja en 429 mientras dure; al doble, le cuesta el doble.
+# La fuerza bruta la acota el freno del login (5/min por correo, 30 fallos/min por red)
+LOGIN_ATTEMPTS_LIMIT = "120/minute"
 GOOGLE_LOGIN_LIMIT = "30/minute"
 REGISTER_LIMIT = "30/hour"
 EMAIL_SENDING_LIMIT = "30/hour"  # forgot-password y resend-verification
@@ -103,7 +107,8 @@ def get_client_identifier(request: Request) -> str:
     En producción: la IP que da Cloudflare si la petición trae su secreto (BE #466,
     ADR-041); si no, la del peer, que es el proxy de Render: el contador
     compartido de siempre, nunca uno que elija quien llama.
-    Fuera de producción: X-Test-Client-ID si existe (simula clientes distintos).
+    En desarrollo y en los tests: X-Test-Client-ID si existe (simula clientes
+    distintos). Sin ENVIRONMENT, o con un valor desconocido, como en producción.
     """
     if not _admite_el_cliente_de_prueba():
         ip = cloudflare_client_ip(request)
@@ -118,8 +123,8 @@ def get_client_identifier(request: Request) -> str:
     return get_remote_address(request)
 
 
-# Los entornos que dicen expresamente que no son producción
-_ENTORNOS_DE_PRUEBA = frozenset({"development", "staging"})
+# El entorno que dice expresamente que no es producción (no hay staging)
+_ENTORNOS_DE_PRUEBA = frozenset({"development"})
 
 
 def _admite_el_cliente_de_prueba() -> bool:

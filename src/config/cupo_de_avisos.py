@@ -1,9 +1,14 @@
 """
 El tope global de correos de «intentos fallidos», en memoria (BE #732).
 
-Como mucho 20 por hora en toda la app, además del uno por hora y cuenta. En
-memoria, como los límites: la API corre en un solo proceso, y un reinicio lo pone a
-cero (como mucho otros 20 avisos). Sin `await`: atómico en el bucle de asyncio.
+Además del uno por hora y cuenta, en toda la app:
+- los avisos de una red bloqueada: 20 por hora y 30 al día;
+- los graves (el aviso a los 25 fallos, el respaldo y el contador diario): su propio
+  hueco de 10 al día, que los de red no gastan. Así un atacante bloqueando redes no
+  tapa los avisos de un ataque repartido.
+Deja más de la mitad del cupo diario del proveedor (100) para la verificación y la
+recuperación de contraseña. En memoria, como los límites: un reinicio lo pone a cero.
+Sin `await`: atómico en el bucle de asyncio.
 """
 
 from collections import deque
@@ -12,36 +17,47 @@ from datetime import datetime, timedelta
 
 from src.modules.user.application.ports.cupo_de_avisos_port import ICupoDeAvisos
 
-AVISOS_POR_HORA = 20
+AVISOS_DE_RED_POR_HORA = 20
+AVISOS_DE_RED_POR_DIA = 30
+AVISOS_GRAVES_POR_DIA = 10
 UNA_HORA = timedelta(hours=1)
+UN_DIA = timedelta(hours=24)
 
 
 class CupoDeAvisosEnMemoria(ICupoDeAvisos):
-    """Los avisos de la última hora."""
+    """Los avisos enviados en el último día, por tipo."""
 
-    def __init__(
-        self, reloj: Callable[[], datetime] = datetime.now, por_hora: int = AVISOS_POR_HORA
-    ):
+    def __init__(self, reloj: Callable[[], datetime] = datetime.now):
         self._reloj = reloj
-        self._por_hora = por_hora
-        self._enviados: deque[datetime] = deque()
+        self._de_red: deque[datetime] = deque()
+        self._graves: deque[datetime] = deque()
 
-    def reserva(self) -> bool:
+    def _de(self, motivo: str) -> deque[datetime]:
+        return self._de_red if motivo == "red" else self._graves
+
+    def reserva(self, motivo: str) -> bool:
         ahora = self._reloj()
-        while self._enviados and self._enviados[0] <= ahora - UNA_HORA:
-            self._enviados.popleft()
-        if len(self._enviados) >= self._por_hora:
+        enviados = self._de(motivo)
+        while enviados and enviados[0] <= ahora - UN_DIA:
+            enviados.popleft()
+        if motivo == "red":
+            en_la_hora = sum(1 for t in enviados if t > ahora - UNA_HORA)
+            if len(enviados) >= AVISOS_DE_RED_POR_DIA or en_la_hora >= AVISOS_DE_RED_POR_HORA:
+                return False
+        elif len(enviados) >= AVISOS_GRAVES_POR_DIA:
             return False
-        self._enviados.append(ahora)
+        enviados.append(ahora)
         return True
 
-    def devuelve(self) -> None:
-        if self._enviados:
-            self._enviados.pop()
+    def devuelve(self, motivo: str) -> None:
+        enviados = self._de(motivo)
+        if enviados:
+            enviados.pop()
 
     def reinicia(self) -> None:
         """Todo a cero (para los tests)."""
-        self._enviados.clear()
+        self._de_red.clear()
+        self._graves.clear()
 
 
 # El de la app: uno para todo el proceso

@@ -12,9 +12,9 @@ class ICupoDeAvisos(ABC):
     """
 
     @abstractmethod
-    def reserva(self) -> bool:
-        """Reserva un aviso. False si el tope de esta hora está lleno."""
+    def reserva(self, motivo: str) -> bool:
+        """Reserva un aviso de este motivo. False si su tope está lleno."""
 
     @abstractmethod
-    def devuelve(self) -> None:
+    def devuelve(self, motivo: str) -> None:
         """Devuelve un aviso reservado que al final no se envió."""

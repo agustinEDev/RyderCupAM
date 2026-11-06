@@ -99,6 +99,9 @@ class LoginUserUseCase:
             uow: Unit of Work para acceso a repositorios (users + refresh_tokens + user_devices)
             token_service: Servicio para generación de tokens de autenticación
             register_device_use_case: Caso de uso para registrar/actualizar dispositivos (v1.13.0)
+            aviso_de_nuevo_inicio: El correo de «nuevo inicio de sesión» (BE #737)
+            freno: El freno del login por correo y origen (BE #732)
+            aviso_de_fallos: El correo de «intentos fallidos» al dueño (BE #732)
         """
         self._uow = uow
         self._token_service = token_service
@@ -197,9 +200,10 @@ class LoginUserUseCase:
         contexto: tuple[str, str],
     ) -> None:
         """
-        Antes del bcrypt: el cupo del minuto (429), el bloqueo de este origen y el
-        respaldo de la cuenta (423). Bloqueado, la contraseña no se llega a
-        comprobar: no se puede seguir probando. Igual exista el correo o no.
+        Antes del bcrypt, en memoria: el techo de la red y el cupo del minuto (429),
+        y el bloqueo de este origen (423). Bloqueado, la contraseña no se llega a
+        comprobar: no se puede seguir probando. Igual exista el correo o no. El
+        respaldo de la cuenta lo mira aparte `_rechaza_si_el_respaldo_frena`.
         """
         ip_address, user_agent = contexto
         # El techo de fallos de la red (30/min, todos los correos), salvo el fiable:
@@ -211,9 +215,6 @@ class LoginUserUseCase:
         hasta = self._freno.bloqueado_hasta(request.email, origen)
         if hasta is not None:
             self._rechaza(hasta, "Locked for this network", user, request, ip_address, user_agent)
-        # El respaldo solo frena a los desconocidos: el fiable entra igual
-        if user is not None:
-            self._rechaza_si_el_respaldo_frena(user, fiable, request, contexto)
 
     def _apunta_el_fallo_sin_cuenta(
         self, request: LoginRequestDTO, origen: str, contexto: tuple[str, str]
@@ -261,14 +262,14 @@ class LoginUserUseCase:
                 dispositivo desconocido, el respaldo
         """
         ip_address, user_agent = contexto
-        respaldo_salta = False
+        del_respaldo = None
         async with self._uow:
             bloqueado = await self._uow.users.find_by_id_for_update(user.id)
             # Sobre un respaldo que otro acaba de bloquear no se cuenta: alargaría el
             # bloqueo y repetiría su evento por cada intento en vuelo (code-review)
             if bloqueado is not None and not bloqueado.is_locked():
-                bloqueado.record_failed_login()
-                respaldo_salta = bloqueado.is_locked()
+                # «dia» o «respaldo» si bloquea; «aviso» si es el 25 de la hora
+                del_respaldo = bloqueado.record_failed_login()
                 await self._uow.users.save(bloqueado)
 
         if bloqueado is None:
@@ -277,9 +278,10 @@ class LoginUserUseCase:
             return
 
         hasta = self._freno.apunta_fallo(request.email, origen)
-        # Un solo aviso por fallo, el más grave: dos a la vez mandaban dos correos
-        if respaldo_salta:
-            await self._avisa_de_los_fallos(bloqueado, request, "respaldo")
+        # Un solo aviso por fallo, el del respaldo antes que el de la red: dos a la
+        # vez mandaban dos correos
+        if del_respaldo is not None:
+            await self._avisa_de_los_fallos(bloqueado, request, del_respaldo)
         elif hasta is not None and not fiable:
             await self._avisa_de_los_fallos(bloqueado, request, "red")
 
@@ -373,19 +375,26 @@ class LoginUserUseCase:
         # Obtener security logger
         security_logger = get_security_logger()
 
-        # Buscar usuario por email
-        email = Email(request.email)
-        user = await self._uow.users.find_by_email(email)
-
         # Valores por defecto para security logging si no se proporcionan
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
-
         contexto = (ip_address, user_agent)
 
-        # El freno por correo y origen, antes del bcrypt (BE #732)
-        origen, fiable = await self._origen_del_intento(user, request)
-        self._comprueba_la_puerta(user, request, origen, fiable, contexto)
+        # El freno por correo y origen, antes del bcrypt (BE #732). Sin cookie de
+        # dispositivo el origen es la red, y el freno en memoria decide ANTES de tocar
+        # la BD: una inundación de intentos no cuesta consultas
+        email = Email(request.email)
+        if not ids_de_la_cookie_de_dispositivo(request.device_id_from_cookie):
+            origen, fiable = origen_de_red(_red_de(request)), False
+            self._comprueba_la_puerta(None, request, origen, fiable, contexto)
+            user = await self._uow.users.find_by_email(email)
+        else:
+            user = await self._uow.users.find_by_email(email)
+            origen, fiable = await self._origen_del_intento(user, request)
+            self._comprueba_la_puerta(user, request, origen, fiable, contexto)
+        # El respaldo solo frena a los desconocidos: el fiable entra igual
+        if user is not None:
+            self._rechaza_si_el_respaldo_frena(user, fiable, request, contexto)
 
         if not user:
             # El mismo bcrypt que una contraseña mala: sin él, responder antes

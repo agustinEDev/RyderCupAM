@@ -237,7 +237,7 @@ def _con_cliente_de_prueba() -> Request:
         ("production", None, False),
         ("PRODUCTION", "true", False),  # producción manda, aunque diga TESTING
         ("development", None, True),
-        ("staging", None, True),
+        ("staging", None, False),  # no hay staging: como producción
         (None, "true", True),  # la suite de tests
         ("preproduccion", None, False),  # un valor raro: como producción
     ],

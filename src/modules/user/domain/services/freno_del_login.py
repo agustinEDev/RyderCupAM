@@ -7,6 +7,8 @@ entidad User.
 """
 
 # 10 fallos de un origen (una red, o un dispositivo fiable) en 30 minutos lo
-# bloquean 30 minutos para ese correo
+# bloquean 30 minutos para ese correo. La ventana y el bloqueo son cosas distintas,
+# aunque hoy duren lo mismo
 FALLOS_POR_ORIGEN = 10
+MINUTOS_DE_LA_VENTANA_POR_ORIGEN = 30
 MINUTOS_DE_BLOQUEO_POR_ORIGEN = 30

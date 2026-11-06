@@ -51,11 +51,12 @@ class _Cupo:
         self.libre = libre
         self.pedidos = 0
 
-    def reserva(self) -> bool:
+    def reserva(self, motivo: str) -> bool:
         self.pedidos += 1
+        self.motivo = motivo
         return self.libre
 
-    def devuelve(self) -> None:
+    def devuelve(self, motivo: str) -> None:
         self.devueltos = getattr(self, "devueltos", 0) + 1
 
 

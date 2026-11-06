@@ -34,6 +34,10 @@ solo frena a los dispositivos desconocidos. Los números de la tabla aprobada.
   U14  cada fallo (401, 423, cuenta desactivada)             | cuenta en el techo de su red;
                                                              |   un rechazo por cupo (429), no
   U16  la contraseña buena de una cuenta desactivada         | no pone a cero los fallos de su red
+  U17  el fallo 25 de la hora, repartido                     | aviso «aviso» al dueño, sin bloquear
+  U18  150 fallos en 24 h (ataque lento)                     | aviso «dia»; 423 a un desconocido; el
+                                                             |   fiable entra
+  U19  sin cookie y la red ya rechazada (cupo o techo)       | 429 sin tocar la BD
   U15  una cookie con 5 ids, con un correo que existe y con  | UNA consulta en los dos casos:
        uno que no                                            |   el tiempo no delata cuál existe
 """
@@ -530,3 +534,80 @@ async def test_u16_acertar_en_una_cuenta_desactivada_no_borra_los_fallos():
         await e.entra(email=LUIS, red=RED_A)
 
     assert e.freno.apunta_fallo(LUIS, origen_de_red(RED_A)) is not None
+
+
+async def _con_fallos(e: Escena, user: User, hora: int, dia: int) -> None:
+    releida = await e.releido(user)
+    releida._failed_login_attempts = hora
+    releida._failed_login_window_started_at = datetime.now() - timedelta(minutes=5)
+    releida._failed_login_day_attempts = dia
+    releida._failed_login_day_window_started_at = datetime.now() - timedelta(hours=5)
+    async with e.uow:
+        await e.uow.users.save(releida)
+
+
+async def test_u17_el_fallo_25_de_la_hora_avisa_sin_bloquear():
+    """
+    Given: Ana con 24 fallos repartidos en la última hora
+    When: Falla otra vez desde una red limpia
+    Then: Aviso con motivo «aviso», 401 (sin bloqueo) y entra con la buena
+    """
+    e = Escena()
+    ana = await e.usuario()
+    await _con_fallos(e, ana, hora=24, dia=24)
+
+    assert (await e.falla(1, red=RED_B)) == [None]
+
+    assert e.aviso_de_fallos.avisa.await_args.args[0].motivo == "aviso"
+    assert (await e.entra(red=RED_B)) is not None
+
+
+async def test_u18_150_en_un_dia_bloquean_a_los_desconocidos_y_avisan():
+    """
+    Given: Ana con su dispositivo, y 149 fallos en el día (ataque lento)
+    When: Falla otra vez
+    Then: Aviso «dia», 423 a ese desconocido y a otro con la buena; su móvil entra
+    """
+    e = Escena()
+    ana = await e.usuario()
+    movil = await e.dispositivo(ana)
+    await _con_fallos(e, ana, hora=10, dia=149)
+
+    salida = await e.falla(1, red=RED_B)
+
+    assert isinstance(salida[0], AccountLockedException)
+    assert e.aviso_de_fallos.avisa.await_args.args[0].motivo == "dia"
+    with pytest.raises(AccountLockedException):
+        await e.entra(red=RED_A)
+    assert (await e.entra(red=RED_A, cookie=movil)) is not None
+
+
+@pytest.mark.parametrize("motivo", ["cupo", "techo"])
+async def test_u19_sin_cookie_el_429_no_toca_la_base_de_datos(monkeypatch, motivo):
+    """
+    Given: Una red sin cookie que ya agotó su cupo del minuto, o su techo de fallos
+    When: Llega otro intento
+    Then: 429 sin buscar al usuario: una inundación no cuesta consultas
+    """
+    from src.config import rate_limit
+
+    e = Escena()
+    await e.usuario()
+    if motivo == "cupo":
+        for _ in range(5):
+            await e.entra(clave=MALA, red=RED_A)
+    else:
+        monkeypatch.setattr(rate_limit, "FAILED_LOGINS_LIMIT", "1/minute")
+        rate_limit.record_failed_login(RED_A)
+    busquedas = []
+    original = e.uow.users.find_by_email
+
+    async def espia(email):
+        busquedas.append(email)
+        return await original(email)
+
+    e.uow.users.find_by_email = espia
+
+    with pytest.raises(LoginAttemptsExceededException):
+        await e.entra(red=RED_A)
+    assert busquedas == []

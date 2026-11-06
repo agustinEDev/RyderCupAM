@@ -32,6 +32,7 @@ from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLog
 from src.modules.user.domain.services.freno_del_login import (
     FALLOS_POR_ORIGEN,
     MINUTOS_DE_BLOQUEO_POR_ORIGEN,
+    MINUTOS_DE_LA_VENTANA_POR_ORIGEN,
 )
 
 INTENTOS_POR_MINUTO = parse(LOGIN_ATTEMPTS_PER_EMAIL_LIMIT).amount
@@ -39,9 +40,11 @@ FALLOS_QUE_BLOQUEAN = FALLOS_POR_ORIGEN
 MINUTOS_DE_BLOQUEO = MINUTOS_DE_BLOQUEO_POR_ORIGEN
 
 UN_MINUTO = timedelta(minutes=1)
-VENTANA_DE_FALLOS = timedelta(minutes=MINUTOS_DE_BLOQUEO)
+VENTANA_DE_FALLOS = timedelta(minutes=MINUTOS_DE_LA_VENTANA_POR_ORIGEN)
 BLOQUEO = timedelta(minutes=MINUTOS_DE_BLOQUEO)
-# Unas 2 KB por pareja: 50.000 por tabla son ~100 MB como mucho entre las tres
+# Unos 2,7 KB por pareja (medido): 50.000 de intentos y de fallos son unos 150 MB
+# como mucho. Los bloqueos vivos no cuentan para el tope: no se expulsan nunca, y los
+# acota el techo de fallos de cada red
 MAXIMO_DE_PAREJAS = 50_000
 
 
@@ -91,6 +94,11 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
             del tabla[next(iter(tabla))]
         return tabla[clave]
 
+    def tiene_bloqueos(self, email: str) -> bool:
+        cuenta = email_rate_limit_key(email)
+        ahora = self._reloj()
+        return any(c[0] == cuenta and hasta > ahora for c, hasta in self._bloqueos.items())
+
     def _recientes(self, tabla: dict, clave, desde: datetime) -> deque[datetime]:
         marcas = self._al_final(tabla, clave, deque)
         while marcas and marcas[0] <= desde:
@@ -129,7 +137,9 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
         # Bloqueado: el contador empieza de cero cuando el bloqueo acabe
         del self._fallos[clave]
         hasta = ahora + BLOQUEO
-        self._al_final(self._bloqueos, clave, lambda: hasta)
+        # Al final y sin tope: un bloqueo vivo no se expulsa (code-review). Duran
+        # todos lo mismo, así que el orden de entrada es el de salida
+        self._bloqueos.pop(clave, None)
         self._bloqueos[clave] = hasta
         return hasta
 
@@ -145,8 +155,7 @@ class FrenoDelLoginEnMemoria(IFrenoDelLogin):
 
     def olvida_la_cuenta(self, email: str) -> bool:
         cuenta = email_rate_limit_key(email)
-        ahora = self._reloj()
-        habia = any(c[0] == cuenta and hasta > ahora for c, hasta in self._bloqueos.items())
+        habia = self.tiene_bloqueos(email)
         for tabla in (self._intentos, self._fallos, self._bloqueos):
             for clave in [c for c in tabla if c[0] == cuenta]:
                 del tabla[clave]

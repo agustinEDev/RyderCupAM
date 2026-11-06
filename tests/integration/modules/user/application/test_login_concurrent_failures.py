@@ -73,8 +73,7 @@ async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session, mo
     assert all(r is None or isinstance(r, AccountLockedException) for r in resultados), resultados
     async with sesiones() as sesion:
         final = await SQLAlchemyUserRepository(sesion).find_by_id(usuario.id)
-        # Si se perdiera una suma, no llegaría a 50 y no se bloquearía. Al bloquear,
-        # el contador empieza una hora nueva a cero (BE #732)
+        # Si se perdiera una suma, no llegaría a 50 y no se bloquearía
         assert final.is_locked()
-        assert final.failed_login_attempts == 0
+        assert final.failed_login_attempts == MAX_FAILED_ATTEMPTS
     assert sum(isinstance(r, AccountLockedException) for r in resultados) >= 1

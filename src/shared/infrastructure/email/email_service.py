@@ -36,6 +36,8 @@ from src.shared.infrastructure.email.email_layout import (
 
 logger = logging.getLogger(__name__)
 
+MINUTOS_POR_HORA = 60
+
 
 class EmailService(
     IEmailService, IInvitationEmailService, ISocialEmailService, IHandicapUpdateEmailService
@@ -419,21 +421,46 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
         safe_user_name = self._sanitize_name(user_name)
         donde = f"desde {pais}" if pais else "desde otra red"
         from_where = f"from {pais}" if pais else "from another network"
-        if motivo == "respaldo":
+        if minutos >= MINUTOS_POR_HORA:
+            horas = minutos // MINUTOS_POR_HORA
+            dura, lasts = f"{horas} horas", f"{horas} hours"
+        else:
+            dura, lasts = f"{minutos} minutos", f"{minutos} minutes"
+        if motivo == "aviso":
+            que_pasa = (
+                f"alguien ha fallado tu contraseña {fallos} veces en la última hora desde "
+                "varias redes. Todavía no hemos bloqueado nada: si sigue, pararemos la "
+                "entrada desde dispositivos nuevos."
+            )
+            en = (
+                f"{fallos} times in the last hour from several networks. Nothing is blocked "
+                "yet; if it goes on, sign-ins from new devices will be paused."
+            )
+        elif motivo == "dia":
+            que_pasa = (
+                f"alguien ha fallado tu contraseña {fallos} veces en las últimas 24 horas "
+                f"desde varias redes. Hemos bloqueado {dura} la entrada desde dispositivos "
+                "nuevos."
+            )
+            en = (
+                f"{fallos} times in the last 24 hours from several networks. Sign-ins from "
+                f"new devices are paused for {lasts}."
+            )
+        elif motivo == "respaldo":
             que_pasa = (
                 f"alguien ha fallado tu contraseña {fallos} veces desde muchas redes a la "
-                f"vez. Hemos bloqueado {minutos} minutos la entrada desde dispositivos nuevos."
+                f"vez. Hemos bloqueado {dura} la entrada desde dispositivos nuevos."
             )
             en = (
                 f"{fallos} times from many networks. Sign-ins from new devices are paused "
-                f"for {minutos} minutes."
+                f"for {lasts}."
             )
         else:
             que_pasa = (
                 f"alguien ha fallado tu contraseña {fallos} veces {donde}. Hemos bloqueado "
-                f"esos intentos {minutos} minutos."
+                f"esos intentos {dura}."
             )
-            en = f"{fallos} times {from_where}. Those attempts are blocked for {minutos} minutes."
+            en = f"{fallos} times {from_where}. Those attempts are blocked for {lasts}."
         subject = (
             "Intentos fallidos de entrar en tu cuenta - Ryder Cup Friends | "
             "Failed sign-in attempts to your account"

@@ -37,6 +37,13 @@ from ..value_objects.user_id import UserId
 MAX_FAILED_ATTEMPTS = 50
 FAILED_ATTEMPTS_WINDOW = timedelta(hours=1)
 LOCKOUT_DURATION_MINUTES = 30
+# Al fallo 25 de la hora se avisa al dueño, sin bloquear
+FAILED_ATTEMPTS_EARLY_NOTICE = 25
+# Contra el ataque lento (49 por hora sin llegar nunca a 50): 150 en 24 horas
+# bloquean 24 horas a los dispositivos desconocidos
+MAX_FAILED_ATTEMPTS_PER_DAY = 150
+FAILED_ATTEMPTS_DAY_WINDOW = timedelta(hours=24)
+DAY_LOCKOUT = timedelta(hours=24)
 
 # Avatar Configuration
 AVATAR_PRESET_COUNT = 10
@@ -138,6 +145,8 @@ class User:
         locked_until: datetime | None = None,
         failed_login_window_started_at: datetime | None = None,
         failed_login_notice_at: datetime | None = None,
+        failed_login_day_attempts: int = 0,
+        failed_login_day_window_started_at: datetime | None = None,
         is_admin: bool = False,
         is_active: bool = True,
         feed_last_seen_at=None,
@@ -170,6 +179,8 @@ class User:
         self._locked_until = locked_until
         self._failed_login_window_started_at = failed_login_window_started_at
         self._failed_login_notice_at = failed_login_notice_at
+        self._failed_login_day_attempts = failed_login_day_attempts
+        self._failed_login_day_window_started_at = failed_login_day_window_started_at
         self._is_admin = is_admin
         self._is_active = is_active
         self._feed_last_seen_at = feed_last_seen_at
@@ -1142,42 +1153,67 @@ class User:
 
     # === Account Lockout Methods ===
 
-    def record_failed_login(self, ahora: datetime | None = None) -> None:
+    def record_failed_login(self, ahora: datetime | None = None) -> str | None:
         """
         Apunta un login fallido en el RESPALDO de la cuenta (BE #732, ADR-043).
 
-        Suma los fallos de todas las redes dentro de una hora
-        (FAILED_ATTEMPTS_WINDOW): un fallo de hace más de una hora abre una ventana
-        nueva. Con MAX_FAILED_ATTEMPTS (50) la cuenta se bloquea 30 minutos y se
-        emite AccountLockedEvent. Ese bloqueo solo frena a los dispositivos
-        desconocidos: el fiable del dueño entra igual (lo decide el caso de uso).
+        Dos contadores de todas las redes juntas:
+        - la hora (FAILED_ATTEMPTS_WINDOW): al fallo 25 se avisa al dueño, y con 50
+          se bloquea 30 minutos;
+        - el día (FAILED_ATTEMPTS_DAY_WINDOW): con 150 se bloquea 24 horas, contra
+          el ataque lento que nunca llega a 50 en una hora.
+        Cada ventana empieza en su primer fallo; tras un bloqueo, el siguiente fallo
+        abre una nueva (el contador se queda en el tope hasta entonces, para que el
+        log del desbloqueo diga los fallos de verdad). El bloqueo solo frena a los
+        dispositivos desconocidos: el fiable del dueño y Google entran igual.
 
-        Security (OWASP A07): acota la fuerza bruta repartida entre muchas redes.
-        Los fallos de cada red se frenan antes, y por separado, por correo + red.
+        Returns:
+            «dia» o «respaldo» si este fallo bloquea, «aviso» si es el 25 de la
+            hora, o None.
         """
         now = ahora or datetime.now()
+        self._updated_at = now
+
         inicio = self._failed_login_window_started_at
-        if inicio is None or now - inicio >= FAILED_ATTEMPTS_WINDOW:
+        if (
+            inicio is None
+            or now - inicio >= FAILED_ATTEMPTS_WINDOW
+            or self._failed_login_attempts >= MAX_FAILED_ATTEMPTS
+        ):
             self._failed_login_attempts = 0
             self._failed_login_window_started_at = now
         self._failed_login_attempts += 1
-        self._updated_at = now
 
-        if self.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
-            locked_until = now + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
-            self._locked_until = locked_until
-            self._add_domain_event(
-                AccountLockedEvent(
-                    user_id=str(self.id.value),
-                    locked_until=locked_until,
-                    failed_attempts=self.failed_login_attempts,
-                    locked_at=now,
-                )
+        dia = self._failed_login_day_window_started_at
+        if (
+            dia is None
+            or now - dia >= FAILED_ATTEMPTS_DAY_WINDOW
+            or self._failed_login_day_attempts >= MAX_FAILED_ATTEMPTS_PER_DAY
+        ):
+            self._failed_login_day_attempts = 0
+            self._failed_login_day_window_started_at = now
+        self._failed_login_day_attempts += 1
+
+        if self._failed_login_day_attempts >= MAX_FAILED_ATTEMPTS_PER_DAY:
+            self._bloquea(now, now + DAY_LOCKOUT)
+            return "dia"
+        if self._failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+            self._bloquea(now, now + timedelta(minutes=LOCKOUT_DURATION_MINUTES))
+            return "respaldo"
+        if self._failed_login_attempts == FAILED_ATTEMPTS_EARLY_NOTICE:
+            return "aviso"
+        return None
+
+    def _bloquea(self, ahora: datetime, hasta: datetime) -> None:
+        self._locked_until = hasta
+        self._add_domain_event(
+            AccountLockedEvent(
+                user_id=str(self.id.value),
+                locked_until=hasta,
+                failed_attempts=self._failed_login_attempts,
+                locked_at=ahora,
             )
-            # La hora siguiente empieza al acabar el bloqueo, y a cero: sin esto, un
-            # solo fallo al acabar lo volvía a bloquear otros 30 minutos (revisor)
-            self._failed_login_attempts = 0
-            self._failed_login_window_started_at = locked_until
+        )
 
     def is_locked(self, ahora: datetime | None = None) -> bool:
         """
@@ -1216,7 +1252,8 @@ class User:
             >>> user.failed_login_attempts
             0
         """
-        if not self.is_locked() and self.failed_login_attempts == 0:
+        # Solo una cuenta bloqueada: un contador viejo de fallos no es un bloqueo
+        if not self.is_locked():
             raise ValueError("La cuenta no está bloqueada")
 
         now = datetime.now()
@@ -1227,6 +1264,8 @@ class User:
         self._failed_login_attempts = 0
         self._locked_until = None
         self._failed_login_window_started_at = None
+        self._failed_login_day_attempts = 0
+        self._failed_login_day_window_started_at = None
         self._updated_at = now
 
         # Emitir evento de desbloqueo
@@ -1239,32 +1278,6 @@ class User:
                 previous_failed_attempts=old_failed_attempts,
             )
         )
-
-    def reset_failed_attempts(self) -> None:
-        """
-        Resetea el contador de intentos fallidos tras un login exitoso.
-
-        Este método debe llamarse cuando:
-        - El usuario hace login exitosamente
-        - Se quiere limpiar el contador sin desbloquear (casos especiales)
-
-        Post-Condiciones:
-            - failed_login_attempts = 0
-            - locked_until permanece sin cambios (si existe, se mantendrá hasta expirar)
-
-        Security:
-            - Solo resetea contador, NO desbloquea la cuenta
-            - Si la cuenta está bloqueada, permanece bloqueada hasta expiración o unlock manual
-
-        Ejemplo:
-            >>> # Asumiendo que ya hay intentos fallidos registrados (record_failed_login())
-            >>> user.reset_failed_attempts()
-            >>> user.failed_login_attempts
-            0
-        """
-        if self.failed_login_attempts > 0:
-            self._failed_login_attempts = 0
-            self._updated_at = datetime.now()
 
     def set_is_admin(self, is_admin: bool) -> None:
         """Concede o revoca privilegios de administrador (solo desde el panel de admin)."""

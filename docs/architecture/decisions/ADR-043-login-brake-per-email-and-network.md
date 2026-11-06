@@ -33,19 +33,23 @@ IP arrives from Cloudflare (ADR-041), and since 2.50 devices are checked by id
    - Its own 10 failures remove that pass for 30 minutes, so a stolen cookie cannot
      guess passwords without a limit.
    - An id from another account, a revoked device or a made-up id gives no pass.
-3. **The account backstop** stays in the `users` table. It counts failures from all
-   networks: 50 in one hour lock the account for 30 minutes, for unknown devices only.
-   When it locks, a new hour starts at zero once the lock ends. A correct password,
-   and a Google sign-in, no longer reset it: the owner cannot erase a distributed attack.
+3. **The account backstop** stays in the `users` table, for unknown devices only. It
+   counts failures from all networks: the 25th in an hour emails the owner, 50 in an
+   hour lock for 30 minutes, and 150 in 24 hours lock for 24 hours (the slow attack).
+   After a lock, the next failure starts a new window. A correct password, and a
+   Google sign-in, never reset it: the owner cannot erase a distributed attack.
 4. **The per-network ceiling** (30 failures per minute, any email) moves into the use
-   case, so a trusted device is not stopped by an attacker on the same network.
+   case, so a trusted device is not stopped by an attacker on the same network. Without
+   a device cookie, the memory checks run before any database query.
 5. **Google sign-in is never stopped by the password brakes**: Google proves who it is,
    and a Google-only account has no right password to defend itself with.
 6. **Email to the owner** when a network is locked for their account, or the backstop
    trips: one per failure (the backstop first).
    - Only to a confirmed email. At most one per hour per account, reserved with the
-     user row locked before sending, and at most 20 per hour app-wide, to protect the
-     mail quota that verification and password reset share. In the background.
+     user row locked before sending. App-wide, network notices at most 20 an hour and
+     30 a day; the backstop's own (25th failure, 50/hour, 150/day) have 10 a day of
+     their own. That keeps over half of the daily mail quota (100) for verification and
+     password reset. In the background.
    - It says the country, that they can still sign in from their devices, and links
      to changing the password.
 7. **Same answers for an unknown email:** the same 401, 423 and 429, the same bcrypt
@@ -58,7 +62,7 @@ IP arrives from Cloudflare (ADR-041), and since 2.50 devices are checked by id
 | Attacker | Guesses against one account |
 |---|---|
 | One network | 10 per 30 min (5 per minute until then) |
-| Many networks | 50 per hour in total, then only trusted devices for 30 min |
+| Many networks | 50 per hour, 150 per day, then only trusted devices (30 min / 24 h) |
 | A stolen trusted-device cookie | 10 per 30 min, then it counts as its network |
 
 ## Consequences
@@ -68,11 +72,15 @@ IP arrives from Cloudflare (ADR-041), and since 2.50 devices are checked by id
   club's shared wifi with the attacker inside, if the owner signs in from their device.
 
 **Negative / residual risk:**
-- **The per-network state lives in memory** (capped at 50,000 pairs per table, old
-  ones first out), like the other limits. One process; a restart resets it (at most
+- **The per-network state lives in memory** (capped at 50,000 pairs per table, about
+  150 MB; live locks are never evicted), like the other limits. An attacker who floods
+  it can push out partial failure counts; the backstop still bounds them. One process; a restart resets it (at most
   another 10 guesses per network). Several instances would need a shared store.
-- **Without the real IP** (no Cloudflare secret), every request is one network. A
-  missing `ENVIRONMENT` no longer lets the caller pick its network (`X-Test-Client-ID`).
+- **Without the real IP** (no Cloudflare secret), every request is one network. Only
+  `development` and the tests let the caller pick its network (`X-Test-Client-ID`).
+- **The route's 120 requests per minute per network** (raised from 60; it protects the
+  CPU) still applies to everyone: an attacker on the owner's network can keep that
+  network at 429 while the attack lasts.
 - **Safari without the device cookie** (cleared, or capped at 7 days) is an unknown
   device: a distributed attack can keep it out for 30 minutes at a time.
 - **After 50 distributed failures** an existing email answers 423 from a new network and

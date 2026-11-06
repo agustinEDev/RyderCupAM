@@ -412,11 +412,8 @@ class LoginRequestDTO(BaseModel):
         max_length=2,
         description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
-    red: str | None = Field(
-        default=None,
-        max_length=100,
-        description="La red del intento, la misma clave que los límites por red (BE #732)",
-    )
+    # La pone la ruta (la clave de red de los límites, BE #732): fuera del esquema
+    red: SkipJsonSchema[str | None] = Field(default=None, max_length=100)
 
 
 class AvisoDeFallosRequestDTO(BaseModel):
@@ -427,8 +424,9 @@ class AvisoDeFallosRequestDTO(BaseModel):
     nombre: str = Field(..., max_length=100)
     verificado: bool
     country_code: str | None = Field(default=None, max_length=2)
-    # «red»: una red quedó bloqueada para la cuenta; «respaldo»: saltó el de todas
-    motivo: Literal["red", "respaldo"]
+    # «red»: una red quedó bloqueada para la cuenta; «aviso»: 25 fallos en la hora
+    # (sin bloqueo); «respaldo»: 50 en la hora; «dia»: 150 en 24 horas
+    motivo: Literal["red", "aviso", "respaldo", "dia"]
 
     def toca_avisar(self) -> bool:
         """Nunca a un correo sin confirmar: quizá no es suyo."""
