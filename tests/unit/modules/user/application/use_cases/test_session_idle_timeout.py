@@ -35,9 +35,6 @@ from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
-from tests.unit.modules.user.application.use_cases._registro_falso import (
-    registro_de_dispositivo_falso,
-)
 
 JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.movil"
 
@@ -103,7 +100,7 @@ class TestRefrescarSegunElUso:
         await uow.refresh_tokens.save(
             RefreshToken.create(user.id, JWT, device_id=dispositivo.id if dispositivo else None)
         )
-        caso = RefreshAccessTokenUseCase(uow, token_service, registro_de_dispositivo_falso())
+        caso = RefreshAccessTokenUseCase(uow, token_service)
         return await caso.execute(RefreshAccessTokenRequestDTO(), JWT)
 
     async def test_r1_usado_hace_una_hora_se_refresca(self, user, token_service):
@@ -124,12 +121,13 @@ class TestRefrescarSegunElUso:
         assert rechazo.value.motivo is RefreshRejection.SESSION_IDLE
         assert (await uow.refresh_tokens.find_by_token_hash(JWT)).revoked is True
 
-    async def test_r3_un_token_sin_dispositivo_se_refresca(self, user, token_service):
+    async def test_r3_un_token_sin_dispositivo_se_rechaza(self, user, token_service):
+        """Desde BE #738 no queda ninguno vivo: un token sin dispositivo se rechaza."""
         uow = InMemoryUnitOfWork()
 
-        respuesta = await self._refresca(uow, token_service, user, None)
-
-        assert respuesta is not None
+        with pytest.raises(RefreshRejectedError) as rechazo:
+            await self._refresca(uow, token_service, user, None)
+        assert rechazo.value.motivo is RefreshRejection.REFRESH_TOKEN_INVALID
 
     async def test_r4_refrescar_cuenta_como_uso_del_dispositivo_del_token(
         self, user, token_service
@@ -190,8 +188,8 @@ class TestRefrescarSegunElUso:
         await uow.refresh_tokens.save(token)
 
         with pytest.raises(RefreshRejectedError) as rechazo:
-            await RefreshAccessTokenUseCase(
-                uow, token_service, registro_de_dispositivo_falso()
-            ).execute(RefreshAccessTokenRequestDTO(), JWT)
+            await RefreshAccessTokenUseCase(uow, token_service).execute(
+                RefreshAccessTokenRequestDTO(), JWT
+            )
 
         assert rechazo.value.motivo is motivo

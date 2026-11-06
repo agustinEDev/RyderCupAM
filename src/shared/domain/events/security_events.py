@@ -409,6 +409,67 @@ class AccountUnlockedAuditEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class AccountDeactivatedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador desactivó una cuenta y cerró sus sesiones (BE #744).
+
+    `user_id` es el administrador; `deactivated_user_id`, la cuenta.
+    """
+
+    deactivated_user_id: str = ""
+    devices_revoked: int = 0
+    tokens_revoked: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: dejar a alguien fuera de su cuenta es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con los campos de la desactivación."""
+        base = super().to_dict()
+        base.update(
+            {
+                "deactivated_user_id": self.deactivated_user_id,
+                "devices_revoked": self.devices_revoked,
+                "tokens_revoked": self.tokens_revoked,
+            }
+        )
+        return base
+
+
+@dataclass(frozen=True)
+class RefreshRejectedAuditEvent(SecurityAuditEvent):
+    """
+    Un refresco rechazado, con su motivo exacto (BE #733).
+
+    Al cliente solo le llega SESSION_ENDED o SESSION_REJECTED: el motivo, que dice
+    el estado de la cuenta, se queda aquí para investigar.
+    """
+
+    reason: str = ""
+    rejected: bool = False
+
+    def __post_init__(self):
+        """Validación y severidad: un rechazo es MEDIUM; el final normal, LOW."""
+        super().__post_init__()
+        object.__setattr__(
+            self, "severity", SecuritySeverity.MEDIUM if self.rejected else SecuritySeverity.LOW
+        )
+
+    @property
+    def is_failure(self) -> bool:
+        """Un rechazo cuenta como fallo (rastro en WARNING); el final normal, no."""
+        return self.rejected
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con el motivo."""
+        base = super().to_dict()
+        base.update({"reason": self.reason, "rejected": self.rejected})
+        return base
+
+
+@dataclass(frozen=True)
 class AccessDeniedEvent(SecurityAuditEvent):
     """
     Evento de acceso denegado (HTTP 403).

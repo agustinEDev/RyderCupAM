@@ -88,7 +88,6 @@ def register_device_use_case():
         device_id="550e8400-e29b-41d4-a716-446655440099",
         is_new_device=True,
         message="New device registered",
-        set_device_cookie=True,
     )
     return mock
 
@@ -204,7 +203,6 @@ class TestGoogleLoginUseCaseAutoRegister:
         response = await use_case.execute(login_request)
 
         assert response.device_id == "550e8400-e29b-41d4-a716-446655440099"
-        assert response.should_set_device_cookie is True
         register_device_use_case.execute.assert_called_once()
 
 
@@ -439,9 +437,7 @@ class TestGoogleLoginUseCaseTokenGeneration:
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         )
 
-        response = await use_case.execute(request)
-
-        assert response.should_set_device_cookie is True
+        await use_case.execute(request)
         register_device_use_case.execute.assert_awaited_once()
         call_kwargs = register_device_use_case.execute.call_args.args[0]
         assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
@@ -547,7 +543,6 @@ class TestGoogleLoginNuevoInicio:
             device_id="550e8400-e29b-41d4-a716-446655440099",
             is_new_device=False,
             message="Dispositivo actualizado",
-            set_device_cookie=not por_su_cookie,
             recognized_by_cookie=por_su_cookie,
         )
         aviso = AsyncMock()

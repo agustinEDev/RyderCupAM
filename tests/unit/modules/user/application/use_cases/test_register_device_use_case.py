@@ -63,8 +63,8 @@ class TestRegisterDeviceUseCase:
         Then: Se actualiza last_used_at y retorna is_new_device=False (v2.0.4)
 
         Cookie-based identification (v2.0.4):
-        - Primera vez: Sin cookie → crea dispositivo, set_device_cookie=True
-        - Segunda vez: Con cookie → actualiza dispositivo, set_device_cookie=False
+        - Primera vez: Sin cookie → crea dispositivo, sin reconocerlo por la cookie
+        - Segunda vez: Con cookie → actualiza dispositivo, reconocido por la cookie
         """
         # Arrange
         use_case = RegisterDeviceUseCase(uow)
@@ -92,9 +92,9 @@ class TestRegisterDeviceUseCase:
 
         # Assert
         assert response1.is_new_device is True
-        assert response1.set_device_cookie is True  # Debe setear cookie
+        assert response1.recognized_by_cookie is False
         assert response2.is_new_device is False
-        assert response2.set_device_cookie is False  # Cookie ya existe
+        assert response2.recognized_by_cookie is True
         assert response1.device_id == response2.device_id
         assert "Dispositivo actualizado" in response2.message
 

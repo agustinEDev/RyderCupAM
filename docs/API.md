@@ -250,7 +250,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 - `token_type` - "bearer"
 - `user` - User data (see User Object in Authentication section, includes `auth_providers` and `has_password`)
 - `is_new_user` (bool) - True if user was auto-registered (frontend should redirect to "Complete Profile")
-- `device_id`, `should_set_device_cookie` - Device registration info
+- `device_id` - The session's device (always present; the device cookie is set on every login and refresh)
 
 **httpOnly Cookies set:** `access_token` (15 min), `refresh_token` (7 days), `csrf_token` (15 min), `device_id` (1 year, if new device)
 

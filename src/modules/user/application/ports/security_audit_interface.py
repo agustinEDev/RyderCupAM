@@ -43,6 +43,20 @@ class ISecurityAuditLogger(ABC):
         """
 
     @abstractmethod
+    def log_account_deactivated(
+        self, user_id: str, deactivated_user_id: str, devices_revoked: int, tokens_revoked: int
+    ) -> None:
+        """Deja constancia de que un administrador desactivó una cuenta y cerró sus
+        sesiones (BE #744).
+
+        Args:
+            user_id: ID del administrador
+            deactivated_user_id: ID de la cuenta desactivada
+            devices_revoked: Dispositivos revocados
+            tokens_revoked: Sesiones (tokens de refresco) revocadas
+        """
+
+    @abstractmethod
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:

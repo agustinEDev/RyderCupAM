@@ -110,8 +110,7 @@ async def google_login(
     set_csrf_cookie(response, login_response.csrf_token)
 
     # Siempre: la renueva y deja este dispositivo delante (BE #737)
-    if login_response.device_id:
-        pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
+    pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     return login_response
 

@@ -68,9 +68,12 @@ from src.modules.user.application.use_cases.logout_user_use_case import (
 )
 from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
+    SESSION_ENDED,
+    SESSION_REJECTED,
     RefreshAccessTokenUseCase,
     RefreshRejectedError,
     RefreshRejection,
+    codigo_publico,
 )
 from src.modules.user.application.use_cases.register_user_use_case import (
     RegisterUserUseCase,
@@ -315,8 +318,7 @@ async def login_user(
 
     # La cookie del dispositivo, siempre: renovarla la mantiene viva (Safari
     # recorta a 7 días las de una API en otra dirección) y deja este delante (BE #737)
-    if login_response.device_id:
-        pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
+    pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
@@ -447,27 +449,37 @@ async def logout_user(
     return logout_response
 
 
-# Los textos del 401 del refresco, los de siempre; el motivo va en `error_code`
-_TEXTOS_DEL_REFRESCO = {
-    motivo.value: (
-        "Refresh token no proporcionado. Por favor, inicia sesión nuevamente."
-        if motivo is RefreshRejection.REFRESH_TOKEN_MISSING
-        else "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente."
-    )
-    for motivo in RefreshRejection
-}
+# El texto del 401 del refresco: el mismo para los dos códigos públicos (BE #733),
+# para no decir con el texto lo que el código ya no dice
+_TEXTOS_DEL_REFRESCO = dict.fromkeys(
+    (SESSION_ENDED, SESSION_REJECTED),
+    "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
+)
 
 
-def _refresco_rechazado(motivo: RefreshRejection) -> JSONResponse:
+def _refresco_rechazado(motivo: RefreshRejection, request: Request) -> JSONResponse:
     """
-    El 401 del refresco: texto fijo y el motivo en `error_code` (FE #1042).
+    El 401 del refresco: texto fijo y en `error_code` solo SESSION_ENDED (el final
+    normal) o SESSION_REJECTED (BE #733). El motivo exacto va al log de seguridad:
+    al cliente le decía si la cuenta se borró o si cambió la contraseña.
 
     Borra la cookie de refresh si llegó una: un token que ya no vale no se vuelve a
     mandar, y el siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez
     de un REVOKED que alertaría en cada visita (/code-review, 5 nov).
     """
+    if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING:
+        # Sin cookie es cualquier visitante anónimo: no se apunta, solo haría ruido
+        get_security_logger().log_refresh_rejected(
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            )
+            or "unknown",
+            user_agent=get_user_agent(request) or "unknown",
+            reason=motivo.value,
+            rejected=codigo_publico(motivo) == SESSION_REJECTED,
+        )
     respuesta = respuesta_con_codigo(
-        status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, motivo.value
+        status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, codigo_publico(motivo)
     )
     # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
     # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
@@ -487,10 +499,9 @@ def _refresco_rechazado(motivo: RefreshRejection) -> JSONResponse:
     responses={
         401: {
             "description": (
-                "La sesión no se renueva. `error_code` dice por qué: REFRESH_TOKEN_MISSING, "
-                "REFRESH_TOKEN_EXPIRED y SESSION_IDLE son el final normal; "
-                "REFRESH_TOKEN_INVALID, REFRESH_TOKEN_NOT_FOUND, REFRESH_TOKEN_REVOKED y "
-                "USER_NOT_FOUND, un rechazo. Borra la cookie de refresh."
+                "La sesión no se renueva. `error_code`: SESSION_ENDED, el final normal "
+                "(sin sesión, caducada o 24 h sin uso), o SESSION_REJECTED, un rechazo "
+                "(sin decir por qué). Borra la cookie de refresh."
             ),
         }
     },
@@ -550,7 +561,7 @@ async def refresh_access_token(
     refresh_token_jwt = request.cookies.get(refresh_cookie_name)
 
     if not refresh_token_jwt:
-        return _refresco_rechazado(RefreshRejection.REFRESH_TOKEN_MISSING)
+        return _refresco_rechazado(RefreshRejection.REFRESH_TOKEN_MISSING, request)
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
@@ -571,7 +582,7 @@ async def refresh_access_token(
     except RefreshRejectedError as rechazo:
         # Refresh token inválido, expirado o revocado: el mismo texto de siempre, y el
         # motivo para que el front distinga el final normal de un rechazo (FE #1042)
-        return _refresco_rechazado(rechazo.motivo)
+        return _refresco_rechazado(rechazo.motivo, request)
 
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
     set_auth_cookie(response, refresh_response.access_token)
@@ -581,8 +592,7 @@ async def refresh_access_token(
 
     # La cookie del dispositivo se renueva en cada refresco (BE #737): sin esto
     # caducaba a los 7 días en Safari y la app creía que el dispositivo estaba revocado
-    if refresh_response.device_id:
-        pon_la_cookie_de_dispositivo(response, refresh_response.device_id, request)
+    pon_la_cookie_de_dispositivo(response, refresh_response.device_id, request)
 
     # ⚠️ LEGACY: Retornar access token en response body para compatibilidad
     # TODO (v2.0.0): BREAKING CHANGE - Eliminar campo access_token del response body
@@ -711,6 +721,8 @@ async def verify_email(
             token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
             user=user_dto,
             email_verification_required=False,
+            # La sesión que abre verificar el correo también tiene su dispositivo
+            device_id=sesion.device_id,
         )
     except HTTPException:
         raise

@@ -284,7 +284,6 @@ async def test_login_success_rereads_before_the_device_and_saves_nothing_there(e
         registro.append("dispositivo")
         return SimpleNamespace(
             device_id=str(uuid4()),
-            set_device_cookie=False,
             is_new_device=False,
             recognized_by_cookie=True,
         )

@@ -140,7 +140,7 @@ class GoogleLoginUseCase:
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
-        """Register device and return (device_id, device_id_str, should_set_cookie, is_new)."""
+        """Register device and return (device_id, device_id_str, is_new)."""
         # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
@@ -154,7 +154,6 @@ class GoogleLoginUseCase:
         return (
             UserDeviceId.from_string(device_response.device_id),
             device_response.device_id,
-            device_response.set_device_cookie,
             # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
             device_response.is_new_device or not device_response.recognized_by_cookie,
         )
@@ -197,7 +196,7 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        device_id, device_id_str, should_set_device_cookie, es_nuevo = await self._register_device(
+        device_id, device_id_str, es_nuevo = await self._register_device(
             request, str(user.id.value)
         )
 
@@ -251,5 +250,4 @@ class GoogleLoginUseCase:
             user=UserResponseDTO.model_validate(user),
             is_new_user=is_new_user,
             device_id=device_id_str,
-            should_set_device_cookie=should_set_device_cookie,
         )

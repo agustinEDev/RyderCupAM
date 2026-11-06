@@ -178,16 +178,6 @@ class RefreshToken:
         # 3. Verificar que el token coincida con el hash
         return self._token_hash.verify(token)
 
-    def ata_al_dispositivo(self, device_id: UserDeviceId) -> None:
-        """
-        Ata al dispositivo un token que no tenía ninguno (BE #737).
-
-        Los tokens de antes de los dispositivos no eran de ninguno, y revocar el
-        dispositivo no los cerraba. Un token que ya tiene dispositivo no cambia.
-        """
-        if self._device_id is None:
-            self._device_id = device_id
-
     def revoke(self) -> None:
         """
         Revoca este refresh token.

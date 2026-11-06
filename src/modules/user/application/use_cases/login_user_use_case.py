@@ -458,7 +458,6 @@ class LoginUserUseCase:
         # Obtener device_id para asociar con refresh token
         device_id = UserDeviceId.from_string(device_response.device_id)
         device_id_str = device_response.device_id
-        should_set_device_cookie = device_response.set_device_cookie
         # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
         es_nuevo = device_response.is_new_device or not device_response.recognized_by_cookie
 
@@ -527,5 +526,4 @@ class LoginUserUseCase:
             email_verification_required=not user.is_email_verified(),
             # Device Fingerprinting (v2.0.4): Cookie-based identification
             device_id=device_id_str,
-            should_set_device_cookie=should_set_device_cookie,
         )

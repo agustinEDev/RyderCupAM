@@ -40,6 +40,16 @@ class SecurityAuditLogger(ISecurityAuditLogger):
             previous_failed_attempts=previous_failed_attempts,
         )
 
+    def log_account_deactivated(
+        self, user_id: str, deactivated_user_id: str, devices_revoked: int, tokens_revoked: int
+    ) -> None:
+        get_security_logger().log_account_deactivated(
+            user_id=user_id,
+            deactivated_user_id=deactivated_user_id,
+            devices_revoked=devices_revoked,
+            tokens_revoked=tokens_revoked,
+        )
+
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:
