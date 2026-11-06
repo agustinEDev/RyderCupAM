@@ -113,6 +113,7 @@ from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.security.authorization import require_admin
 from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
@@ -1050,10 +1051,9 @@ async def unlock_account(
     - Emite AccountUnlockedEvent para auditoría
 
     Security (OWASP A01, A09):
-    - Solo Admin puede ejecutar este endpoint
+    - Solo Admin puede ejecutar este endpoint (403 al resto, hotfix 2.50.1)
     - Requiere autenticación JWT válida
     - Registra quién desbloqueó en evento de auditoría
-    - TODO: Verificar rol Admin cuando se implemente sistema de roles (v2.1.0)
 
     Args:
         request: Request de FastAPI
@@ -1066,13 +1066,13 @@ async def unlock_account(
 
     Raises:
         HTTPException 401: Si no está autenticado
-        HTTPException 403: Si no es Admin (cuando se implemente verificación de rol)
+        HTTPException 403: Si no es Admin
         HTTPException 404: Si el usuario no existe
         HTTPException 400: Si la cuenta no está bloqueada
     """
-    # TODO (v2.1.0): Verificar que current_user tiene rol ADMIN
-    # Por ahora, cualquier usuario autenticado puede desbloquear (MVP)
-    # TODO: When roles are implemented, restrict to ADMIN only
+    # Solo administradores (hotfix 2.50.1): con solo pedir sesión, cualquiera podía
+    # quitar el bloqueo de otra cuenta y seguir probando contraseñas (OWASP A01/A07)
+    require_admin(current_user)
 
     # Establecer unlocked_by_user_id del usuario autenticado
     unlock_data.unlocked_by_user_id = str(current_user.id)
