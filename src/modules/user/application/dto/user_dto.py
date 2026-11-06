@@ -746,21 +746,14 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
 
-    Device Fingerprinting (v2.0.4):
-    - device_id_from_cookie: ID del dispositivo desde cookie httpOnly (primary identifier)
+    El dispositivo es el del refresh token (BE #737): la cookie del dispositivo no
+    hace falta aquí desde BE #738
     """
 
     # El refresh token se leerá desde la cookie httpOnly, no del body
     # Security context (opcional, proporcionado por API layer)
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
-    # Device Fingerprinting (v2.0.4): Cookie-based identification
-    device_id_from_cookie: str | None = Field(
-        None,
-        min_length=36,
-        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
-        description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
-    )
     installed_app: bool = Field(
         default=False,
         description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",

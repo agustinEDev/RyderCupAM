@@ -61,6 +61,10 @@ class SecurityAuditEvent(DomainEvent, ABC):
         """Tipo de agregado (Security para eventos de seguridad)"""
         return "Security"
 
+    def resumen(self, user_info: str) -> str | None:
+        """La línea del log, si el evento la sabe dar (BE #732, #733, #744)."""
+        return None
+
     @property
     def is_failure(self) -> bool:
         """
@@ -517,6 +521,29 @@ class AccountReactivatedAuditEvent(SecurityAuditEvent):
         base.update(
             {"reactivated_user_id": self.reactivated_user_id, "tokens_revoked": self.tokens_revoked}
         )
+        return base
+
+
+@dataclass(frozen=True)
+class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
+    """Un Google quedó vinculado a una cuenta: da acceso a ella (revisión del registro)."""
+
+    automatic: bool = False
+
+    def __post_init__(self):
+        """Validación y severidad: un acceso nuevo a la cuenta es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        como = "automatically, by email" if self.automatic else "by the user"
+        return f"GOOGLE LINKED | {user_info} | {como}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con cómo se vinculó."""
+        base = super().to_dict()
+        base.update({"automatic": self.automatic})
         return base
 
 

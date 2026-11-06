@@ -25,6 +25,7 @@ from ...domain.events.security_events import (
     AccountReactivatedAuditEvent,
     AccountUnlockedAuditEvent,
     EmailChangedEvent,
+    GoogleAccountLinkedAuditEvent,
     LoginAttemptEvent,
     LogoutEvent,
     PasswordChangedEvent,
@@ -211,9 +212,9 @@ class SecurityLogger:
         user_info = f"User {event.user_id}" if event.user_id else "Anonymous"
 
         # Los eventos que saben resumirse (los de BE #732, #733 y #744)
-        resumen = getattr(event, "resumen", None)
+        resumen = event.resumen(user_info)
         if resumen is not None:
-            return resumen(user_info)
+            return resumen
 
         # Mensajes específicos por tipo de evento
         if isinstance(event, LoginAttemptEvent):
@@ -462,6 +463,20 @@ class SecurityLogger:
                 deactivated_user_id=deactivated_user_id,
                 devices_revoked=devices_revoked,
                 tokens_revoked=tokens_revoked,
+            )
+        )
+
+    def log_google_account_linked(
+        self,
+        user_id: str,
+        automatic: bool,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un Google vinculado a una cuenta (automático por correo o no)."""
+        self.log_security_event(
+            GoogleAccountLinkedAuditEvent(
+                user_id=user_id, ip_address=ip_address, user_agent=user_agent, automatic=automatic
             )
         )
 

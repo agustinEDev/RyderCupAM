@@ -1,6 +1,7 @@
 """Caso de Uso: (Des)activar una cuenta de usuario (panel de administración)."""
 
 import logging
+from collections.abc import Callable
 
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
@@ -55,14 +56,16 @@ class AdminSetUserActiveUseCase:
         reactivada: int | None = None
 
         async with self._uow:
-            user = await self._uow.users.find_by_id(user_id)
+            # Con la fila bloqueada: un login a la vez espera a la desactivación
+            user = await self._uow.users.find_by_id_for_update(user_id)
             if not user:
                 raise UserNotFoundError(f"User not found: {user_id_str}")
 
             if is_active:
                 if not user.is_active:
                     user.reactivate(reactivated_by_user_id=actor_user_id)
-                    reactivada = await self._uow.refresh_tokens.revoke_all_for_user(user_id)
+                    # Lo que se colara (un login a la vez que la desactivación), fuera
+                    reactivada = (await self._revoca_sus_sesiones(user_id))[1]
             elif user.is_active:
                 user.deactivate(deactivated_by_user_id=actor_user_id)
                 revocados = await self._revoca_sus_sesiones(user_id)
@@ -100,7 +103,7 @@ class AdminSetUserActiveUseCase:
         return len(dispositivos), tokens
 
     @staticmethod
-    def _apunta(registra, **datos) -> None:
+    def _apunta(registra: Callable[..., None], **datos: object) -> None:
         """Al log de seguridad, ya guardada: si el log falla, el cambio vale igual."""
         try:
             registra(**datos)

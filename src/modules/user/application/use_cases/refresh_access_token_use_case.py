@@ -5,7 +5,7 @@ Caso de uso para renovar el access token usando un refresh token válido.
 Implementa el patrón Session Timeout (OWASP A01/A02 - v1.8.0).
 Security Logging (v1.8.0): Registra uso de refresh tokens.
 CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
-Device Fingerprinting (v1.13.0): Registra/actualiza dispositivo en cada refresh.
+Dispositivos (BE #737, #738): usa y actualiza el dispositivo de su refresh token.
 """
 
 from enum import StrEnum
@@ -27,15 +27,14 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
-from src.shared.infrastructure.logging.security_logger import SecurityLogger, get_security_logger
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RefreshRejection(StrEnum):
     """
-    Por qué no se renueva la sesión: el `error_code` del 401 (FE #1042).
+    Por qué no se renueva la sesión: el motivo exacto, para el log de seguridad.
 
-    Le deja al front separar el final normal de una sesión de un rechazo raro, y
-    avisar a Sentry solo de lo segundo.
+    Al cliente solo le llega su código público (`codigo_publico`, BE #733).
     """
 
     # El final normal
@@ -149,9 +148,6 @@ class RefreshAccessTokenUseCase:
             >>> response = await use_case.execute(request, "eyJ...")  # o RefreshRejectedError
             >>> print(response.access_token)  # Nuevo token válido por 15 min
         """
-        # Obtener security logger
-        security_logger = get_security_logger()
-
         # 1. Verificar que el refresh token JWT sea válido (firma + expiración)
         payload = self._token_service.verify_refresh_token(refresh_token_jwt)
 
@@ -175,7 +171,7 @@ class RefreshAccessTokenUseCase:
         # Nota: find_by_token_hash espera el JWT token original, NO el hash
         # El repositorio se encarga de hashear internamente
         try:
-            return await self._renueva(request, refresh_token_jwt, user_id, security_logger)
+            return await self._renueva(request, refresh_token_jwt, user_id)
         except RefreshRejectedError as rechazo:
             # Con el usuario del token, para el log de seguridad (revisor de la PR)
             rechazo.user_id = rechazo.user_id or user_id_str
@@ -186,9 +182,9 @@ class RefreshAccessTokenUseCase:
         request: RefreshAccessTokenRequestDTO,
         refresh_token_jwt: str,
         user_id: UserId,
-        security_logger: SecurityLogger,
     ) -> RefreshAccessTokenResponseDTO:
         """Del token en la BD en adelante: la cuenta, el token, el dispositivo y el acceso."""
+        security_logger = get_security_logger()
         user_id_str = str(user_id.value)
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
@@ -219,6 +215,13 @@ class RefreshAccessTokenUseCase:
         dispositivo = await self._dispositivo_del_token(refresh_token_entity)
         if dispositivo is None:
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_INVALID)
+        if not dispositivo.is_active:
+            # Un token que se coló sin revocar (una carrera con la revocación): no da
+            # acceso a un dispositivo revocado; se revoca (/code-review)
+            async with self._uow:
+                refresh_token_entity.revoke()
+                await self._uow.refresh_tokens.save(refresh_token_entity)
+            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
         # La sesión de este dispositivo caduca tras 24 h sin usarse (BE #376, OWASP
         # A07). Se revoca: el token no vuelve a servir aunque llegue de otra forma
         if dispositivo.is_idle():

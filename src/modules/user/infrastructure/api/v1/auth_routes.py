@@ -473,15 +473,20 @@ def _refresco_rechazado(
     """
     codigo = codigo_publico(motivo)
     if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING:
-        # Sin cookie es cualquier visitante anónimo: no se apunta, solo haría ruido
+        # Sin cookie es cualquier visitante anónimo: no se apunta, solo haría ruido.
+        # El log nunca cambia la respuesta: un fallo suyo daría un 500 en vez del 401
+        # que borra la cookie (/code-review)
         ip_address, user_agent = contexto
-        get_security_logger().log_refresh_rejected(
-            ip_address=ip_address or "unknown",
-            user_agent=user_agent or "unknown",
-            reason=motivo.value,
-            rejected=codigo == SESSION_REJECTED,
-            user_id=user_id,
-        )
+        try:
+            get_security_logger().log_refresh_rejected(
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
+                reason=motivo.value,
+                rejected=codigo == SESSION_REJECTED,
+                user_id=user_id,
+            )
+        except Exception as error:
+            logger.error("Refresh rejection audit event failed: %s", type(error).__name__)
     respuesta = respuesta_con_codigo(status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, codigo)
     # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
     # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
@@ -556,7 +561,7 @@ async def refresh_access_token(
         RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
 
     Returns (401):
-        `detail` fijo y `error_code` con el motivo (RefreshRejection); borra la cookie
+        `detail` fijo y `error_code` SESSION_ENDED o SESSION_REJECTED; borra la cookie
     """
     # Leer refresh token desde cookie httpOnly
     refresh_cookie_name = get_refresh_cookie_name()
@@ -567,23 +572,20 @@ async def refresh_access_token(
 
     # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
     # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
-    # Device Fingerprinting (v2.0.4): Leer y validar device_id desde cookie httpOnly
-    # SECURITY: Validar UUID para evitar ValidationError si cookie es malformada
-    device_id_cookie_name = get_device_id_cookie_name()
+    # El dispositivo es el del refresh token (BE #737, #738)
     refresh_request = RefreshAccessTokenRequestDTO(
         ip_address=get_trusted_client_ip(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         ),
         user_agent=get_user_agent(request),
-        device_id_from_cookie=ids_validos_de_la_cookie(request.cookies.get(device_id_cookie_name)),
         installed_app=es_la_app_instalada(request),
         country_code=cloudflare_client_country(request),
     )
     try:
         refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
     except RefreshRejectedError as rechazo:
-        # Refresh token inválido, expirado o revocado: el mismo texto de siempre, y el
-        # motivo para que el front distinga el final normal de un rechazo (FE #1042)
+        # El mismo texto, y el código público para que el front distinga el final
+        # normal de un rechazo (BE #733); el motivo exacto, al log de seguridad
         return _refresco_rechazado(
             rechazo.motivo,
             (refresh_request.ip_address, refresh_request.user_agent),
@@ -670,14 +672,6 @@ async def verify_email(
         user = await use_case.execute(verify_data.token)
         logger.info("Email verification successful")
 
-        # Una cuenta desactivada verifica su correo, pero no entra (BE #744, auditoría
-        # OWASP): ni sesión, ni dispositivo. La misma respuesta que el login
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This account has been deactivated. Contact an administrator.",
-            )
-
         # La sesión, como en el login (BE #737): dispositivo, tokens con su id y el
         # refresco GUARDADO. Antes no se guardaba, y a los 15 minutos el refresco daba
         # REFRESH_TOKEN_NOT_FOUND: a cada usuario nuevo le echaban
@@ -696,6 +690,13 @@ async def verify_email(
                     country_code=cloudflare_client_country(request),
                 )
             )
+        except AccountDeactivatedException as e:
+            # Una cuenta desactivada verifica su correo, pero no entra (BE #744): la
+            # misma respuesta que el login
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been deactivated. Contact an administrator.",
+            ) from e
         except Exception as e:
             # El correo YA está verificado y el enlace gastado: decir que el enlace no
             # vale le dejaba sin forma de entrar. Que entre con su contraseña

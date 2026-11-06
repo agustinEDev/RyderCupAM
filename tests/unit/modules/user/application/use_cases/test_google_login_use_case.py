@@ -19,10 +19,12 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
 )
 from src.modules.user.application.use_cases.google_login_use_case import (
+    GoogleEmailNotVerifiedError,
     GoogleLoginUseCase,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -606,3 +608,137 @@ class TestGoogleLoginCuentaDesactivada:
         aviso.avisa.assert_not_awaited()
         async with uow:
             assert await uow.refresh_tokens.find_all_by_user(user.id) == []
+
+    async def test_a_deactivated_account_found_by_email_is_not_linked_to_google(
+        self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Given: Una cuenta desactivada, sin vincular a Google, con el correo sin verificar
+        When: Alguien entra con un Google que tiene ese correo
+        Then: 403, y la cuenta queda como estaba: sin vínculo y sin verificar
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        user = User.create(
+            first_name="Baja",
+            last_name="Correo",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(user)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        caso = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=AsyncMock(),
+        )
+
+        with pytest.raises(AccountDeactivatedException):
+            await caso.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_user_info.google_user_id
+                )
+                is None
+            )
+            assert not (await uow.users.find_by_id(user.id)).email_verified
+
+
+def _sin_verificar(info: GoogleUserInfo) -> GoogleUserInfo:
+    return GoogleUserInfo(
+        google_user_id=info.google_user_id,
+        email=info.email,
+        first_name=info.first_name,
+        last_name=info.last_name,
+        email_verified=False,
+        picture_url=info.picture_url,
+    )
+
+
+@pytest.mark.asyncio
+class TestGoogleConElCorreoSinVerificar:
+    """Sin el correo verificado por Google, ni alta ni vínculo (revisión del registro)."""
+
+    async def test_it_does_not_link_an_existing_account(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta con contraseña y el correo oauth@example.com
+        When: Alguien entra con un Google de ese correo, SIN verificar por Google
+        Then: GoogleEmailNotVerifiedError y ningún vínculo: si no, cualquiera con una
+              cuenta de Google con tu dirección entraría en la tuya
+        """
+        cuenta = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+        google_oauth_service.exchange_code_for_user_info.return_value = _sin_verificar(
+            google_user_info
+        )
+
+        with pytest.raises(GoogleEmailNotVerifiedError):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_user_info.google_user_id
+                )
+                is None
+            )
+
+    async def test_it_does_not_sign_up(self, use_case, uow, google_oauth_service, google_user_info):
+        """
+        Given: Ningún usuario con ese correo
+        When: Alguien se da de alta con un Google SIN el correo verificado
+        Then: GoogleEmailNotVerifiedError y ninguna cuenta creada: no se ocupa el
+              correo de otro
+        """
+        google_oauth_service.exchange_code_for_user_info.return_value = _sin_verificar(
+            google_user_info
+        )
+
+        with pytest.raises(GoogleEmailNotVerifiedError):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert await uow.users.find_by_email(Email("oauth@example.com")) is None
+
+    async def test_an_already_linked_google_still_signs_in(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Un Google ya vinculado a su cuenta (Google lo verificó al vincularlo)
+        When: Entra y Google ahora dice que el correo no está verificado
+        Then: Entra: la cuenta ya es suya, por su id de Google
+        """
+        cuenta = User.create_from_oauth(
+            first_name="Ana", last_name="Vinculada", email_str="oauth@example.com"
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=cuenta.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id=google_user_info.google_user_id,
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = _sin_verificar(
+            google_user_info
+        )
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.user.email == "oauth@example.com"

@@ -245,3 +245,24 @@ async def test_a5_una_cuenta_desactivada_que_verifica_su_correo_no_entra(client:
     assert "refresh_token" not in r.cookies and "access_token" not in r.cookies
     verificado = (await _sql("select email_verified from users where email = :e", e=email)).scalar()
     assert verificado is True
+
+
+async def test_c5_un_log_roto_no_cambia_el_401_del_refresco(client: AsyncClient, monkeypatch):
+    """
+    Given: Una sesión cuyo token ya no existe, y el log de seguridad que falla
+    When: Refresca
+    Then: 401 SESSION_REJECTED igual, no 500: el log nunca cambia la respuesta
+    """
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    def roto(self, **kw):
+        raise RuntimeError("disco lleno")
+
+    monkeypatch.setattr(SecurityLogger, "log_refresh_rejected", roto)
+    yo = await create_authenticated_user(client, _email("roto"), CLAVE, "Ro", "To")
+    await _sql("delete from refresh_tokens where user_id = :u", u=yo["user"]["id"])
+
+    r = await _refresca(client, yo)
+
+    assert r.status_code == 401
+    assert r.json()["error_code"] == "SESSION_REJECTED"

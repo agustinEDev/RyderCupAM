@@ -28,6 +28,7 @@ from src.modules.user.application.dto.oauth_dto import (
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.use_cases.google_login_use_case import (
+    GoogleEmailNotVerifiedError,
     GoogleLoginUseCase,
 )
 from src.modules.user.application.use_cases.link_google_account_use_case import (
@@ -42,6 +43,7 @@ from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     ids_validos_de_la_cookie,
     pon_la_cookie_de_dispositivo,
 )
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     cloudflare_client_country,
     get_trusted_client_ip,
@@ -55,6 +57,14 @@ from src.shared.infrastructure.security.cookie_handler import (
 )
 
 logger = logging.getLogger(__name__)
+GOOGLE_EMAIL_NOT_VERIFIED = "GOOGLE_EMAIL_NOT_VERIFIED"
+_TEXTOS_DE_GOOGLE = {
+    GOOGLE_EMAIL_NOT_VERIFIED: (
+        "Your Google account email is not verified. Verify it with Google, or sign up "
+        "with your email and a password."
+    )
+}
+
 router = APIRouter()
 
 
@@ -90,6 +100,14 @@ async def google_login(
     # Sin 423: el bloqueo por fallos de contraseña no frena a Google (BE #732)
     try:
         login_response = await use_case.execute(login_data)
+    except GoogleEmailNotVerifiedError:
+        # Sin el correo verificado por Google, ni alta ni vínculo: con su código, para
+        # que la app diga qué hacer en su idioma
+        return respuesta_con_codigo(
+            status.HTTP_400_BAD_REQUEST,
+            _TEXTOS_DE_GOOGLE,
+            GOOGLE_EMAIL_NOT_VERIFIED,
+        )
     except AccountDeactivatedException as e:
         # La misma respuesta que el login con contraseña (BE #744)
         raise HTTPException(

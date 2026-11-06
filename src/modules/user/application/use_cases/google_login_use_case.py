@@ -45,6 +45,15 @@ from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
+class GoogleEmailNotVerifiedError(ValueError):
+    """Google no ha verificado el correo de esa cuenta: ni alta ni vínculo.
+
+    Sin esta regla, cualquiera con una cuenta de Google con tu dirección, sin
+    verificar, entraba en la tuya (el vínculo automático por correo) o te la dejaba
+    ocupada (el alta). La ruta responde 400 con GOOGLE_EMAIL_NOT_VERIFIED.
+    """
+
+
 class GoogleLoginUseCase:
     """
     Caso de uso para login/registro con Google OAuth.
@@ -91,11 +100,20 @@ class GoogleLoginUseCase:
                     raise ValueError("User associated with OAuth account not found")
                 return user, False
 
+            # Sin cuenta vinculada: un alta o un vínculo por correo. Solo con el correo
+            # verificado por Google: si no, la dirección no es necesariamente suya
+            if not google_info.email_verified:
+                raise GoogleEmailNotVerifiedError("Google email is not verified")
+
             # Buscar usuario por email
             email = Email(google_info.email)
             user = await self._uow.users.find_by_email(email)
 
             if user:
+                # Desactivada: sin vincular Google ni verificar el correo. Un login
+                # rechazado no cambia la cuenta (/code-review); execute da el 403
+                if not user.is_active:
+                    return user, False
                 return await self._auto_link_existing_user(user, google_info), False
 
             return await self._auto_register_new_user(google_info), True
@@ -113,10 +131,14 @@ class GoogleLoginUseCase:
         )
         await self._uow.oauth_accounts.save(new_oauth)
 
-        if not user.email_verified and google_info.email_verified:
+        # Google ha verificado el correo (si no, no se llega aquí)
+        if not user.email_verified:
             user.verify_email_from_oauth()
 
         await self._uow.users.save(user)
+        # Que quede rastro: un Google vinculado solo, por el correo, da acceso a la
+        # cuenta (revisión del registro con Google)
+        get_security_logger().log_google_account_linked(user_id=str(user.id.value), automatic=True)
         return user
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
