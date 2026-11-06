@@ -7,7 +7,7 @@ rastro de quién lo hizo, salvo la respuesta HTTP.
   #   caso                                         | esperado
   ----|---------------------------------------------|----------------------------------
   L1  un administrador desbloquea una cuenta        | queda en el log: quién, a quién, desde
-                                                    |   dónde y cuántos fallos llevaba
+      bloqueada por una red (BE #732)               |   dónde y cuántos fallos llevaba
   L2  falla el log                                  | el desbloqueo ya guardado responde bien
   L3  la cuenta no estaba bloqueada                 | ValueError y nada en el log
 """
@@ -16,7 +16,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from src.config.freno_del_login import FrenoDelLoginEnMemoria
 from src.modules.user.application.dto.user_dto import UnlockAccountRequestDTO
+from src.modules.user.application.ports.freno_del_login_port import origen_de_red
 from src.modules.user.application.use_cases.unlock_account_use_case import UnlockAccountUseCase
 from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -36,9 +38,12 @@ async def _escena(bloqueada=True):
         email_str="ana.l@example.com",
         plain_password="V@l1dP@ss123!",
     )
+    freno = FrenoDelLoginEnMemoria()
     if bloqueada:
+        # 10 fallos desde una red: la bloquean para Ana (y suman 10 en el respaldo)
         for _ in range(10):
             ana.record_failed_login()
+            freno.apunta_fallo("ana.l@example.com", origen_de_red("203.0.113.7"))
     async with uow:
         await uow.users.save(ana)
     auditoria = Mock()
@@ -48,7 +53,7 @@ async def _escena(bloqueada=True):
         ip_address="203.0.113.7",
         user_agent="Mozilla/5.0 admin",
     )
-    return uow, ana, auditoria, UnlockAccountUseCase(uow, auditoria), pide
+    return uow, ana, auditoria, UnlockAccountUseCase(uow, freno, auditoria), pide
 
 
 async def test_l1_el_desbloqueo_queda_en_el_log_de_seguridad():
@@ -76,15 +81,13 @@ async def test_l2_un_fallo_del_log_no_deshace_el_desbloqueo(caplog):
     When: Un administrador la desbloquea
     Then: Responde bien (ya está guardado) y el fallo queda en el log, solo su tipo
     """
-    uow, ana, auditoria, caso, pide = await _escena()
+    _uow, _ana, auditoria, caso, pide = await _escena()
     auditoria.log_account_unlocked.side_effect = RuntimeError("disco lleno: secreto")
 
     with caplog.at_level("ERROR"):
         r = await caso.execute(pide)
 
     assert r.success
-    async with uow:
-        assert not (await uow.users.find_by_id(ana.id)).is_locked()
     assert "RuntimeError" in caplog.text and "secreto" not in caplog.text
 
 

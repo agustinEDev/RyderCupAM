@@ -124,6 +124,15 @@ class UserDeviceRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_active_ids_of_user(
+        self, device_ids: list[UserDeviceId], user_id: UserId
+    ) -> list[UserDeviceId]:
+        """
+        De estos ids, los de dispositivos ACTIVOS de este usuario, en una consulta
+        (BE #732: el dispositivo fiable del login, desde los ids de la cookie).
+        """
+
+    @abstractmethod
     async def find_by_id_and_user(
         self, device_id: UserDeviceId, user_id: UserId
     ) -> UserDevice | None:

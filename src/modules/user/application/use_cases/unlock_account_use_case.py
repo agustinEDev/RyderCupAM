@@ -11,6 +11,7 @@ from src.modules.user.application.dto.user_dto import (
     UnlockAccountRequestDTO,
     UnlockAccountResponseDTO,
 )
+from src.modules.user.application.ports.freno_del_login_port import IFrenoDelLogin
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -26,8 +27,8 @@ class UnlockAccountUseCase:
 
     Responsabilidades:
     - Verificar que el usuario existe
-    - Verificar que la cuenta está bloqueada
-    - Desbloquear la cuenta (resetear failed_login_attempts y locked_until)
+    - Verificar que la cuenta está bloqueada: el respaldo, o alguna de sus redes
+    - Desbloquear la cuenta (el respaldo en la BD y las redes del freno, BE #732)
     - Dejar el desbloqueo en el log de seguridad (hotfix 2.50.1)
 
     Security (OWASP A01, A09):
@@ -40,15 +41,23 @@ class UnlockAccountUseCase:
     - La validación de rol se hace en API Layer (auth_routes.py)
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, security_audit: ISecurityAuditLogger):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        freno: IFrenoDelLogin,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso.
 
         Args:
             uow: Unit of Work para acceso a repositorios
+            freno: El freno del login por correo + red (BE #732)
             security_audit: El log de seguridad, donde queda cada desbloqueo
         """
         self._uow = uow
+        # Los bloqueos por correo + red (BE #732): también se limpian
+        self._freno = freno
         # El log de seguridad, por su puerto: un caso de uso no importa infraestructura
         self._security_audit = security_audit
 
@@ -81,14 +90,25 @@ class UnlockAccountUseCase:
             user = await self._uow.users.find_by_id_for_update(UserId(request.user_id))
             if not user:
                 raise ValueError(f"User with ID {request.user_id} not found")
-            # Desbloquear cuenta (lanza ValueError si no está bloqueada)
-            fallos = user.failed_login_attempts
-            user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
-            await self._uow.users.save(user)
+            fallos = user.failed_login_attempts_for_audit
+            email = user.email.value if user.email else None
+            # Los bloqueos de cada red para esta cuenta (BE #732): se miran sin borrar
+            # nada, y se borran solo después de guardar
+            habia_en_redes = self._freno.tiene_bloqueos(email) if email else False
+            try:
+                user.unlock(unlocked_by_user_id=request.unlocked_by_user_id)
+            except ValueError:
+                # El respaldo estaba limpio: error solo si tampoco había ninguna red
+                if not habia_en_redes:
+                    raise
+            else:
+                await self._uow.users.save(user)
             # Commit automático al salir del contexto
+        if email:
+            self._freno.olvida_la_cuenta(email)
 
-        # Al log de seguridad (hotfix 2.50.1): el AccountUnlockedEvent del dominio no
-        # lo leía nadie. Ya está guardado: si el log falla, se responde bien igual.
+        # Al log de seguridad (hotfix 2.50.1), también cuando solo había redes
+        # bloqueadas. Ya está guardado: si el log falla, se responde bien igual.
         # Solo el tipo del error, no su mensaje
         try:
             self._security_audit.log_account_unlocked(

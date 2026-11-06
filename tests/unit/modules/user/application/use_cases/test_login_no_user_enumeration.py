@@ -26,6 +26,7 @@ from unittest.mock import AsyncMock
 import bcrypt
 import pytest
 
+from src.config.freno_del_login import FrenoDelLoginEnMemoria
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases import login_user_use_case
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
@@ -61,7 +62,9 @@ def caso_de_uso():
     """Ayudante del test: caso de uso."""
     uow = InMemoryUnitOfWork()
     dispositivos = AsyncMock()
-    return uow, LoginUserUseCase(uow, JWTTokenService(), dispositivos, AsyncMock())
+    return uow, LoginUserUseCase(
+        uow, JWTTokenService(), dispositivos, AsyncMock(), FrenoDelLoginEnMemoria(), AsyncMock()
+    )
 
 
 async def _con_usuario(uow) -> User:

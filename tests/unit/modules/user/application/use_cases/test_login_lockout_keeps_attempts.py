@@ -16,30 +16,34 @@ releído. El bcrypt va antes y fuera de esa transacción: no la alarga 200 ms.
   1  contraseña mala                             | se relee con bloqueo y se suma
                                                    sobre lo RELEÍDO (5 → 6), no 0 → 1
   2  orden                                       | bcrypt antes del bloqueo
-  3  lo releído ya va por 9                      | este intento bloquea la cuenta
+  3  lo releído ya va por 49 (BE #732: el         | este intento bloquea el respaldo
+     respaldo de la cuenta, 50 en una hora)        |
   4  el usuario desaparece entre medias          | None, sin error
-  5  contraseña buena, cuenta abierta           | se relee con bloqueo y se pone a 0
-                                                   sobre lo RELEÍDO
+  5  contraseña buena, cuenta abierta           | se relee con bloqueo, y el respaldo
+                                                   NO vuelve a 0 (BE #732: suma todas
+                                                   las redes; se acaba con su hora)
   6  contraseña buena, pero otro la acaba de      | AccountLockedException: una
      bloquear (lo releído está bloqueado)          | ráfaga no cuela la buena (revisor)
   7  contraseña buena y el usuario desaparece     | None, sin error
   8  contraseña mala sobre una que otro acaba de   | se rechaza SIN contar: ni alarga
      bloquear                                      | el bloqueo ni repite el evento
-  9  contraseña buena                              | el cero se guarda DENTRO de la
-                                                   transacción bloqueada, antes de
-                                                   seguir con el dispositivo
+  9  contraseña buena                              | se relee con bloqueo ANTES de
+                                                   seguir con el dispositivo, sin
+                                                   guardar nada en esa transacción
   —  N intentos a la vez de verdad               | test de integración, aparte
 """
 
+from datetime import datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from src.config.freno_del_login import FrenoDelLoginEnMemoria
 from src.modules.user.application.dto.user_dto import LoginRequestDTO
 from src.modules.user.application.use_cases import login_user_use_case
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
-from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.entities.user import MAX_FAILED_ATTEMPTS, User
 from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
@@ -69,13 +73,23 @@ async def escena():
     return (
         uow,
         usuario,
-        LoginUserUseCase(uow, JWTTokenService(), registro_de_dispositivo_falso(), AsyncMock()),
+        LoginUserUseCase(
+            uow,
+            JWTTokenService(),
+            registro_de_dispositivo_falso(),
+            AsyncMock(),
+            FrenoDelLoginEnMemoria(),
+            AsyncMock(),
+        ),
     )
 
 
 def _releido_con(uow, usuario, intentos, registro=None):
     """Lo que devuelve la relectura bloqueada: otra copia, que otro ya cambió."""
-    copia = _rebuild_user(usuario, failed_login_attempts=intentos)
+    # Con su hora abierta: el respaldo cuenta los fallos de la última hora (BE #732)
+    copia = _rebuild_user(
+        usuario, failed_login_attempts=intentos, failed_login_window_started_at=datetime.now()
+    )
     pedidos = []
 
     async def bloqueada(user_id):
@@ -131,12 +145,12 @@ async def test_login_failure_runs_bcrypt_before_locking_row(escena, monkeypatch)
 
 async def test_login_failure_with_reread_counter_at_nine_locks_account(escena):
     """
-    Given: Lo releído va por 9 fallos
+    Given: Lo releído va por 49 fallos en la última hora
     When: Llega otra contraseña mala
-    Then: La cuenta queda bloqueada
+    Then: El respaldo de la cuenta queda bloqueado
     """
     uow, usuario, login = escena
-    _releido_con(uow, usuario, intentos=9)
+    _releido_con(uow, usuario, intentos=MAX_FAILED_ATTEMPTS - 1)
 
     with pytest.raises(AccountLockedException):
         await login.execute(LoginRequestDTO(email=EMAIL, password=MALA))
@@ -159,11 +173,12 @@ async def test_login_failure_user_deleted_meanwhile_returns_none(escena):
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=MALA)) is None
 
 
-async def test_login_success_resets_reread_counter(escena):
+async def test_login_success_rereads_and_keeps_the_backstop(escena):
     """
-    Given: Lo releído tiene fallos apuntados
+    Given: Lo releído tiene 3 fallos en la última hora
     When: Llega la contraseña buena
-    Then: El contador vuelve a cero sobre lo releído
+    Then: Se relee con bloqueo, y el respaldo sigue en 3: el dueño entrando no
+          borra los fallos de un ataque repartido (BE #732)
     """
     uow, usuario, login = escena
     copia, pedidos = _releido_con(uow, usuario, intentos=3)
@@ -171,7 +186,7 @@ async def test_login_success_resets_reread_counter(escena):
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA)) is not None
 
     assert pedidos == [usuario.id]
-    assert copia.failed_login_attempts == 0
+    assert copia.failed_login_attempts == 3
 
 
 async def test_login_success_on_account_locked_meanwhile_raises_locked(escena):
@@ -181,12 +196,15 @@ async def test_login_success_on_account_locked_meanwhile_raises_locked(escena):
     Then: AccountLockedException: no entra
     """
     uow, usuario, login = escena
-    _releido_con(uow, usuario, intentos=9)
 
-    # Lo que dejó otro intento justo antes: el décimo fallo, que la bloquea
+    # Lo que dejó otro intento justo antes: el fallo 50, que bloquea el respaldo
     async def bloqueada(_user_id):
         """Ayudante del test: bloqueada."""
-        copia = _rebuild_user(usuario, failed_login_attempts=9)
+        copia = _rebuild_user(
+            usuario,
+            failed_login_attempts=MAX_FAILED_ATTEMPTS - 1,
+            failed_login_window_started_at=datetime.now(),
+        )
         copia.record_failed_login()
         return copia
 
@@ -220,9 +238,14 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
     Then: El contador no sube
     """
     uow, usuario, login = escena
-    bloqueada = _rebuild_user(usuario, failed_login_attempts=9)
+    bloqueada = _rebuild_user(
+        usuario,
+        failed_login_attempts=MAX_FAILED_ATTEMPTS - 1,
+        failed_login_window_started_at=datetime.now(),
+    )
     bloqueada.record_failed_login()
     hasta = bloqueada.locked_until
+    fallos = bloqueada.failed_login_attempts
     eventos = len(bloqueada.get_domain_events())
 
     async def releida(_user_id):
@@ -234,16 +257,17 @@ async def test_login_failure_on_locked_account_does_not_count(escena):
     with pytest.raises(AccountLockedException):
         await login.execute(LoginRequestDTO(email=EMAIL, password=MALA))
 
-    assert bloqueada.failed_login_attempts == 10
+    assert bloqueada.failed_login_attempts == fallos
     assert bloqueada.locked_until == hasta
     assert len(bloqueada.get_domain_events()) == eventos
 
 
-async def test_login_success_saves_reset_inside_locked_transaction(escena):
+async def test_login_success_rereads_before_the_device_and_saves_nothing_there(escena):
     """
     Given: La contraseña buena
     When: Se procesa el intento
-    Then: El cero se guarda en la misma transacción que bloqueó la fila
+    Then: Relee con bloqueo antes del dispositivo, y no guarda el usuario hasta
+          después (ya no hay cero que guardar: BE #732)
     """
     uow, usuario, login = escena
     registro = []
@@ -272,4 +296,5 @@ async def test_login_success_saves_reset_inside_locked_transaction(escena):
         LoginRequestDTO(email=EMAIL, password=BUENA, user_agent="Mozilla/5.0 pytest")
     )
 
-    assert registro.index("bloqueo") < registro.index(("save", 0)) < registro.index("dispositivo")
+    guardados = [i for i, r in enumerate(registro) if isinstance(r, tuple)]
+    assert registro.index("bloqueo") < registro.index("dispositivo") < min(guardados)

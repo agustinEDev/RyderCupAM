@@ -1,0 +1,310 @@
+"""
+El respaldo del bloqueo de la cuenta (BE #732).
+
+Los fallos de cada red se frenan por su cuenta (correo + red). Este contador suma
+los de todas las redes, contra un ataque repartido entre muchas: con 50 en una
+hora, la cuenta se bloquea 30 minutos para los dispositivos desconocidos.
+
+  #   caso                                                | esperado
+  ----|----------------------------------------------------|---------------------------------
+  R1  49 fallos dentro de la hora                           | sin bloquear
+  R2  el fallo 50 dentro de la hora                         | bloqueada 30 min, con su evento
+  R3  los fallos de hace más de una hora                    | no cuentan: la ventana vuelve a 0
+  R4  el bloqueo, pasados 30 min                            | se acaba solo
+  R5  el desbloqueo del administrador                       | limpia contador, ventana y bloqueo
+  R6  el aviso de fallos                                    | se apunta su hora
+  R7  acabado el bloqueo, un fallo                          | no vuelve a bloquear: hora nueva
+  R8  al bloquear                                           | el contador se queda en 50 (para el
+                                                            |   log del desbloqueo) hasta el siguiente
+  R9  el fallo 25 de la hora                                | «aviso»: el dueño se entera sin bloquear
+  R10 150 fallos en 24 h (sin llegar a 50 en ninguna hora)  | bloqueo de 24 h, «dia»
+  R11 lo que devuelve cada fallo                            | None, «aviso», «respaldo» o «dia»
+  R13 el evento y el desbloqueo de un bloqueo de 24 h       | cuentan los fallos del día (150), no
+                                                            |   los de la hora
+"""
+
+from datetime import datetime, timedelta
+
+from src.modules.user.domain.entities.user import (
+    FAILED_ATTEMPTS_DAY_WINDOW,
+    FAILED_ATTEMPTS_EARLY_NOTICE,
+    FAILED_ATTEMPTS_WINDOW,
+    LOCKOUT_DURATION_MINUTES,
+    MAX_FAILED_ATTEMPTS,
+    MAX_FAILED_ATTEMPTS_PER_DAY,
+    User,
+)
+from src.modules.user.domain.events.account_locked_event import AccountLockedEvent
+
+LAS_DIEZ = datetime(2026, 11, 6, 10, 0)
+
+
+def _usuario() -> User:
+    return User.create(
+        first_name="Ana",
+        last_name="Pérez",
+        email_str="ana@example.com",
+        plain_password="ClaveSegura123!x",
+    )
+
+
+def _falla(user: User, veces: int, desde: datetime, cada: timedelta = timedelta(seconds=30)):
+    for i in range(veces):
+        user.record_failed_login(ahora=desde + cada * i)
+
+
+def test_los_numeros_del_respaldo():
+    """
+    Given: El respaldo de BE #732
+    When: Se leen sus constantes
+    Then: 50 fallos en una hora, 30 minutos de bloqueo
+    """
+    assert MAX_FAILED_ATTEMPTS == 50
+    assert timedelta(hours=1) == FAILED_ATTEMPTS_WINDOW
+    assert LOCKOUT_DURATION_MINUTES == 30
+
+
+def test_r1_49_fallos_dentro_de_la_hora_no_bloquean():
+    """
+    Given: Un usuario
+    When: Falla 49 veces en 25 minutos
+    Then: No está bloqueado
+    """
+    user = _usuario()
+    _falla(user, 49, LAS_DIEZ)
+
+    assert user.failed_login_attempts == 49
+    assert not user.is_locked(ahora=LAS_DIEZ + timedelta(minutes=25))
+
+
+def test_r2_el_fallo_50_bloquea_30_minutos():
+    """
+    Given: Un usuario con 49 fallos en la última hora
+    When: Falla otra vez
+    Then: Queda bloqueado 30 minutos desde ese fallo, y lo dice un evento
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ)
+    ultimo = LAS_DIEZ + timedelta(seconds=30) * 49
+
+    assert user.locked_until == ultimo + timedelta(minutes=30)
+    assert user.is_locked(ahora=ultimo + timedelta(minutes=29))
+    assert any(isinstance(e, AccountLockedEvent) for e in user.get_domain_events())
+
+
+def test_r3_los_fallos_de_hace_mas_de_una_hora_no_cuentan():
+    """
+    Given: 49 fallos a las 10:00
+    When: Falla otra vez pasada la hora
+    Then: La ventana empieza de nuevo: un fallo, sin bloqueo
+    """
+    user = _usuario()
+    _falla(user, 49, LAS_DIEZ, cada=timedelta(seconds=1))
+    user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=1, seconds=1))
+
+    assert user.failed_login_attempts == 1
+    assert user.locked_until is None
+
+
+def test_r3b_justo_antes_de_la_hora_aun_cuenta():
+    """
+    Given: 49 fallos que empezaron a las 10:00
+    When: El 50 llega a las 10:59:59
+    Then: Bloquea: la ventana dura una hora entera
+    """
+    user = _usuario()
+    _falla(user, 49, LAS_DIEZ, cada=timedelta(seconds=1))
+    user.record_failed_login(ahora=LAS_DIEZ + timedelta(minutes=59, seconds=59))
+
+    assert user.locked_until is not None
+
+
+def test_r4_el_bloqueo_se_acaba_solo():
+    """
+    Given: Un usuario bloqueado por el respaldo
+    When: Pasan 30 minutos
+    Then: Ya no está bloqueado
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+
+    assert user.is_locked(ahora=LAS_DIEZ + timedelta(minutes=29, seconds=59))
+    assert not user.is_locked(ahora=LAS_DIEZ + timedelta(minutes=30))
+
+
+def test_r5_el_desbloqueo_limpia_contador_ventana_y_bloqueo():
+    """
+    Given: Un usuario bloqueado por el respaldo
+    When: Lo desbloquea un administrador
+    Then: Contador a 0, sin bloqueo y sin ventana: el siguiente fallo empieza otra
+    """
+    user = _usuario()
+    # Ahora de verdad: el desbloqueo mira si sigue bloqueado con la hora del reloj
+    _falla(user, 50, datetime.now(), cada=timedelta(seconds=0))
+    user.unlock(unlocked_by_user_id="admin")
+
+    assert user.failed_login_attempts == 0
+    assert user.locked_until is None
+    assert user.failed_login_window_started_at is None
+
+
+def test_r6_el_aviso_de_fallos_apunta_su_hora():
+    """
+    Given: Un usuario sin avisos de fallos
+    When: Se le apunta uno
+    Then: Queda su hora, para el tope de uno por hora
+    """
+    user = _usuario()
+    assert user.failed_login_notice_at is None
+
+    user.apunta_el_aviso_de_fallos(LAS_DIEZ)
+
+    assert user.failed_login_notice_at == LAS_DIEZ
+
+
+def test_r3c_justo_a_la_hora_empieza_otra_ventana():
+    """
+    Given: 49 fallos que empezaron a las 10:00
+    When: El siguiente llega a las 11:00 en punto
+    Then: Ya es otra ventana: un fallo, sin bloqueo
+    """
+    user = _usuario()
+    _falla(user, 49, LAS_DIEZ, cada=timedelta(seconds=1))
+    user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=1))
+
+    assert user.failed_login_attempts == 1
+    assert user.locked_until is None
+
+
+def test_r7_acabado_el_bloqueo_un_fallo_no_vuelve_a_bloquear():
+    """
+    Given: El respaldo bloqueado con 50 fallos a las 10:00 (hasta las 10:30)
+    When: A las 10:31 llega un fallo, y luego 48 más
+    Then: No se vuelve a bloquear: hacen falta otros 50, en una hora nueva
+          (antes, un solo fallo lo alargaba otros 30 minutos)
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+    despues = LAS_DIEZ + timedelta(minutes=31)
+
+    user.record_failed_login(ahora=despues)
+    assert not user.is_locked(ahora=despues)
+    _falla(user, 48, despues, cada=timedelta(seconds=1))
+    assert not user.is_locked(ahora=despues + timedelta(minutes=1))
+    assert user.failed_login_attempts == 49
+
+
+def test_r8_al_bloquear_el_contador_se_queda_en_50():
+    """
+    Given: Un usuario con 49 fallos
+    When: Falla la 50
+    Then: Queda bloqueado y el contador en 50: el log del desbloqueo dirá los fallos
+          de verdad, no 0
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+
+    assert user.failed_login_attempts == 50
+
+
+def test_r9_el_fallo_25_de_la_hora_avisa_sin_bloquear():
+    """
+    Given: Un usuario con 24 fallos en la hora
+    When: Falla la 25
+    Then: Devuelve «aviso» y no bloquea
+    """
+    user = _usuario()
+    _falla(user, 24, LAS_DIEZ)
+
+    assert FAILED_ATTEMPTS_EARLY_NOTICE == 25
+    assert user.record_failed_login(ahora=LAS_DIEZ + timedelta(minutes=13)) == "aviso"
+    assert not user.is_locked(ahora=LAS_DIEZ + timedelta(minutes=13))
+
+
+def test_r10_150_fallos_en_un_dia_bloquean_24_horas():
+    """
+    Given: Un atacante lento: 49 fallos por hora, sin llegar nunca a 50
+    When: Lleva 150 en el día
+    Then: El último devuelve «dia» y bloquea 24 horas
+    """
+    assert MAX_FAILED_ATTEMPTS_PER_DAY == 150
+    assert timedelta(hours=24) == FAILED_ATTEMPTS_DAY_WINDOW
+    user = _usuario()
+    resultados = []
+    for hora in range(4):
+        inicio = LAS_DIEZ + timedelta(hours=hora)
+        for i in range(49 if hora < 3 else 3):
+            resultados.append(user.record_failed_login(ahora=inicio + timedelta(seconds=i)))
+    ultimo = LAS_DIEZ + timedelta(hours=3, seconds=2)
+
+    assert resultados[-1] == "dia"
+    assert "respaldo" not in resultados
+    assert user.locked_until == ultimo + timedelta(hours=24)
+    assert user.is_locked(ahora=ultimo + timedelta(hours=23))
+
+
+def test_r11_lo_que_devuelve_cada_fallo():
+    """
+    Given: Un usuario
+    When: Falla 50 veces en la hora
+    Then: None salvo el 25 («aviso») y el 50 («respaldo»)
+    """
+    user = _usuario()
+    resultados = [
+        user.record_failed_login(ahora=LAS_DIEZ + timedelta(seconds=i)) for i in range(50)
+    ]
+
+    assert resultados[24] == "aviso"
+    assert resultados[49] == "respaldo"
+    assert set(resultados[:24] + resultados[25:49]) == {None}
+
+
+def test_r7b_y_con_otros_50_en_la_hora_nueva_si():
+    """
+    Given: El respaldo bloqueado y ya acabado
+    When: Llegan otros 50 fallos
+    Then: Se vuelve a bloquear
+    """
+    user = _usuario()
+    _falla(user, 50, LAS_DIEZ, cada=timedelta(seconds=0))
+    despues = LAS_DIEZ + timedelta(minutes=31)
+
+    _falla(user, 50, despues, cada=timedelta(seconds=1))
+
+    assert user.is_locked(ahora=despues + timedelta(minutes=1))
+
+
+def test_r12_pasadas_24_horas_el_contador_diario_empieza_de_nuevo():
+    """
+    Given: 149 fallos en el día, nunca 50 en una hora
+    When: El siguiente llega 24 horas después del primero
+    Then: No bloquea: es otro día
+    """
+    user = _usuario()
+    for hora in range(4):
+        for i in range(49 if hora < 3 else 2):
+            user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=hora, seconds=i))
+
+    assert user.record_failed_login(ahora=LAS_DIEZ + timedelta(hours=24)) is None
+    assert user.locked_until is None
+
+
+def test_r13_el_bloqueo_diario_cuenta_los_fallos_del_dia():
+    """
+    Given: Un ataque lento que llega a 150 en el día con 3 en la última hora
+    When: Se bloquea 24 horas y un administrador lo desbloquea
+    Then: El evento del bloqueo y el del desbloqueo dicen 150, no 3
+    """
+    from src.modules.user.domain.events.account_unlocked_event import AccountUnlockedEvent
+
+    user = _usuario()
+    ahora = datetime.now() - timedelta(hours=4)
+    for hora in range(4):
+        for i in range(49 if hora < 3 else 3):
+            user.record_failed_login(ahora=ahora + timedelta(hours=hora, seconds=i))
+
+    bloqueo = [e for e in user.get_domain_events() if isinstance(e, AccountLockedEvent)][-1]
+    assert bloqueo.failed_attempts == 150
+    user.unlock(unlocked_by_user_id="admin")
+    desbloqueo = [e for e in user.get_domain_events() if isinstance(e, AccountUnlockedEvent)][-1]
+    assert desbloqueo.previous_failed_attempts == 150

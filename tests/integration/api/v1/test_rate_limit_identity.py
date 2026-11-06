@@ -110,24 +110,27 @@ class TestSessionTrafficCountsPerUser:
 
 @pytest.mark.integration
 class TestLoginCountsPerEmailAndFailuresPerNetwork:
-    """Login: 5/min por email, y por red solo los intentos fallidos."""
+    """Login: 5/min por email Y red (BE #732), y por red solo los intentos fallidos."""
 
     @pytest.mark.asyncio
-    async def test_sixth_attempt_on_one_email_is_refused_from_any_network(
+    async def test_sixth_attempt_on_one_email_is_refused_only_on_that_network(
         self, client: AsyncClient
     ):
         """
         Given: Un email que no existe
-        When: Se intenta 6 veces, cada vez desde una red distinta
-        Then: Las 5 primeras dan 401 y la 6.ª 429
+        When: Se intenta 6 veces desde la misma red, y otra desde una red distinta
+        Then: 401 cinco veces y 429 la 6.ª; desde la otra red, 401: los intentos de
+              otro ya no dejan al dueño en 429 (BE #732)
         """
         email = _email()
 
         statuses = [
-            (await _login(client, email, "Wrong123!", f"net-{i}")).status_code for i in range(6)
+            (await _login(client, email, "Wrong123!", "net-a")).status_code for _ in range(6)
         ]
+        otra_red = (await _login(client, email, "Wrong123!", "net-b")).status_code
 
         assert statuses == [401] * 5 + [429]
+        assert otra_red == 401
 
     @pytest.mark.asyncio
     async def test_the_same_email_written_differently_counts_together(self, client: AsyncClient):
@@ -139,10 +142,7 @@ class TestLoginCountsPerEmailAndFailuresPerNetwork:
         email = _email()
         variants = [email, email.upper(), f"  {email}", email.title(), email, email.upper()]
 
-        statuses = [
-            (await _login(client, v, "Wrong123!", f"net-{i}")).status_code
-            for i, v in enumerate(variants)
-        ]
+        statuses = [(await _login(client, v, "Wrong123!", "net-x")).status_code for v in variants]
 
         assert statuses[-1] == 429
 
@@ -161,10 +161,10 @@ class TestLoginCountsPerEmailAndFailuresPerNetwork:
         limiter.reset()  # el registro ya inició sesión una vez con ese email
 
         real_statuses = [
-            (await _login(client, real, "Wrong123!", f"r-{i}")).status_code for i in range(6)
+            (await _login(client, real, "Wrong123!", "net-r")).status_code for _ in range(6)
         ]
         unknown_statuses = [
-            (await _login(client, unknown, "Wrong123!", f"u-{i}")).status_code for i in range(6)
+            (await _login(client, unknown, "Wrong123!", "net-u")).status_code for _ in range(6)
         ]
 
         assert real_statuses == unknown_statuses == [401] * 5 + [429]
