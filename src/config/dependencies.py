@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
 from src.config.cupo_de_avisos import cupo_de_avisos
+from src.config.cupo_de_contacto import cupo_de_contacto
 from src.config.database import async_session_maker
 from src.config.freno_del_login import freno_del_login
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
@@ -546,11 +547,12 @@ from src.modules.social.infrastructure.adapters.tournament_visibility_adapter im
 from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
     SQLAlchemySocialUnitOfWork,
 )
+from src.modules.support.application.ports.contact_mailer import IContactMailer
 from src.modules.support.application.use_cases.submit_contact_use_case import (
     SubmitContactUseCase,
 )
-from src.modules.support.infrastructure.services.github_issue_service import (
-    GitHubIssueService,
+from src.modules.support.infrastructure.services.mailgun_contact_mailer import (
+    MailgunContactMailer,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
@@ -3372,16 +3374,16 @@ def get_unlock_account_use_case(
 # ============================================================================
 
 
-def get_github_issue_service():
-    """Proveedor del servicio de GitHub Issues."""
-    return GitHubIssueService()
+def get_contact_mailer() -> IContactMailer:
+    """El envío por correo de los mensajes de contacto (Mailgun)."""
+    return MailgunContactMailer()
 
 
 def get_submit_contact_use_case(
-    github_issue_service=Depends(get_github_issue_service),
-):
-    """Proveedor del caso de uso SubmitContactUseCase."""
-    return SubmitContactUseCase(github_issue_service)
+    mailer: IContactMailer = Depends(get_contact_mailer),
+) -> SubmitContactUseCase:
+    """Proveedor del caso de uso SubmitContactUseCase, con el tope diario de la app."""
+    return SubmitContactUseCase(mailer, cupo_de_contacto)
 
 
 # ============================================================================

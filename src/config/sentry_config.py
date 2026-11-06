@@ -163,7 +163,7 @@ def init_sentry() -> None:
         # SECURITY: send_default_pii=False NO cubre las variables locales de cada frame
         # del stack trace -- el SDK las adjunta por defecto. Cualquier logger.error()
         # dentro de un except que tenga en scope un secreto (p.ej. self.api_key en
-        # EmailService, o `token` en GitHubIssueService) lo habría mandado a Sentry
+        # EmailService o en MailgunContactMailer) lo habría mandado a Sentry
         # íntegro. Causa raíz del incidente de fuga de la API key de Mailgun (Jul 2026).
         include_local_variables=False,
         max_breadcrumbs=50,  # Máximo de breadcrumbs por evento

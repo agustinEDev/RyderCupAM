@@ -16,11 +16,20 @@ from src.modules.support.application.dto.contact_dto import (
     ContactResponseDTO,
 )
 from src.modules.support.application.use_cases.submit_contact_use_case import (
-    GitHubIssueCreationError,
+    ContactDeliveryError,
+    ContactQuotaExceededError,
     SubmitContactUseCase,
 )
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 
 logger = logging.getLogger(__name__)
+
+CONTACT_QUOTA_EXCEEDED = "CONTACT_QUOTA_EXCEEDED"
+_TEXTOS_DEL_CONTACTO = {
+    CONTACT_QUOTA_EXCEEDED: (
+        "We cannot receive more messages right now. Please write to admin@rydercupfriends.com."
+    )
+}
 
 router = APIRouter()
 
@@ -30,7 +39,10 @@ router = APIRouter()
     response_model=ContactResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Submit contact form",
-    description="Sends a contact form submission as a GitHub Issue. Rate limited to 10 per hour per network.",
+    description=(
+        "Emails a contact form message to the app's mailbox. Rate limited to 10 per hour "
+        "per network and 20 per day app-wide (429 CONTACT_QUOTA_EXCEEDED)."
+    ),
 )
 @limiter.limit(CONTACT_LIMIT, key_func=get_client_identifier)
 async def submit_contact_form(
@@ -46,7 +58,12 @@ async def submit_contact_form(
     try:
         return await use_case.execute(contact_request)
 
-    except GitHubIssueCreationError:
+    except ContactQuotaExceededError:
+        # El tope diario de la app: que escriban directamente
+        return respuesta_con_codigo(
+            status.HTTP_429_TOO_MANY_REQUESTS, _TEXTOS_DEL_CONTACTO, CONTACT_QUOTA_EXCEEDED
+        )
+    except ContactDeliveryError:
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
             content={"detail": "Unable to process your request. Please try again later."},

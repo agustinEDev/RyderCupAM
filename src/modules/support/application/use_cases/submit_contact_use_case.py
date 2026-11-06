@@ -1,69 +1,87 @@
 """
 Submit Contact Use Case - Application Layer
 
-Caso de uso para enviar un formulario de contacto como GitHub Issue.
+El formulario de contacto, por correo al buzón de la app (6 nov 2026). Antes abría
+una issue en un repositorio público de GitHub, con el nombre y el correo a la vista.
 """
 
 import logging
+import re
 
 from src.modules.support.application.dto.contact_dto import (
     ContactRequestDTO,
     ContactResponseDTO,
 )
-from src.modules.support.application.ports.github_issue_service import (
-    IGitHubIssueService,
-)
-from src.shared.application.validation.sanitizers import sanitize_html
+from src.modules.support.application.ports.contact_mailer import IContactMailer
+from src.modules.support.application.ports.cupo_de_contacto_port import ICupoDeContacto
+from src.modules.support.domain.value_objects.contact_category import ContactCategory
 
 logger = logging.getLogger(__name__)
 
+# El nombre de cada categoría en el asunto y el cuerpo
+NOMBRE_DE_LA_CATEGORIA = {
+    ContactCategory.BUG: "Error",
+    ContactCategory.FEATURE: "Sugerencia",
+    ContactCategory.QUESTION: "Pregunta",
+    ContactCategory.OTHER: "Otro",
+}
+# Saltos de línea y demás caracteres de control: fuera de una línea (asunto, nombre)
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+# En el cuerpo se conservan los saltos de línea y los tabuladores
+_CONTROL_EN_EL_CUERPO = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
-class GitHubIssueCreationError(Exception):
-    """Error al crear issue en GitHub."""
 
-    pass
+class ContactQuotaExceededError(Exception):
+    """El tope diario de mensajes de contacto está lleno."""
+
+
+class ContactDeliveryError(Exception):
+    """El proveedor de correo no aceptó el mensaje."""
+
+
+def _en_una_linea(texto: str) -> str:
+    """Sin saltos de línea ni caracteres de control, y sin espacios dobles."""
+    return " ".join(_CONTROL.sub(" ", texto).split())
 
 
 class SubmitContactUseCase:
-    """Caso de uso para enviar el formulario de contacto."""
+    """Manda un mensaje del formulario de contacto al buzón de la app."""
 
-    def __init__(self, github_issue_service: IGitHubIssueService):
-        self._github_issue_service = github_issue_service
+    def __init__(self, mailer: IContactMailer, cupo: ICupoDeContacto):
+        """El caso de uso, con el envío del correo y el tope diario."""
+        self._mailer = mailer
+        self._cupo = cupo
 
     async def execute(self, request: ContactRequestDTO) -> ContactResponseDTO:
         """
-        Ejecuta el caso de uso de contacto.
-
-        1. Sanitiza los inputs
-        2. Construye título y cuerpo de la issue
-        3. Crea la issue en GitHub
+        Manda el mensaje por correo, si cabe en el tope de hoy.
 
         Raises:
-            GitHubIssueCreationError: Si falla la creación de la issue
+            ContactQuotaExceededError: si el tope diario está lleno (no se envía)
+            ContactDeliveryError: si el proveedor no lo acepta (el hueco se devuelve)
         """
-        name = sanitize_html(request.name) or ""
-        email = str(request.email)
-        subject = sanitize_html(request.subject) or ""
-        message = sanitize_html(request.message) or ""
-        category = request.category
+        if not self._cupo.reserva():
+            logger.warning("Contact form daily quota reached")
+            raise ContactQuotaExceededError()
 
-        title = f"[{category.value}] {subject}"
-        body = (
-            f"## Contact Form Submission\n\n"
-            f"**Name:** {name}\n"
-            f"**Email:** {email}\n"
-            f"**Category:** {category.value}\n\n"
-            f"---\n\n"
-            f"### Message\n\n"
-            f"{message}\n"
+        categoria = NOMBRE_DE_LA_CATEGORIA[request.category]
+        nombre = _en_una_linea(request.name)
+        texto = (
+            f"Nombre: {nombre}\n"
+            f"Correo: {request.email}\n"
+            f"Categoría: {categoria}\n\n"
+            f"{_CONTROL_EN_EL_CUERPO.sub('', request.message)}\n"
         )
-        labels = [category.to_github_label()]
-
-        success = await self._github_issue_service.create_issue(title, body, labels)
-
-        if not success:
-            logger.error("Failed to create GitHub issue for contact form submission")
-            raise GitHubIssueCreationError("Failed to create GitHub issue. Please try again later.")
+        enviado = await self._mailer.send(
+            subject=f"[Contacto · {categoria}] {_en_una_linea(request.subject)}",
+            text=texto,
+            reply_to=str(request.email),
+        )
+        if not enviado:
+            self._cupo.devuelve()
+            # Sin datos de quien escribe: el log no es sitio para su correo
+            logger.error("Contact form email could not be sent")
+            raise ContactDeliveryError()
 
         return ContactResponseDTO(
             message="Your message has been received. We will get back to you soon."

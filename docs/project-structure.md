@@ -57,11 +57,11 @@ src/
 │       │   └── value_objects/  # ContactCategory
 │       ├── application/
 │       │   ├── dto/            # ContactRequestDTO, ContactResponseDTO
-│       │   ├── ports/          # IGitHubIssueService
+│       │   ├── ports/          # IContactMailer, ICupoDeContacto
 │       │   └── use_cases/      # SubmitContactUseCase
 │       └── infrastructure/
 │           ├── api/v1/         # support_routes.py
-│           └── services/       # GitHubIssueService
+│           └── services/       # MailgunContactMailer
 │
 └── shared/
     ├── domain/         # Base classes (DomainEvent, Entity)

@@ -552,7 +552,7 @@ See [ADR-021](docs/architecture/decisions/ADR-021-github-actions-ci-cd-pipeline.
 <details>
 <summary><b>Support (1 endpoint)</b></summary>
 
-- `POST /api/v1/support/contact` - Submit contact form (creates GitHub Issue)
+- `POST /api/v1/support/contact` - Submit contact form (emails the app's mailbox)
 </details>
 
 **Interactive Documentation**: http://localhost:8000/docs

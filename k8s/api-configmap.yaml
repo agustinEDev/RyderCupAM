@@ -50,5 +50,6 @@ data:
   # Para producción, cambiar a: https://rydercupfriends.com
   FRONTEND_URL: "http://localhost:8080"
 
-  # GitHub Issues - contact form creates issues in this repo
-  GITHUB_ISSUES_REPO: "agustinEDev/RyderCupWeb"
+  # Formulario de contacto: el buzón al que llegan los mensajes (por Mailgun).
+  # OJO: el Kind envía correos REALES
+  CONTACT_EMAIL: "admin@rydercupfriends.com"

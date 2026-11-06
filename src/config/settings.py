@@ -88,11 +88,8 @@ class Settings:
         "TRUST_CLOUDFLARE_HEADERS", "false"
     ).lower() in ("true", "1", "yes")
 
-    # GitHub Issues Configuration (Support Module)
-    # Token: Personal Access Token with 'repo' scope for creating issues
-    # Repo: owner/repo format (e.g., "agustinEDev/RyderCupWeb")
-    GH_ISSUES_TOKEN: str = os.getenv("GH_ISSUES_TOKEN", "")
-    GITHUB_ISSUES_REPO: str = os.getenv("GITHUB_ISSUES_REPO", "agustinEDev/RyderCupWeb")
+    # Formulario de contacto: el buzón al que llegan los mensajes (6 nov 2026)
+    CONTACT_EMAIL: str = os.getenv("CONTACT_EMAIL", "admin@rydercupfriends.com")
 
     # Google OAuth Configuration (Sprint 3)
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")

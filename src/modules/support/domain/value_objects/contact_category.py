@@ -14,13 +14,3 @@ class ContactCategory(StrEnum):
     FEATURE = "FEATURE"
     QUESTION = "QUESTION"
     OTHER = "OTHER"
-
-    def to_github_label(self) -> str:
-        """Mapea la categoría a un label de GitHub Issues."""
-        label_map = {
-            ContactCategory.BUG: "bug",
-            ContactCategory.FEATURE: "enhancement",
-            ContactCategory.QUESTION: "question",
-            ContactCategory.OTHER: "other",
-        }
-        return label_map[self]
