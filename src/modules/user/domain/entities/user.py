@@ -1210,8 +1210,8 @@ class User:
             ValueError: Si la cuenta no está bloqueada
 
         Security:
-            - Solo accesible por Admin (verificado en Application Layer)
-            - Evento de auditoría registra quién desbloqueó
+            - Solo accesible por Admin (lo comprueba la ruta con require_admin)
+            - Quién desbloqueó queda en el log de seguridad (lo escribe el caso de uso)
             - Previene abuso de auto-desbloqueo
 
         Ejemplo:

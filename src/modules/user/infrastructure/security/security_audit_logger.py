@@ -24,6 +24,22 @@ class SecurityAuditLogger(ISecurityAuditLogger):
             device_id=device_id,
         )
 
+    def log_account_unlocked(
+        self,
+        user_id: str,
+        unlocked_user_id: str,
+        ip_address: str,
+        user_agent: str,
+        previous_failed_attempts: int,
+    ) -> None:
+        get_security_logger().log_account_unlocked(
+            user_id=user_id,
+            unlocked_user_id=unlocked_user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            previous_failed_attempts=previous_failed_attempts,
+        )
+
     def log_terms_accepted(
         self, user_id: str, ip_address: str, user_agent: str, terms_version: str
     ) -> None:
