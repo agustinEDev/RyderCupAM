@@ -44,6 +44,12 @@
    `email_verified`. A password login saves its session only if, with the row locked,
    the account still has the checked password and is active.
 
+6. **One rule for every access path:** sessions and credential changes lock the user
+   row before deciding, re-check on the locked row and write in the same transaction
+   (password and Google login, opening a session, reset, Security, link and unlink,
+   claim). A password reset revokes devices too. **An email change stays pending**
+   until confirmed from the new address, with the account's session, within 24 hours.
+
 ## Consequences
 
 **Positive:**

@@ -34,7 +34,9 @@ User Management (5 endpoints)
 ├── GET   /api/v1/users/search-autocomplete # Autocomplete search by partial name ⭐ Sprint 4
 ├── GET   /api/v1/users/search           # Search users by email/name
 ├── PATCH /api/v1/users/profile          # Update profile (name/surname/country)
-├── PATCH /api/v1/users/security         # Update security (email/password)
+├── PATCH /api/v1/users/security         # Update security (password; a new email stays pending)
+├── POST /api/v1/users/me/email-change/confirm  # Confirm the pending email (session + token)
+├── DELETE /api/v1/users/me/email-change # Cancel the pending email
 └── GET   /api/v1/users/me/roles/{id}    # Check user roles in a competition (v2.0.0)
 
 Device Management (2 endpoints) ⭐ v1.13.0
@@ -296,7 +298,17 @@ Returned in all endpoints that include user data (login, current-user, register,
 | `/users/search-autocomplete` | GET | Yes | Autocomplete search by partial name ⭐ Sprint 4 |
 | `/users/search` | GET | Yes | Search users by email/name |
 | `/users/profile` | PATCH | Yes | Update profile (name, surname, country) |
-| `/users/security` | PATCH | Yes | Change email or password |
+| `/users/security` | PATCH | Yes | Change the password, or ask for a new email (stays pending) |
+| `/users/me/email-change/confirm` | POST | Yes | Confirm the pending email with the token of its link |
+| `/users/me/email-change` | DELETE | Yes | Cancel the pending email |
+
+### Pending email change
+
+Changing the email no longer puts it on the account unverified (pre-account takeover, #749):
+- `PATCH /users/security` with `new_email` leaves the account on its current email (still verified) and stores the new one as `pending_email` for **24 hours**. A link goes to the new address (`{FRONTEND_URL}/confirm-email-change?token=...`) and a notice to the old one (new address masked). Response message: `Email change pending confirmation`. The same email as the current one changes nothing.
+- `POST /users/me/email-change/confirm` `{ "token" }` — **only with the account's session**: a stranger who gets the link through a typo cannot confirm it. On success the account email is the new one, verified, and a pending password reset for the old address is dropped. Errors (`detail` + `error_code`): `400 EMAIL_CHANGE_INVALID`, `400 EMAIL_CHANGE_EXPIRED` (cancelled), `409 EMAIL_ALREADY_IN_USE` (another account took it meanwhile; cancelled).
+- `DELETE /users/me/email-change` cancels it; its link stops working. Asking for another email replaces the pending one.
+- The user object carries `pending_email` (or `null`). Until confirmed, login, Google, password reset and notices keep using the old email.
 
 ### Search Autocomplete ⭐ Sprint 4
 

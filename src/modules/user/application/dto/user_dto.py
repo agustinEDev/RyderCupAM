@@ -298,6 +298,13 @@ class UserResponseDTO(BaseModel):
     email_verified: bool = Field(
         default=False, description="Indica si el email del usuario ha sido verificado."
     )
+    pending_email: str | None = Field(
+        default=None,
+        description=(
+            "Correo nuevo pendiente de confirmar desde su dirección (24 h). Hasta "
+            "entonces, `email` sigue siendo el de antes."
+        ),
+    )
     is_admin: bool = Field(
         default=False,
         description="Indica si el usuario tiene privilegios de administrador del sistema (RBAC).",

@@ -7,8 +7,7 @@ Security Logging (v1.8.0): Registra cambios de contraseña y email.
 """
 
 import logging
-
-import requests
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     UpdateSecurityRequestDTO,
@@ -63,7 +62,9 @@ class UpdateSecurityUseCase:
     ) -> tuple[UserId, object]:
         """Valida que el usuario exista y la contraseña sea correcta."""
         user_id_vo = UserId(user_id)
-        user = await self._uow.users.find_by_id(user_id_vo)
+        # Con la fila bloqueada: una toma o un restablecimiento a la vez no se pisan
+        # (tabla de caminos de #749)
+        user = await self._uow.users.find_by_id_for_update(user_id_vo)
 
         if not user:
             raise UserNotFoundError(f"User with id {user_id} not found")
@@ -76,16 +77,18 @@ class UpdateSecurityUseCase:
     async def _handle_email_change(
         self, user: object, new_email: str, user_id: str
     ) -> tuple[bool, str | None]:
-        """Maneja el cambio de email y genera token de verificación."""
+        """El correo nuevo queda pendiente hasta confirmarlo desde su dirección (#749)."""
         email_vo = Email(new_email)
         existing_user = await self._uow.users.find_by_email(email_vo)
 
         if existing_user and str(existing_user.id.value) != user_id:
             raise DuplicateEmailError(f"Email {new_email} is already in use")
 
-        user.change_email(new_email)
-        verification_token = user.generate_verification_token()
-        return True, verification_token
+        # El mismo correo que ya tiene: nada que cambiar (como antes)
+        if user.email is not None and email_vo == user.email:
+            return False, None
+        token = user.request_email_change(new_email, ahora=datetime.now())
+        return True, token
 
     async def _handle_password_change(
         self, user: object, new_password: str, user_id_vo: UserId
@@ -165,29 +168,32 @@ class UpdateSecurityUseCase:
                 email_verification_required=True,
             )
 
-    def _send_verification_email(
-        self, user: object, new_email: str, verification_token: str
-    ) -> None:
-        """Envía email de verificación al nuevo correo."""
+    async def _avisa_del_cambio_de_correo(self, user: object, new_email: str, token: str) -> None:
+        """El enlace al correo nuevo y el aviso al de antes. Un fallo no tumba el cambio."""
         if not self._email_service:
             return
-
-        try:
-            email_sent = self._email_service.send_verification_email(
-                to_email=new_email,
-                user_name=user.first_name,
-                verification_token=verification_token,
-            )
-            if not email_sent:
-                logger.warning(
-                    "No se pudo enviar el email de verificación para el usuario %s",
-                    user.id.value,
-                )
-        except (requests.RequestException, ValueError, ConnectionError):
-            logger.exception(
-                "Error al enviar email de verificación para el usuario %s",
-                user.id.value,
-            )
+        envios = (
+            (
+                "confirmation",
+                self._email_service.send_email_change_confirmation,
+                {"to_email": new_email, "user_name": user.first_name, "token": token},
+            ),
+            (
+                "notice",
+                self._email_service.send_email_change_requested_notice,
+                {
+                    "to_email": str(user.email.value),
+                    "user_name": user.first_name,
+                    "new_email": new_email,
+                },
+            ),
+        )
+        for nombre, envia, datos in envios:
+            try:
+                if not await envia(**datos):
+                    logger.warning("Email change %s mail not sent for a user", nombre)
+            except Exception as error:
+                logger.error("Email change %s mail failed: %s", nombre, type(error).__name__)
 
     async def execute(
         self, user_id: str, request: UpdateSecurityRequestDTO
@@ -259,12 +265,16 @@ class UpdateSecurityUseCase:
             security_logger,
         )
 
-        # Enviar email de verificación si cambió el email
+        # El enlace, al correo nuevo; el aviso, al de antes
         if email_changed and verification_token:
-            self._send_verification_email(user, request.new_email, verification_token)
+            await self._avisa_del_cambio_de_correo(user, request.new_email, verification_token)
 
         # Construir respuesta
         return UpdateSecurityResponseDTO(
             user=UserResponseDTO.model_validate(user),
-            message="Security settings updated successfully",
+            message=(
+                "Email change pending confirmation"
+                if email_changed
+                else "Security settings updated successfully"
+            ),
         )

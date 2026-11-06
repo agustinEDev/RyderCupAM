@@ -659,6 +659,9 @@ def mock_external_services():
     # integración que completa uno)
     mock_email.send_password_reset_email = AsyncMock(return_value=True)
     mock_email.send_password_changed_notification = AsyncMock(return_value=True)
+    # Y los del cambio de correo pendiente (#749)
+    mock_email.send_email_change_confirmation = AsyncMock(return_value=True)
+    mock_email.send_email_change_requested_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):

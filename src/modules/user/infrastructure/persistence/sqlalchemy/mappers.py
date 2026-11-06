@@ -162,6 +162,10 @@ users_table = Table(
     Column("verification_token", String(255), nullable=True),
     Column("password_reset_token", String(255), nullable=True),
     Column("reset_token_expires_at", DateTime, nullable=True),
+    # El correo nuevo, pendiente de confirmar desde su dirección (#749)
+    Column("pending_email", String(255), nullable=True),
+    Column("pending_email_token", String(255), nullable=True),
+    Column("pending_email_expires_at", DateTime, nullable=True),
     Column(
         "country_code",
         CountryCodeDecorator,
@@ -258,6 +262,9 @@ def start_mappers():
                 "_updated_at": users_table.c.updated_at,
                 "_email_verified": users_table.c.email_verified,
                 "_verification_token": users_table.c.verification_token,
+                "_pending_email": users_table.c.pending_email,
+                "_pending_email_token": users_table.c.pending_email_token,
+                "_pending_email_expires_at": users_table.c.pending_email_expires_at,
                 "_country_code": users_table.c.country_code,
                 "_password_reset_token": users_table.c.password_reset_token,
                 "_reset_token_expires_at": users_table.c.reset_token_expires_at,
