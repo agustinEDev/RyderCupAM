@@ -176,7 +176,3 @@ class InMemoryUserDeviceRepository(UserDeviceRepositoryInterface):
         for clave in viejos:
             del self._devices[clave]
         return len(viejos)
-
-    async def find_all_by_user(self, user_id: UserId) -> list[UserDevice]:
-        """Todos los dispositivos del usuario, activos y revocados."""
-        return [d for d in self._devices.values() if d.user_id == user_id]

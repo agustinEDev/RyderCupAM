@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 """
 El contador de intentos fallidos no pierde sumas (BE #282).
 
@@ -64,7 +66,11 @@ async def escena():
     )
     async with uow:
         await uow.users.save(usuario)
-    return uow, usuario, LoginUserUseCase(uow, JWTTokenService(), registro_de_dispositivo_falso())
+    return (
+        uow,
+        usuario,
+        LoginUserUseCase(uow, JWTTokenService(), registro_de_dispositivo_falso(), AsyncMock()),
+    )
 
 
 def _releido_con(uow, usuario, intentos, registro=None):

@@ -61,7 +61,7 @@ def caso_de_uso():
     """Ayudante del test: caso de uso."""
     uow = InMemoryUnitOfWork()
     dispositivos = AsyncMock()
-    return uow, LoginUserUseCase(uow, JWTTokenService(), dispositivos)
+    return uow, LoginUserUseCase(uow, JWTTokenService(), dispositivos, AsyncMock())
 
 
 async def _con_usuario(uow) -> User:

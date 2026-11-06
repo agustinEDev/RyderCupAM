@@ -65,7 +65,7 @@ class LoginUserUseCase:
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
         register_device_use_case: RegisterDeviceUseCase,
-        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio | None = None,
+        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
     ):
         """
         Inicializa el caso de uso.
@@ -78,7 +78,7 @@ class LoginUserUseCase:
         self._uow = uow
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
-        # El correo de «nuevo inicio de sesión» (BE #737); sin él, no se avisa
+        # El correo de «nuevo inicio de sesión» (BE #737)
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
 
     @staticmethod
@@ -273,10 +273,6 @@ class LoginUserUseCase:
         # Device Fingerprinting (v2.0.4): Registrar/actualizar dispositivo PRIMERO
         # Cookie-based identification: device_id_from_cookie tiene prioridad
         # Necesitamos el device_id para asociarlo con el refresh token
-        device_id = None
-        should_set_device_cookie = False
-        device_id_str = None
-        es_nuevo = False
         # Siempre con dispositivo, también sin User-Agent: una sesión sin él no salía en
         # la lista, no avisaba y no se podía revocar (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
@@ -330,7 +326,7 @@ class LoginUserUseCase:
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737). No
         # lanza: un fallo del correo no tumba el login
-        if self._aviso_de_nuevo_inicio is not None and user.email is not None:
+        if user.email is not None:
             # Nunca a un correo sin confirmar: solo le llega el de confirmación
             await self._aviso_de_nuevo_inicio.avisa(
                 AvisoDeNuevoInicioRequestDTO(

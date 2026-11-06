@@ -18,14 +18,6 @@ import os
 from fastapi import Request, Response
 from fastapi.security.utils import get_authorization_scheme_param
 
-# La cookie del dispositivo se lee y se escribe con una sola pieza, la del dominio
-from src.modules.user.domain.services.cookie_de_dispositivo import (  # noqa: F401 - se re-exporta
-    MAXIMO_DE_DISPOSITIVOS_EN_LA_COOKIE,
-    SEPARADOR_DE_DISPOSITIVOS,
-    ids_de_la_cookie_de_dispositivo,
-    valor_de_la_cookie_de_dispositivo,
-)
-
 # Nombres de las cookies
 COOKIE_NAME = "access_token"  # Access token (15 min)
 REFRESH_COOKIE_NAME = "refresh_token"  # Refresh token (7 días)
@@ -403,29 +395,6 @@ DEVICE_ID_COOKIE_MAX_AGE = 31536000  # 1 year in seconds
 # con otra cuenta lo pisaba y la primera estrenaba dispositivo al volver
 
 
-def es_la_app_instalada(request: Request) -> bool:
-    """Si la petición viene de la app instalada (PWA): la cabecera X-App-Mode (BE #737)."""
-    return request.headers.get("X-App-Mode", "").strip().lower() == "standalone"
-
-
-def ids_validos_de_la_cookie(valor: str | None) -> str | None:
-    """
-    Los ids válidos de la cookie del dispositivo, unidos por puntos, o None.
-
-    La cookie la controla el cliente: se valida antes de pasar a los DTOs para no
-    dar un 500 con un valor malformado (v2.0.4). Desde BE #737 guarda los
-    dispositivos de hasta 5 cuentas del mismo navegador.
-    """
-    ids = ids_de_la_cookie_de_dispositivo(valor)
-    return SEPARADOR_DE_DISPOSITIVOS.join(ids) if ids else None
-
-
-def pon_la_cookie_de_dispositivo(response: Response, device_id: str, request: Request) -> None:
-    """La cookie del dispositivo, con este delante y los de otras cuentas detrás (BE #737)."""
-    anteriores = ids_de_la_cookie_de_dispositivo(request.cookies.get(get_device_id_cookie_name()))
-    set_device_id_cookie(response, valor_de_la_cookie_de_dispositivo(device_id, anteriores))
-
-
 def set_device_id_cookie(response: Response, device_id: str) -> None:
     """
     Establece una cookie httpOnly con el device_id (UUID).
@@ -469,36 +438,6 @@ def set_device_id_cookie(response: Response, device_id: str) -> None:
         max_age=DEVICE_ID_COOKIE_MAX_AGE,  # ✅ Expira en 1 año
         path="/",  # ✅ Disponible en toda la app
         domain=get_cookie_domain(),  # ✅ Cross-subdomain support (www ↔ api)
-    )
-
-
-def delete_device_id_cookie(response: Response) -> None:
-    """
-    Elimina la cookie de device_id (revocación de dispositivo).
-
-    Esta función invalida la cookie estableciendo su valor vacío y
-    expiración en 0 (eliminación inmediata).
-
-    Args:
-        response: Objeto Response de FastAPI donde se eliminará la cookie
-
-    Example:
-        >>> from fastapi import Response
-        >>> response = Response()
-        >>> delete_device_id_cookie(response)
-        >>> # Cookie device_id eliminada del navegador
-
-    Note:
-        Esta función se usa cuando un dispositivo es revocado.
-        El usuario deberá hacer login nuevamente, generando un nuevo device_id.
-    """
-    response.delete_cookie(
-        key=DEVICE_ID_COOKIE_NAME,
-        path="/",  # Mismo path que al crear la cookie
-        httponly=True,  # Mismo httponly que al crear
-        secure=is_production(),  # Mismo secure que al crear
-        samesite="lax",  # Mismo samesite que al crear
-        domain=get_cookie_domain(),  # Mismo domain que al crear
     )
 
 

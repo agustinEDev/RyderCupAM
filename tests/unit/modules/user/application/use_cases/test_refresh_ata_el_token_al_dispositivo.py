@@ -86,7 +86,7 @@ async def test_t1_t2_a_token_without_device_is_bound_and_revoking_closes_it():
     assert guardado.device_id is not None
     assert str(guardado.device_id.value) == respuesta.device_id
 
-    await RevokeDeviceUseCase(uow).execute(
+    await RevokeDeviceUseCase(uow, Mock()).execute(
         RevokeDeviceRequestDTO(user_id=str(usuario.id.value), device_id=respuesta.device_id)
     )
     with pytest.raises(RefreshRejectedError):
@@ -143,7 +143,7 @@ async def test_t5_the_token_device_is_reused_and_put_back_in_the_cookie():
 
     assert respuesta.device_id == str(dispositivo.id.value)
     assert respuesta.should_set_device_cookie is True
-    assert len(await uow.user_devices.find_all_by_user(usuario.id)) == 1
+    assert len(await uow.user_devices.find_active_by_user(usuario.id)) == 1
 
 
 @pytest.mark.asyncio

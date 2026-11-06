@@ -271,9 +271,9 @@ class TestListUserDevicesUseCase:
 
     async def test_is_current_device_true_when_cookie_matches(self, uow):
         """
-        Test: is_current_device=True cuando device_id_from_cookie coincide (v2.0.4)
+        Test: is_current_device=True cuando current_device_id coincide (v2.0.4)
         Given: Usuario con 1 dispositivo registrado
-        When: Se lista con device_id_from_cookie del dispositivo registrado
+        When: Se lista con current_device_id del dispositivo registrado
         Then: El dispositivo tiene is_current_device=True
 
         Cookie-based identification (v2.0.4):
@@ -301,10 +301,10 @@ class TestListUserDevicesUseCase:
         )
         device_id = register_response.device_id
 
-        # Listar con device_id_from_cookie (simula cookie del navegador)
+        # Listar con current_device_id (el did del token)
         request = ListUserDevicesRequestDTO(
             user_id=str(user_id.value),
-            device_id_from_cookie=device_id,  # ← Cookie con el device_id
+            current_device_id=device_id,  # ← Cookie con el device_id
         )
 
         # Act
@@ -405,7 +405,7 @@ class TestListUserDevicesUseCase:
         """
         Test: Solo UN dispositivo es is_current_device=True con múltiples dispositivos (v2.0.4)
         Given: Usuario con 4 dispositivos registrados
-        When: Se lista con device_id_from_cookie del dispositivo 2
+        When: Se lista con current_device_id del dispositivo 2
         Then: Solo dispositivo 2 tiene is_current_device=True, los demás False
 
         Cookie-based identification (v2.0.4):
@@ -450,10 +450,10 @@ class TestListUserDevicesUseCase:
             )
         )
 
-        # Listar con device_id_from_cookie del dispositivo 2
+        # Listar con current_device_id del dispositivo 2
         request = ListUserDevicesRequestDTO(
             user_id=str(user_id.value),
-            device_id_from_cookie=current_device_id,  # ← Cookie con device_id del Safari on iOS
+            current_device_id=current_device_id,  # ← Cookie con device_id del Safari on iOS
         )
 
         # Act

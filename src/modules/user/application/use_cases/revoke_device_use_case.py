@@ -56,7 +56,7 @@ class RevokeDeviceUseCase:
     def __init__(
         self,
         uow: UserUnitOfWorkInterface,
-        security_audit: ISecurityAuditLogger | None = None,
+        security_audit: ISecurityAuditLogger,
     ):
         """
         Inicializa el caso de uso.
@@ -149,14 +149,13 @@ class RevokeDeviceUseCase:
         # 8. Al historial de seguridad: quién revocó qué y cuántas sesiones cerró
         # (BE #737; antes solo quedaba un logger.info). Por su puerto: un caso de uso
         # no importa infraestructura
-        if self._security_audit is not None:
-            self._security_audit.log_device_revoked(
-                user_id=request.user_id,
-                device_id=str(device_id.value),
-                ip_address=request.ip_address or "unknown",
-                user_agent=request.user_agent or "unknown",
-                tokens_revoked_count=tokens_revoked,
-            )
+        self._security_audit.log_device_revoked(
+            user_id=request.user_id,
+            device_id=str(device_id.value),
+            ip_address=request.ip_address or "unknown",
+            user_agent=request.user_agent or "unknown",
+            tokens_revoked_count=tokens_revoked,
+        )
 
         # 9. Retornar confirmación
         message = f"Dispositivo revocado exitosamente. {tokens_revoked} sesión(es) cerrada(s)."

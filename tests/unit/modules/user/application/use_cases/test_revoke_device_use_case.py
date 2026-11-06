@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 """
 Tests para RevokeDeviceUseCase
 
@@ -44,7 +46,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Registrar dispositivo
@@ -85,7 +87,7 @@ class TestRevokeDeviceUseCase:
         Then: Lanza ValueError
         """
         # Arrange
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
         non_existent_device_id = UserDeviceId.generate()
 
@@ -109,7 +111,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id1 = UserId.generate()
         user_id2 = UserId.generate()
 
@@ -144,7 +146,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Registrar dispositivo
@@ -179,7 +181,7 @@ class TestRevokeDeviceUseCase:
         Then: Lanza ValueError
         """
         # Arrange
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         request = RevokeDeviceRequestDTO(
@@ -207,7 +209,7 @@ class TestRevokeDeviceUseCase:
         )
 
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         list_use_case = ListUserDevicesUseCase(uow)
         user_id = UserId.generate()
 
@@ -256,7 +258,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Contexto HTTP del dispositivo actual
@@ -305,7 +307,7 @@ class TestRevokeDeviceUseCase:
         """
         # Arrange
         register_use_case = RegisterDeviceUseCase(uow)
-        revoke_use_case = RevokeDeviceUseCase(uow)
+        revoke_use_case = RevokeDeviceUseCase(uow, Mock())
         user_id = UserId.generate()
 
         # Dispositivo A (actual - desde donde se hace la revocación)

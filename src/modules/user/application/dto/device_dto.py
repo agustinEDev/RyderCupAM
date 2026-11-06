@@ -279,7 +279,7 @@ class ListUserDevicesRequestDTO(BaseModel):
         user_id: ID del usuario (extraído del JWT)
         user_agent: User-Agent del request HTTP (opcional, legacy) (v1.13.1)
         ip_address: IP del request HTTP (opcional, legacy) (v1.13.1)
-        device_id_from_cookie: ID del dispositivo desde cookie (v2.0.4, primary identifier)
+        current_device_id: El dispositivo de la petición, el `did` del token (BE #737)
     """
 
     user_id: str = Field(
@@ -303,11 +303,11 @@ class ListUserDevicesRequestDTO(BaseModel):
         description="IP del request HTTP (legacy, v1.13.1)",
         json_schema_extra={"example": "192.168.1.100"},
     )
-    device_id_from_cookie: str | None = Field(
+    current_device_id: str | None = Field(
         default=None,
         min_length=36,
-        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
-        description="ID del dispositivo desde cookie httpOnly (v2.0.4, primary identifier)",
+        max_length=36,
+        description="El dispositivo de la petición: el `did` que comprobó get_current_user (BE #737)",
         json_schema_extra={"example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"},
     )
 
@@ -487,8 +487,12 @@ class AvisoDeNuevoInicioRequestDTO(BaseModel):
     user_id: str
     email: str
     nombre: str
-    device_id: str | None
+    device_id: str
     # Sin su cookie: nuevo, o reconocido solo por la huella
     desconocido: bool
     verificado: bool
     es_alta: bool = False
+
+    def toca_avisar(self) -> bool:
+        """Si toca avisar: sin su cookie, con el correo confirmado y sin ser el alta."""
+        return self.desconocido and self.verificado and not self.es_alta

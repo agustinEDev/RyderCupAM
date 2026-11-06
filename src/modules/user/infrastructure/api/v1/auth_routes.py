@@ -101,6 +101,11 @@ from src.modules.user.domain.errors.user_errors import (
 from src.modules.user.domain.exceptions import AccountDeactivatedException, AccountLockedException
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
+from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
+    es_la_app_instalada,
+    ids_validos_de_la_cookie,
+    pon_la_cookie_de_dispositivo,
+)
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
@@ -112,11 +117,8 @@ from src.shared.infrastructure.security.cookie_handler import (
     delete_auth_cookie,
     delete_csrf_cookie,
     delete_refresh_token_cookie,
-    es_la_app_instalada,
     get_device_id_cookie_name,
     get_refresh_cookie_name,
-    ids_validos_de_la_cookie,
-    pon_la_cookie_de_dispositivo,
     read_access_token,
     set_auth_cookie,
     set_csrf_cookie,

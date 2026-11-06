@@ -207,9 +207,8 @@ class RefreshAccessTokenUseCase:
         # 6. Generar nuevo access token (15 minutos)
         # Con el id de su dispositivo: revocarlo se comprueba por id (BE #737). El
         # del token de refresco manda; sin él (tokens de antes), el reconocido
-        did = device_id
         new_access_token = self._token_service.create_access_token(
-            data=datos_del_acceso(str(user.id.value), did)
+            data=datos_del_acceso(str(user.id.value), device_id)
         )
 
         # 7. Generar nuevo token CSRF (256 bits, 15 minutos de duración)

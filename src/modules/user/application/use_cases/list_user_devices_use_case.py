@@ -9,7 +9,7 @@ Responsabilidades:
 - Mapear entidades a DTOs
 - Ordenar por last_used_at desc (más recientes primero)
 - Retornar lista + contador
-- Marcar dispositivo actual via device_id_from_cookie (v2.0.4)
+- Marcar el dispositivo actual: el `did` del token, ya comprobado (BE #737)
 
 Llamado desde:
 - GET /api/v1/users/me/devices (endpoint protegido)
@@ -125,16 +125,11 @@ class ListUserDevicesUseCase:
                 if device.id in con_sesion and not device.is_idle(ahora)
             ]
 
-            # 3. Determinar device_id actual desde cookie (v2.0.4)
-            # Cookie-based identification: device_id_from_cookie es el primary identifier
-            # Si no hay cookie, ningún dispositivo se marca como current
-            current_device_id = request.device_id_from_cookie
-            if current_device_id:
-                logger.debug(f"Current device identified via cookie: {current_device_id}")
-            else:
-                logger.debug("No device_id cookie found, no device will be marked as current")
+            # 3. El dispositivo actual: el `did` del token, que get_current_user ya
+            # comprobó (BE #737)
+            current_device_id = request.current_device_id
 
-            # 4. Mapear entidades a DTOs (con is_current_device calculado via cookie)
+            # 4. Mapear entidades a DTOs (con is_current_device por el `did`)
             device_dtos = [
                 UserDeviceDTO(
                     id=str(device.id.value),

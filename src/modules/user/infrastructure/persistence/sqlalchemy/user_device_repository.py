@@ -272,10 +272,3 @@ class SQLAlchemyUserDeviceRepository(UserDeviceRepositoryInterface):
         )
         await self._session.flush()
         return result.rowcount or 0
-
-    async def find_all_by_user(self, user_id: UserId) -> list[UserDevice]:
-        """Todos los dispositivos del usuario, activos y revocados."""
-        result = await self._session.execute(
-            select(UserDevice).where(UserDevice._user_id == user_id)
-        )
-        return list(result.scalars().all())

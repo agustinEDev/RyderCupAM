@@ -402,31 +402,6 @@ class UserDevice:
         """
         self._ip_address = ip_address
 
-    def matches_fingerprint(self, fingerprint: DeviceFingerprint) -> bool:
-        """
-        Verifica si el fingerprint dado coincide con el de este dispositivo.
-
-        Compara los hashes SHA256. Si coinciden, es el mismo dispositivo.
-
-        Args:
-            fingerprint: Fingerprint a comparar
-
-        Returns:
-            bool: True si coincide (mismo dispositivo), False en caso contrario
-
-        Examples:
-            >>> fp1 = DeviceFingerprint.create("Mozilla/5.0...", "192.168.1.100")
-            >>> device = UserDevice.create(user_id, fp1)
-            >>> fp2 = DeviceFingerprint.create("Mozilla/5.0...", "192.168.1.100")
-            >>> device.matches_fingerprint(fp2)
-            True
-        """
-        return self._fingerprint_hash == fingerprint.fingerprint_hash
-
-    # ==========================================================================
-    # DOMAIN EVENTS MANAGEMENT
-    # ==========================================================================
-
     def _add_domain_event(self, event: DomainEvent) -> None:
         """
         Registra un evento de dominio pendiente.

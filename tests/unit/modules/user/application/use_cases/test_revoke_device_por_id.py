@@ -54,7 +54,7 @@ async def test_r1_revoking_the_current_device_says_so_by_its_id():
     """
     uow, _, mac = await _dos()
 
-    r = await RevokeDeviceUseCase(uow).execute(
+    r = await RevokeDeviceUseCase(uow, Mock()).execute(
         RevokeDeviceRequestDTO(
             user_id=USUARIO,
             device_id=mac,
@@ -75,7 +75,7 @@ async def test_r2_revoking_another_device_is_not_the_current_one():
     """
     uow, iphone, mac = await _dos()
 
-    r = await RevokeDeviceUseCase(uow).execute(
+    r = await RevokeDeviceUseCase(uow, Mock()).execute(
         RevokeDeviceRequestDTO(user_id=USUARIO, device_id=iphone, current_device_id=mac)
     )
 
@@ -117,7 +117,7 @@ async def test_r4_the_current_device_is_found_whatever_the_case_of_the_id():
     """
     uow, _, mac = await _dos()
 
-    r = await RevokeDeviceUseCase(uow).execute(
+    r = await RevokeDeviceUseCase(uow, Mock()).execute(
         RevokeDeviceRequestDTO(user_id=USUARIO, device_id=mac.upper(), current_device_id=mac)
     )
 

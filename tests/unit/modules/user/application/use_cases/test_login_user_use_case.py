@@ -105,7 +105,7 @@ class TestLoginUserUseCase:
     ):
         """Debe retornar token JWT cuando las credenciales son correctas."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         # Act
@@ -126,7 +126,7 @@ class TestLoginUserUseCase:
     ):
         """Debe retornar None cuando la contraseña es incorrecta."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 
         # Act
@@ -140,7 +140,7 @@ class TestLoginUserUseCase:
     ):
         """Debe retornar None cuando el email no existe."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="nonexistent@example.com", password="S0m3P@ssw0rd!")
 
         # Act
@@ -154,7 +154,7 @@ class TestLoginUserUseCase:
     ):
         """Debe asegurarse que la respuesta NO incluye la contraseña."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         # Act
@@ -170,7 +170,7 @@ class TestLoginUserUseCase:
     ):
         """Debe incluir el user_id en el subject del token."""
         # Arrange
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         # Act
@@ -209,7 +209,7 @@ class TestLoginUserUseCase:
             device_id="7c9e6679-7425-40de-944b-e07fc1f90ae7",
             set_device_cookie=True,
         )
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(
             email="test@example.com",
             password="V@l1dP@ss123!",
@@ -254,7 +254,7 @@ class TestLoginUserUseCaseNoEsperaALaRFEG:
             await uow.users.save(user)
             await uow.commit()
 
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
 
         response = await use_case.execute(
             LoginRequestDTO(email="es@example.com", password="V@l1dP@ss123!")
@@ -291,7 +291,7 @@ class TestLoginUserUseCaseDeactivatedAccount:
             await uow.users.save(deactivated_user)
             await uow.commit()
 
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
         with pytest.raises(AccountDeactivatedException):
@@ -312,7 +312,7 @@ class TestLoginUserUseCaseDeactivatedAccount:
             await uow.users.save(deactivated_user)
             await uow.commit()
 
-        use_case = LoginUserUseCase(uow, token_service, register_device_use_case)
+        use_case = LoginUserUseCase(uow, token_service, register_device_use_case, AsyncMock())
         request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 
         response = await use_case.execute(request)

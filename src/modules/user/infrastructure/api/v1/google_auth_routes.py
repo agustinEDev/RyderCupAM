@@ -37,16 +37,18 @@ from src.modules.user.application.use_cases.unlink_google_account_use_case impor
     UnlinkGoogleAccountUseCase,
 )
 from src.modules.user.domain.exceptions import AccountLockedException
+from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
+    es_la_app_instalada,
+    ids_validos_de_la_cookie,
+    pon_la_cookie_de_dispositivo,
+)
 from src.shared.infrastructure.http.http_context_validator import (
     cloudflare_client_country,
     get_trusted_client_ip,
     get_user_agent,
 )
 from src.shared.infrastructure.security.cookie_handler import (
-    es_la_app_instalada,
     get_device_id_cookie_name,
-    ids_validos_de_la_cookie,
-    pon_la_cookie_de_dispositivo,
     set_auth_cookie,
     set_csrf_cookie,
     set_refresh_token_cookie,

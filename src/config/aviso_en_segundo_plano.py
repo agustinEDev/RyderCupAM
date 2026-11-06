@@ -13,6 +13,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.aviso_de_nuevo_inicio_de_sesion import (
     AvisoDeNuevoInicioDeSesion,
@@ -37,7 +38,7 @@ async def espera_los_avisos_pendientes() -> None:
         await asyncio.gather(*list(_PENDIENTES), return_exceptions=True)
 
 
-class AvisoEnSegundoPlano:
+class AvisoEnSegundoPlano(IAvisoDeNuevoInicio):
     """Lanza el aviso sin que el login lo espere."""
 
     def __init__(self, fabrica: async_sessionmaker[AsyncSession], email_service: IEmailService):
@@ -46,12 +47,7 @@ class AvisoEnSegundoPlano:
 
     async def avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
         """Lanza el aviso y vuelve enseguida. Si no toca avisar, ni lo lanza."""
-        if (
-            not request.desconocido
-            or not request.device_id
-            or not request.verificado
-            or request.es_alta
-        ):
+        if not request.toca_avisar():
             return
         tarea = asyncio.create_task(self._avisa(request))
         _PENDIENTES.add(tarea)

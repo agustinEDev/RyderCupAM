@@ -22,11 +22,13 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from src.modules.user.application.dto.device_dto import AvisoDeNuevoInicioRequestDTO
+from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.services.descripcion_del_dispositivo import describe_el_dispositivo
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.shared.domain.repositories.country_repository_interface import (
     CountryRepositoryInterface,
@@ -79,7 +81,7 @@ def cuando_en_espana(instante_utc: datetime) -> str:
     return f"{local.day} {MESES[local.month - 1]} {local.year}, {local:%H:%M} (hora de España)"
 
 
-class AvisoDeNuevoInicioDeSesion:
+class AvisoDeNuevoInicioDeSesion(IAvisoDeNuevoInicio):
     """Decide si toca avisar de un nuevo inicio de sesión y, si toca, envía el correo."""
 
     def __init__(
@@ -97,17 +99,14 @@ class AvisoDeNuevoInicioDeSesion:
     async def avisa(self, request: AvisoDeNuevoInicioRequestDTO) -> None:
         """Avisa si el dispositivo llegó sin su cookie, el correo está confirmado, no es
         el alta y este dispositivo no avisó en la última hora."""
-        if (
-            not request.desconocido
-            or not request.device_id
-            or not request.verificado
-            or request.es_alta
-        ):
+        if not request.toca_avisar():
             return
         try:
             async with self._uow:
-                todos = await self._uow.user_devices.find_all_by_user(UserId(request.user_id))
-            este = next((d for d in todos if str(d.id.value) == request.device_id), None)
+                este = await self._uow.user_devices.find_by_id_and_user(
+                    device_id=UserDeviceId.from_string(request.device_id),
+                    user_id=UserId(request.user_id),
+                )
             if este is None:
                 return
             ahora = self._reloj()
@@ -119,7 +118,9 @@ class AvisoDeNuevoInicioDeSesion:
                 to_email=request.email,
                 user_name=request.nombre,
                 dispositivo=nombre_del_dispositivo(este.user_agent, este.installed_app),
-                cuando=cuando_en_espana(este.created_at),
+                # La hora del acceso, no la del alta: con un dispositivo reconocido por la
+                # huella, la del alta haría parecer viejo lo que acaba de pasar
+                cuando=cuando_en_espana(ahora),
                 pais=await self._nombre_del_pais(este.country_code),
             )
             # Enviado: cuenta para el tope de uno por hora. Uno que no salió, no

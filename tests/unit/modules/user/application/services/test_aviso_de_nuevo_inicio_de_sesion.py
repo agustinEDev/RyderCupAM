@@ -350,3 +350,21 @@ async def test_n12_a_failure_logs_only_its_type_not_the_address(caplog):
 
     assert "RuntimeError" in caplog.text
     assert "ana@example.com" not in caplog.text
+
+
+async def test_n13_the_email_says_when_the_sign_in_happened_not_when_the_device_was_created():
+    """
+    Given: Un iPhone dado de alta hace 30 días, que entra sin su cookie (lo reconoce la huella)
+    When: Se avisa
+    Then: El correo dice la hora del acceso (20:07 del 5 nov), no la del alta: con la del
+          alta, un intruso con el mismo móvil parecería algo de hace un mes (revisión, 6 nov)
+    """
+    usuario = UserId(uuid4())
+    mac = _dispositivo(usuario, MAC)
+    iphone = _dispositivo(usuario, IPHONE, creado_hace=timedelta(days=30))
+    _, correo, aviso = await _escena(mac, iphone)
+
+    await _avisa(aviso, usuario, str(iphone.id.value))
+
+    cuando = correo.send_new_login_notification.await_args.kwargs["cuando"]
+    assert "5 nov 2026" in cuando and "20:07" in cuando

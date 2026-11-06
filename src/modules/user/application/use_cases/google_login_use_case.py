@@ -62,9 +62,9 @@ class GoogleLoginUseCase:
         token_service: ITokenService,
         google_oauth_service: IGoogleOAuthService,
         register_device_use_case: RegisterDeviceUseCase,
-        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio | None = None,
+        aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
     ):
-        # El correo de «nuevo inicio de sesión» (BE #737); sin él, no se avisa
+        # El correo de «nuevo inicio de sesión» (BE #737)
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
         self._uow = uow
         self._token_service = token_service
@@ -231,22 +231,21 @@ class GoogleLoginUseCase:
             await self._uow.refresh_tokens.save(refresh_token_entity)
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
-        if self._aviso_de_nuevo_inicio is not None:
-            # El alta con Google no avisa: es crear la cuenta
-            # Al correo de la CUENTA, no al de Google: si la cuenta se vinculó con
-            # otra dirección, o lo comprometido es la cuenta de Google, el aviso tiene
-            # que llegar a su dueño (auditoría OWASP, 5 nov 2026)
-            await self._aviso_de_nuevo_inicio.avisa(
-                AvisoDeNuevoInicioRequestDTO(
-                    user_id=str(user.id.value),
-                    email=user.email.value if user.email else google_info.email,
-                    nombre=user.first_name,
-                    device_id=device_id_str,
-                    desconocido=es_nuevo,
-                    verificado=user.is_email_verified(),
-                    es_alta=is_new_user,
-                )
+        # El alta con Google no avisa: es crear la cuenta
+        # Al correo de la CUENTA, no al de Google: si la cuenta se vinculó con
+        # otra dirección, o lo comprometido es la cuenta de Google, el aviso tiene
+        # que llegar a su dueño (auditoría OWASP, 5 nov 2026)
+        await self._aviso_de_nuevo_inicio.avisa(
+            AvisoDeNuevoInicioRequestDTO(
+                user_id=str(user.id.value),
+                email=user.email.value if user.email else google_info.email,
+                nombre=user.first_name,
+                device_id=device_id_str,
+                desconocido=es_nuevo,
+                verificado=user.is_email_verified(),
+                es_alta=is_new_user,
             )
+        )
 
         security_logger.log_login_attempt(
             user_id=str(user.id.value),

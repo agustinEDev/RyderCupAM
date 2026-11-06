@@ -113,6 +113,7 @@ def use_case(uow, token_service, google_oauth_service, register_device_use_case)
         token_service=token_service,
         google_oauth_service=google_oauth_service,
         register_device_use_case=register_device_use_case,
+        aviso_de_nuevo_inicio=AsyncMock(),
     )
 
 

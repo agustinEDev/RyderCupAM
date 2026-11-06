@@ -167,19 +167,15 @@ async def list_user_devices(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
 
-        # «Este dispositivo» es el del token de acceso (`did`, BE #737): la cookie
-        # puede traer los de varias cuentas del navegador. Sin `did` (un token de
-        # antes de esta versión), el primero de la cookie
-        device_id_from_cookie = _dispositivo_actual(request)
-
-        # Crear request DTO con user_id + device_id_from_cookie
+        # «Este dispositivo» es el del token de acceso (`did`, BE #737), que
+        # get_current_user ya comprobó: la cookie puede traer los de varias cuentas
         # NOTA: user_agent e ip_address ya no se usan para is_current_device (v2.0.4)
         # Se mantienen por backwards compatibility y logging
         request_dto = ListUserDevicesRequestDTO(
             user_id=str(current_user.id),
             user_agent=user_agent,
             ip_address=ip_address,
-            device_id_from_cookie=device_id_from_cookie,
+            current_device_id=_dispositivo_actual(request),
         )
 
         # Ejecutar use case
