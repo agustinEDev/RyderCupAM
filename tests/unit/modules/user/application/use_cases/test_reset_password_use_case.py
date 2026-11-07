@@ -17,7 +17,7 @@ Estructura:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -30,6 +30,7 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 # Marcar todos los tests como asyncio
 pytestmark = pytest.mark.asyncio
@@ -84,7 +85,7 @@ class TestResetPasswordSuccess:
         email_service = AsyncMock()
         email_service.send_password_changed_notification = AsyncMock(return_value=True)
 
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         # Crear usuario con token de reseteo
         user = User.create(
@@ -142,7 +143,7 @@ class TestResetPasswordSuccess:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -177,7 +178,7 @@ class TestResetPasswordSuccess:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -216,7 +217,7 @@ class TestResetPasswordInvalidToken:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         # Generar un token válido de al menos 32 caracteres (pero que no existe en BD)
         fake_token = "a" * 43  # Longitud típica de token URL-safe
@@ -244,7 +245,7 @@ class TestResetPasswordInvalidToken:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -282,7 +283,7 @@ class TestResetPasswordInvalidToken:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -318,8 +319,7 @@ class TestResetPasswordInvalidToken:
 class TestResetPasswordSecurityFeatures:
     """Tests para features de seguridad"""
 
-    @patch("src.modules.user.application.use_cases.reset_password_use_case.get_security_logger")
-    async def test_reset_password_logs_successful_reset(self, mock_get_logger, sample_user_data):
+    async def test_reset_password_logs_successful_reset(self, sample_user_data):
         """
         Test: Reseteo exitoso registra security log
         Given: Usuario con token válido
@@ -329,10 +329,9 @@ class TestResetPasswordSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        mock_security_logger = AsyncMock()
-        mock_get_logger.return_value = mock_security_logger
+        mock_security_logger = MagicMock()
 
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=mock_security_logger)
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -363,8 +362,7 @@ class TestResetPasswordSecurityFeatures:
         assert call_args.kwargs["ip_address"] == "192.168.1.1"
         assert call_args.kwargs["user_agent"] == "Mozilla/5.0"
 
-    @patch("src.modules.user.application.use_cases.reset_password_use_case.get_security_logger")
-    async def test_reset_password_logs_failed_reset_invalid_token(self, mock_get_logger):
+    async def test_reset_password_logs_failed_reset_invalid_token(self):
         """
         Test: Token inválido registra security log con failure
         Given: Token que no existe
@@ -374,10 +372,9 @@ class TestResetPasswordSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        mock_security_logger = AsyncMock()
-        mock_get_logger.return_value = mock_security_logger
+        mock_security_logger = MagicMock()
 
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=mock_security_logger)
 
         # Token válido de al menos 32 caracteres (pero no existe en BD)
         fake_token = "b" * 43
@@ -403,10 +400,7 @@ class TestResetPasswordSecurityFeatures:
         assert call_args.kwargs["success"] is False
         assert call_args.kwargs["failure_reason"] == "Invalid or expired token"
 
-    @patch("src.modules.user.application.use_cases.reset_password_use_case.get_security_logger")
-    async def test_reset_password_logs_failed_reset_expired_token(
-        self, mock_get_logger, sample_user_data
-    ):
+    async def test_reset_password_logs_failed_reset_expired_token(self, sample_user_data):
         """
         Test: Token expirado registra security log con failure
         Given: Usuario con token expirado
@@ -416,10 +410,9 @@ class TestResetPasswordSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        mock_security_logger = AsyncMock()
-        mock_get_logger.return_value = mock_security_logger
+        mock_security_logger = MagicMock()
 
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=mock_security_logger)
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -459,7 +452,7 @@ class TestResetPasswordSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -495,7 +488,7 @@ class TestResetPasswordSecurityFeatures:
         email_service = AsyncMock()
         email_service.send_password_changed_notification = AsyncMock(return_value=True)
 
-        use_case = ResetPasswordUseCase(uow, email_service)
+        use_case = ResetPasswordUseCase(uow, email_service, security_audit=SecurityAuditLogger())
 
         user = User.create(
             first_name=sample_user_data["name"],

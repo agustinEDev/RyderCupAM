@@ -1,4 +1,4 @@
-"""Utilidad compartida para enmascarar emails en logs de seguridad."""
+"""Enmascarar un correo para los logs (función pura: vive en el dominio compartido, #750)."""
 
 
 def mask_email(email: str) -> str:

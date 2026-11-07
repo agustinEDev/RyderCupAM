@@ -17,6 +17,7 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
@@ -35,8 +36,7 @@ from src.modules.user.domain.value_objects.password import (
     Password,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
-from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,13 @@ class UpdateSecurityUseCase:
     requiriendo verificación de la contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService | None = None,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -90,6 +96,7 @@ class UpdateSecurityUseCase:
             uow: Unit of Work para manejar transacciones
             email_service: Servicio para envío de emails de verificación
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
 
@@ -288,7 +295,7 @@ class UpdateSecurityUseCase:
             ValueError: Si los datos no son válidos
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"

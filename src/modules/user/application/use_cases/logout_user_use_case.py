@@ -12,12 +12,12 @@ from src.modules.user.application.dto.user_dto import (
     LogoutRequestDTO,
     LogoutResponseDTO,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class LogoutUserUseCase:
@@ -40,13 +40,14 @@ class LogoutUserUseCase:
     - OWASP A01: Previene reuso de refresh tokens después de logout
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, *, security_audit: ISecurityAuditLogger):
         """
         Inicializa el caso de uso.
 
         Args:
             uow: Unit of Work para acceso a repositorios (users + refresh_tokens)
         """
+        self._security_audit = security_audit
         self._uow = uow
 
     async def execute(
@@ -78,7 +79,7 @@ class LogoutUserUseCase:
             >>> print(response.message)  # "Logout exitoso"
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"

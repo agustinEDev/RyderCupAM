@@ -17,6 +17,7 @@ from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -113,6 +114,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -141,6 +143,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 
@@ -162,6 +165,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="nonexistent@example.com", password="S0m3P@ssw0rd!")
 
@@ -183,6 +187,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -206,6 +211,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -251,6 +257,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(
             email="test@example.com",
@@ -303,6 +310,7 @@ class TestLoginUserUseCaseNoEsperaALaRFEG:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         response = await use_case.execute(
@@ -347,6 +355,7 @@ class TestLoginUserUseCaseDeactivatedAccount:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -375,6 +384,7 @@ class TestLoginUserUseCaseDeactivatedAccount:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 

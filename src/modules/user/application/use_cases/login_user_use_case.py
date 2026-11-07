@@ -34,6 +34,7 @@ from src.modules.user.application.ports.freno_del_login_port import (
     origen_de_dispositivo,
     origen_de_red,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.application.services.guarda_la_sesion import (
@@ -60,8 +61,7 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
-from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
 
 def _red_de(request: LoginRequestDTO) -> str:
@@ -95,6 +95,8 @@ class LoginUserUseCase:
         aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
         freno: IFrenoDelLogin,
         aviso_de_fallos: IAvisoDeFallos,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         """
         Inicializa el caso de uso.
@@ -107,6 +109,7 @@ class LoginUserUseCase:
             freno: El freno del login por correo y origen (BE #732)
             aviso_de_fallos: El correo de «intentos fallidos» al dueño (BE #732)
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._token_service = token_service
         self._register_device_use_case = register_device_use_case
@@ -116,10 +119,11 @@ class LoginUserUseCase:
         self._freno = freno
         self._aviso_de_fallos = aviso_de_fallos
 
-    @staticmethod
-    def _apunta_que_no_existe(request: LoginRequestDTO, ip_address: str, user_agent: str) -> None:
+    def _apunta_que_no_existe(
+        self, request: LoginRequestDTO, ip_address: str, user_agent: str
+    ) -> None:
         """Security Logging: login fallido porque el usuario no existe."""
-        get_security_logger().log_login_attempt(
+        self._security_audit.log_login_attempt(
             user_id=None,
             email=request.email,
             success=False,
@@ -128,8 +132,8 @@ class LoginUserUseCase:
             user_agent=user_agent,
         )
 
-    @staticmethod
     def _rechaza(
+        self,
         hasta: datetime,
         motivo: str,
         user: User | None,
@@ -138,7 +142,7 @@ class LoginUserUseCase:
         user_agent: str,
     ) -> NoReturn:
         """Security Logging del intento bloqueado, y la excepción (el 423)."""
-        get_security_logger().log_login_attempt(
+        self._security_audit.log_login_attempt(
             user_id=str(user.id.value) if user else None,
             email=request.email,
             success=False,
@@ -296,7 +300,7 @@ class LoginUserUseCase:
         self._rechaza_si_el_respaldo_frena(bloqueado, fiable, request, contexto)
 
         # Security Logging: Login fallido (contraseña incorrecta)
-        get_security_logger().log_login_attempt(
+        self._security_audit.log_login_attempt(
             user_id=str(bloqueado.id.value),
             email=request.email,
             success=False,
@@ -371,7 +375,7 @@ class LoginUserUseCase:
         self, cambio: str, user: User, request: LoginRequestDTO, contexto: tuple[str, str]
     ) -> None:
         """Al log; una cuenta desactivada responde como siempre (403), lo demás 401."""
-        get_security_logger().log_login_attempt(
+        self._security_audit.log_login_attempt(
             user_id=str(user.id.value),
             email=request.email,
             success=False,
@@ -432,7 +436,7 @@ class LoginUserUseCase:
             >>>     print(response.refresh_token)  # Válido 7 días
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging si no se proporcionan
         ip_address = request.ip_address or "unknown"

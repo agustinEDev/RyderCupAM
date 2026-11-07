@@ -25,6 +25,7 @@ from src.modules.user.application.dto.user_dto import (
     ResetPasswordResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     cierra_lo_que_no_se_probo,
 )
@@ -36,8 +37,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.password import Password
-from src.shared.infrastructure.logging.security_logger import get_security_logger
-from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,13 @@ class ResetPasswordUseCase:
     - Logout forzado en todos los dispositivos
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso.
 
@@ -71,11 +77,12 @@ class ResetPasswordUseCase:
             uow: Unit of Work para acceso a repositorios (users + refresh_tokens)
             email_service: Servicio para envío de emails (Mailgun)
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
 
-    @staticmethod
     def _apunta_la_toma(
+        self,
         user: User,
         cerrado: tuple[int, int, int],
         ip_address: str,
@@ -83,7 +90,7 @@ class ResetPasswordUseCase:
     ) -> None:
         """La toma, al log de seguridad, ya guardada: si el log falla, vale igual."""
         try:
-            get_security_logger().log_unverified_account_claimed(
+            self._security_audit.log_unverified_account_claimed(
                 user_id=str(user.id.value),
                 devices_revoked=cerrado[0],
                 tokens_revoked=cerrado[1],
@@ -128,7 +135,7 @@ class ResetPasswordUseCase:
             "Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas..."
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"

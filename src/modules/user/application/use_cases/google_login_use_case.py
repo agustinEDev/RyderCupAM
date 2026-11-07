@@ -30,6 +30,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
     IGoogleOAuthService,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     cierra_lo_que_no_se_probo,
@@ -53,7 +54,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +85,11 @@ class GoogleLoginUseCase:
         google_oauth_service: IGoogleOAuthService,
         register_device_use_case: RegisterDeviceUseCase,
         aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         # El correo de «nuevo inicio de sesión» (BE #737)
+        self._security_audit = security_audit
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
         self._uow = uow
         self._token_service = token_service
@@ -239,7 +242,7 @@ class GoogleLoginUseCase:
         Raises:
             ValueError: Si el authorization code es inválido
         """
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
 

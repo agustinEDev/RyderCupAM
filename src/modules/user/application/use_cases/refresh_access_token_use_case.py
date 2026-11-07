@@ -19,6 +19,7 @@ from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
 from src.modules.user.domain.entities.refresh_token import RefreshToken
@@ -27,7 +28,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RefreshRejection(StrEnum):
@@ -109,6 +109,8 @@ class RefreshAccessTokenUseCase:
         self,
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         """
         Inicializa el caso de uso.
@@ -117,6 +119,7 @@ class RefreshAccessTokenUseCase:
             uow: Unit of Work para acceso a repositorios (users, refresh_tokens, user_devices)
             token_service: Servicio para validación y generación de tokens JWT
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._token_service = token_service
 
@@ -184,7 +187,7 @@ class RefreshAccessTokenUseCase:
         user_id: UserId,
     ) -> RefreshAccessTokenResponseDTO:
         """Del token en la BD en adelante: la cuenta, el token, el dispositivo y el acceso."""
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
         user_id_str = str(user_id.value)
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"

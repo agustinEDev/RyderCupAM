@@ -47,6 +47,7 @@ from src.modules.user.domain.value_objects.password import InvalidPasswordError,
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 pytestmark = pytest.mark.asyncio
 
@@ -134,7 +135,7 @@ async def test_b2_3_the_password_changes_during_the_bcrypt(monkeypatch):
     _entretanto(monkeypatch, update_security_use_case, la_restablecen)
 
     with pytest.raises(InvalidCredentialsError):
-        await UpdateSecurityUseCase(uow).execute(
+        await UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger()).execute(
             str(user.id.value),
             UpdateSecurityRequestDTO(
                 current_password=CLAVE, new_password=NUEVA, confirm_password=NUEVA
@@ -161,7 +162,7 @@ async def test_b2_3_the_new_email_is_taken_during_the_bcrypt(monkeypatch):
     _entretanto(monkeypatch, update_security_use_case, otro_lo_coge)
 
     with pytest.raises(DuplicateEmailError):
-        await UpdateSecurityUseCase(uow, AsyncMock()).execute(
+        await UpdateSecurityUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()).execute(
             str(user.id.value),
             UpdateSecurityRequestDTO(current_password=CLAVE, new_email="nuevo@example.com"),
         )
@@ -181,7 +182,7 @@ async def test_b2_3_errors_in_the_usual_order_wrong_password_first():
     await _con_usuario(uow, "ocupado@example.com")
 
     with pytest.raises(InvalidCredentialsError):
-        await UpdateSecurityUseCase(uow).execute(
+        await UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger()).execute(
             str(user.id.value),
             UpdateSecurityRequestDTO(
                 current_password="Mal4$Clave000", new_email="ocupado@example.com"
@@ -202,7 +203,7 @@ async def test_b2_6_a_weak_new_password_costs_no_bcrypt_of_its_own():
         patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,
         pytest.raises(InvalidPasswordError),
     ):
-        await UpdateSecurityUseCase(uow).execute(
+        await UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger()).execute(
             str(user.id.value),
             UpdateSecurityRequestDTO(
                 current_password=CLAVE, new_password=DEBIL, confirm_password=DEBIL
@@ -241,7 +242,7 @@ async def test_b2_4_someone_spends_the_token_during_the_bcrypt(monkeypatch):
     _entretanto(monkeypatch, reset_password_use_case, otro_lo_gasta)
 
     with pytest.raises(InvalidResetTokenError):
-        await ResetPasswordUseCase(uow, AsyncMock()).execute(
+        await ResetPasswordUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()).execute(
             ResetPasswordRequestDTO(token=token, new_password=NUEVA)
         )
 
@@ -265,7 +266,7 @@ async def test_b2_4_an_expired_or_wrong_token_costs_no_bcrypt():
         patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,
         pytest.raises(InvalidResetTokenError),
     ):
-        await ResetPasswordUseCase(uow, AsyncMock()).execute(
+        await ResetPasswordUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()).execute(
             ResetPasswordRequestDTO(token=token, new_password=NUEVA)
         )
 
@@ -285,7 +286,7 @@ async def test_b2_6_a_weak_password_on_reset_costs_no_bcrypt():
         patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,
         pytest.raises(ValueError),
     ):
-        await ResetPasswordUseCase(uow, AsyncMock()).execute(
+        await ResetPasswordUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()).execute(
             ResetPasswordRequestDTO(token=token, new_password=DEBIL)
         )
 
@@ -356,7 +357,7 @@ async def test_b2_3_a_reused_password_is_reported_before_hashing_it():
         patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,
         pytest.raises(InvalidPasswordError) as error,
     ):
-        await UpdateSecurityUseCase(uow).execute(
+        await UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger()).execute(
             str(user.id.value),
             UpdateSecurityRequestDTO(
                 current_password=CLAVE, new_password=NUEVA, confirm_password=NUEVA
@@ -391,7 +392,7 @@ async def test_b2_6_a_weak_new_password_skips_the_history_bcrypts():
         patch.object(Password, "verify", autospec=True, side_effect=Password.verify) as verifica,
         pytest.raises(InvalidPasswordError),
     ):
-        await UpdateSecurityUseCase(uow).execute(
+        await UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger()).execute(
             str(user.id.value),
             UpdateSecurityRequestDTO(
                 current_password=CLAVE, new_password=DEBIL, confirm_password=DEBIL

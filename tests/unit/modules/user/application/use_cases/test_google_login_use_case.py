@@ -30,6 +30,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 
@@ -114,6 +115,7 @@ def use_case(uow, token_service, google_oauth_service, register_device_use_case)
         google_oauth_service=google_oauth_service,
         register_device_use_case=register_device_use_case,
         aviso_de_nuevo_inicio=AsyncMock(),
+        security_audit=SecurityAuditLogger(),
     )
 
 
@@ -471,6 +473,7 @@ class TestGoogleLoginNuevoInicio:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
         )
 
         await use_case.execute(login_request)
@@ -515,6 +518,7 @@ class TestGoogleLoginNuevoInicio:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
         )
 
         await use_case.execute(login_request)
@@ -554,6 +558,7 @@ class TestGoogleLoginNuevoInicio:
             google_oauth_service=google_oauth_service,
             register_device_use_case=registro,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
         )
 
         await use_case.execute(login_request)
@@ -597,6 +602,7 @@ class TestGoogleLoginCuentaDesactivada:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -635,6 +641,7 @@ class TestGoogleLoginCuentaDesactivada:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -945,6 +952,8 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
                 "devices_revoked": 1,
                 "tokens_revoked": 1,
                 "google_unlinked": 0,
+                # Por Google (el adaptador del puerto lo pasa explícito, #750)
+                "via": "google",
                 "ip_address": "203.0.113.7",
                 "user_agent": "Navegador",
             }

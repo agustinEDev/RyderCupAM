@@ -32,6 +32,7 @@ from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 pytestmark = pytest.mark.asyncio
 
@@ -74,7 +75,13 @@ async def _escena(verificada: bool):
                 provider_email="otro@example.com",
             )
         )
-    return uow, cuenta, dispositivo, ResetPasswordUseCase(uow, AsyncMock()), token
+    return (
+        uow,
+        cuenta,
+        dispositivo,
+        ResetPasswordUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()),
+        token,
+    )
 
 
 async def _restablece(caso, token):

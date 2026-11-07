@@ -1000,7 +1000,13 @@ def get_login_user_use_case(
     (RyderCupAM#340); eso lo hace `get_refresh_own_handicap_use_case`.
     """
     return LoginUserUseCase(
-        uow, token_service, register_device_use_case, aviso, freno, aviso_de_fallos
+        uow,
+        token_service,
+        register_device_use_case,
+        aviso,
+        freno,
+        aviso_de_fallos,
+        security_audit=get_security_audit_logger(),
     )
 
 
@@ -1015,7 +1021,7 @@ def get_logout_user_use_case(
     2. Crea una instancia de `LogoutUserUseCase` con esa dependencia.
     3. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return LogoutUserUseCase(uow)
+    return LogoutUserUseCase(uow, security_audit=get_security_audit_logger())
 
 
 def get_refresh_access_token_use_case(
@@ -1028,7 +1034,7 @@ def get_refresh_access_token_use_case(
     Con la Unit of Work (users + refresh_tokens + user_devices) y el servicio de
     tokens. Ya no registra dispositivos: usa el de su token (BE #738).
     """
-    return RefreshAccessTokenUseCase(uow, token_service)
+    return RefreshAccessTokenUseCase(uow, token_service, security_audit=get_security_audit_logger())
 
 
 def get_open_session_use_case(
@@ -1060,7 +1066,7 @@ def get_confirm_email_change_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
 ) -> ConfirmEmailChangeUseCase:
     """Proveedor del caso de uso que confirma el correo nuevo pendiente (#749)."""
-    return ConfirmEmailChangeUseCase(uow)
+    return ConfirmEmailChangeUseCase(uow, security_audit=get_security_audit_logger())
 
 
 def get_cancel_email_change_use_case(
@@ -1083,7 +1089,7 @@ def get_update_security_use_case(
     3. Crea una instancia de `UpdateSecurityUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return UpdateSecurityUseCase(uow, email_service)
+    return UpdateSecurityUseCase(uow, email_service, security_audit=get_security_audit_logger())
 
 
 # ============================================================================
@@ -1374,7 +1380,9 @@ def get_request_password_reset_use_case(
     3. Crea una instancia de `RequestPasswordResetUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return RequestPasswordResetUseCase(uow, email_service)
+    return RequestPasswordResetUseCase(
+        uow, email_service, security_audit=get_security_audit_logger()
+    )
 
 
 def get_reset_password_use_case(
@@ -1390,7 +1398,7 @@ def get_reset_password_use_case(
     3. Crea una instancia de `ResetPasswordUseCase` con esas dependencias.
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
-    return ResetPasswordUseCase(uow, email_service)
+    return ResetPasswordUseCase(uow, email_service, security_audit=get_security_audit_logger())
 
 
 def get_validate_reset_token_use_case(uow: UserUnitOfWorkInterface = Depends(get_uow)):
@@ -3653,7 +3661,12 @@ def get_google_login_use_case(
 ) -> GoogleLoginUseCase:
     """Proveedor del caso de uso GoogleLoginUseCase."""
     return GoogleLoginUseCase(
-        uow, token_service, google_oauth_service, register_device_use_case, aviso
+        uow,
+        token_service,
+        google_oauth_service,
+        register_device_use_case,
+        aviso,
+        security_audit=get_security_audit_logger(),
     )
 
 

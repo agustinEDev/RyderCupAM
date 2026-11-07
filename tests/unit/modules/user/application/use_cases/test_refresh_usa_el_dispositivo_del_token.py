@@ -29,6 +29,7 @@ from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from tests.unit.modules.user.application.use_cases._sesion_al_registrar import (
     uow_con_sesion_al_registrar,
 )
@@ -65,7 +66,12 @@ async def _escena(con_dispositivo=True):
     tokens.verify_refresh_token.return_value = {"sub": str(usuario.id.value), "type": "refresh"}
     tokens.refresh_token_expired.return_value = False
     tokens.create_access_token.return_value = "acceso"
-    return uow, usuario, dispositivo, RefreshAccessTokenUseCase(uow, tokens)
+    return (
+        uow,
+        usuario,
+        dispositivo,
+        RefreshAccessTokenUseCase(uow, tokens, security_audit=SecurityAuditLogger()),
+    )
 
 
 async def test_t3_un_token_con_su_dispositivo_se_queda_en_el():

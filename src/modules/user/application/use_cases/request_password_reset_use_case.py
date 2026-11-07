@@ -19,11 +19,11 @@ from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RequestPasswordResetUseCase:
@@ -49,7 +49,13 @@ class RequestPasswordResetUseCase:
     # Previene timing attacks que podrían revelar si el email existe
     FAKE_EMAIL_DELAY_SECONDS = 0.5
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso.
 
@@ -57,6 +63,7 @@ class RequestPasswordResetUseCase:
             uow: Unit of Work para acceso a repositorio de usuarios
             email_service: Servicio para envío de emails (Mailgun)
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
 
@@ -90,7 +97,7 @@ class RequestPasswordResetUseCase:
             "Si el email existe en nuestro sistema, recibirás un enlace..."
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"
