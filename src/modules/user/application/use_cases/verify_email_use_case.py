@@ -48,9 +48,16 @@ class VerifyEmailUseCase:
 
             if not user:
                 raise ValueError("Token de verificación inválido o expirado")
+            # Con la fila bloqueada (ADR-045, la regla de los caminos)
+            user = await self._uow.users.find_by_id_for_update(user.id)
+            if not user:
+                raise ValueError("Token de verificación inválido o expirado")
 
             # Verificar el email en la entidad de dominio
             verification_success = user.verify_email(token)
+            # El dueño del correo acaba de demostrarlo: un cambio pendiente que pidiera
+            # quien creó la cuenta, fuera (/code-review de la rama)
+            user.cancel_email_change()
 
             if not verification_success:
                 raise ValueError("No se pudo verificar el email")

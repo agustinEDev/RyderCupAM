@@ -55,7 +55,6 @@ async def test_s1_si_otro_lo_dio_de_alta_entre_medias_se_reutiliza(monkeypatch):
 
     assert respuesta.device_id == str(del_otro.id.value)
     assert respuesta.is_new_device is False
-    assert respuesta.set_device_cookie is True
     async with uow:
         activos = await uow.user_devices.find_active_by_user(user_id)
     assert [d.id for d in activos] == [del_otro.id]

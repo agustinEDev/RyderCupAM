@@ -1,10 +1,14 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 
 from src.config.dependencies import (
     get_accept_terms_use_case,
+    get_cancel_email_change_use_case,
     get_competition_uow,
+    get_confirm_email_change_use_case,
     get_current_user,
     get_find_user_use_case,
     get_get_player_stats_use_case,
@@ -39,6 +43,12 @@ from src.modules.user.application.dto.user_dto import (
     UserRolesResponseDTO,
 )
 from src.modules.user.application.use_cases.accept_terms_use_case import AcceptTermsUseCase
+from src.modules.user.application.use_cases.cancel_email_change_use_case import (
+    CancelEmailChangeUseCase,
+)
+from src.modules.user.application.use_cases.confirm_email_change_use_case import (
+    ConfirmEmailChangeUseCase,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.get_player_stats_use_case import (
     GetPlayerStatsUseCase,
@@ -59,9 +69,15 @@ from src.modules.user.domain.errors.user_errors import (
     InvalidCredentialsError,
     UserNotFoundError,
 )
+from src.modules.user.domain.exceptions import (
+    EmailChangeEmailInUseError,
+    EmailChangeExpiredError,
+    EmailChangeInvalidError,
+)
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -171,6 +187,81 @@ async def find_user(
         ) from e
 
 
+EMAIL_CHANGE_INVALID = "EMAIL_CHANGE_INVALID"
+EMAIL_CHANGE_EXPIRED = "EMAIL_CHANGE_EXPIRED"
+EMAIL_ALREADY_IN_USE = "EMAIL_ALREADY_IN_USE"
+_TEXTOS_DEL_CAMBIO_DE_CORREO = {
+    EMAIL_CHANGE_INVALID: "This confirmation link is not valid for your account.",
+    EMAIL_CHANGE_EXPIRED: "This confirmation link has expired. Ask for the change again.",
+    EMAIL_ALREADY_IN_USE: "That email is already used by another account.",
+}
+
+
+class ConfirmEmailChangeRequestDTO(BaseModel):
+    """El token del enlace que llegó al correo nuevo."""
+
+    token: str = Field(..., min_length=1, max_length=255)
+
+
+@router.post(
+    "/me/email-change/confirm",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Confirmar el correo nuevo pendiente",
+    description=(
+        "Confirma, con la sesión de la cuenta, el correo nuevo pendiente con el token de "
+        "su enlace (24 h). 400 EMAIL_CHANGE_INVALID o EMAIL_CHANGE_EXPIRED; 409 "
+        "EMAIL_ALREADY_IN_USE si otra cuenta lo tiene ya (el cambio se anula)."
+    ),
+    tags=["Users"],
+)
+async def confirm_email_change(
+    request: Request,
+    datos: ConfirmEmailChangeRequestDTO,
+    use_case: ConfirmEmailChangeUseCase = Depends(get_confirm_email_change_use_case),
+    anula: CancelEmailChangeUseCase = Depends(get_cancel_email_change_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),
+):
+    """Confirma el cambio de correo de la cuenta con sesión (#749)."""
+    try:
+        return await use_case.execute(
+            str(current_user.id),
+            datos.token,
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
+    except EmailChangeExpiredError:
+        codigo, estado = EMAIL_CHANGE_EXPIRED, status.HTTP_400_BAD_REQUEST
+    except EmailChangeEmailInUseError:
+        codigo, estado = EMAIL_ALREADY_IN_USE, status.HTTP_409_CONFLICT
+    except EmailChangeInvalidError:
+        codigo, estado = EMAIL_CHANGE_INVALID, status.HTTP_400_BAD_REQUEST
+    except IntegrityError:
+        # Otra cuenta lo ocupó entre la comprobación y el guardado (la restricción
+        # única de users.email): como el otro 409, el cambio queda anulado
+        await anula.execute(str(current_user.id), token=datos.token)
+        codigo, estado = EMAIL_ALREADY_IN_USE, status.HTTP_409_CONFLICT
+    return respuesta_con_codigo(estado, _TEXTOS_DEL_CAMBIO_DE_CORREO, codigo)
+
+
+@router.delete(
+    "/me/email-change",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Anular el correo nuevo pendiente",
+    description="Anula el cambio de correo pendiente: su enlace deja de valer (#749).",
+    tags=["Users"],
+)
+async def cancel_email_change(
+    use_case: CancelEmailChangeUseCase = Depends(get_cancel_email_change_use_case),
+    current_user: UserResponseDTO = Depends(get_current_user),
+):
+    """Anula el cambio de correo pendiente de la cuenta con sesión."""
+    return await use_case.execute(str(current_user.id))
+
+
 @router.post(
     "/me/accept-terms",
     response_model=UserResponseDTO,
@@ -267,7 +358,10 @@ async def update_profile(
     response_model=UpdateSecurityResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar datos de seguridad",
-    description="Actualiza el email y/o password del usuario autenticado. Requiere contraseña actual.",
+    description=(
+        "Actualiza la contraseña y/o pide un correo nuevo, que queda pendiente hasta "
+        "confirmarlo desde su dirección (ADR-045). Requiere la contraseña actual."
+    ),
     tags=["Users"],
 )
 async def update_security(

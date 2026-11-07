@@ -110,8 +110,14 @@ class SQLAlchemyUnitOfWork(UserUnitOfWorkInterface):
             # Si hubo excepción, hacer rollback
             await self.rollback()
         else:
-            # Si todo fue exitoso, hacer commit automáticamente
-            await self.commit()
+            # Si todo fue exitoso, hacer commit automáticamente. Si el commit falla (una
+            # restricción única), rollback: sin él la sesión quedaba inservible para lo
+            # siguiente de la misma petición (CodeRabbit en #752)
+            try:
+                await self.commit()
+            except Exception:
+                await self.rollback()
+                raise
 
             # Los eventos de dominio se publican automáticamente
             # Nota: Para MVP, los eventos están registrados pero la publicación

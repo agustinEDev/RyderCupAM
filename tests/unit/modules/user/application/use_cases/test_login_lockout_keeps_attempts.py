@@ -178,14 +178,15 @@ async def test_login_success_rereads_and_keeps_the_backstop(escena):
     Given: Lo releído tiene 3 fallos en la última hora
     When: Llega la contraseña buena
     Then: Se relee con bloqueo, y el respaldo sigue en 3: el dueño entrando no
-          borra los fallos de un ataque repartido (BE #732)
+          borra los fallos de un ataque repartido (BE #732). Dos lecturas con
+          bloqueo: antes de darla por buena, y al guardar la sesión (#749)
     """
     uow, usuario, login = escena
     copia, pedidos = _releido_con(uow, usuario, intentos=3)
 
     assert await login.execute(LoginRequestDTO(email=EMAIL, password=BUENA)) is not None
 
-    assert pedidos == [usuario.id]
+    assert pedidos == [usuario.id, usuario.id]
     assert copia.failed_login_attempts == 3
 
 
@@ -284,7 +285,6 @@ async def test_login_success_rereads_before_the_device_and_saves_nothing_there(e
         registro.append("dispositivo")
         return SimpleNamespace(
             device_id=str(uuid4()),
-            set_device_cookie=False,
             is_new_device=False,
             recognized_by_cookie=True,
         )

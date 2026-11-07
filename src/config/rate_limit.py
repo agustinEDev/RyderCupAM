@@ -61,7 +61,10 @@ REGISTER_LIMIT = "30/hour"
 EMAIL_SENDING_LIMIT = "30/hour"  # forgot-password y resend-verification
 RESET_PASSWORD_LIMIT = "20/hour"  # nosec B105 - a rate limit, not a password
 VALIDATE_RESET_TOKEN_LIMIT = "30/hour"  # nosec B105 - a rate limit, not a token
-CONTACT_LIMIT = "10/hour"
+# Por red y DÍA (auditoría OWASP, 6 nov 2026; antes 10 por hora): una red sola llena
+# como mucho la mitad del tope de 20 al día de la app. 10 y no menos: como los demás,
+# dimensionado para un club entero, o para todos si falla la IP real (una sola red)
+CONTACT_LIMIT = "10/day"
 
 VERIFY_EMAIL_LIMIT = "60/hour"  # el doble que el registro: cuenta los enlaces reintentados
 REFRESH_TOKEN_LIMIT = "30/minute"  # nosec B105 - a rate limit, not a token

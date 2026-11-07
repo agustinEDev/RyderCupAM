@@ -265,3 +265,31 @@ class TestResolveNames:
         assert GoogleOAuthService._resolve_names(
             {"given_name": "  Ada  ", "family_name": "  Lovelace  "}, "ada@example.com"
         ) == ("Ada", "Lovelace")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("valor", "verificado"),
+    [(True, True), (False, False), ("false", False), ("true", False), (None, False), (1, False)],
+)
+@patch("src.modules.user.infrastructure.external.google_oauth_service.httpx.AsyncClient")
+async def test_only_a_json_true_counts_as_a_verified_email(
+    mock_client_class, valor, verificado, service, mock_token_response, mock_userinfo_response
+):
+    """
+    Given: Google devuelve email_verified con distintos valores
+    When: Se intercambia el código
+    Then: Solo el booleano True cuenta como verificado: el alta y el vínculo dependen
+          de ello, y bool("false") es True
+    """
+    mock_userinfo_response.json.return_value["email_verified"] = valor
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_token_response
+    mock_client.get.return_value = mock_userinfo_response
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client_class.return_value = mock_client
+
+    info = await service.exchange_code_for_user_info("code")
+
+    assert info.email_verified is verificado

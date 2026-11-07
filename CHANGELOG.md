@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.52.0] - 2026-11-07
+
+**Una cuenta sin verificar es de quien demuestra su correo, las cuentas desactivadas no
+guardan sesión y el cambio de correo queda pendiente hasta confirmarlo** (#744, #733,
+#738; ADR-044 y ADR-045). Una migración (tres columnas vacías), que se aplica sola al
+arrancar. Va con el frontend **2.67.0**, que hay que desplegar ANTES: el front viejo
+daría el correo por cambiado. Probado en el Kind con develop.
+
+### Security
+
+- **Cuentas desactivadas sin sesión** (#744): desactivar revoca todos sus dispositivos
+  y tokens de refresco (con la fila bloqueada) y reactivar revoca lo que se colara.
+  Ningún camino le abre sesión: login con contraseña, Google, verificar el correo,
+  refresco y `get_current_user`. Las dos acciones del administrador van al log de
+  seguridad con IP y navegador.
+- **Una cuenta sin verificar es de quien demuestra su correo**: entrar con un Google
+  que lo verificó, o restablecer la contraseña con el enlace enviado a él, se queda la
+  cuenta: correo verificado y fuera todo lo anterior (dispositivos, sesiones, el Google
+  vinculado, el cambio de correo pendiente y, por Google, la contraseña no probada).
+  Restablecer la contraseña revoca también los dispositivos.
+- **Una sola regla en todos los caminos de acceso**: bloquear la fila del usuario,
+  volver a mirar y escribir en la misma transacción (`guarda_la_sesion`). Si la cuenta
+  cambió entretanto, no hay sesión y se revoca el dispositivo que creó ese login.
+- **Registro con Google**: el alta y el vínculo automático por correo exigen que Google
+  haya verificado el correo (`400 GOOGLE_EMAIL_NOT_VERIFIED`); vincular Google desde el
+  perfil exige el correo verificado (`403 GOOGLE_LINK_NEEDS_VERIFIED_EMAIL`). Una cuenta
+  desactivada responde `403 ACCOUNT_DEACTIVATED` y Google no la vincula ni la verifica.
+  Los vínculos van al log de seguridad.
+- Un refresco con el token de un dispositivo revocado se rechaza, se revoca y se anota.
+
+### Added
+
+- **Cambio de correo pendiente**: `PATCH /users/security` con `new_email` deja el
+  correo actual (y su verificación) y guarda el nuevo como pendiente 24 horas. Va un
+  enlace al nuevo y un aviso enmascarado al viejo, si está verificado.
+  `POST /users/me/email-change/confirm` (con la sesión de esa cuenta; `400
+  EMAIL_CHANGE_INVALID` / `EMAIL_CHANGE_EXPIRED`, `409 EMAIL_ALREADY_IN_USE`) y
+  `DELETE /users/me/email-change`. Lo anulan un cambio de contraseña, un
+  restablecimiento, quedarse la cuenta, la verificación del alta y el cambio del admin.
+- **El formulario de contacto llega por correo a `CONTACT_EMAIL`**
+  (`admin@rydercupfriends.com` por defecto, Mailgun UE) en vez de abrir una issue de
+  GitHub. Texto plano, `Reply-To` quien escribe y aviso de que su correo no está
+  verificado. 10 al día por red (un envío fallido también cuenta) y 20 al día en toda la
+  app (`429 CONTACT_QUOTA_EXCEEDED`, que da el buzón). Sentry no guarda el cuerpo de esa
+  ruta.
+
+### Changed
+
+- **Dos códigos públicos en el 401 del refresco** (#733): `SESSION_ENDED` (fin normal)
+  o `SESSION_REJECTED`; el motivo exacto, solo en el log de seguridad.
+- **`api-breaking`**: `device_id` obligatorio en las respuestas de login, Google y
+  refresco, y cambia el sentido de `PATCH /users/security` (correo pendiente).
+
+### Removed
+
+- **El enlace heredado de dispositivos** (#738): `should_set_device_cookie`,
+  `set_device_cookie` y el enlace del refresco.
+- **El servicio de issues de GitHub** del formulario de contacto, con
+  `GH_ISSUES_TOKEN` / `GITHUB_ISSUES_REPO` (tras la release se puede quitar de Render).
+
+### Fixed
+
+- La unidad de trabajo deshace la transacción si falla el commit.
+
 ## [2.51.0] - 2026-11-06
 
 **Los fallos de otro ya no dejan fuera al dueño de la cuenta** (#732, ADR-043, que

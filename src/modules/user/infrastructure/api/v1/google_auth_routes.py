@@ -28,24 +28,29 @@ from src.modules.user.application.dto.oauth_dto import (
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.use_cases.google_login_use_case import (
+    GoogleEmailNotVerifiedError,
     GoogleLoginUseCase,
 )
 from src.modules.user.application.use_cases.link_google_account_use_case import (
+    GoogleLinkNeedsVerifiedEmailError,
     LinkGoogleAccountUseCase,
 )
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_validos_de_la_cookie,
     pon_la_cookie_de_dispositivo,
 )
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     cloudflare_client_country,
     get_trusted_client_ip,
     get_user_agent,
 )
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.cookie_handler import (
     get_device_id_cookie_name,
     set_auth_cookie,
@@ -54,6 +59,18 @@ from src.shared.infrastructure.security.cookie_handler import (
 )
 
 logger = logging.getLogger(__name__)
+GOOGLE_EMAIL_NOT_VERIFIED = "GOOGLE_EMAIL_NOT_VERIFIED"
+ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED"
+GOOGLE_LINK_NEEDS_VERIFIED_EMAIL = "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL"
+_TEXTOS_DE_GOOGLE = {
+    GOOGLE_LINK_NEEDS_VERIFIED_EMAIL: "Verify your email before linking a Google account.",
+    ACCOUNT_DEACTIVATED: "This account has been deactivated. Contact an administrator.",
+    GOOGLE_EMAIL_NOT_VERIFIED: (
+        "Your Google account email is not verified. Verify it with Google, or sign up "
+        "with your email and a password."
+    ),
+}
+
 router = APIRouter()
 
 
@@ -89,6 +106,20 @@ async def google_login(
     # Sin 423: el bloqueo por fallos de contraseña no frena a Google (BE #732)
     try:
         login_response = await use_case.execute(login_data)
+    except GoogleEmailNotVerifiedError:
+        # Sin el correo verificado por Google, ni alta ni vínculo: con su código, para
+        # que la app diga qué hacer en su idioma
+        return respuesta_con_codigo(
+            status.HTTP_400_BAD_REQUEST,
+            _TEXTOS_DE_GOOGLE,
+            GOOGLE_EMAIL_NOT_VERIFIED,
+        )
+    except AccountDeactivatedException:
+        # El mismo texto que el login con contraseña (BE #744), con su código: la app
+        # dice que está desactivada en vez de invitar a reintentar
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_GOOGLE, ACCOUNT_DEACTIVATED
+        )
     except ValueError as e:
         error_msg = str(e)
         # Map known errors to safe client-facing messages
@@ -110,10 +141,28 @@ async def google_login(
     set_csrf_cookie(response, login_response.csrf_token)
 
     # Siempre: la renueva y deja este dispositivo delante (BE #737)
-    if login_response.device_id:
-        pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
+    pon_la_cookie_de_dispositivo(response, login_response.device_id, request)
 
     return login_response
+
+
+def _apunta_el_vinculo(request: Request, user_id: str) -> None:
+    """Un Google vinculado desde el perfil da acceso a la cuenta: al log, con la red.
+
+    Ya guardado; el log nunca cambia la respuesta (revisión del registro con Google).
+    """
+    try:
+        get_security_logger().log_google_account_linked(
+            user_id=user_id,
+            automatic=False,
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            )
+            or "unknown",
+            user_agent=get_user_agent(request) or "unknown",
+        )
+    except Exception as error:
+        logger.error("Google link audit event failed: %s", type(error).__name__)
 
 
 @router.post(
@@ -125,14 +174,22 @@ async def google_login(
     tags=["Authentication"],
 )
 async def link_google_account(
-    request: Request,  # noqa: ARG001
+    request: Request,
     link_data: LinkGoogleAccountRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: LinkGoogleAccountUseCase = Depends(get_link_google_account_use_case),
 ):
     """Vincula cuenta Google a usuario autenticado."""
     try:
-        return await use_case.execute(link_data, str(current_user.id))
+        vinculo = await use_case.execute(link_data, str(current_user.id))
+        _apunta_el_vinculo(request, str(current_user.id))
+        return vinculo
+    except GoogleLinkNeedsVerifiedEmailError:
+        # Sin el correo verificado, sin Google: con su código, para que la app diga
+        # qué hacer en su idioma
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_GOOGLE, GOOGLE_LINK_NEEDS_VERIFIED_EMAIL
+        )
     except ValueError as e:
         error_msg = str(e)
         safe_messages = {

@@ -36,6 +36,10 @@ from src.modules.user.application.ports.freno_del_login_port import (
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.guarda_la_sesion import (
+    CUENTA_DESACTIVADA,
+    guarda_la_sesion,
+)
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -329,6 +333,55 @@ class LoginUserUseCase:
         self._rechaza_si_el_respaldo_frena(releido, fiable, request, contexto)
         return releido
 
+    async def _guarda_la_sesion(
+        self,
+        user: User,
+        comprobada: Password | None,
+        refresh_token: RefreshToken,
+        dispositivo_nuevo: UserDeviceId | None,
+    ) -> str | None:
+        """La sesión, en una transacción con la fila bloqueada, si la cuenta sigue igual.
+
+        Returns:
+            None si se guardó; si no, qué cambió (y el dispositivo que dio de alta
+            este login, si lo hizo, revocado)
+        """
+
+        async def comprueba(actual: User | None) -> str | None:
+            return self._cambio_a_mitad(actual, comprobada)
+
+        async def guarda() -> None:
+            await self._uow.users.save(user)
+            await self._uow.refresh_tokens.save(refresh_token)
+
+        return await guarda_la_sesion(self._uow, user.id, comprueba, guarda, dispositivo_nuevo)
+
+    @staticmethod
+    def _cambio_a_mitad(actual: User | None, comprobada: Password | None) -> str | None:
+        """Qué cambió en la cuenta desde que se comprobó la contraseña, o None."""
+        if actual is None:
+            return "Account deleted during login"
+        if not actual.is_active:
+            return CUENTA_DESACTIVADA
+        if actual.password is None or actual.password != comprobada:
+            return "Password changed during login"
+        return None
+
+    def _rechaza_el_cambio_a_mitad(
+        self, cambio: str, user: User, request: LoginRequestDTO, contexto: tuple[str, str]
+    ) -> None:
+        """Al log; una cuenta desactivada responde como siempre (403), lo demás 401."""
+        get_security_logger().log_login_attempt(
+            user_id=str(user.id.value),
+            email=request.email,
+            success=False,
+            failure_reason=cambio,
+            ip_address=contexto[0],
+            user_agent=contexto[1],
+        )
+        if cambio == CUENTA_DESACTIVADA:
+            raise AccountDeactivatedException()
+
     async def execute(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
         El login, y cada fallo apuntado en el techo de su red (#273): una contraseña
@@ -408,6 +461,9 @@ class LoginUserUseCase:
             await self._apunta_el_fallo(user, request, origen, fiable, contexto)
             return None
 
+        # La que se comprobó: al guardar la sesión, la cuenta tiene que tenerla aún
+        comprobada = user.password
+
         # La buena, pero RELEÍDA con la fila bloqueada (BE #282, revisor)
         releido = await self._releido_para_entrar(user, request, fiable, contexto)
         if releido is None:
@@ -427,10 +483,6 @@ class LoginUserUseCase:
                 user_agent=user_agent,
             )
             raise AccountDeactivatedException()
-
-        # Entra: los fallos de ESTE origen vuelven a cero; los de los demás, no. Solo
-        # con una cuenta activa: acertar en una desactivada no es entrar
-        self._freno.olvida(request.email, origen)
 
         # Registrar evento de login exitoso (Clean Architecture)
         login_time = datetime.now(UTC)
@@ -458,7 +510,6 @@ class LoginUserUseCase:
         # Obtener device_id para asociar con refresh token
         device_id = UserDeviceId.from_string(device_response.device_id)
         device_id_str = device_response.device_id
-        should_set_device_cookie = device_response.set_device_cookie
         # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
         es_nuevo = device_response.is_new_device or not device_response.recognized_by_cookie
 
@@ -477,12 +528,21 @@ class LoginUserUseCase:
             user_id=user.id, token=refresh_token_jwt, device_id=device_id, expires_in_days=7
         )
 
-        # Persistir usuario + refresh token usando Unit of Work
-        async with self._uow:
-            await self._uow.users.save(user)
-            await self._uow.refresh_tokens.save(refresh_token_entity)
-            # Commit automático al salir del contexto
-            # Nota: Device ya fue persistido en su propio UoW dentro de RegisterDeviceUseCase
+        # Persistir usuario + refresh token usando Unit of Work, con la fila
+        # bloqueada y la cuenta como cuando se comprobó: si a la vez Google se la
+        # quedó, la desactivaron o cambió la contraseña, no hay sesión (auditoría
+        # OWASP y revisor de #749)
+        # El dispositivo solo se revoca si lo dio de alta este login (no el de siempre)
+        nuevo = device_id if device_response.is_new_device else None
+        cambio = await self._guarda_la_sesion(user, comprobada, refresh_token_entity, nuevo)
+        if cambio is not None:
+            self._rechaza_el_cambio_a_mitad(cambio, user, request, contexto)
+            return None
+
+        # Entra: los fallos de ESTE origen vuelven a cero; los de los demás, no. Solo
+        # con la sesión ya guardada: acertar en una desactivada, o en una que cambió a
+        # mitad, no es entrar
+        self._freno.olvida(request.email, origen)
 
         # Security Logging: Login exitoso
         security_logger.log_login_attempt(
@@ -527,5 +587,4 @@ class LoginUserUseCase:
             email_verification_required=not user.is_email_verified(),
             # Device Fingerprinting (v2.0.4): Cookie-based identification
             device_id=device_id_str,
-            should_set_device_cookie=should_set_device_cookie,
         )

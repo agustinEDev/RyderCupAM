@@ -11,7 +11,7 @@ Arquitectura:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
@@ -26,13 +26,12 @@ from src.modules.user.application.use_cases.refresh_access_token_use_case import
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
+from src.modules.user.domain.entities.user_device import UserDevice
+from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
 from src.modules.user.domain.value_objects.refresh_token_id import RefreshTokenId
 from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
-)
-from tests.unit.modules.user.application.use_cases._registro_falso import (
-    registro_de_dispositivo_falso,
 )
 
 
@@ -59,14 +58,9 @@ class TestRefreshAccessTokenUseCase:
         return service
 
     @pytest.fixture
-    def register_device_use_case(self):
-        """Fixture que proporciona un mock del RegisterDeviceUseCase (v1.13.0)."""
-        return registro_de_dispositivo_falso()
-
-    @pytest.fixture
-    def use_case(self, uow, token_service, register_device_use_case):
+    def use_case(self, uow, token_service):
         """Fixture que proporciona el use case con dependencias mockeadas."""
-        return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
+        return RefreshAccessTokenUseCase(uow, token_service)
 
     @pytest.fixture
     def sample_user(self):
@@ -84,10 +78,25 @@ class TestRefreshAccessTokenUseCase:
         return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.valid_refresh_token"
 
     @pytest.fixture
-    def refresh_token_entity(self, sample_user, valid_refresh_token_jwt):
-        """Fixture que crea una entidad RefreshToken válida."""
+    async def dispositivo(self, uow, sample_user):
+        """El dispositivo de la sesión: toda sesión tiene uno (BE #737, #738)."""
+        d = UserDevice.create(
+            sample_user.id,
+            DeviceFingerprint.create(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "203.0.113.7"
+            ),
+        )
+        await uow.user_devices.save(d)
+        return d
+
+    @pytest.fixture
+    def refresh_token_entity(self, sample_user, valid_refresh_token_jwt, dispositivo):
+        """Fixture que crea una entidad RefreshToken válida, con su dispositivo."""
         return RefreshToken.create(
-            user_id=sample_user.id, token=valid_refresh_token_jwt, expires_in_days=7
+            user_id=sample_user.id,
+            token=valid_refresh_token_jwt,
+            device_id=dispositivo.id,
+            expires_in_days=7,
         )
 
     async def test_execute_with_valid_refresh_token_returns_new_access_token(
@@ -144,28 +153,23 @@ class TestRefreshAccessTokenUseCase:
         token_service.verify_refresh_token.assert_called_once_with(valid_refresh_token_jwt)
         token_service.create_access_token.assert_called_once()
 
-    async def test_registers_device_with_placeholder_ip_when_ip_unresolved(
+    async def test_updates_its_device_with_placeholder_ip_when_ip_unresolved(
         self,
         use_case,
         uow,
         token_service,
-        register_device_use_case,
         sample_user,
         valid_refresh_token_jwt,
         refresh_token_entity,
+        dispositivo,
     ):
         """
-        Debe seguir registrando/actualizando el dispositivo (con IP placeholder)
-        cuando ip_address es None pero hay user_agent — ver test equivalente en
-        test_login_user_use_case.py para el porqué (device_id cookie nunca se
-        fijaba, causando logout inmediato por falsa revocación).
+        Given: Un refresco sin IP resuelta
+        When: Se ejecuta
+        Then: Usa el dispositivo del token y le apunta la IP de relleno (no la deja vacía)
         """
         from src.modules.user.application.dto.device_dto import UNRESOLVED_IP_PLACEHOLDER
 
-        register_device_use_case.execute.return_value = AsyncMock(
-            device_id="7c9e6679-7425-40de-944b-e07fc1f90ae7",
-            set_device_cookie=True,
-        )
         request = RefreshAccessTokenRequestDTO(
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
             ip_address=None,
@@ -179,10 +183,10 @@ class TestRefreshAccessTokenUseCase:
 
         result = await use_case.execute(request, valid_refresh_token_jwt)
 
-        assert result is not None
-        register_device_use_case.execute.assert_awaited_once()
-        call_kwargs = register_device_use_case.execute.call_args.args[0]
-        assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
+        assert result.device_id == str(dispositivo.id.value)
+        assert (await uow.user_devices.find_by_id(dispositivo.id)).ip_address == (
+            UNRESOLVED_IP_PLACEHOLDER
+        )
 
     async def test_execute_with_invalid_jwt_raises_refresh_token_invalid(
         self,

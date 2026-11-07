@@ -140,3 +140,60 @@ class TestUnlinkGoogleAccountUseCase:
         unlinked_events = [e for e in events if isinstance(e, GoogleAccountUnlinkedEvent)]
         assert len(unlinked_events) == 1
         assert unlinked_events[0].provider == "google"
+
+
+@pytest.mark.asyncio
+async def test_the_google_link_is_looked_up_after_locking_the_account():
+    """
+    Given: Una cuenta con su Google
+    When: Se desvincula
+    Then: El vínculo se busca con la fila ya bloqueada: dos desvinculaciones a la vez no
+          dicen las dos «hecho» (CodeRabbit en #752)
+    """
+    from src.modules.user.application.use_cases.unlink_google_account_use_case import (
+        UnlinkGoogleAccountUseCase,
+    )
+    from src.modules.user.domain.entities.user import User
+    from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+    from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
+    from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
+        InMemoryUnitOfWork,
+    )
+
+    uow = InMemoryUnitOfWork()
+    ana = User.create(
+        first_name="Ana",
+        last_name="Dueña",
+        email_str="ana@example.com",
+        plain_password="SecureP@ssw0rd123!",
+    )
+    async with uow:
+        await uow.users.save(ana)
+        await uow.oauth_accounts.save(
+            UserOAuthAccount.create(
+                user_id=ana.id,
+                provider=OAuthProvider.GOOGLE,
+                provider_user_id="g",
+                provider_email="ana@example.com",
+            )
+        )
+    orden = []
+    bloqueo, busca = (
+        uow.users.find_by_id_for_update,
+        uow.oauth_accounts.find_by_user_id_and_provider,
+    )
+
+    async def espia_bloqueo(user_id):
+        orden.append("bloqueo")
+        return await bloqueo(user_id)
+
+    async def espia_busca(*a):
+        orden.append("busca")
+        return await busca(*a)
+
+    uow.users.find_by_id_for_update = espia_bloqueo
+    uow.oauth_accounts.find_by_user_id_and_provider = espia_busca
+
+    await UnlinkGoogleAccountUseCase(uow).execute(str(ana.id.value))
+
+    assert orden == ["bloqueo", "busca"]

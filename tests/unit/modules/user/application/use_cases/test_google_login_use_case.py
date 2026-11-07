@@ -19,10 +19,12 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
 )
 from src.modules.user.application.use_cases.google_login_use_case import (
+    GoogleEmailNotVerifiedError,
     GoogleLoginUseCase,
 )
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
@@ -88,7 +90,6 @@ def register_device_use_case():
         device_id="550e8400-e29b-41d4-a716-446655440099",
         is_new_device=True,
         message="New device registered",
-        set_device_cookie=True,
     )
     return mock
 
@@ -204,7 +205,6 @@ class TestGoogleLoginUseCaseAutoRegister:
         response = await use_case.execute(login_request)
 
         assert response.device_id == "550e8400-e29b-41d4-a716-446655440099"
-        assert response.should_set_device_cookie is True
         register_device_use_case.execute.assert_called_once()
 
 
@@ -439,9 +439,7 @@ class TestGoogleLoginUseCaseTokenGeneration:
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         )
 
-        response = await use_case.execute(request)
-
-        assert response.should_set_device_cookie is True
+        await use_case.execute(request)
         register_device_use_case.execute.assert_awaited_once()
         call_kwargs = register_device_use_case.execute.call_args.args[0]
         assert call_kwargs.ip_address == UNRESOLVED_IP_PLACEHOLDER
@@ -547,7 +545,6 @@ class TestGoogleLoginNuevoInicio:
             device_id="550e8400-e29b-41d4-a716-446655440099",
             is_new_device=False,
             message="Dispositivo actualizado",
-            set_device_cookie=not por_su_cookie,
             recognized_by_cookie=por_su_cookie,
         )
         aviso = AsyncMock()
@@ -562,3 +559,593 @@ class TestGoogleLoginNuevoInicio:
         await use_case.execute(login_request)
 
         assert aviso.avisa.await_args.args[0].desconocido is desconocido
+
+
+@pytest.mark.asyncio
+class TestGoogleLoginCuentaDesactivada:
+    """Una cuenta desactivada no entra con Google (BE #744, auditoría OWASP)."""
+
+    async def test_a_deactivated_account_gets_no_session_device_or_email(
+        self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Given: Una cuenta vinculada a Google, desactivada por un administrador
+        When: Entra con Google
+        Then: AccountDeactivatedException, y ni dispositivo, ni token, ni correo
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        user = User.create_from_oauth(
+            first_name="Baja", last_name="Google", email_str="oauth@example.com"
+        )
+        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(user)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-id-12345",
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        aviso = AsyncMock()
+        caso = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=aviso,
+        )
+
+        with pytest.raises(AccountDeactivatedException):
+            await caso.execute(
+                GoogleLoginRequestDTO(authorization_code="code", ip_address="203.0.113.7")
+            )
+
+        register_device_use_case.execute.assert_not_awaited()
+        aviso.avisa.assert_not_awaited()
+        async with uow:
+            assert await uow.refresh_tokens.find_all_by_user(user.id) == []
+
+    async def test_a_deactivated_account_found_by_email_is_not_linked_to_google(
+        self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Given: Una cuenta desactivada, sin vincular a Google, con el correo sin verificar
+        When: Alguien entra con un Google que tiene ese correo
+        Then: 403, y la cuenta queda como estaba: sin vínculo y sin verificar
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        user = User.create(
+            first_name="Baja",
+            last_name="Correo",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(user)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        caso = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=AsyncMock(),
+        )
+
+        with pytest.raises(AccountDeactivatedException):
+            await caso.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_user_info.google_user_id
+                )
+                is None
+            )
+            assert not (await uow.users.find_by_id(user.id)).email_verified
+
+
+def _sin_verificar(info: GoogleUserInfo) -> GoogleUserInfo:
+    return GoogleUserInfo(
+        google_user_id=info.google_user_id,
+        email=info.email,
+        first_name=info.first_name,
+        last_name=info.last_name,
+        email_verified=False,
+        picture_url=info.picture_url,
+    )
+
+
+@pytest.mark.asyncio
+class TestGoogleConElCorreoSinVerificar:
+    """Sin el correo verificado por Google, ni alta ni vínculo (revisión del registro)."""
+
+    async def test_it_does_not_link_an_existing_account(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta con contraseña y el correo oauth@example.com
+        When: Alguien entra con un Google de ese correo, SIN verificar por Google
+        Then: GoogleEmailNotVerifiedError y ningún vínculo: si no, cualquiera con una
+              cuenta de Google con tu dirección entraría en la tuya
+        """
+        cuenta = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+        google_oauth_service.exchange_code_for_user_info.return_value = _sin_verificar(
+            google_user_info
+        )
+
+        with pytest.raises(GoogleEmailNotVerifiedError):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_user_info.google_user_id
+                )
+                is None
+            )
+
+    async def test_it_does_not_sign_up(self, use_case, uow, google_oauth_service, google_user_info):
+        """
+        Given: Ningún usuario con ese correo
+        When: Alguien se da de alta con un Google SIN el correo verificado
+        Then: GoogleEmailNotVerifiedError y ninguna cuenta creada: no se ocupa el
+              correo de otro
+        """
+        google_oauth_service.exchange_code_for_user_info.return_value = _sin_verificar(
+            google_user_info
+        )
+
+        with pytest.raises(GoogleEmailNotVerifiedError):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert await uow.users.find_by_email(Email("oauth@example.com")) is None
+
+    async def test_an_already_linked_google_still_signs_in(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Un Google ya vinculado a su cuenta (Google lo verificó al vincularlo)
+        When: Entra y Google ahora dice que el correo no está verificado
+        Then: Entra: la cuenta ya es suya, por su id de Google
+        """
+        cuenta = User.create_from_oauth(
+            first_name="Ana", last_name="Vinculada", email_str="oauth@example.com"
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=cuenta.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id=google_user_info.google_user_id,
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = _sin_verificar(
+            google_user_info
+        )
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.user.email == "oauth@example.com"
+
+
+@pytest.mark.asyncio
+class TestElVinculoAutomaticoAlLog:
+    """El vínculo automático va al log después de guardar, con la red, sin romper nada."""
+
+    async def _cuenta(self, uow):
+        cuenta = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+        return cuenta
+
+    async def test_it_logs_the_link_with_the_network(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: Una cuenta con el correo de un Google verificado, sin vincular
+        When: Entra con ese Google desde una IP y un navegador
+        Then: El log de seguridad apunta el vínculo automático con esa IP y ese navegador
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_google_account_linked",
+            lambda self, **kw: apuntes.append(kw),
+        )
+        cuenta = await self._cuenta(uow)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(
+            GoogleLoginRequestDTO(
+                authorization_code="code", ip_address="203.0.113.7", user_agent="Navegador"
+            )
+        )
+
+        assert apuntes == [
+            {
+                "user_id": str(cuenta.id.value),
+                "automatic": True,
+                "ip_address": "203.0.113.7",
+                "user_agent": "Navegador",
+            }
+        ]
+
+    async def test_a_broken_log_does_not_undo_the_link_nor_the_login(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: El log de seguridad falla
+        When: Alguien entra con un Google que se vincula solo
+        Then: Entra y el vínculo queda guardado: el log nunca cambia la respuesta
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        def roto(self, **kw):
+            raise RuntimeError("disco lleno")
+
+        monkeypatch.setattr(modulo.SecurityLogger, "log_google_account_linked", roto)
+        await self._cuenta(uow)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.user.email == "oauth@example.com"
+        async with uow:
+            assert await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_user_info.google_user_id
+            )
+
+
+@pytest.mark.asyncio
+class TestGoogleSeQuedaUnaCuentaSinVerificar:
+    """Pre-captura: la cuenta sin verificar con ese correo la pudo crear cualquiera (G1-G7)."""
+
+    async def _cuenta_con_sesion(self, uow, verificada: bool):
+        from src.modules.user.domain.entities.refresh_token import RefreshToken
+        from src.modules.user.domain.entities.user_device import UserDevice
+        from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+
+        cuenta = User.create(
+            first_name="Ana",
+            last_name="Dueña",
+            email_str="oauth@example.com",
+            plain_password="SecureP@ssw0rd123!",
+        )
+        if verificada:
+            cuenta.confirm_email_ownership()
+        dispositivo = UserDevice.create(
+            user_id=cuenta.id,
+            fingerprint=DeviceFingerprint.create(
+                "Mozilla/5.0 (X11; Linux x86_64) Firefox/131.0", "198.51.100.9"
+            ),
+        )
+        token = RefreshToken.create(
+            user_id=cuenta.id,
+            token="refresco-del-otro",
+            device_id=dispositivo.id,
+            expires_in_days=7,
+        )
+        async with uow:
+            await uow.users.save(cuenta)
+            await uow.user_devices.save(dispositivo)
+            await uow.refresh_tokens.save(token)
+        return cuenta, dispositivo
+
+    async def test_g1_google_claims_it_and_drops_what_was_never_proven(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta sin verificar, con contraseña, un dispositivo y una sesión
+        When: Entra un Google que verificó ese correo
+        Then: Se vincula y se verifica; sin contraseña; el dispositivo y la sesión
+              de antes, revocados (los de quien la creó)
+        """
+        cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            guardada = await uow.users.find_by_id(cuenta.id)
+            assert guardada.email_verified
+            assert not guardada.has_password
+            assert await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_user_info.google_user_id
+            )
+            assert not (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+            assert (await uow.refresh_tokens.find_by_token_hash("refresco-del-otro")).revoked
+
+    async def test_g1_the_new_google_session_stays_open(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La misma cuenta sin verificar
+        When: Entra con Google
+        Then: El refresh token de ESTE login sigue vivo: solo se cierra lo de antes
+        """
+        _cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            nuevo = await uow.refresh_tokens.find_by_token_hash(respuesta.refresh_token)
+            assert nuevo is not None and not nuevo.revoked
+
+    async def test_g3_a_verified_account_keeps_its_password_and_sessions(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta YA verificada, con contraseña y sesión
+        When: Entra con Google
+        Then: Se vincula como siempre: conserva la contraseña, el dispositivo y la sesión
+        """
+        cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+            assert not (await uow.refresh_tokens.find_by_token_hash("refresco-del-otro")).revoked
+
+    async def test_g7_the_claim_goes_to_the_security_log(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: La cuenta sin verificar con un dispositivo y una sesión
+        When: Entra con Google desde una IP y un navegador
+        Then: El log apunta la toma con lo que se cerró, la IP y el navegador
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_unverified_account_claimed",
+            lambda self, **kw: apuntes.append(kw),
+            raising=False,
+        )
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(
+            GoogleLoginRequestDTO(
+                authorization_code="code", ip_address="203.0.113.7", user_agent="Navegador"
+            )
+        )
+
+        assert apuntes == [
+            {
+                "user_id": str(cuenta.id.value),
+                "devices_revoked": 1,
+                "tokens_revoked": 1,
+                "google_unlinked": 0,
+                "ip_address": "203.0.113.7",
+                "user_agent": "Navegador",
+            }
+        ]
+
+    async def test_g7_a_broken_log_does_not_change_the_login(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: El log de seguridad falla
+        When: Google se queda la cuenta sin verificar
+        Then: Entra igual, y la cuenta queda tomada
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        def roto(self, **kw):
+            raise RuntimeError("disco lleno")
+
+        monkeypatch.setattr(
+            modulo.SecurityLogger, "log_unverified_account_claimed", roto, raising=False
+        )
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.user.email == "oauth@example.com"
+        async with uow:
+            assert not (await uow.users.find_by_id(cuenta.id)).has_password
+
+    async def test_g1_a_google_the_creator_linked_is_removed(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """
+        Given: La cuenta sin verificar, con OTRO Google vinculado por quien la creó
+        When: Entra el Google que verificó el correo
+        Then: Se queda solo el suyo: el otro se quita (tampoco se probó) y va al log
+        """
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_unverified_account_claimed",
+            lambda self, **kw: apuntes.append(kw),
+        )
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        async with uow:
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=cuenta.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-del-atacante",
+                    provider_email="atacante@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, "google-del-atacante"
+                )
+                is None
+            )
+            suyo = await uow.oauth_accounts.find_by_user_id_and_provider(
+                cuenta.id, OAuthProvider.GOOGLE
+            )
+            assert suyo.provider_user_id == google_user_info.google_user_id
+        assert apuntes[0]["google_unlinked"] == 1
+
+    async def test_g3_a_verified_account_is_not_logged_as_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
+    ):
+        """Una verificada se vincula sin apuntar ninguna toma."""
+        from src.shared.infrastructure.logging import security_logger as modulo
+
+        apuntes = []
+        monkeypatch.setattr(
+            modulo.SecurityLogger,
+            "log_unverified_account_claimed",
+            lambda self, **kw: apuntes.append(kw),
+        )
+        await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert apuntes == []
+
+    async def test_g4_a_deactivated_unverified_account_is_not_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar, desactivada por un administrador
+        When: Entra con Google
+        Then: 403, y conserva contraseña y sesiones: un login rechazado no cambia nada
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
+        cuenta.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(cuenta)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        with pytest.raises(AccountDeactivatedException):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+
+    async def test_g8_the_claim_reads_the_account_with_the_row_locked(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar
+        When: Google se la queda
+        Then: La relee con la fila bloqueada: un login con contraseña a la vez espera.
+              Dos veces: al quedársela y al guardar la sesión (tabla de caminos)
+        """
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+        pedidos = []
+        original = uow.users.find_by_id_for_update
+
+        async def espia(user_id):
+            pedidos.append(user_id)
+            return await original(user_id)
+
+        uow.users.find_by_id_for_update = espia
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert pedidos == [cuenta.id, cuenta.id]
+
+    async def test_g9_deactivated_right_before_the_lock_is_not_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar, que un administrador desactiva justo antes de
+               que Google la bloquee
+        When: Google iba a quedársela
+        Then: 403 y la cuenta como estaba: un login rechazado no cambia la cuenta
+        """
+        import copy
+
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        cuenta, dispositivo = await self._cuenta_con_sesion(uow, verificada=False)
+
+        async def desactivada(user_id):
+            otra = copy.deepcopy(uow.users._users[user_id])
+            otra.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+            uow.users._users[user_id] = otra
+            return otra
+
+        uow.users.find_by_id_for_update = desactivada
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        with pytest.raises(AccountDeactivatedException):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
+
+    async def test_g10_an_email_changed_right_before_the_lock_is_not_claimed(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: La cuenta sin verificar con el correo de Google, que cambia de correo justo
+               antes de que Google la bloquee
+        When: Google iba a quedársela
+        Then: No se la queda (ya no es la cuenta de ese correo): error, y conserva la
+              contraseña
+        """
+        import copy
+
+        cuenta, _d = await self._cuenta_con_sesion(uow, verificada=False)
+
+        async def otro_correo(user_id):
+            otra = copy.deepcopy(uow.users._users[user_id])
+            otra.change_email("otro.correo@example.com")
+            uow.users._users[user_id] = otra
+            return otra
+
+        uow.users.find_by_id_for_update = otro_correo
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        with pytest.raises(ValueError, match="Account changed during Google sign-in"):
+            await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        async with uow:
+            assert (await uow.users.find_by_id(cuenta.id)).has_password
+            assert (
+                await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_user_info.google_user_id
+                )
+                is None
+            )

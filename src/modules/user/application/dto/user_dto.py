@@ -298,6 +298,13 @@ class UserResponseDTO(BaseModel):
     email_verified: bool = Field(
         default=False, description="Indica si el email del usuario ha sido verificado."
     )
+    pending_email: str | None = Field(
+        default=None,
+        description=(
+            "Correo nuevo pendiente de confirmar desde su dirección (24 h). Hasta "
+            "entonces, `email` sigue siendo el de antes."
+        ),
+    )
     is_admin: bool = Field(
         default=False,
         description="Indica si el usuario tiene privilegios de administrador del sistema (RBAC).",
@@ -446,8 +453,8 @@ class LoginResponseDTO(BaseModel):
     - csrf_token: Token de 256 bits para validación double-submit (15 minutos)
 
     Device Fingerprinting (v2.0.4):
-    - device_id: ID del dispositivo (para setear cookie si es nuevo)
-    - should_set_device_cookie: True si el caller debe setear la cookie device_id
+    - device_id: el dispositivo de la sesión: toda sesión tiene uno (BE #737), y la
+      ruta lo pone en la cookie siempre
     """
 
     access_token: str = Field(..., description="Token JWT de acceso (15 minutos).")
@@ -460,15 +467,8 @@ class LoginResponseDTO(BaseModel):
     email_verification_required: bool = Field(
         default=False, description="Indica si el usuario necesita verificar su email."
     )
-    # Device Fingerprinting (v2.0.4): Cookie-based identification
-    device_id: str | None = Field(
-        None,
-        description="ID del dispositivo registrado (v2.0.4). Usar para setear cookie si should_set_device_cookie=True.",
-    )
-    should_set_device_cookie: bool = Field(
-        default=False,
-        description="True si el caller debe setear la cookie device_id (v2.0.4). False si la cookie ya existe.",
-    )
+    # El dispositivo de la sesión: toda sesión tiene uno (BE #737)
+    device_id: str = Field(..., description="ID del dispositivo de esta sesión.")
 
 
 # ======================================================================================
@@ -651,7 +651,9 @@ class UpdateSecurityRequestDTO(BaseModel):
         description="Contraseña actual (requerida).",
     )
     new_email: EmailStr | None = Field(
-        None, max_length=FieldLimits.EMAIL_MAX_LENGTH, description="Nuevo email."
+        None,
+        max_length=FieldLimits.EMAIL_MAX_LENGTH,
+        description="Correo nuevo: queda pendiente hasta confirmarlo desde su dirección (24 h).",
     )
     new_password: str | None = Field(
         None,
@@ -753,21 +755,14 @@ class RefreshAccessTokenRequestDTO(BaseModel):
     - ip_address y user_agent son opcionales para security audit trail
     - Proporcionados por API layer, no requeridos en tests
 
-    Device Fingerprinting (v2.0.4):
-    - device_id_from_cookie: ID del dispositivo desde cookie httpOnly (primary identifier)
+    El dispositivo es el del refresh token (BE #737): la cookie del dispositivo no
+    hace falta aquí desde BE #738
     """
 
     # El refresh token se leerá desde la cookie httpOnly, no del body
     # Security context (opcional, proporcionado por API layer)
     ip_address: str | None = Field(None, max_length=45, description=IP_ADDRESS_DESCRIPTION)
     user_agent: str | None = Field(None, max_length=500, description=USER_AGENT_DESCRIPTION)
-    # Device Fingerprinting (v2.0.4): Cookie-based identification
-    device_id_from_cookie: str | None = Field(
-        None,
-        min_length=36,
-        max_length=LONGITUD_MAXIMA_DE_LA_COOKIE,  # hasta 5 ids (BE #737)
-        description="ID del dispositivo desde cookie httpOnly (v2.0.4). Primary identifier.",
-    )
     installed_app: bool = Field(
         default=False,
         description="La app instalada (PWA), por la cabecera X-App-Mode: standalone (BE #737)",
@@ -800,15 +795,8 @@ class RefreshAccessTokenResponseDTO(BaseModel):
         default="Access token renovado exitosamente",
         description="Mensaje de confirmación de renovación.",
     )
-    # Device Fingerprinting (v2.0.4): Cookie-based device identification
-    device_id: str | None = Field(
-        default=None,
-        description="ID del dispositivo registrado (para cookie httpOnly).",
-    )
-    should_set_device_cookie: bool = Field(
-        default=False,
-        description="True si el caller debe establecer la cookie device_id.",
-    )
+    # El dispositivo de la sesión, el de su token de refresco (BE #737)
+    device_id: str = Field(..., description="ID del dispositivo de esta sesión.")
 
 
 # ======================================================================================

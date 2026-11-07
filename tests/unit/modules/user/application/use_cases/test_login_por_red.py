@@ -63,6 +63,7 @@ from src.modules.user.domain.exceptions import (
     LoginAttemptsExceededException,
 )
 from src.modules.user.domain.value_objects.device_fingerprint import DeviceFingerprint
+from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -99,7 +100,7 @@ class Escena:
     async def usuario(self, email=ANA, verificado=True) -> User:
         u = User.create(first_name="Ana", last_name="Red", email_str=email, plain_password=BUENA)
         if verificado:
-            u.verify_email_from_oauth()
+            u.confirm_email_ownership()
         async with self.uow:
             await self.uow.users.save(u)
         return u
@@ -611,3 +612,142 @@ async def test_u19_sin_cookie_el_429_no_toca_la_base_de_datos(monkeypatch, motiv
     with pytest.raises(LoginAttemptsExceededException):
         await e.entra(red=RED_A)
     assert busquedas == []
+
+
+async def _a_mitad_del_login(e: Escena, que_pasa, nuevo: bool = True) -> str:
+    """Hace `que_pasa` con la cuenta justo después de comprobar la contraseña (al
+    registrar el dispositivo), como otra petición que llega a la vez.
+
+    Guarda OTRO objeto (una copia), como la BD tras otra transacción: el login solo lo
+    ve si relee la cuenta. Y da de alta de verdad el dispositivo de este login, para
+    ver que se revoca. Devuelve su id.
+    """
+    import copy
+
+    respuesta = e.caso._register_device_use_case.execute.return_value
+    respuesta.is_new_device = nuevo
+    cuenta = await e.uow.users.find_by_email(Email(ANA))
+    dispositivo = UserDevice.create(
+        user_id=cuenta.id, fingerprint=DeviceFingerprint.create(IPHONE, RED_A)
+    )
+    respuesta.device_id = str(dispositivo.id.value)
+
+    async def a_la_vez(*_a, **_k):
+        async with e.uow:
+            await e.uow.user_devices.save(dispositivo)
+            otra = copy.deepcopy(await e.uow.users.find_by_email(Email(ANA)))
+            que_pasa(otra)
+            e.uow.users._users[otra.id] = otra
+        return respuesta
+
+    e.caso._register_device_use_case.execute.side_effect = a_la_vez
+    return str(dispositivo.id.value)
+
+
+async def _sin_sesion_ni_dispositivo(e: Escena, ana: User, dispositivo_id: str) -> None:
+    from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+        dispositivo = await e.uow.user_devices.find_by_id(UserDeviceId.from_string(dispositivo_id))
+        assert not dispositivo.is_active
+
+
+async def test_u20_si_google_se_queda_la_cuenta_a_mitad_del_login_no_hay_sesion():
+    """
+    Given: Una cuenta sin verificar y su contraseña buena (quien la creó)
+    When: Mientras se comprueba, Google se la queda (quita la contraseña)
+    Then: 401 (None) y ningún refresh token: la sesión no se cuela tras la toma
+          (auditoría OWASP y revisor de #749)
+    """
+    e = Escena()
+    ana = await e.usuario(verificado=False)
+    dispositivo = await _a_mitad_del_login(e, lambda cuenta: cuenta.claim_with_verified_oauth())
+
+    assert await e.entra() is None
+
+    await _sin_sesion_ni_dispositivo(e, ana, dispositivo)
+
+
+async def test_u21_si_la_desactivan_a_mitad_del_login_no_hay_sesion():
+    """
+    Given: Ana con su contraseña buena
+    When: Mientras se comprueba, un administrador la desactiva
+    Then: AccountDeactivatedException y ningún refresh token
+    """
+    e = Escena()
+    ana = await e.usuario()
+    dispositivo = await _a_mitad_del_login(
+        e, lambda cuenta: cuenta.deactivate(deactivated_by_user_id=str(uuid4()))
+    )
+
+    with pytest.raises(AccountDeactivatedException):
+        await e.entra()
+
+    await _sin_sesion_ni_dispositivo(e, ana, dispositivo)
+
+
+async def test_u22_si_cambia_la_contrasena_a_mitad_del_login_no_hay_sesion():
+    """
+    Given: Ana con su contraseña buena
+    When: Mientras se comprueba, la cambia otra petición (un restablecimiento)
+    Then: 401 (None): la contraseña comprobada ya no es la suya
+    """
+    e = Escena()
+    ana = await e.usuario()
+    dispositivo = await _a_mitad_del_login(
+        e, lambda cuenta: cuenta.change_password("OtraClave#2026segura")
+    )
+
+    assert await e.entra() is None
+
+    await _sin_sesion_ni_dispositivo(e, ana, dispositivo)
+
+
+async def test_u23_el_rechazo_a_mitad_apunta_al_usuario_y_no_borra_los_fallos(monkeypatch):
+    """
+    Given: Ana, y su contraseña cambiada a mitad del login
+    When: El login se rechaza
+    Then: El log apunta su usuario, y los fallos de esa red NO vuelven a cero: no fue
+          un login bueno
+    """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    apuntes = []
+    monkeypatch.setattr(
+        modulo.SecurityLogger, "log_login_attempt", lambda self, **kw: apuntes.append(kw)
+    )
+    e = Escena()
+    ana = await e.usuario()
+    olvidos = []
+    monkeypatch.setattr(e.freno, "olvida", lambda *a: olvidos.append(a))
+    await _a_mitad_del_login(e, lambda cuenta: cuenta.change_password("OtraClave#2026segura"))
+
+    assert await e.entra() is None
+
+    assert apuntes[-1]["user_id"] == str(ana.id.value)
+    assert apuntes[-1]["failure_reason"] == "Password changed during login"
+    assert olvidos == []
+
+
+async def test_u24_un_dispositivo_que_ya_existia_no_se_revoca_por_el_rechazo():
+    """
+    Given: Ana entra desde su dispositivo de siempre (otra pestaña cambia la contraseña)
+    When: El login se rechaza a mitad
+    Then: Sin sesión nueva, pero su dispositivo sigue activo: no lo dio de alta este login
+    """
+    from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
+
+    e = Escena()
+    ana = await e.usuario()
+    dispositivo = await _a_mitad_del_login(
+        e, lambda cuenta: cuenta.change_password("OtraClave#2026segura"), nuevo=False
+    )
+
+    assert await e.entra() is None
+
+    async with e.uow:
+        assert await e.uow.refresh_tokens.find_all_by_user(ana.id) == []
+        assert (
+            await e.uow.user_devices.find_by_id(UserDeviceId.from_string(dispositivo))
+        ).is_active

@@ -1,6 +1,11 @@
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from src.modules.user.domain.exceptions.email_change_exceptions import (
+    EmailChangeExpiredError,
+    EmailChangeInvalidError,
+)
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.shared.domain.events.domain_event import DomainEvent
 from src.shared.domain.value_objects.country_code import CountryCode
@@ -54,6 +59,11 @@ AVATAR_MAX_STORED_UPLOADS = 5
 FEED_SEEN_FUTURE_TOLERANCE = timedelta(minutes=5)
 
 
+def _hash_del_token(token: str) -> str:
+    """El hash con el que se guarda el token del correo pendiente (SHA-256)."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 class User:
     """
     Entidad User - Representa un usuario en el sistema.
@@ -65,6 +75,7 @@ class User:
     def _validate_profile_update(
         self, first_name, last_name, country_code_str, gender_str=None, alias=None
     ):
+        """Valida los datos nuevos del perfil antes de aplicarlos."""
         if (
             first_name is None
             and last_name is None
@@ -84,6 +95,7 @@ class User:
     def _detect_profile_changes(
         self, first_name, last_name, country_code_str, gender_str=None, alias=None
     ):
+        """Qué campos del perfil cambian respecto a los actuales."""
         old_first_name = self.first_name
         old_last_name = self.last_name
         old_country_code = self.country_code
@@ -141,6 +153,9 @@ class User:
         country_code: CountryCode | None = None,
         password_reset_token: str | None = None,
         reset_token_expires_at: datetime | None = None,
+        pending_email: str | None = None,
+        pending_email_token: str | None = None,
+        pending_email_expires_at: datetime | None = None,
         failed_login_attempts: int = 0,
         locked_until: datetime | None = None,
         failed_login_window_started_at: datetime | None = None,
@@ -160,6 +175,7 @@ class User:
         domain_events: list[DomainEvent] | None = None,
     ):
         # Asignación de atributos privados (encapsulación)
+        """La cuenta, con todos sus campos (también el correo pendiente, #749)."""
         self._id = id
         self._email = email
         self._password = password
@@ -175,6 +191,10 @@ class User:
         self._country_code = country_code
         self._password_reset_token = password_reset_token
         self._reset_token_expires_at = reset_token_expires_at
+        # El correo nuevo, hasta que se confirme desde la dirección nueva (#749)
+        self._pending_email = pending_email
+        self._pending_email_token = pending_email_token
+        self._pending_email_expires_at = pending_email_expires_at
         self._failed_login_attempts = failed_login_attempts
         self._locked_until = locked_until
         self._failed_login_window_started_at = failed_login_window_started_at
@@ -253,6 +273,28 @@ class User:
     @property
     def password_reset_token(self) -> str | None:
         return self._password_reset_token
+
+    @property
+    def pending_email_token(self) -> str | None:
+        """El token del enlace que confirma el correo nuevo, si hay cambio pendiente."""
+        return self._pending_email_token
+
+    @property
+    def pending_email_expires_at(self) -> datetime | None:
+        """Hasta cuándo vale el cambio pendiente."""
+        return self._pending_email_expires_at
+
+    def pending_email_at(self, ahora: datetime) -> str | None:
+        """El correo pendiente, si lo hay y no ha caducado a esa hora."""
+        pendiente = self._pending_email
+        if pendiente is None or self.pending_email_expires_at is None:
+            return None
+        return pendiente if ahora <= self.pending_email_expires_at else None
+
+    @property
+    def pending_email(self) -> str | None:
+        """El correo pendiente ahora (para la respuesta del perfil)."""
+        return self.pending_email_at(datetime.now())
 
     @property
     def reset_token_expires_at(self) -> datetime | None:
@@ -687,17 +729,39 @@ class User:
             self._domain_events = []
         return len(self._domain_events) > 0
 
-    def verify_email_from_oauth(self) -> None:
+    def confirm_email_ownership(self) -> None:
         """
-        Marca el email como verificado tras auto-link con cuenta OAuth.
-
-        Google ya verificó el email del usuario, por lo que podemos
-        confirmar la verificación sin token.
-        Solo actúa si el email aún no está verificado.
+        Da el correo por verificado, sin token: alguien demostró que es suyo por otro
+        camino (un Google que lo verificó, o el enlace de restablecer que llegó a su
+        buzón). Solo actúa si aún no lo estaba.
         """
         if not self.email_verified:
             self._email_verified = True
+            self._verification_token = None
             self._updated_at = datetime.now()
+
+    def claim_with_verified_oauth(self) -> bool:
+        """
+        Un proveedor que verificó el correo se queda una cuenta SIN verificar.
+
+        Esa cuenta la pudo crear cualquiera con este correo (pre-captura): su
+        contraseña nunca se demostró del dueño del correo, así que se quita, y la
+        cuenta queda verificada. El que llama cierra sus sesiones. El dueño puede
+        ponerse contraseña con «Olvidé mi contraseña».
+
+        Returns:
+            True si se la quedó; False si ya estaba verificada (no cambia nada)
+        """
+        if self.email_verified:
+            return False
+        self._password = None
+        # Un «Olvidé mi contraseña» de antes del cambio de manos, tampoco, ni un
+        # cambio de correo que pidiera quien la creó
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
+        self.cancel_email_change()
+        self.confirm_email_ownership()
+        return True
 
     def record_google_unlinked(self, provider: str, unlinked_at: datetime) -> None:
         """
@@ -829,6 +893,81 @@ class User:
             )
         )
 
+    # Cuánto vale el enlace que confirma un correo nuevo
+    HORAS_PARA_CONFIRMAR_EL_CORREO = 24
+
+    def request_email_change(self, new_email: str, ahora: datetime) -> str:
+        """
+        Pide cambiar el correo: el nuevo queda pendiente y la cuenta sigue con el de
+        antes (y verificada, si lo estaba) hasta confirmarlo desde la dirección nueva.
+
+        Pedir otro sustituye al pendiente: su token deja de valer.
+
+        Returns:
+            El token del enlace que va al correo nuevo
+
+        Raises:
+            ValueError: si es el mismo correo que ya tiene
+        """
+        nuevo = Email(new_email)
+        if self.email is not None and nuevo == self.email:
+            raise ValueError("El correo nuevo es el mismo que el actual")
+        token = secrets.token_urlsafe(32)
+        self._pending_email = str(nuevo.value)
+        # Con hash: quien lea la BD no puede confirmar el cambio (auditoría OWASP)
+        self._pending_email_token = _hash_del_token(token)
+        self._pending_email_expires_at = ahora + timedelta(
+            hours=self.HORAS_PARA_CONFIRMAR_EL_CORREO
+        )
+        self._updated_at = datetime.now()
+        return token
+
+    def pending_email_token_matches(self, token: str) -> bool:
+        """Si hay cambio pendiente y el token es el de su enlace (sin mirar la hora)."""
+        guardado = self.pending_email_token
+        if self._pending_email is None or not guardado:
+            return False
+        # En bytes: compare_digest con un str no ASCII lanzaba (un 500)
+        return secrets.compare_digest(guardado.encode(), _hash_del_token(token or "").encode())
+
+    def confirm_email_change(self, token: str, ahora: datetime) -> None:
+        """
+        Confirma el correo pendiente con el token de su enlace: pasa a ser el de la
+        cuenta, verificado. Un «Olvidé mi contraseña» pedido para el de antes no vale.
+
+        Raises:
+            EmailChangeInvalidError: si no hay ese cambio pendiente (otro token)
+            EmailChangeExpiredError: si caducó (y se anula)
+        """
+        pendiente = self._pending_email
+        if pendiente is None or not self.pending_email_token_matches(token):
+            raise EmailChangeInvalidError("No pending email change with that token")
+        if self.pending_email_expires_at is None or ahora > self.pending_email_expires_at:
+            self.cancel_email_change()
+            raise EmailChangeExpiredError("The pending email change expired")
+        viejo = str(self.email.value) if self.email else ""
+        self._email = Email(pendiente)
+        self._email_verified = True
+        self._verification_token = None
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
+        self.cancel_email_change()
+        self._add_domain_event(
+            UserEmailChangedEvent(
+                user_id=str(self.id.value),
+                old_email=viejo,
+                new_email=pendiente,
+                changed_at=self._updated_at,
+            )
+        )
+
+    def cancel_email_change(self) -> None:
+        """Anula el cambio de correo pendiente: su enlace deja de valer."""
+        self._pending_email = None
+        self._pending_email_token = None
+        self._pending_email_expires_at = None
+        self._updated_at = datetime.now()
+
     def change_email(self, new_email: str) -> None:
         """
         Cambia el email del usuario y resetea la verificación.
@@ -852,6 +991,14 @@ class User:
 
         self._email = new_email_vo
         self._email_verified = False  # Requiere nueva verificación
+        # El enlace de verificación del correo de antes tampoco vale para este, ni un
+        # cambio de correo pendiente (lo sustituye este)
+        self._verification_token = None
+        self.cancel_email_change()
+        # Un «Olvidé mi contraseña» pedido para el correo de antes no vale para este:
+        # verificaría el nuevo sin que nadie lo haya demostrado (#749)
+        self._password_reset_token = None
+        self._reset_token_expires_at = None
         self._updated_at = datetime.now()
 
         self._add_domain_event(

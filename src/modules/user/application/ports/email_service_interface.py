@@ -119,3 +119,27 @@ class IEmailService(ABC):
             - Plantilla bilingüe (ES/EN)
         """
         pass
+
+    @abstractmethod
+    async def send_email_change_confirmation(
+        self, to_email: str, user_name: str, token: str
+    ) -> bool:
+        """
+        Envía al correo NUEVO el enlace que confirma el cambio (#749). Hasta pulsarlo,
+        la cuenta sigue con el correo de antes. Caduca en 24 horas.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
+    async def send_email_change_requested_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        Avisa al correo de ANTES de que se ha pedido cambiarlo (#749): si no fue el
+        dueño, alguien entró en su cuenta. El correo nuevo va tapado.
+
+        Returns:
+            True si se envió correctamente
+        """

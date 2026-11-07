@@ -18,6 +18,5 @@ def registro_de_dispositivo_falso(device_id: str | None = None) -> AsyncMock:
         device_id=device_id or str(uuid4()),
         is_new_device=False,
         message="Dispositivo actualizado",
-        set_device_cookie=False,
     )
     return registro

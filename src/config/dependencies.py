@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
 from src.config.cupo_de_avisos import cupo_de_avisos
+from src.config.cupo_de_contacto import cupo_de_contacto
 from src.config.database import async_session_maker
 from src.config.freno_del_login import freno_del_login
 from src.config.refresco_de_handicaps import LanzadorEnSegundoPlano, refresco_activado
@@ -546,11 +547,12 @@ from src.modules.social.infrastructure.adapters.tournament_visibility_adapter im
 from src.modules.social.infrastructure.persistence.sqlalchemy.social_unit_of_work import (
     SQLAlchemySocialUnitOfWork,
 )
+from src.modules.support.application.ports.contact_mailer import IContactMailer
 from src.modules.support.application.use_cases.submit_contact_use_case import (
     SubmitContactUseCase,
 )
-from src.modules.support.infrastructure.services.github_issue_service import (
-    GitHubIssueService,
+from src.modules.support.infrastructure.services.mailgun_contact_mailer import (
+    MailgunContactMailer,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.avatar_preset_provider_interface import (
@@ -582,6 +584,12 @@ from src.modules.user.application.use_cases.admin_set_user_active_use_case impor
 )
 from src.modules.user.application.use_cases.admin_update_user_use_case import (
     AdminUpdateUserUseCase,
+)
+from src.modules.user.application.use_cases.cancel_email_change_use_case import (
+    CancelEmailChangeUseCase,
+)
+from src.modules.user.application.use_cases.confirm_email_change_use_case import (
+    ConfirmEmailChangeUseCase,
 )
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.get_admin_stats_use_case import (
@@ -1013,19 +1021,14 @@ def get_logout_user_use_case(
 def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
-    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
 ) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
-    Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens + user_devices).
-    2. Depende de `get_token_service` para generación de tokens JWT.
-    3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
-    4. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
-    5. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
+    Con la Unit of Work (users + refresh_tokens + user_devices) y el servicio de
+    tokens. Ya no registra dispositivos: usa el de su token (BE #738).
     """
-    return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
+    return RefreshAccessTokenUseCase(uow, token_service)
 
 
 def get_open_session_use_case(
@@ -1051,6 +1054,20 @@ def get_update_profile_use_case(
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return UpdateProfileUseCase(uow, country_repository)
+
+
+def get_confirm_email_change_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ConfirmEmailChangeUseCase:
+    """Proveedor del caso de uso que confirma el correo nuevo pendiente (#749)."""
+    return ConfirmEmailChangeUseCase(uow)
+
+
+def get_cancel_email_change_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CancelEmailChangeUseCase:
+    """Proveedor del caso de uso que anula el correo nuevo pendiente (#749)."""
+    return CancelEmailChangeUseCase(uow)
 
 
 def get_update_security_use_case(
@@ -1550,9 +1567,10 @@ def get_admin_update_user_use_case(
 
 def get_admin_set_user_active_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AdminSetUserActiveUseCase:
-    """Proveedor del caso de uso AdminSetUserActiveUseCase."""
-    return AdminSetUserActiveUseCase(uow)
+    """Proveedor de AdminSetUserActiveUseCase (con su log de seguridad desde BE #744)."""
+    return AdminSetUserActiveUseCase(uow, security_audit)
 
 
 def get_admin_delete_user_use_case(
@@ -3372,16 +3390,16 @@ def get_unlock_account_use_case(
 # ============================================================================
 
 
-def get_github_issue_service():
-    """Proveedor del servicio de GitHub Issues."""
-    return GitHubIssueService()
+def get_contact_mailer() -> IContactMailer:
+    """El envío por correo de los mensajes de contacto (Mailgun)."""
+    return MailgunContactMailer()
 
 
 def get_submit_contact_use_case(
-    github_issue_service=Depends(get_github_issue_service),
-):
-    """Proveedor del caso de uso SubmitContactUseCase."""
-    return SubmitContactUseCase(github_issue_service)
+    mailer: IContactMailer = Depends(get_contact_mailer),
+) -> SubmitContactUseCase:
+    """Proveedor del caso de uso SubmitContactUseCase, con el tope diario de la app."""
+    return SubmitContactUseCase(mailer, cupo_de_contacto)
 
 
 # ============================================================================

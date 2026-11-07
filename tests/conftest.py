@@ -655,6 +655,13 @@ def mock_external_services():
     mock_email.send_new_login_notification = AsyncMock(return_value=True)
     # Y el de intentos fallidos (BE #732)
     mock_email.send_failed_logins_notification = AsyncMock(return_value=True)
+    # Y los del restablecimiento, que también se esperan (#749: el primer test de
+    # integración que completa uno)
+    mock_email.send_password_reset_email = AsyncMock(return_value=True)
+    mock_email.send_password_changed_notification = AsyncMock(return_value=True)
+    # Y los del cambio de correo pendiente (#749)
+    mock_email.send_email_change_confirmation = AsyncMock(return_value=True)
+    mock_email.send_email_change_requested_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):
@@ -671,6 +678,7 @@ def reset_rate_limits():
     tests con el mismo email se pisarían dentro del mismo minuto.
     """
     from src.config.cupo_de_avisos import cupo_de_avisos
+    from src.config.cupo_de_contacto import cupo_de_contacto
     from src.config.freno_del_login import freno_del_login
     from src.config.rate_limit import limiter
 
@@ -678,10 +686,12 @@ def reset_rate_limits():
     limiter.reset()
     freno_del_login.reinicia()
     cupo_de_avisos.reinicia()
+    cupo_de_contacto.reinicia()
     yield
     limiter.reset()
     freno_del_login.reinicia()
     cupo_de_avisos.reinicia()
+    cupo_de_contacto.reinicia()
 
 
 # ======================================================================================

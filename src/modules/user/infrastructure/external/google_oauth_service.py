@@ -96,7 +96,9 @@ class GoogleOAuthService(IGoogleOAuthService):
                     email=email,
                     first_name=first_name,
                     last_name=last_name,
-                    email_verified=bool(userinfo.get("email_verified", False)),
+                    # Solo el booleano: bool("false") es True, y el alta y el vínculo
+                    # por correo dependen de esto
+                    email_verified=userinfo.get("email_verified") is True,
                     picture_url=userinfo.get("picture"),
                 )
         except ValueError:

@@ -30,11 +30,13 @@ Google OAuth (3 endpoints) ⭐ Sprint 3
 ├── POST   /api/v1/auth/google/link      # Link Google account to existing user (auth + CSRF)
 └── DELETE /api/v1/auth/google/unlink    # Unlink Google account (auth + CSRF)
 
-User Management (5 endpoints)
+User Management (7 endpoints)
 ├── GET   /api/v1/users/search-autocomplete # Autocomplete search by partial name ⭐ Sprint 4
 ├── GET   /api/v1/users/search           # Search users by email/name
 ├── PATCH /api/v1/users/profile          # Update profile (name/surname/country)
-├── PATCH /api/v1/users/security         # Update security (email/password)
+├── PATCH /api/v1/users/security         # Update security (password; a new email stays pending)
+├── POST /api/v1/users/me/email-change/confirm  # Confirm the pending email (session + token)
+├── DELETE /api/v1/users/me/email-change # Cancel the pending email
 └── GET   /api/v1/users/me/roles/{id}    # Check user roles in a competition (v2.0.0)
 
 Device Management (2 endpoints) ⭐ v1.13.0
@@ -127,7 +129,7 @@ Scoring & Leaderboard (5 endpoints) ⭐ Sprint 4
 └── PUT  /api/v1/competitions/matches/{id}/concede               # Concede match
 
 Support (1 endpoint) ⭐ v2.0.8
-└── POST /api/v1/support/contact         # Submit contact form (creates GitHub Issue)
+└── POST /api/v1/support/contact         # Submit contact form (emails the app's mailbox)
 ```
 
 ---
@@ -144,7 +146,7 @@ Support (1 endpoint) ⭐ v2.0.8
 | `/auth/verify-email` | POST | No | Verify email with unique token |
 | `/auth/resend-verification` | POST | No | Resend verification email |
 | `/auth/forgot-password` | POST | No | Request password reset (sends email with token) |
-| `/auth/reset-password` | POST | No | Complete password reset using token |
+| `/auth/reset-password` | POST | No | Complete password reset using token. Revokes every session and device; on an unverified account it also verifies the email and removes any linked Google (ADR-045); any pending email change is cancelled |
 | `/auth/validate-reset-token/{token}` | GET | No | Validate reset token before showing form |
 | `/auth/unlock-account` | POST | Yes | Manual account unlock (Admin) - **v1.13.0** |
 
@@ -250,20 +252,25 @@ Returned in all endpoints that include user data (login, current-user, register,
 - `token_type` - "bearer"
 - `user` - User data (see User Object in Authentication section, includes `auth_providers` and `has_password`)
 - `is_new_user` (bool) - True if user was auto-registered (frontend should redirect to "Complete Profile")
-- `device_id`, `should_set_device_cookie` - Device registration info
+- `device_id` - The session's device (always present; the device cookie is set on every login and refresh)
 
-**httpOnly Cookies set:** `access_token` (15 min), `refresh_token` (7 days), `csrf_token` (15 min), `device_id` (1 year, if new device)
+**httpOnly Cookies set:** `access_token` (15 min), `refresh_token` (7 days), `csrf_token` (15 min), `device_id` (1 year, set on every login and refresh)
 
 ### Three Login Flows
 
 1. **Existing OAuth account** → Direct login (`is_new_user=false`)
-2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`)
-3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`)
+2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`), only if Google verified the email. If the account's email was **unverified** (anyone could have created it with that address), Google **claims** it: the email is verified, the password and any pending reset token are removed, every earlier device and refresh token is revoked and any Google linked before is unlinked. The owner can set a password with the password reset
+3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`), only if Google verified the email
+
+**Errors** (`detail` plus `error_code` at the root):
+- `400 GOOGLE_EMAIL_NOT_VERIFIED` - Google has not verified the email: no sign-up and no auto-link (flows 2 and 3). An already linked Google still signs in.
+- `403 ACCOUNT_DEACTIVATED` - The account was deactivated by an administrator.
 
 ### Link/Unlink Google Account
 
 **POST /auth/google/link** - Requires JWT auth + CSRF header (`X-CSRF-Token`)
 - Links Google account to the authenticated user
+- Requires a verified account email: otherwise `403` with `error_code: GOOGLE_LINK_NEEDS_VERIFIED_EMAIL`
 - Errors if Google account already linked to another user, or user already has Google linked
 
 **DELETE /auth/google/unlink** - Requires JWT auth + CSRF header (`X-CSRF-Token`)
@@ -276,6 +283,7 @@ Returned in all endpoints that include user data (login, current-user, register,
 |------|---------|
 | 400 | Invalid/expired authorization code, already linked, no Google linked |
 | 401 | Not authenticated (link/unlink only) |
+| 403 | `ACCOUNT_DEACTIVATED` (login) or `GOOGLE_LINK_NEEDS_VERIFIED_EMAIL` (link) |
 | 423 | Account locked (brute force protection) |
 | 429 | Rate limit exceeded (login only) |
 
@@ -290,7 +298,17 @@ Returned in all endpoints that include user data (login, current-user, register,
 | `/users/search-autocomplete` | GET | Yes | Autocomplete search by partial name ⭐ Sprint 4 |
 | `/users/search` | GET | Yes | Search users by email/name |
 | `/users/profile` | PATCH | Yes | Update profile (name, surname, country) |
-| `/users/security` | PATCH | Yes | Change email or password |
+| `/users/security` | PATCH | Yes | Change the password, or ask for a new email (stays pending) |
+| `/users/me/email-change/confirm` | POST | Yes | Confirm the pending email with the token of its link |
+| `/users/me/email-change` | DELETE | Yes | Cancel the pending email |
+
+### Pending email change
+
+Changing the email no longer puts it on the account unverified (pre-account takeover, #749):
+- `PATCH /users/security` with `new_email` leaves the account on its current email (still verified) and stores the new one as `pending_email` for **24 hours**. A link goes to the new address (`{FRONTEND_URL}/confirm-email-change?token=...`) and a notice to the old one (new address masked). Response message: `Email change pending confirmation`. The same email as the current one changes nothing.
+- `POST /users/me/email-change/confirm` `{ "token" }` — **only with the account's session**: a stranger who gets the link through a typo cannot confirm it. On success the account email is the new one, verified, and a pending password reset for the old address is dropped. Errors (`detail` + `error_code`): `400 EMAIL_CHANGE_INVALID`, `400 EMAIL_CHANGE_EXPIRED` (cancelled), `409 EMAIL_ALREADY_IN_USE` (another account took it meanwhile; cancelled).
+- `DELETE /users/me/email-change` cancels it; its link stops working. Asking for another email replaces the pending one.
+- The user object carries `pending_email` (or `null`). Until confirmed, login, Google, password reset and notices keep using the old email.
 
 ### Search Autocomplete ⭐ Sprint 4
 
@@ -1057,7 +1075,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 | Endpoint | Method | Auth | Rate Limit | Description |
 |----------|--------|------|------------|-------------|
-| `/support/contact` | POST | No | 10/hour | Submit contact form (creates GitHub Issue) |
+| `/support/contact` | POST | No | 10/day per network, 20/day app-wide | Submit contact form (emails the app's mailbox) |
 
 ### Main Fields
 
@@ -1071,29 +1089,29 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 **Contact Response:**
 - `message` (string) - Confirmation message
 
-### Category → GitHub Label Mapping
+### Category in the email
 
-| Category | GitHub Label |
-|----------|-------------|
-| BUG | `bug` |
-| FEATURE | `enhancement` |
-| QUESTION | `question` |
-| OTHER | `other` |
+| Category | In the subject |
+|----------|----------------|
+| BUG | `Error` |
+| FEATURE | `Sugerencia` |
+| QUESTION | `Pregunta` |
+| OTHER | `Otro` |
 
 ### Business Rules
 
 - **Public endpoint**: No authentication required
 - **CSRF exempt**: No session to protect
-- **Rate limited**: 10 requests/hour per network (SlowAPI, `CONTACT_LIMIT`)
-- **Input sanitization**: All fields sanitized via `sanitize_html()` before creating issue
-- **GitHub Integration**: Creates issues in configured repo via REST API (`GH_ISSUES_TOKEN` + `GITHUB_ISSUES_REPO`)
-- **Error handling**: Returns 502 Bad Gateway if GitHub API fails
+- **Rate limited**: 10 requests/day per network (SlowAPI, `CONTACT_LIMIT`; a failed send also counts there, the app-wide slot is given back)
+- **Daily quota**: at most 20 messages a day app-wide (in memory); then `429` with `error_code: CONTACT_QUOTA_EXCEEDED`, so the shared mail quota stays for verification and password reset
+- **Email**: plain text to `CONTACT_EMAIL` (default `admin@rydercupfriends.com`) through Mailgun (EU), subject `[Contacto · <category>] <subject>` in one line (control characters removed), `Reply-To` the sender. Since 2.52; before, it opened a GitHub issue
+- **Error handling**: Returns 502 Bad Gateway if Mailgun refuses the message (the quota slot is given back)
 
 ### Architecture (Clean Architecture)
 
-- **Domain**: `ContactCategory` value object (StrEnum with `to_github_label()`)
-- **Application**: `SubmitContactUseCase` + `IGitHubIssueService` port + `ContactRequestDTO`/`ContactResponseDTO`
-- **Infrastructure**: `GitHubIssueService` adapter (GitHub REST API) + `support_routes.py`
+- **Domain**: `ContactCategory` value object (StrEnum)
+- **Application**: `SubmitContactUseCase` + `IContactMailer` and `ICupoDeContacto` ports + `ContactRequestDTO`/`ContactResponseDTO`
+- **Infrastructure**: `MailgunContactMailer` adapter + `support_routes.py`; the quota lives in `src/config/cupo_de_contacto.py`
 
 ---
 
@@ -1153,7 +1171,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 | POST /auth/forgot-password, /auth/resend-verification | 30/hour + 3/hour per email | network + email | Protect Mailgun and the mailbox |
 | POST /auth/reset-password | 20/hour | network | |
 | GET /auth/validate-reset-token/{token} | 30/hour | network | |
-| POST /support/contact | 10/hour | network | Anti contact form spam |
+| POST /support/contact | 10/day | network | Anti contact form spam; 20/day app-wide on top |
 | POST /handicaps/update | 5/hour | user | Protect RFEG API |
 | POST /handicaps/refresh-mine | 10/hour | user | Each call may wait for RFEG |
 | POST /competitions | 10/hour | user | Anti competition spam |

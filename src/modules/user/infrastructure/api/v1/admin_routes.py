@@ -6,7 +6,7 @@ estadisticas globales de la plataforma. Todos los endpoints requieren
 autenticacion + require_admin().
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from src.config.dependencies import (
     get_admin_delete_user_use_case,
@@ -16,6 +16,7 @@ from src.config.dependencies import (
     get_current_user,
     get_get_admin_stats_use_case,
 )
+from src.config.settings import settings
 from src.modules.user.application.dto.admin_dto import (
     AdminListUsersRequestDTO,
     AdminListUsersResponseDTO,
@@ -42,6 +43,10 @@ from src.modules.user.application.use_cases.get_admin_stats_use_case import (
 )
 from src.modules.user.domain.errors.user_errors import DuplicateEmailError, UserNotFoundError
 from src.modules.user.domain.exceptions import UserHasActivityException
+from src.shared.infrastructure.http.http_context_validator import (
+    get_trusted_client_ip,
+    get_user_agent,
+)
 from src.shared.infrastructure.security.authorization import require_admin
 
 router = APIRouter()
@@ -118,6 +123,7 @@ async def update_user(
     summary="Activar o desactivar una cuenta (Admin)",
 )
 async def set_user_active(
+    request: Request,
     user_id: str,
     body: AdminSetUserActiveRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -125,7 +131,16 @@ async def set_user_active(
 ):
     require_admin(current_user)
     try:
-        await use_case.execute(user_id, body.is_active, actor_user_id=str(current_user.id))
+        # Quién y desde dónde, para el log de seguridad (BE #744)
+        await use_case.execute(
+            user_id,
+            body.is_active,
+            actor_user_id=str(current_user.id),
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
