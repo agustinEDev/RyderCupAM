@@ -17,6 +17,12 @@ from src.config.dependencies import (
     get_update_profile_use_case,
     get_update_security_use_case,
 )
+from src.config.rate_limit import (
+    NEW_EMAIL_REQUESTS_LIMIT,
+    SECURITY_CHANGES_LIMIT,
+    cabe,
+    clave_de_usuario,
+)
 from src.config.settings import settings
 from src.config.terms_guard import TERMS_EXEMPT_ROUTES
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -353,6 +359,26 @@ async def update_profile(
         ) from e
 
 
+# El 429 de PATCH /users/security, con su código para traducirlo (BE #753). Sin el
+# límite ni la ventana: no es asunto de quien llama
+DEMASIADOS_CAMBIOS = "TOO_MANY_SECURITY_CHANGES"
+DEMASIADOS_CORREOS_NUEVOS = "TOO_MANY_EMAIL_CHANGE_REQUESTS"
+_TEXTOS_DEL_LIMITE_DE_SEGURIDAD = {
+    DEMASIADOS_CAMBIOS: "Demasiados intentos. Inténtalo de nuevo más tarde.",
+    DEMASIADOS_CORREOS_NUEVOS: "Has pedido demasiados cambios de correo. Inténtalo más tarde.",
+}
+
+
+def _fuera_del_limite_de_seguridad(user_id: str, pide_correo: bool) -> str | None:
+    """El código del límite que se pasa, o None. El del correo solo cuenta si lo pide."""
+    clave = clave_de_usuario(user_id)
+    if not cabe(SECURITY_CHANGES_LIMIT, "security-changes", clave):
+        return DEMASIADOS_CAMBIOS
+    if pide_correo and not cabe(NEW_EMAIL_REQUESTS_LIMIT, "new-email-requests", clave):
+        return DEMASIADOS_CORREOS_NUEVOS
+    return None
+
+
 @router.patch(
     "/security",
     response_model=UpdateSecurityResponseDTO,
@@ -360,8 +386,11 @@ async def update_profile(
     summary="Actualizar datos de seguridad",
     description=(
         "Actualiza la contraseña y/o pide un correo nuevo, que queda pendiente hasta "
-        "confirmarlo desde su dirección (ADR-045). Requiere la contraseña actual."
+        "confirmarlo desde su dirección (ADR-045). Requiere la contraseña actual. "
+        "Límite por usuario: 10 por hora, y 3 por hora pidiendo un correo nuevo (429 con "
+        "`error_code` TOO_MANY_SECURITY_CHANGES o TOO_MANY_EMAIL_CHANGE_REQUESTS)."
     ),
+    responses={429: {"description": "Demasiadas peticiones; `error_code` dice cuál."}},
     tags=["Users"],
 )
 async def update_security(
@@ -388,6 +417,13 @@ async def update_security(
     - Registra cambios de email (severity HIGH)
     - Revoca refresh tokens si cambia contraseña
     """
+    # Antes de mirar la contraseña: cada petición cuenta, salga bien o mal (BE #753)
+    fuera = _fuera_del_limite_de_seguridad(str(current_user.id), bool(request.new_email))
+    if fuera:
+        return respuesta_con_codigo(
+            status.HTTP_429_TOO_MANY_REQUESTS, _TEXTOS_DEL_LIMITE_DE_SEGURIDAD, fuera
+        )
+
     try:
         # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
         # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
