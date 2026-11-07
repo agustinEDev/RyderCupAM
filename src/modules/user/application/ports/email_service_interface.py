@@ -133,6 +133,18 @@ class IEmailService(ABC):
         """
 
     @abstractmethod
+    async def send_email_changed_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        Avisa al correo de ANTES de que el cambio se ha confirmado (BE #753): desde
+        ahora la cuenta usa el nuevo, que va tapado, y dice a quién escribir.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
     async def send_email_change_requested_notice(
         self, to_email: str, user_name: str, new_email: str
     ) -> bool:

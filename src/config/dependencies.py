@@ -1068,9 +1068,12 @@ def get_update_profile_use_case(
 def get_confirm_email_change_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> ConfirmEmailChangeUseCase:
     """Proveedor del caso de uso que confirma el correo nuevo pendiente (#749)."""
-    return ConfirmEmailChangeUseCase(uow, security_audit=security_audit)
+    return ConfirmEmailChangeUseCase(
+        uow, security_audit=security_audit, email_service=email_service
+    )
 
 
 def get_cancel_email_change_use_case(

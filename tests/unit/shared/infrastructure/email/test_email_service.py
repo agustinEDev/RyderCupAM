@@ -574,6 +574,20 @@ class TestCorreosDelCambioDeCorreo:
         assert "24 horas" in cuerpo and "24 hours" in cuerpo
 
     @pytest.mark.asyncio
+    async def test_the_change_notice_tells_the_old_address_whom_to_write(self, correo):
+        """
+        El aviso tras confirmar (BE #753): al correo de antes, el nuevo tapado y a quién
+        escribir si no fue el dueño
+        """
+        await correo.send_email_changed_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "a***@trabajo.com" in cuerpo and "a***@trabajo.com" in texto
+        assert "ana@trabajo.com" not in cuerpo and "ana@trabajo.com" not in texto
+        assert "admin@rydercupfriends.com" in cuerpo and "admin@rydercupfriends.com" in texto
+
+    @pytest.mark.asyncio
     async def test_the_notice_goes_to_the_old_address_with_the_new_one_masked(self, correo):
         """
         El aviso, al correo de antes: el nuevo tapado (lo puede leer quien no es su

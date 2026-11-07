@@ -439,6 +439,66 @@ If it wasn't you, change your password: {restablecer}
         )
         return await self._send_email(to_email, subject, text_body, html_body)
 
+    async def send_email_changed_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        El aviso, al correo de ANTES, de que el cambio ya está hecho (BE #753). El nuevo
+        va tapado, y dice a quién escribir: con el correo cambiado, el dueño ya no puede
+        recuperar la cuenta por su cuenta.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        nuevo = mask_email(new_email)
+        contacto = "admin@rydercupfriends.com"
+        subject = "Tu correo ha cambiado - Ryder Cup Friends | Your email has changed"
+        text_body = f"""
+Hola {safe_user_name},
+
+El correo de tu cuenta de Ryder Cup Friends es ahora {nuevo}.
+
+Si no has sido tú, escríbenos a {contacto}.
+
+---
+
+Hello {safe_user_name},
+
+Your Ryder Cup Friends account email is now {nuevo}.
+
+If it wasn't you, write to us at {contacto}.
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Tu correo ha cambiado · Your email has changed",
+            etiqueta="Seguridad",
+            titulo="Tu correo ha cambiado",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", el correo de tu cuenta es ahora ",
+                    negrita(nuevo),
+                    ".",
+                ),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Escríbenos a ",
+                    negrita(contacto),
+                    " y la recuperamos.",
+                ),
+            ],
+            boton=Boton("Escríbenos", f"mailto:{contacto}"),
+            ingles=Ingles(
+                frase(
+                    negrita("Your account email is now"),
+                    f" {nuevo}. If it wasn't you, write to us at {contacto}.",
+                ),
+                Boton("Write to us", f"mailto:{contacto}"),
+            ),
+            pie="Este aviso se envía siempre que cambia el correo de una cuenta. "
+            "We always send this when an account email changes.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
     async def send_new_login_notification(
         self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
     ) -> bool:

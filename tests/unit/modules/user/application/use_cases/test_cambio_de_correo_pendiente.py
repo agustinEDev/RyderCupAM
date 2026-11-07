@@ -11,6 +11,11 @@ El cambio de correo, pendiente hasta confirmarlo desde la dirección nueva (#749
                                                    |   pendiente anulado (guardado)
   E4  el nuevo ya lo tiene otra cuenta al confirmar| EmailChangeEmailInUseError, sin cambio
   E6  anular                                       | sin pendiente
+  Tras el cambio (BE #753, punto 3):
+  E7  confirmado: aviso al correo de ANTES, con el nuevo tapado y a quién escribir
+  E7b el de antes sin verificar: sin aviso (nunca a un correo sin confirmar)
+  E7c el aviso falla o no sale: el cambio se queda
+  E7d caducado, ocupado o con otro token: sin aviso
 """
 
 from datetime import datetime, timedelta
@@ -116,9 +121,9 @@ async def test_e2_confirming_switches_the_email():
     _r, correos = await _pide(uow, ana)
     token = correos.send_email_change_confirmation.await_args.kwargs["token"]
 
-    usuario = await ConfirmEmailChangeUseCase(uow, security_audit=SecurityAuditLogger()).execute(
-        str(ana.id.value), token
-    )
+    usuario = await ConfirmEmailChangeUseCase(
+        uow, security_audit=SecurityAuditLogger(), email_service=AsyncMock()
+    ).execute(str(ana.id.value), token)
 
     assert usuario.email == "ana@trabajo.com"
     assert usuario.email_verified is True
@@ -138,6 +143,7 @@ async def test_e3_a_late_confirmation_cancels_the_change_and_saves_it():
     token = correos.send_email_change_confirmation.await_args.kwargs["token"]
     caso = ConfirmEmailChangeUseCase(
         uow,
+        email_service=AsyncMock(),
         reloj=lambda: datetime.now() + timedelta(hours=25),
         security_audit=SecurityAuditLogger(),
     )
@@ -166,9 +172,9 @@ async def test_e4_an_address_taken_meanwhile_is_refused():
         await uow.users.save(otra)
 
     with pytest.raises(EmailChangeEmailInUseError):
-        await ConfirmEmailChangeUseCase(uow, security_audit=SecurityAuditLogger()).execute(
-            str(ana.id.value), token
-        )
+        await ConfirmEmailChangeUseCase(
+            uow, security_audit=SecurityAuditLogger(), email_service=AsyncMock()
+        ).execute(str(ana.id.value), token)
 
     async with uow:
         guardada = await uow.users.find_by_id(ana.id)
@@ -183,9 +189,9 @@ async def test_a_wrong_token_is_refused():
     await _pide(uow, ana)
 
     with pytest.raises(EmailChangeInvalidError):
-        await ConfirmEmailChangeUseCase(uow, security_audit=SecurityAuditLogger()).execute(
-            str(ana.id.value), "otro"
-        )
+        await ConfirmEmailChangeUseCase(
+            uow, security_audit=SecurityAuditLogger(), email_service=AsyncMock()
+        ).execute(str(ana.id.value), "otro")
 
     assert (await uow.users.find_by_id(ana.id)).pending_email_token is not None
 
@@ -201,9 +207,9 @@ async def test_e6_cancelling_leaves_nothing_pending():
 
     assert usuario.pending_email is None
     with pytest.raises(EmailChangeInvalidError):
-        await ConfirmEmailChangeUseCase(uow, security_audit=SecurityAuditLogger()).execute(
-            str(ana.id.value), token
-        )
+        await ConfirmEmailChangeUseCase(
+            uow, security_audit=SecurityAuditLogger(), email_service=AsyncMock()
+        ).execute(str(ana.id.value), token)
 
 
 async def test_a_wrong_token_with_a_taken_address_is_invalid_and_keeps_the_change():
@@ -222,9 +228,9 @@ async def test_a_wrong_token_with_a_taken_address_is_invalid_and_keeps_the_chang
         await uow.users.save(otra)
 
     with pytest.raises(EmailChangeInvalidError):
-        await ConfirmEmailChangeUseCase(uow, security_audit=SecurityAuditLogger()).execute(
-            str(ana.id.value), "otro"
-        )
+        await ConfirmEmailChangeUseCase(
+            uow, security_audit=SecurityAuditLogger(), email_service=AsyncMock()
+        ).execute(str(ana.id.value), "otro")
 
     assert (await uow.users.find_by_id(ana.id)).pending_email_token is not None
 
@@ -271,9 +277,9 @@ async def test_the_confirmed_change_goes_to_the_security_log(monkeypatch):
     )
 
     # El adaptador de verdad: el test espía lo que le llega al SecurityLogger
-    await ConfirmEmailChangeUseCase(uow, security_audit=SecurityAuditLogger()).execute(
-        str(ana.id.value), token, ip_address="203.0.113.7", user_agent="Navegador"
-    )
+    await ConfirmEmailChangeUseCase(
+        uow, security_audit=SecurityAuditLogger(), email_service=AsyncMock()
+    ).execute(str(ana.id.value), token, ip_address="203.0.113.7", user_agent="Navegador")
 
     assert apuntes == [
         {
@@ -358,3 +364,76 @@ async def test_cancelling_with_a_token_keeps_a_newer_request():
     await CancelEmailChangeUseCase(uow).execute(str(ana.id.value), token=viejo)
 
     assert (await uow.users.find_by_id(ana.id)).pending_email == "ana@casa.com"
+
+
+async def _confirma(uow, ana, correos=None, token=None):
+    correos = correos or AsyncMock()
+    if token is None:
+        _r, pedidos = await _pide(uow, ana)
+        token = pedidos.send_email_change_confirmation.await_args.kwargs["token"]
+    usuario = await ConfirmEmailChangeUseCase(
+        uow, security_audit=SecurityAuditLogger(), email_service=correos
+    ).execute(str(ana.id.value), token)
+    return usuario, correos
+
+
+async def test_e7_the_old_address_is_told_once_the_change_is_confirmed():
+    """
+    Given: Ana, verificada, con un cambio pendiente a ana@trabajo.com
+    When: Lo confirma
+    Then: Un aviso a ana@gmail.com, con el correo nuevo
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+
+    _usuario, correos = await _confirma(uow, ana)
+
+    correos.send_email_changed_notice.assert_awaited_once_with(
+        to_email="ana@gmail.com", user_name="Ana", new_email="ana@trabajo.com"
+    )
+
+
+async def test_e7b_an_unverified_old_address_is_not_told():
+    """Nunca a un correo sin confirmar: lo pudo escribir mal o ser de otro."""
+    uow = InMemoryUnitOfWork()
+    ana = User.create(
+        first_name="Ana", last_name="Dueña", email_str="ana@gmail.com", plain_password=CLAVE
+    )
+    async with uow:
+        await uow.users.save(ana)
+
+    _usuario, correos = await _confirma(uow, ana)
+
+    correos.send_email_changed_notice.assert_not_awaited()
+
+
+@pytest.mark.parametrize("falla", ["lanza", "no sale"])
+async def test_e7c_a_failing_notice_keeps_the_change(falla):
+    """El aviso no deshace el cambio, ya guardado."""
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    correos = AsyncMock()
+    if falla == "lanza":
+        correos.send_email_changed_notice.side_effect = RuntimeError("smtp")
+    else:
+        correos.send_email_changed_notice.return_value = False
+
+    usuario, _ = await _confirma(uow, ana, correos)
+
+    assert usuario.email == "ana@trabajo.com"
+    async with uow:
+        guardada = await uow.users.find_by_id(ana.id)
+    assert str(guardada.email.value) == "ana@trabajo.com"
+
+
+async def test_e7d_a_refused_confirmation_tells_nobody():
+    """Con otro token no se confirma nada, y no se avisa."""
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    await _pide(uow, ana)
+    correos = AsyncMock()
+
+    with pytest.raises(EmailChangeInvalidError):
+        await _confirma(uow, ana, correos, token="otro")
+
+    correos.send_email_changed_notice.assert_not_awaited()
