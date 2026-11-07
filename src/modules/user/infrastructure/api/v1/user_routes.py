@@ -241,7 +241,7 @@ async def confirm_email_change(
     except IntegrityError:
         # Otra cuenta lo ocupó entre la comprobación y el guardado (la restricción
         # única de users.email): como el otro 409, el cambio queda anulado
-        await anula.execute(str(current_user.id))
+        await anula.execute(str(current_user.id), token=datos.token)
         codigo, estado = EMAIL_ALREADY_IN_USE, status.HTTP_409_CONFLICT
     return respuesta_con_codigo(estado, _TEXTOS_DEL_CAMBIO_DE_CORREO, codigo)
 

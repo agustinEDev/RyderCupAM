@@ -69,11 +69,13 @@ class GenderDecorator(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value: Gender | None, dialect) -> str | None:
+        """Del valor del dominio a la columna."""
         if value is None:
             return None
         return value.value
 
     def process_result_value(self, value: str | None, dialect) -> Gender | None:
+        """De la columna al valor del dominio."""
         if value is None:
             return None
         return Gender(value)
@@ -87,11 +89,13 @@ class AvatarSourceDecorator(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value: AvatarSource | None, dialect) -> str | None:
+        """Del valor del dominio a la columna."""
         if value is None:
             return None
         return value.value
 
     def process_result_value(self, value: str | None, dialect) -> AvatarSource | None:
+        """De la columna al valor del dominio."""
         if value is None:
             return AvatarSource.NONE
         return AvatarSource(value)
@@ -105,6 +109,7 @@ class ActiveAvatarUploadIdDecorator(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value: UserAvatarUploadId | str | None, dialect) -> str | None:
+        """Del valor del dominio a la columna."""
         if isinstance(value, UserAvatarUploadId):
             return str(value.value)
         if isinstance(value, str):
@@ -112,6 +117,7 @@ class ActiveAvatarUploadIdDecorator(TypeDecorator):
         return None
 
     def process_result_value(self, value: str | None, dialect) -> UserAvatarUploadId | None:
+        """De la columna al valor del dominio."""
         if value is None:
             return None
         return UserAvatarUploadId(uuid.UUID(value))

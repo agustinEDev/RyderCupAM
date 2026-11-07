@@ -317,3 +317,23 @@ async def test_verifying_the_sign_up_email_cancels_a_pending_change():
     assert guardada.email_verified
     assert guardada.pending_email_token is None
     assert ana.id in pedidos
+
+
+async def test_cancelling_with_a_token_keeps_a_newer_request():
+    """
+    Given: Un pendiente que se sustituyó por otro más nuevo
+    When: Se anula con el token del de antes (el 409 de último instante)
+    Then: El nuevo sigue: solo se anula el que se estaba confirmando
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    _r, correos = await _pide(uow, ana)
+    viejo = correos.send_email_change_confirmation.await_args.kwargs["token"]
+    await UpdateSecurityUseCase(uow, correos).execute(
+        str(ana.id.value),
+        UpdateSecurityRequestDTO(current_password=CLAVE, new_email="ana@casa.com"),
+    )
+
+    await CancelEmailChangeUseCase(uow).execute(str(ana.id.value), token=viejo)
+
+    assert (await uow.users.find_by_id(ana.id)).pending_email == "ana@casa.com"

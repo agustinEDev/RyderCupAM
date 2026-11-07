@@ -75,6 +75,7 @@ class User:
     def _validate_profile_update(
         self, first_name, last_name, country_code_str, gender_str=None, alias=None
     ):
+        """Valida los datos nuevos del perfil antes de aplicarlos."""
         if (
             first_name is None
             and last_name is None
@@ -94,6 +95,7 @@ class User:
     def _detect_profile_changes(
         self, first_name, last_name, country_code_str, gender_str=None, alias=None
     ):
+        """Qué campos del perfil cambian respecto a los actuales."""
         old_first_name = self.first_name
         old_last_name = self.last_name
         old_country_code = self.country_code
@@ -173,6 +175,7 @@ class User:
         domain_events: list[DomainEvent] | None = None,
     ):
         # Asignación de atributos privados (encapsulación)
+        """La cuenta, con todos sus campos (también el correo pendiente, #749)."""
         self._id = id
         self._email = email
         self._password = password

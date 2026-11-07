@@ -322,6 +322,7 @@ class GoogleLoginUseCase:
         # Con la fila bloqueada y la cuenta como al resolverla: activa y con ESTE Google
         # (a la vez, una toma pudo quitárselo; #749, tabla de caminos)
         async def comprueba(actual: User | None) -> str | None:
+            """Activa y con ESTE Google vinculado a esta cuenta; si no, el motivo."""
             motivo = await activa(actual)
             if motivo is not None:
                 return motivo

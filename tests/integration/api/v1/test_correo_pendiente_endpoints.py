@@ -194,33 +194,34 @@ async def test_a_last_moment_duplicate_is_409_and_cancels(
     client: AsyncClient, mock_external_services, monkeypatch
 ):
     """
-    Given: Un cambio pendiente, y otra cuenta que ocupa el correo justo al guardar (la
-           restricción única de la BD salta en el commit)
-    When: Se confirma
-    Then: 409 EMAIL_ALREADY_IN_USE, y el pendiente queda anulado
+    Given: Un cambio pendiente a un correo que otra cuenta ya tiene, y la comprobación
+           de «ocupado» que no lo ve (como si lo ocupara justo después)
+    When: Se confirma: salta la restricción única de la BD al guardar
+    Then: 409 EMAIL_ALREADY_IN_USE y el pendiente anulado: la sesión de la BD sigue
+          sirviendo tras el fallo (CodeRabbit en #752)
     """
-    from sqlalchemy.exc import IntegrityError
-
-    from src.modules.user.application.use_cases.confirm_email_change_use_case import (
-        ConfirmEmailChangeUseCase,
+    from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
+        SQLAlchemyUserRepository,
     )
 
     _r, cabecera, token = await _pide(
         client, mock_external_services, "ultimo.viejo@example.com", "ultimo.nuevo@example.com"
     )
+    await create_authenticated_user(client, "ultimo.nuevo@example.com", CLAVE, "Otra", "Persona")
+    original = SQLAlchemyUserRepository.find_by_email
 
-    async def choca(self, *a, **k):
-        raise IntegrityError(
-            "insert", {}, Exception("duplicate key value violates unique constraint")
-        )
+    async def no_lo_ve(self, email):
+        if str(email.value) == "ultimo.nuevo@example.com":
+            return None
+        return await original(self, email)
 
-    monkeypatch.setattr(ConfirmEmailChangeUseCase, "execute", choca)
+    monkeypatch.setattr(SQLAlchemyUserRepository, "find_by_email", no_lo_ve)
 
     r = await _confirma(client, cabecera, token)
 
     assert r.status_code == 409
     assert r.json()["error_code"] == "EMAIL_ALREADY_IN_USE"
     filas = await _sql(
-        "select pending_email from users where email = :e", {"e": "ultimo.viejo@example.com"}
+        "select email, pending_email from users where email = :e", {"e": "ultimo.viejo@example.com"}
     )
-    assert filas == [(None,)]
+    assert filas == [("ultimo.viejo@example.com", None)]
