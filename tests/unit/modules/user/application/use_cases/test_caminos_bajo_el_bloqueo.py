@@ -116,6 +116,7 @@ def _google(uow, registro):
         register_device_use_case=registro,
         aviso_de_nuevo_inicio=AsyncMock(),
         security_audit=SecurityAuditLogger(),
+        email_service=AsyncMock(),
     )
 
 

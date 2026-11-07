@@ -574,6 +574,25 @@ class TestCorreosDelCambioDeCorreo:
         assert "24 horas" in cuerpo and "24 hours" in cuerpo
 
     @pytest.mark.asyncio
+    async def test_the_secured_notice_by_google_says_the_password_is_gone(self, correo):
+        """La toma por Google (BE #753): sin contraseña, y cómo tener una"""
+        await correo.send_account_secured_notice("ana@gmail.com", "Ana", "google")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "quitamos la contraseña" in cuerpo and "quitamos la contraseña" in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+
+    @pytest.mark.asyncio
+    async def test_the_secured_notice_by_reset_keeps_the_new_password(self, correo):
+        """La toma al restablecer: la contraseña es la que acaba de elegir"""
+        await correo.send_account_secured_notice("ana@gmail.com", "Ana", "reset")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "quitamos la contraseña" not in cuerpo and "quitamos la contraseña" not in texto
+        assert "la que acabas de elegir" in cuerpo and "la que acabas de elegir" in texto
+
+    @pytest.mark.asyncio
     async def test_the_change_notice_tells_the_old_address_whom_to_write(self, correo):
         """
         El aviso tras confirmar (BE #753): al correo de antes, el nuevo tapado y a quién

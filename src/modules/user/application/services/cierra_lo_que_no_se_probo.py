@@ -7,12 +7,18 @@ que dejó quien la creó o le cambió el correo no vale: sus dispositivos, sus s
 el Google que hubiera vinculado. Dentro de la transacción del que llama.
 """
 
+import logging
+
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
+from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
+
+logger = logging.getLogger(__name__)
 
 
 async def cierra_lo_que_no_se_probo(
@@ -24,3 +30,19 @@ async def cierra_lo_que_no_se_probo(
     if google is not None:
         await uow.oauth_accounts.delete(google)
     return dispositivos, tokens, int(google is not None)
+
+
+async def avisa_de_la_toma(email_service: IEmailService, user: User, via: str) -> None:
+    """
+    Avisa al dueño, ya demostrado, de que se ha asegurado su cuenta (BE #753). Tras la
+    transacción: si falla, la toma ya está hecha.
+    """
+    try:
+        enviado = await email_service.send_account_secured_notice(
+            to_email=str(user.email.value), user_name=user.first_name, via=via
+        )
+    except Exception as error:
+        logger.error("Account secured notice failed: %s", type(error).__name__)
+        return
+    if not enviado:
+        logger.error("Account secured notice was not sent")

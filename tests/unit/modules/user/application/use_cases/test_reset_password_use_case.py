@@ -94,6 +94,8 @@ class TestResetPasswordSuccess:
             email_str=sample_user_data["email"],
             plain_password="OldPassword123!",
         )
+        # Verificada: sin verificar, restablecer se la queda (aviso aparte, BE #753)
+        user.confirm_email_ownership()
         token = user.generate_password_reset_token(ip_address="1.1.1.1")
         old_password_hash = user.password.hashed_value
 
@@ -496,6 +498,8 @@ class TestResetPasswordSecurityFeatures:
             email_str=sample_user_data["email"],
             plain_password="OldPassword123!",
         )
+        # Verificada: sin verificar, restablecer se la queda (aviso aparte, BE #753)
+        user.confirm_email_ownership()
         token = user.generate_password_reset_token()
         async with uow:
             await uow.users.save(user)

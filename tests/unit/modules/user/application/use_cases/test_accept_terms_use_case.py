@@ -257,6 +257,7 @@ class TestAltaConGoogle:
             register_device_use_case=dispositivos,
             aviso_de_nuevo_inicio=AsyncMock(),
             security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         respuesta = await use_case.execute(

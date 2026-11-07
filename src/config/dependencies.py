@@ -3667,6 +3667,7 @@ def get_google_login_use_case(
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
     aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> GoogleLoginUseCase:
     """Proveedor del caso de uso GoogleLoginUseCase."""
     return GoogleLoginUseCase(
@@ -3676,6 +3677,7 @@ def get_google_login_use_case(
         register_device_use_case,
         aviso,
         security_audit=security_audit,
+        email_service=email_service,
     )
 
 

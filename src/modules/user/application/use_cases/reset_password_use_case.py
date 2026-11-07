@@ -27,6 +27,7 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
@@ -268,10 +269,14 @@ class ResetPasswordUseCase:
         if cerrado is not None:
             self._apunta_la_toma(user, cerrado, ip_address, user_agent)
 
-        # Enviar email de confirmación
-        await self._email_service.send_password_changed_notification(
-            to_email=str(user.email.value), user_name=user.get_full_name()
-        )
+        # Enviar email de confirmación. Si se la quedó, el de cuenta asegurada, que ya
+        # dice cuál es la contraseña (BE #753)
+        if cerrado is not None:
+            await avisa_de_la_toma(self._email_service, user, "reset")
+        else:
+            await self._email_service.send_password_changed_notification(
+                to_email=str(user.email.value), user_name=user.get_full_name()
+            )
 
         # Security Logging: Reseteo exitoso
         registra_sin_romper(

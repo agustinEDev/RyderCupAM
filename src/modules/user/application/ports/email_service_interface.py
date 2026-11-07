@@ -133,6 +133,17 @@ class IEmailService(ABC):
         """
 
     @abstractmethod
+    async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
+        """
+        Avisa al dueño de una cuenta SIN verificar que se la ha quedado (BE #753): lo que
+        dejó quien la creó, fuera. `via`: "google" (queda sin contraseña) o "reset" (la
+        contraseña es la que acaba de elegir).
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
     async def send_email_changed_notice(
         self, to_email: str, user_name: str, new_email: str
     ) -> bool:

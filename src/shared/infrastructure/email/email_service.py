@@ -439,6 +439,67 @@ If it wasn't you, change your password: {restablecer}
         )
         return await self._send_email(to_email, subject, text_body, html_body)
 
+    async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
+        """
+        El aviso de que se ha asegurado una cuenta sin verificar (BE #753). Con Google
+        se quitó la contraseña; al restablecer, la que vale es la que acaba de elegir.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        por_google = via == "google"
+        if por_google:
+            que_es = (
+                "Como no estaba verificada, quitamos la contraseña y cerramos sus sesiones. "
+                'Si quieres contraseña, usa "Olvidé mi contraseña".'
+            )
+            que_es_en = (
+                "As it was not verified, we removed its password and closed its sessions. "
+                'To have a password, use "Forgot password".'
+            )
+        else:
+            que_es = (
+                "Como no estaba verificada, tu contraseña es ahora la que acabas de elegir "
+                "y cerramos las demás sesiones."
+            )
+            que_es_en = (
+                "As it was not verified, your password is now the one you just chose and "
+                "we closed the other sessions."
+            )
+        subject = "Hemos asegurado tu cuenta - Ryder Cup Friends | Your account is secured"
+        text_body = f"""
+Hola {safe_user_name},
+
+Hemos asegurado tu cuenta de Ryder Cup Friends. {que_es}
+
+---
+
+Hello {safe_user_name},
+
+We have secured your Ryder Cup Friends account. {que_es_en}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Hemos asegurado tu cuenta · Your account is secured",
+            etiqueta="Seguridad",
+            titulo="Hemos asegurado tu cuenta",
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), ", hemos asegurado tu cuenta."),
+                aviso(que_es),
+            ],
+            boton=Boton("Olvidé mi contraseña", restablecer)
+            if por_google
+            else Boton("Abrir la aplicación", settings.FRONTEND_URL),
+            ingles=Ingles(
+                frase(negrita("We have secured your account."), f" {que_es_en}"),
+                Boton("Forgot password", restablecer)
+                if por_google
+                else Boton("Open the app", settings.FRONTEND_URL),
+            ),
+            pie="Este aviso se envía cuando se asegura una cuenta sin verificar. "
+            "We send this when an unverified account is secured.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
     async def send_email_changed_notice(
         self, to_email: str, user_name: str, new_email: str
     ) -> bool:

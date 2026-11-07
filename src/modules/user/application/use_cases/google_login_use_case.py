@@ -26,6 +26,7 @@ from src.modules.user.application.dto.oauth_dto import (
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
     IGoogleOAuthService,
@@ -33,6 +34,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
@@ -88,9 +90,12 @@ class GoogleLoginUseCase:
         aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
         *,
         security_audit: ISecurityAuditLogger,
+        email_service: IEmailService,
     ):
         # El correo de «nuevo inicio de sesión» (BE #737)
         self._security_audit = security_audit
+        # El aviso de cuenta asegurada (BE #753)
+        self._email_service = email_service
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
         self._uow = uow
         self._token_service = token_service
@@ -268,6 +273,8 @@ class GoogleLoginUseCase:
                     user_agent=user_agent,
                 ),
             )
+        if revocados is not None:
+            await avisa_de_la_toma(self._email_service, user, "google")
         if vinculada:
             # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
             # el correo, da acceso a la cuenta. El log nunca cambia la respuesta

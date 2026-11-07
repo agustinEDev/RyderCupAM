@@ -116,6 +116,7 @@ def use_case(uow, token_service, google_oauth_service, register_device_use_case)
         register_device_use_case=register_device_use_case,
         aviso_de_nuevo_inicio=AsyncMock(),
         security_audit=SecurityAuditLogger(),
+        email_service=AsyncMock(),
     )
 
 
@@ -474,6 +475,7 @@ class TestGoogleLoginNuevoInicio:
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
             security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         await use_case.execute(login_request)
@@ -519,6 +521,7 @@ class TestGoogleLoginNuevoInicio:
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
             security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         await use_case.execute(login_request)
@@ -559,6 +562,7 @@ class TestGoogleLoginNuevoInicio:
             register_device_use_case=registro,
             aviso_de_nuevo_inicio=aviso,
             security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         await use_case.execute(login_request)
@@ -604,6 +608,7 @@ class TestGoogleLoginCuentaDesactivada:
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=AsyncMock(),
             security_audit=roto,
+            email_service=AsyncMock(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -644,6 +649,7 @@ class TestGoogleLoginCuentaDesactivada:
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
             security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -683,6 +689,7 @@ class TestGoogleLoginCuentaDesactivada:
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=AsyncMock(),
             security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -960,6 +967,46 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
             assert (await uow.users.find_by_id(cuenta.id)).has_password
             assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
             assert not (await uow.refresh_tokens.find_by_token_hash("refresco-del-otro")).revoked
+
+    async def test_g8_the_owner_is_told_the_account_was_secured(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta sin verificar
+        When: Google se la queda
+        Then: El aviso de cuenta asegurada, por Google, al correo de la cuenta (BE #753)
+        """
+        await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        use_case._email_service.send_account_secured_notice.assert_awaited_once_with(
+            to_email="oauth@example.com", user_name="Ana", via="google"
+        )
+
+    async def test_g8b_a_verified_account_is_not_told(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """Sin toma, sin aviso."""
+        await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        use_case._email_service.send_account_secured_notice.assert_not_awaited()
+
+    async def test_g8c_a_failing_notice_keeps_the_login(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """El aviso no cambia el login."""
+        await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        use_case._email_service.send_account_secured_notice.side_effect = RuntimeError("smtp")
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.access_token
 
     async def test_g7_the_claim_goes_to_the_security_log(
         self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
