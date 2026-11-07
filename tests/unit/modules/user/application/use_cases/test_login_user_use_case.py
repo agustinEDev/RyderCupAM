@@ -17,6 +17,7 @@ from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -113,6 +114,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -141,6 +143,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 
@@ -162,6 +165,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="nonexistent@example.com", password="S0m3P@ssw0rd!")
 
@@ -183,6 +187,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -206,6 +211,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -251,6 +257,7 @@ class TestLoginUserUseCase:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(
             email="test@example.com",
@@ -303,6 +310,7 @@ class TestLoginUserUseCaseNoEsperaALaRFEG:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         response = await use_case.execute(
@@ -347,6 +355,7 @@ class TestLoginUserUseCaseDeactivatedAccount:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="V@l1dP@ss123!")
 
@@ -375,9 +384,40 @@ class TestLoginUserUseCaseDeactivatedAccount:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
         request = LoginRequestDTO(email="test@example.com", password="Wr0ngP@ssw0rd!")
 
         response = await use_case.execute(request)
 
         assert response is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("clave", "entra"), [("V@l1dP@ss123!", True), ("Wr0ngP@ssw0rd!", False)])
+async def test_g1_a_broken_security_log_does_not_change_the_login(
+    uow, token_service, register_device_use_case, existing_user, clave, entra
+):
+    """
+    Given: El log de seguridad fallando al apuntar el intento
+    When: Entra con la contraseña buena o con una mala
+    Then: Lo mismo que sin el fallo: entra, o no entra (#750 punto 2, también en el login)
+    """
+    from unittest.mock import MagicMock
+
+    roto = MagicMock()
+    roto.log_login_attempt.side_effect = RuntimeError("log caído")
+    use_case = LoginUserUseCase(
+        uow,
+        token_service,
+        register_device_use_case,
+        AsyncMock(),
+        FrenoDelLoginEnMemoria(),
+        AsyncMock(),
+        security_audit=roto,
+    )
+
+    respuesta = await use_case.execute(LoginRequestDTO(email="test@example.com", password=clave))
+
+    assert (respuesta is not None) is entra
+    assert roto.log_login_attempt.called

@@ -12,7 +12,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
 # Longitud holgada: nadie va a teclear esta contraseña nunca, y cuanto más
 # larga, menos margen deja si algún día la cuenta se reactivara por error.

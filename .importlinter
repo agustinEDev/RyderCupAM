@@ -187,3 +187,23 @@ source_modules =
     src.shared.application
 forbidden_modules =
     src.config.dependencies
+
+[importlinter:contract:application-no-infrastructure]
+name = La aplicación (de cualquier módulo y la compartida) no importa infraestructura (#750)
+type = forbidden
+source_modules =
+    src.modules.competition.application
+    src.modules.golf_course.application
+    src.modules.quick_match.application
+    src.modules.social.application
+    src.modules.support.application
+    src.modules.user.application
+    src.shared.application
+forbidden_modules =
+    src.shared.infrastructure
+    src.modules.competition.infrastructure
+    src.modules.golf_course.infrastructure
+    src.modules.quick_match.infrastructure
+    src.modules.social.infrastructure
+    src.modules.support.infrastructure
+    src.modules.user.infrastructure

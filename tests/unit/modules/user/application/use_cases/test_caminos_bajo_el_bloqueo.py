@@ -45,6 +45,7 @@ from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 pytestmark = pytest.mark.asyncio
@@ -114,6 +115,7 @@ def _google(uow, registro):
         google_oauth_service=servicio,
         register_device_use_case=registro,
         aviso_de_nuevo_inicio=AsyncMock(),
+        security_audit=SecurityAuditLogger(),
     )
 
 
@@ -201,7 +203,7 @@ async def test_b2_resetting_a_verified_account_also_revokes_its_devices():
             )
         )
 
-    await ResetPasswordUseCase(uow, AsyncMock()).execute(
+    await ResetPasswordUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()).execute(
         ResetPasswordRequestDTO(token=token, new_password="OtraClave#2026segura")
     )
 

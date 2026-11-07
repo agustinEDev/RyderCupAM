@@ -33,14 +33,15 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import ParamSpec, TypeVar
 
-from src.shared.infrastructure.env import env_int
+from src.config.env import env_int
 
 P = ParamSpec("P")
 T = TypeVar("T")
 
+
 # Con el medio núcleo del plan actual, más de dos hashes a la vez no acaban antes: solo
 # se estorban entre ellos y se llevan por delante la CPU del resto de peticiones.
-MAX_CONCURRENCY = env_int("BCRYPT_MAX_CONCURRENCY", default=2)
+MAX_CONCURRENCY = env_int("BCRYPT_MAX_CONCURRENCY", 2)
 
 # Pool propio, no el del runtime: así el límite es real y los hashes no compiten por los
 # hilos que FastAPI usa para los endpoints síncronos.

@@ -17,6 +17,8 @@ from src.modules.user.application.dto.user_dto import (
     UserResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import (
@@ -35,8 +37,7 @@ from src.modules.user.domain.value_objects.password import (
     Password,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
-from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,13 @@ class UpdateSecurityUseCase:
     requiriendo verificación de la contraseña actual.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService | None = None):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService | None = None,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso con sus dependencias.
 
@@ -90,6 +97,7 @@ class UpdateSecurityUseCase:
             uow: Unit of Work para manejar transacciones
             email_service: Servicio para envío de emails de verificación
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
 
@@ -204,32 +212,40 @@ class UpdateSecurityUseCase:
         user_id: str,
         ip_address: str,
         user_agent: str,
-        security_logger,
     ) -> None:
         """Registra los cambios de seguridad en el audit trail."""
         if password_changed:
-            security_logger.log_password_changed(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                old_password_verified=True,
-            )
-
-            if tokens_revoked_count > 0:
-                security_logger.log_refresh_token_revoked(
+            registra_sin_romper(
+                "Update security",
+                lambda: self._security_audit.log_password_changed(
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
-                    tokens_revoked_count=tokens_revoked_count,
-                    reason="password_change",
+                    old_password_verified=True,
+                ),
+            )
+
+            if tokens_revoked_count > 0:
+                registra_sin_romper(
+                    "Update security",
+                    lambda: self._security_audit.log_refresh_token_revoked(
+                        user_id=user_id,
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                        tokens_revoked_count=tokens_revoked_count,
+                        reason="password_change",
+                    ),
                 )
 
         if email_changed:
-            security_logger.log_email_changed(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                email_verification_required=True,
+            registra_sin_romper(
+                "Update security",
+                lambda: self._security_audit.log_email_changed(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    email_verification_required=True,
+                ),
             )
 
     async def _avisa_del_cambio_de_correo(self, user: object, new_email: str, token: str) -> None:
@@ -287,9 +303,6 @@ class UpdateSecurityUseCase:
             DuplicateEmailError: Si el nuevo email ya está en uso
             ValueError: Si los datos no son válidos
         """
-        # Obtener security logger
-        security_logger = get_security_logger()
-
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
@@ -328,11 +341,15 @@ class UpdateSecurityUseCase:
                 # El context manager (__aexit__) hace commit automático y publica eventos
         except (InvalidCredentialsError, DuplicateEmailError, InvalidPasswordError) as error:
             # Al log de auditoría con su motivo (L1-L3); el cliente recibe lo de siempre
-            security_logger.log_security_change_failed(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                reason=_motivo_del_fallo(error),
+            motivo = _motivo_del_fallo(error)
+            registra_sin_romper(
+                "Update security",
+                lambda: self._security_audit.log_security_change_failed(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    reason=motivo,
+                ),
             )
             raise
 
@@ -344,7 +361,6 @@ class UpdateSecurityUseCase:
             user_id,
             ip_address,
             user_agent,
-            security_logger,
         )
 
         # El enlace, al correo nuevo; el aviso, al de antes

@@ -14,7 +14,7 @@ Estructura:
 - TestRequestPasswordResetSecurityFeatures: Tests de seguridad
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -28,6 +28,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 # Marcar todos los tests como asyncio
 pytestmark = pytest.mark.asyncio
@@ -48,7 +49,9 @@ class TestRequestPasswordResetSuccess:
         email_service = AsyncMock()
         email_service.send_password_reset_email = AsyncMock(return_value=True)
 
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         # Crear usuario existente
         user = User.create(
@@ -102,7 +105,9 @@ class TestRequestPasswordResetSuccess:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -140,7 +145,9 @@ class TestRequestPasswordResetSuccess:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -182,7 +189,9 @@ class TestRequestPasswordResetEmailNotFound:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         request_dto = RequestPasswordResetRequestDTO(
             email="nonexistent@example.com", ip_address="1.2.3.4"
@@ -221,7 +230,9 @@ class TestRequestPasswordResetEmailNotFound:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         request_existing = RequestPasswordResetRequestDTO(email="exists@test.com")
         request_nonexistent = RequestPasswordResetRequestDTO(email="nonexistent@test.com")
@@ -251,12 +262,7 @@ class TestRequestPasswordResetEmailNotFound:
 class TestRequestPasswordResetSecurityFeatures:
     """Tests para features de seguridad"""
 
-    @patch(
-        "src.modules.user.application.use_cases.request_password_reset_use_case.get_security_logger"
-    )
-    async def test_request_password_reset_logs_successful_request(
-        self, mock_get_logger, sample_user_data
-    ):
+    async def test_request_password_reset_logs_successful_request(self, sample_user_data):
         """
         Test: Solicitud exitosa registra security log
         Given: Usuario existente
@@ -266,10 +272,11 @@ class TestRequestPasswordResetSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        mock_security_logger = AsyncMock()
-        mock_get_logger.return_value = mock_security_logger
+        mock_security_logger = MagicMock()
 
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=mock_security_logger
+        )
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -298,10 +305,7 @@ class TestRequestPasswordResetSecurityFeatures:
         assert call_args.kwargs["ip_address"] == "192.168.1.1"
         assert call_args.kwargs["user_agent"] == "Mozilla/5.0"
 
-    @patch(
-        "src.modules.user.application.use_cases.request_password_reset_use_case.get_security_logger"
-    )
-    async def test_request_password_reset_logs_failed_request(self, mock_get_logger):
+    async def test_request_password_reset_logs_failed_request(self):
         """
         Test: Email no existente registra security log con failure
         Given: Email no registrado
@@ -311,10 +315,11 @@ class TestRequestPasswordResetSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        mock_security_logger = AsyncMock()
-        mock_get_logger.return_value = mock_security_logger
+        mock_security_logger = MagicMock()
 
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=mock_security_logger
+        )
 
         request_dto = RequestPasswordResetRequestDTO(
             email="nonexistent@example.com",
@@ -346,7 +351,9 @@ class TestRequestPasswordResetSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -378,7 +385,9 @@ class TestRequestPasswordResetSecurityFeatures:
         # Arrange
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         user = User.create(
             first_name=sample_user_data["name"],
@@ -421,7 +430,9 @@ class TestPasswordResetEmailIgnoresTheAlias:
         uow = InMemoryUnitOfWork()
         email_service = AsyncMock()
         email_service.send_password_reset_email = AsyncMock(return_value=True)
-        use_case = RequestPasswordResetUseCase(uow, email_service)
+        use_case = RequestPasswordResetUseCase(
+            uow, email_service, security_audit=SecurityAuditLogger()
+        )
 
         user = User.create(
             first_name=sample_user_data["name"],

@@ -24,6 +24,7 @@ from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import 
 from src.modules.user.infrastructure.persistence.sqlalchemy.user_repository import (
     SQLAlchemyUserRepository,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -62,6 +63,7 @@ async def test_login_ten_concurrent_failures_counts_ten_and_locks(db_session, mo
                 AsyncMock(),
                 FrenoDelLoginEnMemoria(),
                 AsyncMock(),
+                security_audit=SecurityAuditLogger(),
             )
             return await login.execute(LoginRequestDTO(email=EMAIL, password="Mala-Pass-1!"))
 

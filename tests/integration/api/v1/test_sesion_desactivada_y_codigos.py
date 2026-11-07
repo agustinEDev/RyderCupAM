@@ -242,6 +242,8 @@ async def test_a5_una_cuenta_desactivada_que_verifica_su_correo_no_entra(client:
 
     assert r.status_code == 403, r.text
     assert "deactivated" in r.json()["detail"]
+    # Con su código, como Google, para que la app lo diga en su idioma (#750 punto 1)
+    assert r.json()["error_code"] == "ACCOUNT_DEACTIVATED"
     assert "refresh_token" not in r.cookies and "access_token" not in r.cookies
     verificado = (await _sql("select email_verified from users where email = :e", e=email)).scalar()
     assert verificado is True
@@ -266,3 +268,34 @@ async def test_c5_un_log_roto_no_cambia_el_401_del_refresco(client: AsyncClient,
 
     assert r.status_code == 401
     assert r.json()["error_code"] == "SESSION_REJECTED"
+
+
+async def test_d1_a_deactivated_account_signing_in_gets_its_code(client: AsyncClient):
+    """
+    Given: Una cuenta desactivada por un administrador
+    When: Entra con su contraseña
+    Then: 403 con error_code ACCOUNT_DEACTIVATED y el texto de siempre (#750 punto 1)
+    """
+    email = _email("desactivada")
+    usuario = await create_authenticated_user(client, email, CLAVE, "Des", "Activada")
+    admin = await create_admin_user(client, _email("admin"), CLAVE, "Ad", "Min")
+    await _desactiva(client, admin, usuario["user"]["id"])
+    client.cookies.clear()
+
+    r = await client.post("/api/v1/auth/login", json={"email": email, "password": CLAVE})
+
+    assert r.status_code == 403, r.text
+    assert r.json()["error_code"] == "ACCOUNT_DEACTIVATED"
+    assert r.json()["detail"] == "This account has been deactivated. Contact an administrator."
+
+
+async def test_d3_the_google_route_documents_its_two_codes(client: AsyncClient):
+    """
+    Given: El esquema OpenAPI de la app
+    When: Se mira la ruta del login con Google
+    Then: Declara sus respuestas 400 (correo de Google sin verificar) y 403 (desactivada)
+    """
+    esquema = fastapi_app.openapi()
+    respuestas = esquema["paths"]["/api/v1/auth/google"]["post"]["responses"]
+
+    assert {"400", "403"} <= set(respuestas)

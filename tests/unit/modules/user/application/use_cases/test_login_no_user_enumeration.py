@@ -36,6 +36,7 @@ from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases.test_login_user_use_case import _rebuild_user
 
@@ -63,7 +64,13 @@ def caso_de_uso():
     uow = InMemoryUnitOfWork()
     dispositivos = AsyncMock()
     return uow, LoginUserUseCase(
-        uow, JWTTokenService(), dispositivos, AsyncMock(), FrenoDelLoginEnMemoria(), AsyncMock()
+        uow,
+        JWTTokenService(),
+        dispositivos,
+        AsyncMock(),
+        FrenoDelLoginEnMemoria(),
+        AsyncMock(),
+        security_audit=SecurityAuditLogger(),
     )
 
 
