@@ -29,6 +29,14 @@ class AdminUpdateUserUseCase:
     async def execute(
         self, user_id_str: str, request: AdminUpdateUserRequestDTO
     ) -> AdminUserSummaryDTO:
+        """
+        Edita un usuario con su fila bloqueada. Un correo nuevo queda pendiente hasta
+        que el usuario lo confirme (BE #753), con su enlace y su aviso tras guardar.
+
+        Raises:
+            UserNotFoundError: si no existe
+            DuplicateEmailError: si otra cuenta ya usa ese correo
+        """
         user_id = UserId(user_id_str)
 
         token_del_cambio: str | None = None

@@ -41,6 +41,7 @@ def emite(user_id: str, dura: timedelta = DURACION) -> str:
 
 
 def _lee(token: str | None, user_id: str) -> dict | None:
+    """Los datos de una marca firmada, sin caducar, de ese usuario; si no, None."""
     if not token:
         return None
     try:

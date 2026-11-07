@@ -17,6 +17,7 @@ class AdminListUsersUseCase:
         self._uow = uow
 
     async def execute(self, request: AdminListUsersRequestDTO) -> AdminListUsersResponseDTO:
+        """La página de usuarios con sus filtros, el total y el último acceso de cada uno."""
         async with self._uow:
             users = await self._uow.users.find_all(
                 limit=request.limit,

@@ -69,7 +69,8 @@ The residual risks above were closed in the next release:
 - A password reset also removes a linked Google on a verified account: a session thief
   could have added it. A real owner links it again.
 - An admin email change stays pending too (point 5 above no longer applies to admins).
-- The old address is told when a change is confirmed, and the owner when an unverified
+- A verified old address is told when a change is requested (as since #749) and again
+  when it is confirmed; the owner is told when an unverified
   account is secured; asking for a new email is limited to 3 per hour within 10 security
   requests per hour per user.
 

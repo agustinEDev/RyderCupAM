@@ -181,3 +181,20 @@ class TestAdminUpdateUserUseCase:
                 str(existing_user.id.value),
                 AdminUpdateUserRequestDTO(email="taken@test.com"),
             )
+
+
+async def test_a_notice_that_fails_while_being_built_does_not_escape():
+    """
+    Un fallo al montar los avisos (no solo al mandarlos) no se escapa: el cambio ya
+    está guardado (CodeRabbit en BE #760)
+    """
+    from unittest.mock import MagicMock, PropertyMock
+
+    from src.modules.user.application.services.avisa_del_cambio_de_correo import (
+        avisa_del_cambio_de_correo,
+    )
+
+    usuario = MagicMock()
+    type(usuario).first_name = PropertyMock(side_effect=RuntimeError("roto"))
+
+    await avisa_del_cambio_de_correo(AsyncMock(), usuario, "nuevo@test.com", "tok")

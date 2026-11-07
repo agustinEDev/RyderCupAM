@@ -198,15 +198,13 @@ class TestHttpOnlyCookies:
         test_user_data: dict,
     ):
         """
-        Test: POST /verify-email establece cookie httpOnly (auto-login después de verificación).
+        Test: POST /verify-email solo verifica, sin abrir sesión (BE #753).
 
         Given: Un usuario registrado con email no verificado
         When: El usuario verifica su email con token válido
         Then:
-            - HTTP 200 OK
-            - Response body contiene access_token (LEGACY)
-            - Response headers contienen Set-Cookie con httpOnly flag
-            - Usuario autenticado automáticamente
+            - HTTP 200 OK, con email_verified
+            - Ni access_token en el cuerpo ni cookie access_token en Set-Cookie
         """
         # Given: Registrar usuario (genera token de verificación)
         register_payload = RegisterUserRequestDTO(
