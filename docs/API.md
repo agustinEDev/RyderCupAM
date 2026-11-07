@@ -129,7 +129,7 @@ Scoring & Leaderboard (5 endpoints) ⭐ Sprint 4
 └── PUT  /api/v1/competitions/matches/{id}/concede               # Concede match
 
 Support (1 endpoint) ⭐ v2.0.8
-└── POST /api/v1/support/contact         # Submit contact form (creates GitHub Issue)
+└── POST /api/v1/support/contact         # Submit contact form (emails the app's mailbox)
 ```
 
 ---
@@ -1075,7 +1075,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 | Endpoint | Method | Auth | Rate Limit | Description |
 |----------|--------|------|------------|-------------|
-| `/support/contact` | POST | No | 10/hour | Submit contact form (creates GitHub Issue) |
+| `/support/contact` | POST | No | 10/day per network, 20/day app-wide | Submit contact form (emails the app's mailbox) |
 
 ### Main Fields
 
@@ -1089,29 +1089,29 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 **Contact Response:**
 - `message` (string) - Confirmation message
 
-### Category → GitHub Label Mapping
+### Category in the email
 
-| Category | GitHub Label |
-|----------|-------------|
-| BUG | `bug` |
-| FEATURE | `enhancement` |
-| QUESTION | `question` |
-| OTHER | `other` |
+| Category | In the subject |
+|----------|----------------|
+| BUG | `Error` |
+| FEATURE | `Sugerencia` |
+| QUESTION | `Pregunta` |
+| OTHER | `Otro` |
 
 ### Business Rules
 
 - **Public endpoint**: No authentication required
 - **CSRF exempt**: No session to protect
-- **Rate limited**: 10 requests/hour per network (SlowAPI, `CONTACT_LIMIT`)
-- **Input sanitization**: All fields sanitized via `sanitize_html()` before creating issue
-- **GitHub Integration**: Creates issues in configured repo via REST API (`GH_ISSUES_TOKEN` + `GITHUB_ISSUES_REPO`)
-- **Error handling**: Returns 502 Bad Gateway if GitHub API fails
+- **Rate limited**: 10 requests/day per network (SlowAPI, `CONTACT_LIMIT`; a failed send also counts there, the app-wide slot is given back)
+- **Daily quota**: at most 20 messages a day app-wide (in memory); then `429` with `error_code: CONTACT_QUOTA_EXCEEDED`, so the shared mail quota stays for verification and password reset
+- **Email**: plain text to `CONTACT_EMAIL` (default `admin@rydercupfriends.com`) through Mailgun (EU), subject `[Contacto · <category>] <subject>` in one line (control characters removed), `Reply-To` the sender. Since 2.52; before, it opened a GitHub issue
+- **Error handling**: Returns 502 Bad Gateway if Mailgun refuses the message (the quota slot is given back)
 
 ### Architecture (Clean Architecture)
 
-- **Domain**: `ContactCategory` value object (StrEnum with `to_github_label()`)
-- **Application**: `SubmitContactUseCase` + `IGitHubIssueService` port + `ContactRequestDTO`/`ContactResponseDTO`
-- **Infrastructure**: `GitHubIssueService` adapter (GitHub REST API) + `support_routes.py`
+- **Domain**: `ContactCategory` value object (StrEnum)
+- **Application**: `SubmitContactUseCase` + `IContactMailer` and `ICupoDeContacto` ports + `ContactRequestDTO`/`ContactResponseDTO`
+- **Infrastructure**: `MailgunContactMailer` adapter + `support_routes.py`; the quota lives in `src/config/cupo_de_contacto.py`
 
 ---
 
@@ -1171,7 +1171,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 | POST /auth/forgot-password, /auth/resend-verification | 30/hour + 3/hour per email | network + email | Protect Mailgun and the mailbox |
 | POST /auth/reset-password | 20/hour | network | |
 | GET /auth/validate-reset-token/{token} | 30/hour | network | |
-| POST /support/contact | 10/hour | network | Anti contact form spam |
+| POST /support/contact | 10/day | network | Anti contact form spam; 20/day app-wide on top |
 | POST /handicaps/update | 5/hour | user | Protect RFEG API |
 | POST /handicaps/refresh-mine | 10/hour | user | Each call may wait for RFEG |
 | POST /competitions | 10/hour | user | Anti competition spam |
