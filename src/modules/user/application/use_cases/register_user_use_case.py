@@ -55,6 +55,23 @@ class RegisterUserUseCase:
         self._email_service = email_service
         self._security_audit = security_audit
 
+    async def _rechaza_si_ocupado(self, email_vo: Email, email: str) -> None:
+        """La regla del correo ocupado, en un solo sitio (fase 1 y, otra vez, la 3)."""
+        if await self._user_finder.by_email(email_vo):
+            raise UserAlreadyExistsError(f"El email '{email}' ya está registrado.")
+
+    async def _comprueba_lo_barato(self, request: RegisterUserRequestDTO) -> Email:
+        """El correo libre y el país, en su propia transacción ya cerrada al volver: con
+        el correo ocupado no se gasta ningún bcrypt (BE #283)."""
+        async with self._uow:
+            email_vo = Email(request.email)
+            await self._rechaza_si_ocupado(email_vo, request.email)
+            if request.country_code:
+                country_code_vo = CountryCode(request.country_code)
+                if not await self._country_repository.exists(country_code_vo):
+                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
+        return email_vo
+
     async def execute(self, request: RegisterUserRequestDTO) -> UserResponseDTO:
         """
         Ejecuta el caso de uso.
@@ -77,77 +94,69 @@ class RegisterUserUseCase:
                 "Para registrarse hay que aceptar los Términos de uso vigentes."
             )
 
+        # Fase 1, lo barato y en su propia transacción (BE #283)
+        email_vo = await self._comprueba_lo_barato(request)
+
+        # Fase 2, sin transacción: el bcrypt y la búsqueda del hándicap en la RFEG (red)
+        # no retienen una conexión del pool (BE #283)
+        # 2. Crear la entidad de dominio User
+        gender = Gender(request.gender) if request.gender else None
+        new_user = await run_bcrypt(
+            User.create,
+            email_str=request.email,
+            plain_password=request.password,
+            first_name=request.first_name,
+            last_name=request.last_name,
+            country_code_str=request.country_code,
+            gender=gender,
+        )
+
+        # 2.1 Los Términos: se guarda la versión vigente con la fecha de
+        # ahora, y la aceptación va al historial con la IP y el navegador
+        terms_version = current_terms_version()
+        new_user.accept_terms(terms_version)
+        accepted_at = new_user.terms_accepted_at
+        if accepted_at is None:  # accept_terms acaba de ponerla
+            raise RuntimeError("accept_terms no dejó fecha de aceptación")
+        terms_acceptance = TermsAcceptance.record(
+            user_id=new_user.id,
+            user_email=new_user.email.value,
+            terms_version=terms_version,
+            accepted_at=accepted_at,
+            ip_address=request.ip_address,
+            user_agent=request.user_agent,
+        )
+
+        # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)
+        handicap_value = None
+        if self._handicap_service and new_user.country_code and new_user.country_code.value == "ES":
+            try:
+                handicap_value = await self._handicap_service.search_handicap(
+                    new_user.get_full_name()
+                )
+            except HandicapServiceError as e:
+                # No falla el registro si no se encuentra el hándicap
+                logger.warning(
+                    "No se pudo obtener hándicap inicial para %s: %s",
+                    new_user.get_full_name(),
+                    e,
+                )
+
+        # 2.6 Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
+        if handicap_value is None and request.manual_handicap is not None:
+            handicap_value = request.manual_handicap
+
+        # 2.7 Actualizar hándicap si se obtuvo uno (de RFEG o manual)
+        if handicap_value is not None:
+            new_user.update_handicap(handicap_value)
+
+        # 2.8 Generar token de verificación de email
+        verification_token = new_user.generate_verification_token()
+
+        # Fase 3, en otra transacción: el correo, otra vez (alguien pudo registrarlo
+        # entretanto), y se guarda
         async with self._uow:
-            # 1. Validar que el email no existe
-            email_vo = Email(request.email)
-            if await self._user_finder.by_email(email_vo):
-                raise UserAlreadyExistsError(f"El email '{request.email}' ya está registrado.")
-
-            # 1.5 Validar que el country_code existe (si se proporcionó)
-            if request.country_code:
-                country_code_vo = CountryCode(request.country_code)
-                country_exists = await self._country_repository.exists(country_code_vo)
-                if not country_exists:
-                    raise ValueError(f"El código de país '{request.country_code}' no es válido.")
-
-            # 2. Crear la entidad de dominio User
-            gender = Gender(request.gender) if request.gender else None
-            new_user = await run_bcrypt(
-                User.create,
-                email_str=request.email,
-                plain_password=request.password,
-                first_name=request.first_name,
-                last_name=request.last_name,
-                country_code_str=request.country_code,
-                gender=gender,
-            )
-
-            # 2.1 Los Términos: se guarda la versión vigente con la fecha de
-            # ahora, y la aceptación va al historial con la IP y el navegador
-            terms_version = current_terms_version()
-            new_user.accept_terms(terms_version)
-            accepted_at = new_user.terms_accepted_at
-            if accepted_at is None:  # accept_terms acaba de ponerla
-                raise RuntimeError("accept_terms no dejó fecha de aceptación")
-            terms_acceptance = TermsAcceptance.record(
-                user_id=new_user.id,
-                user_email=new_user.email.value,
-                terms_version=terms_version,
-                accepted_at=accepted_at,
-                ip_address=request.ip_address,
-                user_agent=request.user_agent,
-            )
-
-            # 2.5 Intentar buscar hándicap inicial (solo para usuarios españoles)
-            handicap_value = None
-            if (
-                self._handicap_service
-                and new_user.country_code
-                and new_user.country_code.value == "ES"
-            ):
-                try:
-                    handicap_value = await self._handicap_service.search_handicap(
-                        new_user.get_full_name()
-                    )
-                except HandicapServiceError as e:
-                    # No falla el registro si no se encuentra el hándicap
-                    logger.warning(
-                        "No se pudo obtener hándicap inicial para %s: %s",
-                        new_user.get_full_name(),
-                        e,
-                    )
-
-            # 2.6 Si no se encontró en RFEG, usar hándicap manual si fue proporcionado
-            if handicap_value is None and request.manual_handicap is not None:
-                handicap_value = request.manual_handicap
-
-            # 2.7 Actualizar hándicap si se obtuvo uno (de RFEG o manual)
-            if handicap_value is not None:
-                new_user.update_handicap(handicap_value)
-
-            # 2.8 Generar token de verificación de email
-            verification_token = new_user.generate_verification_token()
-
+            await self._rechaza_si_ocupado(email_vo, request.email)
             # 3. Guardar el usuario en el repositorio, y después su aceptación
             # (la fila apunta al usuario: tiene que existir antes)
             await self._uow.users.save(new_user)

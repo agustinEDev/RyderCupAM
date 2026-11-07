@@ -63,7 +63,7 @@ pip-audit==2.10.1
 # fichero para que la imagen de producción no los instale (#289).
 # Comprobado con `pip show <paquete>`: su "Required-by" es exclusivamente de dev.
 # Los que sí necesita producción se quedan en requirements.txt — click (uvicorn),
-# urllib3 (requests, sentry-sdk) y mako (alembic).
+# urllib3 (sentry-sdk) y mako (alembic).
 
 # msgpack - Serialización binaria (dependencia transitiva de pip-audit > cachecontrol)
 # Fijada explícitamente para resolver SNYK-PYTHON-MSGPACK-17391445 (Use After Free)

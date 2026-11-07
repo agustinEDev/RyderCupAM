@@ -64,6 +64,17 @@ def _hash_del_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _como_password(contrasena: str | Password) -> Password:
+    """La contraseña como Value Object: ya calculada, tal cual (el bcrypt se hizo fuera
+    de la transacción, BE #283); en texto plano, se valida y se calcula aquí."""
+    if isinstance(contrasena, Password):
+        if not contrasena.de_texto_plano:
+            # Un hash cualquiera se saltaría la política (revisores del bloque 2)
+            raise ValueError("A ready Password must come from Password.from_plain_text")
+        return contrasena
+    return Password.from_plain_text(contrasena)
+
+
 class User:
     """
     Entidad User - Representa un usuario en el sistema.
@@ -1010,18 +1021,19 @@ class User:
             )
         )
 
-    def change_password(self, new_password: str) -> None:
+    def change_password(self, new_password: str | Password) -> None:
         """
         Cambia el password del usuario.
 
         Args:
-            new_password: Nuevo password en texto plano
+            new_password: Nuevo password en texto plano, o ya calculado con
+                `Password.from_plain_text` (BE #283: el bcrypt se hace fuera de la
+                transacción y aquí no se repite). Otro Password lanza ValueError
 
         Raises:
             ValueError: Si el password no es válido
         """
-        new_password_vo = Password.from_plain_text(new_password)
-        self._password = new_password_vo
+        self._password = _como_password(new_password)
         self._updated_at = datetime.now()
 
         self._add_domain_event(
@@ -1229,7 +1241,7 @@ class User:
     def reset_password(
         self,
         token: str,
-        new_password: str,
+        new_password: str | Password,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> None:
@@ -1244,7 +1256,8 @@ class User:
 
         Args:
             token: Token de reseteo generado previamente
-            new_password: Nueva contraseña en texto plano (será hasheada)
+            new_password: Nueva contraseña en texto plano (será hasheada), o ya
+                calculada con `Password.from_plain_text` (BE #283). Otra, ValueError
             ip_address: IP desde donde se hizo el reseteo (para auditoría)
             user_agent: User agent del navegador (para detección de anomalías)
 
@@ -1275,9 +1288,9 @@ class User:
         if not self.can_reset_password(token):
             raise InvalidResetTokenError()
 
-        # Cambiar la contraseña (Password VO valida la política de seguridad)
-        new_password_vo = Password.from_plain_text(new_password)
-        self._password = new_password_vo
+        # Cambiar la contraseña (Password VO valida la política de seguridad); ya
+        # calculada, tal cual (BE #283)
+        self._password = _como_password(new_password)
 
         # Invalidar el token (uso único)
         self._password_reset_token = None
