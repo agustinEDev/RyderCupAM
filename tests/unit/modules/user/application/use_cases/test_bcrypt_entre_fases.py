@@ -326,3 +326,71 @@ class InMemoryUnitOfWorkCompartida:
 
     async def __aexit__(self, *exc):
         return False
+
+
+async def test_b2_3_a_reused_password_is_reported_before_hashing_it():
+    """
+    Given: Un usuario cuya contraseña nueva ya está en su historial
+    When: La pide
+    Then: «repetida» (el orden de antes) y sin gastar el bcrypt de la nueva: solo los
+          de comprobar (la actual y el historial)
+    """
+    from src.modules.user.domain.entities.password_history import PasswordHistory
+
+    uow = InMemoryUnitOfWork()
+    user = await _con_usuario(uow)
+    vieja = Password.from_plain_text(NUEVA)
+    async with uow:
+        await uow.password_history.save(
+            PasswordHistory.create(
+                user_id=user.id, password_hash=vieja.hashed_value, total_history_count=1
+            )
+        )
+
+    with (
+        patch.object(Password, "_hash_password", wraps=Password._hash_password) as hashes,
+        pytest.raises(InvalidPasswordError) as error,
+    ):
+        await UpdateSecurityUseCase(uow).execute(
+            str(user.id.value),
+            UpdateSecurityRequestDTO(
+                current_password=CLAVE, new_password=NUEVA, confirm_password=NUEVA
+            ),
+        )
+
+    assert error.value.error_code == "PASSWORD_REUSED"
+    assert hashes.call_count == 0
+
+
+async def test_b2_6_a_weak_new_password_skips_the_history_bcrypts():
+    """
+    Given: Un usuario con historial y una contraseña nueva débil
+    When: La pide
+    Then: Error de política sin comparar con el historial: solo el bcrypt de la actual
+    """
+    from src.modules.user.domain.entities.password_history import PasswordHistory
+
+    uow = InMemoryUnitOfWork()
+    user = await _con_usuario(uow)
+    async with uow:
+        for clave in (NUEVA, OTRA):
+            await uow.password_history.save(
+                PasswordHistory.create(
+                    user_id=user.id,
+                    password_hash=Password.from_plain_text(clave).hashed_value,
+                    total_history_count=1,
+                )
+            )
+
+    with (
+        patch.object(Password, "verify", autospec=True, side_effect=Password.verify) as verifica,
+        pytest.raises(InvalidPasswordError),
+    ):
+        await UpdateSecurityUseCase(uow).execute(
+            str(user.id.value),
+            UpdateSecurityRequestDTO(
+                current_password=CLAVE, new_password=DEBIL, confirm_password=DEBIL
+            ),
+        )
+
+    assert verifica.call_count == 1

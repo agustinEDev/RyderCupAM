@@ -10,6 +10,8 @@ viva de SQLAlchemy esté dentro de una transacción.
   B2-2 login: bueno, malo y con un correo que no existe (el bcrypt de relleno)
   B2-3 cambio de contraseña (la actual, el historial y la nueva)
   B2-4 restablecer la contraseña
+  B2-5 la cuenta de sistema (contra la BD real, fuera de una petición)
+  Y, tras los revisores, el login con la cookie de dispositivo y el cambio solo de correo
 """
 
 import importlib
@@ -32,6 +34,7 @@ MODULOS = [
     "src.modules.user.application.use_cases.login_user_use_case",
     "src.modules.user.application.use_cases.update_security_use_case",
     "src.modules.user.application.use_cases.reset_password_use_case",
+    "src.modules.user.application.use_cases.ensure_system_user_use_case",
 ]
 
 
@@ -163,4 +166,71 @@ async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
 
     assert r.status_code == 200, r.text
     assert vigia.bcrypts > antes
+    assert vigia.con_transaccion == []
+
+
+async def test_b2_2_login_with_the_device_cookie_hashes_with_no_transaction_open(
+    client: AsyncClient, vigia
+):
+    """El otro camino del login: con la cookie de un dispositivo de la cuenta."""
+    await create_authenticated_user(client, "b22.cookie@example.com", CLAVE, "Ana", "Lopez")
+    client.cookies.clear()
+    primero = await client.post(
+        "/api/v1/auth/login", json={"email": "b22.cookie@example.com", "password": CLAVE}
+    )
+    (cabecera,) = [
+        v
+        for k, v in primero.headers.multi_items()
+        if k == "set-cookie" and v.startswith("device_id=")
+    ]
+    client.cookies.clear()
+    client.cookies.set("device_id", cabecera.split(";", 1)[0].split("=", 1)[1])
+    vigia.con_transaccion.clear()
+    antes = vigia.bcrypts
+
+    r = await client.post(
+        "/api/v1/auth/login", json={"email": "b22.cookie@example.com", "password": CLAVE}
+    )
+
+    assert r.status_code == 200, r.text
+    assert vigia.bcrypts > antes
+    assert vigia.con_transaccion == []
+
+
+async def test_b2_3_an_email_only_change_hashes_with_no_transaction_open(
+    client: AsyncClient, vigia
+):
+    datos = await create_authenticated_user(client, "b23.correo@example.com", CLAVE, "Ana", "Lopez")
+    vigia.con_transaccion.clear()
+    antes = vigia.bcrypts
+
+    r = await client.patch(
+        "/api/v1/users/security",
+        json={"current_password": CLAVE, "new_email": "b23.nuevo@example.com"},
+        headers={"Authorization": f"Bearer {datos['token']}"},
+    )
+
+    assert r.status_code == 200, r.text
+    assert vigia.bcrypts - antes == 1
+    assert vigia.con_transaccion == []
+
+
+async def test_b2_5_the_system_account_hashes_with_no_transaction_open(client: AsyncClient, vigia):
+    from main import app
+    from src.config.dependencies import get_fabrica_de_sesiones
+    from src.modules.user.application.use_cases.ensure_system_user_use_case import (
+        EnsureSystemUserUseCase,
+    )
+    from src.modules.user.infrastructure.persistence.sqlalchemy.unit_of_work import (
+        SQLAlchemyUnitOfWork,
+    )
+
+    fabrica = app.dependency_overrides[get_fabrica_de_sesiones]()
+    async with fabrica() as sesion:
+        vigia.sesiones.add(sesion)
+        await EnsureSystemUserUseCase(SQLAlchemyUnitOfWork(sesion)).execute(
+            "course.import@rydercupfriends.com"
+        )
+
+    assert vigia.bcrypts == 1
     assert vigia.con_transaccion == []

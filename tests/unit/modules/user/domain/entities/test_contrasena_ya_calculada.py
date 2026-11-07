@@ -76,3 +76,42 @@ def test_reset_password_with_a_ready_password_checks_the_token_first():
 
     assert user.password is nueva
     assert user.password_reset_token is None
+
+
+def test_a_password_built_from_any_hash_is_refused():
+    """
+    Given: Un Password construido a mano con un hash cualquiera (sin pasar por la política)
+    When: Se le da al usuario
+    Then: Lo rechaza: solo vale el que sale de from_plain_text (revisores del bloque 2)
+    """
+    user = _usuario()
+    cualquiera = Password(Password.from_plain_text(NUEVA).hashed_value)
+
+    with pytest.raises(ValueError, match="from_plain_text"):
+        user.change_password(cualquiera)
+    with pytest.raises(ValueError, match="from_plain_text"):
+        User.create(
+            first_name="Ana",
+            last_name="Lopez",
+            email_str="b@example.com",
+            plain_password=cualquiera,
+        )
+    assert user.verify_password(CLAVE)
+
+
+def test_the_policy_can_be_checked_without_hashing():
+    """La política, sin calcular ningún bcrypt: el caso de uso la mira antes del historial."""
+    from src.modules.user.domain.value_objects.password import InvalidPasswordError
+
+    with patch.object(Password, "_hash_password", side_effect=AssertionError("bcrypt")):
+        Password.comprueba_la_politica(NUEVA)
+        with pytest.raises(InvalidPasswordError):
+            Password.comprueba_la_politica("solamenteletras")
+
+
+def test_two_equal_hashes_are_equal_whatever_their_origin():
+    """La marca no cambia la igualdad: un Password leído de la BD y uno recién hecho con
+    el mismo hash son iguales."""
+    nueva = Password.from_plain_text(NUEVA)
+
+    assert Password(nueva.hashed_value) == nueva

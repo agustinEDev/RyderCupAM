@@ -102,8 +102,9 @@ class UpdateSecurityUseCase:
 
         nueva = None
         if request.new_password:
-            # La política primero (barata): una débil no llega a ningún bcrypt
-            nueva = await run_bcrypt(Password.from_plain_text, request.new_password)
+            # El orden de antes: la política (barata, sin calcular), el historial, y el
+            # hash de la nueva al final, para no gastarlo con una repetida
+            Password.comprueba_la_politica(request.new_password)
             for registro in historial:
                 anterior = Password(registro.password_hash)
                 if await run_bcrypt(anterior.verify, request.new_password):
@@ -113,6 +114,7 @@ class UpdateSecurityUseCase:
                         MENSAJES_DE_LA_CONTRASENA[CodigoDeContrasena.REUSED],
                         error_code=CodigoDeContrasena.REUSED,
                     )
+            nueva = await run_bcrypt(Password.from_plain_text, request.new_password)
         return _Preparado(user_id_vo=user_id_vo, contrasena_leida=leida, nueva=nueva)
 
     async def _bloquea_y_comprueba(self, preparado: _Preparado) -> User:

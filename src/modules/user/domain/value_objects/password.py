@@ -23,7 +23,7 @@ import os
 import re
 import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 
@@ -93,6 +93,22 @@ class Password:
     # menos con eñes o acentos (2 bytes cada uno), pasa de 72 bytes.
     BCRYPT_MAX_BYTES = 72
     hashed_value: str
+    # Solo la pone from_plain_text: el usuario acepta un Password ya calculado (el
+    # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. No cuenta
+    # para la igualdad: uno leído de la BD y uno recién hecho con el mismo hash son iguales
+    de_texto_plano: bool = field(default=False, compare=False, repr=False)
+
+    @classmethod
+    def comprueba_la_politica(cls, plain_password: str) -> None:
+        """La política, sin calcular ningún bcrypt (barata: va antes de cualquier hash).
+
+        Raises:
+            InvalidPasswordError: con el código y el texto de la regla rota
+        """
+        violation = cls._password_violation(plain_password)
+        if violation:
+            code, error_message = violation
+            raise InvalidPasswordError(error_message, error_code=code)
 
     @classmethod
     def from_plain_text(cls, plain_password: str) -> "Password":
@@ -116,13 +132,10 @@ class Password:
             True
         """
         # Validar fortaleza ANTES de hashear
-        violation = cls._password_violation(plain_password)
-        if violation:
-            code, error_message = violation
-            raise InvalidPasswordError(error_message, error_code=code)
+        cls.comprueba_la_politica(plain_password)
 
         hashed = cls._hash_password(plain_password)
-        return cls(hashed)
+        return cls(hashed, de_texto_plano=True)
 
     @classmethod
     def _bcrypt_bytes(cls, plain_password: str) -> bytes:

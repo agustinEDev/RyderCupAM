@@ -68,6 +68,9 @@ def _como_password(contrasena: str | Password) -> Password:
     """La contraseña como Value Object: ya calculada, tal cual (el bcrypt se hizo fuera
     de la transacción, BE #283); en texto plano, se valida y se calcula aquí."""
     if isinstance(contrasena, Password):
+        if not contrasena.de_texto_plano:
+            # Un hash cualquiera se saltaría la política (revisores del bloque 2)
+            raise ValueError("A ready Password must come from Password.from_plain_text")
         return contrasena
     return Password.from_plain_text(contrasena)
 
