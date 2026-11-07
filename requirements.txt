@@ -94,7 +94,7 @@ sentry-sdk[fastapi]==2.73.0
 # Entraba como transitiva de safety hasta que se sacó de la imagen (#289).
 jinja2==3.1.6
 
-# urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de requests/httpx)
+# urllib3 - Cliente HTTP de bajo nivel (dependencia transitiva de sentry-sdk)
 # Actualizado a 2.7.0 para resolver:
 # - PYSEC-2026-141, PYSEC-2026-142 (decompression bomb y unlimited decompression chain)
 urllib3==2.8.0
@@ -123,7 +123,7 @@ cryptography==50.0.2
 # - GHSA-xmj3-9gf7-h52w (Windows path escape via namespace_packages.txt, 23 oct 2026)
 setuptools==84.2.1
 
-# idna - Internationalized Domain Names in Applications (dependencia transitiva de requests/httpx)
+# idna - Internationalized Domain Names in Applications (dependencia transitiva de httpx)
 # Fijada explícitamente para resolver CVE-2026-45409
 idna==3.20
 

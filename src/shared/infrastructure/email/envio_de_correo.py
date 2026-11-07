@@ -10,8 +10,10 @@ La pieza que manda los correos de la app (7 nov 2026, BE #148 y #563).
     cambiada, cambio de correo pedido): también solo **Resend**;
   - **el resto** (invitaciones, amistad, hándicaps, contacto): **Resend**, y **Brevo**
     solo si fallan los dos.
-  Una clave de Mailgun rechazada (401/403) cuenta como caído. Tras un rechazo 4xx, una
-  espera agotada o un fallo de red no se prueba el siguiente. Tope de 25 s por correo.
+  Sin clave de Mailgun o con su clave rechazada (401/403), lo mismo. Tras un rechazo
+  4xx, un 502/504 de pasarela, una espera agotada o un fallo de red no se prueba el
+  siguiente: el correo pudo salir ya. Ningún respaldo empieza pasados ~10 s de los 25
+  del presupuesto de cada correo, y nada se corta a medias.
 - **mailpit** (el Kind y el docker-compose): el correo se queda en un buzón local que
   no entrega a nadie, para probar sin gastar el cupo de producción.
 
@@ -19,25 +21,31 @@ Todo asíncrono con httpx. En los logs, nunca el destinatario ni el cuerpo de la
 respuesta (podría repetir datos del correo): solo códigos y tipos de error.
 """
 
-import asyncio
 import logging
-from collections.abc import Mapping
+import os
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from email.utils import parseaddr
 from enum import Enum, auto
+from functools import cache
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-# 10 s por paso (5 para conectar) y 25 s en total por correo, respaldos incluidos: un
-# proveedor lento no cuelga el registro ni el restablecimiento
+# 10 s por paso (5 para conectar). Un paso entero cabe en 15 s: un respaldo solo empieza
+# si quedan 15 de los 25 del presupuesto, y así un proveedor lento no cuelga el registro
+# ni el restablecimiento. Nada se corta a medias: el correo podría haber salido
 ESPERA = httpx.Timeout(10.0, connect=5.0)
 PRESUPUESTO_TOTAL = 25.0
-SIN_TIEMPO = "Email sending ran out of time"
-CUPO_AGOTADO = "Mailgun daily quota exhausted (429)"
+TIEMPO_POR_PASO = 15.0
+SIN_TIEMPO = "Email sending ran out of time for the backups"
+# Un 429 es el cupo diario o el límite por segundo (una ráfaga de invitaciones)
+CUPO_AGOTADO = "%s quota or rate limit reached (429)"
 FALLAN_LOS_RESPALDOS = "Mailgun and its backups all failed"
 TRANSPORTES = ("mailgun", "mailpit")
+REMITENTE_POR_DEFECTO = "Ryder Cup Friends <noreply@rydercupfriends.com>"
 
 
 @dataclass(frozen=True)
@@ -60,7 +68,7 @@ class Resultado(Enum):
     ENVIADO = auto()
     SIN_CLAVE = auto()
     CUPO = auto()  # 429: el respaldo puede mandarlo
-    CAIDO = auto()  # 5xx o clave rechazada (401/403): el respaldo puede mandarlo
+    CAIDO = auto()  # 500/503, sin clave o rechazada (401/403): el respaldo puede mandarlo
     RECHAZADO = auto()  # 4xx: el respaldo lo rechazaría igual
     DUDOSO = auto()  # red o espera agotada: pudo salir ya, no se repite
 
@@ -83,6 +91,9 @@ def _por_codigo(proveedor: str, estado: int, aceptado: int) -> Resultado:
     if estado == httpx.codes.TOO_MANY_REQUESTS:
         return Resultado.CUPO
     logger.error("%s refused the email: %s", proveedor, estado)
+    if estado in (httpx.codes.BAD_GATEWAY, httpx.codes.GATEWAY_TIMEOUT):
+        # La pasarela pudo cortar con el correo ya aceptado: no se repite
+        return Resultado.DUDOSO
     if estado >= httpx.codes.INTERNAL_SERVER_ERROR or estado in (
         httpx.codes.UNAUTHORIZED,
         httpx.codes.FORBIDDEN,
@@ -298,10 +309,12 @@ class EnvioConRespaldo:
         primario: MailgunTransport | MailpitTransport,
         brevo: BrevoTransport | None = None,
         resend: ResendTransport | None = None,
+        reloj: Callable[[], float] = time.monotonic,
     ):
         self.primario = primario
         self.brevo = brevo
         self.resend = resend
+        self._reloj = reloj
 
     def _respaldos(self, correo: CorreoSaliente) -> list[BrevoTransport | ResendTransport]:
         """Resend, y Brevo después solo si el correo puede ir por él. Solo con clave."""
@@ -309,34 +322,30 @@ class EnvioConRespaldo:
         return [r for r in candidatos if r is not None and r.configurado]
 
     async def send(self, correo: CorreoSaliente) -> bool:
-        """True si el correo salió (por el primario o por un respaldo), en 25 s como mucho."""
-        try:
-            async with asyncio.timeout(PRESUPUESTO_TOTAL):
-                return await self._manda(correo)
-        except TimeoutError:
-            logger.error(SIN_TIEMPO)
-            return False
-
-    async def _manda(self, correo: CorreoSaliente) -> bool:
+        """True si el correo salió, por el primario o por un respaldo."""
+        empieza = self._reloj()
         resultado = await self.primario.send(correo)
         if resultado is Resultado.ENVIADO:
             return True
         if resultado is Resultado.CUPO:
-            # Su propio error en Sentry: el cupo agotado se sabe el mismo día
-            logger.error("%s daily quota exhausted (429)", self.primario.proveedor)
-        if resultado not in (Resultado.CUPO, Resultado.CAIDO):
-            # Rechazado (lo rechazarían igual), sin clave, o dudoso (pudo salir ya)
+            # Su propio error en Sentry: el cupo o el límite se sabe el mismo día
+            logger.error(CUPO_AGOTADO, self.primario.proveedor)
+        if resultado not in (Resultado.CUPO, Resultado.CAIDO, Resultado.SIN_CLAVE):
+            # Rechazado (lo rechazarían igual) o dudoso (pudo salir ya)
             return False
         respaldos = self._respaldos(correo)
         if not respaldos:
             return False
         for respaldo in respaldos:
+            if self._reloj() - empieza > PRESUPUESTO_TOTAL - TIEMPO_POR_PASO:
+                logger.error(SIN_TIEMPO)
+                return False
             resultado = await respaldo.send(correo)
             if resultado is Resultado.ENVIADO:
                 return True
-            if resultado not in (Resultado.CUPO, Resultado.CAIDO, Resultado.SIN_CLAVE):
-                # La misma regla que con Mailgun: tras un rechazo (lo rechazaría igual) o
-                # algo dudoso (pudo salir ya) no se prueba el siguiente
+            if resultado not in (Resultado.CUPO, Resultado.CAIDO):
+                # La misma regla que con Mailgun: tras un rechazo o algo dudoso no se
+                # prueba el siguiente
                 break
         logger.error(FALLAN_LOS_RESPALDOS)
         return False
@@ -362,6 +371,8 @@ def comprueba_el_envio_de_correo(entorno: Mapping[str, str]) -> None:
     produccion = _valor(entorno, "ENVIRONMENT", "development").lower() == "production"
     if produccion and transporte != "mailgun":
         raise RuntimeError("EMAIL_TRANSPORT must be 'mailgun' in production")
+    if produccion and not _valor(entorno, "MAILGUN_API_KEY", ""):
+        raise RuntimeError("MAILGUN_API_KEY must be set in production")
     # En producción, las claves solo viajan por https: una URL mal puesta no las manda
     # a otro sitio en claro
     for clave in ("MAILGUN_API_URL", "RESEND_API_URL", "BREVO_API_URL"):
@@ -373,9 +384,7 @@ def comprueba_el_envio_de_correo(entorno: Mapping[str, str]) -> None:
 def crea_el_envio(entorno: Mapping[str, str]) -> EnvioConRespaldo:
     """El envío que toca según la configuración (variables de entorno)."""
     comprueba_el_envio_de_correo(entorno)
-    remitente = _valor(
-        entorno, "MAILGUN_FROM_EMAIL", "Ryder Cup Friends <noreply@rydercupfriends.com>"
-    )
+    remitente = _valor(entorno, "MAILGUN_FROM_EMAIL", REMITENTE_POR_DEFECTO)
     if _transporte(entorno) == "mailpit":
         return EnvioConRespaldo(
             MailpitTransport(_valor(entorno, "MAILPIT_URL", "http://localhost:8025"), remitente)
@@ -386,14 +395,7 @@ def crea_el_envio(entorno: Mapping[str, str]) -> EnvioConRespaldo:
         domain=_valor(entorno, "MAILGUN_DOMAIN", "rydercupfriends.com"),
         from_email=remitente,
     )
-    clave_de_brevo = _valor(entorno, "BREVO_API_KEY", "")
-    brevo = (
-        BrevoTransport(
-            clave_de_brevo, _valor(entorno, "BREVO_API_URL", "https://api.brevo.com/v3"), remitente
-        )
-        if clave_de_brevo
-        else None
-    )
+    brevo = brevo_desde(entorno)
     clave_de_resend = _valor(entorno, "RESEND_API_KEY", "")
     resend = (
         ResendTransport(
@@ -403,3 +405,27 @@ def crea_el_envio(entorno: Mapping[str, str]) -> EnvioConRespaldo:
         else None
     )
     return EnvioConRespaldo(mailgun, brevo, resend)
+
+
+def brevo_desde(entorno: Mapping[str, str]) -> BrevoTransport | None:
+    """Brevo con la configuración, o None sin clave (lo usa también su vigía diario)."""
+    clave = _valor(entorno, "BREVO_API_KEY", "")
+    if not clave:
+        return None
+    return BrevoTransport(
+        clave,
+        _valor(entorno, "BREVO_API_URL", "https://api.brevo.com/v3"),
+        _valor(entorno, "MAILGUN_FROM_EMAIL", REMITENTE_POR_DEFECTO),
+    )
+
+
+def envia_por_mailgun_en_produccion(entorno: Mapping[str, str]) -> bool:
+    """Producción y transporte mailgun (vacío o sin poner también)."""
+    produccion = _valor(entorno, "ENVIRONMENT", "development").lower() == "production"
+    return produccion and _transporte(entorno) == "mailgun"
+
+
+@cache
+def envio_de_la_app() -> EnvioConRespaldo:
+    """Uno por proceso: la configuración no cambia sin reiniciar (/code-review)."""
+    return crea_el_envio(os.environ)

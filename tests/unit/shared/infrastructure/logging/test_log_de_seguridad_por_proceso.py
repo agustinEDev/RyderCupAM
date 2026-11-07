@@ -56,3 +56,29 @@ def test_l2_the_usual_file_keeps_its_logger_name(tmp_path):
         SecurityLogger._nombre_del_logger(Path("logs") / "security_audit.log") == "security.audit"
     )
     assert SecurityLogger._nombre_del_logger(tmp_path / "x.log") != "security.audit"
+
+
+def test_l2_the_usual_file_written_absolute_is_the_same_logger():
+    """/code-review: logs/ en absoluto es el mismo fichero, y por tanto el mismo logger
+    (si no, dos handlers rotarían el mismo fichero)."""
+    absoluta = Path.cwd() / "logs" / "security_audit.log"
+
+    assert SecurityLogger._nombre_del_logger(absoluta) == "security.audit"
+
+
+def test_l1_a_new_instance_closes_the_handlers_it_replaces(tmp_path):
+    """Sin descriptores abiertos de más: al reconfigurar el mismo fichero, el handler
+    anterior se cierra."""
+    primero = SecurityLogger(log_dir=tmp_path, log_file="x.log")
+    handler = _fichero_de_handler(primero)
+
+    SecurityLogger(log_dir=tmp_path, log_file="x.log")
+
+    assert handler.stream is None
+
+
+def _fichero_de_handler(registro):
+    (handler,) = [
+        h for h in registro._logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+    ]
+    return handler

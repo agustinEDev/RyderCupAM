@@ -2,11 +2,10 @@
 Email Service - Infrastructure Layer
 
 Los correos de la app: su texto y su HTML. El envío lo hace `envio_de_correo`
-(Mailgun con Brevo de respaldo, o Mailpit en el Kind).
+(Mailgun, con Resend y Brevo de respaldo, o Mailpit en el Kind).
 """
 
 import logging
-import os
 from datetime import datetime
 
 from src.config.settings import settings
@@ -34,7 +33,7 @@ from src.shared.infrastructure.email.email_layout import (
 from src.shared.infrastructure.email.envio_de_correo import (
     CorreoSaliente,
     EnvioConRespaldo,
-    crea_el_envio,
+    envio_de_la_app,
 )
 from src.shared.infrastructure.security.email_masking import mask_email
 
@@ -56,7 +55,7 @@ class EmailService(
 
     def __init__(self, envio: EnvioConRespaldo | None = None):
         """Con el envío de la configuración, salvo el que se pase (tests)."""
-        self._envio = envio or crea_el_envio(os.environ)
+        self._envio = envio or envio_de_la_app()
 
     async def send_verification_email(
         self, to_email: str, user_name: str, verification_token: str

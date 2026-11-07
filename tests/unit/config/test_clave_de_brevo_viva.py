@@ -8,8 +8,9 @@ Brevo caduca una clave que pasa 90 días sin usarse, y el respaldo se usa poco.
   B2 si Brevo dice que la clave no vale (401/403): un error propio en Sentry
   B3 otro fallo (caído, red): solo un aviso; se reintenta al día siguiente. Nunca la
      clave ni el cuerpo de la respuesta en el log
-  B4 tres días seguidos sin respuesta buena: un error propio (Agustín, tras la auditoría:
-     si no, el vigía podría estar roto meses sin que nadie lo vea)
+  B4 cada vuelta avisa a un monitor de Sentry (Crons): ok con 200, error con lo demás.
+     Si un día falla o no llega, alerta Sentry, que guarda el historial: los despliegues
+     no lo reinician (Agustín, tras la auditoría y el revisor)
 """
 
 import logging
@@ -19,12 +20,12 @@ import pytest
 
 from src.config.clave_de_brevo_viva import (
     CLAVE_DE_BREVO_RECHAZADA,
-    COMPROBACION_ROTA,
     INTERVALO_SEGUNDOS,
+    MONITOR,
     VigiaDeLaClaveDeBrevo,
     vigia_activado,
 )
-from src.shared.infrastructure.email.envio_de_correo import BrevoTransport
+from src.shared.infrastructure.email.envio_de_correo import BrevoTransport, brevo_desde
 
 
 class _Servidor:
@@ -50,6 +51,14 @@ def _brevo(servidor):
 PRO = {"ENVIRONMENT": "production", "EMAIL_TRANSPORT": "mailgun", "BREVO_API_KEY": "x"}
 
 
+class _Monitor:
+    def __init__(self):
+        self.avisos = []
+
+    def __call__(self, **kwargs):
+        self.avisos.append(kwargs)
+
+
 @pytest.mark.parametrize(
     ("entorno", "activo"),
     [
@@ -69,7 +78,7 @@ def test_b1_only_in_production_with_mailgun_and_a_key(entorno, activo):
 async def test_b1_it_asks_for_yesterdays_transactional_stats():
     servidor = _Servidor(200)
 
-    assert await VigiaDeLaClaveDeBrevo(_brevo(servidor)).vuelta() is True
+    assert await VigiaDeLaClaveDeBrevo(_brevo(servidor), avisa=_Monitor()).vuelta() is True
 
     (peticion,) = servidor.peticiones
     assert peticion.method == "GET"
@@ -86,7 +95,9 @@ async def test_b1_once_a_day_and_a_failing_turn_does_not_stop_it():
         if len(esperas) == 2:
             raise RuntimeError("fin del test")
 
-    vigia = VigiaDeLaClaveDeBrevo(_brevo(_Servidor(error=ValueError("x"))), esperar=esperar)
+    vigia = VigiaDeLaClaveDeBrevo(
+        _brevo(_Servidor(error=ValueError("x"))), esperar=esperar, avisa=_Monitor()
+    )
 
     with pytest.raises(RuntimeError, match="fin del test"):
         await vigia.vigilar()
@@ -98,7 +109,10 @@ async def test_b1_once_a_day_and_a_failing_turn_does_not_stop_it():
 @pytest.mark.parametrize("estado", [401, 403])
 async def test_b2_a_rejected_key_is_its_own_error(caplog, estado):
     with caplog.at_level(logging.WARNING):
-        assert await VigiaDeLaClaveDeBrevo(_brevo(_Servidor(estado))).vuelta() is False
+        assert (
+            await VigiaDeLaClaveDeBrevo(_brevo(_Servidor(estado)), avisa=_Monitor()).vuelta()
+            is False
+        )
 
     errores = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
     assert errores == [CLAVE_DE_BREVO_RECHAZADA]
@@ -111,7 +125,7 @@ async def test_b2_a_rejected_key_is_its_own_error(caplog, estado):
 )
 async def test_b3_other_failures_are_only_a_warning(caplog, servidor):
     with caplog.at_level(logging.WARNING):
-        assert await VigiaDeLaClaveDeBrevo(_brevo(servidor)).vuelta() is False
+        assert await VigiaDeLaClaveDeBrevo(_brevo(servidor), avisa=_Monitor()).vuelta() is False
 
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
     assert any(r.levelno == logging.WARNING for r in caplog.records)
@@ -119,41 +133,39 @@ async def test_b3_other_failures_are_only_a_warning(caplog, servidor):
     assert "datos-de-brevo" not in caplog.text
 
 
-async def test_b4_three_days_in_a_row_without_a_good_answer_is_an_error(caplog):
-    vigia = VigiaDeLaClaveDeBrevo(_brevo(_Servidor(500)))
+@pytest.mark.parametrize(
+    ("servidor", "estado"),
+    [
+        (_Servidor(200), "ok"),
+        (_Servidor(401), "error"),
+        (_Servidor(500), "error"),
+        (_Servidor(error=httpx.ConnectError("x")), "error"),
+    ],
+)
+async def test_b4_each_turn_reports_to_the_sentry_monitor(servidor, estado):
+    monitor = _Monitor()
+
+    await VigiaDeLaClaveDeBrevo(_brevo(servidor), avisa=monitor).vuelta()
+
+    (aviso,) = monitor.avisos
+    assert aviso["monitor_slug"] == MONITOR == "brevo-key-check"
+    assert aviso["status"] == estado
+    # Sentry crea el monitor solo: una vez al día, con margen y sin clave en el aviso
+    assert aviso["monitor_config"]["schedule"] == {"type": "interval", "value": 1, "unit": "day"}
+    assert "clave-secreta-brevo" not in repr(aviso)
+
+
+async def test_b4_a_failing_monitor_does_not_break_the_check(caplog):
+    def roto(**_):
+        raise RuntimeError("sentry caído")
 
     with caplog.at_level(logging.WARNING):
-        for _ in range(2):
-            await vigia.vuelta()
-        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
-        await vigia.vuelta()
-
-    errores = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
-    assert errores == [COMPROBACION_ROTA]
-    assert COMPROBACION_ROTA == "Brevo key check failing for 3 days"
+        assert await VigiaDeLaClaveDeBrevo(_brevo(_Servidor(200)), avisa=roto).vuelta() is True
 
 
-async def test_b4_a_good_answer_starts_the_count_again(caplog):
-    servidor = _Servidor(500)
-    vigia = VigiaDeLaClaveDeBrevo(_brevo(servidor))
+def test_the_check_uses_the_same_brevo_as_the_sender():
+    """Una sola forma de crear Brevo desde el entorno (/code-review)."""
+    brevo = brevo_desde({"BREVO_API_KEY": "x"})
 
-    with caplog.at_level(logging.WARNING):
-        await vigia.vuelta()
-        await vigia.vuelta()
-        servidor.estado = 200
-        await vigia.vuelta()
-        servidor.estado = 500
-        await vigia.vuelta()
-        await vigia.vuelta()
-
-    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
-
-
-async def test_b4_no_answer_also_counts(caplog):
-    vigia = VigiaDeLaClaveDeBrevo(_brevo(_Servidor(error=httpx.ConnectError("x"))))
-
-    with caplog.at_level(logging.WARNING):
-        for _ in range(3):
-            await vigia.vuelta()
-
-    assert COMPROBACION_ROTA in caplog.text
+    assert brevo is not None and brevo.configurado
+    assert brevo_desde({}) is None

@@ -34,7 +34,6 @@ from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
 )
 from src.config.clave_de_brevo_viva import (  # noqa: E402
     VigiaDeLaClaveDeBrevo,
-    brevo_de_la_configuracion,
     vigia_activado,
 )
 from src.config.cors_config import get_cors_config  # noqa: E402
@@ -100,6 +99,7 @@ from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
 )
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
 from src.shared.infrastructure.email.envio_de_correo import (  # noqa: E402
+    brevo_desde,
     comprueba_el_envio_de_correo,
 )
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
@@ -159,10 +159,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         # Y la limpieza de dispositivos y refrescos viejos, también cada hora (BE #737)
         tareas.append(asyncio.create_task(LimpiezaDeSesiones(async_session_maker).vigilar()))
     # La clave de Brevo, usada una vez al día para que no caduque (solo PRO)
-    if vigia_activado(os.environ):
-        tareas.append(
-            asyncio.create_task(VigiaDeLaClaveDeBrevo(brevo_de_la_configuracion()).vigilar())
-        )
+    brevo = brevo_desde(os.environ)
+    if vigia_activado(os.environ) and brevo is not None:
+        tareas.append(asyncio.create_task(VigiaDeLaClaveDeBrevo(brevo).vigilar()))
     yield
     for tarea in tareas:
         tarea.cancel()

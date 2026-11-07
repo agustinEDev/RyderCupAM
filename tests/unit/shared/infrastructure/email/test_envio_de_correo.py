@@ -6,7 +6,7 @@ Tabla del bloque 1 (BE #148, #563), aprobada por Agustín:
   E1  mailgun: POST a Mailgun con remitente, destinatario, asunto, texto y HTML; 200 → enviado
   E2  sin clave: no llama a nadie, no enviado
   E3  Mailgun lo rechaza: no enviado, en el log solo el código (sin el cuerpo)
-  E4  429 de Mailgun: un error propio («Mailgun daily quota exhausted»)
+  E4  429 de Mailgun: un error propio («Mailgun quota or rate limit reached»)
   E5  red o espera de 10 s: no enviado, en el log solo el tipo del error
   E8  mailpit: a la API de Mailpit, con «Responder a», nunca a Mailgun
   E9  en producción solo mailgun; un valor desconocido no arranca en ningún sitio
@@ -150,6 +150,18 @@ async def test_e2_without_key_nobody_is_called(caplog):
     assert "MAILGUN_API_KEY" in caplog.text
 
 
+async def test_e2_without_mailgun_key_the_backups_are_used():
+    """Como una clave rechazada (/code-review): sin clave de Mailgun, Resend."""
+    resend = _Servidor(200)
+
+    enviado = await EnvioConRespaldo(
+        _mailgun(_Servidor(200), api_key=""), resend=_resend(resend)
+    ).send(CORREO)
+
+    assert enviado is True
+    assert len(resend.peticiones) == 1
+
+
 async def test_e3_a_refusal_logs_only_the_status(caplog):
     servidor = _Servidor(400)
 
@@ -170,8 +182,8 @@ async def test_e4_a_429_is_its_own_error(caplog):
 
     assert enviado is False
     errores = [r for r in caplog.records if r.levelno >= logging.ERROR]
-    assert [r.getMessage() for r in errores] == [CUPO_AGOTADO]
-    assert CUPO_AGOTADO == "Mailgun daily quota exhausted (429)"
+    assert [r.getMessage() for r in errores] == [CUPO_AGOTADO % "Mailgun"]
+    assert CUPO_AGOTADO % "Mailgun" == "Mailgun quota or rate limit reached (429)"
 
 
 @pytest.mark.parametrize(
@@ -193,7 +205,7 @@ async def test_e5_network_or_timeout_logs_only_the_type(caplog, error):
 
 
 @pytest.mark.parametrize("estado", [429, 500, 503])
-async def test_e13_e16_a_429_or_5xx_goes_out_through_brevo(estado):
+async def test_e13_e16_a_429_500_or_503_goes_out_through_brevo(estado):
     mailgun, brevo = _Servidor(estado), _Servidor(201)
 
     enviado = await EnvioConRespaldo(_mailgun(mailgun), _brevo(brevo)).send(SIN_TOKEN)
@@ -216,7 +228,7 @@ async def test_e13_the_quota_error_still_fires_when_brevo_sends(caplog):
     with caplog.at_level(logging.ERROR):
         await EnvioConRespaldo(_mailgun(_Servidor(429)), _brevo(_Servidor(201))).send(SIN_TOKEN)
 
-    assert CUPO_AGOTADO in caplog.text
+    assert CUPO_AGOTADO % "Mailgun" in caplog.text
 
 
 async def test_e14_a_429_without_brevo_key_is_not_sent():
@@ -359,8 +371,8 @@ def test_e9_it_does_not_start(environment, transporte):
 @pytest.mark.parametrize(
     "entorno",
     [
-        {"ENVIRONMENT": "production", "EMAIL_TRANSPORT": "mailgun"},
-        {"ENVIRONMENT": "production"},
+        {"ENVIRONMENT": "production", "EMAIL_TRANSPORT": "mailgun", "MAILGUN_API_KEY": "mg"},
+        {"ENVIRONMENT": "production", "MAILGUN_API_KEY": "mg"},
         {"ENVIRONMENT": "development", "EMAIL_TRANSPORT": "mailpit"},
         {"EMAIL_TRANSPORT": "MAILPIT"},
         {},
@@ -386,7 +398,9 @@ async def test_empty_values_take_their_default():
 
 
 def test_an_empty_transport_is_mailgun_also_in_production():
-    comprueba_el_envio_de_correo({"ENVIRONMENT": "production", "EMAIL_TRANSPORT": ""})
+    comprueba_el_envio_de_correo(
+        {"ENVIRONMENT": "production", "EMAIL_TRANSPORT": "", "MAILGUN_API_KEY": "mg"}
+    )
 
 
 async def test_a_named_recipient_goes_split_to_brevo_and_mailpit():
@@ -579,34 +593,63 @@ async def test_r3_a_mailpit_429_does_not_say_mailgun(caplog):
         await EnvioConRespaldo(mailpit).send(CORREO)
 
     assert "Mailgun" not in caplog.text
-    assert "Mailpit daily quota exhausted (429)" in caplog.text
+    assert "Mailpit quota or rate limit reached (429)" in caplog.text
 
 
-async def test_r4_the_whole_sending_has_a_time_budget(caplog, monkeypatch):
-    """Un proveedor lento no cuelga el registro: tope total por correo."""
-    import asyncio
+@pytest.mark.parametrize("estado", [502, 504])
+async def test_r4_a_gateway_502_or_504_is_doubtful_and_not_resent(estado):
+    """Un 502/504 de pasarela puede llegar con el correo ya aceptado (/code-review): no se
+    repite por otro proveedor, o el usuario recibiría dos."""
+    resend = _Servidor(200)
 
-    from src.shared.infrastructure.email import envio_de_correo
-
-    monkeypatch.setattr(envio_de_correo, "PRESUPUESTO_TOTAL", 0.05)
-
-    class _Lento:
-        proveedor = "Mailgun"
-
-        async def send(self, correo):
-            await asyncio.sleep(5)
-
-    with caplog.at_level(logging.ERROR):
-        enviado = await EnvioConRespaldo(_Lento()).send(CORREO)
+    enviado = await EnvioConRespaldo(_mailgun(_Servidor(estado)), resend=_resend(resend)).send(
+        CORREO
+    )
 
     assert enviado is False
+    assert resend.peticiones == []
+
+
+async def test_r4_no_backup_starts_without_time_for_a_whole_step(caplog):
+    """El tope total no corta un envío a medias (podría haber salido): solo no empieza
+    otro proveedor si ya no queda tiempo para un paso entero."""
+    from src.shared.infrastructure.email import envio_de_correo
+
+    instantes = iter(
+        [0.0, envio_de_correo.PRESUPUESTO_TOTAL - envio_de_correo.TIEMPO_POR_PASO + 0.1]
+    )
+    resend = _Servidor(200)
+
+    with caplog.at_level(logging.ERROR):
+        enviado = await EnvioConRespaldo(
+            _mailgun(_Servidor(503)), resend=_resend(resend), reloj=lambda: next(instantes)
+        ).send(CORREO)
+
+    assert enviado is False
+    assert resend.peticiones == []
     assert envio_de_correo.SIN_TIEMPO in caplog.text
+
+
+async def test_r4_with_time_left_the_backup_starts():
+    from src.shared.infrastructure.email import envio_de_correo
+
+    instantes = iter(
+        [0.0, envio_de_correo.PRESUPUESTO_TOTAL - envio_de_correo.TIEMPO_POR_PASO - 0.1]
+    )
+    resend = _Servidor(200)
+
+    enviado = await EnvioConRespaldo(
+        _mailgun(_Servidor(503)), resend=_resend(resend), reloj=lambda: next(instantes)
+    ).send(CORREO)
+
+    assert enviado is True
 
 
 def test_r4_the_budget_and_the_connect_timeout():
     from src.shared.infrastructure.email import envio_de_correo
 
     assert envio_de_correo.PRESUPUESTO_TOTAL == 25.0
+    assert envio_de_correo.TIEMPO_POR_PASO == 15.0
     assert envio_de_correo.ESPERA.connect == 5.0
     assert envio_de_correo.ESPERA.read == 10.0
 
@@ -615,7 +658,7 @@ def test_r4_the_budget_and_the_connect_timeout():
     "clave", ["MAILGUN_API_URL", "RESEND_API_URL", "BREVO_API_URL", "MAILPIT_URL"]
 )
 def test_r5_production_needs_https_provider_urls(clave):
-    entorno = {"ENVIRONMENT": "production", clave: "http://api.ejemplo.com/v3"}
+    entorno = {"ENVIRONMENT": "production", "MAILGUN_API_KEY": "mg", clave: "http://x.com/v3"}
 
     if clave == "MAILPIT_URL":
         comprueba_el_envio_de_correo(entorno)  # en producción no se usa
@@ -626,3 +669,16 @@ def test_r5_production_needs_https_provider_urls(clave):
 
 def test_r5_outside_production_http_is_fine():
     comprueba_el_envio_de_correo({"ENVIRONMENT": "development", "MAILGUN_API_URL": "http://x/v3"})
+
+
+@pytest.mark.parametrize("valor", ["", "   "])
+def test_r5_production_needs_a_mailgun_key(valor):
+    with pytest.raises(RuntimeError, match="MAILGUN_API_KEY"):
+        comprueba_el_envio_de_correo({"ENVIRONMENT": "production", "MAILGUN_API_KEY": valor})
+
+
+def test_r7_one_sender_per_process():
+    """Un solo envío por proceso (/code-review): no se rehace en cada petición."""
+    from src.shared.infrastructure.email.envio_de_correo import envio_de_la_app
+
+    assert envio_de_la_app() is envio_de_la_app()

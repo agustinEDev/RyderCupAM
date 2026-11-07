@@ -178,7 +178,8 @@ class RegisterUserUseCase:
                         new_user.id.value,
                     )
             except (ValueError, ConnectionError):
-                # Capturar excepciones específicas de red y validación
+                # Defensivo: el envío de la app no lanza (devuelve False), pero otro
+                # adaptador del puerto podría hacerlo
                 logger.exception(
                     "Error al enviar email de verificación para el usuario %s",
                     new_user.id.value,

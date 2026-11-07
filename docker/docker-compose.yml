@@ -84,8 +84,8 @@ services:
       # el cupo de Mailgun de producción (BE #563). EMAIL_TRANSPORT=mailgun para mandarlos
       - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-mailpit}
       - MAILPIT_URL=http://mailpit:8025
-      # Respaldos de Mailgun cuando da 429 o 5xx (vacío = sin respaldo): Resend, y
-      # Brevo solo para los avisos sin token, el último
+      # Respaldos de Mailgun (vacío = sin respaldo): Resend, y el último Brevo, nunca
+      # para correos con token ni avisos de seguridad
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - BREVO_API_KEY=${BREVO_API_KEY:-}
     depends_on:

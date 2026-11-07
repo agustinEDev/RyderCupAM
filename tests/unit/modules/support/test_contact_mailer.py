@@ -1,9 +1,9 @@
 """
 El adaptador que manda el mensaje de contacto (C1, C5), ya sobre la pieza común de
-envío (E7, 7 nov 2026): Mailgun con Brevo de respaldo, o Mailpit en el Kind.
+envío (E7, 7 nov 2026): Mailgun con Resend y Brevo de respaldo, o Mailpit en el Kind.
 """
 
-from src.modules.support.infrastructure.services.mailgun_contact_mailer import ContactMailer
+from src.modules.support.infrastructure.services.contact_mailer import ContactMailer
 from src.shared.infrastructure.email.envio_de_correo import CorreoSaliente
 
 

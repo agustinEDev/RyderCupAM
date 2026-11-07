@@ -551,7 +551,7 @@ from src.modules.support.application.ports.contact_mailer import IContactMailer
 from src.modules.support.application.use_cases.submit_contact_use_case import (
     SubmitContactUseCase,
 )
-from src.modules.support.infrastructure.services.mailgun_contact_mailer import (
+from src.modules.support.infrastructure.services.contact_mailer import (
     ContactMailer,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -3391,7 +3391,7 @@ def get_unlock_account_use_case(
 
 
 def get_contact_mailer() -> IContactMailer:
-    """El envío por correo de los mensajes de contacto (Mailgun)."""
+    """El envío por correo de los mensajes de contacto (la pieza común de envío)."""
     return ContactMailer()
 
 

@@ -248,6 +248,13 @@ MAILGUN_FROM_EMAIL=Ryder Cup Friends <noreply@rydercupfriends.com>
 MAILGUN_API_URL=https://api.eu.mailgun.net/v3
 FRONTEND_URL=https://www.rydercupfriends.com
 
+# Respaldos de Mailgun (BE #563, opcionales: sin clave no se usan). Con 429, 500/503 o
+# clave de Mailgun rechazada o ausente: Resend (todos los correos) y, el último, Brevo
+# (nunca correos con token ni avisos de seguridad: reescribe los enlaces). Claves de
+# solo envío. Brevo se comprueba a diario (monitor de Sentry «brevo-key-check»)
+RESEND_API_KEY=<clave de Resend, solo envío>
+BREVO_API_KEY=<clave de Brevo, solo emails transaccionales>
+
 # Sentry - Error Tracking & Performance Monitoring (v1.8.0+)
 SENTRY_DSN=https://<PUBLIC_KEY>@o<ORG_ID>.ingest.de.sentry.io/<PROJECT_ID>
 SENTRY_TRACES_SAMPLE_RATE=0.1
@@ -260,6 +267,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 **⚠️ NOTAS CRÍTICAS:**
 - DATABASE_URL debe usar `postgresql+asyncpg://` (no `postgresql://`)
 - MAILGUN variables son obligatorias desde v1.1.0
+- En producción la app NO arranca sin `MAILGUN_API_KEY`, con `EMAIL_TRANSPORT` distinto de `mailgun` o con una URL de proveedor que no sea `https://` (BE #563)
 - FRONTEND_URL debe ser tu dominio de producción
 - **SENTRY_DSN:** Obtener tu DSN real desde https://sentry.io → Settings → Projects → [Tu Proyecto] → Client Keys (DSN). Reemplaza `<PUBLIC_KEY>`, `<ORG_ID>` y `<PROJECT_ID>` con tus valores reales.
 - SENTRY_TRACES_SAMPLE_RATE: 0.1 = 10% de requests monitoreados (recomendado)
