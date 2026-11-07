@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 INTERVALO_SEGUNDOS = 24 * 60 * 60
 CLAVE_DE_BREVO_RECHAZADA = "Brevo API key rejected"
+# Tres días seguidos sin respuesta buena: el vigía podría estar roto (auditoría)
+DIAS_SIN_RESPUESTA_BUENA = 3
+COMPROBACION_ROTA = f"Brevo key check failing for {DIAS_SIN_RESPUESTA_BUENA} days"
 
 
 def vigia_activado(entorno: Mapping[str, str]) -> bool:
@@ -52,6 +55,7 @@ class VigiaDeLaClaveDeBrevo:
     ):
         self._brevo = brevo
         self._esperar = esperar
+        self._dias_sin_respuesta_buena = 0
 
     async def vigilar(self) -> None:
         """Hasta que la app se apague. Una vuelta que falla no para las siguientes."""
@@ -67,6 +71,7 @@ class VigiaDeLaClaveDeBrevo:
         estado = await self._brevo.comprueba_la_clave()
         if estado == httpx.codes.OK:
             logger.info("Brevo key check: ok")
+            self._dias_sin_respuesta_buena = 0
             return True
         if estado in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
             # Su propio error en Sentry: la clave caducó o la revocaron
@@ -74,4 +79,7 @@ class VigiaDeLaClaveDeBrevo:
             return False
         if estado is not None:
             logger.warning("Brevo key check: status %s; retrying tomorrow", estado)
+        self._dias_sin_respuesta_buena += 1
+        if self._dias_sin_respuesta_buena == DIAS_SIN_RESPUESTA_BUENA:
+            logger.error(COMPROBACION_ROTA)
         return False

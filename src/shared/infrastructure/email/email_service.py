@@ -144,15 +144,26 @@ The Ryder Cup Friends Team
         )
 
     async def _send_email(
-        self, to: str, subject: str, text: str, html: str | None = None, con_token: bool = True
+        self,
+        to: str,
+        subject: str,
+        text: str,
+        html: str | None = None,
+        puede_ir_por_brevo: bool = False,
     ) -> bool:
         """Lo manda; True si salió (ver `envio_de_correo`).
 
-        `con_token=False` solo en los avisos sin token: son los únicos que pueden salir
-        por Brevo, que reescribe los enlaces (7 nov 2026).
+        `puede_ir_por_brevo=True` solo en los correos sin token que no son de seguridad:
+        Brevo reescribe los enlaces por su servidor (7 nov 2026).
         """
         return await self._envio.send(
-            CorreoSaliente(to=to, subject=subject, text=text, html=html, con_token=con_token)
+            CorreoSaliente(
+                to=to,
+                subject=subject,
+                text=text,
+                html=html,
+                puede_ir_por_brevo=puede_ir_por_brevo,
+            )
         )
 
     async def send_password_reset_email(
@@ -305,7 +316,7 @@ The Ryder Cup Friends Team
             "We always send this when the password changes.",
         )
 
-        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_email_change_confirmation(
         self, to_email: str, user_name: str, token: str
@@ -427,7 +438,7 @@ If it wasn't you, change your password: {restablecer}
             pie="Este aviso se envía siempre que se pide cambiar el correo. "
             "We always send this when an email change is requested.",
         )
-        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_new_login_notification(
         self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
@@ -496,7 +507,7 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
             "We let you know whenever a new device signs in.",
         )
 
-        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_failed_logins_notification(
         self,
@@ -610,7 +621,7 @@ password, change it: {cambiar}
             pie="Te avisamos como mucho una vez por hora. We let you know at most once an hour.",
         )
 
-        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
@@ -618,6 +629,8 @@ password, change it: {cambiar}
             name.replace("\n", "")
             .replace("\r", "")
             .replace('"', "")
+            # La barra invertida escaparía la comilla de '"nombre" <correo>' (auditoría)
+            .replace("\\", "")
             .replace("<", "")
             .replace(">", "")
             .strip()
@@ -732,7 +745,9 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
-        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
 
     async def send_handicaps_pending_email(
         self,
@@ -810,7 +825,9 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
-        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
 
     async def send_scheduled_handicaps_update_skipped_email(
         self,
@@ -886,7 +903,9 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
-        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
 
     async def send_friend_request_email(
         self,
@@ -957,4 +976,6 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_addressee}" <{to_email}>'
-        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )

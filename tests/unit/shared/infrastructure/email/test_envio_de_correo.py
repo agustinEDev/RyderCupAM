@@ -17,7 +17,8 @@ Tabla del bloque 1 (BE #148, #563), aprobada por Agustín:
   E17 con mailpit, Brevo nunca
 
   Tras la prueba real (Brevo reescribe los enlaces y no deja quitarlo), Agustín:
-  E13b cada correo dice si lleva token; por defecto, que sí
+  E13b cada correo dice si puede ir por Brevo; por defecto, que no (con token o aviso
+       de seguridad: nunca, Agustín tras las revisiones)
   E13c con token: solo Resend; si falla, no enviado y error propio
   E13d sin token: Resend, y Brevo solo si fallan los dos (Agustín, tras la prueba
        real de Resend: sin reescribir enlaces ni «Anular suscripción»)
@@ -51,8 +52,8 @@ CORREO = CorreoSaliente(
     reply_to="pepe@example.com",
 )
 REMITENTE = "Ryder Cup Friends <noreply@rydercupfriends.com>"
-# Un aviso sin token: el único que puede ir por Brevo
-SIN_TOKEN = replace(CORREO, con_token=False)
+# Un aviso que puede ir por Brevo (ni token ni seguridad)
+SIN_TOKEN = replace(CORREO, puede_ir_por_brevo=True)
 
 
 class _Servidor:
@@ -130,7 +131,7 @@ async def test_e1_without_html_or_reply_to_they_are_not_sent():
     assert set(_formulario(servidor.peticiones[0])) == {"from", "to", "subject", "text"}
 
 
-async def test_e1_it_waits_at_most_ten_seconds():
+async def test_e1_it_waits_at_most_ten_seconds_per_step():
     servidor = _Servidor(200)
 
     await EnvioConRespaldo(_mailgun(servidor)).send(CORREO)
@@ -391,7 +392,7 @@ def test_an_empty_transport_is_mailgun_also_in_production():
 async def test_a_named_recipient_goes_split_to_brevo_and_mailpit():
     """La verificación va a '"Ana" <ana@…>': Brevo y Mailpit lo quieren por partes."""
     correo = CorreoSaliente(
-        to='"Ana López" <ana@example.com>', subject="S", text="T", con_token=False
+        to='"Ana López" <ana@example.com>', subject="S", text="T", puede_ir_por_brevo=True
     )
     brevo, mailpit = _Servidor(201), _Servidor(200)
 
@@ -422,8 +423,8 @@ def _resend(servidor, api_key="clave-resend"):
     )
 
 
-def test_e13b_by_default_an_email_carries_a_token():
-    assert CorreoSaliente(to="a@b.com", subject="S", text="T").con_token is True
+def test_e13b_by_default_an_email_never_goes_through_brevo():
+    assert CorreoSaliente(to="a@b.com", subject="S", text="T").puede_ir_por_brevo is False
 
 
 async def test_e13c_resend_gets_the_whole_email():
@@ -537,3 +538,91 @@ async def test_e16_timeout_or_refusal_do_not_go_to_resend(mailgun):
 def test_resend_is_mounted_only_with_its_key():
     assert isinstance(crea_el_envio(_entorno(RESEND_API_KEY="re")).resend, ResendTransport)
     assert crea_el_envio(_entorno()).resend is None
+
+
+# --- Tras las revisiones (7 nov 2026) ----------------------------------------------
+
+
+async def test_r1_a_resend_refusal_does_not_go_to_brevo(caplog):
+    """La misma regla entre respaldos: tras un rechazo 4xx no se prueba el siguiente."""
+    brevo = _Servidor(201)
+
+    with caplog.at_level(logging.ERROR):
+        enviado = await EnvioConRespaldo(
+            _mailgun(_Servidor(429)), _brevo(brevo), _resend(_Servidor(422))
+        ).send(SIN_TOKEN)
+
+    assert enviado is False
+    assert brevo.peticiones == []
+    assert FALLAN_LOS_RESPALDOS in caplog.text
+
+
+@pytest.mark.parametrize("estado", [401, 403])
+async def test_r2_a_rejected_mailgun_key_uses_the_backups(estado):
+    """Agustín: la clave de Mailgun revocada o caducada cuenta como Mailgun caído."""
+    resend = _Servidor(200)
+
+    enviado = await EnvioConRespaldo(_mailgun(_Servidor(estado)), resend=_resend(resend)).send(
+        CORREO
+    )
+
+    assert enviado is True
+    assert len(resend.peticiones) == 1
+
+
+async def test_r3_a_mailpit_429_does_not_say_mailgun(caplog):
+    mailpit = MailpitTransport(
+        url="http://mailpit:8025", from_email=REMITENTE, transporte_http=_Servidor(429).transporte
+    )
+
+    with caplog.at_level(logging.ERROR):
+        await EnvioConRespaldo(mailpit).send(CORREO)
+
+    assert "Mailgun" not in caplog.text
+    assert "Mailpit daily quota exhausted (429)" in caplog.text
+
+
+async def test_r4_the_whole_sending_has_a_time_budget(caplog, monkeypatch):
+    """Un proveedor lento no cuelga el registro: tope total por correo."""
+    import asyncio
+
+    from src.shared.infrastructure.email import envio_de_correo
+
+    monkeypatch.setattr(envio_de_correo, "PRESUPUESTO_TOTAL", 0.05)
+
+    class _Lento:
+        proveedor = "Mailgun"
+
+        async def send(self, correo):
+            await asyncio.sleep(5)
+
+    with caplog.at_level(logging.ERROR):
+        enviado = await EnvioConRespaldo(_Lento()).send(CORREO)
+
+    assert enviado is False
+    assert envio_de_correo.SIN_TIEMPO in caplog.text
+
+
+def test_r4_the_budget_and_the_connect_timeout():
+    from src.shared.infrastructure.email import envio_de_correo
+
+    assert envio_de_correo.PRESUPUESTO_TOTAL == 25.0
+    assert envio_de_correo.ESPERA.connect == 5.0
+    assert envio_de_correo.ESPERA.read == 10.0
+
+
+@pytest.mark.parametrize(
+    "clave", ["MAILGUN_API_URL", "RESEND_API_URL", "BREVO_API_URL", "MAILPIT_URL"]
+)
+def test_r5_production_needs_https_provider_urls(clave):
+    entorno = {"ENVIRONMENT": "production", clave: "http://api.ejemplo.com/v3"}
+
+    if clave == "MAILPIT_URL":
+        comprueba_el_envio_de_correo(entorno)  # en producción no se usa
+    else:
+        with pytest.raises(RuntimeError, match=clave):
+            comprueba_el_envio_de_correo(entorno)
+
+
+def test_r5_outside_production_http_is_fine():
+    comprueba_el_envio_de_correo({"ENVIRONMENT": "development", "MAILGUN_API_URL": "http://x/v3"})

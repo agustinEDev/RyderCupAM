@@ -14,6 +14,7 @@ load_dotenv()  # Cargar variables de entorno desde .env
 
 import asyncio  # noqa: E402
 import contextlib  # noqa: E402
+import logging  # noqa: E402
 import secrets  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
@@ -129,11 +130,16 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     """
     print("INFO:     Iniciando aplicación y configurando mappers...")
 
-    # Sin un envío de correo válido no se arranca: en producción solo Mailgun (BE #563)
-    comprueba_el_envio_de_correo(os.environ)
-
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
+
+    # Sin un envío de correo válido no se arranca: en producción solo Mailgun y por
+    # https (BE #563). Tras Sentry, para que un arranque fallido llegue allí
+    try:
+        comprueba_el_envio_de_correo(os.environ)
+    except RuntimeError:
+        logging.getLogger(__name__).exception("Invalid email configuration: not starting")
+        raise
 
     # Si hay secreto de Cloudflare para la IP real, y de qué longitud (ADR-041)
     informa_del_secreto_de_origen()

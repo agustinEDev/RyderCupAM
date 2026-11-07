@@ -91,6 +91,11 @@ apply_configs() {
         print_success "api-secret aplicado"
     fi
 
+    # El buzón local de los correos: el configmap ya manda la API a Mailpit (BE #563)
+    if [ -f "$k8s_dir/mailpit.yaml" ]; then
+        kubectl apply -f "$k8s_dir/mailpit.yaml"
+    fi
+
     if [ -f "$k8s_dir/frontend-configmap.yaml" ]; then
         kubectl apply -f "$k8s_dir/frontend-configmap.yaml"
         print_success "frontend-configmap aplicado"

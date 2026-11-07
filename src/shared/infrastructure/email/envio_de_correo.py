@@ -6,7 +6,12 @@ La pieza que manda los correos de la app (7 nov 2026, BE #148 y #563).
   - **con token** (verificar, restablecer, confirmar el correo nuevo): solo **Resend**,
     que no toca los enlaces. Brevo los reescribe por su servidor y no deja quitarlo, y
     un token no pasa por un tercero (7 nov 2026, prueba real y decisión de Agustín);
-  - **sin token** (los avisos): **Resend**, y **Brevo** solo si fallan los dos.
+  - **avisos de seguridad** (nuevo inicio de sesión, intentos fallidos, contraseña
+    cambiada, cambio de correo pedido): también solo **Resend**;
+  - **el resto** (invitaciones, amistad, hándicaps, contacto): **Resend**, y **Brevo**
+    solo si fallan los dos.
+  Una clave de Mailgun rechazada (401/403) cuenta como caído. Tras un rechazo 4xx, una
+  espera agotada o un fallo de red no se prueba el siguiente. Tope de 25 s por correo.
 - **mailpit** (el Kind y el docker-compose): el correo se queda en un buzón local que
   no entrega a nadie, para probar sin gastar el cupo de producción.
 
@@ -14,6 +19,7 @@ Todo asíncrono con httpx. En los logs, nunca el destinatario ni el cuerpo de la
 respuesta (podría repetir datos del correo): solo códigos y tipos de error.
 """
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -24,7 +30,11 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-ESPERA_MAXIMA = 10.0
+# 10 s por paso (5 para conectar) y 25 s en total por correo, respaldos incluidos: un
+# proveedor lento no cuelga el registro ni el restablecimiento
+ESPERA = httpx.Timeout(10.0, connect=5.0)
+PRESUPUESTO_TOTAL = 25.0
+SIN_TIEMPO = "Email sending ran out of time"
 CUPO_AGOTADO = "Mailgun daily quota exhausted (429)"
 FALLAN_LOS_RESPALDOS = "Mailgun and its backups all failed"
 TRANSPORTES = ("mailgun", "mailpit")
@@ -39,8 +49,9 @@ class CorreoSaliente:
     text: str
     html: str | None = None
     reply_to: str | None = None
-    # Por defecto, que lleva token: un correo nuevo sin marcar nunca sale por Brevo
-    con_token: bool = True
+    # Brevo reescribe los enlaces: nunca un correo con token ni un aviso de seguridad.
+    # Por defecto, no: un correo nuevo sin marcar nunca sale por Brevo
+    puede_ir_por_brevo: bool = False
 
 
 class Resultado(Enum):
@@ -49,7 +60,7 @@ class Resultado(Enum):
     ENVIADO = auto()
     SIN_CLAVE = auto()
     CUPO = auto()  # 429: el respaldo puede mandarlo
-    CAIDO = auto()  # 5xx: el respaldo puede mandarlo
+    CAIDO = auto()  # 5xx o clave rechazada (401/403): el respaldo puede mandarlo
     RECHAZADO = auto()  # 4xx: el respaldo lo rechazaría igual
     DUDOSO = auto()  # red o espera agotada: pudo salir ya, no se repite
 
@@ -72,7 +83,10 @@ def _por_codigo(proveedor: str, estado: int, aceptado: int) -> Resultado:
     if estado == httpx.codes.TOO_MANY_REQUESTS:
         return Resultado.CUPO
     logger.error("%s refused the email: %s", proveedor, estado)
-    if estado >= httpx.codes.INTERNAL_SERVER_ERROR:
+    if estado >= httpx.codes.INTERNAL_SERVER_ERROR or estado in (
+        httpx.codes.UNAUTHORIZED,
+        httpx.codes.FORBIDDEN,
+    ):
         return Resultado.CAIDO
     return Resultado.RECHAZADO
 
@@ -98,7 +112,7 @@ class _TransporteHttp:
     async def _post(self, url: str, **kwargs) -> httpx.Response | None:
         try:
             async with httpx.AsyncClient(
-                timeout=ESPERA_MAXIMA, transport=self._transporte_http
+                timeout=ESPERA, transport=self._transporte_http
             ) as cliente:
                 return await cliente.post(url, **kwargs)
         except Exception as error:
@@ -172,7 +186,7 @@ class BrevoTransport(_TransporteHttp):
         hubo respuesta. Usa la clave para que Brevo no la caduque por inactividad."""
         try:
             async with httpx.AsyncClient(
-                timeout=ESPERA_MAXIMA, transport=self._transporte_http
+                timeout=ESPERA, transport=self._transporte_http
             ) as cliente:
                 respuesta = await cliente.get(
                     f"{self._url_base}/smtp/statistics/aggregatedReport",
@@ -290,18 +304,26 @@ class EnvioConRespaldo:
         self.resend = resend
 
     def _respaldos(self, correo: CorreoSaliente) -> list[BrevoTransport | ResendTransport]:
-        """Con token, solo Resend; sin token, Resend y luego Brevo. Solo los que tienen clave."""
-        candidatos = [self.resend] if correo.con_token else [self.resend, self.brevo]
+        """Resend, y Brevo después solo si el correo puede ir por él. Solo con clave."""
+        candidatos = [self.resend, self.brevo] if correo.puede_ir_por_brevo else [self.resend]
         return [r for r in candidatos if r is not None and r.configurado]
 
     async def send(self, correo: CorreoSaliente) -> bool:
-        """True si el correo salió (por el primario o por un respaldo)."""
+        """True si el correo salió (por el primario o por un respaldo), en 25 s como mucho."""
+        try:
+            async with asyncio.timeout(PRESUPUESTO_TOTAL):
+                return await self._manda(correo)
+        except TimeoutError:
+            logger.error(SIN_TIEMPO)
+            return False
+
+    async def _manda(self, correo: CorreoSaliente) -> bool:
         resultado = await self.primario.send(correo)
         if resultado is Resultado.ENVIADO:
             return True
         if resultado is Resultado.CUPO:
             # Su propio error en Sentry: el cupo agotado se sabe el mismo día
-            logger.error(CUPO_AGOTADO)
+            logger.error("%s daily quota exhausted (429)", self.primario.proveedor)
         if resultado not in (Resultado.CUPO, Resultado.CAIDO):
             # Rechazado (lo rechazarían igual), sin clave, o dudoso (pudo salir ya)
             return False
@@ -312,8 +334,9 @@ class EnvioConRespaldo:
             resultado = await respaldo.send(correo)
             if resultado is Resultado.ENVIADO:
                 return True
-            if resultado is Resultado.DUDOSO:
-                # Pudo salir ya: no se repite por el siguiente (como con Mailgun)
+            if resultado not in (Resultado.CUPO, Resultado.CAIDO, Resultado.SIN_CLAVE):
+                # La misma regla que con Mailgun: tras un rechazo (lo rechazaría igual) o
+                # algo dudoso (pudo salir ya) no se prueba el siguiente
                 break
         logger.error(FALLAN_LOS_RESPALDOS)
         return False
@@ -339,6 +362,12 @@ def comprueba_el_envio_de_correo(entorno: Mapping[str, str]) -> None:
     produccion = _valor(entorno, "ENVIRONMENT", "development").lower() == "production"
     if produccion and transporte != "mailgun":
         raise RuntimeError("EMAIL_TRANSPORT must be 'mailgun' in production")
+    # En producción, las claves solo viajan por https: una URL mal puesta no las manda
+    # a otro sitio en claro
+    for clave in ("MAILGUN_API_URL", "RESEND_API_URL", "BREVO_API_URL"):
+        url = _valor(entorno, clave, "")
+        if produccion and url and not url.lower().startswith("https://"):
+            raise RuntimeError(f"{clave} must use https in production")
 
 
 def crea_el_envio(entorno: Mapping[str, str]) -> EnvioConRespaldo:

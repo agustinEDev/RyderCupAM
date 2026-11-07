@@ -40,8 +40,8 @@ async def test_it_goes_to_admin_with_reply_to_and_text_only():
             subject="[Contacto · Pregunta] Hola",
             text="Cuerpo",
             reply_to="ana@example.com",
-            # Sin token: puede salir por Brevo si Mailgun no puede
-            con_token=False,
+            # Ni token ni seguridad: puede salir por Brevo si Mailgun y Resend no pueden
+            puede_ir_por_brevo=True,
         )
     ]
 

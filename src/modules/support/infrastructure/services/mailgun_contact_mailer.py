@@ -35,7 +35,7 @@ class ContactMailer(IContactMailer):
                 subject=subject,
                 text=text,
                 reply_to=reply_to if reply_to.isascii() else None,
-                # Sin token: puede salir por Brevo si Mailgun no puede
-                con_token=False,
+                # Ni token ni seguridad: puede salir por Brevo si Mailgun y Resend no pueden
+                puede_ir_por_brevo=True,
             )
         )
