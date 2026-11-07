@@ -31,6 +31,13 @@ class GoogleLinkNeedsVerifiedEmailError(ValueError):
     """
 
 
+class ReauthenticationRequiredError(PermissionError):
+    """
+    Vincular Google pide la contraseña actual a una cuenta que la tiene (BE #753): con
+    solo la sesión, una robada podía añadir un Google que sobrevive al restablecimiento.
+    """
+
+
 class LinkGoogleAccountUseCase:
     """
     Vincula una cuenta de Google a un usuario autenticado existente.
@@ -55,6 +62,7 @@ class LinkGoogleAccountUseCase:
         self,
         request: LinkGoogleAccountRequestDTO,
         user_id: str,
+        reautenticado: bool = False,
     ) -> LinkGoogleAccountResponseDTO:
         """
         Vincula cuenta Google al usuario autenticado.
@@ -75,6 +83,10 @@ class LinkGoogleAccountUseCase:
             cuenta = await self._uow.users.find_by_id(uid)
         if cuenta is None or not cuenta.email_verified:
             raise GoogleLinkNeedsVerifiedEmailError("Verify your email before linking Google")
+        # Con contraseña, la marca de haberla escrito hace poco; también antes de gastar
+        # el código de Google
+        if cuenta.has_password and not reautenticado:
+            raise ReauthenticationRequiredError("Enter your current password first")
 
         google_info = await self._google_oauth_service.exchange_code_for_user_info(
             request.authorization_code

@@ -633,6 +633,9 @@ from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
 from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
+from src.modules.user.application.use_cases.reauthenticate_use_case import (
+    ReauthenticateUseCase,
+)
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
@@ -3688,6 +3691,13 @@ def get_link_google_account_use_case(
 ) -> LinkGoogleAccountUseCase:
     """Proveedor del caso de uso LinkGoogleAccountUseCase."""
     return LinkGoogleAccountUseCase(uow, google_oauth_service, security_audit=security_audit)
+
+
+def get_reauthenticate_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ReauthenticateUseCase:
+    """Proveedor del caso de uso que comprueba la contraseña actual (BE #753)."""
+    return ReauthenticateUseCase(uow)
 
 
 def get_unlink_google_account_use_case(

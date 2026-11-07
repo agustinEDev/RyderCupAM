@@ -15,15 +15,25 @@ from src.config.dependencies import (
     get_current_user,
     get_google_login_use_case,
     get_link_google_account_use_case,
+    get_reauthenticate_use_case,
     get_unlink_google_account_use_case,
 )
-from src.config.rate_limit import GOOGLE_LOGIN_LIMIT, get_client_identifier, limiter
+from src.config.rate_limit import (
+    GOOGLE_LOGIN_LIMIT,
+    SECURITY_CHANGES_LIMIT,
+    cabe,
+    clave_de_usuario,
+    get_client_identifier,
+    limiter,
+)
 from src.config.settings import settings
 from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginRequestDTO,
     GoogleLoginResponseDTO,
     LinkGoogleAccountRequestDTO,
     LinkGoogleAccountResponseDTO,
+    ReauthenticateRequestDTO,
+    ReauthenticateResponseDTO,
     UnlinkGoogleAccountResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -34,10 +44,16 @@ from src.modules.user.application.use_cases.google_login_use_case import (
 from src.modules.user.application.use_cases.link_google_account_use_case import (
     GoogleLinkNeedsVerifiedEmailError,
     LinkGoogleAccountUseCase,
+    ReauthenticationRequiredError,
+)
+from src.modules.user.application.use_cases.reauthenticate_use_case import (
+    AccountWithoutPasswordError,
+    ReauthenticateUseCase,
 )
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
+from src.modules.user.domain.errors.user_errors import InvalidCredentialsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
@@ -48,6 +64,7 @@ from src.modules.user.infrastructure.api.v1.cuenta_desactivada import (
     ACCOUNT_DEACTIVATED,
     TEXTO as TEXTO_DE_CUENTA_DESACTIVADA,
 )
+from src.modules.user.infrastructure.security import reautenticacion
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     cloudflare_client_country,
@@ -153,6 +170,62 @@ async def google_login(
     return login_response
 
 
+# Los errores de la marca de reautenticación (BE #753), con su código para traducirlos
+CURRENT_PASSWORD_INCORRECT = "CURRENT_PASSWORD_INCORRECT"
+ACCOUNT_WITHOUT_PASSWORD = "ACCOUNT_WITHOUT_PASSWORD"
+REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED"
+TOO_MANY_SECURITY_CHANGES = "TOO_MANY_SECURITY_CHANGES"
+_TEXTOS_DE_LA_REAUTENTICACION = {
+    CURRENT_PASSWORD_INCORRECT: "Current password is incorrect.",
+    ACCOUNT_WITHOUT_PASSWORD: "This account has no password.",
+    REAUTHENTICATION_REQUIRED: "Enter your current password first.",
+    TOO_MANY_SECURITY_CHANGES: "Too many attempts. Try again later.",
+}
+
+
+@router.post(
+    "/reauthenticate",
+    response_model=ReauthenticateResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Confirmar la contraseña actual",
+    description=(
+        "Con la contraseña actual, deja una marca de 5 minutos (cookie httpOnly) que pide "
+        "/auth/google/link (BE #753). Los intentos cuentan en el límite de seguridad del "
+        "usuario (429 TOO_MANY_SECURITY_CHANGES)."
+    ),
+    tags=["Authentication"],
+)
+async def reauthenticate(
+    datos: ReauthenticateRequestDTO,
+    response: Response,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ReauthenticateUseCase = Depends(get_reauthenticate_use_case),
+):
+    """Comprueba la contraseña actual y deja la marca para vincular Google."""
+    user_id = str(current_user.id)
+    # Cada intento prueba una contraseña: el mismo límite que Seguridad
+    if not cabe(SECURITY_CHANGES_LIMIT, "security-changes", clave_de_usuario(user_id)):
+        return respuesta_con_codigo(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            _TEXTOS_DE_LA_REAUTENTICACION,
+            TOO_MANY_SECURITY_CHANGES,
+        )
+    try:
+        await use_case.execute(user_id, datos.password)
+    except InvalidCredentialsError:
+        return respuesta_con_codigo(
+            status.HTTP_401_UNAUTHORIZED,
+            _TEXTOS_DE_LA_REAUTENTICACION,
+            CURRENT_PASSWORD_INCORRECT,
+        )
+    except AccountWithoutPasswordError:
+        return respuesta_con_codigo(
+            status.HTTP_409_CONFLICT, _TEXTOS_DE_LA_REAUTENTICACION, ACCOUNT_WITHOUT_PASSWORD
+        )
+    reautenticacion.pon_la_cookie(response, reautenticacion.emite(user_id))
+    return ReauthenticateResponseDTO(expires_in=int(reautenticacion.DURACION.total_seconds()))
+
+
 @router.post(
     "/google/link",
     response_model=LinkGoogleAccountResponseDTO,
@@ -163,11 +236,14 @@ async def google_login(
 )
 async def link_google_account(
     request: Request,
+    response: Response,
     link_data: LinkGoogleAccountRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: LinkGoogleAccountUseCase = Depends(get_link_google_account_use_case),
 ):
     """Vincula cuenta Google a usuario autenticado."""
+    user_id = str(current_user.id)
+    marca = request.cookies.get(reautenticacion.COOKIE)
     try:
         # El caso de uso lo deja en el log de seguridad, con la red (#750 punto 3).
         # Siempre desde la petición: lo que mande el cliente no cuenta
@@ -175,7 +251,17 @@ async def link_google_account(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
         link_data.user_agent = get_user_agent(request)
-        return await use_case.execute(link_data, str(current_user.id))
+        vinculado = await use_case.execute(
+            link_data, user_id, reautenticado=reautenticacion.vale(marca, user_id)
+        )
+        # Una sola vez: gastada aunque el navegador no borrara la cookie
+        reautenticacion.gasta(marca, user_id)
+        reautenticacion.borra_la_cookie(response)
+        return vinculado
+    except ReauthenticationRequiredError:
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_LA_REAUTENTICACION, REAUTHENTICATION_REQUIRED
+        )
     except GoogleLinkNeedsVerifiedEmailError:
         # Sin el correo verificado, sin Google: con su código, para que la app diga
         # qué hacer en su idioma

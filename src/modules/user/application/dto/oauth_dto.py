@@ -51,6 +51,18 @@ class GoogleLoginResponseDTO(BaseModel):
     device_id: str = Field(..., description="ID del dispositivo de esta sesión")
 
 
+class ReauthenticateRequestDTO(BaseModel):
+    """La contraseña actual, antes de vincular Google (BE #753)."""
+
+    password: str = Field(..., min_length=1, max_length=128, description="Contraseña actual")
+
+
+class ReauthenticateResponseDTO(BaseModel):
+    """La marca queda en una cookie httpOnly; aquí, cuánto dura."""
+
+    expires_in: int = Field(..., description="Segundos que vale la marca")
+
+
 class LinkGoogleAccountRequestDTO(BaseModel):
     """Request DTO para vincular cuenta de Google a usuario existente."""
 

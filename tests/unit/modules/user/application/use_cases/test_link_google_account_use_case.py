@@ -86,7 +86,7 @@ class TestLinkGoogleAccountUseCase:
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         request = LinkGoogleAccountRequestDTO(authorization_code="link-code")
-        response = await use_case.execute(request, str(existing_user.id.value))
+        response = await use_case.execute(request, str(existing_user.id.value), reautenticado=True)
 
         assert response.message == "Google account linked successfully"
         assert response.provider == "google"
@@ -118,7 +118,7 @@ class TestLinkGoogleAccountUseCase:
 
         request = LinkGoogleAccountRequestDTO(authorization_code="link-code")
         with pytest.raises(ValueError, match="already linked to another user"):
-            await use_case.execute(request, str(existing_user.id.value))
+            await use_case.execute(request, str(existing_user.id.value), reautenticado=True)
 
     async def test_link_fails_when_user_already_has_google(
         self, use_case, uow, google_oauth_service, google_user_info, existing_user
@@ -138,7 +138,7 @@ class TestLinkGoogleAccountUseCase:
 
         request = LinkGoogleAccountRequestDTO(authorization_code="link-code")
         with pytest.raises(ValueError, match="already have a Google account linked"):
-            await use_case.execute(request, str(existing_user.id.value))
+            await use_case.execute(request, str(existing_user.id.value), reautenticado=True)
 
     async def test_link_propagates_oauth_service_error(
         self, use_case, google_oauth_service, existing_user
@@ -150,7 +150,7 @@ class TestLinkGoogleAccountUseCase:
 
         request = LinkGoogleAccountRequestDTO(authorization_code="bad-code")
         with pytest.raises(ValueError, match="Invalid authorization code"):
-            await use_case.execute(request, str(existing_user.id.value))
+            await use_case.execute(request, str(existing_user.id.value), reautenticado=True)
 
     async def test_link_creates_oauth_account_with_correct_data(
         self, use_case, uow, google_oauth_service, google_user_info, existing_user
@@ -159,7 +159,7 @@ class TestLinkGoogleAccountUseCase:
         google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
 
         request = LinkGoogleAccountRequestDTO(authorization_code="link-code")
-        await use_case.execute(request, str(existing_user.id.value))
+        await use_case.execute(request, str(existing_user.id.value), reautenticado=True)
 
         oauth = await uow.oauth_accounts.find_by_user_id_and_provider(
             existing_user.id, OAuthProvider.GOOGLE
@@ -193,7 +193,9 @@ async def test_an_unverified_account_cannot_link_google(
 
     with pytest.raises(GoogleLinkNeedsVerifiedEmailError):
         await use_case.execute(
-            LinkGoogleAccountRequestDTO(authorization_code="code"), str(user.id.value)
+            LinkGoogleAccountRequestDTO(authorization_code="code"),
+            str(user.id.value),
+            reautenticado=True,
         )
 
     async with uow:
@@ -227,7 +229,9 @@ async def test_the_verified_email_is_checked_again_when_linking(
 
     with pytest.raises(GoogleLinkNeedsVerifiedEmailError):
         await use_case.execute(
-            LinkGoogleAccountRequestDTO(authorization_code="code"), str(existing_user.id.value)
+            LinkGoogleAccountRequestDTO(authorization_code="code"),
+            str(existing_user.id.value),
+            reautenticado=True,
         )
 
     async with uow:
@@ -268,9 +272,12 @@ class TestElVinculoManualAlLog:
 
         await use_case.execute(
             LinkGoogleAccountRequestDTO(
-                authorization_code="code", ip_address="203.0.113.7", user_agent="Safari"
+                authorization_code="code",
+                ip_address="203.0.113.7",
+                user_agent="Safari",
             ),
             str(existing_user.id.value),
+            reautenticado=True,
         )
 
         assert guardado_al_registrar == [
@@ -304,6 +311,7 @@ class TestElVinculoManualAlLog:
             await use_case.execute(
                 LinkGoogleAccountRequestDTO(authorization_code="code"),
                 str(sin_verificar.id.value),
+                reautenticado=True,
             )
 
         auditoria.log_google_account_linked.assert_not_called()
@@ -320,7 +328,30 @@ class TestElVinculoManualAlLog:
         auditoria.log_google_account_linked.side_effect = RuntimeError("log caído")
 
         respuesta = await use_case.execute(
-            LinkGoogleAccountRequestDTO(authorization_code="code"), str(existing_user.id.value)
+            LinkGoogleAccountRequestDTO(authorization_code="code"),
+            str(existing_user.id.value),
+            reautenticado=True,
         )
 
         assert respuesta.provider_email == "link@gmail.com"
+
+
+@pytest.mark.asyncio
+async def test_an_account_with_a_password_needs_the_mark_before_using_the_code(
+    use_case, existing_user, google_oauth_service
+):
+    """
+    Given: Una cuenta con contraseña
+    When: Vincula sin haberla confirmado hace poco
+    Then: ReauthenticationRequiredError, sin gastar el código de Google (BE #753)
+    """
+    from src.modules.user.application.use_cases.link_google_account_use_case import (
+        ReauthenticationRequiredError,
+    )
+
+    with pytest.raises(ReauthenticationRequiredError):
+        await use_case.execute(
+            LinkGoogleAccountRequestDTO(authorization_code="code"), str(existing_user.id.value)
+        )
+
+    google_oauth_service.exchange_code_for_user_info.assert_not_awaited()
