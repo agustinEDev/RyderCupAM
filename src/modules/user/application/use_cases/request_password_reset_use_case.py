@@ -19,11 +19,12 @@ from src.modules.user.application.dto.user_dto import (
     RequestPasswordResetResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RequestPasswordResetUseCase:
@@ -49,7 +50,13 @@ class RequestPasswordResetUseCase:
     # Previene timing attacks que podrían revelar si el email existe
     FAKE_EMAIL_DELAY_SECONDS = 0.5
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso.
 
@@ -57,6 +64,7 @@ class RequestPasswordResetUseCase:
             uow: Unit of Work para acceso a repositorio de usuarios
             email_service: Servicio para envío de emails (Mailgun)
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
 
@@ -90,7 +98,7 @@ class RequestPasswordResetUseCase:
             "Si el email existe en nuestro sistema, recibirás un enlace..."
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"
@@ -107,13 +115,16 @@ class RequestPasswordResetUseCase:
             await asyncio.sleep(self.FAKE_EMAIL_DELAY_SECONDS)
 
             # Security Logging: Solicitud fallida (email no existe)
-            security_logger.log_password_reset_requested(
-                user_id=None,
-                email=request.email,
-                success=False,
-                failure_reason="Email not found (not revealed to client)",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Request password reset",
+                lambda: security_logger.log_password_reset_requested(
+                    user_id=None,
+                    email=request.email,
+                    success=False,
+                    failure_reason="Email not found (not revealed to client)",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
 
             # Retornar mensaje genérico (NO revelar que el email no existe)
@@ -140,13 +151,16 @@ class RequestPasswordResetUseCase:
         )
 
         # Security Logging: Solicitud exitosa
-        security_logger.log_password_reset_requested(
-            user_id=str(user.id.value),
-            email=request.email,
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Request password reset",
+            lambda: security_logger.log_password_reset_requested(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         # Retornar el MISMO mensaje genérico (previene enumeración)

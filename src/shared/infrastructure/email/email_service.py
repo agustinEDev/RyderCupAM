@@ -19,6 +19,7 @@ from src.modules.social.application.ports.social_email_service_interface import 
     ISocialEmailService,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.shared.domain.services.email_masking import mask_email
 from src.shared.infrastructure.email.email_layout import (
     Boton,
     Ingles,
@@ -35,7 +36,6 @@ from src.shared.infrastructure.email.envio_de_correo import (
     EnvioConRespaldo,
     envio_de_la_app,
 )
-from src.shared.infrastructure.security.email_masking import mask_email
 
 logger = logging.getLogger(__name__)
 

@@ -40,6 +40,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 _REGISTRO = {
@@ -255,6 +256,7 @@ class TestAltaConGoogle:
             google_oauth_service=google,
             register_device_use_case=dispositivos,
             aviso_de_nuevo_inicio=AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         respuesta = await use_case.execute(

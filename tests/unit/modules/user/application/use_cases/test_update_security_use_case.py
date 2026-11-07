@@ -22,6 +22,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 
 @pytest.fixture
@@ -78,7 +79,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_email_only(self, uow, existing_user):
         """Debe actualizar solo el email cuando se proporciona."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",
@@ -108,7 +109,7 @@ class TestUpdateSecurityUseCase:
         Then InvalidPasswordError con código PASSWORD_REUSED (BE #519): el cliente
         lo reconocía buscando un texto en inglés
         """
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         await use_case.execute(
             user_id,
@@ -151,7 +152,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_password_only(self, uow, existing_user):
         """Debe actualizar solo el password cuando se proporciona."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",
@@ -175,7 +176,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_both_email_and_password(self, uow, existing_user):
         """Debe actualizar ambos cuando se proporcionan."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",
@@ -199,7 +200,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_fails_with_wrong_current_password(self, uow, existing_user):
         """Debe lanzar InvalidCredentialsError cuando el password actual es incorrecto."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="Wr0ngP@ssw0rd!",
@@ -215,7 +216,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_fails_when_user_not_found(self, uow):
         """Debe lanzar UserNotFoundError cuando el usuario no existe."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         non_existent_id = "00000000-0000-0000-0000-000000000000"
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",
@@ -231,7 +232,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_fails_with_duplicate_email(self, uow, existing_user, another_user):
         """Debe lanzar DuplicateEmailError cuando el email ya está en uso."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",
@@ -247,7 +248,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_allows_same_email_for_same_user(self, uow, existing_user):
         """Debe permitir actualizar con el mismo email del usuario actual."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",
@@ -279,7 +280,7 @@ class TestUpdateSecurityUseCase:
     async def test_update_emits_domain_events(self, uow, existing_user):
         """Debe emitir eventos de dominio cuando se actualiza."""
         # Arrange
-        use_case = UpdateSecurityUseCase(uow)
+        use_case = UpdateSecurityUseCase(uow, security_audit=SecurityAuditLogger())
         user_id = str(existing_user.id.value)
         request = UpdateSecurityRequestDTO(
             current_password="V@l1dP@ss123!",

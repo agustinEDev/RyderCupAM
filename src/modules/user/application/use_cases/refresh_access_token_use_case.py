@@ -8,6 +8,8 @@ CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
 Dispositivos (BE #737, #738): usa y actualiza el dispositivo de su refresh token.
 """
 
+import logging
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from src.config.csrf_config import generate_csrf_token
@@ -19,15 +21,17 @@ from src.modules.user.application.dto.user_dto import (
     RefreshAccessTokenResponseDTO,
     UserResponseDTO,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.domain.value_objects.user_id import InvalidUserIdError, UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class RefreshRejection(StrEnum):
@@ -58,6 +62,9 @@ _FINAL_NORMAL = frozenset(
 )
 SESSION_ENDED = "SESSION_ENDED"
 SESSION_REJECTED = "SESSION_REJECTED"
+# Un 401 tardío de la cookie vieja con el navegador ya en una sesión nueva (BE #734):
+# no es un fin de sesión, y el front no cierra la sesión: reintenta con la cookie nueva
+SESSION_REPLACED = "SESSION_REPLACED"
 
 
 def codigo_publico(motivo: RefreshRejection) -> str:
@@ -72,6 +79,12 @@ def codigo_publico(motivo: RefreshRejection) -> str:
     return SESSION_ENDED if motivo in _FINAL_NORMAL else SESSION_REJECTED
 
 
+logger = logging.getLogger(__name__)
+
+# Una sesión nueva más vieja que esto ya no es la de una petición tardía (BE #734)
+VENTANA_DE_LA_SESION_NUEVA = timedelta(minutes=5)
+
+
 class RefreshRejectedError(Exception):
     """La sesión no se renueva, con su motivo. La ruta responde 401."""
 
@@ -80,6 +93,13 @@ class RefreshRejectedError(Exception):
         self.motivo = motivo
         # Para el log de seguridad (BE #733), nunca para el cliente
         self.user_id = user_id
+        # Si la ruta no debe borrar la cookie: el navegador ya tiene una sesión más
+        # nueva, y su cookie es la de esa (BE #734)
+        self.conserva_la_cookie = False
+        # Solo un token SUSTITUIDO (revocado al cerrar sesión, o caducado) puede tener
+        # una sesión que lo reemplace; nunca una cuenta desactivada, un dispositivo
+        # revocado o 24 h sin uso (/code-review). Con su dispositivo y su fecha
+        self.sustituido: tuple[UserDeviceId | None, datetime] | None = None
 
 
 class RefreshAccessTokenUseCase:
@@ -109,6 +129,8 @@ class RefreshAccessTokenUseCase:
         self,
         uow: UserUnitOfWorkInterface,
         token_service: ITokenService,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         """
         Inicializa el caso de uso.
@@ -117,6 +139,7 @@ class RefreshAccessTokenUseCase:
             uow: Unit of Work para acceso a repositorios (users, refresh_tokens, user_devices)
             token_service: Servicio para validación y generación de tokens JWT
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._token_service = token_service
 
@@ -154,7 +177,13 @@ class RefreshAccessTokenUseCase:
         if not payload:
             # Caducado con la firma buena es el final normal; si no, inválido
             if self._token_service.refresh_token_expired(refresh_token_jwt):
-                raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+                caducado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+                # También el caducado: se identifica en la BD igual (BE #734, Agustín)
+                caducado.sustituido = await self._del_token(refresh_token_jwt)
+                caducado.conserva_la_cookie = await self._hay_una_sesion_mas_nueva(
+                    caducado, request
+                )
+                raise caducado
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_INVALID)
 
         # 2. Extraer user_id del payload
@@ -175,7 +204,63 @@ class RefreshAccessTokenUseCase:
         except RefreshRejectedError as rechazo:
             # Con el usuario del token, para el log de seguridad (revisor de la PR)
             rechazo.user_id = rechazo.user_id or user_id_str
+            rechazo.conserva_la_cookie = await self._hay_una_sesion_mas_nueva(rechazo, request)
             raise
+
+    async def _del_token(
+        self, refresh_token_jwt: str
+    ) -> tuple[UserDeviceId | None, datetime] | None:
+        """El dispositivo y la fecha de un token caducado, si está en la BD."""
+        try:
+            async with self._uow:
+                token = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
+        except Exception as error:
+            logger.error("Newer session check failed: %s", type(error).__name__)
+            return None
+        return (token.device_id, token.created_at) if token is not None else None
+
+    async def _hay_una_sesion_mas_nueva(
+        self, rechazo: RefreshRejectedError, request: RefreshAccessTokenRequestDTO
+    ) -> bool:
+        """
+        Si el navegador tiene ya una sesión más nueva, viva y reciente (BE #734).
+
+        Entonces el rechazo es de una petición tardía con la cookie vieja, y el navegador
+        ya tiene la nueva: borrarla le echaría de la sesión a los 15 minutos. Se miran
+        el dispositivo del token y los de la cookie de dispositivo del navegador (cada
+        cuenta tiene el suyo: así vale también si otra cuenta entró en ese navegador).
+        Solo para un token sustituido; si algo falla, se borra como siempre.
+        """
+        if rechazo.sustituido is None:
+            return False
+        dispositivo, creado = rechazo.sustituido
+        dispositivos = {d for d in [dispositivo] if d is not None}
+        for crudo in request.dispositivos_del_navegador:
+            try:
+                dispositivos.add(UserDeviceId.from_string(crudo))
+            except (ValueError, TypeError):
+                continue
+        if not dispositivos:
+            return False
+        try:
+            async with self._uow:
+                # Un dispositivo revocado no se sustituye, aunque otra cuenta de la cookie
+                # del navegador tenga una sesión más nueva (revisor de seguridad)
+                if dispositivo is not None:
+                    propio = await self._uow.user_devices.find_by_id(dispositivo)
+                    if propio is not None and not propio.is_active:
+                        return False
+                ahora = datetime.now()
+                # Solo una sesión reciente: la petición tardía llega segundos después del
+                # nuevo login. Más vieja, se borra (sin cookies muertas de días, Agustín)
+                desde = max(creado, ahora - VENTANA_DE_LA_SESION_NUEVA)
+                return await self._uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
+                    sorted(dispositivos, key=lambda d: str(d.value)), desde, ahora
+                )
+        except Exception as error:
+            # Si falla, se borra como siempre y el rechazo es el mismo (#750 punto 2)
+            logger.error("Newer session check failed: %s", type(error).__name__)
+            return False
 
     async def _renueva(
         self,
@@ -184,7 +269,7 @@ class RefreshAccessTokenUseCase:
         user_id: UserId,
     ) -> RefreshAccessTokenResponseDTO:
         """Del token en la BD en adelante: la cuenta, el token, el dispositivo y el acceso."""
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
         user_id_str = str(user_id.value)
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
@@ -222,13 +307,16 @@ class RefreshAccessTokenUseCase:
                 refresh_token_entity.revoke()
                 await self._uow.refresh_tokens.save(refresh_token_entity)
             # Con su motivo: en el log se distingue de reusar un token ya revocado
-            security_logger.log_refresh_token_revoked(
-                user_id=user_id_str,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                tokens_revoked_count=1,
-                reason="refresh_on_revoked_device",
-                device_id=str(dispositivo.id.value),
+            registra_sin_romper(
+                "Refresh revocation",
+                lambda: security_logger.log_refresh_token_revoked(
+                    user_id=user_id_str,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=1,
+                    reason="refresh_on_revoked_device",
+                    device_id=str(dispositivo.id.value),
+                ),
             )
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
         # La sesión de este dispositivo caduca tras 24 h sin usarse (BE #376, OWASP
@@ -238,13 +326,16 @@ class RefreshAccessTokenUseCase:
                 refresh_token_entity.revoke()
                 await self._uow.refresh_tokens.save(refresh_token_entity)
             # Que quede constancia: «la app me echó» tiene que poder explicarse
-            security_logger.log_refresh_token_revoked(
-                user_id=user_id_str,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                tokens_revoked_count=1,
-                reason="idle",
-                device_id=str(dispositivo.id.value),
+            registra_sin_romper(
+                "Refresh revocation",
+                lambda: security_logger.log_refresh_token_revoked(
+                    user_id=user_id_str,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=1,
+                    reason="idle",
+                    device_id=str(dispositivo.id.value),
+                ),
             )
             raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
         # Refrescar es usar ESTE dispositivo, el del token (ver el método)
@@ -260,12 +351,15 @@ class RefreshAccessTokenUseCase:
         csrf_token = generate_csrf_token(str(user.id.value))
 
         # 8. Security Logging: Uso exitoso de refresh token
-        security_logger.log_refresh_token_used(
-            user_id=str(user.id.value),
-            ip_address=ip_address,
-            user_agent=user_agent,
-            refresh_token_id=str(refresh_token_entity.id.value),
-            new_access_token_created=True,
+        registra_sin_romper(
+            "Refresh",
+            lambda: security_logger.log_refresh_token_used(
+                user_id=str(user.id.value),
+                ip_address=ip_address,
+                user_agent=user_agent,
+                refresh_token_id=str(refresh_token_entity.id.value),
+                new_access_token_created=True,
+            ),
         )
 
         # 9. Preparar respuesta
@@ -309,12 +403,19 @@ class RefreshAccessTokenUseCase:
             # final normal, aunque además lleve 24 h sin usarse (revisor de la PR)
             if dispositivo is not None and dispositivo.is_active and dispositivo.is_idle():
                 raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
-            # Refresh token fue revocado explícitamente (logout)
-            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
+            # Refresh token fue revocado explícitamente (logout): sustituido
+            revocado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
+            revocado.sustituido = (
+                refresh_token_entity.device_id,
+                refresh_token_entity.created_at,
+            )
+            raise revocado
 
         if refresh_token_entity.is_expired():
-            # Refresh token expiró (aunque JWT aún no lo detectara)
-            raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+            # Refresh token expiró (aunque JWT aún no lo detectara): sustituido
+            caducado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+            caducado.sustituido = (refresh_token_entity.device_id, refresh_token_entity.created_at)
+            raise caducado
 
     async def _dispositivo_del_token(self, refresh_token_entity: RefreshToken) -> UserDevice | None:
         if refresh_token_entity.device_id is None:

@@ -772,6 +772,9 @@ class RefreshAccessTokenRequestDTO(BaseModel):
         max_length=2,
         description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
+    # Los dispositivos de la cookie del navegador (uno por cuenta que entró en él): para
+    # no borrar la cookie de una sesión más nueva en un 401 tardío (BE #734)
+    dispositivos_del_navegador: list[str] = Field(default_factory=list, max_length=10)
 
 
 class RefreshAccessTokenResponseDTO(BaseModel):

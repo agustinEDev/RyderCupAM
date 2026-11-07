@@ -9,6 +9,7 @@ from src.modules.user.application.ports.security_audit_interface import ISecurit
 from src.modules.user.application.services.current_user_response import (
     build_current_user_response,
 )
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
@@ -58,11 +59,14 @@ class AcceptTermsUseCase:
         user, recorded = await self._accept(UserId(request.user_id), request)
 
         if recorded is not None:
-            self._security_audit.log_terms_accepted(
-                user_id=request.user_id,
-                ip_address=request.ip_address or "unknown",
-                user_agent=request.user_agent or "unknown",
-                terms_version=recorded.terms_version,
+            registra_sin_romper(
+                "Accept terms",
+                lambda: self._security_audit.log_terms_accepted(
+                    user_id=request.user_id,
+                    ip_address=request.ip_address or "unknown",
+                    user_agent=request.user_agent or "unknown",
+                    terms_version=recorded.terms_version,
+                ),
             )
 
         known_providers = session_user.auth_providers if session_user is not None else None

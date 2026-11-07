@@ -71,6 +71,7 @@ from src.modules.user.application.use_cases.open_session_use_case import OpenSes
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     SESSION_ENDED,
     SESSION_REJECTED,
+    SESSION_REPLACED,
     RefreshAccessTokenUseCase,
     RefreshRejectedError,
     RefreshRejection,
@@ -110,8 +111,12 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
+    ids_de_la_cookie_de_dispositivo,
     ids_validos_de_la_cookie,
     pon_la_cookie_de_dispositivo,
+)
+from src.modules.user.infrastructure.api.v1.cuenta_desactivada import (
+    respuesta_de_cuenta_desactivada,
 )
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
@@ -318,12 +323,10 @@ async def login_user(
             status_code=status.HTTP_423_LOCKED,
             detail=f"Account locked until {e.locked_until.isoformat()}. Too many failed login attempts.",
         ) from e
-    except AccountDeactivatedException as e:
-        # Admin Panel (v2.4.0): Cuenta desactivada por un administrador
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated. Contact an administrator.",
-        ) from e
+    except AccountDeactivatedException:
+        # Admin Panel (v2.4.0): cuenta desactivada por un administrador. Con su código,
+        # como Google, para que la app lo diga en su idioma (#750 punto 1)
+        return respuesta_de_cuenta_desactivada()
 
     if not login_response:
         raise HTTPException(
@@ -479,7 +482,7 @@ async def logout_user(
 # El texto del 401 del refresco: el mismo para los dos códigos públicos (BE #733),
 # para no decir con el texto lo que el código ya no dice
 _TEXTOS_DEL_REFRESCO = dict.fromkeys(
-    (SESSION_ENDED, SESSION_REJECTED),
+    (SESSION_ENDED, SESSION_REJECTED, SESSION_REPLACED),
     "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
 )
 
@@ -488,11 +491,14 @@ def _refresco_rechazado(
     motivo: RefreshRejection,
     contexto: tuple[str | None, str | None] = (None, None),
     user_id: str | None = None,
+    conserva_la_cookie: bool = False,
 ) -> JSONResponse:
     """
     El 401 del refresco: texto fijo y en `error_code` solo SESSION_ENDED (el final
-    normal) o SESSION_REJECTED (BE #733). El motivo exacto va al log de seguridad:
-    al cliente le decía si la cuenta se borró o si cambió la contraseña.
+    normal), SESSION_REJECTED (BE #733) o SESSION_REPLACED (BE #734: el navegador tiene
+    una sesión más nueva, no se borra la cookie y el front reintenta). El motivo exacto
+    va al log de seguridad: al cliente le decía si la cuenta se borró o si cambió la
+    contraseña.
 
     Borra la cookie de refresh si llegó una: un token que ya no vale no se vuelve a
     mandar, y el siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez
@@ -514,11 +520,15 @@ def _refresco_rechazado(
             )
         except Exception as error:
             logger.error("Refresh rejection audit event failed: %s", type(error).__name__)
-    respuesta = respuesta_con_codigo(status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, codigo)
+    # Con la cookie conservada, su propio código: el front reintenta en vez de cerrar
+    publico = SESSION_REPLACED if conserva_la_cookie else codigo
+    respuesta = respuesta_con_codigo(status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, publico)
     # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
     # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
     # cookie (SameSite=Lax) y el Set-Cookie sí se aplica (auditoría OWASP, 5 nov)
-    if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING:
+    # Tampoco si el dispositivo ya tiene una sesión más nueva: es un 401 tardío de la
+    # cookie vieja, y el navegador ya tiene la nueva; borrarla le echaría (BE #734)
+    if motivo is not RefreshRejection.REFRESH_TOKEN_MISSING and not conserva_la_cookie:
         delete_refresh_token_cookie(respuesta)
     return respuesta
 
@@ -535,7 +545,9 @@ def _refresco_rechazado(
             "description": (
                 "La sesión no se renueva. `error_code`: SESSION_ENDED, el final normal "
                 "(sin sesión, caducada o 24 h sin uso), o SESSION_REJECTED, un rechazo "
-                "(sin decir por qué). Borra la cookie de refresh."
+                "(sin decir por qué). Borra la cookie de refresh, salvo SESSION_REPLACED: "
+                "la cookie vieja de una petición tardía cuando el navegador ya tiene una "
+                "sesión nueva de hace menos de 5 minutos (no borra; el cliente reintenta)."
             ),
         }
     },
@@ -588,7 +600,8 @@ async def refresh_access_token(
         RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
 
     Returns (401):
-        `detail` fijo y `error_code` SESSION_ENDED o SESSION_REJECTED; borra la cookie
+        `detail` fijo y `error_code` SESSION_ENDED o SESSION_REJECTED, que borran la
+        cookie, o SESSION_REPLACED, que la conserva
     """
     # Leer refresh token desde cookie httpOnly
     refresh_cookie_name = get_refresh_cookie_name()
@@ -607,6 +620,9 @@ async def refresh_access_token(
         user_agent=get_user_agent(request),
         installed_app=es_la_app_instalada(request),
         country_code=cloudflare_client_country(request),
+        dispositivos_del_navegador=ids_de_la_cookie_de_dispositivo(
+            request.cookies.get(get_device_id_cookie_name())
+        ),
     )
     try:
         refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)
@@ -617,6 +633,7 @@ async def refresh_access_token(
             rechazo.motivo,
             (refresh_request.ip_address, refresh_request.user_agent),
             rechazo.user_id,
+            conserva_la_cookie=rechazo.conserva_la_cookie,
         )
 
     # ✅ Establecer nuevo access token en cookie httpOnly (15 min)
@@ -717,13 +734,10 @@ async def verify_email(
                     country_code=cloudflare_client_country(request),
                 )
             )
-        except AccountDeactivatedException as e:
+        except AccountDeactivatedException:
             # Una cuenta desactivada verifica su correo, pero no entra (BE #744): la
-            # misma respuesta que el login
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This account has been deactivated. Contact an administrator.",
-            ) from e
+            # misma respuesta que el login, con su código (#750 punto 1)
+            return respuesta_de_cuenta_desactivada()
         except Exception as e:
             # El correo YA está verificado y el enlace gastado: decir que el enlace no
             # vale le dejaba sin forma de entrar. Que entre con su contraseña

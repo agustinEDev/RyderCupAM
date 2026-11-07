@@ -11,6 +11,8 @@ from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.exceptions import (
     EmailChangeEmailInUseError,
@@ -22,7 +24,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,15 @@ logger = logging.getLogger(__name__)
 class ConfirmEmailChangeUseCase:
     """Confirma el cambio de correo pendiente de la cuenta con sesión."""
 
-    def __init__(self, uow: UserUnitOfWorkInterface, reloj: Callable[[], datetime] = datetime.now):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        reloj: Callable[[], datetime] = datetime.now,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """El caso de uso, con su reloj (para los tests de la caducidad)."""
+        self._security_audit = security_audit
         self._uow = uow
         self._reloj = reloj
 
@@ -78,13 +86,13 @@ class ConfirmEmailChangeUseCase:
             raise anulado
         # El cambio de verdad, al log (el de la petición dice «pendiente»). Un fallo
         # del log no deshace el cambio
-        try:
-            get_security_logger().log_email_changed(
+        registra_sin_romper(
+            "Email change",
+            lambda: self._security_audit.log_email_changed(
                 user_id=user_id,
                 ip_address=ip_address or "unknown",
                 user_agent=user_agent or "unknown",
                 email_verification_required=False,
-            )
-        except Exception as error:
-            logger.error("Email change audit event failed: %s", type(error).__name__)
+            ),
+        )
         return UserResponseDTO.model_validate(user)

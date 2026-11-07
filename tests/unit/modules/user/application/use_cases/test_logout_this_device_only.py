@@ -23,6 +23,7 @@ from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 pytestmark = pytest.mark.asyncio
 
@@ -56,7 +57,9 @@ async def test_l1_salir_en_un_dispositivo_no_cierra_los_demas():
     await _sesion(uow, ana, "jwt-ordenador", UserDeviceId.generate())
     await _sesion(uow, ana, "jwt-movil", UserDeviceId.generate())
 
-    await LogoutUserUseCase(uow).execute(_salir("jwt-ordenador"), str(ana.id.value))
+    await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        _salir("jwt-ordenador"), str(ana.id.value)
+    )
 
     assert await _revocado(uow, "jwt-ordenador") is True
     assert await _revocado(uow, "jwt-movil") is False
@@ -70,7 +73,9 @@ async def test_l2_se_cierran_todas_las_de_ese_dispositivo():
     await _sesion(uow, ana, "jwt-ordenador-hoy", ordenador)
     await _sesion(uow, ana, "jwt-movil", UserDeviceId.generate())
 
-    await LogoutUserUseCase(uow).execute(_salir("jwt-ordenador-hoy"), str(ana.id.value))
+    await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        _salir("jwt-ordenador-hoy"), str(ana.id.value)
+    )
 
     assert await _revocado(uow, "jwt-ordenador-ayer") is True
     assert await _revocado(uow, "jwt-ordenador-hoy") is True
@@ -82,7 +87,9 @@ async def test_l3_sin_token_de_refresco_no_se_revoca_nada():
     ana = await _persona(uow, "ana@example.com")
     await _sesion(uow, ana, "jwt-movil", UserDeviceId.generate())
 
-    respuesta = await LogoutUserUseCase(uow).execute(_salir(None), str(ana.id.value))
+    respuesta = await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        _salir(None), str(ana.id.value)
+    )
 
     assert respuesta is not None
     assert await _revocado(uow, "jwt-movil") is False
@@ -96,8 +103,12 @@ async def test_l4_no_se_revoca_el_token_de_otra_persona():
     await _sesion(uow, luis, "jwt-de-luis", None)
     await _sesion(uow, luis, "jwt-de-luis-movil", UserDeviceId.generate())
 
-    await LogoutUserUseCase(uow).execute(_salir("jwt-de-luis"), str(ana.id.value))
-    await LogoutUserUseCase(uow).execute(_salir("jwt-de-luis-movil"), str(ana.id.value))
+    await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        _salir("jwt-de-luis"), str(ana.id.value)
+    )
+    await LogoutUserUseCase(uow, security_audit=SecurityAuditLogger()).execute(
+        _salir("jwt-de-luis-movil"), str(ana.id.value)
+    )
 
     assert await _revocado(uow, "jwt-de-luis") is False
     assert await _revocado(uow, "jwt-de-luis-movil") is False

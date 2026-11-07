@@ -42,10 +42,8 @@ OTRA = "Otr4$ecureP@ss77"
 
 
 @pytest.fixture
-def registro(monkeypatch):
-    log = MagicMock()
-    monkeypatch.setattr(update_security_use_case, "get_security_logger", lambda: log)
-    return log
+def registro():
+    return MagicMock()
 
 
 async def _con_usuario(uow, email="ana@example.com") -> User:
@@ -55,12 +53,12 @@ async def _con_usuario(uow, email="ana@example.com") -> User:
     return user
 
 
-async def _pide(uow, user, **cambios):
+async def _pide(uow, user, registro=None, **cambios):
     datos = {"current_password": CLAVE, "ip_address": "203.0.113.9", "user_agent": "Safari"}
     datos.update(cambios)
-    return await UpdateSecurityUseCase(uow, AsyncMock()).execute(
-        str(user.id.value), UpdateSecurityRequestDTO(**datos)
-    )
+    return await UpdateSecurityUseCase(
+        uow, AsyncMock(), security_audit=registro if registro is not None else MagicMock()
+    ).execute(str(user.id.value), UpdateSecurityRequestDTO(**datos))
 
 
 def _motivo(registro) -> str:
@@ -86,7 +84,12 @@ async def test_l1_a_wrong_current_password_is_recorded(registro):
 
     with pytest.raises(InvalidCredentialsError):
         await _pide(
-            uow, user, current_password="Mal4$Clave000", new_password=NUEVA, confirm_password=NUEVA
+            uow,
+            user,
+            registro,
+            current_password="Mal4$Clave000",
+            new_password=NUEVA,
+            confirm_password=NUEVA,
         )
 
     assert _motivo(registro) == "wrong_current_password"
@@ -117,7 +120,7 @@ async def test_l2_a_password_changed_during_the_request_is_recorded(registro, mo
     monkeypatch.setattr(update_security_use_case, "run_bcrypt", con_cambio_entremedias)
 
     with pytest.raises(InvalidCredentialsError):
-        await _pide(uow, user, new_password=NUEVA, confirm_password=NUEVA)
+        await _pide(uow, user, registro, new_password=NUEVA, confirm_password=NUEVA)
 
     assert _motivo(registro) == "changed_during_request"
 
@@ -133,7 +136,7 @@ async def test_l3_an_email_in_use_is_recorded(registro):
     await _con_usuario(uow, "ocupado@example.com")
 
     with pytest.raises(DuplicateEmailError):
-        await _pide(uow, user, new_email="ocupado@example.com")
+        await _pide(uow, user, registro, new_email="ocupado@example.com")
 
     assert _motivo(registro) == "email_in_use"
 
@@ -156,7 +159,7 @@ async def test_l3_a_reused_password_is_recorded(registro):
         )
 
     with pytest.raises(InvalidPasswordError):
-        await _pide(uow, user, new_password=NUEVA, confirm_password=NUEVA)
+        await _pide(uow, user, registro, new_password=NUEVA, confirm_password=NUEVA)
 
     assert _motivo(registro) == "password_reused"
 
@@ -171,7 +174,9 @@ async def test_l3_a_weak_password_is_recorded(registro):
     user = await _con_usuario(uow)
 
     with pytest.raises(InvalidPasswordError):
-        await _pide(uow, user, new_password="solamenteletras", confirm_password="solamenteletras")
+        await _pide(
+            uow, user, registro, new_password="solamenteletras", confirm_password="solamenteletras"
+        )
 
     assert _motivo(registro) == "weak_password"
 
@@ -185,7 +190,7 @@ async def test_a_change_that_works_records_no_failure(registro):
     uow = InMemoryUnitOfWork()
     user = await _con_usuario(uow)
 
-    await _pide(uow, user, new_password=NUEVA, confirm_password=NUEVA)
+    await _pide(uow, user, registro, new_password=NUEVA, confirm_password=NUEVA)
 
     registro.log_security_change_failed.assert_not_called()
     registro.log_password_changed.assert_called_once()

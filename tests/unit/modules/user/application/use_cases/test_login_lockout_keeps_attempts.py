@@ -48,6 +48,7 @@ from src.modules.user.domain.exceptions import AccountLockedException
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -80,6 +81,7 @@ async def escena():
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         ),
     )
 

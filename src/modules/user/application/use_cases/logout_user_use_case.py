@@ -12,12 +12,13 @@ from src.modules.user.application.dto.user_dto import (
     LogoutRequestDTO,
     LogoutResponseDTO,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 
 class LogoutUserUseCase:
@@ -40,13 +41,14 @@ class LogoutUserUseCase:
     - OWASP A01: Previene reuso de refresh tokens después de logout
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, *, security_audit: ISecurityAuditLogger):
         """
         Inicializa el caso de uso.
 
         Args:
             uow: Unit of Work para acceso a repositorios (users + refresh_tokens)
         """
+        self._security_audit = security_audit
         self._uow = uow
 
     async def execute(
@@ -78,7 +80,7 @@ class LogoutUserUseCase:
             >>> print(response.message)  # "Logout exitoso"
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"
@@ -117,21 +119,27 @@ class LogoutUserUseCase:
             # Commit automático al salir del contexto (atomicidad garantizada)
 
         # 5. Security Logging: Logout exitoso
-        security_logger.log_logout(
-            user_id=user_id,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            refresh_tokens_revoked=tokens_revoked_count,
+        registra_sin_romper(
+            "Logout user",
+            lambda: security_logger.log_logout(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                refresh_tokens_revoked=tokens_revoked_count,
+            ),
         )
 
         # 6. Security Logging: Revocación de refresh tokens
         if tokens_revoked_count > 0:
-            security_logger.log_refresh_token_revoked(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                tokens_revoked_count=tokens_revoked_count,
-                reason="logout",
+            registra_sin_romper(
+                "Logout user",
+                lambda: security_logger.log_refresh_token_revoked(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=tokens_revoked_count,
+                    reason="logout",
+                ),
             )
 
         return LogoutResponseDTO(message="Logout exitoso", logged_out_at=logout_time)

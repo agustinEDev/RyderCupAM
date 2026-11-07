@@ -47,6 +47,7 @@ from src.modules.user.domain.value_objects.device_fingerprint import DeviceFinge
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -141,7 +142,9 @@ async def test_s4_su_refresco_se_rechaza_por_cuenta_desactivada():
     ana.deactivate(deactivated_by_user_id=ADMIN)
     async with uow:
         await uow.users.save(ana)
-    refresco = RefreshAccessTokenUseCase(uow, JWTTokenService())
+    refresco = RefreshAccessTokenUseCase(
+        uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+    )
 
     with pytest.raises(RefreshRejectedError) as rechazo:
         await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
@@ -209,9 +212,9 @@ async def test_s8_el_refresco_de_una_desactivada_revoca_ese_token():
         await uow.users.save(ana)
 
     with pytest.raises(RefreshRejectedError):
-        await RefreshAccessTokenUseCase(uow, JWTTokenService()).execute(
-            RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0]
-        )
+        await RefreshAccessTokenUseCase(
+            uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+        ).execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
 
     async with uow:
         assert (await uow.refresh_tokens.find_by_token_hash(jwts[0])).revoked
@@ -247,9 +250,9 @@ async def test_s10_con_el_token_ya_revocado_el_motivo_es_la_cuenta_desactivada()
     await caso.execute(str(ana.id.value), is_active=False, actor_user_id=ADMIN)
 
     with pytest.raises(RefreshRejectedError) as rechazo:
-        await RefreshAccessTokenUseCase(uow, JWTTokenService()).execute(
-            RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0]
-        )
+        await RefreshAccessTokenUseCase(
+            uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+        ).execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
     assert rechazo.value.motivo is RefreshRejection.USER_INACTIVE
 
 
@@ -263,9 +266,9 @@ async def test_s11_el_rechazo_lleva_el_usuario_para_el_log():
     await caso.execute(str(ana.id.value), is_active=False, actor_user_id=ADMIN)
 
     with pytest.raises(RefreshRejectedError) as rechazo:
-        await RefreshAccessTokenUseCase(uow, JWTTokenService()).execute(
-            RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0]
-        )
+        await RefreshAccessTokenUseCase(
+            uow, JWTTokenService(), security_audit=SecurityAuditLogger()
+        ).execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwts[0])
     assert rechazo.value.user_id == str(ana.id.value)
 
 
