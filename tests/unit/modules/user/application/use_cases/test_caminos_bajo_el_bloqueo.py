@@ -347,3 +347,47 @@ async def test_two_first_google_sign_ins_at_once_do_not_link_twice():
 
     vinculos = [v for v in uow.oauth_accounts._accounts.values() if v.user_id == ana.id]
     assert len(vinculos) == 1
+
+
+async def test_a_google_linked_to_another_account_meanwhile_is_a_plain_refusal():
+    """
+    Given: Ana verificada, sin Google; mientras entra, ese Google se vincula a OTRA cuenta
+    When: Google iba a vincularse a Ana por el correo
+    Then: Un rechazo (ValueError), no un vínculo duplicado que reviente en la BD (500)
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    otra = User.create(
+        first_name="Otra",
+        last_name="Cuenta",
+        email_str="otra@example.com",
+        plain_password="SecureP@ssw0rd123!",
+    )
+    async with uow:
+        await uow.users.save(otra)
+    original = uow.users.find_by_id_for_update
+
+    async def a_otra(user_id):
+        if (
+            await uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, INFO.google_user_id
+            )
+            is None
+        ):
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=otra.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id=INFO.google_user_id,
+                    provider_email=INFO.email,
+                )
+            )
+        return await original(user_id)
+
+    uow.users.find_by_id_for_update = a_otra
+    registro = AsyncMock()
+
+    with pytest.raises(ValueError, match="Google account already linked to another user"):
+        await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+    assert [v for v in uow.oauth_accounts._accounts.values() if v.user_id == ana.id] == []

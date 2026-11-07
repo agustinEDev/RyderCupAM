@@ -651,7 +651,9 @@ class UpdateSecurityRequestDTO(BaseModel):
         description="Contraseña actual (requerida).",
     )
     new_email: EmailStr | None = Field(
-        None, max_length=FieldLimits.EMAIL_MAX_LENGTH, description="Nuevo email."
+        None,
+        max_length=FieldLimits.EMAIL_MAX_LENGTH,
+        description="Correo nuevo: queda pendiente hasta confirmarlo desde su dirección (24 h).",
     )
     new_password: str | None = Field(
         None,

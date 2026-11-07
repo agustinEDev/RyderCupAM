@@ -219,6 +219,7 @@ async def confirm_email_change(
     request: Request,
     datos: ConfirmEmailChangeRequestDTO,
     use_case: ConfirmEmailChangeUseCase = Depends(get_confirm_email_change_use_case),
+    anula: CancelEmailChangeUseCase = Depends(get_cancel_email_change_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """Confirma el cambio de correo de la cuenta con sesión (#749)."""
@@ -239,7 +240,8 @@ async def confirm_email_change(
         codigo, estado = EMAIL_CHANGE_INVALID, status.HTTP_400_BAD_REQUEST
     except IntegrityError:
         # Otra cuenta lo ocupó entre la comprobación y el guardado (la restricción
-        # única de users.email)
+        # única de users.email): como el otro 409, el cambio queda anulado
+        await anula.execute(str(current_user.id))
         codigo, estado = EMAIL_ALREADY_IN_USE, status.HTTP_409_CONFLICT
     return respuesta_con_codigo(estado, _TEXTOS_DEL_CAMBIO_DE_CORREO, codigo)
 

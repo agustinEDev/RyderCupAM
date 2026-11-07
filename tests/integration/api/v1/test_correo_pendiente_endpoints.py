@@ -164,3 +164,63 @@ async def test_i7_cancelling_leaves_nothing_pending(client: AsyncClient, mock_ex
     assert r.status_code == 200
     assert r.json()["pending_email"] is None
     assert (await _confirma(client, cabecera, token)).status_code == 400
+
+
+async def test_another_accounts_session_cannot_confirm_my_change(
+    client: AsyncClient, mock_external_services
+):
+    """
+    Given: Ana con un cambio pendiente, y Luis con su sesión y el token de Ana
+    When: Luis confirma con ese token
+    Then: 400 EMAIL_CHANGE_INVALID: el token solo vale con la sesión de su cuenta; Ana
+          sigue igual, con su pendiente
+    """
+    _r, _ana, token = await _pide(
+        client, mock_external_services, "ana.dueña@example.com", "ana.nuevo@example.com"
+    )
+    luis = await create_authenticated_user(client, "luis.otro@example.com", CLAVE, "Luis", "Otro")
+
+    r = await _confirma(client, {"Authorization": f"Bearer {luis['token']}"}, token)
+
+    assert r.status_code == 400
+    assert r.json()["error_code"] == "EMAIL_CHANGE_INVALID"
+    filas = await _sql(
+        "select email, pending_email from users where email = :e", {"e": "ana.dueña@example.com"}
+    )
+    assert filas == [("ana.dueña@example.com", "ana.nuevo@example.com")]
+
+
+async def test_a_last_moment_duplicate_is_409_and_cancels(
+    client: AsyncClient, mock_external_services, monkeypatch
+):
+    """
+    Given: Un cambio pendiente, y otra cuenta que ocupa el correo justo al guardar (la
+           restricción única de la BD salta en el commit)
+    When: Se confirma
+    Then: 409 EMAIL_ALREADY_IN_USE, y el pendiente queda anulado
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from src.modules.user.application.use_cases.confirm_email_change_use_case import (
+        ConfirmEmailChangeUseCase,
+    )
+
+    _r, cabecera, token = await _pide(
+        client, mock_external_services, "ultimo.viejo@example.com", "ultimo.nuevo@example.com"
+    )
+
+    async def choca(self, *a, **k):
+        raise IntegrityError(
+            "insert", {}, Exception("duplicate key value violates unique constraint")
+        )
+
+    monkeypatch.setattr(ConfirmEmailChangeUseCase, "execute", choca)
+
+    r = await _confirma(client, cabecera, token)
+
+    assert r.status_code == 409
+    assert r.json()["error_code"] == "EMAIL_ALREADY_IN_USE"
+    filas = await _sql(
+        "select pending_email from users where email = :e", {"e": "ultimo.viejo@example.com"}
+    )
+    assert filas == [(None,)]

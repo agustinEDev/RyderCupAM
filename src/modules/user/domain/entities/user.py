@@ -274,16 +274,16 @@ class User:
     @property
     def pending_email_token(self) -> str | None:
         """El token del enlace que confirma el correo nuevo, si hay cambio pendiente."""
-        return getattr(self, "_pending_email_token", None)
+        return self._pending_email_token
 
     @property
     def pending_email_expires_at(self) -> datetime | None:
         """Hasta cuándo vale el cambio pendiente."""
-        return getattr(self, "_pending_email_expires_at", None)
+        return self._pending_email_expires_at
 
     def pending_email_at(self, ahora: datetime) -> str | None:
         """El correo pendiente, si lo hay y no ha caducado a esa hora."""
-        pendiente = getattr(self, "_pending_email", None)
+        pendiente = self._pending_email
         if pendiente is None or self.pending_email_expires_at is None:
             return None
         return pendiente if ahora <= self.pending_email_expires_at else None
@@ -922,7 +922,7 @@ class User:
     def pending_email_token_matches(self, token: str) -> bool:
         """Si hay cambio pendiente y el token es el de su enlace (sin mirar la hora)."""
         guardado = self.pending_email_token
-        if getattr(self, "_pending_email", None) is None or not guardado:
+        if self._pending_email is None or not guardado:
             return False
         # En bytes: compare_digest con un str no ASCII lanzaba (un 500)
         return secrets.compare_digest(guardado.encode(), _hash_del_token(token or "").encode())
@@ -936,7 +936,7 @@ class User:
             EmailChangeInvalidError: si no hay ese cambio pendiente (otro token)
             EmailChangeExpiredError: si caducó (y se anula)
         """
-        pendiente = getattr(self, "_pending_email", None)
+        pendiente = self._pending_email
         if pendiente is None or not self.pending_email_token_matches(token):
             raise EmailChangeInvalidError("No pending email change with that token")
         if self.pending_email_expires_at is None or ahora > self.pending_email_expires_at:

@@ -144,6 +144,9 @@ class GoogleLoginUseCase:
                 )
                 if ya is not None and ya.user_id == user.id:
                     return user, False, False, None
+                if ya is not None:
+                    # Vinculado a otra cuenta a la vez: un rechazo, no un duplicado
+                    raise ValueError("Google account already linked to another user")
                 # Desactivada: sin vincular Google ni verificar el correo. Un login
                 # rechazado no cambia la cuenta (/code-review); execute da el 403
                 if not user.is_active:

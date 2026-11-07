@@ -262,3 +262,58 @@ async def test_the_confirmed_change_goes_to_the_security_log(monkeypatch):
             "email_verification_required": False,
         }
     ]
+
+
+async def test_changing_the_password_cancels_a_pending_email_change():
+    """
+    Given: Un cambio de correo pendiente (quizá lo pidió quien entró con la contraseña)
+    When: El dueño cambia la contraseña en Seguridad, tras ver el aviso
+    Then: El pendiente se anula: quien lo pidió ya no puede confirmarlo
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    await _pide(uow, ana)
+
+    await UpdateSecurityUseCase(uow, AsyncMock()).execute(
+        str(ana.id.value),
+        UpdateSecurityRequestDTO(
+            current_password=CLAVE,
+            new_password="OtraClave#2026segura",
+            confirm_password="OtraClave#2026segura",
+        ),
+    )
+
+    assert (await uow.users.find_by_id(ana.id)).pending_email_token is None
+
+
+async def test_verifying_the_sign_up_email_cancels_a_pending_change():
+    """
+    Given: Una cuenta sin verificar con un cambio pendiente (lo pidió quien la creó)
+    When: Se verifica con el enlace del alta (el dueño del correo lo pulsa)
+    Then: El pendiente se anula, con la fila bloqueada
+    """
+    from src.modules.user.application.use_cases.verify_email_use_case import VerifyEmailUseCase
+
+    uow = InMemoryUnitOfWork()
+    ana = User.create(
+        first_name="Ana", last_name="Dueña", email_str="ana@gmail.com", plain_password=CLAVE
+    )
+    enlace = ana.generate_verification_token()
+    async with uow:
+        await uow.users.save(ana)
+    await _pide(uow, ana)
+    pedidos = []
+    original = uow.users.find_by_id_for_update
+
+    async def espia(user_id):
+        pedidos.append(user_id)
+        return await original(user_id)
+
+    uow.users.find_by_id_for_update = espia
+
+    await VerifyEmailUseCase(uow).execute(enlace)
+
+    guardada = await uow.users.find_by_id(ana.id)
+    assert guardada.email_verified
+    assert guardada.pending_email_token is None
+    assert ana.id in pedidos

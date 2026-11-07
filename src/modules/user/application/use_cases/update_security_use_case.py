@@ -1,7 +1,8 @@
 """
 Update Security Use Case - Application Layer
 
-Caso de uso para actualizar datos de seguridad del usuario (email y/o password).
+Caso de uso para actualizar datos de seguridad del usuario: la contraseña, y/o pedir
+un correo nuevo, que queda pendiente hasta confirmarlo desde su dirección (ADR-045).
 Requiere validación de contraseña actual para autorizar los cambios.
 Security Logging (v1.8.0): Registra cambios de contraseña y email.
 """
@@ -240,11 +241,11 @@ class UpdateSecurityUseCase:
             email_changed = False
             password_changed = False
             tokens_revoked_count = 0
-            verification_token = None
+            token_del_cambio = None
 
             # Procesar cambio de email
             if request.new_email:
-                email_changed, verification_token = await self._handle_email_change(
+                email_changed, token_del_cambio = await self._handle_email_change(
                     user, request.new_email, user_id
                 )
 
@@ -253,6 +254,10 @@ class UpdateSecurityUseCase:
                 password_changed, tokens_revoked_count = await self._handle_password_change(
                     user, request.new_password, user_id_vo
                 )
+                # Un correo pendiente que no se pide ahora, fuera: quizá lo pidió quien
+                # entró con la contraseña de antes (/code-review de la rama)
+                if not email_changed:
+                    user.cancel_email_change()
 
             # Guardar cambios
             await self._uow.users.save(user)
@@ -270,8 +275,8 @@ class UpdateSecurityUseCase:
         )
 
         # El enlace, al correo nuevo; el aviso, al de antes
-        if email_changed and verification_token:
-            await self._avisa_del_cambio_de_correo(user, request.new_email, verification_token)
+        if email_changed and token_del_cambio:
+            await self._avisa_del_cambio_de_correo(user, request.new_email, token_del_cambio)
 
         # Construir respuesta
         return UpdateSecurityResponseDTO(
