@@ -6,12 +6,10 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
-from src.config.csrf_config import generate_csrf_token
 from src.config.dependencies import (
     get_current_user,
     get_login_user_use_case,
     get_logout_user_use_case,
-    get_open_session_use_case,
     get_refresh_access_token_use_case,
     get_register_user_use_case,
     get_request_password_reset_use_case,
@@ -41,7 +39,6 @@ from src.config.rate_limit import (
     too_many_login_attempts,
 )
 from src.config.settings import settings
-from src.modules.user.application.dto.device_dto import OpenSessionRequestDTO
 from src.modules.user.application.dto.user_dto import (
     LoginRequestDTO,
     LoginResponseDTO,
@@ -62,12 +59,12 @@ from src.modules.user.application.dto.user_dto import (
     ValidateResetTokenRequestDTO,
     ValidateResetTokenResponseDTO,
     VerifyEmailRequestDTO,
+    VerifyEmailResponseDTO,
 )
 from src.modules.user.application.use_cases.login_user_use_case import LoginUserUseCase
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
-from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     SESSION_ENDED,
     SESSION_REJECTED,
@@ -653,57 +650,36 @@ async def refresh_access_token(
 
 @router.post(
     "/verify-email",
-    response_model=LoginResponseDTO,
+    response_model=VerifyEmailResponseDTO,
     status_code=status.HTTP_200_OK,
-    summary="Verificar email y autenticar usuario",
+    summary="Verificar el email",
     description=(
-        "Verifica el email del usuario usando el token recibido por correo. "
-        "Si la verificación es exitosa, retorna un JWT de acceso (httpOnly cookie + response body) "
-        "y la información del usuario autenticado en el mismo formato que el login. "
-        "Esto permite que el usuario quede autenticado automáticamente tras verificar su email. "
-        "\n\n"
-        "Respuesta: LoginResponseDTO (access_token, token_type, user, email_verification_required)."
+        "Verifica el email del usuario con el token del correo. No abre sesión (BE #753): "
+        "se entra después con la contraseña. Una sesión ya abierta en el navegador no se "
+        "toca. Una cuenta desactivada se verifica igual y responde 403 ACCOUNT_DEACTIVATED."
     ),
     tags=["Authentication"],
 )
 @limiter.limit(VERIFY_EMAIL_LIMIT, key_func=get_client_identifier)  # Por red
 async def verify_email(
-    request: Request,
+    request: Request,  # noqa: ARG001 - Requerido por SlowAPI limiter
     verify_data: VerifyEmailRequestDTO,
-    response: Response,
     use_case: VerifyEmailUseCase = Depends(get_verify_email_use_case),
-    open_session: OpenSessionUseCase = Depends(get_open_session_use_case),
 ):
     """
-    Endpoint para verificar el email del usuario y autenticarlo automáticamente.
+    Verifica el email del usuario, sin abrir sesión (BE #753).
 
-    FASE TRANSITORIA (v1.8.0 - v2.0.0):
-    Al igual que /login, este endpoint retorna el JWT de dos formas:
-
-    1. **httpOnly Cookie** (NUEVO - Recomendado):
-       - Establecida automáticamente en el navegador
-       - Protección contra XSS
-
-    2. **Response Body** (LEGACY - Deprecated):
-       - Campo `access_token` en LoginResponseDTO
-       - TODO (v2.0.0): Eliminar este campo en breaking change
-
-    El usuario recibe un email con un link que contiene un token.
-    Este endpoint valida el token, marca el email como verificado y retorna un JWT.
+    Antes verificar dejaba dentro: quien se registró con la dirección de otra persona
+    conservaba la contraseña cuando el dueño pulsaba el enlace, y la sesión era suya.
 
     Security Notes:
-    - Usa mensajes de error genéricos para prevenir user enumeration
-    - No revela información sobre el estado de la cuenta
-    - httpOnly cookie previene robo de token vía XSS
+    - Mensajes de error genéricos para prevenir user enumeration
+    - Sin cookies: la sesión solo la abre quien sabe la contraseña (o Google)
 
     Args:
         request: La petición (la necesita el límite por red)
         verify_data: DTO con el token de verificación
-        response: Response de FastAPI (para establecer cookies)
         use_case: Caso de uso de verificación de email
-
-    Returns:
-        LoginResponseDTO con token y datos del usuario
 
     Raises:
         HTTPException 400: Si el token es inválido (mensaje genérico)
@@ -715,71 +691,11 @@ async def verify_email(
     try:
         user = await use_case.execute(verify_data.token)
         logger.info("Email verification successful")
-
-        # La sesión, como en el login (BE #737): dispositivo, tokens con su id y el
-        # refresco GUARDADO. Antes no se guardaba, y a los 15 minutos el refresco daba
-        # REFRESH_TOKEN_NOT_FOUND: a cada usuario nuevo le echaban
-        try:
-            sesion = await open_session.execute(
-                OpenSessionRequestDTO(
-                    user_id=str(user.id.value),
-                    user_agent=get_user_agent(request),
-                    ip_address=get_trusted_client_ip(
-                        request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-                    ),
-                    device_id_from_cookie=ids_validos_de_la_cookie(
-                        request.cookies.get(get_device_id_cookie_name())
-                    ),
-                    installed_app=es_la_app_instalada(request),
-                    country_code=cloudflare_client_country(request),
-                )
-            )
-        except AccountDeactivatedException:
-            # Una cuenta desactivada verifica su correo, pero no entra (BE #744): la
-            # misma respuesta que el login, con su código (#750 punto 1)
+        # Una cuenta desactivada verifica su correo, pero se le dice que lo está (BE #744),
+        # con su código (#750 punto 1)
+        if not user.is_active:
             return respuesta_de_cuenta_desactivada()
-        except Exception as e:
-            # El correo YA está verificado y el enlace gastado: decir que el enlace no
-            # vale le dejaba sin forma de entrar. Que entre con su contraseña
-            # (/code-review, BE #737)
-            logger.error(
-                f"Session could not be opened after verifying the email: {type(e).__name__}",
-                exc_info=True,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Email verified. Please sign in to continue.",
-            ) from e
-        access_token = sesion.access_token
-        refresh_token = sesion.refresh_token
-        pon_la_cookie_de_dispositivo(response, sesion.device_id, request)
-
-        # ✅ NUEVO (v1.13.0): Generar token CSRF - CSRF Protection
-        csrf_token = generate_csrf_token(str(user.id.value))
-
-        # ✅ NUEVO (v1.8.0): Establecer ambas cookies httpOnly
-        set_auth_cookie(response, access_token)
-        set_refresh_token_cookie(response, refresh_token)
-
-        # ✅ NUEVO (v1.13.0): Establecer cookie CSRF (NO httpOnly para double-submit)
-        # CSRF Token: 15 minutos (sincronizado con access token)
-        set_csrf_cookie(response, csrf_token)
-
-        # Mapear a DTO
-        user_dto = UserResponseDTO.model_validate(user)
-
-        # ⚠️ LEGACY: Retornar tokens en response body para compatibilidad
-        # TODO (v2.0.0): BREAKING CHANGE - Eliminar campos de tokens del response body
-        return LoginResponseDTO(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            csrf_token=csrf_token,
-            token_type="bearer",  # nosec B106 - Not a password, it's OAuth2 token type
-            user=user_dto,
-            email_verification_required=False,
-            # La sesión que abre verificar el correo también tiene su dispositivo
-            device_id=sesion.device_id,
-        )
+        return VerifyEmailResponseDTO(message="Email verified. Please sign in.")
     except HTTPException:
         raise
     except ValueError as e:

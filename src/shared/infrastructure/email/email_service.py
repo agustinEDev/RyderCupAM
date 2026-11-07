@@ -88,7 +88,7 @@ Para completar tu registro, por favor confirma tu dirección de correo electrón
 
 {verification_link}
 
-Si no te has registrado en Ryder Cup Friends, puedes ignorar este mensaje.
+Si no has creado esta cuenta, no pulses: usa "Olvidé mi contraseña" en {settings.FRONTEND_URL}/forgot-password para quedártela.
 
 Saludos,
 El equipo de Ryder Cup Friends
@@ -103,7 +103,7 @@ To complete your registration, please confirm your email address by clicking on 
 
 {verification_link}
 
-If you did not sign up for Ryder Cup Friends, you can safely ignore this message.
+If you did not create this account, do not click: use "Forgot password" at {settings.FRONTEND_URL}/forgot-password to take it over.
 
 Best regards,
 The Ryder Cup Friends Team
@@ -121,6 +121,10 @@ The Ryder Cup Friends Team
                     ", gracias por registrarte en RyderCupFriends. Solo falta un paso: "
                     "confirma que este correo es tuyo para activar la cuenta.",
                 ),
+                aviso(
+                    negrita("Si no has creado esta cuenta, no pulses: "),
+                    'usa "Olvidé mi contraseña" y será tuya.',
+                ),
             ],
             boton=Boton("Confirmar mi correo", verification_link),
             ingles=Ingles(
@@ -131,8 +135,8 @@ The Ryder Cup Friends Team
                 ),
                 Boton("Confirm my email", verification_link),
             ),
-            pie="Si no te has registrado en RyderCupFriends, ignora este correo. "
-            "If you didn't sign up, ignore this email.",
+            pie="Si no has creado esta cuenta, no pulses el botón. "
+            "If you didn't create this account, don't click.",
         )
 
         return await self._send_email(

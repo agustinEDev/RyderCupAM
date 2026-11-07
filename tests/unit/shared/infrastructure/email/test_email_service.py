@@ -574,6 +574,16 @@ class TestCorreosDelCambioDeCorreo:
         assert "24 horas" in cuerpo and "24 hours" in cuerpo
 
     @pytest.mark.asyncio
+    async def test_the_verification_email_says_what_to_do_if_it_was_not_you(self, correo):
+        """Quien no creó la cuenta no pulsa, y se la queda con «Olvidé mi contraseña» (BE #753)"""
+        await correo.send_verification_email("ana@gmail.com", "Ana", "tok")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        aviso = "Si no has creado esta cuenta, no pulses"
+        assert aviso in cuerpo and aviso in texto
+        assert "Olvidé mi contraseña" in cuerpo and "Olvidé mi contraseña" in texto
+
+    @pytest.mark.asyncio
     async def test_the_secured_notice_by_google_says_the_password_is_gone(self, correo):
         """La toma por Google (BE #753): sin contraseña, y cómo tener una"""
         await correo.send_account_secured_notice("ana@gmail.com", "Ana", "google")
