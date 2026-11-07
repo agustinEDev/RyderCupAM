@@ -41,6 +41,7 @@ from src.modules.user.application.services.guarda_la_sesion import (
     CUENTA_DESACTIVADA,
     guarda_la_sesion,
 )
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -123,13 +124,16 @@ class LoginUserUseCase:
         self, request: LoginRequestDTO, ip_address: str, user_agent: str
     ) -> None:
         """Security Logging: login fallido porque el usuario no existe."""
-        self._security_audit.log_login_attempt(
-            user_id=None,
-            email=request.email,
-            success=False,
-            failure_reason="User not found",
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Login",
+            lambda: self._security_audit.log_login_attempt(
+                user_id=None,
+                email=request.email,
+                success=False,
+                failure_reason="User not found",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
     def _rechaza(
@@ -142,13 +146,16 @@ class LoginUserUseCase:
         user_agent: str,
     ) -> NoReturn:
         """Security Logging del intento bloqueado, y la excepción (el 423)."""
-        self._security_audit.log_login_attempt(
-            user_id=str(user.id.value) if user else None,
-            email=request.email,
-            success=False,
-            failure_reason=f"{motivo} until {hasta.isoformat()}",
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Login",
+            lambda: self._security_audit.log_login_attempt(
+                user_id=str(user.id.value) if user else None,
+                email=request.email,
+                success=False,
+                failure_reason=f"{motivo} until {hasta.isoformat()}",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
         raise AccountLockedException(
             locked_until=hasta,
@@ -300,13 +307,16 @@ class LoginUserUseCase:
         self._rechaza_si_el_respaldo_frena(bloqueado, fiable, request, contexto)
 
         # Security Logging: Login fallido (contraseña incorrecta)
-        self._security_audit.log_login_attempt(
-            user_id=str(bloqueado.id.value),
-            email=request.email,
-            success=False,
-            failure_reason="Invalid credentials",
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Login",
+            lambda: self._security_audit.log_login_attempt(
+                user_id=str(bloqueado.id.value),
+                email=request.email,
+                success=False,
+                failure_reason="Invalid credentials",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
     async def _releido_para_entrar(
@@ -375,13 +385,16 @@ class LoginUserUseCase:
         self, cambio: str, user: User, request: LoginRequestDTO, contexto: tuple[str, str]
     ) -> None:
         """Al log; una cuenta desactivada responde como siempre (403), lo demás 401."""
-        self._security_audit.log_login_attempt(
-            user_id=str(user.id.value),
-            email=request.email,
-            success=False,
-            failure_reason=cambio,
-            ip_address=contexto[0],
-            user_agent=contexto[1],
+        registra_sin_romper(
+            "Login",
+            lambda: self._security_audit.log_login_attempt(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=False,
+                failure_reason=cambio,
+                ip_address=contexto[0],
+                user_agent=contexto[1],
+            ),
         )
         if cambio == CUENTA_DESACTIVADA:
             raise AccountDeactivatedException()
@@ -484,13 +497,16 @@ class LoginUserUseCase:
         # Se comprueba DESPUES de validar la contraseña para no filtrar el estado
         # de la cuenta (activa/desactivada) a quien no conoce las credenciales.
         if not user.is_active:
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=request.email,
-                success=False,
-                failure_reason="Account deactivated by admin",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Login",
+                lambda: security_logger.log_login_attempt(
+                    user_id=str(user.id.value),
+                    email=request.email,
+                    success=False,
+                    failure_reason="Account deactivated by admin",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             raise AccountDeactivatedException()
 
@@ -555,13 +571,16 @@ class LoginUserUseCase:
         self._freno.olvida(request.email, origen)
 
         # Security Logging: Login exitoso
-        security_logger.log_login_attempt(
-            user_id=str(user.id.value),
-            email=request.email,
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Login",
+            lambda: security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737). No

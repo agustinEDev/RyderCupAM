@@ -206,3 +206,22 @@ async def test_g1_a_broken_security_log_does_not_change_the_rejection(monkeypatc
 
     with pytest.raises(RefreshRejectedError):
         await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
+
+
+async def test_g1_a_broken_log_does_not_break_a_good_refresh(monkeypatch):
+    """
+    Given: Un refresco bueno y el log de seguridad fallando al apuntarlo
+    When: Refresca
+    Then: Sale bien igual: el log nunca cambia la respuesta (#750 punto 2, también en los éxitos)
+    """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    def roto(self, **kw):
+        raise RuntimeError("log caído")
+
+    monkeypatch.setattr(modulo.SecurityLogger, "log_refresh_token_used", roto)
+    _uow, _usuario, _dispositivo, refresco = await _escena()
+
+    respuesta = await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
+
+    assert respuesta.access_token == "acceso"

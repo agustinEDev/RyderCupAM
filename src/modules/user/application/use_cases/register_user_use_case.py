@@ -6,6 +6,7 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.terms_acceptance import TermsAcceptance
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.errors.handicap_errors import HandicapServiceError
@@ -166,11 +167,14 @@ class RegisterUserUseCase:
             # El context manager (__aexit__) hace commit automático y publica eventos
 
         # 3.5 Auditoría de seguridad: la aceptación de los Términos
-        self._security_audit.log_terms_accepted(
-            user_id=str(new_user.id.value),
-            ip_address=request.ip_address or "unknown",
-            user_agent=request.user_agent or "unknown",
-            terms_version=terms_acceptance.terms_version,
+        registra_sin_romper(
+            "Register user",
+            lambda: self._security_audit.log_terms_accepted(
+                user_id=str(new_user.id.value),
+                ip_address=request.ip_address or "unknown",
+                user_agent=request.user_agent or "unknown",
+                terms_version=terms_acceptance.terms_version,
+            ),
         )
 
         # 4. Enviar email de verificación

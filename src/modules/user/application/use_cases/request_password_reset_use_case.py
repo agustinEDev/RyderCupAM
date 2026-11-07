@@ -20,6 +20,7 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -114,13 +115,16 @@ class RequestPasswordResetUseCase:
             await asyncio.sleep(self.FAKE_EMAIL_DELAY_SECONDS)
 
             # Security Logging: Solicitud fallida (email no existe)
-            security_logger.log_password_reset_requested(
-                user_id=None,
-                email=request.email,
-                success=False,
-                failure_reason="Email not found (not revealed to client)",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Request password reset",
+                lambda: security_logger.log_password_reset_requested(
+                    user_id=None,
+                    email=request.email,
+                    success=False,
+                    failure_reason="Email not found (not revealed to client)",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
 
             # Retornar mensaje genérico (NO revelar que el email no existe)
@@ -147,13 +151,16 @@ class RequestPasswordResetUseCase:
         )
 
         # Security Logging: Solicitud exitosa
-        security_logger.log_password_reset_requested(
-            user_id=str(user.id.value),
-            email=request.email,
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Request password reset",
+            lambda: security_logger.log_password_reset_requested(
+                user_id=str(user.id.value),
+                email=request.email,
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         # Retornar el MISMO mensaje genérico (previene enumeración)

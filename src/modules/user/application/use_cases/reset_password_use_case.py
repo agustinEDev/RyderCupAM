@@ -149,13 +149,16 @@ class ResetPasswordUseCase:
 
         if not user:
             # Security Logging: Token inválido (usuario no encontrado)
-            security_logger.log_password_reset_completed(
-                user_id=None,
-                email="unknown",
-                success=False,
-                failure_reason="Invalid or expired token",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Reset password",
+                lambda: security_logger.log_password_reset_completed(
+                    user_id=None,
+                    email="unknown",
+                    success=False,
+                    failure_reason="Invalid or expired token",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             raise InvalidResetTokenError()
 
@@ -166,13 +169,17 @@ class ResetPasswordUseCase:
                 raise InvalidResetTokenError()
             nueva = await run_bcrypt(Password.from_plain_text, request.new_password)
         except ValueError as e:
-            security_logger.log_password_reset_completed(
-                user_id=str(user.id.value),
-                email=str(user.email.value),
-                success=False,
-                failure_reason=str(e),
-                ip_address=ip_address,
-                user_agent=user_agent,
+            fallo = str(e)
+            registra_sin_romper(
+                "Reset password",
+                lambda: security_logger.log_password_reset_completed(
+                    user_id=str(user.id.value),
+                    email=str(user.email.value),
+                    success=False,
+                    failure_reason=fallo,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             raise
 
@@ -183,13 +190,16 @@ class ResetPasswordUseCase:
             bloqueada = await self._uow.users.find_by_id_for_update(user.id)
             # El token se vuelve a validar sobre la fila bloqueada, en reset_password
             if bloqueada is None:
-                security_logger.log_password_reset_completed(
-                    user_id=str(user.id.value),
-                    email=str(user.email.value),
-                    success=False,
-                    failure_reason="Account deleted during reset",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
+                registra_sin_romper(
+                    "Reset password",
+                    lambda: security_logger.log_password_reset_completed(
+                        user_id=str(user.id.value),
+                        email=str(user.email.value),
+                        success=False,
+                        failure_reason="Account deleted during reset",
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                    ),
                 )
                 raise InvalidResetTokenError()
             user = bloqueada
@@ -212,13 +222,17 @@ class ResetPasswordUseCase:
                 )
             except ValueError as e:
                 # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
-                security_logger.log_password_reset_completed(
-                    user_id=str(user.id.value),
-                    email=str(user.email.value),
-                    success=False,
-                    failure_reason=str(e),
-                    ip_address=ip_address,
-                    user_agent=user_agent,
+                fallo = str(e)
+                registra_sin_romper(
+                    "Reset password",
+                    lambda: security_logger.log_password_reset_completed(
+                        user_id=str(user.id.value),
+                        email=str(user.email.value),
+                        success=False,
+                        failure_reason=fallo,
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                    ),
                 )
                 raise  # Re-lanzar la excepción para que el API layer la maneje
 
@@ -260,13 +274,16 @@ class ResetPasswordUseCase:
         )
 
         # Security Logging: Reseteo exitoso
-        security_logger.log_password_reset_completed(
-            user_id=str(user.id.value),
-            email=str(user.email.value),
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Reset password",
+            lambda: security_logger.log_password_reset_completed(
+                user_id=str(user.id.value),
+                email=str(user.email.value),
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         # Retornar mensaje de confirmación

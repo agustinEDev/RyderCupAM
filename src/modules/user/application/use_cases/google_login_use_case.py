@@ -380,13 +380,16 @@ class GoogleLoginUseCase:
             )
         )
 
-        security_logger.log_login_attempt(
-            user_id=str(user.id.value),
-            email=google_info.email,
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Google login",
+            lambda: security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         return GoogleLoginResponseDTO(

@@ -391,3 +391,33 @@ class TestLoginUserUseCaseDeactivatedAccount:
         response = await use_case.execute(request)
 
         assert response is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("clave", "entra"), [("V@l1dP@ss123!", True), ("Wr0ngP@ssw0rd!", False)])
+async def test_g1_a_broken_security_log_does_not_change_the_login(
+    uow, token_service, register_device_use_case, existing_user, clave, entra
+):
+    """
+    Given: El log de seguridad fallando al apuntar el intento
+    When: Entra con la contraseña buena o con una mala
+    Then: Lo mismo que sin el fallo: entra, o no entra (#750 punto 2, también en el login)
+    """
+    from unittest.mock import MagicMock
+
+    roto = MagicMock()
+    roto.log_login_attempt.side_effect = RuntimeError("log caído")
+    use_case = LoginUserUseCase(
+        uow,
+        token_service,
+        register_device_use_case,
+        AsyncMock(),
+        FrenoDelLoginEnMemoria(),
+        AsyncMock(),
+        security_audit=roto,
+    )
+
+    respuesta = await use_case.execute(LoginRequestDTO(email="test@example.com", password=clave))
+
+    assert (respuesta is not None) is entra
+    assert roto.log_login_attempt.called

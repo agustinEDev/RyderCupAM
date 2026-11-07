@@ -28,6 +28,7 @@ la propia operación.
 import asyncio
 import contextvars
 import functools
+import logging
 import os
 import weakref
 from collections.abc import Callable
@@ -47,11 +48,19 @@ def _concurrencia_configurada(defecto: int = 2) -> int:
     2026 este módulo vive en la aplicación, que no importa infraestructura (#750).
     """
     crudo = (os.getenv("BCRYPT_MAX_CONCURRENCY") or "").strip()
+    if not crudo:
+        return defecto
     try:
         valor = int(crudo)
     except ValueError:
-        return defecto
-    return valor if valor >= 1 else defecto
+        valor = 0
+    if valor >= 1:
+        return valor
+    # Una mala configuración no pasa en silencio (como con el ayudante de antes)
+    logging.getLogger(__name__).warning(
+        "BCRYPT_MAX_CONCURRENCY=%r is not a positive integer; using %s", crudo, defecto
+    )
+    return defecto
 
 
 MAX_CONCURRENCY = _concurrencia_configurada()

@@ -8,9 +8,14 @@ en segundo plano) después de volver a entrar, su Set-Cookie borraría la cookie
   S2 sin sesión más nueva → se borra, como hoy (también si la nueva está revocada,
      caducada o es de otro dispositivo)
   S3 token que no se identifica (no está en la BD) → se borra, como hoy
+  Tras las revisiones (Agustín):
+  S5 solo si la sesión nueva tiene menos de 5 minutos: la petición tardía llega segundos
+     después; más vieja, se borra (sin cookies muertas de días)
+  S6 también con el token ya caducado
+  S7 si falla la consulta, se borra como siempre y el rechazo sigue siendo el mismo
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -57,11 +62,11 @@ async def _escena():
     return uow, usuario, dispositivo, viejo, caso
 
 
-async def _nuevo(uow, usuario, device_id, despues=timedelta(seconds=5), dias=7):
+async def _nuevo(uow, usuario, device_id, despues=timedelta(seconds=5), dias=7, hace=None):
     nuevo = RefreshToken.create(
         user_id=usuario.id, token=NUEVO, device_id=device_id, expires_in_days=dias
     )
-    nuevo._created_at = nuevo.created_at + despues
+    nuevo._created_at = datetime.now() - hace if hace is not None else nuevo.created_at + despues
     await uow.refresh_tokens.save(nuevo)
     return nuevo
 
@@ -131,3 +136,64 @@ async def test_s3_a_token_that_is_not_in_the_database_deletes_the_cookie():
     await _nuevo(uow, usuario, dispositivo.id)
 
     assert (await _rechazo(caso, jwt="no-existe")).conserva_la_cookie is False
+
+
+@pytest.mark.parametrize(
+    ("hace", "conserva"), [(timedelta(minutes=4), True), (timedelta(minutes=6), False)]
+)
+async def test_s5_only_a_session_newer_than_five_minutes_keeps_the_cookie(hace, conserva):
+    """
+    Given: El token viejo (de hace una hora) y otro vivo en el mismo dispositivo
+    When: Llega tarde el refresco con el viejo
+    Then: Se conserva si el nuevo tiene menos de 5 minutos; si no, se borra
+    """
+    uow, usuario, dispositivo, viejo, caso = await _escena()
+    viejo._created_at = datetime.now() - timedelta(hours=1)
+    await uow.refresh_tokens.save(viejo)
+    await _nuevo(uow, usuario, dispositivo.id, hace=hace)
+
+    assert (await _rechazo(caso)).conserva_la_cookie is conserva
+
+
+async def test_s6_an_expired_token_also_keeps_a_newer_sessions_cookie():
+    """
+    Given: Un token ya caducado (firma buena) y una sesión nueva y reciente en su dispositivo
+    When: Llega tarde el refresco con el caducado
+    Then: REFRESH_TOKEN_EXPIRED, pero conserva la cookie
+    """
+    from src.modules.user.application.use_cases.refresh_access_token_use_case import (
+        RefreshRejection,
+    )
+
+    uow, usuario, dispositivo, _viejo, caso = await _escena()
+    caso._token_service.verify_refresh_token.return_value = None
+    caso._token_service.refresh_token_expired.return_value = True
+    await _nuevo(uow, usuario, dispositivo.id)
+
+    rechazo = await _rechazo(caso)
+
+    assert rechazo.motivo is RefreshRejection.REFRESH_TOKEN_EXPIRED
+    assert rechazo.conserva_la_cookie is True
+
+
+async def test_s7_a_failing_check_deletes_as_always_and_keeps_the_rejection(monkeypatch, caplog):
+    """
+    Given: Un rechazo y la consulta de la sesión nueva fallando (BD con problemas)
+    When: Llega el refresco
+    Then: El mismo rechazo (no un 500) y se borra la cookie, como siempre (#750 punto 2)
+    """
+    import logging
+
+    uow, usuario, dispositivo, _viejo, caso = await _escena()
+    await _nuevo(uow, usuario, dispositivo.id)
+
+    async def falla(*a, **k):
+        raise RuntimeError("bd caída")
+
+    monkeypatch.setattr(uow.refresh_tokens, "hay_uno_vivo_mas_nuevo", falla)
+
+    with caplog.at_level(logging.ERROR):
+        rechazo = await _rechazo(caso)
+
+    assert rechazo.conserva_la_cookie is False
+    assert "RuntimeError" in caplog.text

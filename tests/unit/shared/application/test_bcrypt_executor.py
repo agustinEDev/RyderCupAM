@@ -160,3 +160,23 @@ def test_the_concurrency_comes_from_the_environment_or_defaults_to_two(
         monkeypatch.setenv("BCRYPT_MAX_CONCURRENCY", valor)
 
     assert _concurrencia_configurada() == esperado
+
+
+@pytest.mark.parametrize("valor", ["0", "-3", "dos"])
+def test_an_invalid_concurrency_is_warned(monkeypatch, caplog, valor):
+    """
+    Given: BCRYPT_MAX_CONCURRENCY con un valor que no vale
+    When: Se lee
+    Then: Usa 2 y lo avisa en el log (como el ayudante de antes: una mala configuración no
+          pasa en silencio)
+    """
+    import logging
+
+    from src.shared.application.concurrencia.bcrypt_executor import _concurrencia_configurada
+
+    monkeypatch.setenv("BCRYPT_MAX_CONCURRENCY", valor)
+
+    with caplog.at_level(logging.WARNING):
+        assert _concurrencia_configurada() == 2
+
+    assert "BCRYPT_MAX_CONCURRENCY" in caplog.text

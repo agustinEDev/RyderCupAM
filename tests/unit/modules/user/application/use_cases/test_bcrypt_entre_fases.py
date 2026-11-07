@@ -400,3 +400,31 @@ async def test_b2_6_a_weak_new_password_skips_the_history_bcrypts():
         )
 
     assert verifica.call_count == 1
+
+
+async def test_b2_4_a_token_spent_during_the_bcrypt_is_logged_as_a_failed_reset(monkeypatch):
+    """
+    Given: Un enlace de restablecer que otro gasta mientras se calcula el bcrypt
+    When: Se intenta restablecer
+    Then: El fallo queda en el log de seguridad con su motivo (no se pierde en silencio)
+    """
+    uow = InMemoryUnitOfWork()
+    user, token = await _con_token(uow)
+    registro = MagicMock()
+
+    async def otro_lo_gasta():
+        async with uow:
+            otro = await uow.users.find_by_id(user.id)
+            otro.reset_password(token, Password.from_plain_text(OTRA))
+            await uow.users.save(otro)
+
+    _entretanto(monkeypatch, reset_password_use_case, otro_lo_gasta)
+
+    with pytest.raises(InvalidResetTokenError):
+        await ResetPasswordUseCase(uow, AsyncMock(), security_audit=registro).execute(
+            ResetPasswordRequestDTO(token=token, new_password=NUEVA)
+        )
+
+    llamada = registro.log_password_reset_completed.call_args
+    assert llamada.kwargs["success"] is False
+    assert llamada.kwargs["failure_reason"]

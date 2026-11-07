@@ -8,7 +8,8 @@ CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
 Dispositivos (BE #737, #738): usa y actualiza el dispositivo de su refresh token.
 """
 
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from src.config.csrf_config import generate_csrf_token
@@ -72,6 +73,12 @@ def codigo_publico(motivo: RefreshRejection) -> str:
     log de seguridad.
     """
     return SESSION_ENDED if motivo in _FINAL_NORMAL else SESSION_REJECTED
+
+
+logger = logging.getLogger(__name__)
+
+# Una sesión nueva más vieja que esto ya no es la de una petición tardía (BE #734)
+VENTANA_DE_LA_SESION_NUEVA = timedelta(minutes=5)
 
 
 class RefreshRejectedError(Exception):
@@ -162,7 +169,12 @@ class RefreshAccessTokenUseCase:
         if not payload:
             # Caducado con la firma buena es el final normal; si no, inválido
             if self._token_service.refresh_token_expired(refresh_token_jwt):
-                raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+                caducado = RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_EXPIRED)
+                # También el caducado: se identifica en la BD igual (BE #734, Agustín)
+                caducado.conserva_la_cookie = await self._hay_una_sesion_mas_nueva(
+                    refresh_token_jwt
+                )
+                raise caducado
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_INVALID)
 
         # 2. Extraer user_id del payload
@@ -194,13 +206,22 @@ class RefreshAccessTokenUseCase:
         ya tiene la nueva: borrarla le echaría de la sesión a los 15 minutos. Sin token
         en la BD o sin dispositivo no se sabe de quién es: se borra, como siempre.
         """
-        async with self._uow:
-            token = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
-            if token is None or token.device_id is None:
-                return False
-            return await self._uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
-                token.device_id, token.created_at, datetime.now()
-            )
+        try:
+            async with self._uow:
+                token = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
+                if token is None or token.device_id is None:
+                    return False
+                ahora = datetime.now()
+                # Solo una sesión reciente: la petición tardía llega segundos después del
+                # nuevo login. Más vieja, se borra (sin cookies muertas de días, Agustín)
+                desde = max(token.created_at, ahora - VENTANA_DE_LA_SESION_NUEVA)
+                return await self._uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
+                    token.device_id, desde, ahora
+                )
+        except Exception as error:
+            # Si falla, se borra como siempre y el rechazo es el mismo (#750 punto 2)
+            logger.error("Newer session check failed: %s", type(error).__name__)
+            return False
 
     async def _renueva(
         self,
@@ -291,12 +312,15 @@ class RefreshAccessTokenUseCase:
         csrf_token = generate_csrf_token(str(user.id.value))
 
         # 8. Security Logging: Uso exitoso de refresh token
-        security_logger.log_refresh_token_used(
-            user_id=str(user.id.value),
-            ip_address=ip_address,
-            user_agent=user_agent,
-            refresh_token_id=str(refresh_token_entity.id.value),
-            new_access_token_created=True,
+        registra_sin_romper(
+            "Refresh",
+            lambda: security_logger.log_refresh_token_used(
+                user_id=str(user.id.value),
+                ip_address=ip_address,
+                user_agent=user_agent,
+                refresh_token_id=str(refresh_token_entity.id.value),
+                new_access_token_created=True,
+            ),
         )
 
         # 9. Preparar respuesta
