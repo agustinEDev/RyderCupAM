@@ -112,13 +112,35 @@ Elimina por completo el entorno de Kubernetes. **Esta acción es irreversible y 
 
 `k8s/api-secret.yaml` está **versionado en git** y debe contener únicamente placeholders de ejemplo — nunca valores reales (el repo es público).
 
-Para tener credenciales reales en local (p. ej. para que Mailgun envíe correos de verdad en desarrollo):
+Para tener credenciales reales en local (p. ej. para mandar un correo de verdad, ver «Correos»):
 
 1. Crea `k8s/api-secret.local.yaml` (ya está en `.gitignore`, nunca se commitea) copiando la estructura de `api-secret.yaml`.
 2. Rellena ahí los valores reales (p. ej. `MAILGUN_API_KEY`, copiada directamente del dashboard de Render → Environment, sin pasar por ningún fichero versionado ni por el chat).
 3. `deploy-cluster.sh` y `restart-cluster.sh` aplican automáticamente `api-secret.local.yaml` si existe, en lugar de `api-secret.yaml`.
 
 ⚠️ Si algún valor real llega a `api-secret.yaml` por error, rótalo de inmediato en el proveedor correspondiente (Mailgun, etc.) — el fichero es público en cuanto se commitea.
+
+---
+
+## 📬 Correos
+
+Desde el 7 nov 2026 (BE #563), **el Kind no entrega correos**: van a **Mailpit**
+(`k8s/mailpit.yaml`), un buzón local que los guarda sin mandarlos. Así las pruebas no
+gastan el cupo diario de Mailgun (100), que comparte producción.
+
+- **Verlos** (HTML, enlaces y tokens):
+  `kubectl port-forward -n rydercupfriends svc/mailpit-service 8025:8025` y abrir
+  http://localhost:8025. Se guardan en memoria: un reinicio del pod los vacía.
+- **Mandar uno de verdad** (p. ej. para verlo en el iPhone), solo a propósito y solo a
+  tu propia dirección:
+  ```bash
+  kubectl set env deployment/rydercup-api -n rydercupfriends EMAIL_TRANSPORT=mailgun
+  # ... la prueba ...
+  kubectl set env deployment/rydercup-api -n rydercupfriends EMAIL_TRANSPORT-
+  ```
+  Al quitarlo vuelve el valor del configmap (`mailpit`). Necesita la `MAILGUN_API_KEY`
+  real en `api-secret.local.yaml`.
+- En **producción** la app no arranca con otro valor que `mailgun`.
 
 ---
 

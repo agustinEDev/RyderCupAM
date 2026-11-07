@@ -1,0 +1,80 @@
+# ==========================================
+# MAILPIT - el buzón local del Kind (BE #563, 7 nov 2026)
+# ==========================================
+# La API del Kind le manda aquí todos sus correos (EMAIL_TRANSPORT=mailpit en
+# api-configmap.yaml): se quedan en este buzón y NO se entregan a nadie, así que las
+# pruebas no gastan el cupo diario de Mailgun que comparte producción.
+#
+# Ver los correos (HTML, enlaces y tokens):
+#   kubectl port-forward -n rydercupfriends svc/mailpit-service 8025:8025
+#   → http://localhost:8025
+#
+# Para probar un correo de verdad en el móvil, ver k8s/README.md («Correos»).
+# Los correos se guardan en memoria: un reinicio del pod los vacía.
+# ==========================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: rydercupfriends
+  labels:
+    app: rydercup
+    component: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rydercup
+      component: mailpit
+  template:
+    metadata:
+      labels:
+        app: rydercup
+        component: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          # Versión fija: nada de latest
+          image: axllent/mailpit:v1.32.0
+          ports:
+            - name: http
+              containerPort: 8025
+            - name: smtp
+              containerPort: 1025
+          env:
+            # Como mucho 500 correos: los más viejos se borran solos
+            - name: MP_MAX_MESSAGES
+              value: "500"
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8025
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-service
+  namespace: rydercupfriends
+  labels:
+    app: rydercup
+    component: mailpit
+spec:
+  # Solo dentro del clúster; desde el Mac, con port-forward
+  type: ClusterIP
+  selector:
+    app: rydercup
+    component: mailpit
+  ports:
+    - name: http
+      port: 8025
+      targetPort: 8025

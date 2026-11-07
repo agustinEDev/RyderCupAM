@@ -6,14 +6,18 @@ from pathlib import Path
 import pytest
 from httpx import AsyncClient
 
+from src.shared.infrastructure.logging.security_logger import get_security_logger
 
-@pytest.mark.asyncio
+
+def _fichero() -> Path:
+    """El log de seguridad de este proceso de pytest (propio, BE #529)."""
+    registro = get_security_logger()
+    return registro.log_dir / registro.log_file
+
+
 def _todo_el_log() -> str:
-    """El log de seguridad con sus rotados: con varios workers, otro puede rotarlo
-    justo después de que este test escriba, y la línea se va a security_audit.log.1."""
-    return "".join(
-        f.read_text(errors="replace") for f in sorted(Path("logs").glob("security_audit.log*"))
-    )
+    """El log de seguridad de este proceso: ningún otro worker escribe ni rota en él."""
+    return _fichero().read_text(errors="replace")
 
 
 class TestSecurityAuditTrail:
@@ -41,7 +45,7 @@ class TestSecurityAuditTrail:
         assert response.status_code == 200
 
         # Verificar que existe security_audit.log
-        assert Path("logs/security_audit.log").exists()
+        assert _fichero().exists()
 
         # Verificar que contiene LoginAttemptEvent
         content = _todo_el_log()
@@ -127,7 +131,7 @@ class TestSecurityAuditTrail:
 
     async def test_audit_log_entries_are_valid_json(self, client: AsyncClient):
         """Todas las entradas del log son JSON válido"""
-        log_file = Path("logs/security_audit.log")
+        log_file = _fichero()
 
         if not log_file.exists():
             pytest.skip("No security_audit.log file exists yet")

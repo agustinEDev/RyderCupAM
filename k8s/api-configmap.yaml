@@ -36,6 +36,12 @@ data:
   MAILGUN_FROM_EMAIL: "Ryder Cup Friends <noreply@rydercupfriends.com>"
   MAILGUN_API_URL: "https://api.eu.mailgun.net/v3"
 
+  # Los correos del Kind van a Mailpit (k8s/mailpit.yaml) y no se entregan: así no
+  # gastan el cupo diario de Mailgun que comparte producción (BE #563). Para probar uno
+  # de verdad en el móvil: ver k8s/README.md («Correos»)
+  EMAIL_TRANSPORT: "mailpit"
+  MAILPIT_URL: "http://mailpit-service:8025"
+
   # ==========================================
   # FRONTEND URL - IMPORTANTE
   # ==========================================

@@ -282,6 +282,9 @@ echo ""
 # ==========================================
 print_step "Desplegando Backend (FastAPI)..."
 
+# El buzón local de los correos, antes que la API que le escribe (BE #563)
+kubectl apply -f "$K8S_DIR/mailpit.yaml"
+kubectl rollout status deployment/mailpit -n rydercupfriends --timeout=120s
 kubectl apply -f "$K8S_DIR/api-deployment.yaml"
 kubectl apply -f "$K8S_DIR/api-service.yaml"
 

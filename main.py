@@ -14,6 +14,7 @@ load_dotenv()  # Cargar variables de entorno desde .env
 
 import asyncio  # noqa: E402
 import contextlib  # noqa: E402
+import logging  # noqa: E402
 import secrets  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
@@ -30,6 +31,10 @@ from slowapi.errors import RateLimitExceeded  # noqa: E402
 from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
     cierre_activado,
+)
+from src.config.clave_de_brevo_viva import (  # noqa: E402
+    VigiaDeLaClaveDeBrevo,
+    vigia_activado,
 )
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
@@ -93,6 +98,10 @@ from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     user_routes,
 )
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
+from src.shared.infrastructure.email.envio_de_correo import (  # noqa: E402
+    brevo_desde,
+    comprueba_el_envio_de_correo,
+)
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
@@ -124,6 +133,14 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
 
+    # Sin un envío de correo válido no se arranca: en producción solo Mailgun y por
+    # https (BE #563). Tras Sentry, para que un arranque fallido llegue allí
+    try:
+        comprueba_el_envio_de_correo(os.environ)
+    except RuntimeError:
+        logging.getLogger(__name__).exception("Invalid email configuration: not starting")
+        raise
+
     # Si hay secreto de Cloudflare para la IP real, y de qué longitud (ADR-041)
     informa_del_secreto_de_origen()
 
@@ -141,6 +158,10 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         tareas.append(asyncio.create_task(CierreDePartidasRapidas(async_session_maker).vigilar()))
         # Y la limpieza de dispositivos y refrescos viejos, también cada hora (BE #737)
         tareas.append(asyncio.create_task(LimpiezaDeSesiones(async_session_maker).vigilar()))
+    # La clave de Brevo, usada una vez al día para que no caduque (solo PRO)
+    brevo = brevo_desde(os.environ)
+    if vigia_activado(os.environ) and brevo is not None:
+        tareas.append(asyncio.create_task(VigiaDeLaClaveDeBrevo(brevo).vigilar()))
     yield
     for tarea in tareas:
         tarea.cancel()

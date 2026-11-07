@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -26,7 +26,7 @@ def correo(monkeypatch):
     """El servicio con el envío sustituido: guarda lo que se mandaría."""
     monkeypatch.setattr(settings, "FRONTEND_URL", WEB)
     servicio = EmailService()
-    servicio._send_email = MagicMock(return_value=True)
+    servicio._send_email = AsyncMock(return_value=True)
     return servicio
 
 
@@ -47,7 +47,7 @@ async def _todos_los_correos(servicio):
     """Manda cada correo de la app (la invitación, con y sin cuenta) y devuelve su HTML."""
     htmls = {}
 
-    servicio.send_verification_email("a@b.com", "Ana", "tok123")
+    await servicio.send_verification_email("a@b.com", "Ana", "tok123")
     htmls["verificacion"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
 
@@ -346,8 +346,8 @@ class TestTheLayoutStaysLightInAppleMailDarkMode:
 class TestTheButtonsGoWhereTheySay:
     """Cada botón lleva a una pantalla que existe."""
 
-    def test_verification_goes_to_verify_email_with_its_token(self, correo):
-        correo.send_verification_email("a@b.com", "Ana", "tok123")
+    async def test_verification_goes_to_verify_email_with_its_token(self, correo):
+        await correo.send_verification_email("a@b.com", "Ana", "tok123")
         _, _, texto, cuerpo = _enviado(correo)
         assert _botones(cuerpo)[0] == f"{WEB}/verify-email?token=tok123"
         assert f"{WEB}/verify-email?token=tok123" in texto
@@ -406,8 +406,8 @@ class TestTheButtonsGoWhereTheySay:
 class TestNothingFromTheUserEntersUnescaped:
     """Nombres y mensajes los escribe la gente: nunca entran como HTML."""
 
-    def test_a_name_with_an_ampersand_is_escaped_in_the_verification(self, correo):
-        correo.send_verification_email("a@b.com", "Tom & Jerry's", "t")
+    async def test_a_name_with_an_ampersand_is_escaped_in_the_verification(self, correo):
+        await correo.send_verification_email("a@b.com", "Tom & Jerry's", "t")
         _, _, _, cuerpo = _enviado(correo)
         assert "Tom &amp; Jerry&#x27;s" in cuerpo
         assert "Tom & Jerry's" not in cuerpo

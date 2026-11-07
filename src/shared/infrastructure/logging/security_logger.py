@@ -15,6 +15,7 @@ Características:
 - Helpers para eventos comunes
 """
 
+import hashlib
 import logging
 import logging.handlers
 from pathlib import Path
@@ -102,6 +103,13 @@ class SecurityLogger:
         self.log_file = log_file or self.LOG_FILE
         self._logger = self._setup_logger()
 
+    @classmethod
+    def _nombre_del_logger(cls, ruta: Path) -> str:
+        """`security.audit` para el fichero de siempre; otro nombre para cualquier otro."""
+        if ruta.resolve() == (cls.LOG_DIR / cls.LOG_FILE).resolve():
+            return "security.audit"
+        return f"security.audit.{hashlib.sha256(str(ruta.resolve()).encode()).hexdigest()[:12]}"
+
     def _setup_logger(self) -> logging.Logger:
         """
         Configura el logger de seguridad con handler rotativo y formato JSON.
@@ -109,13 +117,16 @@ class SecurityLogger:
         Returns:
             Logger configurado
         """
-        # Crear logger único para seguridad
-        logger = logging.getLogger("security.audit")
+        # Un logger por fichero: si dos instancias compartieran uno, la segunda le
+        # quitaría el handler a la primera (así se rompían los tests, BE #529)
+        logger = logging.getLogger(self._nombre_del_logger(self.log_dir / self.log_file))
         logger.setLevel(logging.INFO)
         logger.propagate = False  # No propagar a root logger
 
-        # Limpiar handlers existentes (por si se reinicializa)
-        logger.handlers.clear()
+        # Limpiar handlers existentes (por si se reinicializa), cerrando su fichero
+        for anterior in list(logger.handlers):
+            anterior.close()
+            logger.removeHandler(anterior)
 
         # Crear directorio de logs si no existe
         self.log_dir.mkdir(parents=True, exist_ok=True)
