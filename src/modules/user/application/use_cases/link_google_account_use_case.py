@@ -11,6 +11,8 @@ from src.modules.user.application.dto.oauth_dto import (
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
@@ -42,12 +44,19 @@ class LinkGoogleAccountUseCase:
         self,
         uow: UserUnitOfWorkInterface,
         google_oauth_service: IGoogleOAuthService,
+        *,
+        security_audit: ISecurityAuditLogger,
     ):
         self._uow = uow
         self._google_oauth_service = google_oauth_service
+        self._security_audit = security_audit
 
     async def execute(
-        self, request: LinkGoogleAccountRequestDTO, user_id: str
+        self,
+        request: LinkGoogleAccountRequestDTO,
+        user_id: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> LinkGoogleAccountResponseDTO:
         """
         Vincula cuenta Google al usuario autenticado.
@@ -103,6 +112,18 @@ class LinkGoogleAccountUseCase:
                 provider_email=google_info.email,
             )
             await self._uow.oauth_accounts.save(oauth_account)
+
+        # Ya guardado, al log con la red (#750 punto 3): aquí y no en la ruta, para que
+        # cualquier uso del caso de uso quede auditado, como el vínculo automático
+        registra_sin_romper(
+            "Google link",
+            lambda: self._security_audit.log_google_account_linked(
+                user_id=user_id,
+                automatic=False,
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
+            ),
+        )
 
         return LinkGoogleAccountResponseDTO(
             message="Google account linked successfully",

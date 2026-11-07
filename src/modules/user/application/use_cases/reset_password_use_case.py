@@ -29,6 +29,7 @@ from src.modules.user.application.ports.security_audit_interface import ISecurit
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     cierra_lo_que_no_se_probo,
 )
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
@@ -89,8 +90,9 @@ class ResetPasswordUseCase:
         user_agent: str,
     ) -> None:
         """La toma, al log de seguridad, ya guardada: si el log falla, vale igual."""
-        try:
-            self._security_audit.log_unverified_account_claimed(
+        registra_sin_romper(
+            "Account claim",
+            lambda: self._security_audit.log_unverified_account_claimed(
                 user_id=str(user.id.value),
                 devices_revoked=cerrado[0],
                 tokens_revoked=cerrado[1],
@@ -98,9 +100,8 @@ class ResetPasswordUseCase:
                 via="password_reset",
                 ip_address=ip_address,
                 user_agent=user_agent,
-            )
-        except Exception as error:
-            logger.error("Account claim audit event failed: %s", type(error).__name__)
+            ),
+        )
 
     async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """

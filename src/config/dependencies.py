@@ -3675,7 +3675,9 @@ def get_link_google_account_use_case(
     google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
 ) -> LinkGoogleAccountUseCase:
     """Proveedor del caso de uso LinkGoogleAccountUseCase."""
-    return LinkGoogleAccountUseCase(uow, google_oauth_service)
+    return LinkGoogleAccountUseCase(
+        uow, google_oauth_service, security_audit=get_security_audit_logger()
+    )
 
 
 def get_unlink_google_account_use_case(

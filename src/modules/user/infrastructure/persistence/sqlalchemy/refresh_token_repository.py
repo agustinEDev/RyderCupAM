@@ -6,7 +6,7 @@ Implementación del repositorio de Refresh Tokens usando SQLAlchemy (async).
 
 from datetime import datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.user.domain.entities.refresh_token import RefreshToken
@@ -233,6 +233,20 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         )
         result = await self._session.execute(stmt)
         return {UserDeviceId.from_string(str(fila[0])) for fila in result.all()}
+
+    async def hay_uno_vivo_mas_nuevo(
+        self, device_id: UserDeviceId, creado_despues_de: datetime, ahora: datetime
+    ) -> bool:
+        """Si el dispositivo tiene un token vivo creado después de esa fecha (BE #734)."""
+        stmt = select(
+            exists().where(
+                refresh_tokens_table.c.device_id == str(device_id.value),
+                refresh_tokens_table.c.revoked == False,  # noqa: E712
+                refresh_tokens_table.c.expires_at > ahora,
+                refresh_tokens_table.c.created_at > creado_despues_de,
+            )
+        )
+        return bool((await self._session.execute(stmt)).scalar())
 
     async def delete_expired_before(self, antes: datetime) -> int:
         """Borra los refresh tokens caducados antes de `antes`."""

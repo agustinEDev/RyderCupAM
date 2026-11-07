@@ -8,6 +8,7 @@ CSRF Protection (v1.13.0): Genera nuevo token CSRF al renovar access token.
 Dispositivos (BE #737, #738): usa y actualiza el dispositivo de su refresh token.
 """
 
+from datetime import datetime
 from enum import StrEnum
 
 from src.config.csrf_config import generate_csrf_token
@@ -22,6 +23,7 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user_device import UserDevice
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -80,6 +82,9 @@ class RefreshRejectedError(Exception):
         self.motivo = motivo
         # Para el log de seguridad (BE #733), nunca para el cliente
         self.user_id = user_id
+        # Si la ruta no debe borrar la cookie: el dispositivo ya tiene una sesión más
+        # nueva, y la cookie del navegador es la de esa (BE #734)
+        self.conserva_la_cookie = False
 
 
 class RefreshAccessTokenUseCase:
@@ -178,7 +183,24 @@ class RefreshAccessTokenUseCase:
         except RefreshRejectedError as rechazo:
             # Con el usuario del token, para el log de seguridad (revisor de la PR)
             rechazo.user_id = rechazo.user_id or user_id_str
+            rechazo.conserva_la_cookie = await self._hay_una_sesion_mas_nueva(refresh_token_jwt)
             raise
+
+    async def _hay_una_sesion_mas_nueva(self, refresh_token_jwt: str) -> bool:
+        """
+        Si el dispositivo de este token tiene ya una sesión más nueva y viva (BE #734).
+
+        Entonces el rechazo es de una petición tardía con la cookie vieja, y el navegador
+        ya tiene la nueva: borrarla le echaría de la sesión a los 15 minutos. Sin token
+        en la BD o sin dispositivo no se sabe de quién es: se borra, como siempre.
+        """
+        async with self._uow:
+            token = await self._uow.refresh_tokens.find_by_token_hash(refresh_token_jwt)
+            if token is None or token.device_id is None:
+                return False
+            return await self._uow.refresh_tokens.hay_uno_vivo_mas_nuevo(
+                token.device_id, token.created_at, datetime.now()
+            )
 
     async def _renueva(
         self,
@@ -225,13 +247,16 @@ class RefreshAccessTokenUseCase:
                 refresh_token_entity.revoke()
                 await self._uow.refresh_tokens.save(refresh_token_entity)
             # Con su motivo: en el log se distingue de reusar un token ya revocado
-            security_logger.log_refresh_token_revoked(
-                user_id=user_id_str,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                tokens_revoked_count=1,
-                reason="refresh_on_revoked_device",
-                device_id=str(dispositivo.id.value),
+            registra_sin_romper(
+                "Refresh revocation",
+                lambda: security_logger.log_refresh_token_revoked(
+                    user_id=user_id_str,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=1,
+                    reason="refresh_on_revoked_device",
+                    device_id=str(dispositivo.id.value),
+                ),
             )
             raise RefreshRejectedError(RefreshRejection.REFRESH_TOKEN_REVOKED)
         # La sesión de este dispositivo caduca tras 24 h sin usarse (BE #376, OWASP
@@ -241,13 +266,16 @@ class RefreshAccessTokenUseCase:
                 refresh_token_entity.revoke()
                 await self._uow.refresh_tokens.save(refresh_token_entity)
             # Que quede constancia: «la app me echó» tiene que poder explicarse
-            security_logger.log_refresh_token_revoked(
-                user_id=user_id_str,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                tokens_revoked_count=1,
-                reason="idle",
-                device_id=str(dispositivo.id.value),
+            registra_sin_romper(
+                "Refresh revocation",
+                lambda: security_logger.log_refresh_token_revoked(
+                    user_id=user_id_str,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    tokens_revoked_count=1,
+                    reason="idle",
+                    device_id=str(dispositivo.id.value),
+                ),
             )
             raise RefreshRejectedError(RefreshRejection.SESSION_IDLE)
         # Refrescar es usar ESTE dispositivo, el del token (ver el método)

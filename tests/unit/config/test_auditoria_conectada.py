@@ -22,6 +22,7 @@ CASOS = [
     ("pedir restablecer", lambda: d.get_request_password_reset_use_case(MagicMock(), MagicMock())),
     ("restablecer", lambda: d.get_reset_password_use_case(MagicMock(), MagicMock())),
     ("google", lambda: d.get_google_login_use_case(*(MagicMock() for _ in range(5)))),
+    ("vincular google", lambda: d.get_link_google_account_use_case(MagicMock(), MagicMock())),
 ]
 
 

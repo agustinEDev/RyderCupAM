@@ -6,7 +6,7 @@ Verifica los 3 flujos: OAuth existente, auto-link, auto-register.
 """
 
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -569,6 +569,47 @@ class TestGoogleLoginNuevoInicio:
 @pytest.mark.asyncio
 class TestGoogleLoginCuentaDesactivada:
     """Una cuenta desactivada no entra con Google (BE #744, auditoría OWASP)."""
+
+    async def test_g1_a_broken_security_log_still_answers_deactivated(
+        self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Given: Una cuenta vinculada a Google, desactivada, y un log de seguridad que falla
+        When: Entra con Google
+        Then: AccountDeactivatedException igual, no un 500 (#750 punto 2)
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        user = User.create_from_oauth(
+            first_name="Baja", last_name="Google", email_str="oauth@example.com"
+        )
+        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(user)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-id-12345",
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        roto = MagicMock()
+        roto.log_login_attempt.side_effect = RuntimeError("log caído")
+        caso = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=AsyncMock(),
+            security_audit=roto,
+        )
+
+        with pytest.raises(AccountDeactivatedException):
+            await caso.execute(
+                GoogleLoginRequestDTO(authorization_code="code", ip_address="203.0.113.7")
+            )
 
     async def test_a_deactivated_account_gets_no_session_device_or_email(
         self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case

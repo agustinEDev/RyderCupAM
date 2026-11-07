@@ -41,6 +41,7 @@ from src.modules.user.application.services.guarda_la_sesion import (
     activa,
     guarda_la_sesion,
 )
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -256,40 +257,43 @@ class GoogleLoginUseCase:
         if revocados is not None:
             # La toma de una cuenta sin verificar, al log, ya guardada y sin cambiar
             # la respuesta
-            try:
-                security_logger.log_unverified_account_claimed(
+            registra_sin_romper(
+                "Account claim",
+                lambda: security_logger.log_unverified_account_claimed(
                     user_id=str(user.id.value),
                     devices_revoked=revocados[0],
                     tokens_revoked=revocados[1],
                     google_unlinked=revocados[2],
                     ip_address=ip_address,
                     user_agent=user_agent,
-                )
-            except Exception as error:
-                logger.error("Account claim audit event failed: %s", type(error).__name__)
+                ),
+            )
         if vinculada:
             # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
             # el correo, da acceso a la cuenta. El log nunca cambia la respuesta
-            try:
-                security_logger.log_google_account_linked(
+            registra_sin_romper(
+                "Google link",
+                lambda: security_logger.log_google_account_linked(
                     user_id=str(user.id.value),
                     automatic=True,
                     ip_address=ip_address,
                     user_agent=user_agent,
-                )
-            except Exception as error:
-                logger.error("Google link audit event failed: %s", type(error).__name__)
+                ),
+            )
 
         # Una cuenta desactivada no entra (BE #744, auditoría OWASP): ni sesión, ni
         # dispositivo, ni correo de «nuevo inicio», como con la contraseña
         if not user.is_active:
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=google_info.email,
-                success=False,
-                failure_reason="Account deactivated by admin",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Google login",
+                lambda: security_logger.log_login_attempt(
+                    user_id=str(user.id.value),
+                    email=google_info.email,
+                    success=False,
+                    failure_reason="Account deactivated by admin",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             raise AccountDeactivatedException()
 
@@ -344,13 +348,16 @@ class GoogleLoginUseCase:
             self._uow, user.id, comprueba, guarda, device_id if dado_de_alta else None
         )
         if motivo is not None:
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=google_info.email,
-                success=False,
-                failure_reason=motivo,
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Google login",
+                lambda: security_logger.log_login_attempt(
+                    user_id=str(user.id.value),
+                    email=google_info.email,
+                    success=False,
+                    failure_reason=motivo,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             if motivo == CUENTA_DESACTIVADA:
                 raise AccountDeactivatedException()

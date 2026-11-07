@@ -179,3 +179,30 @@ async def test_t10_la_revocacion_por_dispositivo_revocado_queda_en_el_log(monkey
     assert [(a["reason"], a["device_id"]) for a in apuntes] == [
         ("refresh_on_revoked_device", str(dispositivo.id.value))
     ]
+
+
+@pytest.mark.parametrize("caso", ["dispositivo revocado", "inactiva"])
+async def test_g1_a_broken_security_log_does_not_change_the_rejection(monkeypatch, caso):
+    """
+    Given: Un refresco que se rechaza (dispositivo revocado, o 24 h sin uso) y un log de
+           seguridad que falla
+    When: Refresca
+    Then: El mismo rechazo de siempre, no un 500 (#750 punto 2)
+    """
+    from datetime import datetime, timedelta
+
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    def roto(self, **kw):
+        raise RuntimeError("log caído")
+
+    monkeypatch.setattr(modulo.SecurityLogger, "log_refresh_token_revoked", roto)
+    uow, _usuario, dispositivo, refresco = await _escena()
+    if caso == "dispositivo revocado":
+        dispositivo.revoke()
+    else:
+        dispositivo._last_used_at = datetime.now() - timedelta(hours=25)
+    await uow.user_devices.save(dispositivo)
+
+    with pytest.raises(RefreshRejectedError):
+        await refresco.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), JWT)
