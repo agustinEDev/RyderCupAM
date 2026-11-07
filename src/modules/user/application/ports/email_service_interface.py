@@ -133,6 +133,16 @@ class IEmailService(ABC):
         """
 
     @abstractmethod
+    async def send_google_account_notice(self, to_email: str, user_name: str, linked: bool) -> bool:
+        """
+        Avisa a la cuenta de que se ha vinculado (o desvinculado) un Google (BE #753): un
+        Google vinculado da acceso a la cuenta.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
     async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
         """
         Avisa al dueño de una cuenta SIN verificar que se la ha quedado (BE #753): lo que

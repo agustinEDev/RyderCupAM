@@ -3688,9 +3688,12 @@ def get_link_google_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> LinkGoogleAccountUseCase:
     """Proveedor del caso de uso LinkGoogleAccountUseCase."""
-    return LinkGoogleAccountUseCase(uow, google_oauth_service, security_audit=security_audit)
+    return LinkGoogleAccountUseCase(
+        uow, google_oauth_service, security_audit=security_audit, email_service=email_service
+    )
 
 
 def get_reauthenticate_use_case(
@@ -3702,6 +3705,7 @@ def get_reauthenticate_use_case(
 
 def get_unlink_google_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> UnlinkGoogleAccountUseCase:
     """Proveedor del caso de uso UnlinkGoogleAccountUseCase."""
-    return UnlinkGoogleAccountUseCase(uow)
+    return UnlinkGoogleAccountUseCase(uow, email_service=email_service)

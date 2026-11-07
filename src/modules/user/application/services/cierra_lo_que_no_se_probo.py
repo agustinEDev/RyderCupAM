@@ -46,3 +46,21 @@ async def avisa_de_la_toma(email_service: IEmailService, user: User, via: str) -
         return
     if not enviado:
         logger.error("Account secured notice was not sent")
+
+
+async def avisa_de_google(email_service: IEmailService, user: User, linked: bool) -> None:
+    """
+    El aviso de Google vinculado o desvinculado (BE #753), tras la transacción y solo a
+    un correo verificado. Si falla, la operación ya está hecha.
+    """
+    if not user.email_verified:
+        return
+    try:
+        enviado = await email_service.send_google_account_notice(
+            to_email=str(user.email.value), user_name=user.first_name, linked=linked
+        )
+    except Exception as error:
+        logger.error("Google account notice failed: %s", type(error).__name__)
+        return
+    if not enviado:
+        logger.error("Google account notice was not sent")

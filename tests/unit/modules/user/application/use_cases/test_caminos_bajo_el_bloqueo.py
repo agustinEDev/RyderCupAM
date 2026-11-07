@@ -251,7 +251,7 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
     ana = await _ana(uow, con_google=True)
     pedidos = await _espia_del_bloqueo(uow)
 
-    await UnlinkGoogleAccountUseCase(uow).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(uow, email_service=AsyncMock()).execute(str(ana.id.value))
 
     assert pedidos == [ana.id]
 

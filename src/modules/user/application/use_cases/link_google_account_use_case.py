@@ -8,10 +8,12 @@ from src.modules.user.application.dto.oauth_dto import (
     LinkGoogleAccountRequestDTO,
     LinkGoogleAccountResponseDTO,
 )
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import avisa_de_google
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -53,10 +55,12 @@ class LinkGoogleAccountUseCase:
         google_oauth_service: IGoogleOAuthService,
         *,
         security_audit: ISecurityAuditLogger,
+        email_service: IEmailService,
     ):
         self._uow = uow
         self._google_oauth_service = google_oauth_service
         self._security_audit = security_audit
+        self._email_service = email_service
 
     async def execute(
         self,
@@ -134,6 +138,8 @@ class LinkGoogleAccountUseCase:
                 user_agent=request.user_agent or "unknown",
             ),
         )
+
+        await avisa_de_google(self._email_service, cuenta, linked=True)
 
         return LinkGoogleAccountResponseDTO(
             message="Google account linked successfully",

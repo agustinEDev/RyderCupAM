@@ -574,6 +574,17 @@ class TestCorreosDelCambioDeCorreo:
         assert "24 horas" in cuerpo and "24 hours" in cuerpo
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(("vinculado", "frase"), [(True, "vinculado"), (False, "desvinculado")])
+    async def test_the_google_notice_says_what_happened(self, correo, vinculado, frase):
+        """El aviso de Google (BE #753): qué pasó y qué hacer si no fue el dueño"""
+        await correo.send_google_account_notice("ana@gmail.com", "Ana", vinculado)
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert f"Google {frase}" in cuerpo and f"Google {frase}" in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+
+    @pytest.mark.asyncio
     async def test_the_verification_email_says_what_to_do_if_it_was_not_you(self, correo):
         """Quien no creó la cuenta no pulsa, y se la queda con «Olvidé mi contraseña» (BE #753)"""
         await correo.send_verification_email("ana@gmail.com", "Ana", "tok")

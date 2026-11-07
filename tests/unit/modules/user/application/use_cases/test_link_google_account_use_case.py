@@ -57,6 +57,7 @@ def use_case(uow, google_oauth_service, auditoria):
         uow=uow,
         google_oauth_service=google_oauth_service,
         security_audit=auditoria,
+        email_service=AsyncMock(),
     )
 
 

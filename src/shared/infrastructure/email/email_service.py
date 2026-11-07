@@ -443,6 +443,56 @@ If it wasn't you, change your password: {restablecer}
         )
         return await self._send_email(to_email, subject, text_body, html_body)
 
+    async def send_google_account_notice(self, to_email: str, user_name: str, linked: bool) -> bool:
+        """El aviso de un Google vinculado o desvinculado (BE #753)."""
+        safe_user_name = self._sanitize_name(user_name)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        if linked:
+            titulo, title = "Google vinculado a tu cuenta", "Google linked to your account"
+            hecho = "se ha vinculado una cuenta de Google a tu cuenta: con ella se puede entrar."
+            done = "a Google account was linked to your account: it can be used to sign in."
+        else:
+            titulo, title = "Google desvinculado de tu cuenta", "Google unlinked from your account"
+            hecho = "se ha desvinculado la cuenta de Google de tu cuenta."
+            done = "the Google account was unlinked from your account."
+        subject = f"{titulo} - Ryder Cup Friends | {title}"
+        text_body = f"""
+Hola {safe_user_name},
+
+{titulo}: {hecho}
+
+Si no has sido tú, cambia tu contraseña: {restablecer}
+
+---
+
+Hello {safe_user_name},
+
+{title}: {done}
+
+If it wasn't you, change your password: {restablecer}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"{titulo} · {title}",
+            etiqueta="Seguridad",
+            titulo=titulo,
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), f", {hecho}"),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Cambia tu contraseña ahora: alguien puede estar usando tu cuenta.",
+                ),
+            ],
+            boton=Boton("Cambiar la contraseña", restablecer),
+            ingles=Ingles(
+                frase(negrita(title), f": {done} If it wasn't you, change your password."),
+                Boton("Change my password", restablecer),
+            ),
+            pie="Este aviso se envía siempre que se vincula o desvincula Google. "
+            "We always send this when Google is linked or unlinked.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
     async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
         """
         El aviso de que se ha asegurado una cuenta sin verificar (BE #753). Con Google
