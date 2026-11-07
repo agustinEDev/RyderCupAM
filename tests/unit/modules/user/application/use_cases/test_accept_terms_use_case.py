@@ -248,7 +248,6 @@ class TestAltaConGoogle:
             device_id="550e8400-e29b-41d4-a716-446655440099",
             is_new_device=True,
             message="New device registered",
-            set_device_cookie=True,
         )
         use_case = GoogleLoginUseCase(
             uow=uow,

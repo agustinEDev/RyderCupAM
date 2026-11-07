@@ -122,7 +122,6 @@ class RegisterDeviceResponseDTO(BaseModel):
         device_id: ID único del dispositivo
         is_new_device: True si es dispositivo nuevo, False si ya existía
         message: Mensaje descriptivo
-        set_device_cookie: True si el caller debe setear la cookie device_id (v2.0.4)
     """
 
     device_id: str = Field(
@@ -140,11 +139,6 @@ class RegisterDeviceResponseDTO(BaseModel):
         description="Mensaje descriptivo de la operación",
         json_schema_extra={"example": "Nuevo dispositivo detectado: Chrome on macOS"},
     )
-    set_device_cookie: bool = Field(
-        default=False,
-        description="True si el caller debe setear la cookie device_id (v2.0.4)",
-        json_schema_extra={"example": True},
-    )
     recognized_by_cookie: bool = Field(
         default=False,
         description=(
@@ -160,7 +154,6 @@ class RegisterDeviceResponseDTO(BaseModel):
                 "device_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "is_new_device": True,
                 "message": "Nuevo dispositivo detectado: Chrome on macOS",
-                "set_device_cookie": True,
             }
         }
     )

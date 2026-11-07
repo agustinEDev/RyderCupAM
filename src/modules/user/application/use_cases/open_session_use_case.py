@@ -20,6 +20,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -46,7 +47,15 @@ class OpenSessionUseCase:
 
         Siempre con dispositivo, también sin User-Agent: una sesión sin él no salía
         en la lista, no avisaba y no se podía revocar (auditoría OWASP, A07).
+
+        Raises:
+            AccountDeactivatedException: si la cuenta está desactivada o ya no
+                existe (BE #744). Hoy lo usa verificar el correo; el login con
+                contraseña y el de Google comprueban lo mismo por su cuenta
         """
+        user = await self._uow.users.find_by_id(UserId(request.user_id))
+        if user is None or not user.is_active:
+            raise AccountDeactivatedException()
         registrado = await self._register_device_use_case.execute(
             RegisterDeviceRequestDTO(
                 user_id=request.user_id,

@@ -21,12 +21,16 @@ from pathlib import Path
 
 from ...domain.events.security_events import (
     AccessDeniedEvent,
+    AccountDeactivatedAuditEvent,
+    AccountReactivatedAuditEvent,
     AccountUnlockedAuditEvent,
     EmailChangedEvent,
+    GoogleAccountLinkedAuditEvent,
     LoginAttemptEvent,
     LogoutEvent,
     PasswordChangedEvent,
     RateLimitExceededEvent,
+    RefreshRejectedAuditEvent,
     RefreshTokenRevokedEvent,
     RefreshTokenUsedEvent,
     SecurityAuditEvent,
@@ -207,6 +211,11 @@ class SecurityLogger:
         event_type = event.__class__.__name__
         user_info = f"User {event.user_id}" if event.user_id else "Anonymous"
 
+        # Los eventos que saben resumirse (los de BE #732, #733 y #744)
+        resumen = event.resumen(user_info)
+        if resumen is not None:
+            return resumen
+
         # Mensajes específicos por tipo de evento
         if isinstance(event, LoginAttemptEvent):
             status = "SUCCESS" if event.success else "FAILED"
@@ -222,12 +231,6 @@ class SecurityLogger:
 
         if isinstance(event, EmailChangedEvent):
             return f"📧 EMAIL CHANGED | {user_info} | Verification required: {event.email_verification_required}"
-
-        if isinstance(event, AccountUnlockedAuditEvent):
-            return (
-                f"ACCOUNT UNLOCKED | {user_info} | Unlocked: {event.unlocked_user_id}"
-                f" | Previous failures: {event.previous_failed_attempts}"
-            )
 
         if isinstance(event, AccessDeniedEvent):
             return f"⛔ ACCESS DENIED | {user_info} | Resource: {event.resource_type} | Action: {event.action_attempted}"
@@ -403,6 +406,107 @@ class SecurityLogger:
             email_verification_required=email_verification_required,
         )
         self.log_security_event(event)
+
+    def log_refresh_rejected(
+        self,
+        ip_address: str,
+        user_agent: str,
+        reason: str,
+        rejected: bool,
+        user_id: str | None = None,
+    ) -> None:
+        """
+        Helper rápido para registrar un refresco rechazado con su motivo (BE #733).
+
+        Args:
+            ip_address: IP del cliente
+            user_agent: User-Agent del cliente
+            reason: El motivo exacto (RefreshRejection)
+            rejected: True si es un rechazo; False si es el final normal
+            user_id: El usuario del token, si se conoce (para investigar)
+        """
+        self.log_security_event(
+            RefreshRejectedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                reason=reason,
+                rejected=rejected,
+            )
+        )
+
+    def log_account_deactivated(
+        self,
+        user_id: str,
+        deactivated_user_id: str,
+        devices_revoked: int,
+        tokens_revoked: int,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """
+        Helper rápido para registrar la desactivación de una cuenta (BE #744).
+
+        Args:
+            user_id: ID del administrador
+            deactivated_user_id: ID de la cuenta desactivada
+            devices_revoked: Dispositivos revocados
+            tokens_revoked: Sesiones revocadas
+            ip_address: IP del administrador
+            user_agent: User-Agent del administrador
+        """
+        self.log_security_event(
+            AccountDeactivatedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                deactivated_user_id=deactivated_user_id,
+                devices_revoked=devices_revoked,
+                tokens_revoked=tokens_revoked,
+            )
+        )
+
+    def log_google_account_linked(
+        self,
+        user_id: str,
+        automatic: bool,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un Google vinculado a una cuenta (automático por correo o no)."""
+        self.log_security_event(
+            GoogleAccountLinkedAuditEvent(
+                user_id=user_id, ip_address=ip_address, user_agent=user_agent, automatic=automatic
+            )
+        )
+
+    def log_account_reactivated(
+        self,
+        user_id: str,
+        reactivated_user_id: str,
+        tokens_revoked: int,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """
+        Helper rápido para registrar la reactivación de una cuenta (BE #744).
+
+        Args:
+            user_id: ID del administrador
+            reactivated_user_id: ID de la cuenta reactivada
+            tokens_revoked: Sesiones coladas que se revocan al reactivarla
+            ip_address: IP del administrador
+            user_agent: User-Agent del administrador
+        """
+        self.log_security_event(
+            AccountReactivatedAuditEvent(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                reactivated_user_id=reactivated_user_id,
+                tokens_revoked=tokens_revoked,
+            )
+        )
 
     def log_account_unlocked(
         self,

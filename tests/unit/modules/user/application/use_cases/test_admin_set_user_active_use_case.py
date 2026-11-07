@@ -1,5 +1,7 @@
 """Tests para AdminSetUserActiveUseCase."""
 
+from unittest.mock import Mock
+
 import pytest
 
 from src.modules.user.application.use_cases.admin_set_user_active_use_case import (
@@ -32,7 +34,7 @@ class TestAdminSetUserActiveUseCase:
         return user
 
     async def test_deactivates_active_user(self, uow, existing_user):
-        use_case = AdminSetUserActiveUseCase(uow)
+        use_case = AdminSetUserActiveUseCase(uow, Mock())
         await use_case.execute(str(existing_user.id.value), False, actor_user_id="admin-id")
 
         async with uow:
@@ -40,7 +42,7 @@ class TestAdminSetUserActiveUseCase:
         assert user.is_active is False
 
     async def test_reactivates_deactivated_user(self, uow, existing_user):
-        use_case = AdminSetUserActiveUseCase(uow)
+        use_case = AdminSetUserActiveUseCase(uow, Mock())
         await use_case.execute(str(existing_user.id.value), False, actor_user_id="admin-id")
         await use_case.execute(str(existing_user.id.value), True, actor_user_id="admin-id")
 
@@ -49,7 +51,7 @@ class TestAdminSetUserActiveUseCase:
         assert user.is_active is True
 
     async def test_is_idempotent_when_already_in_target_state(self, uow, existing_user):
-        use_case = AdminSetUserActiveUseCase(uow)
+        use_case = AdminSetUserActiveUseCase(uow, Mock())
         # Ya está activo por defecto: no debe lanzar al pedir is_active=True
         await use_case.execute(str(existing_user.id.value), True, actor_user_id="admin-id")
 
@@ -60,12 +62,12 @@ class TestAdminSetUserActiveUseCase:
     async def test_raises_when_user_not_found(self, uow):
         from uuid import uuid4
 
-        use_case = AdminSetUserActiveUseCase(uow)
+        use_case = AdminSetUserActiveUseCase(uow, Mock())
         with pytest.raises(UserNotFoundError):
             await use_case.execute(str(uuid4()), False, actor_user_id="admin-id")
 
     async def test_blocks_admin_from_deactivating_own_account(self, uow, existing_user):
-        use_case = AdminSetUserActiveUseCase(uow)
+        use_case = AdminSetUserActiveUseCase(uow, Mock())
         actor_id = str(existing_user.id.value)
 
         with pytest.raises(ValueError, match="cannot deactivate their own account"):
@@ -77,7 +79,7 @@ class TestAdminSetUserActiveUseCase:
 
     async def test_allows_admin_to_reactivate_own_account(self, uow, existing_user):
         """El guard solo bloquea auto-desactivación; reactivar la propia cuenta es inofensivo."""
-        use_case = AdminSetUserActiveUseCase(uow)
+        use_case = AdminSetUserActiveUseCase(uow, Mock())
         actor_id = str(existing_user.id.value)
         await use_case.execute(actor_id, False, actor_user_id="other-admin-id")
 

@@ -243,7 +243,6 @@ class TestLoginUserUseCase:
 
         register_device_use_case.execute.return_value = AsyncMock(
             device_id="7c9e6679-7425-40de-944b-e07fc1f90ae7",
-            set_device_cookie=True,
         )
         use_case = LoginUserUseCase(
             uow,

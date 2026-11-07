@@ -61,6 +61,10 @@ class SecurityAuditEvent(DomainEvent, ABC):
         """Tipo de agregado (Security para eventos de seguridad)"""
         return "Security"
 
+    def resumen(self, user_info: str) -> str | None:
+        """La línea del log, si el evento la sabe dar (BE #732, #733, #744)."""
+        return None
+
     @property
     def is_failure(self) -> bool:
         """
@@ -396,6 +400,13 @@ class AccountUnlockedAuditEvent(SecurityAuditEvent):
         super().__post_init__()
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
 
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"ACCOUNT UNLOCKED | {user_info} | Unlocked: {self.unlocked_user_id}"
+            f" | Previous failures: {self.previous_failed_attempts}"
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """Serializa con los campos del desbloqueo."""
         base = super().to_dict()
@@ -405,6 +416,134 @@ class AccountUnlockedAuditEvent(SecurityAuditEvent):
                 "previous_failed_attempts": self.previous_failed_attempts,
             }
         )
+        return base
+
+
+@dataclass(frozen=True)
+class AccountDeactivatedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador desactivó una cuenta y cerró sus sesiones (BE #744).
+
+    `user_id` es el administrador; `deactivated_user_id`, la cuenta.
+    """
+
+    deactivated_user_id: str = ""
+    devices_revoked: int = 0
+    tokens_revoked: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: dejar a alguien fuera de su cuenta es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"ACCOUNT DEACTIVATED | {user_info} | Deactivated: {self.deactivated_user_id}"
+            f" | Devices revoked: {self.devices_revoked} | Sessions revoked: {self.tokens_revoked}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con los campos de la desactivación."""
+        base = super().to_dict()
+        base.update(
+            {
+                "deactivated_user_id": self.deactivated_user_id,
+                "devices_revoked": self.devices_revoked,
+                "tokens_revoked": self.tokens_revoked,
+            }
+        )
+        return base
+
+
+@dataclass(frozen=True)
+class RefreshRejectedAuditEvent(SecurityAuditEvent):
+    """
+    Un refresco rechazado, con su motivo exacto (BE #733).
+
+    Al cliente solo le llega SESSION_ENDED o SESSION_REJECTED: el motivo, que dice
+    el estado de la cuenta, se queda aquí para investigar.
+    """
+
+    reason: str = ""
+    rejected: bool = False
+
+    def __post_init__(self):
+        """Validación y severidad: un rechazo es MEDIUM; el final normal, LOW."""
+        super().__post_init__()
+        object.__setattr__(
+            self, "severity", SecuritySeverity.MEDIUM if self.rejected else SecuritySeverity.LOW
+        )
+
+    @property
+    def is_failure(self) -> bool:
+        """Un rechazo cuenta como fallo (rastro en WARNING); el final normal, no."""
+        return self.rejected
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        estado = "REJECTED" if self.rejected else "ENDED"
+        return f"REFRESH {estado} | {user_info} | Reason: {self.reason} | IP: {self.ip_address}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con el motivo."""
+        base = super().to_dict()
+        base.update({"reason": self.reason, "rejected": self.rejected})
+        return base
+
+
+@dataclass(frozen=True)
+class AccountReactivatedAuditEvent(SecurityAuditEvent):
+    """
+    Un administrador reactivó una cuenta (BE #744). Sus sesiones viejas no vuelven.
+
+    `user_id` es el administrador; `reactivated_user_id`, la cuenta.
+    """
+
+    reactivated_user_id: str = ""
+    tokens_revoked: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: devolver el acceso a una cuenta es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"ACCOUNT REACTIVATED | {user_info} | Reactivated: {self.reactivated_user_id}"
+            f" | Sessions revoked: {self.tokens_revoked}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con los campos de la reactivación."""
+        base = super().to_dict()
+        base.update(
+            {"reactivated_user_id": self.reactivated_user_id, "tokens_revoked": self.tokens_revoked}
+        )
+        return base
+
+
+@dataclass(frozen=True)
+class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
+    """Un Google quedó vinculado a una cuenta: da acceso a ella (revisión del registro)."""
+
+    automatic: bool = False
+
+    def __post_init__(self):
+        """Validación y severidad: un acceso nuevo a la cuenta es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        como = "automatically, by email" if self.automatic else "by the user"
+        return f"GOOGLE LINKED | {user_info} | {como}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con cómo se vinculó."""
+        base = super().to_dict()
+        base.update({"automatic": self.automatic})
         return base
 
 

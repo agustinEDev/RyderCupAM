@@ -250,15 +250,19 @@ Returned in all endpoints that include user data (login, current-user, register,
 - `token_type` - "bearer"
 - `user` - User data (see User Object in Authentication section, includes `auth_providers` and `has_password`)
 - `is_new_user` (bool) - True if user was auto-registered (frontend should redirect to "Complete Profile")
-- `device_id`, `should_set_device_cookie` - Device registration info
+- `device_id` - The session's device (always present; the device cookie is set on every login and refresh)
 
-**httpOnly Cookies set:** `access_token` (15 min), `refresh_token` (7 days), `csrf_token` (15 min), `device_id` (1 year, if new device)
+**httpOnly Cookies set:** `access_token` (15 min), `refresh_token` (7 days), `csrf_token` (15 min), `device_id` (1 year, set on every login and refresh)
 
 ### Three Login Flows
 
 1. **Existing OAuth account** → Direct login (`is_new_user=false`)
-2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`)
-3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`)
+2. **Email match (no OAuth)** → Auto-link Google account + login (`is_new_user=false`), only if Google verified the email
+3. **New user** → Auto-register (no password, email verified) + login (`is_new_user=true`), only if Google verified the email
+
+**Errors** (`detail` plus `error_code` at the root):
+- `400 GOOGLE_EMAIL_NOT_VERIFIED` - Google has not verified the email: no sign-up and no auto-link (flows 2 and 3). An already linked Google still signs in.
+- `403 ACCOUNT_DEACTIVATED` - The account was deactivated by an administrator.
 
 ### Link/Unlink Google Account
 

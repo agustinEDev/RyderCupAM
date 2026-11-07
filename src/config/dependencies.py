@@ -1013,19 +1013,14 @@ def get_logout_user_use_case(
 def get_refresh_access_token_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     token_service: ITokenService = Depends(get_token_service),
-    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
 ) -> RefreshAccessTokenUseCase:
     """
     Proveedor del caso de uso RefreshAccessTokenUseCase (Session Timeout - v1.8.0).
 
-    Esta función:
-    1. Depende de `get_uow` para obtener una Unit of Work (users + refresh_tokens + user_devices).
-    2. Depende de `get_token_service` para generación de tokens JWT.
-    3. Depende de `get_register_device_use_case` para device fingerprinting (v1.13.0).
-    4. Crea una instancia de `RefreshAccessTokenUseCase` con esas dependencias.
-    5. Devuelve la instancia lista para ser usada por el endpoint /refresh-token.
+    Con la Unit of Work (users + refresh_tokens + user_devices) y el servicio de
+    tokens. Ya no registra dispositivos: usa el de su token (BE #738).
     """
-    return RefreshAccessTokenUseCase(uow, token_service, register_device_use_case)
+    return RefreshAccessTokenUseCase(uow, token_service)
 
 
 def get_open_session_use_case(
@@ -1550,9 +1545,10 @@ def get_admin_update_user_use_case(
 
 def get_admin_set_user_active_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> AdminSetUserActiveUseCase:
-    """Proveedor del caso de uso AdminSetUserActiveUseCase."""
-    return AdminSetUserActiveUseCase(uow)
+    """Proveedor de AdminSetUserActiveUseCase (con su log de seguridad desde BE #744)."""
+    return AdminSetUserActiveUseCase(uow, security_audit)
 
 
 def get_admin_delete_user_use_case(

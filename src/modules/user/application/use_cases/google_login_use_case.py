@@ -8,6 +8,7 @@ Soporta tres flujos:
 3. Usuario nuevo → auto-register + login
 """
 
+import logging
 from datetime import datetime
 
 from src.config.csrf_config import generate_csrf_token
@@ -35,6 +36,7 @@ from src.modules.user.application.use_cases.register_device_use_case import (
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -42,6 +44,17 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+logger = logging.getLogger(__name__)
+
+
+class GoogleEmailNotVerifiedError(ValueError):
+    """Google no ha verificado el correo de esa cuenta: ni alta ni vínculo.
+
+    Sin esta regla, cualquiera con una cuenta de Google con tu dirección, sin
+    verificar, entraba en la tuya (el vínculo automático por correo) o te la dejaba
+    ocupada (el alta). La ruta responde 400 con GOOGLE_EMAIL_NOT_VERIFIED.
+    """
 
 
 class GoogleLoginUseCase:
@@ -70,13 +83,13 @@ class GoogleLoginUseCase:
         self._google_oauth_service = google_oauth_service
         self._register_device_use_case = register_device_use_case
 
-    async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool]:
+    async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool, bool]:
         """
         Resuelve el usuario para el login de Google.
         Todas las lecturas y escrituras se ejecutan dentro de una sola transacción UoW.
 
         Returns:
-            Tuple of (user, is_new_user)
+            Tuple of (user, is_new_user, linked): linked, si se vinculó por el correo
         """
         async with self._uow:
             # Buscar OAuth account existente
@@ -88,16 +101,25 @@ class GoogleLoginUseCase:
                 user = await self._uow.users.find_by_id(oauth_account.user_id)
                 if not user:
                     raise ValueError("User associated with OAuth account not found")
-                return user, False
+                return user, False, False
+
+            # Sin cuenta vinculada: un alta o un vínculo por correo. Solo con el correo
+            # verificado por Google: si no, la dirección no es necesariamente suya
+            if not google_info.email_verified:
+                raise GoogleEmailNotVerifiedError("Google email is not verified")
 
             # Buscar usuario por email
             email = Email(google_info.email)
             user = await self._uow.users.find_by_email(email)
 
             if user:
-                return await self._auto_link_existing_user(user, google_info), False
+                # Desactivada: sin vincular Google ni verificar el correo. Un login
+                # rechazado no cambia la cuenta (/code-review); execute da el 403
+                if not user.is_active:
+                    return user, False, False
+                return await self._auto_link_existing_user(user, google_info), False, True
 
-            return await self._auto_register_new_user(google_info), True
+            return await self._auto_register_new_user(google_info), True, False
 
     async def _auto_link_existing_user(self, user: User, google_info: GoogleUserInfo) -> User:
         """
@@ -112,7 +134,8 @@ class GoogleLoginUseCase:
         )
         await self._uow.oauth_accounts.save(new_oauth)
 
-        if not user.email_verified and google_info.email_verified:
+        # Google ha verificado el correo (si no, no se llega aquí)
+        if not user.email_verified:
             user.verify_email_from_oauth()
 
         await self._uow.users.save(user)
@@ -140,7 +163,7 @@ class GoogleLoginUseCase:
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
-        """Register device and return (device_id, device_id_str, should_set_cookie, is_new)."""
+        """Register device and return (device_id, device_id_str, is_new)."""
         # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
@@ -154,7 +177,6 @@ class GoogleLoginUseCase:
         return (
             UserDeviceId.from_string(device_response.device_id),
             device_response.device_id,
-            device_response.set_device_cookie,
             # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
             device_response.is_new_device or not device_response.recognized_by_cookie,
         )
@@ -182,7 +204,32 @@ class GoogleLoginUseCase:
         )
 
         # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
-        user, is_new_user = await self._resolve_user(google_info)
+        user, is_new_user, vinculada = await self._resolve_user(google_info)
+        if vinculada:
+            # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
+            # el correo, da acceso a la cuenta. El log nunca cambia la respuesta
+            try:
+                security_logger.log_google_account_linked(
+                    user_id=str(user.id.value),
+                    automatic=True,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except Exception as error:
+                logger.error("Google link audit event failed: %s", type(error).__name__)
+
+        # Una cuenta desactivada no entra (BE #744, auditoría OWASP): ni sesión, ni
+        # dispositivo, ni correo de «nuevo inicio», como con la contraseña
+        if not user.is_active:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=False,
+                failure_reason="Account deactivated by admin",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise AccountDeactivatedException()
 
         # 3. Sin mirar el bloqueo por fallos de contraseña (BE #732): Google ya
         # demuestra que es él, y una cuenta solo de Google no tiene contraseña buena
@@ -197,7 +244,7 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        device_id, device_id_str, should_set_device_cookie, es_nuevo = await self._register_device(
+        device_id, device_id_str, es_nuevo = await self._register_device(
             request, str(user.id.value)
         )
 
@@ -251,5 +298,4 @@ class GoogleLoginUseCase:
             user=UserResponseDTO.model_validate(user),
             is_new_user=is_new_user,
             device_id=device_id_str,
-            should_set_device_cookie=should_set_device_cookie,
         )
