@@ -273,6 +273,11 @@ async def test_b2_4_an_expired_or_wrong_token_costs_no_bcrypt():
 
 
 async def test_b2_6_a_weak_password_on_reset_costs_no_bcrypt():
+    """
+    Given: Un enlace de restablecer válido
+    When: Se usa con una contraseña que no cumple la política
+    Then: Error de política sin calcular ningún bcrypt
+    """
     uow = InMemoryUnitOfWork()
     _user, token = await _con_token(uow)
 

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from src.config.csrf_config import generate_csrf_token
 from src.config.dependencies import (
@@ -134,6 +135,20 @@ from src.shared.infrastructure.security.cookie_handler import (
 )
 
 logger = logging.getLogger(__name__)
+
+# La restricción única del correo de users (la que pone Postgres a `unique=True`)
+RESTRICCION_DEL_CORREO = "users_email_key"
+
+
+def _es_el_correo_repetido(error: IntegrityError) -> bool:
+    """True si lo que saltó es la restricción única del correo de users."""
+    causa = getattr(error.orig, "__cause__", None)
+    nombre = getattr(causa, "constraint_name", None) or getattr(error.orig, "constraint_name", None)
+    if nombre:
+        return nombre == RESTRICCION_DEL_CORREO
+    return RESTRICCION_DEL_CORREO in str(error.orig)
+
+
 router = APIRouter()
 
 
@@ -187,6 +202,18 @@ async def register_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
+        ) from e
+    except IntegrityError as e:
+        # Dos altas a la vez con el mismo correo: las dos lo vieron libre y la base de
+        # datos paró a la segunda. Lo mismo que si hubiera llegado después (R1). Otra
+        # restricción no se esconde bajo «ya registrado»
+        if not _es_el_correo_repetido(e):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(
+                UserAlreadyExistsError(f"El email '{register_data.email}' ya está registrado.")
+            ),
         ) from e
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)

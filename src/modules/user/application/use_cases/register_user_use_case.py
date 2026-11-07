@@ -55,13 +55,17 @@ class RegisterUserUseCase:
         self._email_service = email_service
         self._security_audit = security_audit
 
+    async def _rechaza_si_ocupado(self, email_vo: Email, email: str) -> None:
+        """La regla del correo ocupado, en un solo sitio (fase 1 y, otra vez, la 3)."""
+        if await self._user_finder.by_email(email_vo):
+            raise UserAlreadyExistsError(f"El email '{email}' ya está registrado.")
+
     async def _comprueba_lo_barato(self, request: RegisterUserRequestDTO) -> Email:
         """El correo libre y el país, en su propia transacción ya cerrada al volver: con
         el correo ocupado no se gasta ningún bcrypt (BE #283)."""
         async with self._uow:
             email_vo = Email(request.email)
-            if await self._user_finder.by_email(email_vo):
-                raise UserAlreadyExistsError(f"El email '{request.email}' ya está registrado.")
+            await self._rechaza_si_ocupado(email_vo, request.email)
             if request.country_code:
                 country_code_vo = CountryCode(request.country_code)
                 if not await self._country_repository.exists(country_code_vo):
@@ -152,8 +156,7 @@ class RegisterUserUseCase:
         # Fase 3, en otra transacción: el correo, otra vez (alguien pudo registrarlo
         # entretanto), y se guarda
         async with self._uow:
-            if await self._user_finder.by_email(email_vo):
-                raise UserAlreadyExistsError(f"El email '{request.email}' ya está registrado.")
+            await self._rechaza_si_ocupado(email_vo, request.email)
             # 3. Guardar el usuario en el repositorio, y después su aceptación
             # (la fila apunta al usuario: tiene que existir antes)
             await self._uow.users.save(new_user)

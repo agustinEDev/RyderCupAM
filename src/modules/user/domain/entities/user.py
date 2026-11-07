@@ -601,7 +601,7 @@ class User:
         first_name: str,
         last_name: str,
         email_str: str,
-        plain_password: str | Password,
+        plain_password: str,
         country_code_str: str | None = None,
         is_admin: bool = False,
         gender: Gender | None = None,
@@ -613,7 +613,7 @@ class User:
             first_name: Nombre del usuario
             last_name: Apellido del usuario
             email_str: Email en formato string
-            plain_password: Password en texto plano, o ya calculado (BE #283)
+            plain_password: Password en texto plano
             country_code_str: Código ISO del país (opcional, ej: "ES", "FR")
             is_admin: Si el usuario tiene privilegios de administrador (default: False)
             gender: Género del usuario (opcional, MALE/FEMALE)
@@ -623,7 +623,7 @@ class User:
         """
         user_id = UserId.generate()
         email = Email(email_str)
-        password = _como_password(plain_password)
+        password = Password.from_plain_text(plain_password)
 
         # Convertir country_code si existe
         country_code = CountryCode(country_code_str) if country_code_str else None
@@ -1026,8 +1026,9 @@ class User:
         Cambia el password del usuario.
 
         Args:
-            new_password: Nuevo password en texto plano, o ya calculado (BE #283: el
-                bcrypt se hace fuera de la transacción y aquí no se repite)
+            new_password: Nuevo password en texto plano, o ya calculado con
+                `Password.from_plain_text` (BE #283: el bcrypt se hace fuera de la
+                transacción y aquí no se repite). Otro Password lanza ValueError
 
         Raises:
             ValueError: Si el password no es válido
@@ -1255,7 +1256,8 @@ class User:
 
         Args:
             token: Token de reseteo generado previamente
-            new_password: Nueva contraseña en texto plano (será hasheada)
+            new_password: Nueva contraseña en texto plano (será hasheada), o ya
+                calculada con `Password.from_plain_text` (BE #283). Otra, ValueError
             ip_address: IP desde donde se hizo el reseteo (para auditoría)
             user_agent: User agent del navegador (para detección de anomalías)
 

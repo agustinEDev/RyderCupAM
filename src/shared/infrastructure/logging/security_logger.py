@@ -35,6 +35,7 @@ from ...domain.events.security_events import (
     RefreshTokenRevokedEvent,
     RefreshTokenUsedEvent,
     SecurityAuditEvent,
+    SecurityChangeFailedAuditEvent,
     SecuritySeverity,
     TermsAcceptedEvent,
     UnverifiedAccountClaimedAuditEvent,
@@ -397,6 +398,16 @@ class SecurityLogger:
             old_password_verified=old_password_verified,
         )
         self.log_security_event(event)
+
+    def log_security_change_failed(
+        self, user_id: str, ip_address: str, user_agent: str, reason: str
+    ) -> None:
+        """Un cambio de /users/security rechazado, con su motivo (L1-L3)."""
+        self.log_security_event(
+            SecurityChangeFailedAuditEvent(
+                user_id=user_id, ip_address=ip_address, user_agent=user_agent, reason=reason
+            )
+        )
 
     def log_email_changed(
         self,

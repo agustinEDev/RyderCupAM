@@ -73,6 +73,11 @@ def vigia(monkeypatch):
 
 
 async def test_b2_1_sign_up_hashes_with_no_transaction_open(client: AsyncClient, vigia):
+    """
+    Given: Un alta con un correo libre
+    When: Se registra
+    Then: 201 y su bcrypt sin ninguna transacción abierta
+    """
     r = await client.post(
         "/api/v1/auth/register",
         json={
@@ -90,6 +95,11 @@ async def test_b2_1_sign_up_hashes_with_no_transaction_open(client: AsyncClient,
 
 
 async def test_b2_1_a_taken_email_costs_no_bcrypt(client: AsyncClient, vigia):
+    """
+    Given: Un correo ya registrado
+    When: Se intenta otra alta con él
+    Then: 409 sin gastar ningún bcrypt
+    """
     datos = {
         "email": "b21.ocupado@example.com",
         "password": CLAVE,
@@ -117,6 +127,11 @@ async def test_b2_1_a_taken_email_costs_no_bcrypt(client: AsyncClient, vigia):
 async def test_b2_2_login_hashes_with_no_transaction_open(
     client: AsyncClient, vigia, email, clave, estado
 ):
+    """
+    Given: Una cuenta, y un login bueno, uno malo o con un correo que no existe
+    When: Se intenta entrar
+    Then: Su respuesta de siempre, y el bcrypt (también el de relleno) sin transacción abierta
+    """
     await create_authenticated_user(client, "b22@example.com", CLAVE, "Ana", "Lopez")
     client.cookies.clear()
     vigia.con_transaccion.clear()
@@ -130,6 +145,11 @@ async def test_b2_2_login_hashes_with_no_transaction_open(
 
 
 async def test_b2_3_a_password_change_hashes_with_no_transaction_open(client: AsyncClient, vigia):
+    """
+    Given: Un usuario con sesión
+    When: Cambia la contraseña
+    Then: 200 y todos sus bcrypt sin transacción abierta
+    """
     datos = await create_authenticated_user(client, "b23@example.com", CLAVE, "Ana", "Lopez")
     vigia.con_transaccion.clear()
     antes = vigia.bcrypts
@@ -149,6 +169,11 @@ async def test_b2_3_a_password_change_hashes_with_no_transaction_open(client: As
 async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
     client: AsyncClient, vigia, mock_external_services
 ):
+    """
+    Given: Un enlace de restablecer válido
+    When: Se usa con una contraseña nueva
+    Then: 200 y el bcrypt sin transacción abierta
+    """
     await create_authenticated_user(client, "b24@example.com", CLAVE, "Ana", "Lopez")
     client.cookies.clear()
     await client.post("/api/v1/auth/forgot-password", json={"email": "b24@example.com"})
@@ -172,7 +197,11 @@ async def test_b2_4_a_password_reset_hashes_with_no_transaction_open(
 async def test_b2_2_login_with_the_device_cookie_hashes_with_no_transaction_open(
     client: AsyncClient, vigia
 ):
-    """El otro camino del login: con la cookie de un dispositivo de la cuenta."""
+    """
+    Given: Una cuenta y la cookie de un dispositivo suyo
+    When: Entra con ella (el otro camino del login)
+    Then: 200 y el bcrypt sin transacción abierta
+    """
     await create_authenticated_user(client, "b22.cookie@example.com", CLAVE, "Ana", "Lopez")
     client.cookies.clear()
     primero = await client.post(
@@ -200,6 +229,11 @@ async def test_b2_2_login_with_the_device_cookie_hashes_with_no_transaction_open
 async def test_b2_3_an_email_only_change_hashes_with_no_transaction_open(
     client: AsyncClient, vigia
 ):
+    """
+    Given: Un usuario con sesión
+    When: Pide solo cambiar el correo
+    Then: 200 y un solo bcrypt (la actual), sin transacción abierta
+    """
     datos = await create_authenticated_user(client, "b23.correo@example.com", CLAVE, "Ana", "Lopez")
     vigia.con_transaccion.clear()
     antes = vigia.bcrypts
@@ -216,6 +250,11 @@ async def test_b2_3_an_email_only_change_hashes_with_no_transaction_open(
 
 
 async def test_b2_5_the_system_account_hashes_with_no_transaction_open(client: AsyncClient, vigia):
+    """
+    Given: La cuenta de sistema sin crear, con la BD real
+    When: Se crea fuera de una petición
+    Then: Un bcrypt y ninguna transacción abierta en ese momento
+    """
     from main import app
     from src.config.dependencies import get_fabrica_de_sesiones
     from src.modules.user.application.use_cases.ensure_system_user_use_case import (

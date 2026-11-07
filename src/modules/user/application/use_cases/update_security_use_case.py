@@ -41,6 +41,30 @@ from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 logger = logging.getLogger(__name__)
 
 
+class _CambiadaEntretantoError(InvalidCredentialsError):
+    """La contraseña cambió entre la comprobación y el bloqueo: para el cliente, lo mismo
+    que una contraseña mal tecleada; para el log de auditoría, otro motivo."""
+
+
+def _rechaza_si_lo_usa_otro(encontrado: User | None, user_id: str, email: str | None) -> None:
+    """La regla del correo ocupado, en un solo sitio: lo tiene otra cuenta."""
+    if encontrado is not None and str(encontrado.id.value) != user_id:
+        raise DuplicateEmailError(f"Email {email} is already in use")
+
+
+def _motivo_del_fallo(error: Exception) -> str:
+    """El motivo para el log de auditoría (L1-L3)."""
+    if isinstance(error, _CambiadaEntretantoError):
+        return "changed_during_request"
+    if isinstance(error, InvalidCredentialsError):
+        return "wrong_current_password"
+    if isinstance(error, DuplicateEmailError):
+        return "email_in_use"
+    if getattr(error, "error_code", None) == CodigoDeContrasena.REUSED:
+        return "password_reused"
+    return "weak_password"
+
+
 @dataclass(frozen=True)
 class _Preparado:
     """Lo comprobado fuera de la transacción, para la fase con la fila bloqueada."""
@@ -73,8 +97,9 @@ class UpdateSecurityUseCase:
         """
         Fases 1 y 2 (BE #283): leer sin bloquear en una transacción que se cierra, y
         después, ya sin ninguna, todos los bcrypt: la contraseña actual, la política de
-        la nueva (antes de calcular nada con ella), el historial y la nueva. Los errores,
-        en el mismo orden de siempre: la actual, el correo ocupado y la nueva.
+        la nueva (sin calcular nada), el historial y el hash de la nueva al final. Los
+        errores: la actual, el correo ocupado y la nueva; de la nueva, la política antes
+        que el historial (B2-6: una débil no gasta ningún bcrypt del historial).
         """
         user_id_vo = UserId(user_id)
         async with self._uow:
@@ -97,8 +122,9 @@ class UpdateSecurityUseCase:
 
         if not await run_bcrypt(user.verify_password, request.current_password):
             raise InvalidCredentialsError("Current password is incorrect")
-        if ocupado is not None and str(ocupado.id.value) != user_id:
-            raise DuplicateEmailError(f"Email {request.new_email} is already in use")
+        # Aquí, para el orden de los errores (tras la contraseña); otra vez con la fila
+        # bloqueada, en _handle_email_change: alguien pudo cogerlo entretanto
+        _rechaza_si_lo_usa_otro(ocupado, user_id, request.new_email)
 
         nueva = None
         if request.new_password:
@@ -126,7 +152,7 @@ class UpdateSecurityUseCase:
             raise UserNotFoundError(f"User with id {preparado.user_id_vo.value} not found")
         actual = user.password.hashed_value if user.password else None
         if actual != preparado.contrasena_leida:
-            raise InvalidCredentialsError("Current password is incorrect")
+            raise _CambiadaEntretantoError("Current password is incorrect")
         return user
 
     async def _handle_email_change(
@@ -134,10 +160,7 @@ class UpdateSecurityUseCase:
     ) -> tuple[bool, str | None]:
         """El correo nuevo queda pendiente hasta confirmarlo desde su dirección (#749)."""
         email_vo = Email(new_email)
-        existing_user = await self._uow.users.find_by_email(email_vo)
-
-        if existing_user and str(existing_user.id.value) != user_id:
-            raise DuplicateEmailError(f"Email {new_email} is already in use")
+        _rechaza_si_lo_usa_otro(await self._uow.users.find_by_email(email_vo), user_id, new_email)
 
         # El mismo correo que ya tiene: nada que cambiar (como antes)
         if user.email is not None and email_vo == user.email:
@@ -271,37 +294,47 @@ class UpdateSecurityUseCase:
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
 
-        preparado = await self._prepara(user_id, request)
+        try:
+            preparado = await self._prepara(user_id, request)
 
-        async with self._uow:
-            user = await self._bloquea_y_comprueba(preparado)
-            user_id_vo = preparado.user_id_vo
+            async with self._uow:
+                user = await self._bloquea_y_comprueba(preparado)
+                user_id_vo = preparado.user_id_vo
 
-            # Tracking de cambios
-            email_changed = False
-            password_changed = False
-            tokens_revoked_count = 0
-            token_del_cambio = None
+                # Tracking de cambios
+                email_changed = False
+                password_changed = False
+                tokens_revoked_count = 0
+                token_del_cambio = None
 
-            # Procesar cambio de email
-            if request.new_email:
-                email_changed, token_del_cambio = await self._handle_email_change(
-                    user, request.new_email, user_id
-                )
+                # Procesar cambio de email
+                if request.new_email:
+                    email_changed, token_del_cambio = await self._handle_email_change(
+                        user, request.new_email, user_id
+                    )
 
-            # Procesar cambio de password
-            if preparado.nueva is not None:
-                password_changed, tokens_revoked_count = await self._handle_password_change(
-                    user, preparado.nueva, user_id_vo
-                )
-                # Un correo pendiente que no se pide ahora, fuera: quizá lo pidió quien
-                # entró con la contraseña de antes (/code-review de la rama)
-                if not email_changed:
-                    user.cancel_email_change()
+                # Procesar cambio de password
+                if preparado.nueva is not None:
+                    password_changed, tokens_revoked_count = await self._handle_password_change(
+                        user, preparado.nueva, user_id_vo
+                    )
+                    # Un correo pendiente que no se pide ahora, fuera: quizá lo pidió quien
+                    # entró con la contraseña de antes (/code-review de la rama)
+                    if not email_changed:
+                        user.cancel_email_change()
 
-            # Guardar cambios
-            await self._uow.users.save(user)
-            # El context manager (__aexit__) hace commit automático y publica eventos
+                # Guardar cambios
+                await self._uow.users.save(user)
+                # El context manager (__aexit__) hace commit automático y publica eventos
+        except (InvalidCredentialsError, DuplicateEmailError, InvalidPasswordError) as error:
+            # Al log de auditoría con su motivo (L1-L3); el cliente recibe lo de siempre
+            security_logger.log_security_change_failed(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                reason=_motivo_del_fallo(error),
+            )
+            raise
 
         # Security Logging
         self._log_security_changes(

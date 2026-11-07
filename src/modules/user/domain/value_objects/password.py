@@ -94,9 +94,11 @@ class Password:
     BCRYPT_MAX_BYTES = 72
     hashed_value: str
     # Solo la pone from_plain_text: el usuario acepta un Password ya calculado (el
-    # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. No cuenta
-    # para la igualdad: uno leído de la BD y uno recién hecho con el mismo hash son iguales
-    de_texto_plano: bool = field(default=False, compare=False, repr=False)
+    # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. Fuera del
+    # constructor (init=False): ni se puede poner desde fuera ni la ve el mapeo de
+    # SQLAlchemy, que saca los valores de la firma del constructor (una sola columna).
+    # La igualdad la decide __eq__ (solo el hash)
+    de_texto_plano: bool = field(default=False, init=False, repr=False)
 
     @classmethod
     def comprueba_la_politica(cls, plain_password: str) -> None:
@@ -135,7 +137,9 @@ class Password:
         cls.comprueba_la_politica(plain_password)
 
         hashed = cls._hash_password(plain_password)
-        return cls(hashed, de_texto_plano=True)
+        contrasena = cls(hashed)
+        object.__setattr__(contrasena, "de_texto_plano", True)
+        return contrasena
 
     @classmethod
     def _bcrypt_bytes(cls, plain_password: str) -> bytes:
