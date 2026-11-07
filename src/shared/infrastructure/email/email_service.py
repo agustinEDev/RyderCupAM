@@ -451,17 +451,22 @@ If it wasn't you, change your password: {restablecer}
             titulo, title = "Google vinculado a tu cuenta", "Google linked to your account"
             hecho = "se ha vinculado una cuenta de Google a tu cuenta: con ella se puede entrar."
             done = "a Google account was linked to your account: it can be used to sign in."
+            # Restablecer la contraseña también quita ese Google (BE #753)
+            que_hacer = "Restablece tu contraseña: también quitará ese Google."
+            what_to_do = "Reset your password: it will also remove that Google."
         else:
             titulo, title = "Google desvinculado de tu cuenta", "Google unlinked from your account"
             hecho = "se ha desvinculado la cuenta de Google de tu cuenta."
             done = "the Google account was unlinked from your account."
+            que_hacer = "Cambia tu contraseña ahora: alguien puede estar usando tu cuenta."
+            what_to_do = "Change your password now: someone may be using your account."
         subject = f"{titulo} - Ryder Cup Friends | {title}"
         text_body = f"""
 Hola {safe_user_name},
 
 {titulo}: {hecho}
 
-Si no has sido tú, cambia tu contraseña: {restablecer}
+Si no has sido tú: {que_hacer} {restablecer}
 
 ---
 
@@ -469,7 +474,7 @@ Hello {safe_user_name},
 
 {title}: {done}
 
-If it wasn't you, change your password: {restablecer}
+If it wasn't you: {what_to_do} {restablecer}
         """
         html_body = correo(
             web=settings.FRONTEND_URL,
@@ -478,15 +483,12 @@ If it wasn't you, change your password: {restablecer}
             titulo=titulo,
             cuerpo=[
                 parrafo("Hola ", negrita(safe_user_name), f", {hecho}"),
-                aviso(
-                    negrita("¿No has sido tú? "),
-                    "Cambia tu contraseña ahora: alguien puede estar usando tu cuenta.",
-                ),
+                aviso(negrita("¿No has sido tú? "), que_hacer),
             ],
-            boton=Boton("Cambiar la contraseña", restablecer),
+            boton=Boton("Restablecer la contraseña", restablecer),
             ingles=Ingles(
-                frase(negrita(title), f": {done} If it wasn't you, change your password."),
-                Boton("Change my password", restablecer),
+                frase(negrita(title), f": {done} If it wasn't you: {what_to_do}"),
+                Boton("Reset my password", restablecer),
             ),
             pie="Este aviso se envía siempre que se vincula o desvincula Google. "
             "We always send this when Google is linked or unlinked.",

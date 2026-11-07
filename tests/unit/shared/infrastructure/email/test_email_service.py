@@ -583,6 +583,9 @@ class TestCorreosDelCambioDeCorreo:
         assert destinatario == "ana@gmail.com"
         assert f"Google {frase}" in cuerpo and f"Google {frase}" in texto
         assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+        # Vinculado: restablecer la contraseña también quita ese Google (BE #753)
+        quita = "también quitará ese Google"
+        assert (quita in cuerpo and quita in texto) is vinculado
 
     @pytest.mark.asyncio
     async def test_the_verification_email_says_what_to_do_if_it_was_not_you(self, correo):
