@@ -31,6 +31,11 @@ from src.config.cierre_de_partidas_rapidas import (  # noqa: E402
     CierreDePartidasRapidas,
     cierre_activado,
 )
+from src.config.clave_de_brevo_viva import (  # noqa: E402
+    VigiaDeLaClaveDeBrevo,
+    brevo_de_la_configuracion,
+    vigia_activado,
+)
 from src.config.cors_config import get_cors_config  # noqa: E402
 from src.config.database import async_session_maker  # noqa: E402
 from src.config.dependencies import get_lanzador_de_actualizaciones  # noqa: E402
@@ -93,6 +98,9 @@ from src.modules.user.infrastructure.api.v1 import (  # noqa: E402
     user_routes,
 )
 from src.shared.infrastructure.api.v1 import country_routes  # noqa: E402
+from src.shared.infrastructure.email.envio_de_correo import (  # noqa: E402
+    comprueba_el_envio_de_correo,
+)
 from src.shared.infrastructure.http.correlation_middleware import (  # noqa: E402
     CorrelationMiddleware,
 )
@@ -121,6 +129,9 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
     """
     print("INFO:     Iniciando aplicación y configurando mappers...")
 
+    # Sin un envío de correo válido no se arranca: en producción solo Mailgun (BE #563)
+    comprueba_el_envio_de_correo(os.environ)
+
     # Inicializar Sentry (v1.8.0 - Task 10)
     init_sentry()
 
@@ -141,6 +152,11 @@ async def lifespan(app: FastAPI):  # noqa: ARG001 - FastAPI requires this signat
         tareas.append(asyncio.create_task(CierreDePartidasRapidas(async_session_maker).vigilar()))
         # Y la limpieza de dispositivos y refrescos viejos, también cada hora (BE #737)
         tareas.append(asyncio.create_task(LimpiezaDeSesiones(async_session_maker).vigilar()))
+    # La clave de Brevo, usada una vez al día para que no caduque (solo PRO)
+    if vigia_activado(os.environ):
+        tareas.append(
+            asyncio.create_task(VigiaDeLaClaveDeBrevo(brevo_de_la_configuracion()).vigilar())
+        )
     yield
     for tarea in tareas:
         tarea.cancel()

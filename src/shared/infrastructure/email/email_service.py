@@ -1,15 +1,13 @@
 """
 Email Service - Infrastructure Layer
 
-Servicio para enviar emails usando Mailgun.
+Los correos de la app: su texto y su HTML. El envío lo hace `envio_de_correo`
+(Mailgun con Brevo de respaldo, o Mailpit en el Kind).
 """
 
-import asyncio
 import logging
+import os
 from datetime import datetime
-
-import requests
-from fastapi import status
 
 from src.config.settings import settings
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
@@ -33,6 +31,11 @@ from src.shared.infrastructure.email.email_layout import (
     parrafo,
     recuadro,
 )
+from src.shared.infrastructure.email.envio_de_correo import (
+    CorreoSaliente,
+    EnvioConRespaldo,
+    crea_el_envio,
+)
 from src.shared.infrastructure.security.email_masking import mask_email
 
 logger = logging.getLogger(__name__)
@@ -51,13 +54,11 @@ class EmailService(
     sin afectar a la capa de aplicación.
     """
 
-    def __init__(self):
-        self.api_key = settings.MAILGUN_API_KEY
-        self.domain = settings.MAILGUN_DOMAIN
-        self.from_email = settings.MAILGUN_FROM_EMAIL
-        self.api_url = settings.MAILGUN_API_URL
+    def __init__(self, envio: EnvioConRespaldo | None = None):
+        """Con el envío de la configuración, salvo el que se pase (tests)."""
+        self._envio = envio or crea_el_envio(os.environ)
 
-    def send_verification_email(
+    async def send_verification_email(
         self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
         """
@@ -135,52 +136,24 @@ The Ryder Cup Friends Team
             "If you didn't sign up, ignore this email.",
         )
 
-        return self._send_email(
+        return await self._send_email(
             to=f'"{safe_user_name}" <{to_email}>',  # RFC 5322 format with quotes
             subject=subject,
             text=text_body,
             html=html_body,
         )
 
-    def _send_email(self, to: str, subject: str, text: str, html: str | None = None) -> bool:
+    async def _send_email(
+        self, to: str, subject: str, text: str, html: str | None = None, con_token: bool = True
+    ) -> bool:
+        """Lo manda; True si salió (ver `envio_de_correo`).
+
+        `con_token=False` solo en los avisos sin token: son los únicos que pueden salir
+        por Brevo, que reescribe los enlaces (7 nov 2026).
         """
-        Envía un email usando la API de Mailgun.
-
-        Args:
-            to: Destinatario del email
-            subject: Asunto del email
-            text: Cuerpo del email en texto plano
-            html: Cuerpo del email en HTML (opcional)
-
-        Returns:
-            bool: True si el email se envió correctamente, False en caso contrario
-        """
-        if not self.api_key:
-            logger.error("MAILGUN_API_KEY no está configurada")
-            return False
-
-        try:
-            url = f"{self.api_url}/{self.domain}/messages"
-
-            data = {"from": self.from_email, "to": to, "subject": subject, "text": text}
-
-            if html:
-                data["html"] = html
-
-            response = requests.post(url, auth=("api", self.api_key), data=data, timeout=10)
-
-            if response.status_code == status.HTTP_200_OK:
-                logger.info("Email de verificación enviado correctamente")
-                return True
-            logger.error("Error al enviar email: %s - %s", response.status_code, response.text)
-            return False
-
-        except requests.exceptions.RequestException as e:
-            logger.error("Error de red al enviar email: %s", str(e))
-            return False
-        except Exception as e:
-            logger.error("Error inesperado al enviar email: %s", str(e))
-            return False
+        return await self._envio.send(
+            CorreoSaliente(to=to, subject=subject, text=text, html=html, con_token=con_token)
+        )
 
     async def send_password_reset_email(
         self, to_email: str, reset_link: str, user_name: str
@@ -262,7 +235,7 @@ The Ryder Cup Friends Team
             "You get this because a password reset was requested for this account.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
@@ -332,7 +305,7 @@ The Ryder Cup Friends Team
             "We always send this when the password changes.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
 
     async def send_email_change_confirmation(
         self, to_email: str, user_name: str, token: str
@@ -395,7 +368,7 @@ Until then your account keeps its previous email. If you didn't ask for this, ig
             pie="Lo enviamos porque se pidió cambiar el correo de una cuenta a esta "
             "dirección. We sent this because this address was requested for an account.",
         )
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_email_change_requested_notice(
         self, to_email: str, user_name: str, new_email: str
@@ -454,7 +427,7 @@ If it wasn't you, change your password: {restablecer}
             pie="Este aviso se envía siempre que se pide cambiar el correo. "
             "We always send this when an email change is requested.",
         )
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
 
     async def send_new_login_notification(
         self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
@@ -523,7 +496,7 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
             "We let you know whenever a new device signs in.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
 
     async def send_failed_logins_notification(
         self,
@@ -637,7 +610,7 @@ password, change it: {cambiar}
             pie="Te avisamos como mucho una vez por hora. We let you know at most once an hour.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body, con_token=False)
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
@@ -759,7 +732,7 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
 
     async def send_handicaps_pending_email(
         self,
@@ -837,7 +810,7 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
 
     async def send_scheduled_handicaps_update_skipped_email(
         self,
@@ -913,7 +886,7 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)
 
     async def send_friend_request_email(
         self,
@@ -984,4 +957,4 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_addressee}" <{to_email}>'
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(recipient, subject, text_body, html_body, con_token=False)

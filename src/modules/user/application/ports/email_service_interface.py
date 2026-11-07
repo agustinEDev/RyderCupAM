@@ -22,7 +22,7 @@ class IEmailService(ABC):
     """
 
     @abstractmethod
-    def send_verification_email(
+    async def send_verification_email(
         self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
         """

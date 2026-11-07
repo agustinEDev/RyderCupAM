@@ -167,12 +167,6 @@ email-validator==2.3.0
 # Alternativa moderna a `requests` con soporte para async/await
 httpx==0.28.1
 
-# requests - Cliente HTTP síncrono estándar de Python
-# Utilizado para integración con servicios externos (Mailgun, RFEG)
-# Actualizado a 2.33.0 para resolver:
-# - MEDIUM (CVSS 4.1): Insecure Temporary File (CWE-377)
-requests==2.34.2
-
 # tzdata - Base de datos de zonas horarias para `zoneinfo`
 # La anotación de un partido abre a una hora LOCAL del campo (BE #305), y
 # `ZoneInfo("Europe/Madrid")` la resuelve hoy contra los ficheros del sistema

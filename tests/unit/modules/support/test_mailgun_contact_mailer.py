@@ -1,106 +1,74 @@
 """
-El adaptador que manda el mensaje de contacto por Mailgun (C1, C5).
+El adaptador que manda el mensaje de contacto (C1, C5), ya sobre la pieza común de
+envío (E7, 7 nov 2026): Mailgun con Brevo de respaldo, o Mailpit en el Kind.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import httpx
-import pytest
-
-from src.modules.support.infrastructure.services.mailgun_contact_mailer import (
-    MailgunContactMailer,
-)
-
-MODULO = "src.modules.support.infrastructure.services.mailgun_contact_mailer"
+from src.modules.support.infrastructure.services.mailgun_contact_mailer import ContactMailer
+from src.shared.infrastructure.email.envio_de_correo import CorreoSaliente
 
 
-def _cliente(status_code=200, error=None):
-    cliente = AsyncMock()
-    if error:
-        cliente.post.side_effect = error
-    else:
-        cliente.post.return_value = MagicMock(status_code=status_code)
-    cliente.__aenter__ = AsyncMock(return_value=cliente)
-    cliente.__aexit__ = AsyncMock(return_value=None)
-    return cliente
+class _Envio:
+    def __init__(self, sale=True):
+        self.sale = sale
+        self.correos: list[CorreoSaliente] = []
+
+    async def send(self, correo: CorreoSaliente) -> bool:
+        self.correos.append(correo)
+        return self.sale
 
 
-def _mailer():
-    return MailgunContactMailer(
-        api_key="clave-de-prueba",
-        api_url="https://api.eu.mailgun.net/v3",
-        domain="rydercupfriends.com",
-        from_email="Ryder Cup Friends <noreply@rydercupfriends.com>",
-        to_email="admin@rydercupfriends.com",
+def _mailer(envio):
+    return ContactMailer(envio=envio, to_email="admin@rydercupfriends.com")
+
+
+async def test_it_goes_to_admin_with_reply_to_and_text_only():
+    """
+    Given: Un mensaje con un remitente ASCII
+    When: Se manda
+    Then: True; a admin@, con «Responder a» quien escribe y sin HTML
+    """
+    envio = _Envio()
+
+    enviado = await _mailer(envio).send(
+        subject="[Contacto · Pregunta] Hola", text="Cuerpo", reply_to="ana@example.com"
+    )
+
+    assert enviado is True
+    assert envio.correos == [
+        CorreoSaliente(
+            to="admin@rydercupfriends.com",
+            subject="[Contacto · Pregunta] Hola",
+            text="Cuerpo",
+            reply_to="ana@example.com",
+            # Sin token: puede salir por Brevo si Mailgun no puede
+            con_token=False,
+        )
+    ]
+
+
+async def test_a_non_ascii_reply_to_is_left_out():
+    """Una dirección con tildes no cabe en una cabecera: sin «Responder a» (va en el cuerpo)."""
+    envio = _Envio()
+
+    await _mailer(envio).send(subject="S", text="T", reply_to="josé@ejemplo.es")
+
+    assert envio.correos[0].reply_to is None
+
+
+async def test_it_says_false_when_it_did_not_go_out():
+    """Si el envío no sale (cupo, red, sin clave), False: la ruta responde 502."""
+    assert (
+        await _mailer(_Envio(sale=False)).send(subject="S", text="T", reply_to="a@b.com") is False
     )
 
 
-async def test_it_posts_to_admin_with_reply_to():
-    """
-    Given: Mailgun responde 200
-    When: Se manda un mensaje
-    Then: True; a admin@, desde noreply@, con Reply-To de quien escribe y solo texto
-    """
-    cliente = _cliente()
-    with patch(f"{MODULO}.httpx.AsyncClient", return_value=cliente) as cliente_clase:
-        enviado = await _mailer().send(
-            subject="[Contacto · Pregunta] Hola", text="Cuerpo", reply_to="ana@example.com"
-        )
+async def test_by_default_it_goes_to_the_configured_mailbox(monkeypatch):
+    """Sin destinatario, el buzón de CONTACT_EMAIL."""
+    from src.config.settings import settings
 
-    assert enviado is True
-    # Con tiempo máximo: un Mailgun colgado no retiene la petición sin fin
-    assert cliente_clase.call_args.kwargs["timeout"] == 10.0
-    url = cliente.post.call_args.args[0]
-    kw = cliente.post.call_args.kwargs
-    assert url == "https://api.eu.mailgun.net/v3/rydercupfriends.com/messages"
-    assert kw["auth"] == ("api", "clave-de-prueba")
-    assert kw["data"] == {
-        "from": "Ryder Cup Friends <noreply@rydercupfriends.com>",
-        "to": "admin@rydercupfriends.com",
-        "subject": "[Contacto · Pregunta] Hola",
-        "text": "Cuerpo",
-        "h:Reply-To": "ana@example.com",
-    }
+    monkeypatch.setattr(settings, "CONTACT_EMAIL", "otro@example.com")
+    envio = _Envio()
 
+    await ContactMailer(envio=envio).send(subject="S", text="T", reply_to="a@b.com")
 
-@pytest.mark.parametrize("status_code", [400, 401, 500])
-async def test_a_refused_message_is_false(status_code):
-    """Mailgun no lo acepta: False, para que el caso de uso devuelva el hueco."""
-    with patch(f"{MODULO}.httpx.AsyncClient", return_value=_cliente(status_code)):
-        assert await _mailer().send(subject="s", text="t", reply_to="a@example.com") is False
-
-
-async def test_a_network_error_is_false():
-    """Sin red con Mailgun: False, sin excepción."""
-    error = httpx.ConnectError("sin red")
-    with patch(f"{MODULO}.httpx.AsyncClient", return_value=_cliente(error=error)):
-        assert await _mailer().send(subject="s", text="t", reply_to="a@example.com") is False
-
-
-async def test_without_api_key_nothing_is_sent():
-    """Sin clave de Mailgun: False y ni se intenta."""
-    mailer = _mailer()
-    mailer._api_key = ""
-    with patch(f"{MODULO}.httpx.AsyncClient") as cliente:
-        assert await mailer.send(subject="s", text="t", reply_to="a@example.com") is False
-    cliente.assert_not_called()
-
-
-async def test_a_non_ascii_address_goes_without_reply_to():
-    """
-    Given: Un correo con tildes (EmailStr lo acepta; en una cabecera no se puede codificar)
-    When: Se manda
-    Then: Sin h:Reply-To, para que Mailgun no lo rechace; el correo ya va en el cuerpo
-    """
-    cliente = _cliente()
-    with patch(f"{MODULO}.httpx.AsyncClient", return_value=cliente):
-        assert await _mailer().send(subject="s", text="t", reply_to="josé@example.com") is True
-
-    assert "h:Reply-To" not in cliente.post.call_args.kwargs["data"]
-
-
-async def test_an_unexpected_error_is_false():
-    """Un error que no es de red (una URL mal puesta): False, sin excepción."""
-    error = httpx.InvalidURL("mal")
-    with patch(f"{MODULO}.httpx.AsyncClient", return_value=_cliente(error=error)):
-        assert await _mailer().send(subject="s", text="t", reply_to="a@example.com") is False
+    assert envio.correos[0].to == "otro@example.com"

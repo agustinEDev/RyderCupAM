@@ -1,7 +1,5 @@
 import logging
 
-import requests
-
 from src.modules.user.application.dto.user_dto import (
     RegisterUserRequestDTO,
     UserResponseDTO,
@@ -169,7 +167,7 @@ class RegisterUserUseCase:
         # 4. Enviar email de verificación
         if self._email_service:
             try:
-                email_sent = self._email_service.send_verification_email(
+                email_sent = await self._email_service.send_verification_email(
                     to_email=request.email,
                     user_name=new_user.first_name,
                     verification_token=verification_token,
@@ -179,7 +177,7 @@ class RegisterUserUseCase:
                         "No se pudo enviar el email de verificación para el usuario %s",
                         new_user.id.value,
                     )
-            except (requests.RequestException, ValueError, ConnectionError):
+            except (ValueError, ConnectionError):
                 # Capturar excepciones específicas de red y validación
                 logger.exception(
                     "Error al enviar email de verificación para el usuario %s",

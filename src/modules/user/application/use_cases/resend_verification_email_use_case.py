@@ -85,7 +85,7 @@ class ResendVerificationEmailUseCase:
             logger.error("Email service no está disponible")
             raise ResendVerificationError("Servicio de email no disponible")
 
-        email_sent = self._email_service.send_verification_email(
+        email_sent = await self._email_service.send_verification_email(
             to_email=email, user_name=user_name, verification_token=verification_token
         )
 
