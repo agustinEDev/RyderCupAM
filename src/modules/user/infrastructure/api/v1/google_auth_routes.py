@@ -169,15 +169,13 @@ async def link_google_account(
 ):
     """Vincula cuenta Google a usuario autenticado."""
     try:
-        # El caso de uso lo deja en el log de seguridad, con la red (#750 punto 3)
-        return await use_case.execute(
-            link_data,
-            str(current_user.id),
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            ),
-            user_agent=get_user_agent(request),
+        # El caso de uso lo deja en el log de seguridad, con la red (#750 punto 3).
+        # Siempre desde la petición: lo que mande el cliente no cuenta
+        link_data.ip_address = get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
+        link_data.user_agent = get_user_agent(request)
+        return await use_case.execute(link_data, str(current_user.id))
     except GoogleLinkNeedsVerifiedEmailError:
         # Sin el correo verificado, sin Google: con su código, para que la app diga
         # qué hacer en su idioma

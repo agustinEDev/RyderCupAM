@@ -71,6 +71,7 @@ from src.modules.user.application.use_cases.open_session_use_case import OpenSes
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     SESSION_ENDED,
     SESSION_REJECTED,
+    SESSION_REPLACED,
     RefreshAccessTokenUseCase,
     RefreshRejectedError,
     RefreshRejection,
@@ -110,6 +111,7 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
+    ids_de_la_cookie_de_dispositivo,
     ids_validos_de_la_cookie,
     pon_la_cookie_de_dispositivo,
 )
@@ -480,7 +482,7 @@ async def logout_user(
 # El texto del 401 del refresco: el mismo para los dos códigos públicos (BE #733),
 # para no decir con el texto lo que el código ya no dice
 _TEXTOS_DEL_REFRESCO = dict.fromkeys(
-    (SESSION_ENDED, SESSION_REJECTED),
+    (SESSION_ENDED, SESSION_REJECTED, SESSION_REPLACED),
     "Refresh token inválido o expirado. Por favor, inicia sesión nuevamente.",
 )
 
@@ -516,7 +518,9 @@ def _refresco_rechazado(
             )
         except Exception as error:
             logger.error("Refresh rejection audit event failed: %s", type(error).__name__)
-    respuesta = respuesta_con_codigo(status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, codigo)
+    # Con la cookie conservada, su propio código: el front reintenta en vez de cerrar
+    publico = SESSION_REPLACED if conserva_la_cookie else codigo
+    respuesta = respuesta_con_codigo(status.HTTP_401_UNAUTHORIZED, _TEXTOS_DEL_REFRESCO, publico)
     # Sin cookie no hay nada que borrar, y borrarla igualmente dejaría a cualquier
     # web cerrar la sesión de quien la visite: un formulario suyo llega sin la
     # cookie (SameSite=Lax) y el Set-Cookie sí se aplica (auditoría OWASP, 5 nov)
@@ -539,7 +543,9 @@ def _refresco_rechazado(
             "description": (
                 "La sesión no se renueva. `error_code`: SESSION_ENDED, el final normal "
                 "(sin sesión, caducada o 24 h sin uso), o SESSION_REJECTED, un rechazo "
-                "(sin decir por qué). Borra la cookie de refresh."
+                "(sin decir por qué). Borra la cookie de refresh, salvo SESSION_REPLACED: "
+                "la cookie vieja de una petición tardía cuando el navegador ya tiene una "
+                "sesión nueva de hace menos de 5 minutos (no borra; el cliente reintenta)."
             ),
         }
     },
@@ -611,6 +617,9 @@ async def refresh_access_token(
         user_agent=get_user_agent(request),
         installed_app=es_la_app_instalada(request),
         country_code=cloudflare_client_country(request),
+        dispositivos_del_navegador=ids_de_la_cookie_de_dispositivo(
+            request.cookies.get(get_device_id_cookie_name())
+        ),
     )
     try:
         refresh_response = await use_case.execute(refresh_request, refresh_token_jwt)

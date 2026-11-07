@@ -12,6 +12,7 @@ from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.exceptions import (
     EmailChangeEmailInUseError,
@@ -85,13 +86,13 @@ class ConfirmEmailChangeUseCase:
             raise anulado
         # El cambio de verdad, al log (el de la petición dice «pendiente»). Un fallo
         # del log no deshace el cambio
-        try:
-            self._security_audit.log_email_changed(
+        registra_sin_romper(
+            "Email change",
+            lambda: self._security_audit.log_email_changed(
                 user_id=user_id,
                 ip_address=ip_address or "unknown",
                 user_agent=user_agent or "unknown",
                 email_verification_required=False,
-            )
-        except Exception as error:
-            logger.error("Email change audit event failed: %s", type(error).__name__)
+            ),
+        )
         return UserResponseDTO.model_validate(user)

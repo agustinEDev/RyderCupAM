@@ -212,13 +212,12 @@ class UpdateSecurityUseCase:
         user_id: str,
         ip_address: str,
         user_agent: str,
-        security_logger,
     ) -> None:
         """Registra los cambios de seguridad en el audit trail."""
         if password_changed:
             registra_sin_romper(
                 "Update security",
-                lambda: security_logger.log_password_changed(
+                lambda: self._security_audit.log_password_changed(
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
@@ -229,7 +228,7 @@ class UpdateSecurityUseCase:
             if tokens_revoked_count > 0:
                 registra_sin_romper(
                     "Update security",
-                    lambda: security_logger.log_refresh_token_revoked(
+                    lambda: self._security_audit.log_refresh_token_revoked(
                         user_id=user_id,
                         ip_address=ip_address,
                         user_agent=user_agent,
@@ -241,7 +240,7 @@ class UpdateSecurityUseCase:
         if email_changed:
             registra_sin_romper(
                 "Update security",
-                lambda: security_logger.log_email_changed(
+                lambda: self._security_audit.log_email_changed(
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
@@ -304,9 +303,6 @@ class UpdateSecurityUseCase:
             DuplicateEmailError: Si el nuevo email ya está en uso
             ValueError: Si los datos no son válidos
         """
-        # Obtener security logger
-        security_logger = self._security_audit
-
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
@@ -348,7 +344,7 @@ class UpdateSecurityUseCase:
             motivo = _motivo_del_fallo(error)
             registra_sin_romper(
                 "Update security",
-                lambda: security_logger.log_security_change_failed(
+                lambda: self._security_audit.log_security_change_failed(
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
@@ -365,7 +361,6 @@ class UpdateSecurityUseCase:
             user_id,
             ip_address,
             user_agent,
-            security_logger,
         )
 
         # El enlace, al correo nuevo; el aviso, al de antes

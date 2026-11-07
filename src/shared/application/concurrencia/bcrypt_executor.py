@@ -28,12 +28,12 @@ la propia operación.
 import asyncio
 import contextvars
 import functools
-import logging
-import os
 import weakref
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import ParamSpec, TypeVar
+
+from src.config.env import env_int
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -41,29 +41,7 @@ T = TypeVar("T")
 
 # Con el medio núcleo del plan actual, más de dos hashes a la vez no acaban antes: solo
 # se estorban entre ellos y se llevan por delante la CPU del resto de peticiones.
-def _concurrencia_configurada(defecto: int = 2) -> int:
-    """`BCRYPT_MAX_CONCURRENCY` como entero de al menos 1; si falta o no vale, `defecto`.
-
-    Con la biblioteca estándar y no con el ayudante de infraestructura: desde el 7 nov
-    2026 este módulo vive en la aplicación, que no importa infraestructura (#750).
-    """
-    crudo = (os.getenv("BCRYPT_MAX_CONCURRENCY") or "").strip()
-    if not crudo:
-        return defecto
-    try:
-        valor = int(crudo)
-    except ValueError:
-        valor = 0
-    if valor >= 1:
-        return valor
-    # Una mala configuración no pasa en silencio (como con el ayudante de antes)
-    logging.getLogger(__name__).warning(
-        "BCRYPT_MAX_CONCURRENCY=%r is not a positive integer; using %s", crudo, defecto
-    )
-    return defecto
-
-
-MAX_CONCURRENCY = _concurrencia_configurada()
+MAX_CONCURRENCY = env_int("BCRYPT_MAX_CONCURRENCY", 2)
 
 # Pool propio, no el del runtime: así el límite es real y los hashes no compiten por los
 # hilos que FastAPI usa para los endpoints síncronos.

@@ -55,8 +55,6 @@ class LinkGoogleAccountUseCase:
         self,
         request: LinkGoogleAccountRequestDTO,
         user_id: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
     ) -> LinkGoogleAccountResponseDTO:
         """
         Vincula cuenta Google al usuario autenticado.
@@ -120,8 +118,8 @@ class LinkGoogleAccountUseCase:
             lambda: self._security_audit.log_google_account_linked(
                 user_id=user_id,
                 automatic=False,
-                ip_address=ip_address or "unknown",
-                user_agent=user_agent or "unknown",
+                ip_address=request.ip_address or "unknown",
+                user_agent=request.user_agent or "unknown",
             ),
         )
 

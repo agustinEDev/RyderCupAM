@@ -5,6 +5,8 @@ Un 401 tardío del refresco no borra la cookie de una sesión más nueva (BE #73
      la cookie vieja → 401 SESSION_REJECTED, pero sin borrar la cookie (es la nueva)
   S2 cerró sesión y no volvió a entrar → 401 y se borra la cookie, como hoy
   S4 sin cookie → 401 y no se borra nada, como hoy
+  S8 otra cuenta entró en ese navegador → tampoco se borra (la cookie es la suya)
+  S1 y S8 responden SESSION_REPLACED: el front reintenta en vez de cerrar la sesión
 """
 
 import uuid
@@ -60,7 +62,8 @@ async def test_s1_a_late_rejection_does_not_delete_the_new_session_cookie(client
     r = await _refresca_con(client, vieja)
 
     assert r.status_code == 401
-    assert r.json()["error_code"] == "SESSION_REJECTED"
+    # Con su propio código: el front no cierra la sesión, reintenta con la nueva
+    assert r.json()["error_code"] == "SESSION_REPLACED"
     assert not _borra_la_cookie_de_refresco(r)
 
 
@@ -114,3 +117,28 @@ async def test_s2_a_newer_session_that_also_closed_does_not_keep_the_cookie(clie
 
     assert r.status_code == 401
     assert _borra_la_cookie_de_refresco(r)
+
+
+async def test_s8_another_account_in_the_same_browser_keeps_its_cookie(client: AsyncClient):
+    """
+    Given: Ana cerró sesión y Bea entró en el mismo navegador (la cookie de dispositivo
+           del navegador lleva el de las dos)
+    When: Llega tarde un refresco con la cookie vieja de Ana
+    Then: 401 SESSION_REPLACED y sin borrar la cookie de refresco (es la de Bea)
+    """
+    ana = f"s8a-{uuid.uuid4().hex[:8]}@example.com"
+    bea = f"s8b-{uuid.uuid4().hex[:8]}@example.com"
+    await create_authenticated_user(client, bea, CLAVE, "Bea", "Ruiz")
+    vieja = (await create_authenticated_user(client, ana, CLAVE, "Ana", "Lopez"))["cookies"]
+    await _cierra_sesion(client, vieja)
+    client.cookies.set("device_id", vieja["device_id"])
+    nuevo = await client.post("/api/v1/auth/login", json={"email": bea, "password": CLAVE})
+    assert nuevo.status_code == 200, nuevo.text
+    navegador = dict(nuevo.cookies).get("device_id", vieja["device_id"])
+    client.cookies.clear()
+
+    r = await _refresca_con(client, {**vieja, "device_id": navegador})
+
+    assert r.status_code == 401
+    assert r.json()["error_code"] == "SESSION_REPLACED"
+    assert not _borra_la_cookie_de_refresco(r)

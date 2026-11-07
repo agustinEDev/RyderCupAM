@@ -166,11 +166,11 @@ class InMemoryRefreshTokenRepository(RefreshTokenRepositoryInterface):
         return count
 
     async def hay_uno_vivo_mas_nuevo(
-        self, device_id: UserDeviceId, creado_despues_de: datetime, ahora: datetime
+        self, device_ids: list[UserDeviceId], creado_despues_de: datetime, ahora: datetime
     ) -> bool:
-        """Si el dispositivo tiene un token vivo creado después de esa fecha (BE #734)."""
+        """Si alguno de esos dispositivos tiene un token vivo más nuevo (BE #734)."""
         return any(
-            token.device_id == device_id
+            token.device_id in device_ids
             and not token.revoked
             and token.expires_at > ahora
             and token.created_at > creado_despues_de

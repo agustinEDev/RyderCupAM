@@ -71,9 +71,14 @@ async def _nuevo(uow, usuario, device_id, despues=timedelta(seconds=5), dias=7, 
     return nuevo
 
 
-async def _rechazo(caso, jwt=VIEJO) -> RefreshRejectedError:
+async def _rechazo(caso, jwt=VIEJO, navegador=()) -> RefreshRejectedError:
     with pytest.raises(RefreshRejectedError) as error:
-        await caso.execute(RefreshAccessTokenRequestDTO(user_agent=IPHONE), jwt)
+        await caso.execute(
+            RefreshAccessTokenRequestDTO(
+                user_agent=IPHONE, dispositivos_del_navegador=list(navegador)
+            ),
+            jwt,
+        )
     return error.value
 
 
@@ -197,3 +202,65 @@ async def test_s7_a_failing_check_deletes_as_always_and_keeps_the_rejection(monk
 
     assert rechazo.conserva_la_cookie is False
     assert "RuntimeError" in caplog.text
+
+
+# --- Tras el /code-review --------------------------------------------------------
+
+
+async def test_s8_switching_account_in_the_same_browser_keeps_the_new_cookie():
+    """
+    Given: Ana cerró sesión y Bea entró en el mismo navegador (otro dispositivo: cada
+           cuenta tiene el suyo); la cookie de dispositivo del navegador lleva los dos
+    When: Llega tarde el refresco viejo de Ana
+    Then: Se conserva la cookie: es la de Bea
+    """
+    uow, _ana, _dispositivo_de_ana, _viejo, caso = await _escena()
+    bea = User.create(
+        first_name="Bea",
+        last_name="Ruiz",
+        email_str="bea@example.com",
+        plain_password="SecureP@ssw0rd123!",
+    )
+    await uow.users.save(bea)
+    de_bea = UserDevice.create(bea.id, DeviceFingerprint.create(IPHONE, "203.0.113.7"))
+    await uow.user_devices.save(de_bea)
+    await _nuevo(uow, bea, de_bea.id)
+
+    with pytest.raises(RefreshRejectedError) as error:
+        await caso.execute(
+            RefreshAccessTokenRequestDTO(
+                user_agent=IPHONE, dispositivos_del_navegador=[str(de_bea.id.value)]
+            ),
+            VIEJO,
+        )
+
+    assert error.value.conserva_la_cookie is True
+
+
+@pytest.mark.parametrize("como", ["desactivada", "dispositivo revocado", "inactiva"])
+async def test_s9_only_a_replaced_token_keeps_the_cookie(como):
+    """
+    Given: Una sesión nueva y reciente en el dispositivo, y un rechazo que NO es de un
+           token sustituido (cuenta desactivada, dispositivo revocado, 24 h sin uso)
+    When: Refresca con el viejo
+    Then: Se borra la cookie: «desactivada = sin sesión» no depende de la casualidad
+    """
+    from datetime import datetime
+
+    uow, usuario, dispositivo, viejo, caso = await _escena()
+    await _nuevo(uow, usuario, dispositivo.id)
+    if como == "desactivada":
+        usuario.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        await uow.users.save(usuario)
+    elif como == "dispositivo revocado":
+        viejo._revoked = False
+        await uow.refresh_tokens.save(viejo)
+        dispositivo.revoke()
+        await uow.user_devices.save(dispositivo)
+    else:
+        dispositivo._last_used_at = datetime.now() - timedelta(hours=25)
+        await uow.user_devices.save(dispositivo)
+
+    # Con la cookie de dispositivo del navegador, como manda uno de verdad
+    navegador = [str(dispositivo.id.value)]
+    assert (await _rechazo(caso, navegador=navegador)).conserva_la_cookie is False

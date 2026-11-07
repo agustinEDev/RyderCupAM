@@ -5,6 +5,7 @@ DTOs para los endpoints de Google OAuth (login, link, unlink).
 """
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from .user_dto import UserResponseDTO
 
@@ -56,6 +57,11 @@ class LinkGoogleAccountRequestDTO(BaseModel):
     authorization_code: str = Field(
         ..., min_length=1, description="Authorization code de Google OAuth"
     )
+    # Para el log de seguridad (#750 punto 3): la ruta los pone siempre desde la
+    # petición, como en el login; lo que mande el cliente no cuenta
+    # Fuera del esquema público, como en el desbloqueo
+    ip_address: SkipJsonSchema[str | None] = Field(default=None, max_length=45)
+    user_agent: SkipJsonSchema[str | None] = Field(default=None, max_length=500)
 
 
 class LinkGoogleAccountResponseDTO(BaseModel):

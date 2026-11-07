@@ -267,10 +267,10 @@ class TestElVinculoManualAlLog:
         auditoria.log_google_account_linked.side_effect = apunta
 
         await use_case.execute(
-            LinkGoogleAccountRequestDTO(authorization_code="code"),
+            LinkGoogleAccountRequestDTO(
+                authorization_code="code", ip_address="203.0.113.7", user_agent="Safari"
+            ),
             str(existing_user.id.value),
-            ip_address="203.0.113.7",
-            user_agent="Safari",
         )
 
         assert guardado_al_registrar == [

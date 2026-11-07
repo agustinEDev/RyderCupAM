@@ -46,6 +46,7 @@ from src.shared.infrastructure.security.cookie_handler import (
     read_access_token,
 )
 from src.shared.infrastructure.security.jwt_handler import (
+    expired_refresh_subject,
     verify_access_token,
     verify_refresh_token,
 )
@@ -183,6 +184,10 @@ def refresh_token_rate_limit_key(request: Request) -> str:
     token = request.cookies.get(get_refresh_cookie_name())
     payload = verify_refresh_token(token) if token else None
     user_id = payload.get("sub") if payload else None
+    if token and not user_id:
+        # El caducado con la firma buena también cuenta: cuesta consultas a la BD (se
+        # mira si el navegador tiene una sesión nueva, BE #734, /code-review)
+        user_id = expired_refresh_subject(token)
     if token and user_id:
         # Por usuario y por token: con un refresh suyo ya revocado, nadie agota el
         # contador de sus otros dispositivos (auditoría OWASP, 5 nov 2026). El token,

@@ -220,12 +220,13 @@ class RefreshTokenRepositoryInterface(ABC):
 
     @abstractmethod
     async def hay_uno_vivo_mas_nuevo(
-        self, device_id: UserDeviceId, creado_despues_de: datetime, ahora: datetime
+        self, device_ids: list[UserDeviceId], creado_despues_de: datetime, ahora: datetime
     ) -> bool:
         """
-        Si el dispositivo tiene un refresh token vivo (sin revocar ni caducar a `ahora`)
-        creado después de `creado_despues_de` (BE #734): entonces el navegador ya tiene
-        la cookie de esa sesión nueva, y un rechazo tardío del token viejo no la borra.
+        Si alguno de esos dispositivos (los del navegador) tiene un refresh token vivo
+        (sin revocar ni caducar a `ahora`) creado después de `creado_despues_de` (BE
+        #734): entonces el navegador ya tiene la cookie de esa sesión nueva, y un
+        rechazo tardío del token viejo no la borra.
         """
 
     @abstractmethod

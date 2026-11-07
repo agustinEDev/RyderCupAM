@@ -235,12 +235,14 @@ class SQLAlchemyRefreshTokenRepository(RefreshTokenRepositoryInterface):
         return {UserDeviceId.from_string(str(fila[0])) for fila in result.all()}
 
     async def hay_uno_vivo_mas_nuevo(
-        self, device_id: UserDeviceId, creado_despues_de: datetime, ahora: datetime
+        self, device_ids: list[UserDeviceId], creado_despues_de: datetime, ahora: datetime
     ) -> bool:
-        """Si el dispositivo tiene un token vivo creado después de esa fecha (BE #734)."""
+        """Si alguno de esos dispositivos tiene un token vivo más nuevo (BE #734)."""
+        if not device_ids:
+            return False
         stmt = select(
             exists().where(
-                refresh_tokens_table.c.device_id == str(device_id.value),
+                refresh_tokens_table.c.device_id.in_([str(d.value) for d in device_ids]),
                 refresh_tokens_table.c.revoked == False,  # noqa: E712
                 refresh_tokens_table.c.expires_at > ahora,
                 refresh_tokens_table.c.created_at > creado_despues_de,
