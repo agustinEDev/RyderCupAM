@@ -55,6 +55,9 @@ class ReauthenticateRequestDTO(BaseModel):
     """La contraseña actual, antes de vincular Google (BE #753)."""
 
     password: str = Field(..., min_length=1, max_length=128, description="Contraseña actual")
+    # Para el log de seguridad: la ruta los pone desde la petición; lo del cliente no cuenta
+    ip_address: SkipJsonSchema[str | None] = Field(default=None, max_length=45)
+    user_agent: SkipJsonSchema[str | None] = Field(default=None, max_length=500)
 
 
 class ReauthenticateResponseDTO(BaseModel):

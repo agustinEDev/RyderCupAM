@@ -598,6 +598,18 @@ class TestCorreosDelCambioDeCorreo:
         assert "Olvidé mi contraseña" in cuerpo and "Olvidé mi contraseña" in texto
 
     @pytest.mark.asyncio
+    async def test_the_change_notice_uses_the_configured_contact(self, correo, monkeypatch):
+        """El buzón de contacto, el de la configuración (code-review): no uno fijo"""
+        from src.config.settings import settings
+
+        monkeypatch.setattr(settings, "CONTACT_EMAIL", "soporte@example.com")
+
+        await correo.send_email_changed_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "soporte@example.com" in cuerpo and "soporte@example.com" in texto
+
+    @pytest.mark.asyncio
     async def test_the_secured_notice_by_google_says_the_password_is_gone(self, correo):
         """La toma por Google (BE #753): sin contraseña, y cómo tener una"""
         await correo.send_account_secured_notice("ana@gmail.com", "Ana", "google")

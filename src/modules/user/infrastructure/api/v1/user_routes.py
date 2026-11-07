@@ -17,12 +17,7 @@ from src.config.dependencies import (
     get_update_profile_use_case,
     get_update_security_use_case,
 )
-from src.config.rate_limit import (
-    NEW_EMAIL_REQUESTS_LIMIT,
-    SECURITY_CHANGES_LIMIT,
-    cabe,
-    clave_de_usuario,
-)
+from src.config.rate_limit import NEW_EMAIL_REQUESTS_LIMIT, cabe, clave_de_usuario
 from src.config.settings import settings
 from src.config.terms_guard import TERMS_EXEMPT_ROUTES
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -82,6 +77,12 @@ from src.modules.user.domain.exceptions import (
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.api.v1.limite_de_seguridad import (
+    DEMASIADOS_CAMBIOS,
+    DEMASIADOS_CORREOS_NUEVOS,
+    cabe_otro_cambio,
+    demasiados,
+)
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
@@ -359,22 +360,13 @@ async def update_profile(
         ) from e
 
 
-# El 429 de PATCH /users/security, con su código para traducirlo (BE #753). Sin el
-# límite ni la ventana: no es asunto de quien llama
-DEMASIADOS_CAMBIOS = "TOO_MANY_SECURITY_CHANGES"
-DEMASIADOS_CORREOS_NUEVOS = "TOO_MANY_EMAIL_CHANGE_REQUESTS"
-_TEXTOS_DEL_LIMITE_DE_SEGURIDAD = {
-    DEMASIADOS_CAMBIOS: "Demasiados intentos. Inténtalo de nuevo más tarde.",
-    DEMASIADOS_CORREOS_NUEVOS: "Has pedido demasiados cambios de correo. Inténtalo más tarde.",
-}
-
-
 def _fuera_del_limite_de_seguridad(user_id: str, pide_correo: bool) -> str | None:
     """El código del límite que se pasa, o None. El del correo solo cuenta si lo pide."""
-    clave = clave_de_usuario(user_id)
-    if not cabe(SECURITY_CHANGES_LIMIT, "security-changes", clave):
+    if not cabe_otro_cambio(user_id):
         return DEMASIADOS_CAMBIOS
-    if pide_correo and not cabe(NEW_EMAIL_REQUESTS_LIMIT, "new-email-requests", clave):
+    if pide_correo and not cabe(
+        NEW_EMAIL_REQUESTS_LIMIT, "new-email-requests", clave_de_usuario(user_id)
+    ):
         return DEMASIADOS_CORREOS_NUEVOS
     return None
 
@@ -420,9 +412,7 @@ async def update_security(
     # Antes de mirar la contraseña: cada petición cuenta, salga bien o mal (BE #753)
     fuera = _fuera_del_limite_de_seguridad(str(current_user.id), bool(request.new_email))
     if fuera:
-        return respuesta_con_codigo(
-            status.HTTP_429_TOO_MANY_REQUESTS, _TEXTOS_DEL_LIMITE_DE_SEGURIDAD, fuera
-        )
+        return demasiados(fuera)
 
     try:
         # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail

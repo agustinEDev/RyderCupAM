@@ -281,3 +281,18 @@ async def test_r6c_a_failing_notice_keeps_the_reset():
 
     async with uow:
         assert (await uow.users.find_by_id(cuenta.id)).verify_password(NUEVA)
+
+
+async def test_r2b_removing_the_google_on_a_reset_is_recorded():
+    """La desvinculación queda como evento, igual que al desvincular a mano (code-review)."""
+    from src.modules.user.domain.events.google_account_unlinked_event import (
+        GoogleAccountUnlinkedEvent,
+    )
+
+    uow, cuenta, _d, caso, token = await _escena(verificada=True)
+
+    await _restablece(caso, token)
+
+    async with uow:
+        guardada = await uow.users.find_by_id(cuenta.id)
+    assert any(isinstance(e, GoogleAccountUnlinkedEvent) for e in guardada.get_domain_events())

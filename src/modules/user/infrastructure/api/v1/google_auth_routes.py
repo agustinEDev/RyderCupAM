@@ -18,14 +18,7 @@ from src.config.dependencies import (
     get_reauthenticate_use_case,
     get_unlink_google_account_use_case,
 )
-from src.config.rate_limit import (
-    GOOGLE_LOGIN_LIMIT,
-    SECURITY_CHANGES_LIMIT,
-    cabe,
-    clave_de_usuario,
-    get_client_identifier,
-    limiter,
-)
+from src.config.rate_limit import GOOGLE_LOGIN_LIMIT, get_client_identifier, limiter
 from src.config.settings import settings
 from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginRequestDTO,
@@ -63,6 +56,11 @@ from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
 from src.modules.user.infrastructure.api.v1.cuenta_desactivada import (
     ACCOUNT_DEACTIVATED,
     TEXTO as TEXTO_DE_CUENTA_DESACTIVADA,
+)
+from src.modules.user.infrastructure.api.v1.limite_de_seguridad import (
+    DEMASIADOS_CAMBIOS,
+    cabe_otro_cambio,
+    demasiados,
 )
 from src.modules.user.infrastructure.security import reautenticacion
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
@@ -174,12 +172,10 @@ async def google_login(
 CURRENT_PASSWORD_INCORRECT = "CURRENT_PASSWORD_INCORRECT"  # nosec B105 - an error code, not a password
 ACCOUNT_WITHOUT_PASSWORD = "ACCOUNT_WITHOUT_PASSWORD"  # nosec B105 - an error code, not a password
 REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED"
-TOO_MANY_SECURITY_CHANGES = "TOO_MANY_SECURITY_CHANGES"
 _TEXTOS_DE_LA_REAUTENTICACION = {
     CURRENT_PASSWORD_INCORRECT: "Current password is incorrect.",
     ACCOUNT_WITHOUT_PASSWORD: "This account has no password.",
     REAUTHENTICATION_REQUIRED: "Enter your current password first.",
-    TOO_MANY_SECURITY_CHANGES: "Too many attempts. Try again later.",
 }
 
 
@@ -205,21 +201,15 @@ async def reauthenticate(
     """Comprueba la contraseña actual y deja la marca para vincular Google."""
     user_id = str(current_user.id)
     # Cada intento prueba una contraseña: el mismo límite que Seguridad
-    if not cabe(SECURITY_CHANGES_LIMIT, "security-changes", clave_de_usuario(user_id)):
-        return respuesta_con_codigo(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            _TEXTOS_DE_LA_REAUTENTICACION,
-            TOO_MANY_SECURITY_CHANGES,
-        )
+    if not cabe_otro_cambio(user_id):
+        return demasiados(DEMASIADOS_CAMBIOS)
     try:
-        await use_case.execute(
-            user_id,
-            datos.password,
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            ),
-            user_agent=get_user_agent(request),
+        # La red, siempre desde la petición: lo que mande el cliente no cuenta
+        datos.ip_address = get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
+        datos.user_agent = get_user_agent(request)
+        await use_case.execute(datos, user_id)
     except InvalidCredentialsError:
         return respuesta_con_codigo(
             status.HTTP_401_UNAUTHORIZED,
@@ -259,11 +249,10 @@ async def link_google_account(
             request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
         link_data.user_agent = get_user_agent(request)
-        vinculado = await use_case.execute(
-            link_data, user_id, reautenticado=reautenticacion.vale(marca, user_id)
-        )
-        # Una sola vez: gastada aunque el navegador no borrara la cookie
-        reautenticacion.gasta(marca, user_id)
+        # Gastada al empezar, de una vez: una sola vez, aunque el navegador no borrara
+        # la cookie, y sin que dos vínculos a la vez pasen los dos
+        reautenticado = reautenticacion.gasta_si_vale(marca, user_id)
+        vinculado = await use_case.execute(link_data, user_id, reautenticado=reautenticado)
         reautenticacion.borra_la_cookie(response)
         return vinculado
     except ReauthenticationRequiredError:

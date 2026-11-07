@@ -566,7 +566,7 @@ We have secured your Ryder Cup Friends account. {que_es_en}
         """
         safe_user_name = self._sanitize_name(user_name)
         nuevo = mask_email(new_email)
-        contacto = "admin@rydercupfriends.com"
+        contacto = settings.CONTACT_EMAIL
         subject = "Tu correo ha cambiado - Ryder Cup Friends | Your email has changed"
         text_body = f"""
 Hola {safe_user_name},

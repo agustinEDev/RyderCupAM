@@ -136,6 +136,10 @@ async def test_p3_attempts_count_in_the_security_limit(client: AsyncClient):
 
     assert r.status_code == 429
     assert r.json()["error_code"] == "TOO_MANY_SECURITY_CHANGES"
+    # El mismo texto que Seguridad: un código, un texto (code-review)
+    from src.modules.user.infrastructure.api.v1.limite_de_seguridad import TEXTOS
+
+    assert r.json()["detail"] == TEXTOS["TOO_MANY_SECURITY_CHANGES"]
 
 
 async def test_p4_linking_without_the_mark_is_refused_before_using_the_code(

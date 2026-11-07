@@ -3,7 +3,7 @@ La marca de «autenticado hace poco» para vincular Google (BE #753, punto 2).
 
 Una cookie firmada, httpOnly, de 5 minutos y atada al usuario, solo para las rutas de
 Google. La deja POST /auth/reauthenticate con la contraseña actual y la gasta
-/auth/google/link: sirve una sola vez. Sin migración: lo gastado vive en memoria, como
+/auth/google/link al empezar: sirve una sola vez, también si el vínculo falla. Sin migración: lo gastado vive en memoria, como
 el freno del login (un proceso; un reinicio solo deja usar otra vez una marca de menos
 de 5 minutos).
 """
@@ -51,27 +51,26 @@ def _lee(token: str | None, user_id: str) -> dict | None:
         return None
     if datos.get("sub") != user_id or not datos.get("jti"):
         return None
-    with _cerrojo:
-        if datos["jti"] in _gastadas:
-            return None
     return datos
 
 
-def vale(token: str | None, user_id: str) -> bool:
-    """Si la marca es de ese usuario, no ha caducado y no se ha usado."""
-    return _lee(token, user_id) is not None
-
-
-def gasta(token: str | None, user_id: str) -> None:
-    """La marca ya no sirve. Lo gastado que haya caducado se olvida."""
+def gasta_si_vale(token: str | None, user_id: str) -> bool:
+    """
+    Si la marca es de ese usuario, no ha caducado y no se ha usado, la gasta y dice
+    True. Comprobar y gastar van juntos bajo el cerrojo (code-review): en dos pasos, dos
+    vínculos a la vez pasaban los dos. Lo gastado que haya caducado se olvida.
+    """
     datos = _lee(token, user_id)
     if datos is None:
-        return
+        return False
     ahora = datetime.now(UTC)
     with _cerrojo:
+        if datos["jti"] in _gastadas:
+            return False
         for jti in [j for j, hasta in _gastadas.items() if hasta < ahora]:
             del _gastadas[jti]
         _gastadas[datos["jti"]] = datetime.fromtimestamp(datos["exp"], UTC)
+    return True
 
 
 def pon_la_cookie(response: Response, token: str) -> None:

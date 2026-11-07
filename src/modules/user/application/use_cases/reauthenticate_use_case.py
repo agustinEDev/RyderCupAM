@@ -6,6 +6,7 @@ vincular Google (BE #753, punto 2): con solo la sesión, una robada podía añad
 Google que sobrevive a restablecer la contraseña.
 """
 
+from src.modules.user.application.dto.oauth_dto import ReauthenticateRequestDTO
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import InvalidCredentialsError, UserNotFoundError
@@ -21,19 +22,16 @@ class AccountWithoutPasswordError(ValueError):
 
 
 class ReauthenticateUseCase:
-    """La contraseña actual de la cuenta con sesión, comprobada."""
+    """
+    La contraseña actual de la cuenta con sesión, comprobada. No devuelve nada: la
+    marca que deja la emite la ruta, que es quien pone cookies.
+    """
 
     def __init__(self, uow: UserUnitOfWorkInterface, *, security_audit: ISecurityAuditLogger):
         self._uow = uow
         self._security_audit = security_audit
 
-    async def execute(
-        self,
-        user_id: str,
-        password: str,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> None:
+    async def execute(self, request: ReauthenticateRequestDTO, user_id: str) -> None:
         """
         Raises:
             UserNotFoundError: si la cuenta ya no existe
@@ -47,14 +45,14 @@ class ReauthenticateUseCase:
         if not user.has_password:
             raise AccountWithoutPasswordError("This account has no password")
         # Fuera de la transacción: bcrypt tarda (BE #283)
-        if not await run_bcrypt(user.verify_password, password):
+        if not await run_bcrypt(user.verify_password, request.password):
             # Al log, como un fallo de Seguridad: cada intento prueba una contraseña
             registra_sin_romper(
                 "Reauthenticate",
                 lambda: self._security_audit.log_security_change_failed(
                     user_id=user_id,
-                    ip_address=ip_address or "unknown",
-                    user_agent=user_agent or "unknown",
+                    ip_address=request.ip_address or "unknown",
+                    user_agent=request.user_agent or "unknown",
                     reason="wrong_current_password",
                 ),
             )

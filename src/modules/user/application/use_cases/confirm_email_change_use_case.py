@@ -13,6 +13,7 @@ from datetime import datetime
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import manda_sin_romper
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.exceptions import (
@@ -107,12 +108,9 @@ class ConfirmEmailChangeUseCase:
 
     async def _avisa_al_de_antes(self, antes: str, nombre: str, nuevo: str) -> None:
         """El aviso al correo de antes (BE #753). Si falla, el cambio ya está hecho."""
-        try:
-            enviado = await self._email_service.send_email_changed_notice(
+        await manda_sin_romper(
+            "Email changed notice",
+            self._email_service.send_email_changed_notice(
                 to_email=antes, user_name=nombre, new_email=nuevo
-            )
-        except Exception as error:
-            logger.error("Email changed notice failed: %s", type(error).__name__)
-            return
-        if not enviado:
-            logger.error("Email changed notice was not sent")
+            ),
+        )

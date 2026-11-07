@@ -19,6 +19,7 @@ Post-Conditions:
 """
 
 import logging
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     ResetPasswordRequestDTO,
@@ -256,7 +257,10 @@ class ResetPasswordUseCase:
                 # hasta que caduque (OWASP A07; tabla de caminos de #749), ni un Google
                 # que vinculó quien entró en la cuenta (BE #753, Agustín). Quien lo tenga
                 # de verdad lo vuelve a vincular. No es una toma: ni su log ni su aviso
-                await cierra_lo_que_no_se_probo(self._uow, user.id)
+                _d, _t, google_quitado = await cierra_lo_que_no_se_probo(self._uow, user.id)
+                if google_quitado:
+                    # Que quede como al desvincularlo a mano (code-review)
+                    user.record_google_unlinked(provider="google", unlinked_at=datetime.now())
                 cerrado = None
 
             # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en
