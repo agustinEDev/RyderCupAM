@@ -102,19 +102,41 @@ async def test_the_quota_text_names_the_configured_mailbox(client: AsyncClient, 
     assert "otro.buzon@example.com" in r.json()["detail"]
 
 
-async def test_one_network_sends_at_most_three_a_day(client: AsyncClient, buzon):
+async def test_one_network_sends_at_most_ten_a_day(client: AsyncClient, buzon):
     """
-    Given: Una red que ya mandó 3 mensajes hoy
-    When: Manda el cuarto
-    Then: 429 del límite por red (no el del tope de la app), y solo salieron 3: una red
-          sola ya no cierra el formulario a todos (auditoría OWASP)
+    Given: Una red que ya mandó 10 mensajes hoy
+    When: Manda el undécimo
+    Then: 429 del límite por red (no el del tope de la app), y solo salieron 10: una
+          red sola llena como mucho la mitad del tope de la app (auditoría OWASP y
+          revisor; 10 y no 3, como los demás límites por red: un club entero o un fallo
+          de la IP real cuentan como una red)
     """
     cabecera = {"X-Test-Client-ID": "contacto-una-red"}
     respuestas = [
         await client.post("/api/v1/support/contact", json=MENSAJE, headers=cabecera)
-        for _ in range(4)
+        for _ in range(11)
     ]
 
-    assert [r.status_code for r in respuestas] == [200, 200, 200, 429]
-    assert respuestas[3].json().get("error_code") != "CONTACT_QUOTA_EXCEEDED"
-    assert len(buzon.enviados) == 3
+    assert [r.status_code for r in respuestas] == [200] * 10 + [429]
+    assert respuestas[10].json().get("error_code") != "CONTACT_QUOTA_EXCEEDED"
+    assert len(buzon.enviados) == 10
+
+
+async def test_failed_sends_count_for_the_network_but_not_for_the_app(client: AsyncClient, buzon):
+    """
+    Given: Mailgun no acepta ningún correo
+    When: Una red lo intenta 11 veces
+    Then: 10 respuestas 502 y la undécima 429 del límite por red: el envío fallido cuenta
+          ahí (CodeRabbit en la #751, comportamiento documentado), pero el tope de la app
+          sigue entero: no salió nada
+    """
+    buzon.acepta = False
+    cabecera = {"X-Test-Client-ID": "contacto-red-con-fallos"}
+    respuestas = [
+        await client.post("/api/v1/support/contact", json=MENSAJE, headers=cabecera)
+        for _ in range(11)
+    ]
+
+    assert [r.status_code for r in respuestas] == [502] * 10 + [429]
+    assert respuestas[10].json().get("error_code") != "CONTACT_QUOTA_EXCEEDED"
+    assert len(cupo_de_contacto._enviados) == 0

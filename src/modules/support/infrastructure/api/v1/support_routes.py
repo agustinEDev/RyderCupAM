@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 
 from src.config.dependencies import get_submit_contact_use_case
 from src.config.rate_limit import (
-    CONTACT_DAILY_LIMIT,
     CONTACT_LIMIT,
     get_client_identifier,
     limiter,
@@ -51,13 +50,12 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     summary="Submit contact form",
     description=(
-        "Emails a contact form message to the app's mailbox. Rate limited to 10 per hour "
-        "and 3 per day per network, and 20 per day app-wide (429 CONTACT_QUOTA_EXCEEDED)."
+        "Emails a contact form message to the app's mailbox. Rate limited to 10 per day "
+        "per network (a failed send counts too) and 20 per day app-wide "
+        "(429 CONTACT_QUOTA_EXCEEDED)."
     ),
 )
 @limiter.limit(CONTACT_LIMIT, key_func=get_client_identifier)
-# Y por día: una red sola no llena el tope de la app (auditoría OWASP)
-@limiter.limit(CONTACT_DAILY_LIMIT, key_func=get_client_identifier)
 async def submit_contact_form(
     request: Request,  # noqa: ARG001 - Required by SlowAPI for rate limiting
     contact_request: ContactRequestDTO,
@@ -66,7 +64,7 @@ async def submit_contact_form(
     """
     Endpoint público para enviar formulario de contacto.
 
-    No requiere autenticación. Rate limited a 10 por hora por red.
+    No requiere autenticación. Rate limited a 10 al día por red (un envío fallido también cuenta).
     """
     try:
         return await use_case.execute(contact_request)

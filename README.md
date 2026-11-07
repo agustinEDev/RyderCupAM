@@ -190,10 +190,9 @@ SENTRY_DSN=<your-sentry-dsn>  # Optional but recommended
 
 ### Support Module (v2.0.8)
 - ✅ **Contact Form** - Public endpoint for support requests (no authentication required)
-- ✅ **GitHub Issues Integration** - Submissions create issues in the project repository via GitHub REST API
-- ✅ **Category Mapping** - BUG, FEATURE, QUESTION, OTHER → GitHub labels (bug, enhancement, question, other)
-- ✅ **Input Sanitization** - HTML/XSS prevention on all fields
-- ✅ **Rate Limiting** - 10 requests per hour per network
+- ✅ **Email Delivery** - Submissions are emailed as plain text to `CONTACT_EMAIL` through Mailgun (EU); before 2.52 they opened GitHub issues
+- ✅ **Input Sanitization** - Control and invisible characters removed from the subject and name, control characters from the message
+- ✅ **Rate Limiting** - 10 per day per network (a failed send counts too) and 20 per day app-wide
 - ✅ 1 endpoint: `POST /api/v1/support/contact`
 
 ### Security Features (v1.13.1)

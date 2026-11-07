@@ -1057,7 +1057,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 | Endpoint | Method | Auth | Rate Limit | Description |
 |----------|--------|------|------------|-------------|
-| `/support/contact` | POST | No | 10/hour and 3/day per network, 20/day app-wide | Submit contact form (emails the app's mailbox) |
+| `/support/contact` | POST | No | 10/day per network, 20/day app-wide | Submit contact form (emails the app's mailbox) |
 
 ### Main Fields
 
@@ -1084,7 +1084,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 
 - **Public endpoint**: No authentication required
 - **CSRF exempt**: No session to protect
-- **Rate limited**: 10 requests/hour and 3/day per network (SlowAPI, `CONTACT_LIMIT`, `CONTACT_DAILY_LIMIT`)
+- **Rate limited**: 10 requests/day per network (SlowAPI, `CONTACT_LIMIT`; a failed send also counts there, the app-wide slot is given back)
 - **Daily quota**: at most 20 messages a day app-wide (in memory); then `429` with `error_code: CONTACT_QUOTA_EXCEEDED`, so the shared mail quota stays for verification and password reset
 - **Email**: plain text to `CONTACT_EMAIL` (default `admin@rydercupfriends.com`) through Mailgun (EU), subject `[Contacto · <category>] <subject>` in one line (control characters removed), `Reply-To` the sender. Since 2.52; before, it opened a GitHub issue
 - **Error handling**: Returns 502 Bad Gateway if Mailgun refuses the message (the quota slot is given back)
@@ -1153,7 +1153,7 @@ Both `own_submitted` AND `marker_submitted` must be true before validation resol
 | POST /auth/forgot-password, /auth/resend-verification | 30/hour + 3/hour per email | network + email | Protect Mailgun and the mailbox |
 | POST /auth/reset-password | 20/hour | network | |
 | GET /auth/validate-reset-token/{token} | 30/hour | network | |
-| POST /support/contact | 10/hour | network | Anti contact form spam |
+| POST /support/contact | 10/day | network | Anti contact form spam; 20/day app-wide on top |
 | POST /handicaps/update | 5/hour | user | Protect RFEG API |
 | POST /handicaps/refresh-mine | 10/hour | user | Each call may wait for RFEG |
 | POST /competitions | 10/hour | user | Anti competition spam |

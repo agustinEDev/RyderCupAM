@@ -42,12 +42,14 @@ async def test_it_posts_to_admin_with_reply_to():
     Then: True; a admin@, desde noreply@, con Reply-To de quien escribe y solo texto
     """
     cliente = _cliente()
-    with patch(f"{MODULO}.httpx.AsyncClient", return_value=cliente):
+    with patch(f"{MODULO}.httpx.AsyncClient", return_value=cliente) as cliente_clase:
         enviado = await _mailer().send(
             subject="[Contacto · Pregunta] Hola", text="Cuerpo", reply_to="ana@example.com"
         )
 
     assert enviado is True
+    # Con tiempo máximo: un Mailgun colgado no retiene la petición sin fin
+    assert cliente_clase.call_args.kwargs["timeout"] == 10.0
     url = cliente.post.call_args.args[0]
     kw = cliente.post.call_args.kwargs
     assert url == "https://api.eu.mailgun.net/v3/rydercupfriends.com/messages"

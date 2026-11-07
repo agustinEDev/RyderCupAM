@@ -91,7 +91,8 @@ class SubmitContactUseCase:
         if not enviado:
             self._cupo.devuelve()
             # Sin datos de quien escribe: el log no es sitio para su correo
-            logger.error("Contact form email could not be sent")
+            # Aviso, no error: el adaptador ya apuntó el error (si no, dos en Sentry)
+            logger.warning("Contact form email could not be sent")
             raise ContactDeliveryError()
 
         return ContactResponseDTO(

@@ -47,3 +47,21 @@ def test_other_routes_keep_their_body():
     )
 
     assert evento["request"]["data"]["name"] == "Ana"
+
+
+def test_a_query_string_does_not_hide_the_contact_route():
+    """Con ?algo detrás de la ruta, también sale sin el cuerpo."""
+    evento = sentry_config.before_send(
+        _evento("https://api.rydercupfriends.com/api/v1/support/contact?x=1"), {}
+    )
+
+    assert "data" not in evento["request"]
+
+
+def test_other_routes_keep_their_body_in_transactions_too():
+    """En las transacciones de otras rutas tampoco cambia nada."""
+    evento = sentry_config.before_send_transaction(
+        _evento("https://api.rydercupfriends.com/api/v1/users/profile"), {}
+    )
+
+    assert evento["request"]["data"]["name"] == "Ana"

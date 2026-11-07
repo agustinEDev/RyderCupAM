@@ -1,7 +1,7 @@
 """
 El tope diario del formulario de contacto, en memoria (6 nov 2026).
 
-Como mucho MENSAJES_POR_DIA en 24 horas, en toda la app, además de los 10 por hora y
+Como mucho MENSAJES_POR_DIA en 24 horas, en toda la app, además de los 10 al día por
 red de la ruta: deja el cupo diario del proveedor (100) para la verificación y la
 recuperación de contraseña. En memoria, como los demás límites: un reinicio lo pone a
 cero. Sin `await`: atómico en el bucle de asyncio.
