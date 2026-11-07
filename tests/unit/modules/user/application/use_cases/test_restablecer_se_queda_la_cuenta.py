@@ -212,3 +212,22 @@ async def test_r4_a_claim_right_before_the_lock_wins_over_the_reset():
             cuenta.id, OAuthProvider.GOOGLE
         )
         assert suyo.provider_user_id == "google-del-dueno"
+
+
+async def test_r5_any_reset_cancels_a_pending_email_change():
+    """
+    Given: Una cuenta verificada con un cambio de correo pendiente
+    When: Restablece la contraseña (quizá porque alguien entró en ella)
+    Then: El pendiente se anula: quien lo pidiera ya no se la lleva
+    """
+    from datetime import datetime
+
+    uow, cuenta, _d, caso, token = await _escena(verificada=True)
+    cuenta.request_email_change("otro@example.com", ahora=datetime.now())
+    async with uow:
+        await uow.users.save(cuenta)
+
+    await _restablece(caso, token)
+
+    async with uow:
+        assert (await uow.users.find_by_id(cuenta.id)).pending_email_token is None

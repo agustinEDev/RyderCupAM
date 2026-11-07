@@ -30,7 +30,7 @@ Google OAuth (3 endpoints) ⭐ Sprint 3
 ├── POST   /api/v1/auth/google/link      # Link Google account to existing user (auth + CSRF)
 └── DELETE /api/v1/auth/google/unlink    # Unlink Google account (auth + CSRF)
 
-User Management (5 endpoints)
+User Management (7 endpoints)
 ├── GET   /api/v1/users/search-autocomplete # Autocomplete search by partial name ⭐ Sprint 4
 ├── GET   /api/v1/users/search           # Search users by email/name
 ├── PATCH /api/v1/users/profile          # Update profile (name/surname/country)
@@ -146,7 +146,7 @@ Support (1 endpoint) ⭐ v2.0.8
 | `/auth/verify-email` | POST | No | Verify email with unique token |
 | `/auth/resend-verification` | POST | No | Resend verification email |
 | `/auth/forgot-password` | POST | No | Request password reset (sends email with token) |
-| `/auth/reset-password` | POST | No | Complete password reset using token |
+| `/auth/reset-password` | POST | No | Complete password reset using token. Revokes every session and device; on an unverified account it also verifies the email and removes any linked Google (ADR-045); any pending email change is cancelled |
 | `/auth/validate-reset-token/{token}` | GET | No | Validate reset token before showing form |
 | `/auth/unlock-account` | POST | Yes | Manual account unlock (Admin) - **v1.13.0** |
 

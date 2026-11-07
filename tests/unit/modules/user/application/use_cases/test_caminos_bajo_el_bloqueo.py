@@ -309,3 +309,41 @@ async def test_a2_google_relinked_to_another_account_mid_login_gets_no_session()
         await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
 
     await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
+
+
+async def test_two_first_google_sign_ins_at_once_do_not_link_twice():
+    """
+    Given: Ana verificada, sin Google, y dos logins con Google a la vez (dos pestañas)
+    When: El segundo llega cuando el primero ya vinculó el Google
+    Then: El segundo ve el vínculo bajo el bloqueo y no lo crea otra vez (antes, un
+          500 por la restricción única)
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    original = uow.users.find_by_id_for_update
+
+    async def el_otro_ya_lo_vinculo(user_id):
+        if (
+            await uow.oauth_accounts.find_by_user_id_and_provider(user_id, OAuthProvider.GOOGLE)
+            is None
+        ):
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user_id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id=INFO.google_user_id,
+                    provider_email=INFO.email,
+                )
+            )
+        return await original(user_id)
+
+    uow.users.find_by_id_for_update = el_otro_ya_lo_vinculo
+    registro = AsyncMock()
+    registro.execute.return_value = RegisterDeviceResponseDTO(
+        device_id="550e8400-e29b-41d4-a716-446655440099", is_new_device=True, message="Nuevo"
+    )
+
+    await _google(uow, registro).execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+    vinculos = [v for v in uow.oauth_accounts._accounts.values() if v.user_id == ana.id]
+    assert len(vinculos) == 1

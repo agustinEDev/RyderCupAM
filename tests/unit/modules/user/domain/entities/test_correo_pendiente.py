@@ -54,7 +54,7 @@ def test_e1_asking_keeps_the_old_email_and_leaves_the_new_one_pending():
     assert str(ana.email.value) == "ana@gmail.com"
     assert ana.email_verified
     assert ana.pending_email_at(AHORA) == "ana@trabajo.com"
-    assert ana.pending_email_token == token and len(token) >= 32
+    assert ana.pending_email_token and len(token) >= 32
     assert ana.pending_email_expires_at == AHORA + timedelta(hours=24)
 
 
@@ -161,3 +161,51 @@ def test_asking_for_the_same_email_is_refused():
 
     with pytest.raises(ValueError):
         ana.request_email_change("ana@gmail.com", ahora=AHORA)
+
+
+def test_a_claim_cancels_a_pending_email_change():
+    """
+    Given: Una cuenta sin verificar con un cambio de correo pendiente (quien la creó
+           pidió llevársela a su dirección)
+    When: El dueño del correo se la queda
+    Then: Ya no hay pendiente: aquel enlace no puede llevársela después
+    """
+    ana = _ana(verificada=False)
+    token = ana.request_email_change("atacante@example.com", ahora=AHORA)
+
+    ana.claim_with_verified_oauth()
+
+    assert ana.pending_email_token is None
+    with pytest.raises(EmailChangeInvalidError):
+        ana.confirm_email_change(token, ahora=AHORA)
+
+
+def test_the_token_is_kept_hashed_not_in_clear():
+    """El token se guarda con hash: quien lea la BD no puede confirmar el cambio."""
+    ana = _ana()
+
+    token = ana.request_email_change("ana@trabajo.com", ahora=AHORA)
+
+    assert ana.pending_email_token != token
+    ana.confirm_email_change(token, ahora=AHORA)
+    assert str(ana.email.value) == "ana@trabajo.com"
+
+
+def test_a_non_ascii_token_is_just_invalid():
+    """Un token con tildes es inválido, no un error (antes, compare_digest lanzaba)."""
+    ana = _ana()
+    ana.request_email_change("ana@trabajo.com", ahora=AHORA)
+
+    with pytest.raises(EmailChangeInvalidError):
+        ana.confirm_email_change("tokén", ahora=AHORA)
+
+
+def test_changing_the_email_directly_cancels_a_pending_change():
+    """El cambio directo (el del administrador) anula el pendiente del usuario."""
+    ana = _ana()
+    token = ana.request_email_change("ana@trabajo.com", ahora=AHORA)
+
+    ana.change_email("ana@otra.com")
+
+    with pytest.raises(EmailChangeInvalidError):
+        ana.confirm_email_change(token, ahora=AHORA)

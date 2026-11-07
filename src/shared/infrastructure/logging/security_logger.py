@@ -231,7 +231,10 @@ class SecurityLogger:
             return f"🔐 PASSWORD CHANGED | {user_info} | Verified: {event.old_password_verified}"
 
         if isinstance(event, EmailChangedEvent):
-            return f"📧 EMAIL CHANGED | {user_info} | Verification required: {event.email_verification_required}"
+            # Pedido (pendiente de confirmar desde la dirección nueva) o ya hecho (#749)
+            if event.email_verification_required:
+                return f"📧 EMAIL CHANGE REQUESTED | {user_info} | pending confirmation"
+            return f"📧 EMAIL CHANGED | {user_info} | confirmed from the new address"
 
         if isinstance(event, AccessDeniedEvent):
             return f"⛔ ACCESS DENIED | {user_info} | Resource: {event.resource_type} | Action: {event.action_attempted}"

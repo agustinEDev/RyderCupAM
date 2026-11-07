@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 
 from src.config.dependencies import (
     get_accept_terms_use_case,
@@ -215,19 +216,31 @@ class ConfirmEmailChangeRequestDTO(BaseModel):
     tags=["Users"],
 )
 async def confirm_email_change(
+    request: Request,
     datos: ConfirmEmailChangeRequestDTO,
     use_case: ConfirmEmailChangeUseCase = Depends(get_confirm_email_change_use_case),
     current_user: UserResponseDTO = Depends(get_current_user),
 ):
     """Confirma el cambio de correo de la cuenta con sesión (#749)."""
     try:
-        return await use_case.execute(str(current_user.id), datos.token)
+        return await use_case.execute(
+            str(current_user.id),
+            datos.token,
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
     except EmailChangeExpiredError:
         codigo, estado = EMAIL_CHANGE_EXPIRED, status.HTTP_400_BAD_REQUEST
     except EmailChangeEmailInUseError:
         codigo, estado = EMAIL_ALREADY_IN_USE, status.HTTP_409_CONFLICT
     except EmailChangeInvalidError:
         codigo, estado = EMAIL_CHANGE_INVALID, status.HTTP_400_BAD_REQUEST
+    except IntegrityError:
+        # Otra cuenta lo ocupó entre la comprobación y el guardado (la restricción
+        # única de users.email)
+        codigo, estado = EMAIL_ALREADY_IN_USE, status.HTTP_409_CONFLICT
     return respuesta_con_codigo(estado, _TEXTOS_DEL_CAMBIO_DE_CORREO, codigo)
 
 
@@ -343,7 +356,10 @@ async def update_profile(
     response_model=UpdateSecurityResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Actualizar datos de seguridad",
-    description="Actualiza el email y/o password del usuario autenticado. Requiere contraseña actual.",
+    description=(
+        "Actualiza la contraseña y/o pide un correo nuevo, que queda pendiente hasta "
+        "confirmarlo desde su dirección (ADR-045). Requiere la contraseña actual."
+    ),
     tags=["Users"],
 )
 async def update_security(

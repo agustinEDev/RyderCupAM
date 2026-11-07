@@ -492,3 +492,21 @@ class TestPasswordResetCompletedAuditEvent:
                 ip_address="unknown",
                 user_agent="unknown",
             )
+
+
+def test_the_email_change_log_line_tells_requested_from_confirmed():
+    """La línea del log separa el cambio pedido (pendiente) del confirmado (#749)."""
+    from src.shared.domain.events.security_events import EmailChangedEvent
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    construye = SecurityLogger._build_message
+    pedido = EmailChangedEvent(
+        user_id="u1", ip_address="1.1.1.1", user_agent="ua", email_verification_required=True
+    )
+    hecho = EmailChangedEvent(
+        user_id="u1", ip_address="1.1.1.1", user_agent="ua", email_verification_required=False
+    )
+
+    assert "EMAIL CHANGE REQUESTED" in construye(SecurityLogger.__new__(SecurityLogger), pedido)
+    assert "EMAIL CHANGED" in construye(SecurityLogger.__new__(SecurityLogger), hecho)
+    assert "REQUESTED" not in construye(SecurityLogger.__new__(SecurityLogger), hecho)

@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -56,6 +57,11 @@ AVATAR_MAX_STORED_UPLOADS = 5
 # Cuanto puede ir por delante la ultima visita al feed antes de darla por mala:
 # lo justo para el desfase entre relojes, no las horas de una zona horaria
 FEED_SEEN_FUTURE_TOLERANCE = timedelta(minutes=5)
+
+
+def _hash_del_token(token: str) -> str:
+    """El hash con el que se guarda el token del correo pendiente (SHA-256)."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 class User:
@@ -746,9 +752,11 @@ class User:
         if self.email_verified:
             return False
         self._password = None
-        # Un «Olvidé mi contraseña» de antes del cambio de manos, tampoco
+        # Un «Olvidé mi contraseña» de antes del cambio de manos, tampoco, ni un
+        # cambio de correo que pidiera quien la creó
         self._password_reset_token = None
         self._reset_token_expires_at = None
+        self.cancel_email_change()
         self.confirm_email_ownership()
         return True
 
@@ -901,13 +909,23 @@ class User:
         nuevo = Email(new_email)
         if self.email is not None and nuevo == self.email:
             raise ValueError("El correo nuevo es el mismo que el actual")
+        token = secrets.token_urlsafe(32)
         self._pending_email = str(nuevo.value)
-        self._pending_email_token = secrets.token_urlsafe(32)
+        # Con hash: quien lea la BD no puede confirmar el cambio (auditoría OWASP)
+        self._pending_email_token = _hash_del_token(token)
         self._pending_email_expires_at = ahora + timedelta(
             hours=self.HORAS_PARA_CONFIRMAR_EL_CORREO
         )
         self._updated_at = datetime.now()
-        return self._pending_email_token
+        return token
+
+    def pending_email_token_matches(self, token: str) -> bool:
+        """Si hay cambio pendiente y el token es el de su enlace (sin mirar la hora)."""
+        guardado = self.pending_email_token
+        if getattr(self, "_pending_email", None) is None or not guardado:
+            return False
+        # En bytes: compare_digest con un str no ASCII lanzaba (un 500)
+        return secrets.compare_digest(guardado.encode(), _hash_del_token(token or "").encode())
 
     def confirm_email_change(self, token: str, ahora: datetime) -> None:
         """
@@ -919,9 +937,7 @@ class User:
             EmailChangeExpiredError: si caducó (y se anula)
         """
         pendiente = getattr(self, "_pending_email", None)
-        if pendiente is None or not secrets.compare_digest(
-            self.pending_email_token or "", token or ""
-        ):
+        if pendiente is None or not self.pending_email_token_matches(token):
             raise EmailChangeInvalidError("No pending email change with that token")
         if self.pending_email_expires_at is None or ahora > self.pending_email_expires_at:
             self.cancel_email_change()
@@ -972,8 +988,10 @@ class User:
 
         self._email = new_email_vo
         self._email_verified = False  # Requiere nueva verificación
-        # El enlace de verificación del correo de antes tampoco vale para este
+        # El enlace de verificación del correo de antes tampoco vale para este, ni un
+        # cambio de correo pendiente (lo sustituye este)
         self._verification_token = None
+        self.cancel_email_change()
         # Un «Olvidé mi contraseña» pedido para el correo de antes no vale para este:
         # verificaría el nuevo sin que nadie lo haya demostrado (#749)
         self._password_reset_token = None

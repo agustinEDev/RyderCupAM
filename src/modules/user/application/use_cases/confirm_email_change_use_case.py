@@ -6,6 +6,7 @@ Confirma el correo nuevo pendiente con el token del enlace que llegó a esa dire
 error al escribir el correo no puede confirmarlo.
 """
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 
@@ -14,12 +15,16 @@ from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.exceptions import (
     EmailChangeEmailInUseError,
     EmailChangeExpiredError,
+    EmailChangeInvalidError,
 )
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+logger = logging.getLogger(__name__)
 
 
 class ConfirmEmailChangeUseCase:
@@ -30,7 +35,13 @@ class ConfirmEmailChangeUseCase:
         self._uow = uow
         self._reloj = reloj
 
-    async def execute(self, user_id: str, token: str) -> UserResponseDTO:
+    async def execute(
+        self,
+        user_id: str,
+        token: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> UserResponseDTO:
         """
         Confirma el cambio, con la fila bloqueada (tabla de caminos de #749).
 
@@ -45,6 +56,9 @@ class ConfirmEmailChangeUseCase:
             user = await self._uow.users.find_by_id_for_update(UserId(user_id))
             if user is None:
                 raise UserNotFoundError(f"User not found: {user_id}")
+            # El token, antes que nada: con otro, ni se anula ni se dice si está ocupado
+            if not user.pending_email_token_matches(token):
+                raise EmailChangeInvalidError("No pending email change with that token")
             pendiente = user.pending_email_at(ahora)
             if pendiente is not None:
                 otra = await self._uow.users.find_by_email(Email(pendiente))
@@ -62,4 +76,15 @@ class ConfirmEmailChangeUseCase:
             await self._uow.users.save(user)
         if anulado is not None:
             raise anulado
+        # El cambio de verdad, al log (el de la petición dice «pendiente»). Un fallo
+        # del log no deshace el cambio
+        try:
+            get_security_logger().log_email_changed(
+                user_id=user_id,
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
+                email_verification_required=False,
+            )
+        except Exception as error:
+            logger.error("Email change audit event failed: %s", type(error).__name__)
         return UserResponseDTO.model_validate(user)

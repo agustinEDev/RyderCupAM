@@ -214,6 +214,10 @@ class ResetPasswordUseCase:
                 await revoca_sus_sesiones(self._uow, user.id)
                 cerrado = None
 
+            # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en
+            # la cuenta (revisión de #749)
+            user.cancel_email_change()
+
             # Guardar usuario con nueva contraseña y token invalidado
             await self._uow.users.save(user)
             # Commit automático al salir del contexto (todas las operaciones atomicas)

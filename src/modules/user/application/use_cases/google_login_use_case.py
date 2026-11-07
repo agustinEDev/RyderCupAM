@@ -137,6 +137,13 @@ class GoogleLoginUseCase:
                 if bloqueada.email is None or bloqueada.email != email:
                     raise ValueError("Account changed during Google sign-in")
                 user = bloqueada
+                # Otra petición a la vez (otra pestaña) pudo vincular ya este Google:
+                # entonces es un login con él, sin vincular de nuevo
+                ya = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_info.google_user_id
+                )
+                if ya is not None and ya.user_id == user.id:
+                    return user, False, False, None
                 # Desactivada: sin vincular Google ni verificar el correo. Un login
                 # rechazado no cambia la cuenta (/code-review); execute da el 403
                 if not user.is_active:

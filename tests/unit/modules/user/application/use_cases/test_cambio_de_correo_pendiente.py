@@ -81,7 +81,7 @@ async def test_e1_asking_keeps_the_old_email_and_sends_both_mails():
     assert confirmacion["to_email"] == "ana@trabajo.com"
     async with uow:
         guardada = await uow.users.find_by_id(ana.id)
-    assert confirmacion["token"] == guardada.pending_email_token
+    assert guardada.pending_email_token_matches(confirmacion["token"])
     aviso = correos.send_email_change_requested_notice.await_args.kwargs
     assert aviso["to_email"] == "ana@gmail.com"
     assert aviso["new_email"] == "ana@trabajo.com"
@@ -110,8 +110,8 @@ async def test_e2_confirming_switches_the_email():
     """Con su token: el correo de la cuenta es el nuevo, verificado, sin pendiente."""
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    await _pide(uow, ana)
-    token = (await uow.users.find_by_id(ana.id)).pending_email_token
+    _r, correos = await _pide(uow, ana)
+    token = correos.send_email_change_confirmation.await_args.kwargs["token"]
 
     usuario = await ConfirmEmailChangeUseCase(uow).execute(str(ana.id.value), token)
 
@@ -129,8 +129,8 @@ async def test_e3_a_late_confirmation_cancels_the_change_and_saves_it():
     """
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    await _pide(uow, ana)
-    token = (await uow.users.find_by_id(ana.id)).pending_email_token
+    _r, correos = await _pide(uow, ana)
+    token = correos.send_email_change_confirmation.await_args.kwargs["token"]
     caso = ConfirmEmailChangeUseCase(uow, reloj=lambda: datetime.now() + timedelta(hours=25))
 
     with pytest.raises(EmailChangeExpiredError):
@@ -148,8 +148,8 @@ async def test_e4_an_address_taken_meanwhile_is_refused():
     """
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    await _pide(uow, ana)
-    token = (await uow.users.find_by_id(ana.id)).pending_email_token
+    _r, correos = await _pide(uow, ana)
+    token = correos.send_email_change_confirmation.await_args.kwargs["token"]
     otra = User.create(
         first_name="Otra", last_name="Persona", email_str="ana@trabajo.com", plain_password=CLAVE
     )
@@ -181,11 +181,84 @@ async def test_e6_cancelling_leaves_nothing_pending():
     """Anular: sin pendiente, y el enlace ya no vale."""
     uow = InMemoryUnitOfWork()
     ana = await _ana(uow)
-    await _pide(uow, ana)
-    token = (await uow.users.find_by_id(ana.id)).pending_email_token
+    _r, correos = await _pide(uow, ana)
+    token = correos.send_email_change_confirmation.await_args.kwargs["token"]
 
     usuario = await CancelEmailChangeUseCase(uow).execute(str(ana.id.value))
 
     assert usuario.pending_email is None
     with pytest.raises(EmailChangeInvalidError):
         await ConfirmEmailChangeUseCase(uow).execute(str(ana.id.value), token)
+
+
+async def test_a_wrong_token_with_a_taken_address_is_invalid_and_keeps_the_change():
+    """
+    Given: Un pendiente a una dirección que otra cuenta ocupó después
+    When: Se confirma con OTRO token
+    Then: EmailChangeInvalidError (no 409) y el pendiente sigue: el token se mira antes
+    """
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    await _pide(uow, ana)
+    otra = User.create(
+        first_name="Otra", last_name="Persona", email_str="ana@trabajo.com", plain_password=CLAVE
+    )
+    async with uow:
+        await uow.users.save(otra)
+
+    with pytest.raises(EmailChangeInvalidError):
+        await ConfirmEmailChangeUseCase(uow).execute(str(ana.id.value), "otro")
+
+    assert (await uow.users.find_by_id(ana.id)).pending_email_token is not None
+
+
+async def test_the_notice_skips_an_unverified_old_address():
+    """
+    Given: Una cuenta con el correo SIN verificar
+    When: Pide un correo nuevo
+    Then: El enlace va al nuevo, pero no hay aviso al viejo: nunca a un correo sin
+          confirmar (como el aviso de nuevo inicio)
+    """
+    uow = InMemoryUnitOfWork()
+    ana = User.create(
+        first_name="Ana", last_name="Dueña", email_str="ana@gmail.com", plain_password=CLAVE
+    )
+    async with uow:
+        await uow.users.save(ana)
+
+    _respuesta, correos = await _pide(uow, ana)
+
+    correos.send_email_change_confirmation.assert_awaited_once()
+    correos.send_email_change_requested_notice.assert_not_awaited()
+
+
+async def test_the_confirmed_change_goes_to_the_security_log(monkeypatch):
+    """
+    Given: Un cambio pendiente
+    When: Se confirma desde una IP y un navegador
+    Then: El log apunta el cambio YA hecho (sin verificación pendiente), con la red
+    """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    apuntes = []
+    monkeypatch.setattr(
+        modulo.SecurityLogger, "log_email_changed", lambda self, **kw: apuntes.append(kw)
+    )
+    uow = InMemoryUnitOfWork()
+    ana = await _ana(uow)
+    _r, correos = await _pide(uow, ana)
+    apuntes.clear()
+    token = correos.send_email_change_confirmation.await_args.kwargs["token"]
+
+    await ConfirmEmailChangeUseCase(uow).execute(
+        str(ana.id.value), token, ip_address="203.0.113.7", user_agent="Navegador"
+    )
+
+    assert apuntes == [
+        {
+            "user_id": str(ana.id.value),
+            "ip_address": "203.0.113.7",
+            "user_agent": "Navegador",
+            "email_verification_required": False,
+        }
+    ]

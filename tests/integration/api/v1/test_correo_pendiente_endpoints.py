@@ -28,7 +28,7 @@ VIEJO = "pendiente.viejo@example.com"
 NUEVO = "pendiente.nuevo@example.com"
 
 
-async def _pide(client: AsyncClient, viejo=VIEJO, nuevo=NUEVO):
+async def _pide(client: AsyncClient, correos, viejo=VIEJO, nuevo=NUEVO):
     datos = await create_authenticated_user(client, viejo, CLAVE, "Ana", "Lopez")
     cabecera = {"Authorization": f"Bearer {datos['token']}"}
     r = await client.patch(
@@ -36,8 +36,12 @@ async def _pide(client: AsyncClient, viejo=VIEJO, nuevo=NUEVO):
         json={"current_password": CLAVE, "new_email": nuevo},
         headers=cabecera,
     )
-    filas = await _sql("select pending_email_token from users where email = :e", {"e": viejo})
-    return r, cabecera, filas[0][0]
+    # El token, del correo (en la BD solo está su hash)
+    return (
+        r,
+        cabecera,
+        correos.send_email_change_confirmation.await_args.kwargs["token"],
+    )
 
 
 async def _confirma(client, cabecera, token):
@@ -46,8 +50,10 @@ async def _confirma(client, cabecera, token):
     )
 
 
-async def test_i1_asking_keeps_the_old_email_with_the_new_one_pending(client: AsyncClient):
-    r, cabecera, _token = await _pide(client)
+async def test_i1_asking_keeps_the_old_email_with_the_new_one_pending(
+    client: AsyncClient, mock_external_services
+):
+    r, cabecera, _token = await _pide(client, mock_external_services)
 
     assert r.status_code == 200
     assert r.json()["user"]["email"] == VIEJO
@@ -57,8 +63,12 @@ async def test_i1_asking_keeps_the_old_email_with_the_new_one_pending(client: As
     assert yo.json()["pending_email"] == NUEVO
 
 
-async def test_i2_confirming_switches_the_email_and_it_signs_in(client: AsyncClient):
-    _r, cabecera, token = await _pide(client, "i2.viejo@example.com", "i2.nuevo@example.com")
+async def test_i2_confirming_switches_the_email_and_it_signs_in(
+    client: AsyncClient, mock_external_services
+):
+    _r, cabecera, token = await _pide(
+        client, mock_external_services, "i2.viejo@example.com", "i2.nuevo@example.com"
+    )
 
     r = await _confirma(client, cabecera, token)
 
@@ -81,8 +91,10 @@ async def test_i2_confirming_switches_the_email_and_it_signs_in(client: AsyncCli
     assert viejo.status_code == 401
 
 
-async def test_i3_without_a_session_nobody_confirms(client: AsyncClient):
-    _r, _cabecera, token = await _pide(client, "i3.viejo@example.com", "i3.nuevo@example.com")
+async def test_i3_without_a_session_nobody_confirms(client: AsyncClient, mock_external_services):
+    _r, _cabecera, token = await _pide(
+        client, mock_external_services, "i3.viejo@example.com", "i3.nuevo@example.com"
+    )
     client.cookies.clear()
 
     r = await client.post("/api/v1/users/me/email-change/confirm", json={"token": token})
@@ -92,8 +104,12 @@ async def test_i3_without_a_session_nobody_confirms(client: AsyncClient):
     assert filas == [("i3.viejo@example.com",)]
 
 
-async def test_i4_a_late_confirmation_is_refused_and_cancels(client: AsyncClient):
-    _r, cabecera, token = await _pide(client, "i4.viejo@example.com", "i4.nuevo@example.com")
+async def test_i4_a_late_confirmation_is_refused_and_cancels(
+    client: AsyncClient, mock_external_services
+):
+    _r, cabecera, token = await _pide(
+        client, mock_external_services, "i4.viejo@example.com", "i4.nuevo@example.com"
+    )
     await _sql(
         "update users set pending_email_expires_at = now() - interval '1 hour' where email = :e",
         {"e": "i4.viejo@example.com"},
@@ -109,8 +125,10 @@ async def test_i4_a_late_confirmation_is_refused_and_cancels(client: AsyncClient
     assert filas == [("i4.viejo@example.com", None)]
 
 
-async def test_i5_another_token_is_refused(client: AsyncClient):
-    _r, cabecera, _token = await _pide(client, "i5.viejo@example.com", "i5.nuevo@example.com")
+async def test_i5_another_token_is_refused(client: AsyncClient, mock_external_services):
+    _r, cabecera, _token = await _pide(
+        client, mock_external_services, "i5.viejo@example.com", "i5.nuevo@example.com"
+    )
 
     r = await _confirma(client, cabecera, "no-es-el-token")
 
@@ -118,8 +136,12 @@ async def test_i5_another_token_is_refused(client: AsyncClient):
     assert r.json()["error_code"] == "EMAIL_CHANGE_INVALID"
 
 
-async def test_i6_an_address_taken_meanwhile_is_refused(client: AsyncClient):
-    _r, cabecera, token = await _pide(client, "i6.viejo@example.com", "i6.nuevo@example.com")
+async def test_i6_an_address_taken_meanwhile_is_refused(
+    client: AsyncClient, mock_external_services
+):
+    _r, cabecera, token = await _pide(
+        client, mock_external_services, "i6.viejo@example.com", "i6.nuevo@example.com"
+    )
     await create_authenticated_user(client, "i6.nuevo@example.com", CLAVE, "Otra", "Persona")
 
     r = await _confirma(client, cabecera, token)
@@ -132,8 +154,10 @@ async def test_i6_an_address_taken_meanwhile_is_refused(client: AsyncClient):
     assert filas == [(None,)]
 
 
-async def test_i7_cancelling_leaves_nothing_pending(client: AsyncClient):
-    _r, cabecera, token = await _pide(client, "i7.viejo@example.com", "i7.nuevo@example.com")
+async def test_i7_cancelling_leaves_nothing_pending(client: AsyncClient, mock_external_services):
+    _r, cabecera, token = await _pide(
+        client, mock_external_services, "i7.viejo@example.com", "i7.nuevo@example.com"
+    )
 
     r = await client.delete("/api/v1/users/me/email-change", headers=cabecera)
 

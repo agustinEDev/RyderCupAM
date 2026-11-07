@@ -172,22 +172,26 @@ class UpdateSecurityUseCase:
         """El enlace al correo nuevo y el aviso al de antes. Un fallo no tumba el cambio."""
         if not self._email_service:
             return
-        envios = (
+        envios = [
             (
                 "confirmation",
                 self._email_service.send_email_change_confirmation,
                 {"to_email": new_email, "user_name": user.first_name, "token": token},
-            ),
-            (
-                "notice",
-                self._email_service.send_email_change_requested_notice,
-                {
-                    "to_email": str(user.email.value),
-                    "user_name": user.first_name,
-                    "new_email": new_email,
-                },
-            ),
-        )
+            )
+        ]
+        # Nunca a un correo sin confirmar (como el aviso de nuevo inicio)
+        if user.email_verified:
+            envios.append(
+                (
+                    "notice",
+                    self._email_service.send_email_change_requested_notice,
+                    {
+                        "to_email": str(user.email.value),
+                        "user_name": user.first_name,
+                        "new_email": new_email,
+                    },
+                )
+            )
         for nombre, envia, datos in envios:
             try:
                 if not await envia(**datos):
