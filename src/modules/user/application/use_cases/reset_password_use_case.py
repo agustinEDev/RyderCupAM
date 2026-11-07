@@ -35,6 +35,7 @@ from src.modules.user.domain.exceptions.invalid_reset_token_error import Invalid
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
+from src.modules.user.domain.value_objects.password import Password
 from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
 
@@ -133,8 +134,10 @@ class ResetPasswordUseCase:
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
 
-        # Buscar usuario por token de reseteo
-        user = await self._uow.users.find_by_password_reset_token(request.token)
+        # Buscar usuario por token de reseteo, en su propia transacción: cerrada antes
+        # del bcrypt (BE #283)
+        async with self._uow:
+            user = await self._uow.users.find_by_password_reset_token(request.token)
 
         if not user:
             # Security Logging: Token inválido (usuario no encontrado)
@@ -147,6 +150,23 @@ class ResetPasswordUseCase:
                 user_agent=user_agent,
             )
             raise InvalidResetTokenError()
+
+        # Lo barato antes del bcrypt y sin transacción (BE #283): un enlace que no vale
+        # responde sin calcular nada; luego la política y el hash de la nueva
+        try:
+            if not user.can_reset_password(request.token):
+                raise InvalidResetTokenError()
+            nueva = await run_bcrypt(Password.from_plain_text, request.new_password)
+        except ValueError as e:
+            security_logger.log_password_reset_completed(
+                user_id=str(user.id.value),
+                email=str(user.email.value),
+                success=False,
+                failure_reason=str(e),
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise
 
         # Todo con la fila bloqueada (revisión de #749): una toma por Google a la vez
         # borra el token, y entonces el enlace ya no vale; sin el bloqueo, el
@@ -174,10 +194,11 @@ class ResetPasswordUseCase:
             try:
                 # reset_password() internamente llama a can_reset_password()
                 # Si el token es inválido/expirado, lanza ValueError
-                await run_bcrypt(
-                    user.reset_password,
+                # El token, otra vez sobre la fila bloqueada (otro pudo gastarlo
+                # entretanto); la contraseña ya va calculada, sin bcrypt aquí
+                user.reset_password(
                     token=request.token,
-                    new_password=request.new_password,
+                    new_password=nueva,
                     ip_address=ip_address,
                     user_agent=user_agent,
                 )

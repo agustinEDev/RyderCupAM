@@ -79,25 +79,32 @@ class EnsureSystemUserUseCase:
         Returns:
             UserId de la cuenta de sistema
         """
+        # Ya existe: en su propia transacción, sin bcrypt (BE #283)
         async with self._uow:
             existing = await self._uow.users.find_by_email(Email(email_str))
             if existing is not None:
                 self._require_system_account(existing, email_str)
                 return self._require_id(existing)
 
-            system_user = await run_bcrypt(
-                User.create,
-                first_name=first_name,
-                last_name=last_name,
-                email_str=email_str,
-                plain_password=_generate_unusable_password(),
-            )
-            # Se desactiva a sí misma: no hay ningún admin detrás de esta alta,
-            # y la auditoría de la desactivación tiene que apuntar a algo.
-            system_user.deactivate(deactivated_by_user_id=str(system_user.id.value))
+        # El bcrypt, sin transacción abierta (BE #283)
+        system_user = await run_bcrypt(
+            User.create,
+            first_name=first_name,
+            last_name=last_name,
+            email_str=email_str,
+            plain_password=_generate_unusable_password(),
+        )
+        # Se desactiva a sí misma: no hay ningún admin detrás de esta alta,
+        # y la auditoría de la desactivación tiene que apuntar a algo.
+        system_user.deactivate(deactivated_by_user_id=str(system_user.id.value))
 
+        async with self._uow:
+            # Otro proceso pudo crearla entretanto: entonces vale la suya
+            existing = await self._uow.users.find_by_email(Email(email_str))
+            if existing is not None:
+                self._require_system_account(existing, email_str)
+                return self._require_id(existing)
             await self._uow.users.save(system_user)
-
             return self._require_id(system_user)
 
     @staticmethod

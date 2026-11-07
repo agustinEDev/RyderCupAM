@@ -397,6 +397,12 @@ class LoginUserUseCase:
             self._freno.apunta_fallo_en_la_red(_red_de(request))
         return respuesta
 
+    async def _lee_la_cuenta(self, email: Email) -> User | None:
+        """La cuenta, en su propia transacción: cerrada antes del bcrypt, que no retiene
+        así una conexión del pool (BE #283)."""
+        async with self._uow:
+            return await self._uow.users.find_by_email(email)
+
     async def _entra(self, request: LoginRequestDTO) -> LoginResponseDTO | None:
         """
         Ejecuta el caso de uso de login.
@@ -440,9 +446,9 @@ class LoginUserUseCase:
         if not ids_de_la_cookie_de_dispositivo(request.device_id_from_cookie):
             origen, fiable = origen_de_red(_red_de(request)), False
             self._comprueba_la_puerta(None, request, origen, fiable, contexto)
-            user = await self._uow.users.find_by_email(email)
+            user = await self._lee_la_cuenta(email)
         else:
-            user = await self._uow.users.find_by_email(email)
+            user = await self._lee_la_cuenta(email)
             origen, fiable = await self._origen_del_intento(user, request)
             self._comprueba_la_puerta(user, request, origen, fiable, contexto)
         # El respaldo solo frena a los desconocidos: el fiable entra igual
