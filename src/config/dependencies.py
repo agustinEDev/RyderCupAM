@@ -1579,9 +1579,10 @@ def get_admin_list_users_use_case(
 
 def get_admin_update_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> AdminUpdateUserUseCase:
     """Proveedor del caso de uso AdminUpdateUserUseCase."""
-    return AdminUpdateUserUseCase(uow)
+    return AdminUpdateUserUseCase(uow, email_service=email_service)
 
 
 def get_admin_set_user_active_use_case(

@@ -18,6 +18,9 @@ from src.modules.user.application.dto.user_dto import (
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.avisa_del_cambio_de_correo import (
+    avisa_del_cambio_de_correo,
+)
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
@@ -248,36 +251,11 @@ class UpdateSecurityUseCase:
                 ),
             )
 
-    async def _avisa_del_cambio_de_correo(self, user: object, new_email: str, token: str) -> None:
+    async def _avisa_del_cambio_de_correo(self, user: User, new_email: str, token: str) -> None:
         """El enlace al correo nuevo y el aviso al de antes. Un fallo no tumba el cambio."""
         if not self._email_service:
             return
-        envios = [
-            (
-                "confirmation",
-                self._email_service.send_email_change_confirmation,
-                {"to_email": new_email, "user_name": user.first_name, "token": token},
-            )
-        ]
-        # Nunca a un correo sin confirmar (como el aviso de nuevo inicio)
-        if user.email_verified:
-            envios.append(
-                (
-                    "notice",
-                    self._email_service.send_email_change_requested_notice,
-                    {
-                        "to_email": str(user.email.value),
-                        "user_name": user.first_name,
-                        "new_email": new_email,
-                    },
-                )
-            )
-        for nombre, envia, datos in envios:
-            try:
-                if not await envia(**datos):
-                    logger.warning("Email change %s mail not sent for a user", nombre)
-            except Exception as error:
-                logger.error("Email change %s mail failed: %s", nombre, type(error).__name__)
+        await avisa_del_cambio_de_correo(self._email_service, user, new_email, token)
 
     async def execute(
         self, user_id: str, request: UpdateSecurityRequestDTO

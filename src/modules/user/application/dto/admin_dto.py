@@ -41,6 +41,8 @@ class AdminUserSummaryDTO(BaseModel):
     is_admin: bool
     is_active: bool
     email_verified: bool
+    # El correo que el admin (o el usuario) pidió, hasta que se confirme (BE #753)
+    pending_email: str | None = None
     created_at: datetime
     last_login_at: datetime | None = None
 
