@@ -244,6 +244,12 @@ class RefreshAccessTokenUseCase:
             return False
         try:
             async with self._uow:
+                # Un dispositivo revocado no se sustituye, aunque otra cuenta de la cookie
+                # del navegador tenga una sesión más nueva (revisor de seguridad)
+                if dispositivo is not None:
+                    propio = await self._uow.user_devices.find_by_id(dispositivo)
+                    if propio is not None and not propio.is_active:
+                        return False
                 ahora = datetime.now()
                 # Solo una sesión reciente: la petición tardía llega segundos después del
                 # nuevo login. Más vieja, se borra (sin cookies muertas de días, Agustín)

@@ -13,6 +13,8 @@ en segundo plano) después de volver a entrar, su Set-Cookie borraría la cookie
      después; más vieja, se borra (sin cookies muertas de días)
   S6 también con el token ya caducado
   S7 si falla la consulta, se borra como siempre y el rechazo sigue siendo el mismo
+  S10 token de un dispositivo revocado → se borra, aunque otra cuenta de la cookie del
+      navegador tenga una sesión más nueva (revocado o caducado, revisor de seguridad)
 """
 
 from datetime import datetime, timedelta
@@ -264,3 +266,56 @@ async def test_s9_only_a_replaced_token_keeps_the_cookie(como):
     # Con la cookie de dispositivo del navegador, como manda uno de verdad
     navegador = [str(dispositivo.id.value)]
     assert (await _rechazo(caso, navegador=navegador)).conserva_la_cookie is False
+
+
+async def _otra_cuenta_con_sesion_nueva(uow):
+    otra = User.create(
+        first_name="Luis",
+        last_name="Gómez",
+        email_str="luis@example.com",
+        plain_password="SecureP@ssw0rd123!",
+    )
+    await uow.users.save(otra)
+    suyo = UserDevice.create(otra.id, DeviceFingerprint.create(IPHONE, "203.0.113.7"))
+    await uow.user_devices.save(suyo)
+    await _nuevo(uow, otra, suyo.id)
+    return suyo
+
+
+@pytest.mark.parametrize("como", ["revocado", "caducado en la BD", "caducado en el JWT"])
+async def test_s10_a_token_of_a_revoked_device_never_keeps_the_cookie(como):
+    """
+    Given: Un token de un dispositivo revocado y, en la cookie del navegador, otra cuenta
+           con una sesión más nueva
+    When: Refresca con él
+    Then: Rechazado y se borra la cookie: un dispositivo revocado no se sustituye
+    """
+    uow, _usuario, dispositivo, viejo, caso = await _escena()
+    dispositivo.revoke()
+    await uow.user_devices.save(dispositivo)
+    suyo = await _otra_cuenta_con_sesion_nueva(uow)
+    if como != "revocado":
+        viejo._revoked = False
+        viejo._expires_at = datetime.now() - timedelta(minutes=1)
+        await uow.refresh_tokens.save(viejo)
+    if como == "caducado en el JWT":
+        caso._token_service.verify_refresh_token.return_value = None
+        caso._token_service.refresh_token_expired.return_value = True
+
+    rechazo = await _rechazo(caso, navegador=[str(suyo.id.value)])
+
+    assert rechazo.conserva_la_cookie is False
+
+
+async def test_s10_the_same_scene_with_a_live_device_keeps_the_cookie():
+    """
+    Given: La misma escena, con el dispositivo del token activo
+    When: Refresca con él
+    Then: Conserva la cookie (el caso de cambio de cuenta, S8)
+    """
+    uow, _usuario, _dispositivo, _viejo, caso = await _escena()
+    suyo = await _otra_cuenta_con_sesion_nueva(uow)
+
+    rechazo = await _rechazo(caso, navegador=[str(suyo.id.value)])
+
+    assert rechazo.conserva_la_cookie is True

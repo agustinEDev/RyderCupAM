@@ -495,8 +495,10 @@ def _refresco_rechazado(
 ) -> JSONResponse:
     """
     El 401 del refresco: texto fijo y en `error_code` solo SESSION_ENDED (el final
-    normal) o SESSION_REJECTED (BE #733). El motivo exacto va al log de seguridad:
-    al cliente le decía si la cuenta se borró o si cambió la contraseña.
+    normal), SESSION_REJECTED (BE #733) o SESSION_REPLACED (BE #734: el navegador tiene
+    una sesión más nueva, no se borra la cookie y el front reintenta). El motivo exacto
+    va al log de seguridad: al cliente le decía si la cuenta se borró o si cambió la
+    contraseña.
 
     Borra la cookie de refresh si llegó una: un token que ya no vale no se vuelve a
     mandar, y el siguiente intento es un REFRESH_TOKEN_MISSING, el final normal, en vez
@@ -598,7 +600,8 @@ async def refresh_access_token(
         RefreshAccessTokenResponseDTO con nuevo access_token y datos del usuario
 
     Returns (401):
-        `detail` fijo y `error_code` SESSION_ENDED o SESSION_REJECTED; borra la cookie
+        `detail` fijo y `error_code` SESSION_ENDED o SESSION_REJECTED, que borran la
+        cookie, o SESSION_REPLACED, que la conserva
     """
     # Leer refresh token desde cookie httpOnly
     refresh_cookie_name = get_refresh_cookie_name()
