@@ -46,11 +46,8 @@ class GoogleLoginResponseDTO(BaseModel):
         default=False,
         description="True si el usuario fue creado en este login. Frontend debe redirigir a completar perfil.",
     )
-    # Device Fingerprinting
-    device_id: str | None = Field(None, description="ID del dispositivo registrado")
-    should_set_device_cookie: bool = Field(
-        default=False, description="True si se debe setear la cookie device_id"
-    )
+    # El dispositivo de la sesión: toda sesión tiene uno (BE #737)
+    device_id: str = Field(..., description="ID del dispositivo de esta sesión")
 
 
 class LinkGoogleAccountRequestDTO(BaseModel):

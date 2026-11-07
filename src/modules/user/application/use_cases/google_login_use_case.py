@@ -4,10 +4,13 @@ Google Login Use Case - Application Layer
 Caso de uso para login/registro con Google OAuth.
 Soporta tres flujos:
 1. Usuario OAuth existente → login directo
-2. Usuario email existente → auto-link + login
+2. Usuario email existente → auto-link + login; si su correo no estaba verificado,
+   Google se la queda sin lo que no se probó (contraseña, sesiones, otro Google; #749)
 3. Usuario nuevo → auto-register + login
+Los flujos 2 y 3, solo con el correo verificado por Google.
 """
 
+import logging
 from datetime import datetime
 
 from src.config.csrf_config import generate_csrf_token
@@ -28,13 +31,22 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    cierra_lo_que_no_se_probo,
+)
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.guarda_la_sesion import (
+    CUENTA_DESACTIVADA,
+    activa,
+    guarda_la_sesion,
+)
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
 from src.modules.user.domain.entities.refresh_token import RefreshToken
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
+from src.modules.user.domain.exceptions import AccountDeactivatedException
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -42,6 +54,17 @@ from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+logger = logging.getLogger(__name__)
+
+
+class GoogleEmailNotVerifiedError(ValueError):
+    """Google no ha verificado el correo de esa cuenta: ni alta ni vínculo.
+
+    Sin esta regla, cualquiera con una cuenta de Google con tu dirección, sin
+    verificar, entraba en la tuya (el vínculo automático por correo) o te la dejaba
+    ocupada (el alta). La ruta responde 400 con GOOGLE_EMAIL_NOT_VERIFIED.
+    """
 
 
 class GoogleLoginUseCase:
@@ -51,7 +74,7 @@ class GoogleLoginUseCase:
     Flujo:
     1. Intercambiar authorization code por user info de Google
     2. Buscar OAuth account existente → login directo
-    3. Buscar usuario por email → auto-link + login
+    3. Buscar usuario por email → auto-link + login (o la toma, si no estaba verificada)
     4. Crear usuario nuevo → auto-register + login
     """
 
@@ -70,13 +93,16 @@ class GoogleLoginUseCase:
         self._google_oauth_service = google_oauth_service
         self._register_device_use_case = register_device_use_case
 
-    async def _resolve_user(self, google_info: GoogleUserInfo) -> tuple[User, bool]:
+    async def _resolve_user(
+        self, google_info: GoogleUserInfo
+    ) -> tuple[User, bool, bool, tuple[int, int, int] | None]:
         """
         Resuelve el usuario para el login de Google.
         Todas las lecturas y escrituras se ejecutan dentro de una sola transacción UoW.
 
         Returns:
-            Tuple of (user, is_new_user)
+            Tuple of (user, is_new_user, linked, revocados): linked, si se vinculó por
+            el correo; revocados, lo que se cerró si se quedó una cuenta sin verificar
         """
         async with self._uow:
             # Buscar OAuth account existente
@@ -88,22 +114,66 @@ class GoogleLoginUseCase:
                 user = await self._uow.users.find_by_id(oauth_account.user_id)
                 if not user:
                     raise ValueError("User associated with OAuth account not found")
-                return user, False
+                return user, False, False, None
+
+            # Sin cuenta vinculada: un alta o un vínculo por correo. Solo con el correo
+            # verificado por Google: si no, la dirección no es necesariamente suya
+            if not google_info.email_verified:
+                raise GoogleEmailNotVerifiedError("Google email is not verified")
 
             # Buscar usuario por email
             email = Email(google_info.email)
             user = await self._uow.users.find_by_email(email)
 
             if user:
-                return await self._auto_link_existing_user(user, google_info), False
+                # Con la fila bloqueada, también si está verificada: un login con
+                # contraseña a la vez espera y ve el cambio, y se ve si la desactivaron
+                # o le cambiaron el correo justo antes (revisor de #749, tabla)
+                bloqueada = await self._uow.users.find_by_id_for_update(user.id)
+                if bloqueada is None:
+                    raise ValueError("User not found")
+                # Y que siga siendo la cuenta de ESE correo: si lo cambió justo antes,
+                # Google no tiene nada que demostrar sobre ella
+                if bloqueada.email is None or bloqueada.email != email:
+                    raise ValueError("Account changed during Google sign-in")
+                user = bloqueada
+                # Otra petición a la vez (otra pestaña) pudo vincular ya este Google:
+                # entonces es un login con él, sin vincular de nuevo
+                ya = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                    OAuthProvider.GOOGLE, google_info.google_user_id
+                )
+                if ya is not None and ya.user_id == user.id:
+                    return user, False, False, None
+                if ya is not None:
+                    # Vinculado a otra cuenta a la vez: un rechazo, no un duplicado
+                    raise ValueError("Google account already linked to another user")
+                # Desactivada: sin vincular Google ni verificar el correo. Un login
+                # rechazado no cambia la cuenta (/code-review); execute da el 403
+                if not user.is_active:
+                    return user, False, False, None
+                user, revocados = await self._auto_link_existing_user(user, google_info)
+                return user, False, True, revocados
 
-            return await self._auto_register_new_user(google_info), True
+            return await self._auto_register_new_user(google_info), True, False, None
 
-    async def _auto_link_existing_user(self, user: User, google_info: GoogleUserInfo) -> User:
+    async def _auto_link_existing_user(
+        self, user: User, google_info: GoogleUserInfo
+    ) -> tuple[User, tuple[int, int, int] | None]:
         """
         Auto-link Google account to existing user found by email.
         Ejecuta dentro del contexto UoW del caller (sin abrir transacción propia).
+
+        Una cuenta SIN verificar la pudo crear cualquiera con este correo: Google,
+        que lo verificó, se la queda; sin la contraseña que nunca se demostró y sin
+        sus sesiones de antes (pre-captura, CodeRabbit en #749).
+
+        Returns:
+            (user, revocados): revocados, (dispositivos, tokens, googles quitados) si
+            se la quedó
         """
+        revocados = None
+        if user.claim_with_verified_oauth():
+            revocados = await cierra_lo_que_no_se_probo(self._uow, user.id)
         new_oauth = UserOAuthAccount.create(
             user_id=user.id,
             provider=OAuthProvider.GOOGLE,
@@ -112,11 +182,8 @@ class GoogleLoginUseCase:
         )
         await self._uow.oauth_accounts.save(new_oauth)
 
-        if not user.email_verified and google_info.email_verified:
-            user.verify_email_from_oauth()
-
         await self._uow.users.save(user)
-        return user
+        return user, revocados
 
     async def _auto_register_new_user(self, google_info: GoogleUserInfo) -> User:
         """
@@ -140,7 +207,7 @@ class GoogleLoginUseCase:
         return user
 
     async def _register_device(self, request: GoogleLoginRequestDTO, user_id_str: str):
-        """Register device and return (device_id, device_id_str, should_set_cookie, is_new)."""
+        """Register device: (device_id, device_id_str, avisa, lo dio de alta este login)."""
         # Siempre con dispositivo, también sin User-Agent (auditoría OWASP, A07)
         device_request = RegisterDeviceRequestDTO(
             user_id=user_id_str,
@@ -154,9 +221,9 @@ class GoogleLoginUseCase:
         return (
             UserDeviceId.from_string(device_response.device_id),
             device_response.device_id,
-            device_response.set_device_cookie,
             # Sin su cookie (nuevo, o solo por la huella) avisa (BE #737)
             device_response.is_new_device or not device_response.recognized_by_cookie,
+            device_response.is_new_device,
         )
 
     async def execute(self, request: GoogleLoginRequestDTO) -> GoogleLoginResponseDTO:
@@ -182,7 +249,46 @@ class GoogleLoginUseCase:
         )
 
         # 2. Resolve user (existing OAuth, auto-link, or auto-register) — atomic
-        user, is_new_user = await self._resolve_user(google_info)
+        user, is_new_user, vinculada, revocados = await self._resolve_user(google_info)
+        if revocados is not None:
+            # La toma de una cuenta sin verificar, al log, ya guardada y sin cambiar
+            # la respuesta
+            try:
+                security_logger.log_unverified_account_claimed(
+                    user_id=str(user.id.value),
+                    devices_revoked=revocados[0],
+                    tokens_revoked=revocados[1],
+                    google_unlinked=revocados[2],
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except Exception as error:
+                logger.error("Account claim audit event failed: %s", type(error).__name__)
+        if vinculada:
+            # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
+            # el correo, da acceso a la cuenta. El log nunca cambia la respuesta
+            try:
+                security_logger.log_google_account_linked(
+                    user_id=str(user.id.value),
+                    automatic=True,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            except Exception as error:
+                logger.error("Google link audit event failed: %s", type(error).__name__)
+
+        # Una cuenta desactivada no entra (BE #744, auditoría OWASP): ni sesión, ni
+        # dispositivo, ni correo de «nuevo inicio», como con la contraseña
+        if not user.is_active:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=False,
+                failure_reason="Account deactivated by admin",
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            raise AccountDeactivatedException()
 
         # 3. Sin mirar el bloqueo por fallos de contraseña (BE #732): Google ya
         # demuestra que es él, y una cuenta solo de Google no tiene contraseña buena
@@ -197,7 +303,7 @@ class GoogleLoginUseCase:
             login_method="google",
         )
 
-        device_id, device_id_str, should_set_device_cookie, es_nuevo = await self._register_device(
+        device_id, device_id_str, es_nuevo, dado_de_alta = await self._register_device(
             request, str(user.id.value)
         )
 
@@ -213,9 +319,39 @@ class GoogleLoginUseCase:
             user_id=user.id, token=refresh_token_jwt, device_id=device_id, expires_in_days=7
         )
 
-        async with self._uow:
+        # Con la fila bloqueada y la cuenta como al resolverla: activa y con ESTE Google
+        # (a la vez, una toma pudo quitárselo; #749, tabla de caminos)
+        async def comprueba(actual: User | None) -> str | None:
+            """Activa y con ESTE Google vinculado a esta cuenta; si no, el motivo."""
+            motivo = await activa(actual)
+            if motivo is not None:
+                return motivo
+            vinculo = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
+                OAuthProvider.GOOGLE, google_info.google_user_id
+            )
+            if vinculo is None or vinculo.user_id != user.id:
+                return "Google unlinked during sign-in"
+            return None
+
+        async def guarda() -> None:
             await self._uow.users.save(user)
             await self._uow.refresh_tokens.save(refresh_token_entity)
+
+        motivo = await guarda_la_sesion(
+            self._uow, user.id, comprueba, guarda, device_id if dado_de_alta else None
+        )
+        if motivo is not None:
+            security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=False,
+                failure_reason=motivo,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            if motivo == CUENTA_DESACTIVADA:
+                raise AccountDeactivatedException()
+            raise ValueError(motivo)
 
         # Si entra desde un dispositivo nuevo, se le avisa por correo (BE #737)
         # El alta con Google no avisa: es crear la cuenta
@@ -251,5 +387,4 @@ class GoogleLoginUseCase:
             user=UserResponseDTO.model_validate(user),
             is_new_user=is_new_user,
             device_id=device_id_str,
-            should_set_device_cookie=should_set_device_cookie,
         )

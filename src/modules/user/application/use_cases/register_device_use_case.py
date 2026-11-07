@@ -48,11 +48,11 @@ class RegisterDeviceUseCase:
     1. Si hay device_id_from_cookie:
        - Buscar por device_id + user_id (ownership validation)
        - Si existe y activo: update_last_used(), update_ip_address()
-       - Retornar set_device_cookie=False (cookie ya existe)
+       - recognized_by_cookie=True
     2. Si no hay cookie o device no encontrado:
-       - Crear nuevo UserDevice con fingerprint
+       - Buscarlo por la huella, o crear uno nuevo
        - Lanzar evento NewDeviceDetectedEvent
-       - Retornar set_device_cookie=True (caller debe setear cookie)
+    La ruta pone la cookie del dispositivo siempre (BE #737)
 
     Security (OWASP A01):
     - Ownership validation: device.user_id == jwt.user_id
@@ -68,8 +68,8 @@ class RegisterDeviceUseCase:
         ...     device_id_from_cookie="7c9e6679-..."
         ... )
         >>> response = await use_case.execute(request)
-        >>> response.set_device_cookie
-        False  # Cookie ya existe, no setear
+        >>> response.recognized_by_cookie
+        True
 
         >>> # Login sin cookie (nuevo dispositivo)
         >>> request = RegisterDeviceRequestDTO(
@@ -78,8 +78,8 @@ class RegisterDeviceUseCase:
         ...     ip_address="192.168.1.100"
         ... )
         >>> response = await use_case.execute(request)
-        >>> response.set_device_cookie
-        True  # Caller debe setear cookie device_id
+        >>> response.is_new_device
+        True
     """
 
     def __init__(self, uow: UserUnitOfWorkInterface):
@@ -99,7 +99,7 @@ class RegisterDeviceUseCase:
             request: DTO con user_id, user_agent, ip_address, device_id_from_cookie
 
         Returns:
-            RegisterDeviceResponseDTO con device_id, is_new_device, message, set_device_cookie
+            RegisterDeviceResponseDTO con device_id, is_new_device, message, recognized_by_cookie
 
         Raises:
             ValueError: Si user_id no es UUID válido
@@ -126,7 +126,7 @@ class RegisterDeviceUseCase:
                     existing_device.update_country(request.country_code)
                     existing_device.update_installed_app(request.installed_app)
                     return await self._reusa(
-                        existing_device, request.ip_address, poner_cookie=False, por_su_cookie=True
+                        existing_device, request.ip_address, por_su_cookie=True
                     )
 
             # =========================================================
@@ -149,7 +149,6 @@ class RegisterDeviceUseCase:
                 logger.debug(
                     f"Device identified via fingerprint (cookie missing): {existing_device.device_name}"
                 )
-                # Cookie was missing, caller must set it
                 return await self._reusa(
                     existing_device, request.ip_address, country_code=request.country_code
                 )
@@ -176,18 +175,16 @@ class RegisterDeviceUseCase:
                 device_id=str(new_device.id.value),
                 is_new_device=True,
                 message=f"Nuevo dispositivo detectado: {new_device.device_name}",
-                set_device_cookie=True,  # Caller must set cookie
             )
 
     async def _reusa(
         self,
         device: UserDevice,
         ip_address: str,
-        poner_cookie: bool = True,
         country_code: str | None = None,
         por_su_cookie: bool = False,
     ) -> RegisterDeviceResponseDTO:
-        """El que ya estaba, al día; si no traía su cookie, el que llama se la pone."""
+        """El que ya estaba, al día."""
         await self._reanuda(device)
         device.update_ip_address(ip_address)
         device.update_country(country_code)
@@ -196,7 +193,6 @@ class RegisterDeviceUseCase:
             device_id=str(device.id.value),
             is_new_device=False,
             message=f"Dispositivo actualizado: {device.device_name}",
-            set_device_cookie=poner_cookie,
             recognized_by_cookie=por_su_cookie,
         )
 

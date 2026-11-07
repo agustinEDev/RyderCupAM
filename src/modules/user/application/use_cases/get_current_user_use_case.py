@@ -44,7 +44,7 @@ class GetCurrentUserUseCase:
             user_id_str: ID del usuario en formato string
 
         Returns:
-            UserResponseDTO si el usuario existe, None si no existe
+            UserResponseDTO si el usuario existe y está activo; si no, None
         """
         try:
             user_id = UserId(user_id_str)
@@ -53,7 +53,9 @@ class GetCurrentUserUseCase:
 
         user = await self._uow.users.find_by_id(user_id)
 
-        if not user:
+        # Una cuenta desactivada no tiene sesión (BE #744): su token de acceso deja de
+        # valer en la siguiente petición, sin esperar a que caduque
+        if not user or not user.is_active:
             return None
 
         # La misma respuesta que accept-terms: se construye en un solo sitio

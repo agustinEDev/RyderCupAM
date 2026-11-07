@@ -81,6 +81,7 @@ class TestGoogleLoginResponseDTO:
             csrf_token="csrf-xyz",
             user=user_response,
             is_new_user=True,
+            device_id="dev-123",
         )
         assert dto.access_token == "jwt-access"
         assert dto.refresh_token == "jwt-refresh"
@@ -95,11 +96,17 @@ class TestGoogleLoginResponseDTO:
             refresh_token="r",
             csrf_token="c",
             user=user_response,
+            device_id="dev-123",
         )
         assert dto.token_type == "bearer"
         assert dto.is_new_user is False
-        assert dto.device_id is None
-        assert dto.should_set_device_cookie is False
+
+    def test_device_id_is_required(self, user_response):
+        """Toda sesión tiene dispositivo (BE #737, #738): sin él no hay respuesta."""
+        with pytest.raises(ValidationError):
+            GoogleLoginResponseDTO(
+                access_token="a", refresh_token="r", csrf_token="c", user=user_response
+            )
 
     def test_with_device_info(self, user_response):
         dto = GoogleLoginResponseDTO(
@@ -108,10 +115,9 @@ class TestGoogleLoginResponseDTO:
             csrf_token="c",
             user=user_response,
             device_id="dev-123",
-            should_set_device_cookie=True,
         )
         assert dto.device_id == "dev-123"
-        assert dto.should_set_device_cookie is True
+        assert not hasattr(dto, "should_set_device_cookie")
 
     def test_missing_required_fields_raises(self):
         with pytest.raises(ValidationError):
