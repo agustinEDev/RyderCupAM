@@ -9,8 +9,8 @@ vinculado, sus dispositivos, sus sesiones) no se probó y se quita.
   ----|--------------------------------------------|---------------------------------------
   R1  sin verificar, con un Google ajeno, sesiones | verificada, la contraseña nueva, sin ese
                                                    |   Google, dispositivos y sesiones fuera
-  R2  ya verificada, con su Google                 | conserva su Google; sesiones y dispositivos,
-                                                   |   fuera (tabla de caminos)
+  R2  ya verificada, con un Google                | sin ese Google (BE #753); sesiones y
+                                                   |   dispositivos, fuera (tabla de caminos)
   R3  la toma                                      | al log de seguridad, con lo que se cerró;
                                                    |   un log roto no cambia el restablecimiento
   R6  la toma (BE #753, punto 6)                   | en vez de «contraseña cambiada», el aviso
@@ -119,19 +119,21 @@ async def test_r1_an_unverified_account_is_claimed_by_whoever_resets_it():
         assert (await uow.refresh_tokens.find_by_token_hash("sesion-de-antes")).revoked
 
 
-async def test_r2_a_verified_account_keeps_its_google():
+async def test_r2_a_verified_account_also_loses_its_google():
     """
-    Given: Una cuenta verificada, con su Google y un dispositivo
+    Given: Una cuenta verificada, con un Google y un dispositivo
     When: Se restablece la contraseña
-    Then: Conserva su Google (es suyo); sesiones y dispositivos, revocados
+    Then: Sin ese Google (pudo vincularlo quien entró en la cuenta: BE #753, Agustín);
+          sesiones y dispositivos, revocados. Quien lo tenga de verdad lo vuelve a vincular
     """
     uow, cuenta, dispositivo, caso, token = await _escena(verificada=True)
 
     await _restablece(caso, token)
 
     async with uow:
-        assert await uow.oauth_accounts.find_by_user_id_and_provider(
-            cuenta.id, OAuthProvider.GOOGLE
+        assert (
+            await uow.oauth_accounts.find_by_user_id_and_provider(cuenta.id, OAuthProvider.GOOGLE)
+            is None
         )
         assert not (await uow.user_devices.find_by_id(dispositivo.id)).is_active
         assert (await uow.refresh_tokens.find_by_token_hash("sesion-de-antes")).revoked

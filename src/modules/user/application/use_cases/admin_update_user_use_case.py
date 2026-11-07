@@ -49,7 +49,9 @@ class AdminUpdateUserUseCase:
                     country_code_str=request.country_code,
                 )
 
-            if request.email is not None and str(request.email) != str(user.email):
+            # Sin distinguir mayúsculas: el mismo correo escrito de otra forma no es un
+            # cambio, y lanzaría «es el mismo que el actual» sin guardar lo demás
+            if request.email is not None and str(request.email).lower() != str(user.email).lower():
                 new_email_str = str(request.email)
                 existing = await self._uow.users.find_by_email(Email(new_email_str))
                 if existing and existing.id != user.id:

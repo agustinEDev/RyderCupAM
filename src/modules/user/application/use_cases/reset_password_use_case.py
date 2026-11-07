@@ -31,7 +31,6 @@ from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     cierra_lo_que_no_se_probo,
 )
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
-from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
@@ -253,9 +252,11 @@ class ResetPasswordUseCase:
                 user.confirm_email_ownership()
                 cerrado = await cierra_lo_que_no_se_probo(self._uow, user.id)
             else:
-                # Sesiones Y dispositivos: un acceso robado no sigue valiendo hasta que
-                # caduque (OWASP A07; tabla de caminos de #749)
-                await revoca_sus_sesiones(self._uow, user.id)
+                # Sesiones, dispositivos Y su Google: un acceso robado no sigue valiendo
+                # hasta que caduque (OWASP A07; tabla de caminos de #749), ni un Google
+                # que vinculó quien entró en la cuenta (BE #753, Agustín). Quien lo tenga
+                # de verdad lo vuelve a vincular. No es una toma: ni su log ni su aviso
+                await cierra_lo_que_no_se_probo(self._uow, user.id)
                 cerrado = None
 
             # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en

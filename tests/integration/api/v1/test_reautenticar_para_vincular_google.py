@@ -109,6 +109,23 @@ async def test_p2_a_wrong_password_leaves_no_mark(client: AsyncClient):
     assert _cookie_de_la_marca(r) is None
 
 
+async def test_p2b_a_wrong_password_goes_to_the_security_log(client: AsyncClient, monkeypatch):
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    apuntes = []
+    monkeypatch.setattr(
+        SecurityLogger, "log_security_change_failed", lambda self, **kw: apuntes.append(kw)
+    )
+    datos = await _usuario(client, "p2b@example.com")
+    set_auth_cookies(client, datos["cookies"])
+
+    await _reautentica(client, "Equivocada123!")
+
+    assert len(apuntes) == 1
+    assert apuntes[0]["user_id"] == datos["user"]["id"]
+    assert apuntes[0]["reason"] == "wrong_current_password"
+
+
 async def test_p3_attempts_count_in_the_security_limit(client: AsyncClient):
     datos = await _usuario(client, "p3@example.com")
     set_auth_cookies(client, datos["cookies"])

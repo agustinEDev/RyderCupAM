@@ -632,7 +632,6 @@ from src.modules.user.application.use_cases.login_user_use_case import LoginUser
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
-from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
 from src.modules.user.application.use_cases.reauthenticate_use_case import (
     ReauthenticateUseCase,
 )
@@ -1041,15 +1040,6 @@ def get_refresh_access_token_use_case(
     tokens. Ya no registra dispositivos: usa el de su token (BE #738).
     """
     return RefreshAccessTokenUseCase(uow, token_service, security_audit=security_audit)
-
-
-def get_open_session_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-    token_service: ITokenService = Depends(get_token_service),
-    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
-) -> OpenSessionUseCase:
-    """Proveedor de OpenSessionUseCase: abrir sesión tras verificar el email (BE #737)."""
-    return OpenSessionUseCase(uow, token_service, register_device_use_case)
 
 
 def get_update_profile_use_case(
@@ -3699,9 +3689,10 @@ def get_link_google_account_use_case(
 
 def get_reauthenticate_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> ReauthenticateUseCase:
     """Proveedor del caso de uso que comprueba la contraseña actual (BE #753)."""
-    return ReauthenticateUseCase(uow)
+    return ReauthenticateUseCase(uow, security_audit=security_audit)
 
 
 def get_unlink_google_account_use_case(

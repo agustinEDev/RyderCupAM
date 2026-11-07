@@ -48,6 +48,7 @@ class AdminListUsersUseCase:
                     is_admin=user.is_admin,
                     is_active=user.is_active,
                     email_verified=user.email_verified,
+                    pending_email=user.pending_email,
                     created_at=user.created_at,
                     last_login_at=last_login_map.get(str(user.id.value)),
                 )

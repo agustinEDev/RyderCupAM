@@ -196,6 +196,7 @@ _TEXTOS_DE_LA_REAUTENTICACION = {
     tags=["Authentication"],
 )
 async def reauthenticate(
+    request: Request,
     datos: ReauthenticateRequestDTO,
     response: Response,
     current_user: UserResponseDTO = Depends(get_current_user),
@@ -211,7 +212,14 @@ async def reauthenticate(
             TOO_MANY_SECURITY_CHANGES,
         )
     try:
-        await use_case.execute(user_id, datos.password)
+        await use_case.execute(
+            user_id,
+            datos.password,
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
     except InvalidCredentialsError:
         return respuesta_con_codigo(
             status.HTTP_401_UNAUTHORIZED,

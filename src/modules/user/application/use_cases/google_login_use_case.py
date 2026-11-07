@@ -34,6 +34,7 @@ from src.modules.user.application.ports.google_oauth_service_interface import (
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_google,
     avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
@@ -275,6 +276,10 @@ class GoogleLoginUseCase:
             )
         if revocados is not None:
             await avisa_de_la_toma(self._email_service, user, "google")
+        elif vinculada:
+            # Un Google con ese correo no siempre es el dueño del buzón: que se entere
+            # (BE #753, Agustín). En una toma ya va el aviso de cuenta asegurada
+            await avisa_de_google(self._email_service, user, linked=True)
         if vinculada:
             # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
             # el correo, da acceso a la cuenta. El log nunca cambia la respuesta

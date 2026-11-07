@@ -282,7 +282,8 @@ def cabe(limit_value: str, scope: str, identifier: str) -> bool:
     Cuenta una petición contra un límite y dice si cabía, sin lanzar nada.
 
     Para las rutas que responden su propio 429 con un código traducible; las demás
-    usan count_or_refuse. Una petición que no cabe no se cuenta.
+    usan count_or_refuse. Una petición que no cabe también se cuenta (limits suma antes
+    de comparar), lo que no alarga la ventana fija.
     """
     if not limiter.enabled:
         return True

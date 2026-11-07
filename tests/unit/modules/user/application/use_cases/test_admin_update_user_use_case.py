@@ -113,7 +113,10 @@ class TestAdminUpdateUserUseCase:
 
         assert usuario.email == "new-email@test.com"
 
-    @pytest.mark.parametrize("cambio", [{"email": "carlos@test.com"}, {"first_name": "Otro"}])
+    @pytest.mark.parametrize(
+        "cambio",
+        [{"email": "carlos@test.com"}, {"email": "Carlos@Test.com"}, {"first_name": "Otro"}],
+    )
     async def test_ad3_no_new_email_sends_nothing(self, uow, existing_user, cambio):
         correos = AsyncMock()
 

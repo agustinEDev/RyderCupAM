@@ -57,3 +57,23 @@ access path decides on stale data.
   decided).
 - A first Google sign-in by an owner whose unverified account had a password removes
   it without notice (3 such accounts in production on November 6).
+
+## Amendment (7 Nov 2026, RyderCupAM #753)
+
+The residual risks above were closed in the next release:
+- Verifying the sign-up email only verifies; it opens no session, and the mail tells
+  whoever did not create the account to use "Forgot password".
+- Linking Google needs the current password, confirmed in the last 5 minutes (a signed,
+  httpOnly, single-use mark scoped to the Google routes); link and unlink are mailed,
+  also an automatic link when signing in with Google.
+- A password reset also removes a linked Google on a verified account: a session thief
+  could have added it. A real owner links it again.
+- An admin email change stays pending too (point 5 above no longer applies to admins).
+- The old address is told when a change is confirmed, and the owner when an unverified
+  account is secured; asking for a new email is limited to 3 per hour within 10 security
+  requests per hour per user.
+
+Still residual: the single-use mark lives in memory (one process; a restart forgets
+spent marks younger than 5 minutes), and reauthenticating does not lock the account,
+only the per-user limit applies.
+

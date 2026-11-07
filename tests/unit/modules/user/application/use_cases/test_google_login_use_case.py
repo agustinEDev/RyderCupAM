@@ -1008,6 +1008,23 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
 
         assert respuesta.access_token
 
+    async def test_g9_an_automatic_link_tells_the_account(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta ya verificada con ese correo, sin Google
+        When: Entra con Google y se vincula sola
+        Then: El aviso de «Google vinculado» al correo de la cuenta (BE #753, Agustín)
+        """
+        await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        use_case._email_service.send_google_account_notice.assert_awaited_once_with(
+            to_email="oauth@example.com", user_name="Ana", linked=True
+        )
+
     async def test_g7_the_claim_goes_to_the_security_log(
         self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
     ):
