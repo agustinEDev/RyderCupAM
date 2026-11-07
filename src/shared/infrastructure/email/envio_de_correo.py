@@ -85,8 +85,9 @@ def _destinatario(to: str) -> tuple[str, str]:
     return nombre, direccion or to
 
 
-def _por_codigo(proveedor: str, estado: int, aceptado: int) -> Resultado:
-    if estado == aceptado:
+def _por_codigo(proveedor: str, estado: int) -> Resultado:
+    """Qué significa el código de la respuesta: cualquier 2xx es aceptado (CodeRabbit)."""
+    if httpx.codes.OK <= estado < httpx.codes.MULTIPLE_CHOICES:
         return Resultado.ENVIADO
     if estado == httpx.codes.TOO_MANY_REQUESTS:
         return Resultado.CUPO
@@ -103,11 +104,13 @@ def _por_codigo(proveedor: str, estado: int, aceptado: int) -> Resultado:
 
 
 def _para_brevo(to: str) -> dict[str, str]:
+    """El destinatario como lo quiere Brevo: dirección y nombre por separado."""
     nombre, direccion = _destinatario(to)
     return {"email": direccion, "name": nombre} if nombre else {"email": direccion}
 
 
 def _para_mailpit(to: str) -> dict[str, str]:
+    """El destinatario como lo quiere Mailpit: dirección y nombre por separado."""
     nombre, direccion = _destinatario(to)
     return {"Email": direccion, "Name": nombre} if nombre else {"Email": direccion}
 
@@ -118,9 +121,11 @@ class _TransporteHttp:
     proveedor = ""
 
     def __init__(self, transporte_http: httpx.AsyncBaseTransport | None = None):
+        """El transporte HTTP solo se pasa en los tests (uno falso, sin red)."""
         self._transporte_http = transporte_http
 
     async def _post(self, url: str, **kwargs) -> httpx.Response | None:
+        """La respuesta del proveedor, o None si no la hubo (red o espera agotada)."""
         try:
             async with httpx.AsyncClient(
                 timeout=ESPERA, transport=self._transporte_http
@@ -145,12 +150,14 @@ class MailgunTransport(_TransporteHttp):
         from_email: str,
         transporte_http: httpx.AsyncBaseTransport | None = None,
     ):
+        """Con su clave, su URL y el remitente de la configuración."""
         super().__init__(transporte_http)
         self._api_key = api_key
         self._url = f"{api_url}/{domain}/messages"
         self._from_email = from_email
 
     async def send(self, correo: CorreoSaliente) -> Resultado:
+        """Un intento de envío, sin respaldo (eso lo decide EnvioConRespaldo)."""
         if not self._api_key:
             logger.error("MAILGUN_API_KEY is not set: email not sent")
             return Resultado.SIN_CLAVE
@@ -167,7 +174,7 @@ class MailgunTransport(_TransporteHttp):
         respuesta = await self._post(self._url, auth=("api", self._api_key), data=datos)
         if respuesta is None:
             return Resultado.DUDOSO
-        return _por_codigo(self.proveedor, respuesta.status_code, httpx.codes.OK)
+        return _por_codigo(self.proveedor, respuesta.status_code)
 
 
 class BrevoTransport(_TransporteHttp):
@@ -182,6 +189,7 @@ class BrevoTransport(_TransporteHttp):
         from_email: str,
         transporte_http: httpx.AsyncBaseTransport | None = None,
     ):
+        """Con su clave, su URL y el remitente de la configuración."""
         super().__init__(transporte_http)
         self._api_key = api_key
         self._url_base = api_url.rstrip("/")
@@ -190,6 +198,7 @@ class BrevoTransport(_TransporteHttp):
 
     @property
     def configurado(self) -> bool:
+        """True si tiene clave: sin ella no se usa como respaldo."""
         return bool(self._api_key)
 
     async def comprueba_la_clave(self) -> int | None:
@@ -210,6 +219,7 @@ class BrevoTransport(_TransporteHttp):
         return respuesta.status_code
 
     async def send(self, correo: CorreoSaliente) -> Resultado:
+        """Un intento de envío, sin respaldo (eso lo decide EnvioConRespaldo)."""
         if not self._api_key:
             return Resultado.SIN_CLAVE
         cuerpo: dict = {
@@ -227,7 +237,7 @@ class BrevoTransport(_TransporteHttp):
         )
         if respuesta is None:
             return Resultado.DUDOSO
-        return _por_codigo(self.proveedor, respuesta.status_code, httpx.codes.CREATED)
+        return _por_codigo(self.proveedor, respuesta.status_code)
 
 
 class ResendTransport(_TransporteHttp):
@@ -242,6 +252,7 @@ class ResendTransport(_TransporteHttp):
         from_email: str,
         transporte_http: httpx.AsyncBaseTransport | None = None,
     ):
+        """Con su clave, su URL y el remitente de la configuración."""
         super().__init__(transporte_http)
         self._api_key = api_key
         self._url = f"{api_url.rstrip('/')}/emails"
@@ -249,9 +260,11 @@ class ResendTransport(_TransporteHttp):
 
     @property
     def configurado(self) -> bool:
+        """True si tiene clave: sin ella no se usa como respaldo."""
         return bool(self._api_key)
 
     async def send(self, correo: CorreoSaliente) -> Resultado:
+        """Un intento de envío, sin respaldo (eso lo decide EnvioConRespaldo)."""
         if not self._api_key:
             return Resultado.SIN_CLAVE
         cuerpo: dict = {
@@ -269,7 +282,7 @@ class ResendTransport(_TransporteHttp):
         )
         if respuesta is None:
             return Resultado.DUDOSO
-        return _por_codigo(self.proveedor, respuesta.status_code, httpx.codes.OK)
+        return _por_codigo(self.proveedor, respuesta.status_code)
 
 
 class MailpitTransport(_TransporteHttp):
@@ -280,11 +293,13 @@ class MailpitTransport(_TransporteHttp):
     def __init__(
         self, url: str, from_email: str, transporte_http: httpx.AsyncBaseTransport | None = None
     ):
+        """Con la URL del buzón local y el remitente de la configuración."""
         super().__init__(transporte_http)
         self._url = f"{url.rstrip('/')}/api/v1/send"
         self._nombre, self._direccion = _remitente(from_email)
 
     async def send(self, correo: CorreoSaliente) -> Resultado:
+        """Lo deja en el buzón local de Mailpit (no se entrega a nadie)."""
         cuerpo: dict = {
             "From": {"Name": self._nombre, "Email": self._direccion},
             "To": [_para_mailpit(correo.to)],
@@ -298,7 +313,7 @@ class MailpitTransport(_TransporteHttp):
         respuesta = await self._post(self._url, json=cuerpo)
         if respuesta is None:
             return Resultado.DUDOSO
-        return _por_codigo(self.proveedor, respuesta.status_code, httpx.codes.OK)
+        return _por_codigo(self.proveedor, respuesta.status_code)
 
 
 class EnvioConRespaldo:
@@ -311,6 +326,7 @@ class EnvioConRespaldo:
         resend: ResendTransport | None = None,
         reloj: Callable[[], float] = time.monotonic,
     ):
+        """El primario, los respaldos que haya (None sin clave) y el reloj (tests)."""
         self.primario = primario
         self.brevo = brevo
         self.resend = resend
@@ -357,6 +373,7 @@ def _valor(entorno: Mapping[str, str], clave: str, por_defecto: str) -> str:
 
 
 def _transporte(entorno: Mapping[str, str]) -> str:
+    """El transporte configurado, en minúsculas (mailgun si falta o está vacío)."""
     return _valor(entorno, "EMAIL_TRANSPORT", "mailgun").lower()
 
 

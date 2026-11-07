@@ -682,3 +682,18 @@ def test_r7_one_sender_per_process():
     from src.shared.infrastructure.email.envio_de_correo import envio_de_la_app
 
     assert envio_de_la_app() is envio_de_la_app()
+
+
+@pytest.mark.parametrize("estado", [200, 201, 202])
+async def test_r8_any_2xx_from_any_provider_counts_as_sent(estado):
+    """CodeRabbit: un 2xx distinto del de la documentación (202) también es aceptado; si
+    no, el usuario vería un fallo falso."""
+    mailgun = await EnvioConRespaldo(_mailgun(_Servidor(estado))).send(CORREO)
+    brevo = await EnvioConRespaldo(_mailgun(_Servidor(429)), _brevo(_Servidor(estado))).send(
+        SIN_TOKEN
+    )
+    resend = await EnvioConRespaldo(
+        _mailgun(_Servidor(429)), resend=_resend(_Servidor(estado))
+    ).send(CORREO)
+
+    assert (mailgun, brevo, resend) == (True, True, True)

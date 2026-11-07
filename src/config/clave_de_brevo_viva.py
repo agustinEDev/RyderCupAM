@@ -51,6 +51,7 @@ class VigiaDeLaClaveDeBrevo:
         esperar: Callable[[float], Awaitable[None]] = asyncio.sleep,
         avisa: Callable[..., object] = capture_checkin,
     ):
+        """Brevo, cómo esperar entre vueltas y a quién avisar (Sentry; falsos en tests)."""
         self._brevo = brevo
         self._esperar = esperar
         self._avisa = avisa
@@ -79,6 +80,7 @@ class VigiaDeLaClaveDeBrevo:
         return bien
 
     def _al_monitor(self, estado: str) -> None:
+        """Le cuenta la vuelta al monitor de Sentry; si falla, solo un aviso en el log."""
         try:
             self._avisa(
                 monitor_slug=MONITOR,

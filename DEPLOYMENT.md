@@ -249,11 +249,12 @@ MAILGUN_API_URL=https://api.eu.mailgun.net/v3
 FRONTEND_URL=https://www.rydercupfriends.com
 
 # Respaldos de Mailgun (BE #563, opcionales: sin clave no se usan). Con 429, 500/503 o
-# clave de Mailgun rechazada o ausente: Resend (todos los correos) y, el último, Brevo
+# clave de Mailgun rechazada (sin clave, producción no arranca): Resend (todos los
+# correos) y, el último, Brevo
 # (nunca correos con token ni avisos de seguridad: reescribe los enlaces). Claves de
 # solo envío. Brevo se comprueba a diario (monitor de Sentry «brevo-key-check»)
 RESEND_API_KEY=<clave de Resend, solo envío>
-BREVO_API_KEY=<clave de Brevo, solo emails transaccionales>
+BREVO_API_KEY=<clave de Brevo: «Emails transaccionales» en «Todos» (enviar y leer sus estadísticas, que usa la comprobación diaria); el resto, «Ninguno»>
 
 # Sentry - Error Tracking & Performance Monitoring (v1.8.0+)
 SENTRY_DSN=https://<PUBLIC_KEY>@o<ORG_ID>.ingest.de.sentry.io/<PROJECT_ID>

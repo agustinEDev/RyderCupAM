@@ -92,7 +92,7 @@ services:
       db:
         condition: service_healthy
       mailpit:
-        condition: service_started
+        condition: service_healthy
 
   # Buzón local: guarda los correos de desarrollo sin entregarlos (BE #563)
   mailpit:
@@ -102,6 +102,12 @@ services:
       - "127.0.0.1:8025:8025"
     environment:
       - MP_MAX_MESSAGES=500
+    # La API espera a que el buzón responda (CodeRabbit)
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   postgres_data:
