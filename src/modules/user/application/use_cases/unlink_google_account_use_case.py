@@ -42,7 +42,14 @@ class UnlinkGoogleAccountUseCase:
 
         # Lecturas, validaciones, delete y evento en una sola transacción
         async with self._uow:
-            # Buscar OAuth account
+            # Primero la fila bloqueada: una toma a la vez quita la contraseña, y dos
+            # desvinculaciones a la vez no dicen las dos «hecho» (tabla de caminos de
+            # #749; CodeRabbit en #752)
+            user = await self._uow.users.find_by_id_for_update(uid)
+            if not user:
+                raise ValueError("User not found")
+
+            # Buscar OAuth account, ya con la fila bloqueada
             oauth_account = await self._uow.oauth_accounts.find_by_user_id_and_provider(
                 uid, OAuthProvider.GOOGLE
             )
@@ -50,9 +57,6 @@ class UnlinkGoogleAccountUseCase:
                 raise ValueError("No Google account linked to this user")
 
             # Guard: verificar que el usuario tiene password
-            user = await self._uow.users.find_by_id(uid)
-            if not user:
-                raise ValueError("User not found")
 
             if not user.has_password:
                 raise ValueError(

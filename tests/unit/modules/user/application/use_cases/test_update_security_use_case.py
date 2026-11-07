@@ -92,8 +92,10 @@ class TestUpdateSecurityUseCase:
 
         # Assert
         assert response is not None
-        assert response.user.email == "newemail@example.com"
-        assert response.message == "Security settings updated successfully"
+        # Pendiente hasta confirmarlo desde la dirección nueva (#749)
+        assert response.user.email == "test@example.com"
+        assert response.user.pending_email == "newemail@example.com"
+        assert response.message == "Email change pending confirmation"
 
         # Verificar que el password no cambió
         updated_user = await uow.users.find_by_id(UserId(user_id))
@@ -187,11 +189,11 @@ class TestUpdateSecurityUseCase:
 
         # Assert
         assert response is not None
-        assert response.user.email == "newemail@example.com"
+        assert response.user.pending_email == "newemail@example.com"
 
         # Verificar cambios en BD
         updated_user = await uow.users.find_by_id(UserId(user_id))
-        assert str(updated_user.email.value) == "newemail@example.com"
+        assert str(updated_user.email.value) == "test@example.com"
         assert updated_user.verify_password("N3wS3cur3P@ss!")
 
     async def test_update_fails_with_wrong_current_password(self, uow, existing_user):
@@ -292,6 +294,6 @@ class TestUpdateSecurityUseCase:
         # Assert
         updated_user = await uow.users.find_by_id(UserId(user_id))
 
-        # Verificar que los cambios se aplicaron
-        assert str(updated_user.email.value) == "newemail@example.com"
+        # Verificar que los cambios se aplicaron (el correo, pendiente: #749)
+        assert updated_user.pending_email == "newemail@example.com"
         assert updated_user.verify_password("N3wP@ss456!0")

@@ -19,6 +19,16 @@ from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_id import UserId
 
 
+class GoogleLinkNeedsVerifiedEmailError(ValueError):
+    """Vincular Google pide el correo de la cuenta verificado.
+
+    Sin esta regla, quien creó una cuenta con un correo ajeno, sin poder
+    verificarlo, metía su propio Google y lo conservaba aunque el dueño del correo
+    la recuperara (revisión de la pre-captura, #749). La ruta responde 403 con
+    GOOGLE_LINK_NEEDS_VERIFIED_EMAIL.
+    """
+
+
 class LinkGoogleAccountUseCase:
     """
     Vincula una cuenta de Google a un usuario autenticado existente.
@@ -52,14 +62,25 @@ class LinkGoogleAccountUseCase:
         Raises:
             ValueError: Si la cuenta ya está vinculada a otro usuario o el usuario ya tiene Google
         """
+        uid = UserId(user_id)
+        # Antes que gastar el código de Google
+        async with self._uow:
+            cuenta = await self._uow.users.find_by_id(uid)
+        if cuenta is None or not cuenta.email_verified:
+            raise GoogleLinkNeedsVerifiedEmailError("Verify your email before linking Google")
+
         google_info = await self._google_oauth_service.exchange_code_for_user_info(
             request.authorization_code
         )
 
-        uid = UserId(user_id)
-
         # Lecturas y escritura en una sola transacción (previene TOCTOU)
         async with self._uow:
+            # Otra vez, con la fila bloqueada: un cambio de correo a la vez la habría
+            # dejado sin verificar entre la primera comprobación y el vínculo
+            cuenta = await self._uow.users.find_by_id_for_update(uid)
+            if cuenta is None or not cuenta.email_verified:
+                raise GoogleLinkNeedsVerifiedEmailError("Verify your email before linking Google")
+
             # Verificar que la cuenta Google no está vinculada a otro usuario
             existing = await self._uow.oauth_accounts.find_by_provider_and_provider_user_id(
                 OAuthProvider.GOOGLE, google_info.google_user_id

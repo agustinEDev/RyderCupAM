@@ -35,6 +35,8 @@
    `should_set_device_cookie` field is removed (breaking change, `api-breaking`), since
    the device cookie is set on every login and refresh.
 
+See ADR-045 for unverified accounts, the lock rule and the pending email change.
+
 ## Consequences
 
 **Positive:**

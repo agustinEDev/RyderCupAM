@@ -33,6 +33,7 @@ from src.shared.infrastructure.email.email_layout import (
     parrafo,
     recuadro,
 )
+from src.shared.infrastructure.security.email_masking import mask_email
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +332,128 @@ The Ryder Cup Friends Team
             "We always send this when the password changes.",
         )
 
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+
+    async def send_email_change_confirmation(
+        self, to_email: str, user_name: str, token: str
+    ) -> bool:
+        """
+        El enlace que confirma el correo nuevo (#749), al correo NUEVO. Hasta pulsarlo
+        (desde la sesión de la cuenta, en 24 horas), la cuenta sigue con el de antes.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        enlace = f"{settings.FRONTEND_URL}/confirm-email-change?token={token}"
+        subject = "Confirma tu correo nuevo - Ryder Cup Friends | Confirm your new email"
+        text_body = f"""
+Hola {safe_user_name},
+
+Has pedido usar esta dirección en tu cuenta de Ryder Cup Friends. Para confirmarla, abre
+este enlace con tu sesión iniciada (caduca en 24 horas):
+
+{enlace}
+
+Hasta que lo hagas, tu cuenta sigue con su correo de antes. Si no lo has pedido tú,
+ignora este correo.
+
+---
+
+Hello {safe_user_name},
+
+You asked to use this address in your Ryder Cup Friends account. To confirm it, open
+this link while signed in (it expires in 24 hours):
+
+{enlace}
+
+Until then your account keeps its previous email. If you didn't ask for this, ignore it.
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Confirma tu correo nuevo · Confirm your new email",
+            etiqueta="Seguridad",
+            titulo="Confirma tu correo nuevo",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", has pedido usar esta dirección en tu cuenta. Confírmala con tu "
+                    "sesión iniciada: el enlace caduca en 24 horas.",
+                ),
+                aviso(
+                    negrita("Hasta entonces "),
+                    "tu cuenta sigue con su correo de antes. Si no lo has pedido tú, "
+                    "ignora este correo.",
+                ),
+            ],
+            boton=Boton("Confirmar el correo", enlace),
+            ingles=Ingles(
+                frase(
+                    negrita("Confirm your new email"),
+                    " while signed in. The link expires in 24 hours.",
+                ),
+                Boton("Confirm my email", enlace),
+            ),
+            pie="Lo enviamos porque se pidió cambiar el correo de una cuenta a esta "
+            "dirección. We sent this because this address was requested for an account.",
+        )
+        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+
+    async def send_email_change_requested_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        El aviso, al correo de ANTES, de que se ha pedido cambiarlo (#749). El nuevo va
+        tapado: el aviso puede leerlo quien no es el dueño de esa dirección nueva.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        nuevo = mask_email(new_email)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        subject = "Se ha pedido cambiar tu correo - Ryder Cup Friends | Email change requested"
+        text_body = f"""
+Hola {safe_user_name},
+
+Se ha pedido cambiar el correo de tu cuenta de Ryder Cup Friends a {nuevo}. No cambiará
+hasta que se confirme desde esa dirección.
+
+Si no has sido tú, cambia tu contraseña: {restablecer}
+
+---
+
+Hello {safe_user_name},
+
+Someone asked to change your Ryder Cup Friends account email to {nuevo}. It won't change
+until it is confirmed from that address.
+
+If it wasn't you, change your password: {restablecer}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Se ha pedido cambiar tu correo · Email change requested",
+            etiqueta="Seguridad",
+            titulo="Se ha pedido cambiar tu correo",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", se ha pedido cambiar el correo de tu cuenta a ",
+                    negrita(nuevo),
+                    ". No cambiará hasta que se confirme desde esa dirección.",
+                ),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Cambia tu contraseña ahora: alguien puede estar usando tu cuenta.",
+                ),
+            ],
+            boton=Boton("Cambiar la contraseña", restablecer),
+            ingles=Ingles(
+                frase(
+                    negrita("Someone asked to change your email"),
+                    f" to {nuevo}. If it wasn't you, change your password.",
+                ),
+                Boton("Change my password", restablecer),
+            ),
+            pie="Este aviso se envía siempre que se pide cambiar el correo. "
+            "We always send this when an email change is requested.",
+        )
         return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
 
     async def send_new_login_notification(

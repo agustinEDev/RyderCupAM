@@ -41,7 +41,7 @@ async def test_dos_avisos_a_la_vez_mandan_un_correo(db_session):
         email_str="ana.conc@example.com",
         plain_password="V@l1dP@ss123!",
     )
-    ana.verify_email_from_oauth()
+    ana.confirm_email_ownership()
     await SQLAlchemyUserRepository(db_session).save(ana)
     await db_session.commit()
     sesiones = async_sessionmaker(db_session.bind, class_=AsyncSession, expire_on_commit=False)

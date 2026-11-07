@@ -345,6 +345,8 @@ class TestGoogleConUsuarioExistente:
         """
         email = "vincula@example.com"
         datos = await create_authenticated_user(client, email, PASSWORD, "Ana", "Lopez")
+        # Vincular Google pide el correo verificado (#749)
+        await _sql("update users set email_verified = true where email = :e", {"e": email})
         antes = await _terminos_en_bd(email)
         set_auth_cookies(client, datos["cookies"])
         _google(email, google_id="google-perfil")

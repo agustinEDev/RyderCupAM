@@ -525,6 +525,46 @@ class AccountReactivatedAuditEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class UnverifiedAccountClaimedAuditEvent(SecurityAuditEvent):
+    """Quien demostró el correo se quedó una cuenta sin verificar (pre-captura, #749).
+
+    `via`: «google» (entró con un Google que lo verificó) o «password_reset» (usó el
+    enlace de restablecer que llegó a su buzón).
+    """
+
+    via: str = "google"
+    devices_revoked: int = 0
+    tokens_revoked: int = 0
+    google_unlinked: int = 0
+
+    def __post_init__(self):
+        """Validación y severidad: una cuenta que cambia de manos es HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"UNVERIFIED ACCOUNT CLAIMED VIA {self.via.upper()} | {user_info} | "
+            f"devices revoked: {self.devices_revoked} | tokens revoked: {self.tokens_revoked} | "
+            f"earlier Google unlinked: {self.google_unlinked}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con lo que se cerró."""
+        base = super().to_dict()
+        base.update(
+            {
+                "via": self.via,
+                "devices_revoked": self.devices_revoked,
+                "tokens_revoked": self.tokens_revoked,
+                "google_unlinked": self.google_unlinked,
+            }
+        )
+        return base
+
+
+@dataclass(frozen=True)
 class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
     """Un Google quedó vinculado a una cuenta: da acceso a ella (revisión del registro)."""
 

@@ -32,6 +32,7 @@ from src.modules.user.application.use_cases.google_login_use_case import (
     GoogleLoginUseCase,
 )
 from src.modules.user.application.use_cases.link_google_account_use_case import (
+    GoogleLinkNeedsVerifiedEmailError,
     LinkGoogleAccountUseCase,
 )
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
@@ -60,7 +61,9 @@ from src.shared.infrastructure.security.cookie_handler import (
 logger = logging.getLogger(__name__)
 GOOGLE_EMAIL_NOT_VERIFIED = "GOOGLE_EMAIL_NOT_VERIFIED"
 ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED"
+GOOGLE_LINK_NEEDS_VERIFIED_EMAIL = "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL"
 _TEXTOS_DE_GOOGLE = {
+    GOOGLE_LINK_NEEDS_VERIFIED_EMAIL: "Verify your email before linking a Google account.",
     ACCOUNT_DEACTIVATED: "This account has been deactivated. Contact an administrator.",
     GOOGLE_EMAIL_NOT_VERIFIED: (
         "Your Google account email is not verified. Verify it with Google, or sign up "
@@ -181,6 +184,12 @@ async def link_google_account(
         vinculo = await use_case.execute(link_data, str(current_user.id))
         _apunta_el_vinculo(request, str(current_user.id))
         return vinculo
+    except GoogleLinkNeedsVerifiedEmailError:
+        # Sin el correo verificado, sin Google: con su código, para que la app diga
+        # qué hacer en su idioma
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_GOOGLE, GOOGLE_LINK_NEEDS_VERIFIED_EMAIL
+        )
     except ValueError as e:
         error_msg = str(e)
         safe_messages = {

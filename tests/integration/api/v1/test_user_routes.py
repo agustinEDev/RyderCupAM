@@ -745,8 +745,10 @@ class TestUserRoutes:
 
         assert update_response.status_code == status.HTTP_200_OK
         data = update_response.json()
-        assert data["user"]["email"] == "newemail@example.com"
-        assert "Security settings updated" in data["message"]
+        # El correo nuevo queda pendiente hasta confirmarlo desde su dirección (#749)
+        assert data["user"]["email"] == "security.test@example.com"
+        assert data["user"]["pending_email"] == "newemail@example.com"
+        assert data["message"] == "Email change pending confirmation"
 
     async def test_update_security_password_only(self, client: AsyncClient):
         """Verifica que se puede actualizar solo el password."""
@@ -831,12 +833,14 @@ class TestUserRoutes:
 
         assert update_response.status_code == status.HTTP_200_OK
         data = update_response.json()
-        assert data["user"]["email"] == "newemail3@example.com"
+        # El correo nuevo, pendiente (#749): se entra con el de antes y la contraseña nueva
+        assert data["user"]["email"] == "security3.test@example.com"
+        assert data["user"]["pending_email"] == "newemail3@example.com"
 
         # Verificar login con nuevo email y password
         login_response = await client.post(
             "/api/v1/auth/login",
-            json={"email": "newemail3@example.com", "password": "n3wP@ssw0rd!9"},
+            json={"email": "security3.test@example.com", "password": "n3wP@ssw0rd!9"},
         )
         assert login_response.status_code == status.HTTP_200_OK
 

@@ -556,3 +556,33 @@ async def test_el_correo_de_intentos_fallidos_dice_lo_que_paso(
     assert dice in texto and dice in html
     assert en_ingles in texto
     assert _botones(html)[0] == f"{WEB}/profile/edit"
+
+
+class TestCorreosDelCambioDeCorreo:
+    """Los dos correos del cambio de correo pendiente (#749)."""
+
+    @pytest.mark.asyncio
+    async def test_the_confirmation_goes_to_the_new_address_with_its_link(self, correo):
+        """El enlace de confirmar, al correo nuevo: botón, 24 horas y la página del front."""
+        await correo.send_email_change_confirmation("ana@trabajo.com", "Ana", "tok-123")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        enlace = f"{WEB}/confirm-email-change?token=tok-123"
+        assert destinatario == "ana@trabajo.com"
+        assert _botones(cuerpo)[0] == enlace
+        assert enlace in texto
+        assert "24 horas" in cuerpo and "24 hours" in cuerpo
+
+    @pytest.mark.asyncio
+    async def test_the_notice_goes_to_the_old_address_with_the_new_one_masked(self, correo):
+        """
+        El aviso, al correo de antes: el nuevo tapado (lo puede leer quien no es su
+        dueño) y el botón para cambiar la contraseña
+        """
+        await correo.send_email_change_requested_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "a***@trabajo.com" in cuerpo and "a***@trabajo.com" in texto
+        assert "ana@trabajo.com" not in cuerpo and "ana@trabajo.com" not in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"

@@ -583,6 +583,12 @@ from src.modules.user.application.use_cases.admin_set_user_active_use_case impor
 from src.modules.user.application.use_cases.admin_update_user_use_case import (
     AdminUpdateUserUseCase,
 )
+from src.modules.user.application.use_cases.cancel_email_change_use_case import (
+    CancelEmailChangeUseCase,
+)
+from src.modules.user.application.use_cases.confirm_email_change_use_case import (
+    ConfirmEmailChangeUseCase,
+)
 from src.modules.user.application.use_cases.find_user_use_case import FindUserUseCase
 from src.modules.user.application.use_cases.get_admin_stats_use_case import (
     GetAdminStatsUseCase,
@@ -1046,6 +1052,20 @@ def get_update_profile_use_case(
     4. Devuelve la instancia lista para ser usada por el endpoint de la API.
     """
     return UpdateProfileUseCase(uow, country_repository)
+
+
+def get_confirm_email_change_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> ConfirmEmailChangeUseCase:
+    """Proveedor del caso de uso que confirma el correo nuevo pendiente (#749)."""
+    return ConfirmEmailChangeUseCase(uow)
+
+
+def get_cancel_email_change_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+) -> CancelEmailChangeUseCase:
+    """Proveedor del caso de uso que anula el correo nuevo pendiente (#749)."""
+    return CancelEmailChangeUseCase(uow)
 
 
 def get_update_security_use_case(

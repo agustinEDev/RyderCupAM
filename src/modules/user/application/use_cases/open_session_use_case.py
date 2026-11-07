@@ -16,6 +16,7 @@ from src.modules.user.application.dto.device_dto import (
 )
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
+from src.modules.user.application.services.guarda_la_sesion import activa, guarda_la_sesion
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -72,7 +73,8 @@ class OpenSessionUseCase:
             data=datos_del_acceso(request.user_id, device_id)
         )
         refresh_token = self._token_service.create_refresh_token(data={"sub": request.user_id})
-        async with self._uow:
+
+        async def guarda() -> None:
             await self._uow.refresh_tokens.save(
                 RefreshToken.create(
                     user_id=UserId(request.user_id),
@@ -81,6 +83,11 @@ class OpenSessionUseCase:
                     expires_in_days=7,
                 )
             )
+
+        # Con la fila bloqueada: si la desactivaron mientras tanto, sin sesión (tabla)
+        nuevo = UserDeviceId.from_string(device_id) if registrado.is_new_device else None
+        if await guarda_la_sesion(self._uow, UserId(request.user_id), activa, guarda, nuevo):
+            raise AccountDeactivatedException()
         return OpenSessionResponseDTO(
             access_token=access_token, refresh_token=refresh_token, device_id=device_id
         )

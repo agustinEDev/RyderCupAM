@@ -36,6 +36,7 @@ from ...domain.events.security_events import (
     SecurityAuditEvent,
     SecuritySeverity,
     TermsAcceptedEvent,
+    UnverifiedAccountClaimedAuditEvent,
 )
 from .config import HandlerConfig, LogFormat, LogHandler, LogLevel
 from .formatters import JsonFormatter, PythonLoggingFormatter
@@ -230,7 +231,10 @@ class SecurityLogger:
             return f"🔐 PASSWORD CHANGED | {user_info} | Verified: {event.old_password_verified}"
 
         if isinstance(event, EmailChangedEvent):
-            return f"📧 EMAIL CHANGED | {user_info} | Verification required: {event.email_verification_required}"
+            # Pedido (pendiente de confirmar desde la dirección nueva) o ya hecho (#749)
+            if event.email_verification_required:
+                return f"📧 EMAIL CHANGE REQUESTED | {user_info} | pending confirmation"
+            return f"📧 EMAIL CHANGED | {user_info} | confirmed from the new address"
 
         if isinstance(event, AccessDeniedEvent):
             return f"⛔ ACCESS DENIED | {user_info} | Resource: {event.resource_type} | Action: {event.action_attempted}"
@@ -463,6 +467,29 @@ class SecurityLogger:
                 deactivated_user_id=deactivated_user_id,
                 devices_revoked=devices_revoked,
                 tokens_revoked=tokens_revoked,
+            )
+        )
+
+    def log_unverified_account_claimed(
+        self,
+        user_id: str,
+        devices_revoked: int,
+        tokens_revoked: int,
+        google_unlinked: int = 0,
+        via: str = "google",
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: se quedó una cuenta sin verificar quien demostró el correo."""
+        self.log_security_event(
+            UnverifiedAccountClaimedAuditEvent(
+                user_id=user_id,
+                via=via,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                devices_revoked=devices_revoked,
+                tokens_revoked=tokens_revoked,
+                google_unlinked=google_unlinked,
             )
         )
 

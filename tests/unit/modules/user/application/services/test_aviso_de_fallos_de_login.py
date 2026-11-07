@@ -70,7 +70,7 @@ async def _escena(avisado_hace=None, enviado=True, cupo=None):
         email_str="ana@example.com",
         plain_password="V@l1dP@ss123!",
     )
-    ana.verify_email_from_oauth()
+    ana.confirm_email_ownership()
     if avisado_hace is not None:
         ana.apunta_el_aviso_de_fallos(AHORA - avisado_hace)
     async with uow:
