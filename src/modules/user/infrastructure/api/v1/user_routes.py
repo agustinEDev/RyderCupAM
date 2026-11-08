@@ -77,6 +77,11 @@ from src.modules.user.domain.exceptions import (
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
+    CURRENT_PASSWORD_INCORRECT,
+    EMAIL_ALREADY_IN_USE,
+    TEXTOS as TEXTOS_DE_CUENTA,
+)
 from src.modules.user.infrastructure.api.v1.limite_de_seguridad import (
     DEMASIADOS_CAMBIOS,
     DEMASIADOS_CORREOS_NUEVOS,
@@ -196,7 +201,6 @@ async def find_user(
 
 EMAIL_CHANGE_INVALID = "EMAIL_CHANGE_INVALID"
 EMAIL_CHANGE_EXPIRED = "EMAIL_CHANGE_EXPIRED"
-EMAIL_ALREADY_IN_USE = "EMAIL_ALREADY_IN_USE"
 _TEXTOS_DEL_CAMBIO_DE_CORREO = {
     EMAIL_CHANGE_INVALID: "This confirmation link is not valid for your account.",
     EMAIL_CHANGE_EXPIRED: "This confirmation link has expired. Ask for the change again.",
@@ -430,16 +434,15 @@ async def update_security(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
-    except InvalidCredentialsError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-        ) from e
-    except DuplicateEmailError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
+    except InvalidCredentialsError:
+        # Con su código, para que la app lo diga en su idioma
+        return respuesta_con_codigo(
+            status.HTTP_401_UNAUTHORIZED, TEXTOS_DE_CUENTA, CURRENT_PASSWORD_INCORRECT
+        )
+    except DuplicateEmailError:
+        return respuesta_con_codigo(
+            status.HTTP_409_CONFLICT, TEXTOS_DE_CUENTA, EMAIL_ALREADY_IN_USE
+        )
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)
         return coded_bad_request(e)

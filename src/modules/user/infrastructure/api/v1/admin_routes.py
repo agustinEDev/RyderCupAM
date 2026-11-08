@@ -43,6 +43,11 @@ from src.modules.user.application.use_cases.get_admin_stats_use_case import (
 )
 from src.modules.user.domain.errors.user_errors import DuplicateEmailError, UserNotFoundError
 from src.modules.user.domain.exceptions import UserHasActivityException
+from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
+    EMAIL_ALREADY_IN_USE,
+    TEXTOS as TEXTOS_DE_CUENTA,
+)
+from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     get_trusted_client_ip,
     get_user_agent,
@@ -111,8 +116,11 @@ async def update_user(
         return await use_case.execute(user_id, body)
     except UserNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    except DuplicateEmailError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    except DuplicateEmailError:
+        # Con su código, para que la app lo diga en su idioma (y sin el correo en el texto)
+        return respuesta_con_codigo(
+            status.HTTP_409_CONFLICT, TEXTOS_DE_CUENTA, EMAIL_ALREADY_IN_USE
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 

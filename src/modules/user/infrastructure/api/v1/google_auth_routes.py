@@ -48,6 +48,10 @@ from src.modules.user.application.use_cases.unlink_google_account_use_case impor
 )
 from src.modules.user.domain.errors.user_errors import InvalidCredentialsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException
+from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
+    CURRENT_PASSWORD_INCORRECT,
+    TEXTOS as TEXTOS_DE_CUENTA,
+)
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_validos_de_la_cookie,
@@ -169,11 +173,10 @@ async def google_login(
 
 
 # Los errores de la marca de reautenticación (BE #753), con su código para traducirlos
-CURRENT_PASSWORD_INCORRECT = "CURRENT_PASSWORD_INCORRECT"  # nosec B105 - an error code, not a password
 ACCOUNT_WITHOUT_PASSWORD = "ACCOUNT_WITHOUT_PASSWORD"  # nosec B105 - an error code, not a password
 REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED"
 _TEXTOS_DE_LA_REAUTENTICACION = {
-    CURRENT_PASSWORD_INCORRECT: "Current password is incorrect.",
+    CURRENT_PASSWORD_INCORRECT: TEXTOS_DE_CUENTA[CURRENT_PASSWORD_INCORRECT],
     ACCOUNT_WITHOUT_PASSWORD: "This account has no password.",
     REAUTHENTICATION_REQUIRED: "Enter your current password first.",
 }
