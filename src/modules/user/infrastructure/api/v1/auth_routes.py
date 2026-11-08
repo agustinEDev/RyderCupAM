@@ -711,12 +711,11 @@ async def verify_email(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to verify email. Please check your verification link or request a new one.",
         ) from e
-    except Exception as e:
-        logger.error(f"Unexpected error in email verification: {type(e).__name__}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unable to verify email. Please check your verification link or request a new one.",
-        ) from e
+    except Exception:
+        # Un fallo que no es del enlace (la BD, la red) no se dice como «enlace malo»: la
+        # app lo daría por perdido y puede ser bueno. Sube como 500 genérico (CodeRabbit)
+        logger.error("Unexpected error in email verification", exc_info=True)
+        raise
 
 
 @router.post(
