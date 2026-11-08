@@ -204,7 +204,7 @@ EMAIL_CHANGE_EXPIRED = "EMAIL_CHANGE_EXPIRED"
 _TEXTOS_DEL_CAMBIO_DE_CORREO = {
     EMAIL_CHANGE_INVALID: "This confirmation link is not valid for your account.",
     EMAIL_CHANGE_EXPIRED: "This confirmation link has expired. Ask for the change again.",
-    EMAIL_ALREADY_IN_USE: "That email is already used by another account.",
+    EMAIL_ALREADY_IN_USE: TEXTOS_DE_CUENTA[EMAIL_ALREADY_IN_USE],
 }
 
 

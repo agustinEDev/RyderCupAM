@@ -10,7 +10,7 @@ Los tests unitarios no lo veían: usan repositorios en memoria.
   C1 la cuenta creada con Google, guardada y leída: sin contraseña
   C2 la que pierde la contraseña al tomarla Google, guardada y leída: sin contraseña
   C3 la que tiene contraseña: la conserva y la comprueba
-  C4 desvincular su único Google, leída de Postgres: se rechaza
+  (Desvincular su único Google, por la API: test_cuenta_solo_google.py, G1)
 """
 
 import pytest
