@@ -49,9 +49,6 @@ from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_wor
 )
 from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
-from tests.unit.modules.user.application.use_cases._registro_falso import (
-    registro_de_dispositivo_falso,
-)
 
 pytestmark = pytest.mark.asyncio
 
@@ -300,26 +297,3 @@ async def test_s12_desactivar_y_reactivar_quedan_en_el_log_con_ip_y_navegador():
     assert (baja["ip_address"], baja["user_agent"]) == ("203.0.113.9", "Admin UA")
     assert (alta["user_id"], alta["reactivated_user_id"]) == (ADMIN, str(ana.id.value))
     assert (alta["ip_address"], alta["user_agent"]) == ("203.0.113.9", "Admin UA")
-
-
-async def test_s13_abrir_sesion_a_una_cuenta_desactivada_se_rechaza():
-    """
-    Given: Ana desactivada
-    When: Algo intenta abrirle sesión (verificar el correo, o el siguiente camino)
-    Then: AccountDeactivatedException: la regla vive en quien abre la sesión
-    """
-    from src.modules.user.application.dto.device_dto import OpenSessionRequestDTO
-    from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
-    from src.modules.user.domain.exceptions import AccountDeactivatedException
-
-    uow, ana, _d, _j, _a, _caso = await _escena()
-    ana.deactivate(deactivated_by_user_id=ADMIN)
-    async with uow:
-        await uow.users.save(ana)
-    registro = registro_de_dispositivo_falso()
-
-    with pytest.raises(AccountDeactivatedException):
-        await OpenSessionUseCase(uow, JWTTokenService(), registro).execute(
-            OpenSessionRequestDTO(user_id=str(ana.id.value), user_agent=IPHONE)
-        )
-    registro.execute.assert_not_awaited()

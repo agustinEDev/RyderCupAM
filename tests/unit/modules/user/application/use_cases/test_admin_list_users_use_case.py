@@ -44,6 +44,30 @@ class TestAdminListUsersUseCase:
         assert response.total_count == 2
         assert len(response.users) == 1
 
+    async def test_the_list_shows_a_pending_email(self, uow):
+        """El correo pendiente también en el listado, no solo al guardar (BE #753)."""
+        from datetime import datetime
+
+        from src.modules.user.application.dto.admin_dto import AdminListUsersRequestDTO
+        from src.modules.user.application.use_cases.admin_list_users_use_case import (
+            AdminListUsersUseCase,
+        )
+        from src.modules.user.domain.entities.user import User
+
+        ana = User.create(
+            first_name="Ana",
+            last_name="Lopez",
+            email_str="ana@test.com",
+            plain_password="SecureP@ssw0rd123",
+        )
+        ana.request_email_change("nuevo@test.com", ahora=datetime.now())
+        async with uow:
+            await uow.users.save(ana)
+
+        respuesta = await AdminListUsersUseCase(uow).execute(AdminListUsersRequestDTO())
+
+        assert respuesta.users[0].pending_email == "nuevo@test.com"
+
     async def test_search_filters_by_name_or_email(self, uow):
         await self._create_user(uow, "Marta", "Sánchez", "marta@test.com")
         await self._create_user(uow, "Diego", "Molero", "diego@test.com")

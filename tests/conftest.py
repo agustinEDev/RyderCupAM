@@ -661,6 +661,10 @@ def mock_external_services():
     # Y los del cambio de correo pendiente (#749)
     mock_email.send_email_change_confirmation = AsyncMock(return_value=True)
     mock_email.send_email_change_requested_notice = AsyncMock(return_value=True)
+    # Y los avisos de BE #753: sin esto el await fallaba y el aviso lo tragaba en silencio
+    mock_email.send_email_changed_notice = AsyncMock(return_value=True)
+    mock_email.send_account_secured_notice = AsyncMock(return_value=True)
+    mock_email.send_google_account_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):

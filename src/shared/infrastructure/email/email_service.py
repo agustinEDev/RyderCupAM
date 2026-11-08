@@ -88,7 +88,7 @@ Para completar tu registro, por favor confirma tu dirección de correo electrón
 
 {verification_link}
 
-Si no te has registrado en Ryder Cup Friends, puedes ignorar este mensaje.
+Si no has creado esta cuenta, no pulses: usa "Olvidé mi contraseña" en {settings.FRONTEND_URL}/forgot-password para quedártela.
 
 Saludos,
 El equipo de Ryder Cup Friends
@@ -103,7 +103,7 @@ To complete your registration, please confirm your email address by clicking on 
 
 {verification_link}
 
-If you did not sign up for Ryder Cup Friends, you can safely ignore this message.
+If you did not create this account, do not click: use "Forgot password" at {settings.FRONTEND_URL}/forgot-password to take it over.
 
 Best regards,
 The Ryder Cup Friends Team
@@ -121,6 +121,10 @@ The Ryder Cup Friends Team
                     ", gracias por registrarte en RyderCupFriends. Solo falta un paso: "
                     "confirma que este correo es tuyo para activar la cuenta.",
                 ),
+                aviso(
+                    negrita("Si no has creado esta cuenta, no pulses: "),
+                    'usa "Olvidé mi contraseña" y será tuya.',
+                ),
             ],
             boton=Boton("Confirmar mi correo", verification_link),
             ingles=Ingles(
@@ -131,8 +135,8 @@ The Ryder Cup Friends Team
                 ),
                 Boton("Confirm my email", verification_link),
             ),
-            pie="Si no te has registrado en RyderCupFriends, ignora este correo. "
-            "If you didn't sign up, ignore this email.",
+            pie="Si no has creado esta cuenta, no pulses el botón. "
+            "If you didn't create this account, don't click.",
         )
 
         return await self._send_email(
@@ -436,6 +440,179 @@ If it wasn't you, change your password: {restablecer}
             ),
             pie="Este aviso se envía siempre que se pide cambiar el correo. "
             "We always send this when an email change is requested.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_google_account_notice(self, to_email: str, user_name: str, linked: bool) -> bool:
+        """El aviso de un Google vinculado o desvinculado (BE #753)."""
+        safe_user_name = self._sanitize_name(user_name)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        if linked:
+            titulo, title = "Google vinculado a tu cuenta", "Google linked to your account"
+            hecho = "se ha vinculado una cuenta de Google a tu cuenta: con ella se puede entrar."
+            done = "a Google account was linked to your account: it can be used to sign in."
+            # Restablecer la contraseña también quita ese Google (BE #753)
+            que_hacer = "Restablece tu contraseña: también quitará ese Google."
+            what_to_do = "Reset your password: it will also remove that Google."
+        else:
+            titulo, title = "Google desvinculado de tu cuenta", "Google unlinked from your account"
+            hecho = "se ha desvinculado la cuenta de Google de tu cuenta."
+            done = "the Google account was unlinked from your account."
+            que_hacer = "Cambia tu contraseña ahora: alguien puede estar usando tu cuenta."
+            what_to_do = "Change your password now: someone may be using your account."
+        subject = f"{titulo} - Ryder Cup Friends | {title}"
+        text_body = f"""
+Hola {safe_user_name},
+
+{titulo}: {hecho}
+
+Si no has sido tú: {que_hacer} {restablecer}
+
+---
+
+Hello {safe_user_name},
+
+{title}: {done}
+
+If it wasn't you: {what_to_do} {restablecer}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"{titulo} · {title}",
+            etiqueta="Seguridad",
+            titulo=titulo,
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), f", {hecho}"),
+                aviso(negrita("¿No has sido tú? "), que_hacer),
+            ],
+            boton=Boton("Restablecer la contraseña", restablecer),
+            ingles=Ingles(
+                frase(negrita(title), f": {done} If it wasn't you: {what_to_do}"),
+                Boton("Reset my password", restablecer),
+            ),
+            pie="Este aviso se envía siempre que se vincula o desvincula Google. "
+            "We always send this when Google is linked or unlinked.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
+        """
+        El aviso de que se ha asegurado una cuenta sin verificar (BE #753). Con Google
+        se quitó la contraseña; al restablecer, la que vale es la que acaba de elegir.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        por_google = via == "google"
+        if por_google:
+            que_es = (
+                "Como no estaba verificada, quitamos la contraseña y cerramos sus sesiones. "
+                'Si quieres contraseña, usa "Olvidé mi contraseña".'
+            )
+            que_es_en = (
+                "As it was not verified, we removed its password and closed its sessions. "
+                'To have a password, use "Forgot password".'
+            )
+        else:
+            que_es = (
+                "Como no estaba verificada, tu contraseña es ahora la que acabas de elegir "
+                "y cerramos las demás sesiones."
+            )
+            que_es_en = (
+                "As it was not verified, your password is now the one you just chose and "
+                "we closed the other sessions."
+            )
+        subject = "Hemos asegurado tu cuenta - Ryder Cup Friends | Your account is secured"
+        text_body = f"""
+Hola {safe_user_name},
+
+Hemos asegurado tu cuenta de Ryder Cup Friends. {que_es}
+
+---
+
+Hello {safe_user_name},
+
+We have secured your Ryder Cup Friends account. {que_es_en}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Hemos asegurado tu cuenta · Your account is secured",
+            etiqueta="Seguridad",
+            titulo="Hemos asegurado tu cuenta",
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), ", hemos asegurado tu cuenta."),
+                aviso(que_es),
+            ],
+            boton=Boton("Olvidé mi contraseña", restablecer)
+            if por_google
+            else Boton("Abrir la aplicación", settings.FRONTEND_URL),
+            ingles=Ingles(
+                frase(negrita("We have secured your account."), f" {que_es_en}"),
+                Boton("Forgot password", restablecer)
+                if por_google
+                else Boton("Open the app", settings.FRONTEND_URL),
+            ),
+            pie="Este aviso se envía cuando se asegura una cuenta sin verificar. "
+            "We send this when an unverified account is secured.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_email_changed_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        El aviso, al correo de ANTES, de que el cambio ya está hecho (BE #753). El nuevo
+        va tapado, y dice a quién escribir: con el correo cambiado, el dueño ya no puede
+        recuperar la cuenta por su cuenta.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        nuevo = mask_email(new_email)
+        contacto = settings.CONTACT_EMAIL
+        subject = "Tu correo ha cambiado - Ryder Cup Friends | Your email has changed"
+        text_body = f"""
+Hola {safe_user_name},
+
+El correo de tu cuenta de Ryder Cup Friends es ahora {nuevo}.
+
+Si no has sido tú, escríbenos a {contacto}.
+
+---
+
+Hello {safe_user_name},
+
+Your Ryder Cup Friends account email is now {nuevo}.
+
+If it wasn't you, write to us at {contacto}.
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Tu correo ha cambiado · Your email has changed",
+            etiqueta="Seguridad",
+            titulo="Tu correo ha cambiado",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", el correo de tu cuenta es ahora ",
+                    negrita(nuevo),
+                    ".",
+                ),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Escríbenos a ",
+                    negrita(contacto),
+                    " y la recuperamos.",
+                ),
+            ],
+            boton=Boton("Escríbenos", f"mailto:{contacto}"),
+            ingles=Ingles(
+                frase(
+                    negrita("Your account email is now"),
+                    f" {nuevo}. If it wasn't you, write to us at {contacto}.",
+                ),
+                Boton("Write to us", f"mailto:{contacto}"),
+            ),
+            pie="Este aviso se envía siempre que cambia el correo de una cuenta. "
+            "We always send this when an account email changes.",
         )
         return await self._send_email(to_email, subject, text_body, html_body)
 

@@ -446,25 +446,6 @@ class RevokeDeviceResponseDTO(BaseModel):
     )
 
 
-class OpenSessionRequestDTO(BaseModel):
-    """Abrir la sesión de un usuario ya autenticado por otra vía (BE #737)."""
-
-    user_id: str
-    user_agent: str | None = None
-    ip_address: str | None = None
-    device_id_from_cookie: str | None = None
-    installed_app: bool = False
-    country_code: str | None = Field(default=None, max_length=2)
-
-
-class OpenSessionResponseDTO(BaseModel):
-    """Los tokens de la sesión y el dispositivo al que pertenece."""
-
-    access_token: str
-    refresh_token: str
-    device_id: str
-
-
 class PurgeStaleSessionsRequestDTO(BaseModel):
     """Una limpieza a la hora `ahora` (UTC, sin huso, como el resto de fechas)."""
 

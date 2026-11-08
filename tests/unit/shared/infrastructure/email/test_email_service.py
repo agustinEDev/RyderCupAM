@@ -574,6 +574,75 @@ class TestCorreosDelCambioDeCorreo:
         assert "24 horas" in cuerpo and "24 hours" in cuerpo
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(("vinculado", "frase"), [(True, "vinculado"), (False, "desvinculado")])
+    async def test_the_google_notice_says_what_happened(self, correo, vinculado, frase):
+        """El aviso de Google (BE #753): qué pasó y qué hacer si no fue el dueño"""
+        await correo.send_google_account_notice("ana@gmail.com", "Ana", vinculado)
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert f"Google {frase}" in cuerpo and f"Google {frase}" in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+        # Vinculado: restablecer la contraseña también quita ese Google (BE #753)
+        quita = "también quitará ese Google"
+        assert (quita in cuerpo and quita in texto) is vinculado
+
+    @pytest.mark.asyncio
+    async def test_the_verification_email_says_what_to_do_if_it_was_not_you(self, correo):
+        """Quien no creó la cuenta no pulsa, y se la queda con «Olvidé mi contraseña» (BE #753)"""
+        await correo.send_verification_email("ana@gmail.com", "Ana", "tok")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        aviso = "Si no has creado esta cuenta, no pulses"
+        assert aviso in cuerpo and aviso in texto
+        assert "Olvidé mi contraseña" in cuerpo and "Olvidé mi contraseña" in texto
+
+    @pytest.mark.asyncio
+    async def test_the_change_notice_uses_the_configured_contact(self, correo, monkeypatch):
+        """El buzón de contacto, el de la configuración (code-review): no uno fijo"""
+        from src.config.settings import settings
+
+        monkeypatch.setattr(settings, "CONTACT_EMAIL", "soporte@example.com")
+
+        await correo.send_email_changed_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "soporte@example.com" in cuerpo and "soporte@example.com" in texto
+
+    @pytest.mark.asyncio
+    async def test_the_secured_notice_by_google_says_the_password_is_gone(self, correo):
+        """La toma por Google (BE #753): sin contraseña, y cómo tener una"""
+        await correo.send_account_secured_notice("ana@gmail.com", "Ana", "google")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "quitamos la contraseña" in cuerpo and "quitamos la contraseña" in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+
+    @pytest.mark.asyncio
+    async def test_the_secured_notice_by_reset_keeps_the_new_password(self, correo):
+        """La toma al restablecer: la contraseña es la que acaba de elegir"""
+        await correo.send_account_secured_notice("ana@gmail.com", "Ana", "reset")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "quitamos la contraseña" not in cuerpo and "quitamos la contraseña" not in texto
+        assert "la que acabas de elegir" in cuerpo and "la que acabas de elegir" in texto
+
+    @pytest.mark.asyncio
+    async def test_the_change_notice_tells_the_old_address_whom_to_write(self, correo):
+        """
+        El aviso tras confirmar (BE #753): al correo de antes, el nuevo tapado y a quién
+        escribir si no fue el dueño
+        """
+        await correo.send_email_changed_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "a***@trabajo.com" in cuerpo and "a***@trabajo.com" in texto
+        assert "ana@trabajo.com" not in cuerpo and "ana@trabajo.com" not in texto
+        assert "admin@rydercupfriends.com" in cuerpo and "admin@rydercupfriends.com" in texto
+
+    @pytest.mark.asyncio
     async def test_the_notice_goes_to_the_old_address_with_the_new_one_masked(self, correo):
         """
         El aviso, al correo de antes: el nuevo tapado (lo puede leer quien no es su

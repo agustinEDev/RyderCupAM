@@ -632,7 +632,9 @@ from src.modules.user.application.use_cases.login_user_use_case import LoginUser
 from src.modules.user.application.use_cases.logout_user_use_case import (
     LogoutUserUseCase,
 )
-from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
+from src.modules.user.application.use_cases.reauthenticate_use_case import (
+    ReauthenticateUseCase,
+)
 from src.modules.user.application.use_cases.refresh_access_token_use_case import (
     RefreshAccessTokenUseCase,
 )
@@ -1040,15 +1042,6 @@ def get_refresh_access_token_use_case(
     return RefreshAccessTokenUseCase(uow, token_service, security_audit=security_audit)
 
 
-def get_open_session_use_case(
-    uow: UserUnitOfWorkInterface = Depends(get_uow),
-    token_service: ITokenService = Depends(get_token_service),
-    register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
-) -> OpenSessionUseCase:
-    """Proveedor de OpenSessionUseCase: abrir sesión tras verificar el email (BE #737)."""
-    return OpenSessionUseCase(uow, token_service, register_device_use_case)
-
-
 def get_update_profile_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     country_repository: CountryRepositoryInterface = Depends(get_country_repository),
@@ -1068,9 +1061,12 @@ def get_update_profile_use_case(
 def get_confirm_email_change_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> ConfirmEmailChangeUseCase:
     """Proveedor del caso de uso que confirma el correo nuevo pendiente (#749)."""
-    return ConfirmEmailChangeUseCase(uow, security_audit=security_audit)
+    return ConfirmEmailChangeUseCase(
+        uow, security_audit=security_audit, email_service=email_service
+    )
 
 
 def get_cancel_email_change_use_case(
@@ -1573,9 +1569,10 @@ def get_admin_list_users_use_case(
 
 def get_admin_update_user_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> AdminUpdateUserUseCase:
     """Proveedor del caso de uso AdminUpdateUserUseCase."""
-    return AdminUpdateUserUseCase(uow)
+    return AdminUpdateUserUseCase(uow, email_service=email_service)
 
 
 def get_admin_set_user_active_use_case(
@@ -3664,6 +3661,7 @@ def get_google_login_use_case(
     register_device_use_case: RegisterDeviceUseCase = Depends(get_register_device_use_case),
     aviso: IAvisoDeNuevoInicio = Depends(get_aviso_de_nuevo_inicio_de_sesion),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> GoogleLoginUseCase:
     """Proveedor del caso de uso GoogleLoginUseCase."""
     return GoogleLoginUseCase(
@@ -3673,6 +3671,7 @@ def get_google_login_use_case(
         register_device_use_case,
         aviso,
         security_audit=security_audit,
+        email_service=email_service,
     )
 
 
@@ -3680,13 +3679,25 @@ def get_link_google_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     google_oauth_service: IGoogleOAuthService = Depends(get_google_oauth_service),
     security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> LinkGoogleAccountUseCase:
     """Proveedor del caso de uso LinkGoogleAccountUseCase."""
-    return LinkGoogleAccountUseCase(uow, google_oauth_service, security_audit=security_audit)
+    return LinkGoogleAccountUseCase(
+        uow, google_oauth_service, security_audit=security_audit, email_service=email_service
+    )
+
+
+def get_reauthenticate_use_case(
+    uow: UserUnitOfWorkInterface = Depends(get_uow),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
+) -> ReauthenticateUseCase:
+    """Proveedor del caso de uso que comprueba la contraseña actual (BE #753)."""
+    return ReauthenticateUseCase(uow, security_audit=security_audit)
 
 
 def get_unlink_google_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
+    email_service: IEmailService = Depends(get_email_service),
 ) -> UnlinkGoogleAccountUseCase:
     """Proveedor del caso de uso UnlinkGoogleAccountUseCase."""
-    return UnlinkGoogleAccountUseCase(uow)
+    return UnlinkGoogleAccountUseCase(uow, email_service=email_service)

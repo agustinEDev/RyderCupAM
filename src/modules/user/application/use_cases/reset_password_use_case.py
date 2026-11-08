@@ -19,6 +19,7 @@ Post-Conditions:
 """
 
 import logging
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     ResetPasswordRequestDTO,
@@ -27,10 +28,10 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
-from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
@@ -252,9 +253,14 @@ class ResetPasswordUseCase:
                 user.confirm_email_ownership()
                 cerrado = await cierra_lo_que_no_se_probo(self._uow, user.id)
             else:
-                # Sesiones Y dispositivos: un acceso robado no sigue valiendo hasta que
-                # caduque (OWASP A07; tabla de caminos de #749)
-                await revoca_sus_sesiones(self._uow, user.id)
+                # Sesiones, dispositivos Y su Google: un acceso robado no sigue valiendo
+                # hasta que caduque (OWASP A07; tabla de caminos de #749), ni un Google
+                # que vinculó quien entró en la cuenta (BE #753, Agustín). Quien lo tenga
+                # de verdad lo vuelve a vincular. No es una toma: ni su log ni su aviso
+                _d, _t, google_quitado = await cierra_lo_que_no_se_probo(self._uow, user.id)
+                if google_quitado:
+                    # Que quede como al desvincularlo a mano (code-review)
+                    user.record_google_unlinked(provider="google", unlinked_at=datetime.now())
                 cerrado = None
 
             # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en
@@ -268,10 +274,14 @@ class ResetPasswordUseCase:
         if cerrado is not None:
             self._apunta_la_toma(user, cerrado, ip_address, user_agent)
 
-        # Enviar email de confirmación
-        await self._email_service.send_password_changed_notification(
-            to_email=str(user.email.value), user_name=user.get_full_name()
-        )
+        # Enviar email de confirmación. Si se la quedó, el de cuenta asegurada, que ya
+        # dice cuál es la contraseña (BE #753)
+        if cerrado is not None:
+            await avisa_de_la_toma(self._email_service, user, "reset")
+        else:
+            await self._email_service.send_password_changed_notification(
+                to_email=str(user.email.value), user_name=user.get_full_name()
+            )
 
         # Security Logging: Reseteo exitoso
         registra_sin_romper(

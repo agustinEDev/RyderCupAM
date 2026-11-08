@@ -7,6 +7,8 @@ Caso de uso para desvincular una cuenta de Google de un usuario autenticado.
 from datetime import datetime
 
 from src.modules.user.application.dto.oauth_dto import UnlinkGoogleAccountResponseDTO
+from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import avisa_de_google
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -22,8 +24,10 @@ class UnlinkGoogleAccountUseCase:
     ya que sería su único método de autenticación.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface):
+    def __init__(self, uow: UserUnitOfWorkInterface, *, email_service: IEmailService):
         self._uow = uow
+        # El aviso a la cuenta (BE #753)
+        self._email_service = email_service
 
     async def execute(self, user_id: str) -> UnlinkGoogleAccountResponseDTO:
         """
@@ -71,6 +75,8 @@ class UnlinkGoogleAccountUseCase:
                 unlinked_at=datetime.now(),
             )
             await self._uow.users.save(user)
+
+        await avisa_de_google(self._email_service, user, linked=False)
 
         return UnlinkGoogleAccountResponseDTO(
             message="Google account unlinked successfully",

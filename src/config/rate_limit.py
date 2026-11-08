@@ -89,6 +89,10 @@ DEFAULT_LIMIT_OVERRIDES = {
 LOGIN_ATTEMPTS_PER_EMAIL_LIMIT = "5/minute"
 FAILED_LOGINS_LIMIT = "30/minute"  # por red, solo intentos fallidos
 EMAIL_SENDING_PER_EMAIL_LIMIT = "3/hour"
+# PATCH /users/security, por usuario (BE #753): cada petición prueba una contraseña, y
+# pedir un correo nuevo manda dos correos, uno a cualquier dirección, del cupo diario
+SECURITY_CHANGES_LIMIT = "10/hour"
+NEW_EMAIL_REQUESTS_LIMIT = "3/hour"
 
 
 def _clave_de_red(ip: str) -> str:
@@ -271,6 +275,24 @@ def count_or_refuse(limit_value: str, scope: str, identifier: str) -> None:
         return
     if not limiter.limiter.hit(parse(limit_value), scope, identifier):
         raise _exceeded(limit_value)
+
+
+def cabe(limit_value: str, scope: str, identifier: str) -> bool:
+    """
+    Cuenta una petición contra un límite y dice si cabía, sin lanzar nada.
+
+    Para las rutas que responden su propio 429 con un código traducible; las demás
+    usan count_or_refuse. Una petición que no cabe también se cuenta (limits suma antes
+    de comparar), lo que no alarga la ventana fija.
+    """
+    if not limiter.enabled:
+        return True
+    return bool(limiter.limiter.hit(parse(limit_value), scope, identifier))
+
+
+def clave_de_usuario(user_id: str) -> str:
+    """El contador de un usuario para los límites que se cuentan a mano."""
+    return _clave_de_usuario(user_id)
 
 
 def too_many_login_attempts() -> RateLimitExceeded:

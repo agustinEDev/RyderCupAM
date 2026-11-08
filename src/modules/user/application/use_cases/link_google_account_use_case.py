@@ -8,10 +8,12 @@ from src.modules.user.application.dto.oauth_dto import (
     LinkGoogleAccountRequestDTO,
     LinkGoogleAccountResponseDTO,
 )
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     IGoogleOAuthService,
 )
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import avisa_de_google
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.user_oauth_account import UserOAuthAccount
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
@@ -31,6 +33,13 @@ class GoogleLinkNeedsVerifiedEmailError(ValueError):
     """
 
 
+class ReauthenticationRequiredError(PermissionError):
+    """
+    Vincular Google pide la contraseña actual a una cuenta que la tiene (BE #753): con
+    solo la sesión, una robada podía añadir un Google que sobrevive al restablecimiento.
+    """
+
+
 class LinkGoogleAccountUseCase:
     """
     Vincula una cuenta de Google a un usuario autenticado existente.
@@ -46,15 +55,18 @@ class LinkGoogleAccountUseCase:
         google_oauth_service: IGoogleOAuthService,
         *,
         security_audit: ISecurityAuditLogger,
+        email_service: IEmailService,
     ):
         self._uow = uow
         self._google_oauth_service = google_oauth_service
         self._security_audit = security_audit
+        self._email_service = email_service
 
     async def execute(
         self,
         request: LinkGoogleAccountRequestDTO,
         user_id: str,
+        reautenticado: bool = False,
     ) -> LinkGoogleAccountResponseDTO:
         """
         Vincula cuenta Google al usuario autenticado.
@@ -75,6 +87,10 @@ class LinkGoogleAccountUseCase:
             cuenta = await self._uow.users.find_by_id(uid)
         if cuenta is None or not cuenta.email_verified:
             raise GoogleLinkNeedsVerifiedEmailError("Verify your email before linking Google")
+        # Con contraseña, la marca de haberla escrito hace poco; también antes de gastar
+        # el código de Google
+        if cuenta.has_password and not reautenticado:
+            raise ReauthenticationRequiredError("Enter your current password first")
 
         google_info = await self._google_oauth_service.exchange_code_for_user_info(
             request.authorization_code
@@ -122,6 +138,8 @@ class LinkGoogleAccountUseCase:
                 user_agent=request.user_agent or "unknown",
             ),
         )
+
+        await avisa_de_google(self._email_service, cuenta, linked=True)
 
         return LinkGoogleAccountResponseDTO(
             message="Google account linked successfully",

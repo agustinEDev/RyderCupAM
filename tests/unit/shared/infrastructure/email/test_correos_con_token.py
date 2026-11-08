@@ -36,6 +36,21 @@ CORREOS = [
         lambda s: s.send_email_change_requested_notice("a@b.com", "Ana", "nuevo@b.com"),
     ),
     (
+        "correo_cambiado",
+        False,
+        lambda s: s.send_email_changed_notice("a@b.com", "Ana", "nuevo@b.com"),
+    ),
+    (
+        "cuenta_asegurada",
+        False,
+        lambda s: s.send_account_secured_notice("a@b.com", "Ana", "google"),
+    ),
+    (
+        "google",
+        False,
+        lambda s: s.send_google_account_notice("a@b.com", "Ana", True),
+    ),
+    (
         "nuevo_inicio",
         False,
         lambda s: s.send_new_login_notification("a@b.com", "Ana", "iPhone", "hoy", "ES"),
@@ -101,6 +116,9 @@ def test_e13b_every_email_of_the_app_is_in_the_list():
         "send_email_change_confirmation",
         "send_password_changed_notification",
         "send_email_change_requested_notice",
+        "send_email_changed_notice",
+        "send_account_secured_notice",
+        "send_google_account_notice",
         "send_new_login_notification",
         "send_failed_logins_notification",
         "send_invitation_email",

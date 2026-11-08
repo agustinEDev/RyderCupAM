@@ -703,7 +703,10 @@ class VerifyEmailRequestDTO(BaseModel):
 
 
 class VerifyEmailResponseDTO(BaseModel):
-    """DTO de salida para verificación de email."""
+    """
+    DTO de salida para verificación de email. Solo verifica, sin sesión (BE #753):
+    quien se registró con un correo ajeno no entra cuando el dueño pulsa el enlace.
+    """
 
     message: str = Field(
         default="Email verificado exitosamente",

@@ -192,21 +192,19 @@ class TestHttpOnlyCookies:
         assert "access_token=" in set_cookie_header
         assert "Max-Age=0" in set_cookie_header or "Expires=" in set_cookie_header
 
-    async def test_verify_email_sets_httponly_cookie(
+    async def test_verify_email_sets_no_session_cookie(
         self,
         client: AsyncClient,
         test_user_data: dict,
     ):
         """
-        Test: POST /verify-email establece cookie httpOnly (auto-login después de verificación).
+        Test: POST /verify-email solo verifica, sin abrir sesión (BE #753).
 
         Given: Un usuario registrado con email no verificado
         When: El usuario verifica su email con token válido
         Then:
-            - HTTP 200 OK
-            - Response body contiene access_token (LEGACY)
-            - Response headers contienen Set-Cookie con httpOnly flag
-            - Usuario autenticado automáticamente
+            - HTTP 200 OK, con email_verified
+            - Ni access_token en el cuerpo ni cookie access_token en Set-Cookie
         """
         # Given: Registrar usuario (genera token de verificación)
         register_payload = RegisterUserRequestDTO(
@@ -233,17 +231,12 @@ class TestHttpOnlyCookies:
         verify_payload = {"token": verification_token}
         response = await client.post("/api/v1/auth/verify-email", json=verify_payload)
 
-        # Then: Verificar respuesta
+        # Then: Verifica sin abrir sesión (BE #753): ni token en el cuerpo ni cookie
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data  # LEGACY: token en body
-        assert data["email_verification_required"] is False
-
-        # Then: Verificar cookie httpOnly en headers
-        set_cookie_header = response.headers.get("set-cookie")
-        assert set_cookie_header is not None, "Set-Cookie header debe existir"
-        assert "access_token=" in set_cookie_header
-        assert "HttpOnly" in set_cookie_header
+        assert "access_token" not in data
+        assert data["email_verified"] is True
+        assert "access_token=" not in (response.headers.get("set-cookie") or "")
 
     async def test_middleware_dual_cookie_has_priority_over_header(
         self,

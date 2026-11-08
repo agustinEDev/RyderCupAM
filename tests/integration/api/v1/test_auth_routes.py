@@ -239,13 +239,9 @@ class TestAuthRoutes:
         # Assert
         assert response.status_code == status.HTTP_200_OK
         response_data = response.json()
-        # Nuevo contrato: LoginResponseDTO
-        assert "access_token" in response_data
-        assert response_data["token_type"] == "bearer"
-        assert "user" in response_data
-        assert response_data["user"]["email_verified"] is True
-        # El mensaje de éxito está en el DTO original, pero ahora solo validamos el JWT y el usuario
-        # Si quieres validar el mensaje, puedes agregarlo como campo extra en el DTO o en user
+        # Solo verifica, sin sesión (BE #753)
+        assert response_data["email_verified"] is True
+        assert "access_token" not in response_data
 
     async def test_verify_email_endpoint_invalid_token(self, client: AsyncClient):
         """

@@ -28,7 +28,6 @@ from fastapi import status
 from httpx import AsyncClient
 
 from src.config.settings import settings
-from tests.conftest import get_user_by_email
 
 pytestmark = pytest.mark.asyncio
 
@@ -260,40 +259,6 @@ async def test_d4b_login_without_user_agent_has_a_device_that_can_be_revoked(
     assert r.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-async def test_d4c_verify_email_that_cannot_open_the_session_says_it_is_verified(
-    client: AsyncClient,
-):
-    """
-    Given: Un enlace de verificación válido y un fallo al abrir la sesión
-    When: Se verifica
-    Then: 503 «Email verified. Please sign in», no «el enlace no vale»: el correo ya
-          quedó verificado y el enlace gastado (/code-review, BE #737)
-    """
-    from main import app
-    from src.config.dependencies import get_open_session_use_case
-    from tests.conftest import get_user_by_email
-
-    email = f"d4c-{uuid.uuid4().hex[:6]}@example.com"
-    await _registra(client, email)
-    usuario = await get_user_by_email(client, email)
-
-    class _SinSesion:
-        async def execute(self, _request):
-            raise RuntimeError("la BD se cayó")
-
-    app.dependency_overrides[get_open_session_use_case] = _SinSesion
-    try:
-        r = await client.post(
-            "/api/v1/auth/verify-email", json={"token": usuario.verification_token}
-        )
-    finally:
-        app.dependency_overrides.pop(get_open_session_use_case, None)
-
-    assert r.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-    assert "verified" in r.json()["detail"].lower()
-    assert (await get_user_by_email(client, email)).is_email_verified()
-
-
 async def test_d5_logout_and_login_again_keeps_the_same_device(client: AsyncClient):
     """
     Given: Un iPhone con su dispositivo
@@ -390,30 +355,6 @@ async def test_d9_installed_app_and_safari_on_the_same_phone_are_two_devices(cli
     en_app = (await _entra(app, email, SAFARI_IPHONE, modo="standalone")).json()["device_id"]
 
     assert en_app != en_safari
-
-
-async def test_d10_verify_email_opens_a_session_whose_refresh_works(client: AsyncClient):
-    """
-    Given: Un usuario recién registrado
-    When: Verifica su email (la app le deja dentro) y a los 15 minutos se refresca
-    Then: El refresco funciona: hay dispositivo y su refresh token está guardado. Antes, a los
-          15 minutos le echaban con REFRESH_TOKEN_NOT_FOUND
-    """
-    email = f"d10-{uuid.uuid4().hex[:6]}@example.com"
-    await _registra(client, email)
-    usuario = await get_user_by_email(client, email)
-    c = _otro(client)
-
-    r = await c.post(
-        "/api/v1/auth/verify-email",
-        json={"token": usuario.verification_token},
-        headers=_cabeceras(SAFARI_IPHONE),
-    )
-    assert r.status_code == status.HTTP_200_OK, r.text
-    assert _did(c)
-
-    r = await c.post("/api/v1/auth/refresh-token", headers=_cabeceras(SAFARI_IPHONE))
-    assert r.status_code == status.HTTP_200_OK, r.text
 
 
 async def test_f3_the_list_describes_each_device_for_the_screen(client: AsyncClient):
