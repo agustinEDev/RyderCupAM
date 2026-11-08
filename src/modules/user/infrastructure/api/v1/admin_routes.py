@@ -104,6 +104,11 @@ async def list_users(
     response_model=AdminUserSummaryDTO,
     status_code=status.HTTP_200_OK,
     summary="Editar un usuario (Admin)",
+    description=(
+        "Un correo nuevo queda pendiente hasta que el usuario lo confirme desde esa "
+        "dirección (BE #753): la respuesta trae `pending_email`."
+    ),
+    responses={409: {"description": "`error_code` EMAIL_ALREADY_IN_USE: otra cuenta ya lo usa."}},
 )
 async def update_user(
     user_id: str,

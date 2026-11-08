@@ -238,13 +238,7 @@ class User:
 
     @property
     def password(self) -> Password | None:
-        """
-        La contraseña, o None si la cuenta no tiene (solo Google). Al leer de la BD una
-        columna a NULL, el composite de SQLAlchemy construye `Password(hashed_value=None)`
-        en vez de None: eso tampoco es una contraseña (probador de la release, 8 nov 2026).
-        """
-        if self._password is None or self._password.hashed_value is None:
-            return None
+        """La contraseña, o None si la cuenta no tiene (solo Google)."""
         return self._password
 
     @property
