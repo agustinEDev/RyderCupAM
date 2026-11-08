@@ -34,12 +34,19 @@ def _csrf(client: AsyncClient) -> dict:
 
 
 async def test_g1_unlinking_the_only_google_is_refused(client: AsyncClient):
+    """
+    Given: Una cuenta solo con Google (sin contraseña, sin forma de confirmarla)
+    When: Intenta desvincular Google
+    Then: 403 REAUTHENTICATION_REQUIRED: desvincular pide la marca antes que nada (D4, 8
+          nov 2026) y sin contraseña no hay marca; el Google sigue. La app ya no ofrece
+          el botón a estas cuentas
+    """
     await _solo_google(client, "g1_solo@example.com")
 
     r = await client.delete("/api/v1/auth/google/unlink", headers=_csrf(client))
 
-    assert r.status_code == 400, r.text
-    assert "only authentication method" in r.json()["detail"]
+    assert r.status_code == 403, r.text
+    assert r.json()["error_code"] == "REAUTHENTICATION_REQUIRED"
 
 
 async def test_g2_reauthenticating_says_there_is_no_password(client: AsyncClient):

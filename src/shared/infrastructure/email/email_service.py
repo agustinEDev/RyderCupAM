@@ -250,13 +250,28 @@ The Ryder Cup Friends Team
 
         return await self._send_email(to_email, subject, text_body, html_body)
 
-    async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
+    async def send_password_changed_notification(
+        self, to_email: str, user_name: str, google_unlinked: bool = False
+    ) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 
-        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389).
+        Bilingüe (ES/EN), con la plantilla común de los correos (BE #389). Con
+        `google_unlinked`, una frase más: restablecer una cuenta verificada le quita el
+        Google, y el aviso aparte de «Google desvinculado» parecía una intrusión (Agustín,
+        8 nov 2026).
         """
         safe_user_name = self._sanitize_name(user_name)
+        google_es = (
+            "También hemos desvinculado tu cuenta de Google. Si la usabas para entrar, "
+            "vuelve a vincularla desde tu perfil."
+        )
+        google_en = (
+            "We also unlinked your Google account. If you used it to sign in, link it "
+            "again from your profile."
+        )
+        google_texto_es = f"\n\n{google_es}" if google_unlinked else ""
+        google_texto_en = f"\n\n{google_en}" if google_unlinked else ""
 
         subject = (
             "Tu contraseña ha sido cambiada - Ryder Cup Friends | Your password has been changed"
@@ -267,7 +282,7 @@ Hola {safe_user_name},
 
 Te confirmamos que la contraseña de tu cuenta en Ryder Cup Friends ha sido cambiada exitosamente.
 
-Por seguridad, hemos cerrado todas tus sesiones activas. Necesitarás iniciar sesión nuevamente con tu nueva contraseña.
+Por seguridad, hemos cerrado todas tus sesiones activas. Necesitarás iniciar sesión nuevamente con tu nueva contraseña.{google_texto_es}
 
 Si NO realizaste este cambio, tu cuenta podría estar comprometida. Por favor, contacta a nuestro equipo de soporte inmediatamente.
 
@@ -280,7 +295,7 @@ Hello {safe_user_name},
 
 We confirm that the password for your Ryder Cup Friends account has been successfully changed.
 
-For security, we have closed all your active sessions. You will need to log in again with your new password.
+For security, we have closed all your active sessions. You will need to log in again with your new password.{google_texto_en}
 
 If you did NOT make this change, your account may be compromised. Please contact our support team immediately.
 
@@ -301,6 +316,7 @@ The Ryder Cup Friends Team
                     ", la contraseña de tu cuenta acaba de cambiar. Por seguridad hemos "
                     "cerrado todas tus sesiones: vuelve a entrar con la nueva.",
                 ),
+                *([parrafo(google_es)] if google_unlinked else []),
                 aviso(
                     negrita("¿No has sido tú? "),
                     "Restablece la contraseña ahora: alguien puede estar usando tu cuenta.",
@@ -310,7 +326,9 @@ The Ryder Cup Friends Team
             ingles=Ingles(
                 frase(
                     negrita("Your password was changed"),
-                    " and all your sessions were closed. If it wasn't you, reset it now.",
+                    " and all your sessions were closed. "
+                    + (f"{google_en} " if google_unlinked else "")
+                    + "If it wasn't you, reset it now.",
                 ),
                 Boton("Reset my password", restablecer),
             ),

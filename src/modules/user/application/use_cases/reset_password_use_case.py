@@ -30,6 +30,7 @@ from src.modules.user.application.ports.security_audit_interface import ISecurit
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
     avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
+    manda_sin_romper,
 )
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.password_history import PasswordHistory
@@ -101,6 +102,56 @@ class ResetPasswordUseCase:
                 via="password_reset",
                 ip_address=ip_address,
                 user_agent=user_agent,
+            ),
+        )
+
+    def _apunta_lo_cerrado(
+        self,
+        user: User,
+        cerrado: tuple[int, int, int] | None,
+        google_quitado: int,
+        ip_address: str,
+        user_agent: str,
+    ) -> None:
+        """
+        Al log, ya guardado: la toma (sin verificar), o el Google que se le quitó a una
+        cuenta verificada, que no es una toma y no salía en ninguna línea: sin esto no
+        quedaba rastro (Agustín, 8 nov 2026).
+        """
+        if cerrado is not None:
+            self._apunta_la_toma(user, cerrado, ip_address, user_agent)
+            return
+        if not google_quitado:
+            return
+        registra_sin_romper(
+            "Google unlink on reset",
+            lambda: self._security_audit.log_google_account_unlinked(
+                user_id=str(user.id.value),
+                ip_address=ip_address,
+                user_agent=user_agent,
+                via="password_reset",
+            ),
+        )
+
+    async def _avisa(
+        self, user: User, cerrado: tuple[int, int, int] | None, google_quitado: int
+    ) -> None:
+        """
+        El correo, ya guardado. Si se la quedó, el de cuenta asegurada, que ya dice cuál
+        es la contraseña (BE #753); si no, el de contraseña cambiada, que dice además si
+        se le quitó el Google: sin eso, el dueño descubría que su Google ya no entra al
+        intentarlo (Agustín, 8 nov 2026). Si el correo falla, el restablecimiento ya está
+        hecho: ni cambia la respuesta ni se pierde su línea en el log.
+        """
+        if cerrado is not None:
+            await avisa_de_la_toma(self._email_service, user, "reset")
+            return
+        await manda_sin_romper(
+            "Password changed notice",
+            self._email_service.send_password_changed_notification(
+                to_email=str(user.email.value),
+                user_name=user.get_full_name(),
+                google_unlinked=bool(google_quitado),
             ),
         )
 
@@ -247,6 +298,7 @@ class ResetPasswordUseCase:
             )
             await self._uow.password_history.save(password_history)
 
+            google_quitado = 0
             if sin_verificar:
                 # Lo que dejó quien la creó o le cambió el correo, fuera: dispositivos,
                 # sesiones y su Google
@@ -271,17 +323,9 @@ class ResetPasswordUseCase:
             await self._uow.users.save(user)
             # Commit automático al salir del contexto (todas las operaciones atomicas)
 
-        if cerrado is not None:
-            self._apunta_la_toma(user, cerrado, ip_address, user_agent)
+        self._apunta_lo_cerrado(user, cerrado, google_quitado, ip_address, user_agent)
 
-        # Enviar email de confirmación. Si se la quedó, el de cuenta asegurada, que ya
-        # dice cuál es la contraseña (BE #753)
-        if cerrado is not None:
-            await avisa_de_la_toma(self._email_service, user, "reset")
-        else:
-            await self._email_service.send_password_changed_notification(
-                to_email=str(user.email.value), user_name=user.get_full_name()
-            )
+        await self._avisa(user, cerrado, google_quitado)
 
         # Security Logging: Reseteo exitoso
         registra_sin_romper(

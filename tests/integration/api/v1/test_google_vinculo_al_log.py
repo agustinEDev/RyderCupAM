@@ -99,6 +99,139 @@ async def test_a_broken_log_does_not_change_the_link_answer(client: AsyncClient,
     assert respuesta.status_code == 200
 
 
+async def _reautentica(client: AsyncClient) -> None:
+    """Confirma la contraseña antes de desvincular."""
+    # Desvincular pide la contraseña, como vincular (tabla D, 8 nov 2026)
+    r = await client.post(
+        "/api/v1/auth/reauthenticate",
+        json={"password": CLAVE},
+        headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def _desvincula(client: AsyncClient):
+    """Confirma la contraseña y desvincula, con navegador e IP conocidos."""
+    await _reautentica(client)
+    return await client.delete(
+        "/api/v1/auth/google/unlink",
+        headers={
+            "X-CSRF-Token": client.cookies.get("csrf_token", ""),
+            "User-Agent": "Navegador que desvincula",
+            "X-Forwarded-For": "203.0.113.101",
+        },
+    )
+
+
+async def test_unlink_from_profile_logs_the_network(client: AsyncClient, monkeypatch):
+    """
+    Given: Un usuario con contraseña y Google vinculado
+    When: Desvincula Google desde su perfil
+    Then: 200, y el log apunta la desvinculación con su navegador y una IP
+    """
+    apuntes = []
+    monkeypatch.setattr(
+        SecurityLogger, "log_google_account_unlinked", lambda self, **kw: apuntes.append(kw)
+    )
+    datos, vinculo = await _vincula(client, "desvinculo.log@example.com")
+    assert vinculo.status_code == 200
+
+    respuesta = await _desvincula(client)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert apuntes == [
+        {
+            "user_id": datos["user"]["id"],
+            "ip_address": "203.0.113.101",
+            "user_agent": "Navegador que desvincula",
+            "via": "profile",
+        }
+    ]
+
+
+async def test_unlink_without_user_agent_writes_the_real_line(client: AsyncClient, monkeypatch):
+    """
+    Given: Un usuario con contraseña y Google vinculado, y el log de seguridad DE VERDAD
+    When: Desvincula Google sin cabecera User-Agent (curl, un script)
+    Then: 200, y la línea GOOGLE UNLINKED se escribe con «unknown» (revisión de seguridad:
+          un None de la ruta tumbaba el evento y no quedaba rastro)
+    """
+    datos, vinculo = await _vincula(client, "desvinculo.sin.ua@example.com")
+    assert vinculo.status_code == 200
+    # El método público que escribe cada evento, sin sustituirlo: el evento se construye
+    # y se escribe de verdad, y aquí solo se mira
+    escritos = []
+    original = SecurityLogger.log_security_event
+
+    def mira(self, event):
+        """Apunta el evento y su línea, y lo escribe como siempre."""
+        escritos.append((event, self._build_message(event)))
+        return original(self, event)
+
+    monkeypatch.setattr(SecurityLogger, "log_security_event", mira)
+    await _reautentica(client)
+
+    respuesta = await client.delete(
+        "/api/v1/auth/google/unlink",
+        headers={"X-CSRF-Token": client.cookies.get("csrf_token", ""), "User-Agent": ""},
+    )
+
+    assert respuesta.status_code == 200, respuesta.text
+    lineas = [(e, m) for e, m in escritos if m.startswith("GOOGLE UNLINKED")]
+    assert [m for _e, m in lineas] == [
+        f"GOOGLE UNLINKED | User {datos['user']['id']} | by the user"
+    ]
+    assert lineas[0][0].user_agent == "unknown"
+
+
+async def test_unlink_without_google_linked_answers_400_and_logs_nothing(
+    client: AsyncClient, monkeypatch
+):
+    """
+    Given: Un usuario con sesión y sin Google vinculado
+    When: Intenta desvincular Google
+    Then: 400, y nada de «desvinculado» en el log
+    """
+    apuntes = []
+    monkeypatch.setattr(
+        SecurityLogger, "log_google_account_unlinked", lambda self, **kw: apuntes.append(kw)
+    )
+    datos = await create_authenticated_user(
+        client, "sin.google.log@example.com", CLAVE, "Ana", "Lopez"
+    )
+    set_auth_cookies(client, datos["cookies"])
+
+    respuesta = await _desvincula(client)
+
+    assert respuesta.status_code == 400
+    assert apuntes == []
+
+
+async def test_unlink_with_broken_log_still_answers_200(client: AsyncClient, monkeypatch):
+    """
+    Given: El log de seguridad falla
+    When: Desvincula Google desde su perfil
+    Then: 200 igual, y el Google ya no está vinculado
+    """
+
+    llamadas = []
+
+    def roto(self, **kw):
+        llamadas.append(kw)
+        raise RuntimeError("disco lleno")
+
+    monkeypatch.setattr(SecurityLogger, "log_google_account_unlinked", roto)
+    _datos, vinculo = await _vincula(client, "desvinculo.roto@example.com")
+    assert vinculo.status_code == 200
+
+    respuesta = await _desvincula(client)
+    otra_vez = await _desvincula(client)
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert len(llamadas) == 1, "el log tiene que intentarse y fallar"
+    assert otra_vez.status_code == 400
+
+
 async def test_a_deactivated_account_gets_its_own_code_on_google(client: AsyncClient):
     """
     Given: Una cuenta vinculada a Google y desactivada por un administrador

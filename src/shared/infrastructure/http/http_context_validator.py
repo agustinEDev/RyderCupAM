@@ -100,6 +100,13 @@ def validate_ip_address(ip: str | None) -> str | None:
         # 4. (Opcional) Rechazar IPs privadas/loopback
         # Deshabilitado porque en desarrollo local usamos 192.168.x.x
 
+        # 5. Ni una IPv6 con zona (fe80::1%eth0): no es la de un cliente de Internet y
+        # su zona mide lo que quiera, más que los 45 caracteres de columnas y DTOs de IP;
+        # tumbaba el refresco y el desvincular (revisiones de #765, 8 nov 2026)
+        if getattr(ip_obj, "scope_id", None):
+            logger.warning("IP validation failed: scoped IPv6")
+            return None
+
         return str(ip_obj)  # Normalizado por ipaddress
 
     except ValueError as e:

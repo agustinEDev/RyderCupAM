@@ -3698,6 +3698,9 @@ def get_reauthenticate_use_case(
 def get_unlink_google_account_use_case(
     uow: UserUnitOfWorkInterface = Depends(get_uow),
     email_service: IEmailService = Depends(get_email_service),
+    security_audit: ISecurityAuditLogger = Depends(get_security_audit_logger),
 ) -> UnlinkGoogleAccountUseCase:
     """Proveedor del caso de uso UnlinkGoogleAccountUseCase."""
-    return UnlinkGoogleAccountUseCase(uow, email_service=email_service)
+    return UnlinkGoogleAccountUseCase(
+        uow, email_service=email_service, security_audit=security_audit
+    )

@@ -220,3 +220,13 @@ class ISecurityAuditLogger(ABC):
         user_agent: str = "unknown",
     ) -> None:
         """Un Google vinculado (automático o desde el perfil)."""
+
+    @abstractmethod
+    def log_google_account_unlinked(
+        self,
+        user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+        via: str = "profile",
+    ) -> None:
+        """Un Google desvinculado: desde el perfil o al restablecer la contraseña."""
