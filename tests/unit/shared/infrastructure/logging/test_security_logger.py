@@ -195,3 +195,28 @@ class TestTermsAccepted:
 
         assert event.severity == SecuritySeverity.LOW
         assert event.to_dict()["terms_version"] == "2026-10-20"
+
+
+class TestGoogleUnlinked:
+    """Desvincular Google queda en el log de seguridad (G1)."""
+
+    def test_log_google_account_unlinked_helper(self, logger, temp_log_dir):
+        """
+        Given: Un usuario que desvincula su Google
+        When: Se registra con el helper
+        Then: El log lleva la línea GOOGLE UNLINKED, el usuario, la IP, el navegador
+              y el tipo de evento, con severidad alta (quita una forma de entrar)
+        """
+        logger.log_google_account_unlinked(
+            user_id="user-unlink",
+            ip_address="203.0.113.21",
+            user_agent="Safari/18.0",
+        )
+
+        content = (temp_log_dir / "test_security.log").read_text()
+        assert "GOOGLE UNLINKED | User user-unlink" in content
+        assert "203.0.113.21" in content
+        assert "Safari/18.0" in content
+        entrada = json.loads(content.strip().split("\n")[-1])
+        assert entrada["extra"]["event_class"] == "GoogleAccountUnlinkedAuditEvent"
+        assert entrada["extra"]["severity"] == "HIGH"

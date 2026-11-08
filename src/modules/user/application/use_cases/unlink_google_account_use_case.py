@@ -8,7 +8,9 @@ from datetime import datetime
 
 from src.modules.user.application.dto.oauth_dto import UnlinkGoogleAccountResponseDTO
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import avisa_de_google
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -24,17 +26,33 @@ class UnlinkGoogleAccountUseCase:
     ya que sería su único método de autenticación.
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, *, email_service: IEmailService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        *,
+        email_service: IEmailService,
+        security_audit: ISecurityAuditLogger,
+    ):
         self._uow = uow
         # El aviso a la cuenta (BE #753)
         self._email_service = email_service
+        # El rastro en el log de seguridad, como al vincular
+        self._security_audit = security_audit
 
-    async def execute(self, user_id: str) -> UnlinkGoogleAccountResponseDTO:
+    async def execute(
+        self,
+        user_id: str,
+        *,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> UnlinkGoogleAccountResponseDTO:
         """
         Desvincula cuenta Google del usuario.
 
         Args:
             user_id: ID del usuario autenticado (de JWT)
+            ip_address: IP de la petición, para el log de seguridad
+            user_agent: Navegador de la petición, para el log de seguridad
 
         Returns:
             UnlinkGoogleAccountResponseDTO con confirmación
@@ -75,6 +93,17 @@ class UnlinkGoogleAccountUseCase:
                 unlinked_at=datetime.now(),
             )
             await self._uow.users.save(user)
+
+        # Ya guardado, al log con la red: sin él, quitar el Google de otro con una sesión
+        # robada no dejaba rastro. Un fallo del log no cambia la respuesta
+        registra_sin_romper(
+            "Google unlink",
+            lambda: self._security_audit.log_google_account_unlinked(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
+        )
 
         await avisa_de_google(self._email_service, user, linked=False)
 

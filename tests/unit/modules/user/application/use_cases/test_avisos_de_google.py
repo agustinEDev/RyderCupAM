@@ -93,7 +93,9 @@ async def test_a2_unlinking_tells_the_account():
     ana = await _ana(uow, con_google=True)
     correos = AsyncMock()
 
-    await UnlinkGoogleAccountUseCase(uow, email_service=correos).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(
+        uow, email_service=correos, security_audit=MagicMock()
+    ).execute(str(ana.id.value))
 
     correos.send_google_account_notice.assert_awaited_once_with(
         to_email="ana@example.com", user_name="Ana", linked=False
@@ -111,7 +113,9 @@ async def test_a3_a_failing_notice_keeps_the_link_and_the_unlink(falla):
         correos.send_google_account_notice.return_value = False
 
     await _vincula(uow, ana, correos)
-    await UnlinkGoogleAccountUseCase(uow, email_service=correos).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(
+        uow, email_service=correos, security_audit=MagicMock()
+    ).execute(str(ana.id.value))
 
     async with uow:
         assert (
@@ -147,6 +151,8 @@ async def test_a5_an_unverified_account_is_not_told_on_unlink():
     ana = await _ana(uow, verificada=False, con_google=True)
     correos = AsyncMock()
 
-    await UnlinkGoogleAccountUseCase(uow, email_service=correos).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(
+        uow, email_service=correos, security_audit=MagicMock()
+    ).execute(str(ana.id.value))
 
     correos.send_google_account_notice.assert_not_awaited()

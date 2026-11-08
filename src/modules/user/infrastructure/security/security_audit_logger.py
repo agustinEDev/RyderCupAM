@@ -272,3 +272,16 @@ class SecurityAuditLogger(ISecurityAuditLogger):
             ip_address=ip_address,
             user_agent=user_agent,
         )
+
+    def log_google_account_unlinked(
+        self,
+        user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Un Google desvinculado desde el perfil."""
+        get_security_logger().log_google_account_unlinked(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )

@@ -16,7 +16,7 @@ sobre la fila bloqueada, y escribir. Sin ella, otra operación a la vez se pisab
 """
 
 import copy
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -231,7 +231,9 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
     ana = await _ana(uow, con_google=True)
     pedidos = await _espia_del_bloqueo(uow)
 
-    await UnlinkGoogleAccountUseCase(uow, email_service=AsyncMock()).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(
+        uow, email_service=AsyncMock(), security_audit=MagicMock()
+    ).execute(str(ana.id.value))
 
     assert pedidos == [ana.id]
 

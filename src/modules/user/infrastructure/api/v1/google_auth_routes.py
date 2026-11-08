@@ -316,13 +316,20 @@ async def link_google_account(
     },
 )
 async def unlink_google_account(
-    request: Request,  # noqa: ARG001
+    request: Request,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UnlinkGoogleAccountUseCase = Depends(get_unlink_google_account_use_case),
 ):
     """Desvincula cuenta Google de usuario autenticado."""
     try:
-        return await use_case.execute(str(current_user.id))
+        # Al log de seguridad con la red de la petición, como al vincular
+        return await use_case.execute(
+            str(current_user.id),
+            ip_address=get_trusted_client_ip(
+                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+            ),
+            user_agent=get_user_agent(request),
+        )
     except ValueError as e:
         error_msg = str(e)
         safe_messages = {

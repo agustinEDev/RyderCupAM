@@ -27,6 +27,7 @@ from ...domain.events.security_events import (
     AccountUnlockedAuditEvent,
     EmailChangedEvent,
     GoogleAccountLinkedAuditEvent,
+    GoogleAccountUnlinkedAuditEvent,
     LoginAttemptEvent,
     LogoutEvent,
     PasswordChangedEvent,
@@ -526,6 +527,19 @@ class SecurityLogger:
         self.log_security_event(
             GoogleAccountLinkedAuditEvent(
                 user_id=user_id, ip_address=ip_address, user_agent=user_agent, automatic=automatic
+            )
+        )
+
+    def log_google_account_unlinked(
+        self,
+        user_id: str,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Helper rápido: un Google desvinculado desde el perfil."""
+        self.log_security_event(
+            GoogleAccountUnlinkedAuditEvent(
+                user_id=user_id, ip_address=ip_address, user_agent=user_agent
             )
         )
 

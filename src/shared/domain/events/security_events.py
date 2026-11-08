@@ -627,6 +627,23 @@ class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class GoogleAccountUnlinkedAuditEvent(SecurityAuditEvent):
+    """
+    Un Google desvinculado de una cuenta: quita una forma de entrar. Con una sesión
+    robada y la contraseña, es el paso que deja fuera al dueño que entraba con Google.
+    """
+
+    def __post_init__(self):
+        """Validación y severidad: como un cambio de contraseña o de correo, HIGH."""
+        super().__post_init__()
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return f"GOOGLE UNLINKED | {user_info} | by the user"
+
+
+@dataclass(frozen=True)
 class AccessDeniedEvent(SecurityAuditEvent):
     """
     Evento de acceso denegado (HTTP 403).
