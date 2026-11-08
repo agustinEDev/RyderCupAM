@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.54.0] - 2026-11-08
+
+**Desvincular Google pide la contraseña y deja rastro en el log de seguridad, y
+restablecer la contraseña dice en su correo si quitó el Google** (#765). Sin migraciones.
+Va con el frontend **2.69.0**, que hay que desplegar ANTES: un front viejo recibiría 403 al
+desvincular Google sin la contraseña confirmada. Probado en el Kind con develop y dos
+baterías de punta a punta; el correo, en el iPhone en modo oscuro.
+
+### Security
+
+- **Desvincular Google pide la contraseña actual**: `DELETE /auth/google/unlink` gasta al
+  empezar la misma marca de 5 minutos que `/auth/google/link` (una sola vez, aunque luego
+  falle) y sin ella responde `403 REAUTHENTICATION_REQUIRED` antes de leer nada, así que
+  el 403 no dice si hay Google vinculado. Una marca sirve para una sola acción.
+- **Desvincular Google queda en el log de seguridad**: `GOOGLE UNLINKED` (HIGH) con la IP
+  y el navegador de la petición, ya guardado y sin que un fallo del log cambie la
+  respuesta; sin cabecera válida, «unknown».
+- **Restablecer la contraseña de una cuenta verificada** también deja en el log el Google
+  que quita (`via=password_reset`); el de una cuenta sin verificar ya iba en la línea de
+  la toma.
+- **Las IPv6 con zona (`fe80::1%eth0`) se rechazan** en `validate_ip_address`, como ya
+  hacía `cloudflare_client_ip`: su zona no cabía en los 45 caracteres de columnas y DTOs y
+  tumbaba el refresco y el desvincular de quien las enviara.
+
+### Changed
+
+- **El correo de contraseña cambiada** dice, cuando el restablecimiento quitó el Google,
+  «También hemos desvinculado tu cuenta de Google. Si la usabas para entrar, vuelve a
+  vincularla desde tu perfil.» (y en inglés), y se envía sin que su fallo cambie la
+  respuesta ni se pierda el registro del restablecimiento.
+- **El caso de uso de desvincular** recibe `UnlinkGoogleAccountRequestDTO`.
+
 ## [2.53.0] - 2026-11-08
 
 **Verificar el correo ya no abre sesión, vincular Google pide la contraseña, el correo
