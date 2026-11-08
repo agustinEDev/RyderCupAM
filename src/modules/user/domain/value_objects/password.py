@@ -23,7 +23,7 @@ import os
 import re
 import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 
@@ -93,6 +93,24 @@ class Password:
     # menos con eñes o acentos (2 bytes cada uno), pasa de 72 bytes.
     BCRYPT_MAX_BYTES = 72
     hashed_value: str
+    # Solo la pone from_plain_text: el usuario acepta un Password ya calculado (el
+    # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. Fuera del
+    # constructor (init=False): ni se puede poner desde fuera ni la ve el mapeo de
+    # SQLAlchemy, que saca los valores de la firma del constructor (una sola columna).
+    # La igualdad la decide __eq__ (solo el hash)
+    de_texto_plano: bool = field(default=False, init=False, repr=False)
+
+    @classmethod
+    def comprueba_la_politica(cls, plain_password: str) -> None:
+        """La política, sin calcular ningún bcrypt (barata: va antes de cualquier hash).
+
+        Raises:
+            InvalidPasswordError: con el código y el texto de la regla rota
+        """
+        violation = cls._password_violation(plain_password)
+        if violation:
+            code, error_message = violation
+            raise InvalidPasswordError(error_message, error_code=code)
 
     @classmethod
     def from_plain_text(cls, plain_password: str) -> "Password":
@@ -116,13 +134,12 @@ class Password:
             True
         """
         # Validar fortaleza ANTES de hashear
-        violation = cls._password_violation(plain_password)
-        if violation:
-            code, error_message = violation
-            raise InvalidPasswordError(error_message, error_code=code)
+        cls.comprueba_la_politica(plain_password)
 
         hashed = cls._hash_password(plain_password)
-        return cls(hashed)
+        contrasena = cls(hashed)
+        object.__setattr__(contrasena, "de_texto_plano", True)
+        return contrasena
 
     @classmethod
     def _bcrypt_bytes(cls, plain_password: str) -> bytes:

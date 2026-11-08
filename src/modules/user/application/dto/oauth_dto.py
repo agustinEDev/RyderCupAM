@@ -5,6 +5,7 @@ DTOs para los endpoints de Google OAuth (login, link, unlink).
 """
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from .user_dto import UserResponseDTO
 
@@ -50,12 +51,32 @@ class GoogleLoginResponseDTO(BaseModel):
     device_id: str = Field(..., description="ID del dispositivo de esta sesión")
 
 
+class ReauthenticateRequestDTO(BaseModel):
+    """La contraseña actual, antes de vincular Google (BE #753)."""
+
+    password: str = Field(..., min_length=1, max_length=128, description="Contraseña actual")
+    # Para el log de seguridad: la ruta los pone desde la petición; lo del cliente no cuenta
+    ip_address: SkipJsonSchema[str | None] = Field(default=None, max_length=45)
+    user_agent: SkipJsonSchema[str | None] = Field(default=None, max_length=500)
+
+
+class ReauthenticateResponseDTO(BaseModel):
+    """La marca queda en una cookie httpOnly; aquí, cuánto dura."""
+
+    expires_in: int = Field(..., description="Segundos que vale la marca")
+
+
 class LinkGoogleAccountRequestDTO(BaseModel):
     """Request DTO para vincular cuenta de Google a usuario existente."""
 
     authorization_code: str = Field(
         ..., min_length=1, description="Authorization code de Google OAuth"
     )
+    # Para el log de seguridad (#750 punto 3): la ruta los pone siempre desde la
+    # petición, como en el login; lo que mande el cliente no cuenta
+    # Fuera del esquema público, como en el desbloqueo
+    ip_address: SkipJsonSchema[str | None] = Field(default=None, max_length=45)
+    user_agent: SkipJsonSchema[str | None] = Field(default=None, max_length=500)
 
 
 class LinkGoogleAccountResponseDTO(BaseModel):

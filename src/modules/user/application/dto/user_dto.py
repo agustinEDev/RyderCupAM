@@ -703,10 +703,13 @@ class VerifyEmailRequestDTO(BaseModel):
 
 
 class VerifyEmailResponseDTO(BaseModel):
-    """DTO de salida para verificación de email."""
+    """
+    DTO de salida para verificación de email. Solo verifica, sin sesión (BE #753):
+    quien se registró con un correo ajeno no entra cuando el dueño pulsa el enlace.
+    """
 
     message: str = Field(
-        default="Email verificado exitosamente",
+        default="Email verified. Please sign in.",
         description=CONFIRMATION_MESSAGE_DESCRIPTION,
     )
     email_verified: bool = Field(
@@ -772,6 +775,9 @@ class RefreshAccessTokenRequestDTO(BaseModel):
         max_length=2,
         description="País (ISO 3166 alfa-2) que da Cloudflare, solo con su secreto (BE #737)",
     )
+    # Los dispositivos de la cookie del navegador (uno por cuenta que entró en él): para
+    # no borrar la cookie de una sesión más nueva en un 401 tardío (BE #734)
+    dispositivos_del_navegador: list[str] = Field(default_factory=list, max_length=10)
 
 
 class RefreshAccessTokenResponseDTO(BaseModel):

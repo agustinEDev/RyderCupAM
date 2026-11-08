@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from src.shared.infrastructure.security.bcrypt_executor import (
+from src.shared.application.concurrencia.bcrypt_executor import (
     MAX_CONCURRENCY,
     _executor,
     run_bcrypt,

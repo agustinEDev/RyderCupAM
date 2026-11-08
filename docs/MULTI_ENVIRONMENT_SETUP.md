@@ -21,6 +21,8 @@ MAILGUN_API_KEY=your-api-key
 MAILGUN_DOMAIN=rydercupfriends.com
 MAILGUN_FROM_EMAIL="Ryder Cup Friends <noreply@rydercupfriends.com>"
 MAILGUN_API_URL=https://api.eu.mailgun.net/v3
+# Correos (BE #563): local y Kind → EMAIL_TRANSPORT=mailpit (no se entregan, se ven en
+# http://localhost:8025); producción → mailgun, con RESEND_API_KEY y BREVO_API_KEY de respaldo
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/rydercup
 SECRET_KEY=your-local-secret-key
 ```
@@ -133,6 +135,8 @@ MAILGUN_API_KEY=<production-key>
 MAILGUN_DOMAIN=rydercupfriends.com
 MAILGUN_FROM_EMAIL="Ryder Cup Friends <noreply@rydercupfriends.com>"
 MAILGUN_API_URL=https://api.eu.mailgun.net/v3
+# Correos (BE #563): local y Kind → EMAIL_TRANSPORT=mailpit (no se entregan, se ven en
+# http://localhost:8025); producción → mailgun, con RESEND_API_KEY y BREVO_API_KEY de respaldo
 SECRET_KEY=<production-secret>
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60

@@ -10,7 +10,7 @@ Este archivo contiene tests que verifican:
 - Persistencia de cambios
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -41,7 +41,7 @@ class TestResendVerificationEmailUseCase:
     def email_service_mock(self) -> MagicMock:
         """Fixture que proporciona un mock del servicio de email."""
         mock = MagicMock()
-        mock.send_verification_email.return_value = True
+        mock.send_verification_email = AsyncMock(return_value=True)
         return mock
 
     async def test_execute_with_valid_email_sends_verification_email(
@@ -205,7 +205,7 @@ class TestResendVerificationEmailUseCase:
         """
         # Arrange - Mock del servicio de email para que falle
         email_service_mock_fail = MagicMock()
-        email_service_mock_fail.send_verification_email.return_value = False
+        email_service_mock_fail.send_verification_email = AsyncMock(return_value=False)
 
         async with uow:
             user = User.create("Carlos", "Ruiz", "carlos@test.com", "T3stP@ssw0rd!")

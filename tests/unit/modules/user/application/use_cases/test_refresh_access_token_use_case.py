@@ -33,6 +33,7 @@ from src.modules.user.domain.value_objects.token_hash import TokenHash
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 
 @pytest.mark.asyncio
@@ -60,7 +61,7 @@ class TestRefreshAccessTokenUseCase:
     @pytest.fixture
     def use_case(self, uow, token_service):
         """Fixture que proporciona el use case con dependencias mockeadas."""
-        return RefreshAccessTokenUseCase(uow, token_service)
+        return RefreshAccessTokenUseCase(uow, token_service, security_audit=SecurityAuditLogger())
 
     @pytest.fixture
     def sample_user(self):

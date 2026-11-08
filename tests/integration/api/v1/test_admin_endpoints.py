@@ -127,6 +127,8 @@ class TestAdminUpdateUser:
             cookies=admin["cookies"],
         )
         assert response.status_code == 409
+        # Con su código, para que la app lo diga en su idioma (probador de la release)
+        assert response.json()["error_code"] == "EMAIL_ALREADY_IN_USE"
 
     @pytest.mark.asyncio
     async def test_non_admin_cannot_update_user_returns_403(self, client: AsyncClient):

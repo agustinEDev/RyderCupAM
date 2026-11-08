@@ -1,6 +1,6 @@
 """Tests para la utilidad compartida mask_email."""
 
-from src.shared.infrastructure.security.email_masking import mask_email
+from src.shared.domain.services.email_masking import mask_email
 
 
 class TestMaskEmail:

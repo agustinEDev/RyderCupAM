@@ -46,7 +46,7 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.security.email_masking import mask_email as _mask_email
+from src.shared.domain.services.email_masking import mask_email as _mask_email
 
 logger = logging.getLogger(__name__)
 

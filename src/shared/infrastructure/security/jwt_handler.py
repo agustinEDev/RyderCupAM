@@ -261,6 +261,19 @@ def verify_refresh_token(token: str) -> dict | None:
     return service.verify_refresh_token(token)
 
 
+def expired_refresh_subject(token: str) -> str | None:
+    """
+    El `sub` de un refresh token de esta API con la firma buena que YA ha caducado.
+
+    Para el límite del refresco (BE #734): uno así cuesta consultas a la BD, y tiene
+    que contar en el contador de su usuario. Uno con otra firma, o que no es de
+    refresh, no elige contador (None).
+    """
+    if not JWTTokenService().refresh_token_expired(token):
+        return None
+    return subject_ignoring_expiry(token)
+
+
 def subject_ignoring_expiry(token: str) -> str | None:
     """
     El `sub` de un JWT con la firma de esta API, aunque haya caducado.

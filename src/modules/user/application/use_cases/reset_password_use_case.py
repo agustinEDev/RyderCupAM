@@ -19,24 +19,27 @@ Post-Conditions:
 """
 
 import logging
+from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import (
     ResetPasswordRequestDTO,
     ResetPasswordResponseDTO,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
-from src.modules.user.application.services.revoca_sus_sesiones import revoca_sus_sesiones
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.password_history import PasswordHistory
 from src.modules.user.domain.entities.user import User
 from src.modules.user.domain.exceptions.invalid_reset_token_error import InvalidResetTokenError
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
-from src.shared.infrastructure.logging.security_logger import get_security_logger
-from src.shared.infrastructure.security.bcrypt_executor import run_bcrypt
+from src.modules.user.domain.value_objects.password import Password
+from src.shared.application.concurrencia.bcrypt_executor import run_bcrypt
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +65,13 @@ class ResetPasswordUseCase:
     - Logout forzado en todos los dispositivos
     """
 
-    def __init__(self, uow: UserUnitOfWorkInterface, email_service: IEmailService):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        email_service: IEmailService,
+        *,
+        security_audit: ISecurityAuditLogger,
+    ):
         """
         Inicializa el caso de uso.
 
@@ -70,19 +79,21 @@ class ResetPasswordUseCase:
             uow: Unit of Work para acceso a repositorios (users + refresh_tokens)
             email_service: Servicio para envío de emails (Mailgun)
         """
+        self._security_audit = security_audit
         self._uow = uow
         self._email_service = email_service
 
-    @staticmethod
     def _apunta_la_toma(
+        self,
         user: User,
         cerrado: tuple[int, int, int],
         ip_address: str,
         user_agent: str,
     ) -> None:
         """La toma, al log de seguridad, ya guardada: si el log falla, vale igual."""
-        try:
-            get_security_logger().log_unverified_account_claimed(
+        registra_sin_romper(
+            "Account claim",
+            lambda: self._security_audit.log_unverified_account_claimed(
                 user_id=str(user.id.value),
                 devices_revoked=cerrado[0],
                 tokens_revoked=cerrado[1],
@@ -90,9 +101,8 @@ class ResetPasswordUseCase:
                 via="password_reset",
                 ip_address=ip_address,
                 user_agent=user_agent,
-            )
-        except Exception as error:
-            logger.error("Account claim audit event failed: %s", type(error).__name__)
+            ),
+        )
 
     async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """
@@ -127,26 +137,52 @@ class ResetPasswordUseCase:
             "Contraseña reseteada exitosamente. Todas tus sesiones activas han sido cerradas..."
         """
         # Obtener security logger
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
 
         # Valores por defecto para security logging
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
 
-        # Buscar usuario por token de reseteo
-        user = await self._uow.users.find_by_password_reset_token(request.token)
+        # Buscar usuario por token de reseteo, en su propia transacción: cerrada antes
+        # del bcrypt (BE #283)
+        async with self._uow:
+            user = await self._uow.users.find_by_password_reset_token(request.token)
 
         if not user:
             # Security Logging: Token inválido (usuario no encontrado)
-            security_logger.log_password_reset_completed(
-                user_id=None,
-                email="unknown",
-                success=False,
-                failure_reason="Invalid or expired token",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Reset password",
+                lambda: security_logger.log_password_reset_completed(
+                    user_id=None,
+                    email="unknown",
+                    success=False,
+                    failure_reason="Invalid or expired token",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             raise InvalidResetTokenError()
+
+        # Lo barato antes del bcrypt y sin transacción (BE #283): un enlace que no vale
+        # responde sin calcular nada; luego la política y el hash de la nueva
+        try:
+            if not user.can_reset_password(request.token):
+                raise InvalidResetTokenError()
+            nueva = await run_bcrypt(Password.from_plain_text, request.new_password)
+        except ValueError as e:
+            fallo = str(e)
+            registra_sin_romper(
+                "Reset password",
+                lambda: security_logger.log_password_reset_completed(
+                    user_id=str(user.id.value),
+                    email=str(user.email.value),
+                    success=False,
+                    failure_reason=fallo,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
+            )
+            raise
 
         # Todo con la fila bloqueada (revisión de #749): una toma por Google a la vez
         # borra el token, y entonces el enlace ya no vale; sin el bloqueo, el
@@ -155,13 +191,16 @@ class ResetPasswordUseCase:
             bloqueada = await self._uow.users.find_by_id_for_update(user.id)
             # El token se vuelve a validar sobre la fila bloqueada, en reset_password
             if bloqueada is None:
-                security_logger.log_password_reset_completed(
-                    user_id=str(user.id.value),
-                    email=str(user.email.value),
-                    success=False,
-                    failure_reason="Account deleted during reset",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
+                registra_sin_romper(
+                    "Reset password",
+                    lambda: security_logger.log_password_reset_completed(
+                        user_id=str(user.id.value),
+                        email=str(user.email.value),
+                        success=False,
+                        failure_reason="Account deleted during reset",
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                    ),
                 )
                 raise InvalidResetTokenError()
             user = bloqueada
@@ -174,22 +213,27 @@ class ResetPasswordUseCase:
             try:
                 # reset_password() internamente llama a can_reset_password()
                 # Si el token es inválido/expirado, lanza ValueError
-                await run_bcrypt(
-                    user.reset_password,
+                # El token, otra vez sobre la fila bloqueada (otro pudo gastarlo
+                # entretanto); la contraseña ya va calculada, sin bcrypt aquí
+                user.reset_password(
                     token=request.token,
-                    new_password=request.new_password,
+                    new_password=nueva,
                     ip_address=ip_address,
                     user_agent=user_agent,
                 )
             except ValueError as e:
                 # Security Logging: Reseteo fallido (token inválido, expirado o password inválido)
-                security_logger.log_password_reset_completed(
-                    user_id=str(user.id.value),
-                    email=str(user.email.value),
-                    success=False,
-                    failure_reason=str(e),
-                    ip_address=ip_address,
-                    user_agent=user_agent,
+                fallo = str(e)
+                registra_sin_romper(
+                    "Reset password",
+                    lambda: security_logger.log_password_reset_completed(
+                        user_id=str(user.id.value),
+                        email=str(user.email.value),
+                        success=False,
+                        failure_reason=fallo,
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                    ),
                 )
                 raise  # Re-lanzar la excepción para que el API layer la maneje
 
@@ -209,9 +253,14 @@ class ResetPasswordUseCase:
                 user.confirm_email_ownership()
                 cerrado = await cierra_lo_que_no_se_probo(self._uow, user.id)
             else:
-                # Sesiones Y dispositivos: un acceso robado no sigue valiendo hasta que
-                # caduque (OWASP A07; tabla de caminos de #749)
-                await revoca_sus_sesiones(self._uow, user.id)
+                # Sesiones, dispositivos Y su Google: un acceso robado no sigue valiendo
+                # hasta que caduque (OWASP A07; tabla de caminos de #749), ni un Google
+                # que vinculó quien entró en la cuenta (BE #753, Agustín). Quien lo tenga
+                # de verdad lo vuelve a vincular. No es una toma: ni su log ni su aviso
+                _d, _t, google_quitado = await cierra_lo_que_no_se_probo(self._uow, user.id)
+                if google_quitado:
+                    # Que quede como al desvincularlo a mano (code-review)
+                    user.record_google_unlinked(provider="google", unlinked_at=datetime.now())
                 cerrado = None
 
             # Y un cambio de correo pendiente, fuera: quizá lo pidió quien entró en
@@ -225,19 +274,26 @@ class ResetPasswordUseCase:
         if cerrado is not None:
             self._apunta_la_toma(user, cerrado, ip_address, user_agent)
 
-        # Enviar email de confirmación
-        await self._email_service.send_password_changed_notification(
-            to_email=str(user.email.value), user_name=user.get_full_name()
-        )
+        # Enviar email de confirmación. Si se la quedó, el de cuenta asegurada, que ya
+        # dice cuál es la contraseña (BE #753)
+        if cerrado is not None:
+            await avisa_de_la_toma(self._email_service, user, "reset")
+        else:
+            await self._email_service.send_password_changed_notification(
+                to_email=str(user.email.value), user_name=user.get_full_name()
+            )
 
         # Security Logging: Reseteo exitoso
-        security_logger.log_password_reset_completed(
-            user_id=str(user.id.value),
-            email=str(user.email.value),
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Reset password",
+            lambda: security_logger.log_password_reset_completed(
+                user_id=str(user.id.value),
+                email=str(user.email.value),
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         # Retornar mensaje de confirmación

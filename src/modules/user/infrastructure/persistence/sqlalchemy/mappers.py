@@ -149,7 +149,28 @@ class HandicapDecorator(TypeDecorator):
 # --- Registro y Metadatos ---
 # (Importados de base.py - ver imports arriba)
 
+
 # --- Definición de la Tabla ---
+class PasswordDecorator(TypeDecorator):
+    """
+    La contraseña hasheada como VARCHAR(255), y NULL como None: una cuenta solo Google
+    no tiene. Con `composite()` la columna a NULL daba `Password(hashed_value=None)` y la
+    cuenta parecía tener contraseña (probador de la release, 8 nov 2026; regla del
+    CLAUDE.md: TypeDecorator para los Value Objects de una columna y opcionales).
+    """
+
+    impl = String(255)
+    cache_ok = True
+
+    def process_bind_param(self, value: Password | None, dialect) -> str | None:
+        """El hash, o NULL sin contraseña."""
+        return value.hashed_value if isinstance(value, Password) else None
+
+    def process_result_value(self, value: str | None, dialect) -> Password | None:
+        """La contraseña con su hash, o None si la columna está a NULL."""
+        return Password(value) if value is not None else None
+
+
 users_table = Table(
     "users",
     metadata,
@@ -159,7 +180,7 @@ users_table = Table(
     # Apodo publico, opcional. Su unicidad es un indice aparte, justo debajo
     Column("alias", String(20), nullable=True),
     Column("email", String(255), nullable=False, unique=True),
-    Column("password", String(255), nullable=True),  # Nullable for OAuth-only users
+    Column("password", PasswordDecorator, nullable=True),  # NULL: cuenta solo Google
     Column("handicap", HandicapDecorator, nullable=True),
     Column("handicap_updated_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime, nullable=False),
@@ -297,9 +318,9 @@ def start_mappers():
                 # atributo privado "_email"/"_password" que respalda la @property
                 # pública de solo lectura del dominio.
                 "_email_value": users_table.c.email,
-                "_password_value": users_table.c.password,
                 "_email": composite(Email, "_email_value"),
-                "_password": composite(Password, "_password_value"),
+                # TypeDecorator y no composite: la columna admite NULL
+                "_password": users_table.c.password,
             },
         )
 

@@ -644,14 +644,13 @@ def mock_external_services():
     - Los tests unitarios usan sus propios mocks
     - Los tests de integración usan estos mocks via dependencies.py
     """
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     # Mock para EmailService
     mock_email = MagicMock()
-    mock_email.send_verification_email.return_value = True
+    # Asíncrono desde BE #148 (7 nov 2026), como los demás
+    mock_email.send_verification_email = AsyncMock(return_value=True)
     # El aviso de nuevo inicio de sesión se espera con await (BE #737)
-    from unittest.mock import AsyncMock
-
     mock_email.send_new_login_notification = AsyncMock(return_value=True)
     # Y el de intentos fallidos (BE #732)
     mock_email.send_failed_logins_notification = AsyncMock(return_value=True)
@@ -662,6 +661,10 @@ def mock_external_services():
     # Y los del cambio de correo pendiente (#749)
     mock_email.send_email_change_confirmation = AsyncMock(return_value=True)
     mock_email.send_email_change_requested_notice = AsyncMock(return_value=True)
+    # Y los avisos de BE #753: sin esto el await fallaba y el aviso lo tragaba en silencio
+    mock_email.send_email_changed_notice = AsyncMock(return_value=True)
+    mock_email.send_account_secured_notice = AsyncMock(return_value=True)
+    mock_email.send_google_account_notice = AsyncMock(return_value=True)
 
     # Patchear el factory en dependencies.py
     with patch("src.config.dependencies.EmailService", return_value=mock_email):
@@ -1185,3 +1188,15 @@ async def plaza_para_todos(client: AsyncClient, cookies: dict, competition: dict
             json={"user_id": inscrito["user_id"]},
         )
         assert respuesta.status_code == 201, respuesta.text
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _log_de_seguridad_propio(tmp_path_factory):
+    """Cada proceso de pytest escribe el log de seguridad en su propio fichero, vacío al
+    empezar: ningún otro worker lo rota ni escribe en él (BE #529)."""
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    modulo._security_logger_instance = modulo.SecurityLogger(
+        log_dir=tmp_path_factory.mktemp("security_log")
+    )
+    yield modulo._security_logger_instance.log_dir

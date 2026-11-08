@@ -22,7 +22,7 @@ class IEmailService(ABC):
     """
 
     @abstractmethod
-    def send_verification_email(
+    async def send_verification_email(
         self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
         """
@@ -127,6 +127,39 @@ class IEmailService(ABC):
         """
         Envía al correo NUEVO el enlace que confirma el cambio (#749). Hasta pulsarlo,
         la cuenta sigue con el correo de antes. Caduca en 24 horas.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
+    async def send_google_account_notice(self, to_email: str, user_name: str, linked: bool) -> bool:
+        """
+        Avisa a la cuenta de que se ha vinculado (o desvinculado) un Google (BE #753): un
+        Google vinculado da acceso a la cuenta.
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
+    async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
+        """
+        Avisa al dueño de una cuenta SIN verificar que se la ha quedado (BE #753): lo que
+        dejó quien la creó, fuera. `via`: "google" (queda sin contraseña) o "reset" (la
+        contraseña es la que acaba de elegir).
+
+        Returns:
+            True si se envió correctamente
+        """
+
+    @abstractmethod
+    async def send_email_changed_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        Avisa al correo de ANTES de que el cambio se ha confirmado (BE #753): desde
+        ahora la cuenta usa el nuevo, que va tapado, y dice a quién escribir.
 
         Returns:
             True si se envió correctamente

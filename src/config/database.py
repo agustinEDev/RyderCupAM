@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from src.shared.infrastructure.env import env_int
+from src.config.env import env_int
 
 # Cargar las variables de entorno del fichero .env
 load_dotenv()

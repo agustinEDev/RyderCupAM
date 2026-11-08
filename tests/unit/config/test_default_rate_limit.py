@@ -373,3 +373,44 @@ def test_default_limit_counts_with_slowapi_key_order(cliente, monkeypatch):
     cliente.get("/sin-limite", headers=_con_sesion(user_id))
 
     assert apuntes == [(f"user:{user_id}", f"{__name__}.sin_limite_propio")]
+
+
+def test_an_expired_but_signed_refresh_counts_for_the_limit():
+    """
+    Given: Una cookie de refresh caducada con la firma buena (ahora cuesta dos consultas:
+           se mira si el navegador tiene una sesión nueva, BE #734)
+    When: Se calcula la clave y si se exime del límite
+    Then: Cuenta como la de su usuario y su token, sin eximirse (/code-review: si no,
+          se podría repetir en bucle cargando la BD)
+    """
+    from datetime import timedelta
+
+    from src.config.rate_limit import skip_refresh_limit_without_valid_cookie
+
+    user_id = str(uuid4())
+    caducado = create_refresh_token({"sub": user_id}, expires_delta=timedelta(minutes=-1))
+    peticion = _peticion_con_cookies(f"refresh_token={caducado}")
+
+    assert refresh_token_rate_limit_key(peticion).startswith(f"user:{user_id}:")
+    assert skip_refresh_limit_without_valid_cookie(peticion) is False
+
+
+def test_a_forged_expired_refresh_does_not_choose_a_counter():
+    """
+    Given: Un refresh caducado firmado con otra clave
+    When: Se calcula la clave
+    Then: La de red: uno inventado no elige contador
+    """
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+
+    falso = jwt.encode(
+        {"sub": str(uuid4()), "type": "refresh", "exp": datetime.now(UTC) - timedelta(minutes=1)},
+        "otra-clave",
+        algorithm="HS256",
+    )
+
+    assert not refresh_token_rate_limit_key(
+        _peticion_con_cookies(f"refresh_token={falso}")
+    ).startswith("user:")

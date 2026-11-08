@@ -17,6 +17,7 @@ from src.modules.user.domain.events.user_logged_in_event import UserLoggedInEven
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.password import Password
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 from tests.unit.modules.user.application.use_cases._registro_falso import (
     registro_de_dispositivo_falso,
@@ -69,6 +70,7 @@ class TestLoginUserUseCaseEventIntegration:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         request = LoginRequestDTO(email="test@example.com", password="P@ssw0rd123!")
@@ -124,6 +126,7 @@ class TestLoginUserUseCaseEventIntegration:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         request = LoginRequestDTO(email="noexiste@example.com", password="P@ssw0rd123!")
@@ -175,6 +178,7 @@ class TestLoginUserUseCaseEventIntegration:
             AsyncMock(),
             FrenoDelLoginEnMemoria(),
             AsyncMock(),
+            security_audit=SecurityAuditLogger(),
         )
 
         request = LoginRequestDTO(

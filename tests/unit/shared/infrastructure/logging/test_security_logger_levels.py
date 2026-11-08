@@ -37,12 +37,12 @@ _NIVEL_ESPERADO = {
 
 @pytest.fixture
 def capturado(tmp_path, caplog):
-    """SecurityLogger con el handler de caplog colgado de 'security.audit'.
+    """SecurityLogger con el handler de caplog colgado de su logger (uno por fichero).
 
     El logger no propaga a la raíz, así que caplog no lo vería por sí solo.
     """
     security_logger = SecurityLogger(log_dir=tmp_path, log_file="audit.log")
-    audit = logging.getLogger("security.audit")
+    audit = security_logger._logger
     audit.addHandler(caplog.handler)
     caplog.clear()
     yield security_logger, caplog
@@ -67,7 +67,7 @@ def test_event_is_logged_at_the_level_of_its_outcome(capturado, request, event, 
     security_logger.log_security_event(event)
 
     [record] = caplog.records
-    assert record.name == "security.audit"
+    assert record.name.startswith("security.audit")
     assert record.levelno == _NIVEL_ESPERADO[caso]
     assert record.severity == event.severity.value
 

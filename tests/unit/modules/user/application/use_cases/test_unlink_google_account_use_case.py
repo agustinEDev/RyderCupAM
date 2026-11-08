@@ -4,6 +4,8 @@ Tests para UnlinkGoogleAccountUseCase
 Tests unitarios para el caso de uso de desvincular cuenta Google.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
@@ -24,7 +26,7 @@ def uow():
 
 @pytest.fixture
 def use_case(uow):
-    return UnlinkGoogleAccountUseCase(uow=uow)
+    return UnlinkGoogleAccountUseCase(uow=uow, email_service=AsyncMock())
 
 
 @pytest.fixture
@@ -194,6 +196,6 @@ async def test_the_google_link_is_looked_up_after_locking_the_account():
     uow.users.find_by_id_for_update = espia_bloqueo
     uow.oauth_accounts.find_by_user_id_and_provider = espia_busca
 
-    await UnlinkGoogleAccountUseCase(uow).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(uow, email_service=AsyncMock()).execute(str(ana.id.value))
 
     assert orden == ["bloqueo", "busca"]

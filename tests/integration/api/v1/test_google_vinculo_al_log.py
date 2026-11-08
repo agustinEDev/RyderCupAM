@@ -45,6 +45,12 @@ async def _vincula(client: AsyncClient, email: str, verificada: bool = True):
         await _verifica(email)
     set_auth_cookies(client, datos["cookies"])
     _google(email)
+    # Vincular Google pide la contraseña actual (BE #753)
+    await client.post(
+        "/api/v1/auth/reauthenticate",
+        json={"password": CLAVE},
+        headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},
+    )
     respuesta = await client.post(
         "/api/v1/auth/google/link",
         json={"authorization_code": "code"},

@@ -17,6 +17,7 @@ from src.config.dependencies import (
     get_update_profile_use_case,
     get_update_security_use_case,
 )
+from src.config.rate_limit import NEW_EMAIL_REQUESTS_LIMIT, cabe, clave_de_usuario
 from src.config.settings import settings
 from src.config.terms_guard import TERMS_EXEMPT_ROUTES
 from src.modules.competition.domain.repositories.competition_unit_of_work_interface import (
@@ -76,6 +77,17 @@ from src.modules.user.domain.exceptions import (
 )
 from src.modules.user.domain.value_objects.password import InvalidPasswordError
 from src.modules.user.domain.value_objects.user_id import UserId
+from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
+    CURRENT_PASSWORD_INCORRECT,
+    EMAIL_ALREADY_IN_USE,
+    TEXTOS as TEXTOS_DE_CUENTA,
+)
+from src.modules.user.infrastructure.api.v1.limite_de_seguridad import (
+    DEMASIADOS_CAMBIOS,
+    DEMASIADOS_CORREOS_NUEVOS,
+    cabe_otro_cambio,
+    demasiados,
+)
 from src.modules.user.infrastructure.api.v1.password_errors import coded_bad_request
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
@@ -189,11 +201,10 @@ async def find_user(
 
 EMAIL_CHANGE_INVALID = "EMAIL_CHANGE_INVALID"
 EMAIL_CHANGE_EXPIRED = "EMAIL_CHANGE_EXPIRED"
-EMAIL_ALREADY_IN_USE = "EMAIL_ALREADY_IN_USE"
 _TEXTOS_DEL_CAMBIO_DE_CORREO = {
     EMAIL_CHANGE_INVALID: "This confirmation link is not valid for your account.",
     EMAIL_CHANGE_EXPIRED: "This confirmation link has expired. Ask for the change again.",
-    EMAIL_ALREADY_IN_USE: "That email is already used by another account.",
+    EMAIL_ALREADY_IN_USE: TEXTOS_DE_CUENTA[EMAIL_ALREADY_IN_USE],
 }
 
 
@@ -353,6 +364,17 @@ async def update_profile(
         ) from e
 
 
+def _fuera_del_limite_de_seguridad(user_id: str, pide_correo: bool) -> str | None:
+    """El código del límite que se pasa, o None. El del correo solo cuenta si lo pide."""
+    if not cabe_otro_cambio(user_id):
+        return DEMASIADOS_CAMBIOS
+    if pide_correo and not cabe(
+        NEW_EMAIL_REQUESTS_LIMIT, "new-email-requests", clave_de_usuario(user_id)
+    ):
+        return DEMASIADOS_CORREOS_NUEVOS
+    return None
+
+
 @router.patch(
     "/security",
     response_model=UpdateSecurityResponseDTO,
@@ -360,8 +382,27 @@ async def update_profile(
     summary="Actualizar datos de seguridad",
     description=(
         "Actualiza la contraseña y/o pide un correo nuevo, que queda pendiente hasta "
-        "confirmarlo desde su dirección (ADR-045). Requiere la contraseña actual."
+        "confirmarlo desde su dirección (ADR-045). Requiere la contraseña actual. "
+        "Límite por usuario: 10 por hora, y 3 por hora pidiendo un correo nuevo (429 con "
+        "`error_code` TOO_MANY_SECURITY_CHANGES o TOO_MANY_EMAIL_CHANGE_REQUESTS)."
     ),
+    responses={
+        400: {
+            "description": "La contraseña nueva no cumple la política (con `error_code`) "
+            "o los datos no valen."
+        },
+        401: {
+            "description": "`error_code` CURRENT_PASSWORD_INCORRECT: la contraseña actual "
+            "no es. Sin código: la sesión no es válida."
+        },
+        403: {
+            "description": "`error_code` TERMS_NOT_ACCEPTED: faltan los Términos vigentes "
+            "(o falla el CSRF)."
+        },
+        404: {"description": "El usuario ya no existe."},
+        409: {"description": "`error_code` EMAIL_ALREADY_IN_USE: otra cuenta ya usa ese correo."},
+        429: {"description": "Demasiadas peticiones; `error_code` dice cuál."},
+    },
     tags=["Users"],
 )
 async def update_security(
@@ -388,6 +429,11 @@ async def update_security(
     - Registra cambios de email (severity HIGH)
     - Revoca refresh tokens si cambia contraseña
     """
+    # Antes de mirar la contraseña: cada petición cuenta, salga bien o mal (BE #753)
+    fuera = _fuera_del_limite_de_seguridad(str(current_user.id), bool(request.new_email))
+    if fuera:
+        return demasiados(fuera)
+
     try:
         # Security Logging (v1.8.0): Extraer contexto HTTP para audit trail
         # SEGURIDAD: Usa get_trusted_client_ip() para prevenir IP spoofing
@@ -404,16 +450,15 @@ async def update_security(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         ) from e
-    except InvalidCredentialsError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-        ) from e
-    except DuplicateEmailError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        ) from e
+    except InvalidCredentialsError:
+        # Con su código, para que la app lo diga en su idioma
+        return respuesta_con_codigo(
+            status.HTTP_401_UNAUTHORIZED, TEXTOS_DE_CUENTA, CURRENT_PASSWORD_INCORRECT
+        )
+    except DuplicateEmailError:
+        return respuesta_con_codigo(
+            status.HTTP_409_CONFLICT, TEXTOS_DE_CUENTA, EMAIL_ALREADY_IN_USE
+        )
     except InvalidPasswordError as e:
         # Con el código de la regla, para traducirlo (BE #519)
         return coded_bad_request(e)

@@ -17,7 +17,7 @@ dispositivos. Ahora lo decide el servidor, por dispositivo, al refrescar.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -35,6 +35,7 @@ from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.movil"
 
@@ -93,14 +94,18 @@ class TestRefrescarSegunElUso:
         service.create_access_token.return_value = "nuevo_access_token"
         return service
 
-    async def _refresca(self, uow, token_service, user, dispositivo: UserDevice | None):
+    async def _refresca(
+        self, uow, token_service, user, dispositivo: UserDevice | None, registro=None
+    ):
         await uow.users.save(user)
         if dispositivo:
             await uow.user_devices.save(dispositivo)
         await uow.refresh_tokens.save(
             RefreshToken.create(user.id, JWT, device_id=dispositivo.id if dispositivo else None)
         )
-        caso = RefreshAccessTokenUseCase(uow, token_service)
+        caso = RefreshAccessTokenUseCase(
+            uow, token_service, security_audit=registro if registro is not None else MagicMock()
+        )
         return await caso.execute(RefreshAccessTokenRequestDTO(), JWT)
 
     async def test_r1_usado_hace_una_hora_se_refresca(self, user, token_service):
@@ -146,15 +151,12 @@ class TestRefrescarSegunElUso:
         self, user, token_service, monkeypatch
     ):
         registro = Mock()
-        monkeypatch.setattr(
-            "src.modules.user.application.use_cases.refresh_access_token_use_case."
-            "get_security_logger",
-            lambda: registro,
-        )
         uow = InMemoryUnitOfWork()
 
         with pytest.raises(RefreshRejectedError):
-            await self._refresca(uow, token_service, user, _dispositivo(user, timedelta(hours=25)))
+            await self._refresca(
+                uow, token_service, user, _dispositivo(user, timedelta(hours=25)), registro
+            )
 
         registro.log_refresh_token_revoked.assert_called_once()
         assert registro.log_refresh_token_revoked.call_args.kwargs["reason"] == "idle"
@@ -188,8 +190,8 @@ class TestRefrescarSegunElUso:
         await uow.refresh_tokens.save(token)
 
         with pytest.raises(RefreshRejectedError) as rechazo:
-            await RefreshAccessTokenUseCase(uow, token_service).execute(
-                RefreshAccessTokenRequestDTO(), JWT
-            )
+            await RefreshAccessTokenUseCase(
+                uow, token_service, security_audit=SecurityAuditLogger()
+            ).execute(RefreshAccessTokenRequestDTO(), JWT)
 
         assert rechazo.value.motivo is motivo

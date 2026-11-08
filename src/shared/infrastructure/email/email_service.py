@@ -1,15 +1,12 @@
 """
 Email Service - Infrastructure Layer
 
-Servicio para enviar emails usando Mailgun.
+Los correos de la app: su texto y su HTML. El envío lo hace `envio_de_correo`
+(Mailgun, con Resend y Brevo de respaldo, o Mailpit en el Kind).
 """
 
-import asyncio
 import logging
 from datetime import datetime
-
-import requests
-from fastapi import status
 
 from src.config.settings import settings
 from src.modules.competition.application.ports.handicap_update_email_service_interface import (
@@ -22,6 +19,7 @@ from src.modules.social.application.ports.social_email_service_interface import 
     ISocialEmailService,
 )
 from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.shared.domain.services.email_masking import mask_email
 from src.shared.infrastructure.email.email_layout import (
     Boton,
     Ingles,
@@ -33,7 +31,11 @@ from src.shared.infrastructure.email.email_layout import (
     parrafo,
     recuadro,
 )
-from src.shared.infrastructure.security.email_masking import mask_email
+from src.shared.infrastructure.email.envio_de_correo import (
+    CorreoSaliente,
+    EnvioConRespaldo,
+    envio_de_la_app,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +53,11 @@ class EmailService(
     sin afectar a la capa de aplicación.
     """
 
-    def __init__(self):
-        self.api_key = settings.MAILGUN_API_KEY
-        self.domain = settings.MAILGUN_DOMAIN
-        self.from_email = settings.MAILGUN_FROM_EMAIL
-        self.api_url = settings.MAILGUN_API_URL
+    def __init__(self, envio: EnvioConRespaldo | None = None):
+        """Con el envío de la configuración, salvo el que se pase (tests)."""
+        self._envio = envio or envio_de_la_app()
 
-    def send_verification_email(
+    async def send_verification_email(
         self, to_email: str, user_name: str, verification_token: str
     ) -> bool:
         """
@@ -88,7 +88,7 @@ Para completar tu registro, por favor confirma tu dirección de correo electrón
 
 {verification_link}
 
-Si no te has registrado en Ryder Cup Friends, puedes ignorar este mensaje.
+¿No has creado tú esta cuenta? Ignora este correo y no pulses el enlace.
 
 Saludos,
 El equipo de Ryder Cup Friends
@@ -103,7 +103,7 @@ To complete your registration, please confirm your email address by clicking on 
 
 {verification_link}
 
-If you did not sign up for Ryder Cup Friends, you can safely ignore this message.
+Didn't create this account? Just ignore this email and don't click the link.
 
 Best regards,
 The Ryder Cup Friends Team
@@ -121,66 +121,52 @@ The Ryder Cup Friends Team
                     ", gracias por registrarte en RyderCupFriends. Solo falta un paso: "
                     "confirma que este correo es tuyo para activar la cuenta.",
                 ),
+                aviso("¿No has creado tú esta cuenta? Ignora este correo y no pulses el botón."),
             ],
             boton=Boton("Confirmar mi correo", verification_link),
             ingles=Ingles(
                 frase(
                     "Hi ",
                     negrita(safe_user_name),
-                    ", confirm your email to activate your RyderCupFriends account.",
+                    ", confirm your email to activate your RyderCupFriends account. ",
+                    negrita("Didn't create this account? "),
+                    "Just ignore this email and don't click the button.",
                 ),
                 Boton("Confirm my email", verification_link),
             ),
-            pie="Si no te has registrado en RyderCupFriends, ignora este correo. "
-            "If you didn't sign up, ignore this email.",
+            pie="Te llega porque alguien se ha registrado con este correo en RyderCupFriends. "
+            "You're receiving this because someone signed up with this email at RyderCupFriends.",
         )
 
-        return self._send_email(
+        return await self._send_email(
             to=f'"{safe_user_name}" <{to_email}>',  # RFC 5322 format with quotes
             subject=subject,
             text=text_body,
             html=html_body,
         )
 
-    def _send_email(self, to: str, subject: str, text: str, html: str | None = None) -> bool:
+    async def _send_email(
+        self,
+        to: str,
+        subject: str,
+        text: str,
+        html: str | None = None,
+        puede_ir_por_brevo: bool = False,
+    ) -> bool:
+        """Lo manda; True si salió (ver `envio_de_correo`).
+
+        `puede_ir_por_brevo=True` solo en los correos sin token que no son de seguridad:
+        Brevo reescribe los enlaces por su servidor (7 nov 2026).
         """
-        Envía un email usando la API de Mailgun.
-
-        Args:
-            to: Destinatario del email
-            subject: Asunto del email
-            text: Cuerpo del email en texto plano
-            html: Cuerpo del email en HTML (opcional)
-
-        Returns:
-            bool: True si el email se envió correctamente, False en caso contrario
-        """
-        if not self.api_key:
-            logger.error("MAILGUN_API_KEY no está configurada")
-            return False
-
-        try:
-            url = f"{self.api_url}/{self.domain}/messages"
-
-            data = {"from": self.from_email, "to": to, "subject": subject, "text": text}
-
-            if html:
-                data["html"] = html
-
-            response = requests.post(url, auth=("api", self.api_key), data=data, timeout=10)
-
-            if response.status_code == status.HTTP_200_OK:
-                logger.info("Email de verificación enviado correctamente")
-                return True
-            logger.error("Error al enviar email: %s - %s", response.status_code, response.text)
-            return False
-
-        except requests.exceptions.RequestException as e:
-            logger.error("Error de red al enviar email: %s", str(e))
-            return False
-        except Exception as e:
-            logger.error("Error inesperado al enviar email: %s", str(e))
-            return False
+        return await self._envio.send(
+            CorreoSaliente(
+                to=to,
+                subject=subject,
+                text=text,
+                html=html,
+                puede_ir_por_brevo=puede_ir_por_brevo,
+            )
+        )
 
     async def send_password_reset_email(
         self, to_email: str, reset_link: str, user_name: str
@@ -262,7 +248,7 @@ The Ryder Cup Friends Team
             "You get this because a password reset was requested for this account.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
         """
@@ -332,7 +318,7 @@ The Ryder Cup Friends Team
             "We always send this when the password changes.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_email_change_confirmation(
         self, to_email: str, user_name: str, token: str
@@ -395,7 +381,7 @@ Until then your account keeps its previous email. If you didn't ask for this, ig
             pie="Lo enviamos porque se pidió cambiar el correo de una cuenta a esta "
             "dirección. We sent this because this address was requested for an account.",
         )
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_email_change_requested_notice(
         self, to_email: str, user_name: str, new_email: str
@@ -454,7 +440,180 @@ If it wasn't you, change your password: {restablecer}
             pie="Este aviso se envía siempre que se pide cambiar el correo. "
             "We always send this when an email change is requested.",
         )
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_google_account_notice(self, to_email: str, user_name: str, linked: bool) -> bool:
+        """El aviso de un Google vinculado o desvinculado (BE #753)."""
+        safe_user_name = self._sanitize_name(user_name)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        if linked:
+            titulo, title = "Google vinculado a tu cuenta", "Google linked to your account"
+            hecho = "se ha vinculado una cuenta de Google a tu cuenta: con ella se puede entrar."
+            done = "a Google account was linked to your account: it can be used to sign in."
+            # Restablecer la contraseña también quita ese Google (BE #753)
+            que_hacer = "Restablece tu contraseña: también quitará ese Google."
+            what_to_do = "Reset your password: it will also remove that Google."
+        else:
+            titulo, title = "Google desvinculado de tu cuenta", "Google unlinked from your account"
+            hecho = "se ha desvinculado la cuenta de Google de tu cuenta."
+            done = "the Google account was unlinked from your account."
+            que_hacer = "Cambia tu contraseña ahora: alguien puede estar usando tu cuenta."
+            what_to_do = "Change your password now: someone may be using your account."
+        subject = f"{titulo} - Ryder Cup Friends | {title}"
+        text_body = f"""
+Hola {safe_user_name},
+
+{titulo}: {hecho}
+
+Si no has sido tú: {que_hacer} {restablecer}
+
+---
+
+Hello {safe_user_name},
+
+{title}: {done}
+
+If it wasn't you: {what_to_do} {restablecer}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen=f"{titulo} · {title}",
+            etiqueta="Seguridad",
+            titulo=titulo,
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), f", {hecho}"),
+                aviso(negrita("¿No has sido tú? "), que_hacer),
+            ],
+            boton=Boton("Restablecer la contraseña", restablecer),
+            ingles=Ingles(
+                frase(negrita(title), f": {done} If it wasn't you: {what_to_do}"),
+                Boton("Reset my password", restablecer),
+            ),
+            pie="Este aviso se envía siempre que se vincula o desvincula Google. "
+            "We always send this when Google is linked or unlinked.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_account_secured_notice(self, to_email: str, user_name: str, via: str) -> bool:
+        """
+        El aviso de que se ha asegurado una cuenta sin verificar (BE #753). Con Google
+        se quitó la contraseña; al restablecer, la que vale es la que acaba de elegir.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        restablecer = f"{settings.FRONTEND_URL}/forgot-password"
+        por_google = via == "google"
+        if por_google:
+            que_es = (
+                "Como no estaba verificada, quitamos la contraseña y cerramos sus sesiones. "
+                'Si quieres contraseña, usa "Olvidé mi contraseña".'
+            )
+            que_es_en = (
+                "As it was not verified, we removed its password and closed its sessions. "
+                'To have a password, use "Forgot password".'
+            )
+        else:
+            que_es = (
+                "Como no estaba verificada, tu contraseña es ahora la que acabas de elegir "
+                "y cerramos las demás sesiones."
+            )
+            que_es_en = (
+                "As it was not verified, your password is now the one you just chose and "
+                "we closed the other sessions."
+            )
+        subject = "Hemos asegurado tu cuenta - Ryder Cup Friends | Your account is secured"
+        text_body = f"""
+Hola {safe_user_name},
+
+Hemos asegurado tu cuenta de Ryder Cup Friends. {que_es}
+
+---
+
+Hello {safe_user_name},
+
+We have secured your Ryder Cup Friends account. {que_es_en}
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Hemos asegurado tu cuenta · Your account is secured",
+            etiqueta="Seguridad",
+            titulo="Hemos asegurado tu cuenta",
+            cuerpo=[
+                parrafo("Hola ", negrita(safe_user_name), ", hemos asegurado tu cuenta."),
+                aviso(que_es),
+            ],
+            boton=Boton("Olvidé mi contraseña", restablecer)
+            if por_google
+            else Boton("Abrir la aplicación", settings.FRONTEND_URL),
+            ingles=Ingles(
+                frase(negrita("We have secured your account."), f" {que_es_en}"),
+                Boton("Forgot password", restablecer)
+                if por_google
+                else Boton("Open the app", settings.FRONTEND_URL),
+            ),
+            pie="Este aviso se envía cuando se asegura una cuenta sin verificar. "
+            "We send this when an unverified account is secured.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
+
+    async def send_email_changed_notice(
+        self, to_email: str, user_name: str, new_email: str
+    ) -> bool:
+        """
+        El aviso, al correo de ANTES, de que el cambio ya está hecho (BE #753). El nuevo
+        va tapado, y dice a quién escribir: con el correo cambiado, el dueño ya no puede
+        recuperar la cuenta por su cuenta.
+        """
+        safe_user_name = self._sanitize_name(user_name)
+        nuevo = mask_email(new_email)
+        contacto = settings.CONTACT_EMAIL
+        subject = "Tu correo ha cambiado - Ryder Cup Friends | Your email has changed"
+        text_body = f"""
+Hola {safe_user_name},
+
+El correo de tu cuenta de Ryder Cup Friends es ahora {nuevo}.
+
+Si no has sido tú, escríbenos a {contacto}.
+
+---
+
+Hello {safe_user_name},
+
+Your Ryder Cup Friends account email is now {nuevo}.
+
+If it wasn't you, write to us at {contacto}.
+        """
+        html_body = correo(
+            web=settings.FRONTEND_URL,
+            resumen="Tu correo ha cambiado · Your email has changed",
+            etiqueta="Seguridad",
+            titulo="Tu correo ha cambiado",
+            cuerpo=[
+                parrafo(
+                    "Hola ",
+                    negrita(safe_user_name),
+                    ", el correo de tu cuenta es ahora ",
+                    negrita(nuevo),
+                    ".",
+                ),
+                aviso(
+                    negrita("¿No has sido tú? "),
+                    "Escríbenos a ",
+                    negrita(contacto),
+                    " y la recuperamos.",
+                ),
+            ],
+            boton=Boton("Escríbenos", f"mailto:{contacto}"),
+            ingles=Ingles(
+                frase(
+                    negrita("Your account email is now"),
+                    f" {nuevo}. If it wasn't you, write to us at {contacto}.",
+                ),
+                Boton("Write to us", f"mailto:{contacto}"),
+            ),
+            pie="Este aviso se envía siempre que cambia el correo de una cuenta. "
+            "We always send this when an account email changes.",
+        )
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_new_login_notification(
         self, to_email: str, user_name: str, dispositivo: str, cuando: str, pais: str | None
@@ -523,7 +682,7 @@ If it wasn't you, revoke it and change your password: {settings.FRONTEND_URL}/pr
             "We let you know whenever a new device signs in.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     async def send_failed_logins_notification(
         self,
@@ -637,7 +796,7 @@ password, change it: {cambiar}
             pie="Te avisamos como mucho una vez por hora. We let you know at most once an hour.",
         )
 
-        return await asyncio.to_thread(self._send_email, to_email, subject, text_body, html_body)
+        return await self._send_email(to_email, subject, text_body, html_body)
 
     def _sanitize_name(self, name: str) -> str:
         """Sanitiza un nombre para prevenir inyeccion de headers (RFC 5322)."""
@@ -645,6 +804,8 @@ password, change it: {cambiar}
             name.replace("\n", "")
             .replace("\r", "")
             .replace('"', "")
+            # La barra invertida escaparía la comilla de '"nombre" <correo>' (auditoría)
+            .replace("\\", "")
             .replace("<", "")
             .replace(">", "")
             .strip()
@@ -759,7 +920,9 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_invitee}" <{to_email}>' if safe_invitee else to_email
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
 
     async def send_handicaps_pending_email(
         self,
@@ -837,7 +1000,9 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
 
     async def send_scheduled_handicaps_update_skipped_email(
         self,
@@ -913,7 +1078,9 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_organizer}" <{to_email}>'
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )
 
     async def send_friend_request_email(
         self,
@@ -984,4 +1151,6 @@ The Ryder Cup Friends Team
         )
 
         recipient = f'"{safe_addressee}" <{to_email}>'
-        return await asyncio.to_thread(self._send_email, recipient, subject, text_body, html_body)
+        return await self._send_email(
+            recipient, subject, text_body, html_body, puede_ir_por_brevo=True
+        )

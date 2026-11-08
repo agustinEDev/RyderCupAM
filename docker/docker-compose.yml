@@ -77,11 +77,37 @@ services:
       - MAILGUN_API_URL=${MAILGUN_API_URL:-https://api.eu.mailgun.net/v3}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
 
-      # Formulario de contacto: el buzón al que llegan los mensajes (por Mailgun)
+      # Formulario de contacto: el buzón al que llegan los mensajes
       - CONTACT_EMAIL=${CONTACT_EMAIL:-admin@rydercupfriends.com}
+
+      # Los correos van a Mailpit (http://localhost:8025) y no se entregan: no gastan
+      # el cupo de Mailgun de producción (BE #563). EMAIL_TRANSPORT=mailgun para mandarlos
+      - EMAIL_TRANSPORT=${EMAIL_TRANSPORT:-mailpit}
+      - MAILPIT_URL=http://mailpit:8025
+      # Respaldos de Mailgun (vacío = sin respaldo): Resend, y el último Brevo, nunca
+      # para correos con token ni avisos de seguridad
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - BREVO_API_KEY=${BREVO_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
+
+  # Buzón local: guarda los correos de desarrollo sin entregarlos (BE #563)
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports:
+      # Solo desde este ordenador: los correos de prueba llevan enlaces y tokens
+      - "127.0.0.1:8025:8025"
+    environment:
+      - MP_MAX_MESSAGES=500
+    # La API espera a que el buzón responda (CodeRabbit)
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   postgres_data:

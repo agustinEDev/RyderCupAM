@@ -15,6 +15,7 @@ from src.config.dependencies import (
     get_current_user,
     get_google_login_use_case,
     get_link_google_account_use_case,
+    get_reauthenticate_use_case,
     get_unlink_google_account_use_case,
 )
 from src.config.rate_limit import GOOGLE_LOGIN_LIMIT, get_client_identifier, limiter
@@ -24,6 +25,8 @@ from src.modules.user.application.dto.oauth_dto import (
     GoogleLoginResponseDTO,
     LinkGoogleAccountRequestDTO,
     LinkGoogleAccountResponseDTO,
+    ReauthenticateRequestDTO,
+    ReauthenticateResponseDTO,
     UnlinkGoogleAccountResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -34,23 +37,42 @@ from src.modules.user.application.use_cases.google_login_use_case import (
 from src.modules.user.application.use_cases.link_google_account_use_case import (
     GoogleLinkNeedsVerifiedEmailError,
     LinkGoogleAccountUseCase,
+    ReauthenticationRequiredError,
+)
+from src.modules.user.application.use_cases.reauthenticate_use_case import (
+    AccountWithoutPasswordError,
+    ReauthenticateUseCase,
 )
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
+from src.modules.user.domain.errors.user_errors import InvalidCredentialsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException
+from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
+    CURRENT_PASSWORD_INCORRECT,
+    TEXTOS as TEXTOS_DE_CUENTA,
+)
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_validos_de_la_cookie,
     pon_la_cookie_de_dispositivo,
 )
+from src.modules.user.infrastructure.api.v1.cuenta_desactivada import (
+    ACCOUNT_DEACTIVATED,
+    TEXTO as TEXTO_DE_CUENTA_DESACTIVADA,
+)
+from src.modules.user.infrastructure.api.v1.limite_de_seguridad import (
+    DEMASIADOS_CAMBIOS,
+    cabe_otro_cambio,
+    demasiados,
+)
+from src.modules.user.infrastructure.security import reautenticacion
 from src.shared.infrastructure.api.respuesta_con_codigo import respuesta_con_codigo
 from src.shared.infrastructure.http.http_context_validator import (
     cloudflare_client_country,
     get_trusted_client_ip,
     get_user_agent,
 )
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 from src.shared.infrastructure.security.cookie_handler import (
     get_device_id_cookie_name,
     set_auth_cookie,
@@ -60,11 +82,10 @@ from src.shared.infrastructure.security.cookie_handler import (
 
 logger = logging.getLogger(__name__)
 GOOGLE_EMAIL_NOT_VERIFIED = "GOOGLE_EMAIL_NOT_VERIFIED"
-ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED"
 GOOGLE_LINK_NEEDS_VERIFIED_EMAIL = "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL"
 _TEXTOS_DE_GOOGLE = {
     GOOGLE_LINK_NEEDS_VERIFIED_EMAIL: "Verify your email before linking a Google account.",
-    ACCOUNT_DEACTIVATED: "This account has been deactivated. Contact an administrator.",
+    ACCOUNT_DEACTIVATED: TEXTO_DE_CUENTA_DESACTIVADA,
     GOOGLE_EMAIL_NOT_VERIFIED: (
         "Your Google account email is not verified. Verify it with Google, or sign up "
         "with your email and a password."
@@ -81,6 +102,11 @@ router = APIRouter()
     summary="Login/registro con Google",
     description="Autentica o registra un usuario usando Google OAuth. Público.",
     tags=["Authentication"],
+    # Sus dos códigos, en el esquema (#750 punto 1)
+    responses={
+        400: {"description": "error_code GOOGLE_EMAIL_NOT_VERIFIED: Google no verificó el correo"},
+        403: {"description": "error_code ACCOUNT_DEACTIVATED: cuenta desactivada"},
+    },
 )
 @limiter.limit(GOOGLE_LOGIN_LIMIT, key_func=get_client_identifier)
 async def google_login(
@@ -146,23 +172,64 @@ async def google_login(
     return login_response
 
 
-def _apunta_el_vinculo(request: Request, user_id: str) -> None:
-    """Un Google vinculado desde el perfil da acceso a la cuenta: al log, con la red.
+# Los errores de la marca de reautenticación (BE #753), con su código para traducirlos
+ACCOUNT_WITHOUT_PASSWORD = "ACCOUNT_WITHOUT_PASSWORD"  # nosec B105 - an error code, not a password
+REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED"
+_TEXTOS_DE_LA_REAUTENTICACION = {
+    CURRENT_PASSWORD_INCORRECT: TEXTOS_DE_CUENTA[CURRENT_PASSWORD_INCORRECT],
+    ACCOUNT_WITHOUT_PASSWORD: "This account has no password.",
+    REAUTHENTICATION_REQUIRED: "Enter your current password first.",
+}
 
-    Ya guardado; el log nunca cambia la respuesta (revisión del registro con Google).
-    """
+
+@router.post(
+    "/reauthenticate",
+    response_model=ReauthenticateResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Confirmar la contraseña actual",
+    description=(
+        "Con la contraseña actual, deja una marca de 5 minutos (cookie httpOnly) que pide "
+        "/auth/google/link (BE #753). Los intentos cuentan en el límite de seguridad del "
+        "usuario (429 TOO_MANY_SECURITY_CHANGES)."
+    ),
+    tags=["Authentication"],
+    responses={
+        401: {"description": "`error_code` CURRENT_PASSWORD_INCORRECT."},
+        409: {"description": "`error_code` ACCOUNT_WITHOUT_PASSWORD: la cuenta es solo Google."},
+        429: {"description": "`error_code` TOO_MANY_SECURITY_CHANGES."},
+    },
+)
+async def reauthenticate(
+    request: Request,
+    datos: ReauthenticateRequestDTO,
+    response: Response,
+    current_user: UserResponseDTO = Depends(get_current_user),
+    use_case: ReauthenticateUseCase = Depends(get_reauthenticate_use_case),
+):
+    """Comprueba la contraseña actual y deja la marca para vincular Google."""
+    user_id = str(current_user.id)
+    # Cada intento prueba una contraseña: el mismo límite que Seguridad
+    if not cabe_otro_cambio(user_id):
+        return demasiados(DEMASIADOS_CAMBIOS)
     try:
-        get_security_logger().log_google_account_linked(
-            user_id=user_id,
-            automatic=False,
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            )
-            or "unknown",
-            user_agent=get_user_agent(request) or "unknown",
+        # La red, siempre desde la petición: lo que mande el cliente no cuenta
+        datos.ip_address = get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
         )
-    except Exception as error:
-        logger.error("Google link audit event failed: %s", type(error).__name__)
+        datos.user_agent = get_user_agent(request)
+        await use_case.execute(datos, user_id)
+    except InvalidCredentialsError:
+        return respuesta_con_codigo(
+            status.HTTP_401_UNAUTHORIZED,
+            _TEXTOS_DE_LA_REAUTENTICACION,
+            CURRENT_PASSWORD_INCORRECT,
+        )
+    except AccountWithoutPasswordError:
+        return respuesta_con_codigo(
+            status.HTTP_409_CONFLICT, _TEXTOS_DE_LA_REAUTENTICACION, ACCOUNT_WITHOUT_PASSWORD
+        )
+    reautenticacion.pon_la_cookie(response, reautenticacion.emite(user_id))
+    return ReauthenticateResponseDTO(expires_in=int(reautenticacion.DURACION.total_seconds()))
 
 
 @router.post(
@@ -172,18 +239,44 @@ def _apunta_el_vinculo(request: Request, user_id: str) -> None:
     summary="Vincular cuenta Google",
     description="Vincula una cuenta de Google al usuario autenticado.",
     tags=["Authentication"],
+    responses={
+        400: {"description": "Código de Google inválido, o ya vinculada (a él o a otra cuenta)."},
+        403: {
+            "description": (
+                "`error_code` REAUTHENTICATION_REQUIRED (falta la marca de "
+                "/auth/reauthenticate en una cuenta con contraseña) o "
+                "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL (el correo de la cuenta sin verificar)."
+            )
+        },
+    },
 )
 async def link_google_account(
     request: Request,
+    response: Response,
     link_data: LinkGoogleAccountRequestDTO,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: LinkGoogleAccountUseCase = Depends(get_link_google_account_use_case),
 ):
     """Vincula cuenta Google a usuario autenticado."""
+    user_id = str(current_user.id)
+    marca = request.cookies.get(reautenticacion.COOKIE)
     try:
-        vinculo = await use_case.execute(link_data, str(current_user.id))
-        _apunta_el_vinculo(request, str(current_user.id))
-        return vinculo
+        # El caso de uso lo deja en el log de seguridad, con la red (#750 punto 3).
+        # Siempre desde la petición: lo que mande el cliente no cuenta
+        link_data.ip_address = get_trusted_client_ip(
+            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+        )
+        link_data.user_agent = get_user_agent(request)
+        # Gastada al empezar, de una vez: una sola vez, aunque el navegador no borrara
+        # la cookie, y sin que dos vínculos a la vez pasen los dos
+        reautenticado = reautenticacion.gasta_si_vale(marca, user_id)
+        vinculado = await use_case.execute(link_data, user_id, reautenticado=reautenticado)
+        reautenticacion.borra_la_cookie(response)
+        return vinculado
+    except ReauthenticationRequiredError:
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_LA_REAUTENTICACION, REAUTHENTICATION_REQUIRED
+        )
     except GoogleLinkNeedsVerifiedEmailError:
         # Sin el correo verificado, sin Google: con su código, para que la app diga
         # qué hacer en su idioma
@@ -211,6 +304,16 @@ async def link_google_account(
     summary="Desvincular cuenta Google",
     description="Desvincula la cuenta de Google del usuario autenticado.",
     tags=["Authentication"],
+    responses={
+        400: {
+            "description": "No hay Google vinculado, o es el único método para entrar "
+            "(antes hay que poner una contraseña), u otro fallo."
+        },
+        403: {
+            "description": "`error_code` TERMS_NOT_ACCEPTED: faltan los Términos vigentes "
+            "(o falla el CSRF)."
+        },
+    },
 )
 async def unlink_google_account(
     request: Request,  # noqa: ARG001

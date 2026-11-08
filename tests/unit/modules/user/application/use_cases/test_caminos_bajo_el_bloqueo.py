@@ -21,14 +21,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.modules.user.application.dto.device_dto import (
-    OpenSessionRequestDTO,
     RegisterDeviceResponseDTO,
 )
 from src.modules.user.application.dto.oauth_dto import GoogleLoginRequestDTO
 from src.modules.user.application.dto.user_dto import ResetPasswordRequestDTO
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.modules.user.application.use_cases.google_login_use_case import GoogleLoginUseCase
-from src.modules.user.application.use_cases.open_session_use_case import OpenSessionUseCase
 from src.modules.user.application.use_cases.reset_password_use_case import (
     ResetPasswordUseCase,
 )
@@ -45,6 +43,7 @@ from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 pytestmark = pytest.mark.asyncio
@@ -114,6 +113,8 @@ def _google(uow, registro):
         google_oauth_service=servicio,
         register_device_use_case=registro,
         aviso_de_nuevo_inicio=AsyncMock(),
+        security_audit=SecurityAuditLogger(),
+        email_service=AsyncMock(),
     )
 
 
@@ -162,24 +163,6 @@ async def test_a3_deactivated_mid_google_login_gets_403_and_no_session():
     await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
 
 
-async def test_a4_deactivated_while_opening_the_session_gets_none():
-    """Al verificar el correo: si la desactivan mientras se abre la sesión, no hay sesión."""
-    uow = InMemoryUnitOfWork()
-    ana = await _ana(uow)
-
-    async def la_desactivan(otra):
-        otra.deactivate(deactivated_by_user_id=ADMIN)
-
-    registro, dispositivo = _registro_que_a_la_vez(uow, ana, la_desactivan)
-
-    with pytest.raises(AccountDeactivatedException):
-        await OpenSessionUseCase(uow, JWTTokenService(), registro).execute(
-            OpenSessionRequestDTO(user_id=str(ana.id.value), user_agent=LINUX)
-        )
-
-    await _sin_sesion_y_dispositivo_revocado(uow, ana, dispositivo)
-
-
 async def test_b2_resetting_a_verified_account_also_revokes_its_devices():
     """
     Given: Una cuenta verificada con un dispositivo y una sesión
@@ -201,7 +184,7 @@ async def test_b2_resetting_a_verified_account_also_revokes_its_devices():
             )
         )
 
-    await ResetPasswordUseCase(uow, AsyncMock()).execute(
+    await ResetPasswordUseCase(uow, AsyncMock(), security_audit=SecurityAuditLogger()).execute(
         ResetPasswordRequestDTO(token=token, new_password="OtraClave#2026segura")
     )
 
@@ -248,7 +231,7 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
     ana = await _ana(uow, con_google=True)
     pedidos = await _espia_del_bloqueo(uow)
 
-    await UnlinkGoogleAccountUseCase(uow).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(uow, email_service=AsyncMock()).execute(str(ana.id.value))
 
     assert pedidos == [ana.id]
 

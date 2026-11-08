@@ -13,6 +13,7 @@
 # Render: URL sin driver, entorno de producción y un DSN de Sentry (ficticio:
 # los envíos fallan sin más, pero se ejecuta la inicialización, que es lo que
 # tumbó la v2.18.0). El entorno de Sentry sale de ENVIRONMENT.
+# Y una clave de Mailgun ficticia: en producción la app no arranca sin ella (BE #563).
 #
 # Uso: start-like-render.sh <imagen> <database_url> <versión esperada>
 #   <database_url> como la de Render: postgresql://usuario:clave@host:puerto/bd
@@ -49,6 +50,7 @@ docker run -d --name "$nombre" \
   "${red[@]}" \
   -e DATABASE_URL="$database_url" \
   -e SECRET_KEY="ci-start-like-render-not-a-real-secret-0123456789" \
+  -e MAILGUN_API_KEY="ci-start-like-render-not-a-real-key" \
   -e ENVIRONMENT=production \
   -e FRONTEND_ORIGINS="https://www.rydercupfriends.com" \
   -e SENTRY_DSN="https://public@o0.ingest.sentry.io/0" \

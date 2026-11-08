@@ -6,7 +6,7 @@ Verifica los 3 flujos: OAuth existente, auto-link, auto-register.
 """
 
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -30,6 +30,7 @@ from src.modules.user.domain.value_objects.user_id import UserId
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 from src.shared.infrastructure.security.jwt_handler import JWTTokenService
 
 
@@ -114,6 +115,8 @@ def use_case(uow, token_service, google_oauth_service, register_device_use_case)
         google_oauth_service=google_oauth_service,
         register_device_use_case=register_device_use_case,
         aviso_de_nuevo_inicio=AsyncMock(),
+        security_audit=SecurityAuditLogger(),
+        email_service=AsyncMock(),
     )
 
 
@@ -471,6 +474,8 @@ class TestGoogleLoginNuevoInicio:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         await use_case.execute(login_request)
@@ -515,6 +520,8 @@ class TestGoogleLoginNuevoInicio:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         await use_case.execute(login_request)
@@ -554,6 +561,8 @@ class TestGoogleLoginNuevoInicio:
             google_oauth_service=google_oauth_service,
             register_device_use_case=registro,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         await use_case.execute(login_request)
@@ -564,6 +573,48 @@ class TestGoogleLoginNuevoInicio:
 @pytest.mark.asyncio
 class TestGoogleLoginCuentaDesactivada:
     """Una cuenta desactivada no entra con Google (BE #744, auditoría OWASP)."""
+
+    async def test_g1_a_broken_security_log_still_answers_deactivated(
+        self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
+    ):
+        """
+        Given: Una cuenta vinculada a Google, desactivada, y un log de seguridad que falla
+        When: Entra con Google
+        Then: AccountDeactivatedException igual, no un 500 (#750 punto 2)
+        """
+        from src.modules.user.domain.exceptions import AccountDeactivatedException
+
+        user = User.create_from_oauth(
+            first_name="Baja", last_name="Google", email_str="oauth@example.com"
+        )
+        user.deactivate(deactivated_by_user_id="5f0c8a2e-1b3d-4e6f-9a7b-2c4d6e8f0a1b")
+        async with uow:
+            await uow.users.save(user)
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=user.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-id-12345",
+                    provider_email="oauth@example.com",
+                )
+            )
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        roto = MagicMock()
+        roto.log_login_attempt.side_effect = RuntimeError("log caído")
+        caso = GoogleLoginUseCase(
+            uow=uow,
+            token_service=token_service,
+            google_oauth_service=google_oauth_service,
+            register_device_use_case=register_device_use_case,
+            aviso_de_nuevo_inicio=AsyncMock(),
+            security_audit=roto,
+            email_service=AsyncMock(),
+        )
+
+        with pytest.raises(AccountDeactivatedException):
+            await caso.execute(
+                GoogleLoginRequestDTO(authorization_code="code", ip_address="203.0.113.7")
+            )
 
     async def test_a_deactivated_account_gets_no_session_device_or_email(
         self, uow, token_service, google_oauth_service, google_user_info, register_device_use_case
@@ -597,6 +648,8 @@ class TestGoogleLoginCuentaDesactivada:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=aviso,
+            security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -635,6 +688,8 @@ class TestGoogleLoginCuentaDesactivada:
             google_oauth_service=google_oauth_service,
             register_device_use_case=register_device_use_case,
             aviso_de_nuevo_inicio=AsyncMock(),
+            security_audit=SecurityAuditLogger(),
+            email_service=AsyncMock(),
         )
 
         with pytest.raises(AccountDeactivatedException):
@@ -913,6 +968,63 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
             assert (await uow.user_devices.find_by_id(dispositivo.id)).is_active
             assert not (await uow.refresh_tokens.find_by_token_hash("refresco-del-otro")).revoked
 
+    async def test_g8_the_owner_is_told_the_account_was_secured(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta sin verificar
+        When: Google se la queda
+        Then: El aviso de cuenta asegurada, por Google, al correo de la cuenta (BE #753)
+        """
+        await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        use_case._email_service.send_account_secured_notice.assert_awaited_once_with(
+            to_email="oauth@example.com", user_name="Ana", via="google"
+        )
+
+    async def test_g8b_a_verified_account_is_not_told(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """Sin toma, sin aviso."""
+        await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        use_case._email_service.send_account_secured_notice.assert_not_awaited()
+
+    async def test_g8c_a_failing_notice_keeps_the_login(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """El aviso no cambia el login."""
+        await self._cuenta_con_sesion(uow, verificada=False)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+        use_case._email_service.send_account_secured_notice.side_effect = RuntimeError("smtp")
+
+        respuesta = await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        assert respuesta.access_token
+
+    async def test_g9_an_automatic_link_tells_the_account(
+        self, use_case, uow, google_oauth_service, google_user_info
+    ):
+        """
+        Given: Una cuenta ya verificada con ese correo, sin Google
+        When: Entra con Google y se vincula sola
+        Then: El aviso de «Google vinculado» al correo de la cuenta (BE #753, Agustín)
+        """
+        await self._cuenta_con_sesion(uow, verificada=True)
+        google_oauth_service.exchange_code_for_user_info.return_value = google_user_info
+
+        await use_case.execute(GoogleLoginRequestDTO(authorization_code="code"))
+
+        use_case._email_service.send_google_account_notice.assert_awaited_once_with(
+            to_email="oauth@example.com", user_name="Ana", linked=True
+        )
+
     async def test_g7_the_claim_goes_to_the_security_log(
         self, use_case, uow, google_oauth_service, google_user_info, monkeypatch
     ):
@@ -945,6 +1057,8 @@ class TestGoogleSeQuedaUnaCuentaSinVerificar:
                 "devices_revoked": 1,
                 "tokens_revoked": 1,
                 "google_unlinked": 0,
+                # Por Google (el adaptador del puerto lo pasa explícito, #750)
+                "via": "google",
                 "ip_address": "203.0.113.7",
                 "user_agent": "Navegador",
             }

@@ -8,7 +8,7 @@ equivocarse al escribirlas en el panel de Render.
 
 import pytest
 
-from src.shared.infrastructure.env import env_int
+from src.config.env import env_int
 
 
 def test_returns_the_default_when_the_variable_is_not_set(monkeypatch):

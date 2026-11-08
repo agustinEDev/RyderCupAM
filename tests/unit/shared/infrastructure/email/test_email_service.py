@@ -7,11 +7,12 @@ red: el enlace de cada botón, que nada del usuario entra sin escapar y que el
 HTML no depende de un <style> que Gmail borra.
 """
 
+import html
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -26,7 +27,7 @@ def correo(monkeypatch):
     """El servicio con el envío sustituido: guarda lo que se mandaría."""
     monkeypatch.setattr(settings, "FRONTEND_URL", WEB)
     servicio = EmailService()
-    servicio._send_email = MagicMock(return_value=True)
+    servicio._send_email = AsyncMock(return_value=True)
     return servicio
 
 
@@ -47,7 +48,7 @@ async def _todos_los_correos(servicio):
     """Manda cada correo de la app (la invitación, con y sin cuenta) y devuelve su HTML."""
     htmls = {}
 
-    servicio.send_verification_email("a@b.com", "Ana", "tok123")
+    await servicio.send_verification_email("a@b.com", "Ana", "tok123")
     htmls["verificacion"] = _enviado(servicio)[3]
     servicio._send_email.reset_mock()
 
@@ -346,8 +347,8 @@ class TestTheLayoutStaysLightInAppleMailDarkMode:
 class TestTheButtonsGoWhereTheySay:
     """Cada botón lleva a una pantalla que existe."""
 
-    def test_verification_goes_to_verify_email_with_its_token(self, correo):
-        correo.send_verification_email("a@b.com", "Ana", "tok123")
+    async def test_verification_goes_to_verify_email_with_its_token(self, correo):
+        await correo.send_verification_email("a@b.com", "Ana", "tok123")
         _, _, texto, cuerpo = _enviado(correo)
         assert _botones(cuerpo)[0] == f"{WEB}/verify-email?token=tok123"
         assert f"{WEB}/verify-email?token=tok123" in texto
@@ -406,8 +407,8 @@ class TestTheButtonsGoWhereTheySay:
 class TestNothingFromTheUserEntersUnescaped:
     """Nombres y mensajes los escribe la gente: nunca entran como HTML."""
 
-    def test_a_name_with_an_ampersand_is_escaped_in_the_verification(self, correo):
-        correo.send_verification_email("a@b.com", "Tom & Jerry's", "t")
+    async def test_a_name_with_an_ampersand_is_escaped_in_the_verification(self, correo):
+        await correo.send_verification_email("a@b.com", "Tom & Jerry's", "t")
         _, _, _, cuerpo = _enviado(correo)
         assert "Tom &amp; Jerry&#x27;s" in cuerpo
         assert "Tom & Jerry's" not in cuerpo
@@ -572,6 +573,94 @@ class TestCorreosDelCambioDeCorreo:
         assert _botones(cuerpo)[0] == enlace
         assert enlace in texto
         assert "24 horas" in cuerpo and "24 hours" in cuerpo
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("vinculado", "frase"), [(True, "vinculado"), (False, "desvinculado")])
+    async def test_the_google_notice_says_what_happened(self, correo, vinculado, frase):
+        """El aviso de Google (BE #753): qué pasó y qué hacer si no fue el dueño"""
+        await correo.send_google_account_notice("ana@gmail.com", "Ana", vinculado)
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert f"Google {frase}" in cuerpo and f"Google {frase}" in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+        # Vinculado: restablecer la contraseña también quita ese Google (BE #753)
+        quita = "también quitará ese Google"
+        assert (quita in cuerpo and quita in texto) is vinculado
+
+    @pytest.mark.asyncio
+    async def test_the_verification_email_tells_who_did_not_sign_up_to_ignore_it(self, correo):
+        """
+        Given: un correo de verificación
+        When: lo recibe quien no creó la cuenta
+        Then: se le dice que lo ignore, sin invitarle a quedarse la cuenta (Agustín, 8 nov 2026)
+        """
+        await correo.send_verification_email("ana@gmail.com", "Ana", "tok")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        for aviso in (
+            "¿No has creado tú esta cuenta? Ignora este correo",
+            "Just ignore this email",
+        ):
+            assert aviso in cuerpo and aviso in texto
+        # El aviso en ámbar del cuerpo, no solo el pie (revisión)
+        assert "Ignora este correo y no pulses el botón." in cuerpo
+        # El inglés lo dice en su bloque, junto a su botón; el pie no lo repite (/code-review)
+        assert "Just ignore this email and don't click the button." in html.unescape(cuerpo)
+        assert cuerpo.count("¿No has creado tú esta cuenta?") == 1
+        for invitacion in (
+            "quedártela",
+            "será tuya",
+            "take it over",
+            "Olvidé mi contraseña",
+            "forgot-password",
+        ):
+            assert invitacion not in cuerpo and invitacion not in texto
+
+    @pytest.mark.asyncio
+    async def test_the_change_notice_uses_the_configured_contact(self, correo, monkeypatch):
+        """El buzón de contacto, el de la configuración (code-review): no uno fijo"""
+        from src.config.settings import settings
+
+        monkeypatch.setattr(settings, "CONTACT_EMAIL", "soporte@example.com")
+
+        await correo.send_email_changed_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "soporte@example.com" in cuerpo and "soporte@example.com" in texto
+
+    @pytest.mark.asyncio
+    async def test_the_secured_notice_by_google_says_the_password_is_gone(self, correo):
+        """La toma por Google (BE #753): sin contraseña, y cómo tener una"""
+        await correo.send_account_secured_notice("ana@gmail.com", "Ana", "google")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "quitamos la contraseña" in cuerpo and "quitamos la contraseña" in texto
+        assert _botones(cuerpo)[0] == f"{WEB}/forgot-password"
+
+    @pytest.mark.asyncio
+    async def test_the_secured_notice_by_reset_keeps_the_new_password(self, correo):
+        """La toma al restablecer: la contraseña es la que acaba de elegir"""
+        await correo.send_account_secured_notice("ana@gmail.com", "Ana", "reset")
+
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "quitamos la contraseña" not in cuerpo and "quitamos la contraseña" not in texto
+        assert "la que acabas de elegir" in cuerpo and "la que acabas de elegir" in texto
+
+    @pytest.mark.asyncio
+    async def test_the_change_notice_tells_the_old_address_whom_to_write(self, correo):
+        """
+        El aviso tras confirmar (BE #753): al correo de antes, el nuevo tapado y a quién
+        escribir si no fue el dueño
+        """
+        await correo.send_email_changed_notice("ana@gmail.com", "Ana", "ana@trabajo.com")
+
+        destinatario, _, texto, cuerpo = _enviado(correo)
+        assert destinatario == "ana@gmail.com"
+        assert "a***@trabajo.com" in cuerpo and "a***@trabajo.com" in texto
+        assert "ana@trabajo.com" not in cuerpo and "ana@trabajo.com" not in texto
+        assert "admin@rydercupfriends.com" in cuerpo and "admin@rydercupfriends.com" in texto
 
     @pytest.mark.asyncio
     async def test_the_notice_goes_to_the_old_address_with_the_new_one_masked(self, correo):

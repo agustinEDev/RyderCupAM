@@ -11,6 +11,10 @@ from collections.abc import Callable
 from datetime import datetime
 
 from src.modules.user.application.dto.user_dto import UserResponseDTO
+from src.modules.user.application.ports.email_service_interface import IEmailService
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
+from src.modules.user.application.services.cierra_lo_que_no_se_probo import manda_sin_romper
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.errors.user_errors import UserNotFoundError
 from src.modules.user.domain.exceptions import (
     EmailChangeEmailInUseError,
@@ -22,7 +26,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 )
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.user_id import UserId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +33,17 @@ logger = logging.getLogger(__name__)
 class ConfirmEmailChangeUseCase:
     """Confirma el cambio de correo pendiente de la cuenta con sesión."""
 
-    def __init__(self, uow: UserUnitOfWorkInterface, reloj: Callable[[], datetime] = datetime.now):
+    def __init__(
+        self,
+        uow: UserUnitOfWorkInterface,
+        reloj: Callable[[], datetime] = datetime.now,
+        *,
+        security_audit: ISecurityAuditLogger,
+        email_service: IEmailService,
+    ):
         """El caso de uso, con su reloj (para los tests de la caducidad)."""
+        self._security_audit = security_audit
+        self._email_service = email_service
         self._uow = uow
         self._reloj = reloj
 
@@ -59,6 +71,9 @@ class ConfirmEmailChangeUseCase:
             # El token, antes que nada: con otro, ni se anula ni se dice si está ocupado
             if not user.pending_email_token_matches(token):
                 raise EmailChangeInvalidError("No pending email change with that token")
+            # El de antes, para avisarle; solo si estaba verificado (como el aviso al
+            # pedirlo: nunca a un correo sin confirmar)
+            antes = str(user.email.value) if user.email_verified else None
             pendiente = user.pending_email_at(ahora)
             if pendiente is not None:
                 otra = await self._uow.users.find_by_email(Email(pendiente))
@@ -78,13 +93,24 @@ class ConfirmEmailChangeUseCase:
             raise anulado
         # El cambio de verdad, al log (el de la petición dice «pendiente»). Un fallo
         # del log no deshace el cambio
-        try:
-            get_security_logger().log_email_changed(
+        registra_sin_romper(
+            "Email change",
+            lambda: self._security_audit.log_email_changed(
                 user_id=user_id,
                 ip_address=ip_address or "unknown",
                 user_agent=user_agent or "unknown",
                 email_verification_required=False,
-            )
-        except Exception as error:
-            logger.error("Email change audit event failed: %s", type(error).__name__)
+            ),
+        )
+        if antes is not None:
+            await self._avisa_al_de_antes(antes, user.first_name, str(user.email.value))
         return UserResponseDTO.model_validate(user)
+
+    async def _avisa_al_de_antes(self, antes: str, nombre: str, nuevo: str) -> None:
+        """El aviso al correo de antes (BE #753). Si falla, el cambio ya está hecho."""
+        await manda_sin_romper(
+            "Email changed notice",
+            self._email_service.send_email_changed_notice(
+                to_email=antes, user_name=nombre, new_email=nuevo
+            ),
+        )

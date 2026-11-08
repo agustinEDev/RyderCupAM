@@ -493,6 +493,45 @@ class RefreshRejectedAuditEvent(SecurityAuditEvent):
 
 
 @dataclass(frozen=True)
+class SecurityChangeFailedAuditEvent(SecurityAuditEvent):
+    """
+    Un cambio de /users/security rechazado, con su motivo (L1-L3, 7 nov 2026).
+
+    Antes solo quedaba el cambio que salía bien: con una sesión robada se podían probar
+    contraseñas sin rastro. Una contraseña actual equivocada es HIGH; lo demás (correo
+    ocupado, contraseña repetida o débil, o cambiada entretanto), MEDIUM. Nunca lleva la
+    contraseña ni el correo pedido.
+    """
+
+    reason: str = ""
+
+    def __post_init__(self):
+        """Severidad según el motivo."""
+        super().__post_init__()
+        alta = self.reason == "wrong_current_password"
+        object.__setattr__(
+            self, "severity", SecuritySeverity.HIGH if alta else SecuritySeverity.MEDIUM
+        )
+
+    @property
+    def is_failure(self) -> bool:
+        """Siempre un fallo: deja rastro en WARNING."""
+        return True
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        return (
+            f"SECURITY CHANGE FAILED | {user_info} | Reason: {self.reason} | IP: {self.ip_address}"
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con el motivo."""
+        base = super().to_dict()
+        base.update({"reason": self.reason})
+        return base
+
+
+@dataclass(frozen=True)
 class AccountReactivatedAuditEvent(SecurityAuditEvent):
     """
     Un administrador reactivó una cuenta (BE #744). Sus sesiones viejas no vuelven.

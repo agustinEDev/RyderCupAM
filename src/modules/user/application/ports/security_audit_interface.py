@@ -96,3 +96,127 @@ class ISecurityAuditLogger(ABC):
             user_agent: Navegador ("unknown" si no se conoce)
             terms_version: La versión aceptada
         """
+
+    # Los del log de seguridad que usaban los casos de uso importando la
+    # infraestructura (#750): ahora por este puerto, inyectado
+    @abstractmethod
+    def log_login_attempt(
+        self,
+        user_id: str | None,
+        email: str,
+        success: bool,
+        ip_address: str,
+        user_agent: str,
+        failure_reason: str | None = None,
+    ) -> None:
+        """Un intento de inicio de sesión, bueno o malo."""
+
+    @abstractmethod
+    def log_logout(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        refresh_tokens_revoked: int = 0,
+    ) -> None:
+        """Un cierre de sesión."""
+
+    @abstractmethod
+    def log_password_changed(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        old_password_verified: bool = True,
+    ) -> None:
+        """Una contraseña cambiada."""
+
+    @abstractmethod
+    def log_email_changed(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        email_verification_required: bool = True,
+    ) -> None:
+        """Un cambio de correo, pedido o confirmado."""
+
+    @abstractmethod
+    def log_security_change_failed(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        reason: str,
+    ) -> None:
+        """Un cambio de /users/security rechazado, con su motivo."""
+
+    @abstractmethod
+    def log_password_reset_requested(
+        self,
+        user_id: str | None,
+        email: str,
+        success: bool,
+        ip_address: str,
+        user_agent: str,
+        failure_reason: str | None = None,
+    ) -> None:
+        """Una petición de restablecer la contraseña."""
+
+    @abstractmethod
+    def log_password_reset_completed(
+        self,
+        user_id: str | None,
+        email: str,
+        success: bool,
+        ip_address: str,
+        user_agent: str,
+        failure_reason: str | None = None,
+    ) -> None:
+        """Un restablecimiento de contraseña, bueno o malo."""
+
+    @abstractmethod
+    def log_refresh_token_used(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        refresh_token_id: str,
+        new_access_token_created: bool = True,
+    ) -> None:
+        """Un refresco de sesión que sale bien."""
+
+    @abstractmethod
+    def log_refresh_token_revoked(
+        self,
+        user_id: str,
+        ip_address: str,
+        user_agent: str,
+        tokens_revoked_count: int,
+        reason: str,
+        device_id: str | None = None,
+    ) -> None:
+        """Sesiones revocadas, con su motivo."""
+
+    @abstractmethod
+    def log_unverified_account_claimed(
+        self,
+        user_id: str,
+        devices_revoked: int,
+        tokens_revoked: int,
+        google_unlinked: int = 0,
+        via: str = "google",
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Una cuenta sin verificar que se queda quien demuestra el correo."""
+
+    @abstractmethod
+    def log_google_account_linked(
+        self,
+        user_id: str,
+        automatic: bool,
+        ip_address: str = "unknown",
+        user_agent: str = "unknown",
+    ) -> None:
+        """Un Google vinculado (automático o desde el perfil)."""

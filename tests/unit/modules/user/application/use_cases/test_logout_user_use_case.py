@@ -19,6 +19,7 @@ from src.modules.user.domain.entities.user import User
 from src.modules.user.infrastructure.persistence.in_memory.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from src.modules.user.infrastructure.security.security_audit_logger import SecurityAuditLogger
 
 
 @pytest.fixture
@@ -51,7 +52,7 @@ async def existing_user(uow):
 @pytest.fixture
 def use_case(uow):
     """Fixture que proporciona el caso de uso de logout."""
-    return LogoutUserUseCase(uow)
+    return LogoutUserUseCase(uow, security_audit=SecurityAuditLogger())
 
 
 class TestLogoutUserUseCase:

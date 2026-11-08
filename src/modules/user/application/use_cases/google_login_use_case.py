@@ -26,12 +26,16 @@ from src.modules.user.application.dto.oauth_dto import (
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
 from src.modules.user.application.ports.aviso_de_nuevo_inicio_port import IAvisoDeNuevoInicio
+from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.google_oauth_service_interface import (
     GoogleUserInfo,
     IGoogleOAuthService,
 )
+from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.ports.token_service_interface import ITokenService
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_google,
+    avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
 from src.modules.user.application.services.datos_del_acceso import datos_del_acceso
@@ -40,6 +44,7 @@ from src.modules.user.application.services.guarda_la_sesion import (
     activa,
     guarda_la_sesion,
 )
+from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.application.use_cases.register_device_use_case import (
     RegisterDeviceUseCase,
 )
@@ -53,7 +58,6 @@ from src.modules.user.domain.repositories.user_unit_of_work_interface import (
 from src.modules.user.domain.value_objects.email import Email
 from src.modules.user.domain.value_objects.oauth_provider import OAuthProvider
 from src.modules.user.domain.value_objects.user_device_id import UserDeviceId
-from src.shared.infrastructure.logging.security_logger import get_security_logger
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +89,14 @@ class GoogleLoginUseCase:
         google_oauth_service: IGoogleOAuthService,
         register_device_use_case: RegisterDeviceUseCase,
         aviso_de_nuevo_inicio: IAvisoDeNuevoInicio,
+        *,
+        security_audit: ISecurityAuditLogger,
+        email_service: IEmailService,
     ):
         # El correo de «nuevo inicio de sesión» (BE #737)
+        self._security_audit = security_audit
+        # El aviso de cuenta asegurada (BE #753)
+        self._email_service = email_service
         self._aviso_de_nuevo_inicio = aviso_de_nuevo_inicio
         self._uow = uow
         self._token_service = token_service
@@ -239,7 +249,7 @@ class GoogleLoginUseCase:
         Raises:
             ValueError: Si el authorization code es inválido
         """
-        security_logger = get_security_logger()
+        security_logger = self._security_audit
         ip_address = request.ip_address or "unknown"
         user_agent = request.user_agent or "unknown"
 
@@ -253,40 +263,49 @@ class GoogleLoginUseCase:
         if revocados is not None:
             # La toma de una cuenta sin verificar, al log, ya guardada y sin cambiar
             # la respuesta
-            try:
-                security_logger.log_unverified_account_claimed(
+            registra_sin_romper(
+                "Account claim",
+                lambda: security_logger.log_unverified_account_claimed(
                     user_id=str(user.id.value),
                     devices_revoked=revocados[0],
                     tokens_revoked=revocados[1],
                     google_unlinked=revocados[2],
                     ip_address=ip_address,
                     user_agent=user_agent,
-                )
-            except Exception as error:
-                logger.error("Account claim audit event failed: %s", type(error).__name__)
+                ),
+            )
+        if revocados is not None:
+            await avisa_de_la_toma(self._email_service, user, "google")
+        elif vinculada:
+            # Un Google con ese correo no siempre es el dueño del buzón: que se entere
+            # (BE #753, Agustín). En una toma ya va el aviso de cuenta asegurada
+            await avisa_de_google(self._email_service, user, linked=True)
         if vinculada:
             # Que quede rastro, ya guardado y con la red: un Google vinculado solo, por
             # el correo, da acceso a la cuenta. El log nunca cambia la respuesta
-            try:
-                security_logger.log_google_account_linked(
+            registra_sin_romper(
+                "Google link",
+                lambda: security_logger.log_google_account_linked(
                     user_id=str(user.id.value),
                     automatic=True,
                     ip_address=ip_address,
                     user_agent=user_agent,
-                )
-            except Exception as error:
-                logger.error("Google link audit event failed: %s", type(error).__name__)
+                ),
+            )
 
         # Una cuenta desactivada no entra (BE #744, auditoría OWASP): ni sesión, ni
         # dispositivo, ni correo de «nuevo inicio», como con la contraseña
         if not user.is_active:
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=google_info.email,
-                success=False,
-                failure_reason="Account deactivated by admin",
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Google login",
+                lambda: security_logger.log_login_attempt(
+                    user_id=str(user.id.value),
+                    email=google_info.email,
+                    success=False,
+                    failure_reason="Account deactivated by admin",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             raise AccountDeactivatedException()
 
@@ -341,13 +360,16 @@ class GoogleLoginUseCase:
             self._uow, user.id, comprueba, guarda, device_id if dado_de_alta else None
         )
         if motivo is not None:
-            security_logger.log_login_attempt(
-                user_id=str(user.id.value),
-                email=google_info.email,
-                success=False,
-                failure_reason=motivo,
-                ip_address=ip_address,
-                user_agent=user_agent,
+            registra_sin_romper(
+                "Google login",
+                lambda: security_logger.log_login_attempt(
+                    user_id=str(user.id.value),
+                    email=google_info.email,
+                    success=False,
+                    failure_reason=motivo,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                ),
             )
             if motivo == CUENTA_DESACTIVADA:
                 raise AccountDeactivatedException()
@@ -370,13 +392,16 @@ class GoogleLoginUseCase:
             )
         )
 
-        security_logger.log_login_attempt(
-            user_id=str(user.id.value),
-            email=google_info.email,
-            success=True,
-            failure_reason=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
+        registra_sin_romper(
+            "Google login",
+            lambda: security_logger.log_login_attempt(
+                user_id=str(user.id.value),
+                email=google_info.email,
+                success=True,
+                failure_reason=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            ),
         )
 
         return GoogleLoginResponseDTO(
