@@ -74,6 +74,12 @@ The residual risks above were closed in the next release:
   account is secured; asking for a new email is limited to 3 per hour within 10 security
   requests per hour per user.
 
+Amended again (8 Nov 2026): the verification mail no longer mentions "Forgot password"
+(the owner read it as an invitation to take accounts); it only says to ignore the mail.
+The claim path is told where the email's owner looks for it instead: signing up with an
+address that already has an account explains how to recover it (Google or "Forgot
+password"), with a link. The sign-up already said the address exists.
+
 Still residual: the single-use mark lives in memory (one process; a restart forgets
 spent marks younger than 5 minutes), and reauthenticating does not lock the account,
 only the per-user limit applies.

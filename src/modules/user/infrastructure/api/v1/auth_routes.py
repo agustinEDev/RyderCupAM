@@ -235,7 +235,16 @@ async def register_user(
     description="Autentica un usuario y devuelve access + refresh tokens (httpOnly cookies + response body).",
     tags=["Authentication"],
     responses={
-        403: {"description": "`error_code` ACCOUNT_DEACTIVATED: la cuenta está desactivada."}
+        401: {"description": "Credenciales incorrectas (el mismo texto exista o no el correo)."},
+        403: {"description": "`error_code` ACCOUNT_DEACTIVATED: la cuenta está desactivada."},
+        423: {
+            "description": "Bloqueado por intentos fallidos (la cuenta o su origen), "
+            "hasta la hora que dice."
+        },
+        429: {
+            "description": "Demasiados intentos, por correo o por red: el mismo 429 que "
+            "cualquier límite, sin código."
+        },
     },
 )
 @limiter.limit(

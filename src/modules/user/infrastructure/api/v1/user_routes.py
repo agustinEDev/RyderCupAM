@@ -386,7 +386,23 @@ def _fuera_del_limite_de_seguridad(user_id: str, pide_correo: bool) -> str | Non
         "Límite por usuario: 10 por hora, y 3 por hora pidiendo un correo nuevo (429 con "
         "`error_code` TOO_MANY_SECURITY_CHANGES o TOO_MANY_EMAIL_CHANGE_REQUESTS)."
     ),
-    responses={429: {"description": "Demasiadas peticiones; `error_code` dice cuál."}},
+    responses={
+        400: {
+            "description": "La contraseña nueva no cumple la política (con `error_code`) "
+            "o los datos no valen."
+        },
+        401: {
+            "description": "`error_code` CURRENT_PASSWORD_INCORRECT: la contraseña actual "
+            "no es. Sin código: la sesión no es válida."
+        },
+        403: {
+            "description": "`error_code` TERMS_NOT_ACCEPTED: faltan los Términos vigentes "
+            "(o falla el CSRF)."
+        },
+        404: {"description": "El usuario ya no existe."},
+        409: {"description": "`error_code` EMAIL_ALREADY_IN_USE: otra cuenta ya usa ese correo."},
+        429: {"description": "Demasiadas peticiones; `error_code` dice cuál."},
+    },
     tags=["Users"],
 )
 async def update_security(

@@ -7,6 +7,7 @@ red: el enlace de cada botón, que nada del usuario entra sin escapar y que el
 HTML no depende de un <style> que Gmail borra.
 """
 
+import html
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -588,14 +589,33 @@ class TestCorreosDelCambioDeCorreo:
         assert (quita in cuerpo and quita in texto) is vinculado
 
     @pytest.mark.asyncio
-    async def test_the_verification_email_says_what_to_do_if_it_was_not_you(self, correo):
-        """Quien no creó la cuenta no pulsa, y se la queda con «Olvidé mi contraseña» (BE #753)"""
+    async def test_the_verification_email_tells_who_did_not_sign_up_to_ignore_it(self, correo):
+        """
+        Given: un correo de verificación
+        When: lo recibe quien no creó la cuenta
+        Then: se le dice que lo ignore, sin invitarle a quedarse la cuenta (Agustín, 8 nov 2026)
+        """
         await correo.send_verification_email("ana@gmail.com", "Ana", "tok")
 
         _, _, texto, cuerpo = _enviado(correo)
-        aviso = "Si no has creado esta cuenta, no pulses"
-        assert aviso in cuerpo and aviso in texto
-        assert "Olvidé mi contraseña" in cuerpo and "Olvidé mi contraseña" in texto
+        for aviso in (
+            "¿No has creado tú esta cuenta? Ignora este correo",
+            "Just ignore this email",
+        ):
+            assert aviso in cuerpo and aviso in texto
+        # El aviso en ámbar del cuerpo, no solo el pie (revisión)
+        assert "Ignora este correo y no pulses el botón." in cuerpo
+        # El inglés lo dice en su bloque, junto a su botón; el pie no lo repite (/code-review)
+        assert "Just ignore this email and don't click the button." in html.unescape(cuerpo)
+        assert cuerpo.count("¿No has creado tú esta cuenta?") == 1
+        for invitacion in (
+            "quedártela",
+            "será tuya",
+            "take it over",
+            "Olvidé mi contraseña",
+            "forgot-password",
+        ):
+            assert invitacion not in cuerpo and invitacion not in texto
 
     @pytest.mark.asyncio
     async def test_the_change_notice_uses_the_configured_contact(self, correo, monkeypatch):

@@ -88,7 +88,7 @@ Para completar tu registro, por favor confirma tu dirección de correo electrón
 
 {verification_link}
 
-Si no has creado esta cuenta, no pulses: usa "Olvidé mi contraseña" en {settings.FRONTEND_URL}/forgot-password para quedártela.
+¿No has creado tú esta cuenta? Ignora este correo y no pulses el enlace.
 
 Saludos,
 El equipo de Ryder Cup Friends
@@ -103,7 +103,7 @@ To complete your registration, please confirm your email address by clicking on 
 
 {verification_link}
 
-If you did not create this account, do not click: use "Forgot password" at {settings.FRONTEND_URL}/forgot-password to take it over.
+Didn't create this account? Just ignore this email and don't click the link.
 
 Best regards,
 The Ryder Cup Friends Team
@@ -121,22 +121,21 @@ The Ryder Cup Friends Team
                     ", gracias por registrarte en RyderCupFriends. Solo falta un paso: "
                     "confirma que este correo es tuyo para activar la cuenta.",
                 ),
-                aviso(
-                    negrita("Si no has creado esta cuenta, no pulses: "),
-                    'usa "Olvidé mi contraseña" y será tuya.',
-                ),
+                aviso("¿No has creado tú esta cuenta? Ignora este correo y no pulses el botón."),
             ],
             boton=Boton("Confirmar mi correo", verification_link),
             ingles=Ingles(
                 frase(
                     "Hi ",
                     negrita(safe_user_name),
-                    ", confirm your email to activate your RyderCupFriends account.",
+                    ", confirm your email to activate your RyderCupFriends account. ",
+                    negrita("Didn't create this account? "),
+                    "Just ignore this email and don't click the button.",
                 ),
                 Boton("Confirm my email", verification_link),
             ),
-            pie="Si no has creado esta cuenta, no pulses el botón. "
-            "If you didn't create this account, don't click.",
+            pie="Te llega porque alguien se ha registrado con este correo en RyderCupFriends. "
+            "You're receiving this because someone signed up with this email at RyderCupFriends.",
         )
 
         return await self._send_email(
