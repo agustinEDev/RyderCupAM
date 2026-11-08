@@ -27,6 +27,7 @@ from src.modules.user.application.dto.oauth_dto import (
     LinkGoogleAccountResponseDTO,
     ReauthenticateRequestDTO,
     ReauthenticateResponseDTO,
+    UnlinkGoogleAccountRequestDTO,
     UnlinkGoogleAccountResponseDTO,
 )
 from src.modules.user.application.dto.user_dto import UserResponseDTO
@@ -324,11 +325,13 @@ async def unlink_google_account(
     try:
         # Al log de seguridad con la red de la petición, como al vincular
         return await use_case.execute(
-            str(current_user.id),
-            ip_address=get_trusted_client_ip(
-                request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-            ),
-            user_agent=get_user_agent(request),
+            UnlinkGoogleAccountRequestDTO(
+                user_id=str(current_user.id),
+                ip_address=get_trusted_client_ip(
+                    request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+                ),
+                user_agent=get_user_agent(request),
+            )
         )
     except ValueError as e:
         error_msg = str(e)

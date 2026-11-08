@@ -6,7 +6,10 @@ Caso de uso para desvincular una cuenta de Google de un usuario autenticado.
 
 from datetime import datetime
 
-from src.modules.user.application.dto.oauth_dto import UnlinkGoogleAccountResponseDTO
+from src.modules.user.application.dto.oauth_dto import (
+    UnlinkGoogleAccountRequestDTO,
+    UnlinkGoogleAccountResponseDTO,
+)
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import avisa_de_google
@@ -40,19 +43,13 @@ class UnlinkGoogleAccountUseCase:
         self._security_audit = security_audit
 
     async def execute(
-        self,
-        user_id: str,
-        *,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
+        self, request: UnlinkGoogleAccountRequestDTO
     ) -> UnlinkGoogleAccountResponseDTO:
         """
         Desvincula cuenta Google del usuario.
 
         Args:
-            user_id: ID del usuario autenticado (de JWT)
-            ip_address: IP de la petición, para el log de seguridad
-            user_agent: Navegador de la petición, para el log de seguridad
+            request: El usuario autenticado (de JWT) y la red de la petición, para el log
 
         Returns:
             UnlinkGoogleAccountResponseDTO con confirmación
@@ -60,6 +57,7 @@ class UnlinkGoogleAccountUseCase:
         Raises:
             ValueError: Si no tiene cuenta Google vinculada o si es su único método de auth
         """
+        user_id = request.user_id
         uid = UserId(user_id)
 
         # Lecturas, validaciones, delete y evento en una sola transacción
@@ -102,8 +100,8 @@ class UnlinkGoogleAccountUseCase:
                 user_id=user_id,
                 # Los helpers de la ruta dan None sin cabecera válida, y un None tumbaría
                 # el evento (revisión): sin red conocida, «unknown», como al vincular
-                ip_address=ip_address or "unknown",
-                user_agent=user_agent or "unknown",
+                ip_address=request.ip_address or "unknown",
+                user_agent=request.user_agent or "unknown",
             ),
         )
 

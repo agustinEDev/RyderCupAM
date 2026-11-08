@@ -14,7 +14,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.modules.user.application.dto.oauth_dto import LinkGoogleAccountRequestDTO
+from src.modules.user.application.dto.oauth_dto import (
+    LinkGoogleAccountRequestDTO,
+    UnlinkGoogleAccountRequestDTO,
+)
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.modules.user.application.use_cases.link_google_account_use_case import (
     LinkGoogleAccountUseCase,
@@ -95,7 +98,7 @@ async def test_a2_unlinking_tells_the_account():
 
     await UnlinkGoogleAccountUseCase(
         uow, email_service=correos, security_audit=MagicMock()
-    ).execute(str(ana.id.value))
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)))
 
     correos.send_google_account_notice.assert_awaited_once_with(
         to_email="ana@example.com", user_name="Ana", linked=False
@@ -115,7 +118,7 @@ async def test_a3_a_failing_notice_keeps_the_link_and_the_unlink(falla):
     await _vincula(uow, ana, correos)
     await UnlinkGoogleAccountUseCase(
         uow, email_service=correos, security_audit=MagicMock()
-    ).execute(str(ana.id.value))
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)))
 
     async with uow:
         assert (
@@ -153,6 +156,6 @@ async def test_a5_an_unverified_account_is_not_told_on_unlink():
 
     await UnlinkGoogleAccountUseCase(
         uow, email_service=correos, security_audit=MagicMock()
-    ).execute(str(ana.id.value))
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)))
 
     correos.send_google_account_notice.assert_not_awaited()

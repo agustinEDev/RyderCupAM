@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.modules.user.application.dto.oauth_dto import UnlinkGoogleAccountRequestDTO
 from src.modules.user.application.use_cases.unlink_google_account_use_case import (
     UnlinkGoogleAccountUseCase,
 )
@@ -92,7 +93,9 @@ class TestUnlinkGoogleAccountUseCase:
 
     async def test_unlink_google_account_successfully(self, use_case, uow, user_with_password):
         """Debe desvincular Google cuando el usuario tiene password."""
-        response = await use_case.execute(str(user_with_password.id.value))
+        response = await use_case.execute(
+            UnlinkGoogleAccountRequestDTO(user_id=str(user_with_password.id.value))
+        )
 
         assert response.message == "Google account unlinked successfully"
         assert response.provider == "google"
@@ -115,12 +118,14 @@ class TestUnlinkGoogleAccountUseCase:
             await uow.users.save(user)
 
         with pytest.raises(ValueError, match="No Google account linked"):
-            await use_case.execute(str(user.id.value))
+            await use_case.execute(UnlinkGoogleAccountRequestDTO(user_id=str(user.id.value)))
 
     async def test_unlink_fails_when_oauth_only_user(self, use_case, oauth_only_user):
         """Debe fallar si el usuario no tiene password (único método auth)."""
         with pytest.raises(ValueError, match="only authentication method"):
-            await use_case.execute(str(oauth_only_user.id.value))
+            await use_case.execute(
+                UnlinkGoogleAccountRequestDTO(user_id=str(oauth_only_user.id.value))
+            )
 
     async def test_unlink_fails_when_user_not_found(self, use_case, uow):
         """Debe fallar cuando el usuario no existe."""
@@ -138,11 +143,13 @@ class TestUnlinkGoogleAccountUseCase:
             await uow.oauth_accounts.save(oauth)
 
         with pytest.raises(ValueError, match="User not found"):
-            await use_case.execute(str(fake_id.value))
+            await use_case.execute(UnlinkGoogleAccountRequestDTO(user_id=str(fake_id.value)))
 
     async def test_unlink_emits_domain_event(self, use_case, user_with_password):
         """Debe emitir GoogleAccountUnlinkedEvent en el usuario."""
-        await use_case.execute(str(user_with_password.id.value))
+        await use_case.execute(
+            UnlinkGoogleAccountRequestDTO(user_id=str(user_with_password.id.value))
+        )
 
         from src.modules.user.domain.events.google_account_unlinked_event import (
             GoogleAccountUnlinkedEvent,
@@ -208,7 +215,7 @@ async def test_the_google_link_is_looked_up_after_locking_the_account():
 
     await UnlinkGoogleAccountUseCase(
         uow, email_service=AsyncMock(), security_audit=MagicMock()
-    ).execute(str(ana.id.value))
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)))
 
     assert orden == ["bloqueo", "busca"]
 
@@ -217,7 +224,7 @@ async def test_the_google_link_is_looked_up_after_locking_the_account():
 class TestUnlinkGoesToTheSecurityLog:
     """Desvincular Google deja rastro en el log de seguridad, como vincularlo."""
 
-    async def test_g1_a_successful_unlink_is_logged_with_the_network(
+    async def test_unlink_with_google_linked_logs_the_network(
         self, use_case, user_with_password, auditoria
     ):
         """
@@ -226,9 +233,11 @@ class TestUnlinkGoesToTheSecurityLog:
         Then: Una sola entrada en el log, con su id y su red
         """
         await use_case.execute(
-            str(user_with_password.id.value),
-            ip_address="203.0.113.7",
-            user_agent="Safari",
+            UnlinkGoogleAccountRequestDTO(
+                user_id=str(user_with_password.id.value),
+                ip_address="203.0.113.7",
+                user_agent="Safari",
+            )
         )
 
         auditoria.log_google_account_unlinked.assert_called_once_with(
@@ -237,7 +246,7 @@ class TestUnlinkGoesToTheSecurityLog:
             user_agent="Safari",
         )
 
-    async def test_g1_the_log_comes_after_the_unlink_is_saved(
+    async def test_unlink_successful_logs_after_the_commit(
         self, use_case, uow, user_with_password, auditoria
     ):
         """
@@ -268,14 +277,16 @@ class TestUnlinkGoesToTheSecurityLog:
         uow.oauth_accounts.delete = espia_borrar
         uow.commit = espia_confirmar
 
-        await use_case.execute(str(user_with_password.id.value))
+        await use_case.execute(
+            UnlinkGoogleAccountRequestDTO(user_id=str(user_with_password.id.value))
+        )
 
         # Tras el commit, no solo tras el borrado: un log dentro de la transacción
         # apuntaría una desvinculación que aún podría deshacerse
         assert estados.index("borra") < estados.index("commit") < estados.index("log")
         assert await sigue_vinculado() is None
 
-    async def test_g1_without_network_data_it_says_unknown(
+    async def test_unlink_without_network_data_logs_unknown(
         self, use_case, user_with_password, auditoria
     ):
         """
@@ -283,7 +294,9 @@ class TestUnlinkGoesToTheSecurityLog:
         When: Desvincula Google
         Then: Al log igual, con «unknown» en la red
         """
-        await use_case.execute(str(user_with_password.id.value))
+        await use_case.execute(
+            UnlinkGoogleAccountRequestDTO(user_id=str(user_with_password.id.value))
+        )
 
         auditoria.log_google_account_unlinked.assert_called_once_with(
             user_id=str(user_with_password.id.value),
@@ -291,7 +304,7 @@ class TestUnlinkGoesToTheSecurityLog:
             user_agent="unknown",
         )
 
-    async def test_g2_no_google_linked_is_not_logged_as_unlinked(self, use_case, uow, auditoria):
+    async def test_unlink_without_google_linked_logs_nothing(self, use_case, uow, auditoria):
         """
         Given: Un usuario sin Google vinculado
         When: Intenta desvincular
@@ -307,11 +320,13 @@ class TestUnlinkGoesToTheSecurityLog:
             await uow.users.save(user)
 
         with pytest.raises(ValueError, match="No Google account linked"):
-            await use_case.execute(str(user.id.value), ip_address="203.0.113.7")
+            await use_case.execute(
+                UnlinkGoogleAccountRequestDTO(user_id=str(user.id.value), ip_address="203.0.113.7")
+            )
 
         auditoria.log_google_account_unlinked.assert_not_called()
 
-    async def test_g2_google_as_the_only_way_in_is_not_logged_as_unlinked(
+    async def test_unlink_with_google_as_only_login_logs_nothing(
         self, use_case, oauth_only_user, auditoria
     ):
         """
@@ -320,11 +335,13 @@ class TestUnlinkGoesToTheSecurityLog:
         Then: Rechazado, y nada de «desvinculado» en el log
         """
         with pytest.raises(ValueError, match="only authentication method"):
-            await use_case.execute(str(oauth_only_user.id.value))
+            await use_case.execute(
+                UnlinkGoogleAccountRequestDTO(user_id=str(oauth_only_user.id.value))
+            )
 
         auditoria.log_google_account_unlinked.assert_not_called()
 
-    async def test_g3_a_broken_log_does_not_undo_the_unlink_nor_the_email(
+    async def test_unlink_with_broken_log_still_unlinks_and_notifies(
         self, use_case, uow, user_with_password, auditoria, correos
     ):
         """
@@ -337,7 +354,9 @@ class TestUnlinkGoesToTheSecurityLog:
             await uow.users.save(user_with_password)
         auditoria.log_google_account_unlinked.side_effect = RuntimeError("log caído")
 
-        respuesta = await use_case.execute(str(user_with_password.id.value))
+        respuesta = await use_case.execute(
+            UnlinkGoogleAccountRequestDTO(user_id=str(user_with_password.id.value))
+        )
 
         assert respuesta.message == "Google account unlinked successfully"
         async with uow:
@@ -351,7 +370,7 @@ class TestUnlinkGoesToTheSecurityLog:
 
 
 @pytest.mark.asyncio
-async def test_g1_a_missing_user_agent_or_ip_still_reaches_the_log_as_unknown(
+async def test_unlink_with_none_network_data_writes_the_real_line(
     uow, correos, user_with_password, tmp_path, monkeypatch
 ):
     """
@@ -373,7 +392,11 @@ async def test_g1_a_missing_user_agent_or_ip_still_reaches_the_log_as_unknown(
         uow=uow, email_service=correos, security_audit=SecurityAuditLogger()
     )
 
-    await caso.execute(str(user_with_password.id.value), ip_address=None, user_agent=None)
+    await caso.execute(
+        UnlinkGoogleAccountRequestDTO(
+            user_id=str(user_with_password.id.value), ip_address=None, user_agent=None
+        )
+    )
 
     import json
 

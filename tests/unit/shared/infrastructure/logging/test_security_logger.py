@@ -200,7 +200,7 @@ class TestTermsAccepted:
 class TestGoogleUnlinked:
     """Desvincular Google queda en el log de seguridad (G1)."""
 
-    def test_log_google_account_unlinked_helper(self, logger, temp_log_dir):
+    def test_log_google_account_unlinked_writes_the_line(self, logger, temp_log_dir):
         """
         Given: Un usuario que desvincula su Google
         When: Se registra con el helper

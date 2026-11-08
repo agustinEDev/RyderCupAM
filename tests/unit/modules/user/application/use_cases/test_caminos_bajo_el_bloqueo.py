@@ -23,7 +23,10 @@ import pytest
 from src.modules.user.application.dto.device_dto import (
     RegisterDeviceResponseDTO,
 )
-from src.modules.user.application.dto.oauth_dto import GoogleLoginRequestDTO
+from src.modules.user.application.dto.oauth_dto import (
+    GoogleLoginRequestDTO,
+    UnlinkGoogleAccountRequestDTO,
+)
 from src.modules.user.application.dto.user_dto import ResetPasswordRequestDTO
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.modules.user.application.use_cases.google_login_use_case import GoogleLoginUseCase
@@ -233,7 +236,7 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
 
     await UnlinkGoogleAccountUseCase(
         uow, email_service=AsyncMock(), security_audit=MagicMock()
-    ).execute(str(ana.id.value))
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)))
 
     assert pedidos == [ana.id]
 
