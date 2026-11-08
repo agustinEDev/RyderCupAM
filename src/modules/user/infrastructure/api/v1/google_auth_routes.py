@@ -190,6 +190,11 @@ _TEXTOS_DE_LA_REAUTENTICACION = {
         "usuario (429 TOO_MANY_SECURITY_CHANGES)."
     ),
     tags=["Authentication"],
+    responses={
+        401: {"description": "`error_code` CURRENT_PASSWORD_INCORRECT."},
+        409: {"description": "`error_code` ACCOUNT_WITHOUT_PASSWORD: la cuenta es solo Google."},
+        429: {"description": "`error_code` TOO_MANY_SECURITY_CHANGES."},
+    },
 )
 async def reauthenticate(
     request: Request,
@@ -231,6 +236,16 @@ async def reauthenticate(
     summary="Vincular cuenta Google",
     description="Vincula una cuenta de Google al usuario autenticado.",
     tags=["Authentication"],
+    responses={
+        400: {"description": "Código de Google inválido, o ya vinculada (a él o a otra cuenta)."},
+        403: {
+            "description": (
+                "`error_code` REAUTHENTICATION_REQUIRED (falta la marca de "
+                "/auth/reauthenticate en una cuenta con contraseña) o "
+                "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL (el correo de la cuenta sin verificar)."
+            )
+        },
+    },
 )
 async def link_google_account(
     request: Request,

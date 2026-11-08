@@ -709,7 +709,7 @@ class VerifyEmailResponseDTO(BaseModel):
     """
 
     message: str = Field(
-        default="Email verificado exitosamente",
+        default="Email verified. Please sign in.",
         description=CONFIRMATION_MESSAGE_DESCRIPTION,
     )
     email_verified: bool = Field(

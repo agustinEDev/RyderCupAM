@@ -234,6 +234,9 @@ async def register_user(
     summary="Login de usuario",
     description="Autentica un usuario y devuelve access + refresh tokens (httpOnly cookies + response body).",
     tags=["Authentication"],
+    responses={
+        403: {"description": "`error_code` ACCOUNT_DEACTIVATED: la cuenta está desactivada."}
+    },
 )
 @limiter.limit(
     LOGIN_ATTEMPTS_LIMIT, key_func=get_client_identifier
@@ -659,6 +662,10 @@ async def refresh_access_token(
         "toca. Una cuenta desactivada se verifica igual y responde 403 ACCOUNT_DEACTIVATED."
     ),
     tags=["Authentication"],
+    responses={
+        400: {"description": "El enlace no vale: inválido, caducado o ya usado."},
+        403: {"description": "`error_code` ACCOUNT_DEACTIVATED: verificada, pero desactivada."},
+    },
 )
 @limiter.limit(VERIFY_EMAIL_LIMIT, key_func=get_client_identifier)  # Por red
 async def verify_email(
