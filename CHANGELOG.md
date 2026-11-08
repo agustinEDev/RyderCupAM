@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.53.0] - 2026-11-08
+
+**Verificar el correo ya no abre sesión, vincular Google pide la contraseña, el correo
+tiene respaldos y una sesión nueva no la tumba un refresco tardío** (#753, #734, #750,
+#283, #148, #529, #563; ADR-045 enmendada). Sin migraciones. Va con el frontend
+**2.68.0**, que hay que desplegar ANTES: `/verify-email` cambia de forma (`api-breaking`)
+y el front nuevo acepta las dos; el viejo daría un error tras verificar. Render ya tiene
+`RESEND_API_KEY` y `BREVO_API_KEY`. Probado en el Kind con develop y una batería de punta
+a punta; los correos, en el iPhone en modo oscuro.
+
+### Security
+
+- **Verificar el correo solo verifica** (#753): no abre sesión ni toca una abierta;
+  responde `VerifyEmailResponseDTO`, `403 ACCOUNT_DEACTIVATED` si la cuenta está
+  desactivada, 400 solo para un token que no vale y 500 ante un fallo interno.
+- **Vincular Google pide la contraseña actual**: `POST /auth/reauthenticate` deja una
+  marca firmada, httpOnly, de 5 minutos y de un solo uso, atada al usuario y limitada a
+  `/api/v1/auth/google`; `/auth/google/link` la exige y la gasta de forma atómica antes
+  de usar el código de Google. Los fallos van al log de seguridad.
+- **Límites por usuario en `PATCH /users/security`**: 10 por hora
+  (`429 TOO_MANY_SECURITY_CHANGES`) y 3 por hora pidiendo un correo nuevo
+  (`429 TOO_MANY_EMAIL_CHANGE_REQUESTS`); la reautenticación comparte el primero.
+- **Restablecer la contraseña quita también un Google vinculado** en una cuenta
+  verificada: pudo añadirlo quien robó la sesión.
+- **El cambio de correo del administrador queda pendiente** hasta que el usuario lo
+  confirma, con la fila bloqueada y comparando sin mayúsculas; la lista y la respuesta
+  llevan `pending_email`.
+- **Un refresco tardío no borra la cookie de una sesión más nueva** (#734): con el token
+  sustituido y una sesión viva de menos de 5 minutos, `401 SESSION_REPLACED` y la cookie
+  se queda. Nunca con la cuenta desactivada, el dispositivo revocado o 24 h sin uso.
+- **Las cuentas solo-Google no tienen contraseña**: la columna se mapea con un
+  `TypeDecorator`; con `composite()` un NULL daba `has_password` cierto, y una cuenta
+  solo-Google podía quitarse su único Google (15 en producción).
+- **Sin bcrypt con una transacción abierta** (#283): alta, login, cambios de seguridad,
+  restablecimiento y la cuenta del sistema leen, calculan el hash sin conexión y luego
+  bloquean, vuelven a mirar y escriben.
+- **Auditoría de los cambios de seguridad fallidos**, con su motivo y sin la contraseña
+  ni el correo pedido. El log de seguridad va detrás de un puerto
+  (`ISecurityAuditLogger`, #750) y una llamada que falla no rompe la petición.
+
+### Added
+
+- **Avisos por correo**: al viejo, cuando se confirma un cambio de correo; al dueño,
+  cuando se asegura una cuenta sin verificar (por Google o restableciendo, en lugar de
+  «contraseña cambiada»); al vincular y desvincular Google, también el vínculo
+  automático al entrar con Google. El contacto sale de `CONTACT_EMAIL`.
+- **Respaldos del correo** (#148, #563): un solo envío asíncrono (httpx). Mailgun
+  primero; Resend si Mailgun no puede (429, 500/503, clave rechazada); Brevo el último y
+  solo para correos sin token ni avisos de seguridad. Nunca se reenvía lo que pudo salir
+  (4xx, 502/504, tiempo agotado). La clave de Brevo se usa a diario (monitor de Sentry
+  `brevo-key-check`). Producción no arranca con otro transporte, sin `MAILGUN_API_KEY` o
+  con una URL sin https.
+- **Mailpit en el Kind y en docker-compose**: los correos locales ya no se entregan ni
+  gastan el cupo de Mailgun de producción.
+- **Códigos de error de cuenta**: `CURRENT_PASSWORD_INCORRECT` y `EMAIL_ALREADY_IN_USE`
+  en Seguridad y en la edición del administrador, con textos fijos que no repiten el
+  correo; `ACCOUNT_DEACTIVATED` también al entrar y al verificar.
+
+### Changed
+
+- **El correo de verificación** solo dice a quien no creó la cuenta que lo ignore; la
+  pista para recuperarla pasa a la pantalla de registro (frontend 2.68.0).
+- **OpenAPI** documenta las respuestas con código de login, verificación, Seguridad,
+  Google (vincular, desvincular, reautenticar) y la edición del administrador.
+- **`api-breaking`**: la respuesta de `POST /auth/verify-email`.
+
+### Removed
+
+- `OpenSessionUseCase`, sin uso, y la dependencia `requests`.
+
+### Fixed
+
+- Dos altas a la vez con el mismo correo: la segunda recibe 409 y no 500.
+- El log de seguridad, uno por proceso y un fichero temporal por worker de pytest
+  (#529).
+
 ## [2.52.0] - 2026-11-07
 
 **Una cuenta sin verificar es de quien demuestra su correo, las cuentas desactivadas no
