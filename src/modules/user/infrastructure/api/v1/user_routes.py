@@ -395,6 +395,10 @@ def _fuera_del_limite_de_seguridad(user_id: str, pide_correo: bool) -> str | Non
             "description": "`error_code` CURRENT_PASSWORD_INCORRECT: la contraseña actual "
             "no es. Sin código: la sesión no es válida."
         },
+        403: {
+            "description": "`error_code` TERMS_NOT_ACCEPTED: faltan los Términos vigentes "
+            "(o falla el CSRF)."
+        },
         404: {"description": "El usuario ya no existe."},
         409: {"description": "`error_code` EMAIL_ALREADY_IN_USE: otra cuenta ya usa ese correo."},
         429: {"description": "Demasiadas peticiones; `error_code` dice cuál."},

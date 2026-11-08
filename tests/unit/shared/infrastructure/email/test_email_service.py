@@ -7,6 +7,7 @@ red: el enlace de cada botón, que nada del usuario entra sin escapar y que el
 HTML no depende de un <style> que Gmail borra.
 """
 
+import html
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -604,6 +605,9 @@ class TestCorreosDelCambioDeCorreo:
             assert aviso in cuerpo and aviso in texto
         # El aviso en ámbar del cuerpo, no solo el pie (revisión)
         assert "Ignora este correo y no pulses el botón." in cuerpo
+        # El inglés lo dice en su bloque, junto a su botón; el pie no lo repite (/code-review)
+        assert "Just ignore this email and don't click the button." in html.unescape(cuerpo)
+        assert cuerpo.count("¿No has creado tú esta cuenta?") == 1
         for invitacion in (
             "quedártela",
             "será tuya",

@@ -241,7 +241,10 @@ async def register_user(
             "description": "Bloqueado por intentos fallidos (la cuenta o su origen), "
             "hasta la hora que dice."
         },
-        429: {"description": "Demasiados intentos, por correo o por red; `error_code` dice cuál."},
+        429: {
+            "description": "Demasiados intentos, por correo o por red: el mismo 429 que "
+            "cualquier límite, sin código."
+        },
     },
 )
 @limiter.limit(

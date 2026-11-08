@@ -128,12 +128,14 @@ The Ryder Cup Friends Team
                 frase(
                     "Hi ",
                     negrita(safe_user_name),
-                    ", confirm your email to activate your RyderCupFriends account.",
+                    ", confirm your email to activate your RyderCupFriends account. ",
+                    negrita("Didn't create this account? "),
+                    "Just ignore this email and don't click the button.",
                 ),
                 Boton("Confirm my email", verification_link),
             ),
-            pie="¿No has creado tú esta cuenta? Ignora este correo. "
-            "Didn't create this account? Just ignore this email.",
+            pie="Te llega porque alguien se ha registrado con este correo en RyderCupFriends. "
+            "You're receiving this because someone signed up with this email at RyderCupFriends.",
         )
 
         return await self._send_email(
