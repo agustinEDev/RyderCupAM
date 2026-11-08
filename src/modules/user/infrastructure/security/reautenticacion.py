@@ -1,9 +1,11 @@
 """
-La marca de «autenticado hace poco» para vincular Google (BE #753, punto 2).
+La marca de «autenticado hace poco» para vincular o desvincular Google (BE #753, punto 2;
+desvincular desde el 8 nov 2026).
 
 Una cookie firmada, httpOnly, de 5 minutos y atada al usuario, solo para las rutas de
 Google. La deja POST /auth/reauthenticate con la contraseña actual y la gasta
-/auth/google/link al empezar: sirve una sola vez, también si el vínculo falla. Sin migración: lo gastado vive en memoria, como
+/auth/google/link o /auth/google/unlink al empezar: sirve para una sola acción, también si
+falla. Sin migración: lo gastado vive en memoria, como
 el freno del login (un proceso; un reinicio solo deja usar otra vez una marca de menos
 de 5 minutos).
 """

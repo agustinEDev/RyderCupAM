@@ -14,6 +14,9 @@ from src.modules.user.application.ports.email_service_interface import IEmailSer
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import avisa_de_google
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
+from src.modules.user.application.use_cases.link_google_account_use_case import (
+    ReauthenticationRequiredError,
+)
 from src.modules.user.domain.repositories.user_unit_of_work_interface import (
     UserUnitOfWorkInterface,
 )
@@ -43,20 +46,27 @@ class UnlinkGoogleAccountUseCase:
         self._security_audit = security_audit
 
     async def execute(
-        self, request: UnlinkGoogleAccountRequestDTO
+        self, request: UnlinkGoogleAccountRequestDTO, *, reautenticado: bool = False
     ) -> UnlinkGoogleAccountResponseDTO:
         """
         Desvincula cuenta Google del usuario.
 
         Args:
             request: El usuario autenticado (de JWT) y la red de la petición, para el log
+            reautenticado: Si la ruta gastó una marca de contraseña confirmada (BE #753)
 
         Returns:
             UnlinkGoogleAccountResponseDTO con confirmación
 
         Raises:
+            ReauthenticationRequiredError: Sin la marca de contraseña confirmada
             ValueError: Si no tiene cuenta Google vinculada o si es su único método de auth
         """
+        # Pide la contraseña, como vincular (tabla D, Agustín, 8 nov 2026): con solo una
+        # sesión robada se quitaba el Google del dueño. Antes que nada: el 403 no dice si
+        # hay Google vinculado (D4)
+        if not reautenticado:
+            raise ReauthenticationRequiredError("Enter your current password first")
         user_id = request.user_id
         uid = UserId(user_id)
 

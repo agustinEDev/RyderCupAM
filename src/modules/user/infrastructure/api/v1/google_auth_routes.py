@@ -10,6 +10,7 @@ Endpoints para autenticación con Google OAuth:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from src.config.dependencies import (
     get_current_user,
@@ -311,27 +312,41 @@ async def link_google_account(
             "(antes hay que poner una contraseña), u otro fallo."
         },
         403: {
-            "description": "`error_code` TERMS_NOT_ACCEPTED: faltan los Términos vigentes "
-            "(o falla el CSRF)."
+            "description": "`error_code` REAUTHENTICATION_REQUIRED (falta la marca de "
+            "/auth/reauthenticate, o ya se usó o caducó) o TERMS_NOT_ACCEPTED (faltan los "
+            "Términos vigentes), o falla el CSRF."
         },
     },
 )
 async def unlink_google_account(
     request: Request,
+    response: Response,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UnlinkGoogleAccountUseCase = Depends(get_unlink_google_account_use_case),
-) -> UnlinkGoogleAccountResponseDTO:
+) -> UnlinkGoogleAccountResponseDTO | JSONResponse:
     """Desvincula cuenta Google de usuario autenticado."""
+    user_id = str(current_user.id)
+    marca = request.cookies.get(reautenticacion.COOKIE)
     try:
+        # La marca se gasta al empezar, como al vincular: una sola vez, aunque luego falle
+        # (D3, tabla aprobada el 8 nov 2026)
+        reautenticado = reautenticacion.gasta_si_vale(marca, user_id)
         # Al log de seguridad con la red de la petición, como al vincular
-        return await use_case.execute(
+        desvinculado = await use_case.execute(
             UnlinkGoogleAccountRequestDTO(
-                user_id=str(current_user.id),
+                user_id=user_id,
                 ip_address=get_trusted_client_ip(
                     request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
                 ),
                 user_agent=get_user_agent(request),
-            )
+            ),
+            reautenticado=reautenticado,
+        )
+        reautenticacion.borra_la_cookie(response)
+        return desvinculado
+    except ReauthenticationRequiredError:
+        return respuesta_con_codigo(
+            status.HTTP_403_FORBIDDEN, _TEXTOS_DE_LA_REAUTENTICACION, REAUTHENTICATION_REQUIRED
         )
     except ValueError as e:
         error_msg = str(e)

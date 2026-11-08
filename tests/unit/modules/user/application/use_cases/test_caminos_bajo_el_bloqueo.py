@@ -236,7 +236,7 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
 
     await UnlinkGoogleAccountUseCase(
         uow, email_service=AsyncMock(), security_audit=MagicMock()
-    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)))
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)), reautenticado=True)
 
     assert pedidos == [ana.id]
 

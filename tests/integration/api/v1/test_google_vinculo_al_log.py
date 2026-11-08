@@ -99,7 +99,18 @@ async def test_a_broken_log_does_not_change_the_link_answer(client: AsyncClient,
     assert respuesta.status_code == 200
 
 
+async def _reautentica(client: AsyncClient) -> None:
+    # Desvincular pide la contraseña, como vincular (tabla D, 8 nov 2026)
+    r = await client.post(
+        "/api/v1/auth/reauthenticate",
+        json={"password": CLAVE},
+        headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},
+    )
+    assert r.status_code == 200, r.text
+
+
 async def _desvincula(client: AsyncClient):
+    await _reautentica(client)
     return await client.delete(
         "/api/v1/auth/google/unlink",
         headers={
@@ -131,6 +142,7 @@ async def test_unlink_from_profile_logs_the_network(client: AsyncClient, monkeyp
             "user_id": datos["user"]["id"],
             "ip_address": "203.0.113.101",
             "user_agent": "Navegador que desvincula",
+            "via": "profile",
         }
     ]
 
@@ -154,6 +166,7 @@ async def test_unlink_without_user_agent_writes_the_real_line(client: AsyncClien
         return original(self, event)
 
     monkeypatch.setattr(SecurityLogger, "log_security_event", mira)
+    await _reautentica(client)
 
     respuesta = await client.delete(
         "/api/v1/auth/google/unlink",
