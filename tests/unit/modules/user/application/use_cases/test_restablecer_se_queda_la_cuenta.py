@@ -388,36 +388,40 @@ async def test_reset_verified_with_broken_google_log_still_resets(monkeypatch):
         )
 
 
-# Y el dueño se entera por correo, con el aviso de Google desvinculado que ya existe
-# (Agustín, 8 nov 2026): sin él, descubría que su Google ya no entra al intentarlo
+# Y el dueño se entera en el correo de contraseña cambiada, con una frase (Agustín, 8 nov
+# 2026): el aviso aparte de «Google desvinculado» decía «¿No has sido tú? Cambia tu
+# contraseña» y, recién restablecida, parecía una alerta de intrusión
 
 
-async def test_reset_verified_with_google_sends_the_google_unlinked_notice():
+async def test_reset_verified_with_google_says_it_in_the_password_changed_email():
     """
     Given: Una cuenta verificada con un Google vinculado
     When: Se restablece la contraseña
-    Then: El aviso de Google desvinculado, además del de contraseña cambiada
+    Then: El correo de contraseña cambiada lo dice, y no sale el aviso aparte de Google
     """
     _uow, cuenta, _d, caso, token = await _escena(verificada=True)
 
     await _restablece(caso, token)
 
-    caso._email_service.send_google_account_notice.assert_awaited_once_with(
-        to_email=str(cuenta.email.value), user_name=cuenta.first_name, linked=False
+    caso._email_service.send_password_changed_notification.assert_awaited_once_with(
+        to_email=str(cuenta.email.value), user_name=cuenta.get_full_name(), google_unlinked=True
     )
-    caso._email_service.send_password_changed_notification.assert_awaited_once()
+    caso._email_service.send_google_account_notice.assert_not_awaited()
 
 
-async def test_reset_verified_without_google_sends_no_google_notice():
+async def test_reset_verified_without_google_does_not_mention_google():
     """
     Given: Una cuenta verificada sin Google
     When: Se restablece la contraseña
-    Then: Solo el aviso de contraseña cambiada
+    Then: El correo de contraseña cambiada, sin la frase de Google
     """
-    _uow, _c, _d, caso, token = await _escena(verificada=True, con_google=False)
+    _uow, cuenta, _d, caso, token = await _escena(verificada=True, con_google=False)
 
     await _restablece(caso, token)
 
+    caso._email_service.send_password_changed_notification.assert_awaited_once_with(
+        to_email=str(cuenta.email.value), user_name=cuenta.get_full_name(), google_unlinked=False
+    )
     caso._email_service.send_google_account_notice.assert_not_awaited()
 
 
@@ -425,26 +429,37 @@ async def test_reset_unverified_claim_sends_no_separate_google_notice():
     """
     Given: Una cuenta sin verificar con un Google ajeno
     When: Se restablece la contraseña (se la queda)
-    Then: Solo el aviso de cuenta asegurada, sin otro de Google
+    Then: Solo el aviso de cuenta asegurada: ni el de contraseña ni otro de Google
     """
     _uow, _c, _d, caso, token = await _escena(verificada=False)
 
     await _restablece(caso, token)
 
     caso._email_service.send_google_account_notice.assert_not_awaited()
+    caso._email_service.send_password_changed_notification.assert_not_awaited()
 
 
-async def test_reset_verified_with_a_failing_google_notice_keeps_the_reset():
+async def test_reset_with_a_failing_password_email_still_succeeds_and_is_logged(monkeypatch):
     """
-    Given: Una cuenta verificada con Google y el aviso de Google que falla
+    Given: Una cuenta verificada y el correo de contraseña cambiada que falla
     When: Se restablece la contraseña
-    Then: La contraseña queda cambiada y el aviso de contraseña sale igual
+    Then: La respuesta es de éxito, la contraseña queda cambiada y el restablecimiento
+          llega al log de seguridad (antes, el fallo del correo cortaba todo con un 500)
     """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    apuntes = []
+    monkeypatch.setattr(
+        modulo.SecurityLogger,
+        "log_password_reset_completed",
+        lambda self, **kw: apuntes.append(kw),
+    )
     uow, cuenta, _d, caso, token = await _escena(verificada=True)
-    caso._email_service.send_google_account_notice.side_effect = RuntimeError("smtp caído")
+    caso._email_service.send_password_changed_notification.side_effect = RuntimeError("smtp")
 
-    await _restablece(caso, token)
+    respuesta = await _restablece(caso, token)
 
+    assert respuesta.email == str(cuenta.email.value)
     async with uow:
         assert (await uow.users.find_by_id(cuenta.id)).verify_password(NUEVA)
-    caso._email_service.send_password_changed_notification.assert_awaited_once()
+    assert [a["success"] for a in apuntes] == [True]

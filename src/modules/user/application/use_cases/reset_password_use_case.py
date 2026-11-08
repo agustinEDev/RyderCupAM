@@ -28,9 +28,9 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
-    avisa_de_google,
     avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
+    manda_sin_romper,
 )
 from src.modules.user.application.services.registra_sin_romper import registra_sin_romper
 from src.modules.user.domain.entities.password_history import PasswordHistory
@@ -137,20 +137,23 @@ class ResetPasswordUseCase:
         self, user: User, cerrado: tuple[int, int, int] | None, google_quitado: int
     ) -> None:
         """
-        Los correos, ya guardado. Si se la quedó, el de cuenta asegurada, que ya dice cuál
-        es la contraseña (BE #753); si no, el de contraseña cambiada y, si se le quitó el
-        Google, el aviso de Google desvinculado de siempre: sin él, el dueño descubría que
-        su Google ya no entra al intentarlo (Agustín, 8 nov 2026). Ese aviso, si falla, no
-        cambia nada.
+        El correo, ya guardado. Si se la quedó, el de cuenta asegurada, que ya dice cuál
+        es la contraseña (BE #753); si no, el de contraseña cambiada, que dice además si
+        se le quitó el Google: sin eso, el dueño descubría que su Google ya no entra al
+        intentarlo (Agustín, 8 nov 2026). Si el correo falla, el restablecimiento ya está
+        hecho: ni cambia la respuesta ni se pierde su línea en el log.
         """
         if cerrado is not None:
             await avisa_de_la_toma(self._email_service, user, "reset")
             return
-        await self._email_service.send_password_changed_notification(
-            to_email=str(user.email.value), user_name=user.get_full_name()
+        await manda_sin_romper(
+            "Password changed notice",
+            self._email_service.send_password_changed_notification(
+                to_email=str(user.email.value),
+                user_name=user.get_full_name(),
+                google_unlinked=bool(google_quitado),
+            ),
         )
-        if google_quitado:
-            await avisa_de_google(self._email_service, user, linked=False)
 
     async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """

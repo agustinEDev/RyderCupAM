@@ -299,10 +299,6 @@ async def link_google_account(
         ) from e
 
 
-# El tope de la IP en los DTOs de la red de la petición
-_MAX_IP = 45
-
-
 @router.delete(
     "/google/unlink",
     response_model=UnlinkGoogleAccountResponseDTO,
@@ -336,16 +332,14 @@ async def unlink_google_account(
         # (D3, tabla aprobada el 8 nov 2026)
         reautenticado = reautenticacion.gasta_si_vale(marca, user_id)
         # Al log de seguridad con la red de la petición, como al vincular
-        ip_address = get_trusted_client_ip(
-            request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
-        )
         desvinculado = await use_case.execute(
             UnlinkGoogleAccountRequestDTO(
                 user_id=user_id,
-                # Una IP que no cabe (una IPv6 con ámbito por el camino antiguo del
-                # proxy) va al log como «unknown»: no tumba la petición con la marca ya
-                # gastada (CodeRabbit en #765)
-                ip_address=ip_address if ip_address and len(ip_address) <= _MAX_IP else None,
+                # Una IPv6 con zona ya llega como None (validate_ip_address): no tumba la
+                # petición con la marca ya gastada (CodeRabbit en #765)
+                ip_address=get_trusted_client_ip(
+                    request, settings.TRUSTED_PROXIES, settings.TRUST_CLOUDFLARE_HEADERS
+                ),
                 user_agent=get_user_agent(request),
             ),
             reautenticado=reautenticado,

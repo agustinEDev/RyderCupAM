@@ -102,13 +102,17 @@ class IEmailService(ABC):
         """
 
     @abstractmethod
-    async def send_password_changed_notification(self, to_email: str, user_name: str) -> bool:
+    async def send_password_changed_notification(
+        self, to_email: str, user_name: str, google_unlinked: bool = False
+    ) -> bool:
         """
         Envía un email notificando que la contraseña fue cambiada exitosamente.
 
         Args:
             to_email: Email del destinatario
             user_name: Nombre del usuario para personalizar
+            google_unlinked: Si al cambiarla se le quitó el Google (restablecer una cuenta
+                verificada): el correo lo dice y cómo volver a vincularlo
 
         Returns:
             True si se envió correctamente, False en caso contrario

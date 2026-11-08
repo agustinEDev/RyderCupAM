@@ -867,3 +867,35 @@ class TestGetTrustedClientIPWithCIDR:
 
         # Then
         assert result == "203.0.113.99"
+
+
+class TestScopedIpv6IsRejected:
+    """
+    Una IPv6 con zona (fe80::1%eth0) no es la de un cliente de Internet y su zona puede
+    medir lo que quiera: no cabe en los 45 caracteres de las columnas y DTOs de IP. Se
+    rechaza como en cloudflare_client_ip (revisiones de #765, 8 nov 2026).
+    """
+
+    def test_validate_ip_address_with_a_long_zone_returns_none(self):
+        """
+        Given: Una IPv6 con una zona de 50 caracteres (58 en total)
+        When: Se valida
+        Then: None: quien la usa no tumba el refresco ni el desvincular con un 400
+        """
+        assert validate_ip_address("fe80::1%" + "a" * 50) is None
+
+    def test_validate_ip_address_with_a_short_zone_returns_none(self):
+        """
+        Given: Una IPv6 con zona corta
+        When: Se valida
+        Then: None, igual: la zona no identifica a un cliente
+        """
+        assert validate_ip_address("fe80::1%eth0") is None
+
+    def test_validate_ip_address_without_a_zone_keeps_the_ipv6(self):
+        """
+        Given: Una IPv6 normal
+        When: Se valida
+        Then: La misma, normalizada
+        """
+        assert validate_ip_address("2001:db8::1") == "2001:db8::1"
