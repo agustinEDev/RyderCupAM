@@ -220,3 +220,21 @@ class TestGoogleUnlinked:
         entrada = json.loads(content.strip().split("\n")[-1])
         assert entrada["extra"]["event_class"] == "GoogleAccountUnlinkedAuditEvent"
         assert entrada["extra"]["severity"] == "HIGH"
+
+    def test_log_google_account_unlinked_on_reset_says_so(self, logger, temp_log_dir):
+        """
+        Given: Un Google quitado al restablecer la contraseña
+        When: Se registra con el helper
+        Then: La línea dice que fue al restablecer, no que lo quitó el usuario
+        """
+        logger.log_google_account_unlinked(
+            user_id="user-reset",
+            ip_address="203.0.113.22",
+            user_agent="Firefox/131.0",
+            via="password_reset",
+        )
+
+        content = (temp_log_dir / "test_security.log").read_text()
+        assert "GOOGLE UNLINKED | User user-reset | on password reset" in content
+        entrada = json.loads(content.strip().split("\n")[-1])
+        assert entrada["extra"]["security_event"]["via"] == "password_reset"

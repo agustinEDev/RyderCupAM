@@ -43,7 +43,7 @@ pytestmark = pytest.mark.asyncio
 NUEVA = "OtraClave#2026segura"
 
 
-async def _escena(verificada: bool):
+async def _escena(verificada: bool, con_google: bool = True):
     uow = InMemoryUnitOfWork()
     cuenta = User.create(
         first_name="Ana",
@@ -71,14 +71,15 @@ async def _escena(verificada: bool):
                 expires_in_days=7,
             )
         )
-        await uow.oauth_accounts.save(
-            UserOAuthAccount.create(
-                user_id=cuenta.id,
-                provider=OAuthProvider.GOOGLE,
-                provider_user_id="google-de-otro",
-                provider_email="otro@example.com",
+        if con_google:
+            await uow.oauth_accounts.save(
+                UserOAuthAccount.create(
+                    user_id=cuenta.id,
+                    provider=OAuthProvider.GOOGLE,
+                    provider_user_id="google-de-otro",
+                    provider_email="otro@example.com",
+                )
             )
-        )
     return (
         uow,
         cuenta,
@@ -296,3 +297,91 @@ async def test_r2b_removing_the_google_on_a_reset_is_recorded():
     async with uow:
         guardada = await uow.users.find_by_id(cuenta.id)
     assert any(isinstance(e, GoogleAccountUnlinkedEvent) for e in guardada.get_domain_events())
+
+
+# Restablecer la contraseña de una cuenta VERIFICADA quita su Google y no quedaba en el
+# log de seguridad (Agustín, 8 nov 2026: corrige el G4 de la tabla). Sin verificar ya
+# queda en la toma, con su `google_unlinked`: ahí no se apunta otra vez
+def _mira_desvinculos(monkeypatch) -> list:
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    apuntes: list = []
+    monkeypatch.setattr(
+        modulo.SecurityLogger,
+        "log_google_account_unlinked",
+        lambda self, **kw: apuntes.append(kw),
+    )
+    return apuntes
+
+
+async def test_reset_verified_with_google_logs_the_google_unlink(monkeypatch):
+    """
+    Given: Una cuenta verificada con un Google vinculado
+    When: Se restablece la contraseña
+    Then: El log apunta el Google quitado, por el restablecimiento, con la red
+    """
+    apuntes = _mira_desvinculos(monkeypatch)
+    _uow, cuenta, _d, caso, token = await _escena(verificada=True)
+
+    await _restablece(caso, token)
+
+    assert apuntes == [
+        {
+            "user_id": str(cuenta.id.value),
+            "via": "password_reset",
+            "ip_address": "203.0.113.7",
+            "user_agent": "Navegador",
+        }
+    ]
+
+
+async def test_reset_verified_without_google_logs_no_google_unlink(monkeypatch):
+    """
+    Given: Una cuenta verificada sin Google
+    When: Se restablece la contraseña
+    Then: Ningún «Google desvinculado» en el log
+    """
+    apuntes = _mira_desvinculos(monkeypatch)
+    _uow, _c, _d, caso, token = await _escena(verificada=True, con_google=False)
+
+    await _restablece(caso, token)
+
+    assert apuntes == []
+
+
+async def test_reset_unverified_claim_logs_no_separate_google_unlink(monkeypatch):
+    """
+    Given: Una cuenta sin verificar con un Google ajeno
+    When: Se restablece la contraseña (se la queda)
+    Then: El Google quitado va solo en la línea de la toma, no en otra
+    """
+    apuntes = _mira_desvinculos(monkeypatch)
+    _uow, _c, _d, caso, token = await _escena(verificada=False)
+
+    await _restablece(caso, token)
+
+    assert apuntes == []
+
+
+async def test_reset_verified_with_broken_google_log_still_resets(monkeypatch):
+    """
+    Given: Una cuenta verificada con Google y un log que falla
+    When: Se restablece la contraseña
+    Then: La contraseña cambia y el Google se quita igual
+    """
+    from src.shared.infrastructure.logging import security_logger as modulo
+
+    def roto(self, **kw):
+        raise RuntimeError("disco lleno")
+
+    monkeypatch.setattr(modulo.SecurityLogger, "log_google_account_unlinked", roto)
+    uow, cuenta, _d, caso, token = await _escena(verificada=True)
+
+    await _restablece(caso, token)
+
+    async with uow:
+        assert (await uow.users.find_by_id(cuenta.id)).verify_password(NUEVA)
+        assert (
+            await uow.oauth_accounts.find_by_user_id_and_provider(cuenta.id, OAuthProvider.GOOGLE)
+            is None
+        )

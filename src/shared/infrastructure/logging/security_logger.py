@@ -535,11 +535,12 @@ class SecurityLogger:
         user_id: str,
         ip_address: str = "unknown",
         user_agent: str = "unknown",
+        via: str = "profile",
     ) -> None:
-        """Helper rápido: un Google desvinculado desde el perfil."""
+        """Helper rápido: un Google desvinculado, desde el perfil o al restablecer."""
         self.log_security_event(
             GoogleAccountUnlinkedAuditEvent(
-                user_id=user_id, ip_address=ip_address, user_agent=user_agent
+                user_id=user_id, ip_address=ip_address, user_agent=user_agent, via=via
             )
         )
 

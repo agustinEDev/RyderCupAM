@@ -227,5 +227,6 @@ class ISecurityAuditLogger(ABC):
         user_id: str,
         ip_address: str = "unknown",
         user_agent: str = "unknown",
+        via: str = "profile",
     ) -> None:
-        """Un Google desvinculado desde el perfil."""
+        """Un Google desvinculado: desde el perfil o al restablecer la contraseña."""
