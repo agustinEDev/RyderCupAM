@@ -307,7 +307,7 @@ async def link_google_account(
     responses={
         400: {
             "description": "No hay Google vinculado, o es el único método para entrar "
-            "(antes hay que poner una contraseña)."
+            "(antes hay que poner una contraseña), u otro fallo."
         }
     },
 )

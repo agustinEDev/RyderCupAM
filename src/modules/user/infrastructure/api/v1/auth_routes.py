@@ -237,7 +237,11 @@ async def register_user(
     responses={
         401: {"description": "Credenciales incorrectas (el mismo texto exista o no el correo)."},
         403: {"description": "`error_code` ACCOUNT_DEACTIVATED: la cuenta está desactivada."},
-        423: {"description": "Cuenta bloqueada por intentos fallidos, hasta la hora que dice."},
+        423: {
+            "description": "Bloqueado por intentos fallidos (la cuenta o su origen), "
+            "hasta la hora que dice."
+        },
+        429: {"description": "Demasiados intentos, por correo o por red; `error_code` dice cuál."},
     },
 )
 @limiter.limit(

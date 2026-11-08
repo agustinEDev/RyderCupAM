@@ -14,8 +14,8 @@ from main import app as fastapi_app
 @pytest.mark.parametrize(
     ("ruta", "metodo", "codigos"),
     [
-        ("/api/v1/users/security", "patch", {"401", "409", "429"}),
-        ("/api/v1/auth/login", "post", {"401", "403", "423"}),
+        ("/api/v1/users/security", "patch", {"400", "401", "404", "409", "429"}),
+        ("/api/v1/auth/login", "post", {"401", "403", "423", "429"}),
         ("/api/v1/auth/google/unlink", "delete", {"400"}),
     ],
 )

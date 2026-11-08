@@ -602,6 +602,8 @@ class TestCorreosDelCambioDeCorreo:
             "Just ignore this email",
         ):
             assert aviso in cuerpo and aviso in texto
+        # El aviso en ámbar del cuerpo, no solo el pie (revisión)
+        assert "Ignora este correo y no pulses el botón." in cuerpo
         for invitacion in (
             "quedártela",
             "será tuya",
