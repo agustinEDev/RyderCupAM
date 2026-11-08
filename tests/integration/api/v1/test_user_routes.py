@@ -894,7 +894,7 @@ class TestUserRoutes:
         )
 
         assert update_response.status_code == status.HTTP_409_CONFLICT
-        assert "already in use" in update_response.json()["detail"]
+        assert update_response.json()["error_code"] == "EMAIL_ALREADY_IN_USE"
 
     async def test_update_security_requires_authentication(self, client: AsyncClient):
         """Verifica que se requiere autenticación."""

@@ -116,17 +116,16 @@ def test_the_mark_cannot_be_set_from_outside():
 
 def test_the_password_maps_to_a_single_column():
     """
-    Given: El mapeo de User (composite de una columna para la contraseña)
-    When: SQLAlchemy saca los valores de un Password
-    Then: Uno solo, el hash: la marca no se cuela en la BD (revisor de arquitectura)
+    Given: El mapeo de User (TypeDecorator de una columna para la contraseña, 8 nov 2026)
+    When: SQLAlchemy convierte un Password para la BD, y lee la columna de vuelta
+    Then: Solo el hash, sin la marca (revisor de arquitectura), y NULL es None
     """
-    from sqlalchemy import inspect
+    from src.modules.user.infrastructure.persistence.sqlalchemy.mappers import PasswordDecorator
 
-    from src.config.mappers import start_all_mappers
-
-    start_all_mappers()
     contrasena = Password.from_plain_text(NUEVA)
+    tipo = PasswordDecorator()
 
-    valores = inspect(User).attrs["_password"]._composite_values_from_instance(contrasena)
-
-    assert valores == (contrasena.hashed_value,)
+    assert tipo.process_bind_param(contrasena, None) == contrasena.hashed_value
+    assert tipo.process_bind_param(None, None) is None
+    assert tipo.process_result_value(contrasena.hashed_value, None) == contrasena
+    assert tipo.process_result_value(None, None) is None

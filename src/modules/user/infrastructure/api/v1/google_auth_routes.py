@@ -48,6 +48,10 @@ from src.modules.user.application.use_cases.unlink_google_account_use_case impor
 )
 from src.modules.user.domain.errors.user_errors import InvalidCredentialsError
 from src.modules.user.domain.exceptions import AccountDeactivatedException
+from src.modules.user.infrastructure.api.v1.codigos_de_cuenta import (
+    CURRENT_PASSWORD_INCORRECT,
+    TEXTOS as TEXTOS_DE_CUENTA,
+)
 from src.modules.user.infrastructure.api.v1.cookie_de_dispositivo import (
     es_la_app_instalada,
     ids_validos_de_la_cookie,
@@ -169,11 +173,10 @@ async def google_login(
 
 
 # Los errores de la marca de reautenticación (BE #753), con su código para traducirlos
-CURRENT_PASSWORD_INCORRECT = "CURRENT_PASSWORD_INCORRECT"  # nosec B105 - an error code, not a password
 ACCOUNT_WITHOUT_PASSWORD = "ACCOUNT_WITHOUT_PASSWORD"  # nosec B105 - an error code, not a password
 REAUTHENTICATION_REQUIRED = "REAUTHENTICATION_REQUIRED"
 _TEXTOS_DE_LA_REAUTENTICACION = {
-    CURRENT_PASSWORD_INCORRECT: "Current password is incorrect.",
+    CURRENT_PASSWORD_INCORRECT: TEXTOS_DE_CUENTA[CURRENT_PASSWORD_INCORRECT],
     ACCOUNT_WITHOUT_PASSWORD: "This account has no password.",
     REAUTHENTICATION_REQUIRED: "Enter your current password first.",
 }
@@ -190,6 +193,11 @@ _TEXTOS_DE_LA_REAUTENTICACION = {
         "usuario (429 TOO_MANY_SECURITY_CHANGES)."
     ),
     tags=["Authentication"],
+    responses={
+        401: {"description": "`error_code` CURRENT_PASSWORD_INCORRECT."},
+        409: {"description": "`error_code` ACCOUNT_WITHOUT_PASSWORD: la cuenta es solo Google."},
+        429: {"description": "`error_code` TOO_MANY_SECURITY_CHANGES."},
+    },
 )
 async def reauthenticate(
     request: Request,
@@ -231,6 +239,16 @@ async def reauthenticate(
     summary="Vincular cuenta Google",
     description="Vincula una cuenta de Google al usuario autenticado.",
     tags=["Authentication"],
+    responses={
+        400: {"description": "Código de Google inválido, o ya vinculada (a él o a otra cuenta)."},
+        403: {
+            "description": (
+                "`error_code` REAUTHENTICATION_REQUIRED (falta la marca de "
+                "/auth/reauthenticate en una cuenta con contraseña) o "
+                "GOOGLE_LINK_NEEDS_VERIFIED_EMAIL (el correo de la cuenta sin verificar)."
+            )
+        },
+    },
 )
 async def link_google_account(
     request: Request,

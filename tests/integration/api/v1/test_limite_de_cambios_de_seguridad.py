@@ -133,3 +133,34 @@ async def test_l5_the_429_has_a_fixed_text_without_the_limit(client: AsyncClient
 
     assert set(cuerpo) == {"detail", "error_code"}
     assert not any(t in cuerpo["detail"] for t in ("10", "hour", "user:"))
+
+
+async def test_codes_a_wrong_current_password_says_so_with_its_code(client: AsyncClient):
+    """
+    Given: Un usuario
+    When: Cambia algo en Seguridad con la contraseña actual mal
+    Then: 401 CURRENT_PASSWORD_INCORRECT, para que la app lo diga en su idioma (probador
+          de la release: salía en inglés)
+    """
+    cookies = await _usuario(client)
+
+    r = await _cambia(client, cookies, **_contrasena())
+
+    assert r.status_code == 401
+    assert r.json()["error_code"] == "CURRENT_PASSWORD_INCORRECT"
+
+
+async def test_codes_an_email_in_use_says_so_with_its_code(client: AsyncClient):
+    """
+    Given: Un usuario y otro con el correo que pide
+    When: Pide ese correo con su contraseña buena
+    Then: 409 EMAIL_ALREADY_IN_USE
+    """
+    otra = f"ocupado-{uuid.uuid4().hex[:8]}@example.com"
+    await create_authenticated_user(client, otra, CLAVE, "Bea", "Ruiz")
+    cookies = await _usuario(client)
+
+    r = await _cambia(client, cookies, current_password=CLAVE, new_email=otra)
+
+    assert r.status_code == 409
+    assert r.json()["error_code"] == "EMAIL_ALREADY_IN_USE"

@@ -107,3 +107,27 @@ async def test_v4_a_used_link_is_refused_as_before(client: AsyncClient):
     r = await client.post("/api/v1/auth/verify-email", json={"token": token})
 
     assert r.status_code == 400
+
+
+async def test_v5_an_unexpected_failure_is_a_500_not_a_bad_link(client: AsyncClient):
+    """
+    Given: La verificación falla por algo que no es el enlace (la BD caída)
+    When: Se abre un enlace
+    Then: 500, no el 400 de «revisa tu enlace»: el enlace puede ser bueno (CodeRabbit
+          en BE #761)
+    """
+    from main import app
+    from src.config.dependencies import get_verify_email_use_case
+
+    class _Roto:
+        async def execute(self, _token):
+            raise RuntimeError("la BD se cayó")
+
+    app.dependency_overrides[get_verify_email_use_case] = _Roto
+    try:
+        r = await client.post("/api/v1/auth/verify-email", json={"token": "cualquiera"})
+    finally:
+        app.dependency_overrides.pop(get_verify_email_use_case, None)
+
+    assert r.status_code == 500
+    assert "verification link" not in r.text

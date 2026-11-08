@@ -238,6 +238,7 @@ class User:
 
     @property
     def password(self) -> Password | None:
+        """La contraseña, o None si la cuenta no tiene (solo Google)."""
         return self._password
 
     @property
