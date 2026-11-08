@@ -243,7 +243,7 @@ class TestUnlinkGoesToTheSecurityLog:
         """
         Given: Un usuario con contraseña y Google vinculado
         When: Desvincula Google
-        Then: Cuando se escribe el log, el Google ya no está guardado
+        Then: El log se escribe después del commit, con el Google ya borrado
         """
 
         async def sigue_vinculado():
@@ -255,16 +255,24 @@ class TestUnlinkGoesToTheSecurityLog:
         estados = []
         auditoria.log_google_account_unlinked.side_effect = lambda **_kw: estados.append("log")
         borrar = uow.oauth_accounts.delete
+        confirmar = uow.commit
 
         async def espia_borrar(cuenta):
             estados.append("borra")
             return await borrar(cuenta)
 
+        async def espia_confirmar():
+            estados.append("commit")
+            return await confirmar()
+
         uow.oauth_accounts.delete = espia_borrar
+        uow.commit = espia_confirmar
 
         await use_case.execute(str(user_with_password.id.value))
 
-        assert estados == ["borra", "log"]
+        # Tras el commit, no solo tras el borrado: un log dentro de la transacción
+        # apuntaría una desvinculación que aún podría deshacerse
+        assert estados.index("borra") < estados.index("commit") < estados.index("log")
         assert await sigue_vinculado() is None
 
     async def test_g1_without_network_data_it_says_unknown(
@@ -340,3 +348,37 @@ class TestUnlinkGoesToTheSecurityLog:
                 is None
             )
         correos.send_google_account_notice.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_g1_a_missing_user_agent_or_ip_still_reaches_the_log_as_unknown(
+    uow, correos, user_with_password, tmp_path, monkeypatch
+):
+    """
+    Given: Una petición sin User-Agent válido ni IP (la ruta recibe None de sus helpers,
+           como con curl sin cabecera) y el log de seguridad DE VERDAD, no un doble
+    When: Desvincula Google
+    Then: La línea GOOGLE UNLINKED se escribe, con «unknown» en la red: un None no
+          puede tumbar el evento y dejar la desvinculación sin rastro (revisión)
+    """
+    from src.modules.user.infrastructure.security import security_audit_logger as adaptador
+    from src.modules.user.infrastructure.security.security_audit_logger import (
+        SecurityAuditLogger,
+    )
+    from src.shared.infrastructure.logging.security_logger import SecurityLogger
+
+    log = SecurityLogger(log_dir=tmp_path, log_file="unlink.log")
+    monkeypatch.setattr(adaptador, "get_security_logger", lambda: log)
+    caso = UnlinkGoogleAccountUseCase(
+        uow=uow, email_service=correos, security_audit=SecurityAuditLogger()
+    )
+
+    await caso.execute(str(user_with_password.id.value), ip_address=None, user_agent=None)
+
+    import json
+
+    escrito = (tmp_path / "unlink.log").read_text()
+    assert f"GOOGLE UNLINKED | User {user_with_password.id.value}" in escrito
+    evento = json.loads(escrito.strip().split("\n")[-1])["extra"]["security_event"]
+    assert evento["user_agent"] == "unknown"
+    assert evento["ip_address"] == "unknown"

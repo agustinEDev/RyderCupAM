@@ -135,6 +135,48 @@ async def test_unlinking_google_is_logged_with_the_network(client: AsyncClient, 
     ]
 
 
+async def test_unlinking_without_a_user_agent_still_writes_the_real_audit_line(
+    client: AsyncClient,
+):
+    """
+    Given: Un usuario con contraseña y Google vinculado, y el log de seguridad DE VERDAD
+    When: Desvincula Google sin cabecera User-Agent (curl, un script)
+    Then: 200, y la línea GOOGLE UNLINKED se escribe con «unknown» (revisión de seguridad:
+          un None de la ruta tumbaba el evento y no quedaba rastro)
+    """
+    import logging
+
+    from src.shared.infrastructure.logging.security_logger import get_security_logger
+
+    class Recoge(logging.Handler):
+        def __init__(self):
+            super().__init__(level=logging.DEBUG)
+            self.registros = []
+
+        def emit(self, record):
+            self.registros.append(record)
+
+    recoge = Recoge()
+    log = get_security_logger()._logger
+    datos, vinculo = await _vincula(client, "desvinculo.sin.ua@example.com")
+    assert vinculo.status_code == 200
+    log.addHandler(recoge)
+    try:
+        respuesta = await client.delete(
+            "/api/v1/auth/google/unlink",
+            headers={"X-CSRF-Token": client.cookies.get("csrf_token", ""), "User-Agent": ""},
+        )
+    finally:
+        log.removeHandler(recoge)
+
+    assert respuesta.status_code == 200, respuesta.text
+    lineas = [r for r in recoge.registros if "GOOGLE UNLINKED" in r.getMessage()]
+    assert [r.getMessage() for r in lineas] == [
+        f"GOOGLE UNLINKED | User {datos['user']['id']} | by the user"
+    ]
+    assert lineas[0].security_event["user_agent"] == "unknown"
+
+
 async def test_a_refused_unlink_is_not_logged(client: AsyncClient, monkeypatch):
     """
     Given: Un usuario con sesión y sin Google vinculado
@@ -163,7 +205,10 @@ async def test_a_broken_log_does_not_change_the_unlink_answer(client: AsyncClien
     Then: 200 igual, y el Google ya no está vinculado
     """
 
+    llamadas = []
+
     def roto(self, **kw):
+        llamadas.append(kw)
         raise RuntimeError("disco lleno")
 
     monkeypatch.setattr(SecurityLogger, "log_google_account_unlinked", roto)
@@ -174,6 +219,7 @@ async def test_a_broken_log_does_not_change_the_unlink_answer(client: AsyncClien
     otra_vez = await _desvincula(client)
 
     assert respuesta.status_code == 200, respuesta.text
+    assert len(llamadas) == 1, "el log tiene que intentarse y fallar"
     assert otra_vez.status_code == 400
 
 

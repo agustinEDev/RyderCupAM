@@ -629,8 +629,10 @@ class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
 @dataclass(frozen=True)
 class GoogleAccountUnlinkedAuditEvent(SecurityAuditEvent):
     """
-    Un Google desvinculado de una cuenta: quita una forma de entrar. Con una sesión
+    Un Google desvinculado desde el perfil: quita una forma de entrar. Con una sesión
     robada y la contraseña, es el paso que deja fuera al dueño que entraba con Google.
+    Los Google que se quitan al tomar una cuenta sin verificar o al restablecer la
+    contraseña no salen aquí: van en `google_unlinked` de UnverifiedAccountClaimedAuditEvent.
     """
 
     def __post_init__(self):

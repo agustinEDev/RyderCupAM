@@ -43,8 +43,8 @@ class UnlinkGoogleAccountUseCase:
         self,
         user_id: str,
         *,
-        ip_address: str = "unknown",
-        user_agent: str = "unknown",
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> UnlinkGoogleAccountResponseDTO:
         """
         Desvincula cuenta Google del usuario.
@@ -100,8 +100,10 @@ class UnlinkGoogleAccountUseCase:
             "Google unlink",
             lambda: self._security_audit.log_google_account_unlinked(
                 user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
+                # Los helpers de la ruta dan None sin cabecera válida, y un None tumbaría
+                # el evento (revisión): sin red conocida, «unknown», como al vincular
+                ip_address=ip_address or "unknown",
+                user_agent=user_agent or "unknown",
             ),
         )
 

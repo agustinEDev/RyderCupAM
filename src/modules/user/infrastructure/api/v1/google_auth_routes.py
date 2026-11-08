@@ -319,7 +319,7 @@ async def unlink_google_account(
     request: Request,
     current_user: UserResponseDTO = Depends(get_current_user),
     use_case: UnlinkGoogleAccountUseCase = Depends(get_unlink_google_account_use_case),
-):
+) -> UnlinkGoogleAccountResponseDTO:
     """Desvincula cuenta Google de usuario autenticado."""
     try:
         # Al log de seguridad con la red de la petición, como al vincular
