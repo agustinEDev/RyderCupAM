@@ -626,6 +626,10 @@ class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
         return base
 
 
+# Cómo se quitó un Google: desde el perfil o al restablecer la contraseña
+GOOGLE_UNLINK_VIAS = frozenset({"profile", "password_reset"})
+
+
 @dataclass(frozen=True)
 class GoogleAccountUnlinkedAuditEvent(SecurityAuditEvent):
     """
@@ -641,6 +645,9 @@ class GoogleAccountUnlinkedAuditEvent(SecurityAuditEvent):
     def __post_init__(self):
         """Validación y severidad: como un cambio de contraseña o de correo, HIGH."""
         super().__post_init__()
+        # Solo los dos caminos conocidos: una errata se apuntaría como «by the user»
+        if self.via not in GOOGLE_UNLINK_VIAS:
+            raise ValueError(f"via must be one of {sorted(GOOGLE_UNLINK_VIAS)}")
         object.__setattr__(self, "severity", SecuritySeverity.HIGH)
 
     def resumen(self, user_info: str) -> str:

@@ -126,8 +126,8 @@ class ResetPasswordUseCase:
             "Google unlink on reset",
             lambda: self._security_audit.log_google_account_unlinked(
                 user_id=str(user.id.value),
-                ip_address=ip_address or "unknown",
-                user_agent=user_agent or "unknown",
+                ip_address=ip_address,
+                user_agent=user_agent,
                 via="password_reset",
             ),
         )

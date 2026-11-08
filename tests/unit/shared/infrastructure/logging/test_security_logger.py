@@ -238,3 +238,16 @@ class TestGoogleUnlinked:
         assert "GOOGLE UNLINKED | User user-reset | on password reset" in content
         entrada = json.loads(content.strip().split("\n")[-1])
         assert entrada["extra"]["security_event"]["via"] == "password_reset"
+
+    def test_google_unlinked_event_with_an_unknown_via_is_refused(self):
+        """
+        Given: Un «via» que no es ni el perfil ni el restablecimiento (una errata)
+        When: Se construye el evento
+        Then: ValueError: el log no puede atribuir al usuario lo que hizo otra cosa
+        """
+        from src.shared.domain.events.security_events import GoogleAccountUnlinkedAuditEvent
+
+        with pytest.raises(ValueError, match="via"):
+            GoogleAccountUnlinkedAuditEvent(
+                user_id="u", ip_address="203.0.113.1", user_agent="Safari", via="reset"
+            )
