@@ -365,6 +365,38 @@ class TestTheButtonsGoWhereTheySay:
         assert enlace in texto
 
     @pytest.mark.asyncio
+    async def test_password_changed_with_google_unlinked_says_so_in_both_languages(self, correo):
+        """
+        Given: Un restablecimiento que le quitó el Google a la cuenta
+        When: Sale el correo de contraseña cambiada
+        Then: Dice, en texto y en HTML, en los dos idiomas, que se desvinculó y cómo
+              volver a vincularlo (Agustín, 8 nov 2026)
+        """
+        await correo.send_password_changed_notification("a@b.com", "Ana", google_unlinked=True)
+        _, _, texto, cuerpo = _enviado(correo)
+        legible = html.unescape(cuerpo)
+        for frase in (
+            "También hemos desvinculado tu cuenta de Google. Si la usabas para entrar, "
+            "vuelve a vincularla desde tu perfil.",
+            "We also unlinked your Google account. If you used it to sign in, link it "
+            "again from your profile.",
+        ):
+            assert frase in texto
+            assert frase in legible
+
+    @pytest.mark.asyncio
+    async def test_password_changed_without_google_unlinked_does_not_mention_google(self, correo):
+        """
+        Given: Un cambio de contraseña sin Google quitado
+        When: Sale el correo
+        Then: Ni una palabra de Google
+        """
+        await correo.send_password_changed_notification("a@b.com", "Ana")
+        _, _, texto, cuerpo = _enviado(correo)
+        assert "Google" not in texto
+        assert "Google" not in cuerpo
+
+    @pytest.mark.asyncio
     async def test_password_changed_offers_to_reset_it(self, correo):
         await correo.send_password_changed_notification("a@b.com", "Ana")
         _, _, _, cuerpo = _enviado(correo)

@@ -626,6 +626,42 @@ class GoogleAccountLinkedAuditEvent(SecurityAuditEvent):
         return base
 
 
+# Cómo se quitó un Google: desde el perfil o al restablecer la contraseña
+GOOGLE_UNLINK_VIAS = frozenset({"profile", "password_reset"})
+
+
+@dataclass(frozen=True)
+class GoogleAccountUnlinkedAuditEvent(SecurityAuditEvent):
+    """
+    Un Google desvinculado: quita una forma de entrar, y con una sesión robada es el paso
+    que deja fuera al dueño que entraba con Google. `via` dice cómo: desde el perfil
+    («profile») o al restablecer la contraseña de una cuenta verificada
+    («password_reset»). Los que se quitan al tomar una cuenta sin verificar van en
+    `google_unlinked` de UnverifiedAccountClaimedAuditEvent, no aquí.
+    """
+
+    via: str = "profile"
+
+    def __post_init__(self):
+        """Validación y severidad: como un cambio de contraseña o de correo, HIGH."""
+        super().__post_init__()
+        # Solo los dos caminos conocidos: una errata se apuntaría como «by the user»
+        if self.via not in GOOGLE_UNLINK_VIAS:
+            raise ValueError(f"via must be one of {sorted(GOOGLE_UNLINK_VIAS)}")
+        object.__setattr__(self, "severity", SecuritySeverity.HIGH)
+
+    def resumen(self, user_info: str) -> str:
+        """La línea del log."""
+        como = "on password reset" if self.via == "password_reset" else "by the user"
+        return f"GOOGLE UNLINKED | {user_info} | {como}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serializa con cómo se desvinculó."""
+        base = super().to_dict()
+        base.update({"via": self.via})
+        return base
+
+
 @dataclass(frozen=True)
 class AccessDeniedEvent(SecurityAuditEvent):
     """

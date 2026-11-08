@@ -16,14 +16,17 @@ sobre la fila bloqueada, y escribir. Sin ella, otra operación a la vez se pisab
 """
 
 import copy
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.modules.user.application.dto.device_dto import (
     RegisterDeviceResponseDTO,
 )
-from src.modules.user.application.dto.oauth_dto import GoogleLoginRequestDTO
+from src.modules.user.application.dto.oauth_dto import (
+    GoogleLoginRequestDTO,
+    UnlinkGoogleAccountRequestDTO,
+)
 from src.modules.user.application.dto.user_dto import ResetPasswordRequestDTO
 from src.modules.user.application.ports.google_oauth_service_interface import GoogleUserInfo
 from src.modules.user.application.use_cases.google_login_use_case import GoogleLoginUseCase
@@ -231,7 +234,9 @@ async def test_b5_unlinking_google_reads_the_account_with_the_row_locked():
     ana = await _ana(uow, con_google=True)
     pedidos = await _espia_del_bloqueo(uow)
 
-    await UnlinkGoogleAccountUseCase(uow, email_service=AsyncMock()).execute(str(ana.id.value))
+    await UnlinkGoogleAccountUseCase(
+        uow, email_service=AsyncMock(), security_audit=MagicMock()
+    ).execute(UnlinkGoogleAccountRequestDTO(user_id=str(ana.id.value)), reautenticado=True)
 
     assert pedidos == [ana.id]
 

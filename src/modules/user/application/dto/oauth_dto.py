@@ -87,6 +87,16 @@ class LinkGoogleAccountResponseDTO(BaseModel):
     provider_email: str = Field(..., description="Email de la cuenta Google vinculada")
 
 
+class UnlinkGoogleAccountRequestDTO(BaseModel):
+    """Request DTO para desvincular la cuenta de Google del usuario autenticado."""
+
+    user_id: str = Field(..., min_length=1, description="ID del usuario autenticado (del JWT)")
+    # Para el log de seguridad, como al vincular: la ruta los pone desde la petición, y
+    # sin cabecera válida llegan a None (el log dice «unknown»)
+    ip_address: str | None = Field(default=None, max_length=45)
+    user_agent: str | None = Field(default=None, max_length=500)
+
+
 class UnlinkGoogleAccountResponseDTO(BaseModel):
     """Response DTO para desvinculación de cuenta Google."""
 

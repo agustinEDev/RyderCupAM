@@ -195,3 +195,59 @@ class TestTermsAccepted:
 
         assert event.severity == SecuritySeverity.LOW
         assert event.to_dict()["terms_version"] == "2026-10-20"
+
+
+class TestGoogleUnlinked:
+    """Desvincular Google queda en el log de seguridad (G1)."""
+
+    def test_log_google_account_unlinked_writes_the_line(self, logger, temp_log_dir):
+        """
+        Given: Un usuario que desvincula su Google
+        When: Se registra con el helper
+        Then: El log lleva la línea GOOGLE UNLINKED, el usuario, la IP, el navegador
+              y el tipo de evento, con severidad alta (quita una forma de entrar)
+        """
+        logger.log_google_account_unlinked(
+            user_id="user-unlink",
+            ip_address="203.0.113.21",
+            user_agent="Safari/18.0",
+        )
+
+        content = (temp_log_dir / "test_security.log").read_text()
+        assert "GOOGLE UNLINKED | User user-unlink" in content
+        assert "203.0.113.21" in content
+        assert "Safari/18.0" in content
+        entrada = json.loads(content.strip().split("\n")[-1])
+        assert entrada["extra"]["event_class"] == "GoogleAccountUnlinkedAuditEvent"
+        assert entrada["extra"]["severity"] == "HIGH"
+
+    def test_log_google_account_unlinked_on_reset_says_so(self, logger, temp_log_dir):
+        """
+        Given: Un Google quitado al restablecer la contraseña
+        When: Se registra con el helper
+        Then: La línea dice que fue al restablecer, no que lo quitó el usuario
+        """
+        logger.log_google_account_unlinked(
+            user_id="user-reset",
+            ip_address="203.0.113.22",
+            user_agent="Firefox/131.0",
+            via="password_reset",
+        )
+
+        content = (temp_log_dir / "test_security.log").read_text()
+        assert "GOOGLE UNLINKED | User user-reset | on password reset" in content
+        entrada = json.loads(content.strip().split("\n")[-1])
+        assert entrada["extra"]["security_event"]["via"] == "password_reset"
+
+    def test_google_unlinked_event_with_an_unknown_via_is_refused(self):
+        """
+        Given: Un «via» que no es ni el perfil ni el restablecimiento (una errata)
+        When: Se construye el evento
+        Then: ValueError: el log no puede atribuir al usuario lo que hizo otra cosa
+        """
+        from src.shared.domain.events.security_events import GoogleAccountUnlinkedAuditEvent
+
+        with pytest.raises(ValueError, match="via"):
+            GoogleAccountUnlinkedAuditEvent(
+                user_id="u", ip_address="203.0.113.1", user_agent="Safari", via="reset"
+            )
