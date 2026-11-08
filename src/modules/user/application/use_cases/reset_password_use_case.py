@@ -28,6 +28,7 @@ from src.modules.user.application.dto.user_dto import (
 from src.modules.user.application.ports.email_service_interface import IEmailService
 from src.modules.user.application.ports.security_audit_interface import ISecurityAuditLogger
 from src.modules.user.application.services.cierra_lo_que_no_se_probo import (
+    avisa_de_google,
     avisa_de_la_toma,
     cierra_lo_que_no_se_probo,
 )
@@ -131,6 +132,25 @@ class ResetPasswordUseCase:
                 via="password_reset",
             ),
         )
+
+    async def _avisa(
+        self, user: User, cerrado: tuple[int, int, int] | None, google_quitado: int
+    ) -> None:
+        """
+        Los correos, ya guardado. Si se la quedó, el de cuenta asegurada, que ya dice cuál
+        es la contraseña (BE #753); si no, el de contraseña cambiada y, si se le quitó el
+        Google, el aviso de Google desvinculado de siempre: sin él, el dueño descubría que
+        su Google ya no entra al intentarlo (Agustín, 8 nov 2026). Ese aviso, si falla, no
+        cambia nada.
+        """
+        if cerrado is not None:
+            await avisa_de_la_toma(self._email_service, user, "reset")
+            return
+        await self._email_service.send_password_changed_notification(
+            to_email=str(user.email.value), user_name=user.get_full_name()
+        )
+        if google_quitado:
+            await avisa_de_google(self._email_service, user, linked=False)
 
     async def execute(self, request: ResetPasswordRequestDTO) -> ResetPasswordResponseDTO:
         """
@@ -302,14 +322,7 @@ class ResetPasswordUseCase:
 
         self._apunta_lo_cerrado(user, cerrado, google_quitado, ip_address, user_agent)
 
-        # Enviar email de confirmación. Si se la quedó, el de cuenta asegurada, que ya
-        # dice cuál es la contraseña (BE #753)
-        if cerrado is not None:
-            await avisa_de_la_toma(self._email_service, user, "reset")
-        else:
-            await self._email_service.send_password_changed_notification(
-                to_email=str(user.email.value), user_name=user.get_full_name()
-            )
+        await self._avisa(user, cerrado, google_quitado)
 
         # Security Logging: Reseteo exitoso
         registra_sin_romper(

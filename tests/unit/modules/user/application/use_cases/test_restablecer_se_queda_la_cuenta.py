@@ -386,3 +386,65 @@ async def test_reset_verified_with_broken_google_log_still_resets(monkeypatch):
             await uow.oauth_accounts.find_by_user_id_and_provider(cuenta.id, OAuthProvider.GOOGLE)
             is None
         )
+
+
+# Y el dueño se entera por correo, con el aviso de Google desvinculado que ya existe
+# (Agustín, 8 nov 2026): sin él, descubría que su Google ya no entra al intentarlo
+
+
+async def test_reset_verified_with_google_sends_the_google_unlinked_notice():
+    """
+    Given: Una cuenta verificada con un Google vinculado
+    When: Se restablece la contraseña
+    Then: El aviso de Google desvinculado, además del de contraseña cambiada
+    """
+    _uow, cuenta, _d, caso, token = await _escena(verificada=True)
+
+    await _restablece(caso, token)
+
+    caso._email_service.send_google_account_notice.assert_awaited_once_with(
+        to_email=str(cuenta.email.value), user_name=cuenta.first_name, linked=False
+    )
+    caso._email_service.send_password_changed_notification.assert_awaited_once()
+
+
+async def test_reset_verified_without_google_sends_no_google_notice():
+    """
+    Given: Una cuenta verificada sin Google
+    When: Se restablece la contraseña
+    Then: Solo el aviso de contraseña cambiada
+    """
+    _uow, _c, _d, caso, token = await _escena(verificada=True, con_google=False)
+
+    await _restablece(caso, token)
+
+    caso._email_service.send_google_account_notice.assert_not_awaited()
+
+
+async def test_reset_unverified_claim_sends_no_separate_google_notice():
+    """
+    Given: Una cuenta sin verificar con un Google ajeno
+    When: Se restablece la contraseña (se la queda)
+    Then: Solo el aviso de cuenta asegurada, sin otro de Google
+    """
+    _uow, _c, _d, caso, token = await _escena(verificada=False)
+
+    await _restablece(caso, token)
+
+    caso._email_service.send_google_account_notice.assert_not_awaited()
+
+
+async def test_reset_verified_with_a_failing_google_notice_keeps_the_reset():
+    """
+    Given: Una cuenta verificada con Google y el aviso de Google que falla
+    When: Se restablece la contraseña
+    Then: La contraseña queda cambiada y el aviso de contraseña sale igual
+    """
+    uow, cuenta, _d, caso, token = await _escena(verificada=True)
+    caso._email_service.send_google_account_notice.side_effect = RuntimeError("smtp caído")
+
+    await _restablece(caso, token)
+
+    async with uow:
+        assert (await uow.users.find_by_id(cuenta.id)).verify_password(NUEVA)
+    caso._email_service.send_password_changed_notification.assert_awaited_once()
