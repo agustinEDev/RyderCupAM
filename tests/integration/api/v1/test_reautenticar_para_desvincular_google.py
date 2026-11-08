@@ -30,6 +30,7 @@ CLAVE = "V@l1dP@ss123!"
 
 @pytest.fixture(autouse=True)
 def limpio():
+    """Límites limpios y sin el Google simulado de otro test."""
     limiter.reset()
     yield
     limiter.reset()
@@ -37,10 +38,12 @@ def limpio():
 
 
 def _csrf(client: AsyncClient) -> dict:
+    """La cabecera CSRF con el token de la sesión del cliente."""
     return {"X-CSRF-Token": client.cookies.get("csrf_token", "")}
 
 
 async def _usuario(client: AsyncClient, email: str) -> dict:
+    """Un usuario con contraseña, el correo verificado y su sesión puesta en el cliente."""
     from tests.integration.api.v1.test_sesion_desactivada_y_codigos import _sql
 
     datos = await create_authenticated_user(client, email, CLAVE, "Ana", "Lopez")
@@ -71,6 +74,7 @@ async def _con_google(client: AsyncClient, email: str) -> dict:
 
 
 async def _reautentica(client: AsyncClient) -> Response:
+    """Confirma la contraseña: deja la marca de 5 minutos."""
     r = await client.post(
         "/api/v1/auth/reauthenticate", json={"password": CLAVE}, headers=_csrf(client)
     )
@@ -79,10 +83,12 @@ async def _reautentica(client: AsyncClient) -> Response:
 
 
 async def _desvincula(client: AsyncClient) -> Response:
+    """DELETE /auth/google/unlink con el CSRF."""
     return await client.delete("/api/v1/auth/google/unlink", headers=_csrf(client))
 
 
 async def _sigue_vinculado(email: str) -> bool:
+    """Si la cuenta de ese correo sigue con su Google, según la BD."""
     from tests.integration.api.v1.test_terms_acceptance_endpoints import _sql
 
     filas = await _sql(
@@ -94,6 +100,7 @@ async def _sigue_vinculado(email: str) -> bool:
 
 
 def _cookie_de_la_marca(r: Response) -> str | None:
+    """La cabecera Set-Cookie de la marca, si la respuesta la trae."""
     for k, v in r.headers.multi_items():
         if k == "set-cookie" and v.startswith(f"{reautenticacion.COOKIE}="):
             return v
@@ -101,6 +108,7 @@ def _cookie_de_la_marca(r: Response) -> str | None:
 
 
 def _ponle_la_marca(client: AsyncClient, marca: str) -> None:
+    """Pone a mano una marca en el cliente, en su ruta."""
     client.cookies.set(reautenticacion.COOKIE, marca, path=reautenticacion.RUTA)
 
 
@@ -252,3 +260,24 @@ async def test_unlink_with_the_mark_spent_on_linking_answers_403(client: AsyncCl
 
     assert r.status_code == 403
     assert await _sigue_vinculado(email)
+
+
+async def test_unlink_with_an_oversized_proxy_ip_still_unlinks(client: AsyncClient):
+    """
+    Given: Un usuario con Google, la contraseña confirmada y una IP de proxy de más de 45
+           caracteres (una IPv6 con ámbito por el camino antiguo de X-Forwarded-For)
+    When: Desvincula Google
+    Then: 200 y desvinculado: la IP que no cabe va al log como «unknown», no tumba la
+          petición con la marca ya gastada (CodeRabbit en #765)
+    """
+    email = "ip.larga@example.com"
+    await _con_google(client, email)
+    await _reautentica(client)
+
+    r = await client.delete(
+        "/api/v1/auth/google/unlink",
+        headers={**_csrf(client), "X-Forwarded-For": "fe80::1%" + "a" * 50},
+    )
+
+    assert r.status_code == 200, r.text
+    assert not await _sigue_vinculado(email)

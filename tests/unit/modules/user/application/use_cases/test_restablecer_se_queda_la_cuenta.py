@@ -303,6 +303,7 @@ async def test_r2b_removing_the_google_on_a_reset_is_recorded():
 # log de seguridad (Agustín, 8 nov 2026: corrige el G4 de la tabla). Sin verificar ya
 # queda en la toma, con su `google_unlinked`: ahí no se apunta otra vez
 def _mira_desvinculos(monkeypatch) -> list:
+    """Sustituye el log de Google desvinculado por una lista que lo apunta."""
     from src.shared.infrastructure.logging import security_logger as modulo
 
     apuntes: list = []

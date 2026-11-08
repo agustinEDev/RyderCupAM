@@ -27,11 +27,13 @@ def uow():
 
 @pytest.fixture
 def auditoria():
+    """El log de seguridad, simulado."""
     return MagicMock()
 
 
 @pytest.fixture
 def correos():
+    """El servicio de correo, simulado."""
     return AsyncMock()
 
 

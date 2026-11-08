@@ -100,6 +100,7 @@ async def test_a_broken_log_does_not_change_the_link_answer(client: AsyncClient,
 
 
 async def _reautentica(client: AsyncClient) -> None:
+    """Confirma la contraseña antes de desvincular."""
     # Desvincular pide la contraseña, como vincular (tabla D, 8 nov 2026)
     r = await client.post(
         "/api/v1/auth/reauthenticate",
@@ -110,6 +111,7 @@ async def _reautentica(client: AsyncClient) -> None:
 
 
 async def _desvincula(client: AsyncClient):
+    """Confirma la contraseña y desvincula, con navegador e IP conocidos."""
     await _reautentica(client)
     return await client.delete(
         "/api/v1/auth/google/unlink",
@@ -162,6 +164,7 @@ async def test_unlink_without_user_agent_writes_the_real_line(client: AsyncClien
     original = SecurityLogger.log_security_event
 
     def mira(self, event):
+        """Apunta el evento y su línea, y lo escribe como siempre."""
         escritos.append((event, self._build_message(event)))
         return original(self, event)
 
