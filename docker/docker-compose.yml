@@ -41,6 +41,10 @@ services:
       - "${DOCKER_APP_PORT:-8001}:8000"
     volumes:
       - ..:/app
+      # Los logs, en su propio volumen: el checkout montado en /app es del usuario del
+      # equipo y el de la imagen (uid 10001) no podría escribir el log de seguridad.
+      # El volumen nuevo se crea con el /app/logs de la imagen, que es suyo
+      - app_logs:/app/logs
       - ./scripts/validate-app-env.sh:/validate-app-env.sh:ro
     env_file:
       - path: .env
@@ -110,3 +114,4 @@ services:
 
 volumes:
   postgres_data:
+  app_logs:

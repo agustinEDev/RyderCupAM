@@ -136,3 +136,23 @@ def test_the_locks_are_resolved_for_the_platform_of_render():
     assert "docker run --rm --platform linux/amd64" in guion
     # Y compila también la fuente del lock de arranque
     assert "for fuente in requirements.txt requirements-bootstrap.txt" in guion
+
+
+def test_the_dev_compose_gives_logs_its_own_named_volume():
+    """
+    Given: docker/docker-compose.yml, que monta el checkout entero sobre /app
+    When: se mira cómo monta /app/logs
+    Then: con un volumen con nombre declarado: el checkout del equipo no es escribible
+          por el usuario 10001 de la imagen, y el log de seguridad se perdería
+          (CodeRabbit en BE #774)
+    """
+    import yaml
+
+    compose = yaml.safe_load((RAIZ / "docker" / "docker-compose.yml").read_text(encoding="utf-8"))
+    montajes = compose["services"]["app"]["volumes"]
+    de_logs = [m for m in montajes if str(m).endswith(":/app/logs")]
+
+    assert len(de_logs) == 1
+    volumen = de_logs[0].split(":")[0]
+    assert not volumen.startswith((".", "/"))  # con nombre, no un directorio del equipo
+    assert volumen in (compose.get("volumes") or {})
