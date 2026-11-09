@@ -287,22 +287,6 @@ app.add_exception_handler(TermsNotAcceptedError, terms_not_accepted_handler)
 
 
 # ================================
-# SECURITY HEADERS MIDDLEWARE
-# ================================
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    """
-    Middleware para añadir Security Headers HTTP a todas las respuestas.
-
-    La política (y el porqué de cada cabecera) vive en
-    src/shared/infrastructure/http/security_headers.py, con sus tests.
-    """
-    response = await call_next(request)
-    apply_security_headers(response)
-    return response
-
-
-# ================================
 # AVATAR UPLOAD SIZE GUARD (Content-Length fast-fail)
 # ================================
 # Rechaza subidas de avatar por encima del límite ANTES de que FastAPI/Starlette
@@ -383,7 +367,7 @@ app.add_middleware(SentryUserContextMiddleware)
 app.add_middleware(CorrelationMiddleware)
 
 # Debug middleware para ver requests CORS (solo en desarrollo)
-# Este debe ir AL FINAL para que se ejecute PRIMERO y vea todo
+# Va casi al final para ejecutarse casi primero (solo le envuelve el de las cabeceras)
 ENV = os.getenv("ENVIRONMENT", "development").lower()
 if ENV != "production":
 
@@ -421,6 +405,25 @@ if ENV != "production":
                 print("   ⚠️  NO CORS headers in response!")
 
         return response
+
+
+# ================================
+# SECURITY HEADERS MIDDLEWARE
+# ================================
+# El ÚLTIMO en registrarse: el más externo. Así llevan las cabeceras también el 403
+# del CSRF, el preflight que contesta CORS y el 500 del UnhandledErrorMiddleware, que
+# se las saltaban cuando era el más interno (F-15)
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """
+    Middleware para añadir Security Headers HTTP a todas las respuestas.
+
+    La política (y el porqué de cada cabecera) vive en
+    src/shared/infrastructure/http/security_headers.py, con sus tests.
+    """
+    response = await call_next(request)
+    apply_security_headers(response, request.url.path)
+    return response
 
 
 # Incluir los routers de la API
