@@ -19,7 +19,6 @@ OWASP Coverage:
 
 import contextlib
 import functools
-import os
 import re
 import secrets
 from collections.abc import Mapping
@@ -27,9 +26,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 
-import bcrypt
-
-from src.shared.security.password_blacklist import is_common_password
+from src.modules.user.domain.services.password_hasher import hasher_de_contrasenas
+from src.modules.user.domain.value_objects.password_blacklist import is_common_password
 
 
 class CodigoDeContrasena(StrEnum):
@@ -87,11 +85,6 @@ class Password:
 
     MIN_LENGTH = 12  # OWASP recomienda 12+ desde 2024 (antes era 8)
     MAX_LENGTH = 128  # Límite técnico razonable
-    # bcrypt solo usa los primeros 72 BYTES. bcrypt 4 recortaba el resto en silencio;
-    # bcrypt 5 lanza ValueError. Se recorta aquí, igual que hacía bcrypt 4, para que
-    # los hashes guardados sigan valiendo. Una contraseña de 128 caracteres, o de
-    # menos con eñes o acentos (2 bytes cada uno), pasa de 72 bytes.
-    BCRYPT_MAX_BYTES = 72
     hashed_value: str
     # Solo la pone from_plain_text: el usuario acepta un Password ya calculado (el
     # bcrypt fuera de la transacción, BE #283) solo si pasó por la política. Fuera del
@@ -141,21 +134,10 @@ class Password:
         object.__setattr__(contrasena, "de_texto_plano", True)
         return contrasena
 
-    @classmethod
-    def _bcrypt_bytes(cls, plain_password: str) -> bytes:
-        """Los bytes que ve bcrypt: la contraseña en UTF-8, recortada a 72 bytes."""
-        return plain_password.encode("utf-8")[: cls.BCRYPT_MAX_BYTES]
-
     @staticmethod
     def _hash_password(plain_password: str) -> str:
-        """Hashea password con bcrypt y salt."""
-        # Usar rounds mínimo de bcrypt para tests (4 es el mínimo permitido)
-        # 4 rounds en tests: ~5ms por hash (ya optimizado vs 12 rounds)
-        # 12 rounds en producción: ~200ms por hash (seguro según OWASP)
-        rounds = 4 if os.getenv("TESTING") == "true" else 12
-        salt = bcrypt.gensalt(rounds=rounds)
-        hashed = bcrypt.hashpw(Password._bcrypt_bytes(plain_password), salt)
-        return hashed.decode("utf-8")
+        """El hash, con el hasher que instala la composition root (bcrypt, 12 rondas)."""
+        return hasher_de_contrasenas().hash(plain_password)
 
     @classmethod
     def _validate_password_strength(cls, password: str) -> str | None:
@@ -254,16 +236,16 @@ class Password:
         depende de que el azar no acierte.
         """
         # Mismo trato que `verify` ante un error de bcrypt: no es la respuesta
+        relleno = cls._relleno()
         with contextlib.suppress(Exception):
-            bcrypt.checkpw(cls._bcrypt_bytes(plain_password), cls._relleno().encode("utf-8"))
+            hasher_de_contrasenas().matches(plain_password, relleno)
         return False
 
     def verify(self, plain_password: str) -> bool:
         """Verifica si un password plano coincide con el hash."""
+        hasher = hasher_de_contrasenas()
         try:
-            return bcrypt.checkpw(
-                self._bcrypt_bytes(plain_password), self.hashed_value.encode("utf-8")
-            )
+            return hasher.matches(plain_password, self.hashed_value)
         except Exception:
             return False
 

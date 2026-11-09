@@ -2,7 +2,11 @@
 
 import pytest
 
-from src.shared.security.password_blacklist import _ENTRIES, COMMON_PASSWORDS, is_common_password
+from src.modules.user.domain.value_objects.password_blacklist import (
+    _ENTRIES,
+    COMMON_PASSWORDS,
+    is_common_password,
+)
 
 
 @pytest.mark.parametrize("entrada", sorted(_ENTRIES))

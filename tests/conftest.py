@@ -24,6 +24,11 @@ sys.path.insert(0, str(project_root))
 # para que settings.py las cargue correctamente
 os.environ["TESTING"] = "true"
 
+# bcrypt con 4 rondas en los tests (~5 ms por hash frente a ~200 ms con las 12 de
+# producción). Lo lee src/config/contrasenas.py al instalar el hasher; antes lo
+# decidía el dominio mirando TESTING (auditoría de arquitectura del 9 nov 2026, B2)
+os.environ["BCRYPT_ROUNDS"] = "4"
+
 # Configuración de seguridad para Device Fingerprinting (v1.13.1)
 # En testing, configuramos una IP "mágica" como proxy confiable
 # que el AsyncClient simulará como su origen. Esto permite que

@@ -1,0 +1,83 @@
+"""El adaptador de bcrypt del puerto PasswordHasher (auditoría del 9 nov 2026, B2)."""
+
+import bcrypt
+import pytest
+
+from src.config.contrasenas import rondas_de_bcrypt
+from src.modules.user.domain.services import password_hasher
+from src.modules.user.infrastructure.security.bcrypt_password_hasher import (
+    BcryptPasswordHasher,
+)
+
+
+def test_hashes_with_the_given_cost_and_checks_it():
+    """
+    Given: el adaptador con 12 rondas, las de producción
+    When: se calcula un hash y se comprueba
+    Then: el hash es bcrypt de coste 12 y solo casa con su contraseña
+    """
+    hasher = BcryptPasswordHasher(rounds=12)
+
+    hashed = hasher.hash("V@l1dP@ss123!")
+
+    assert hashed.startswith("$2b$12$")
+    assert hasher.matches("V@l1dP@ss123!", hashed) is True
+    assert hasher.matches("V@l1dP@ss124!", hashed) is False
+
+
+def test_cuts_to_72_bytes_like_bcrypt_4_did():
+    """
+    Given: una contraseña de más de 72 bytes (bcrypt 5 lanza ValueError con ella)
+    When: se calcula el hash y se comprueba
+    Then: se recorta a 72 bytes, como hacía bcrypt 4, y los hashes guardados
+          con bcrypt 4 siguen valiendo
+    """
+    hasher = BcryptPasswordHasher(rounds=4)
+    larga = "Ñ" * 40 + "a1!A"  # 84 bytes en UTF-8
+
+    guardado_con_bcrypt_4 = bcrypt.hashpw(larga.encode()[:72], bcrypt.gensalt(4)).decode()
+
+    assert hasher.matches(larga, hasher.hash(larga)) is True
+    assert hasher.matches(larga, guardado_con_bcrypt_4) is True
+
+
+@pytest.mark.parametrize("rondas", [3, 32])
+def test_rejects_a_cost_bcrypt_does_not_accept(rondas):
+    """
+    Given: un coste fuera del rango de bcrypt (4 a 31)
+    When: se crea el adaptador
+    Then: falla al crearlo, no al primer login
+    """
+    with pytest.raises(ValueError):
+        BcryptPasswordHasher(rounds=rondas)
+
+
+def test_production_cost_is_12_when_nothing_is_configured():
+    """
+    Given: un entorno sin BCRYPT_ROUNDS (producción)
+    When: se leen las rondas
+    Then: son 12
+    """
+    assert rondas_de_bcrypt({}) == 12
+    assert rondas_de_bcrypt({"BCRYPT_ROUNDS": "4"}) == 4
+
+
+def test_the_testing_flag_no_longer_lowers_the_cost():
+    """
+    Given: TESTING=true en el entorno, sin BCRYPT_ROUNDS
+    When: se leen las rondas
+    Then: siguen siendo 12: un TESTING olvidado en Render ya no abarata los
+          hashes (F-06 de la auditoría de seguridad)
+    """
+    assert rondas_de_bcrypt({"TESTING": "true"}) == 12
+
+
+def test_the_composition_root_installs_bcrypt():
+    """
+    Given: la app cargada (los tests importan main)
+    When: se mira el hasher instalado
+    Then: es el de bcrypt
+    """
+    import src.config.dependencies  # noqa: F401 - la composition root lo instala
+
+    assert isinstance(password_hasher.hasher_de_contrasenas(), BcryptPasswordHasher)

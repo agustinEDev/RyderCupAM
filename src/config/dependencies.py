@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config.aviso_en_segundo_plano import AvisoDeFallosEnSegundoPlano, AvisoEnSegundoPlano
+from src.config.contrasenas import instala_el_hasher_de_contrasenas
 from src.config.cupo_de_avisos import cupo_de_avisos
 from src.config.cupo_de_contacto import cupo_de_contacto
 from src.config.database import async_session_maker
@@ -730,6 +731,10 @@ from src.shared.infrastructure.security.jwt_handler import (
     JWTTokenService,
     verify_access_token,
 )
+
+# El hash de las contraseñas: lo decide la infraestructura (bcrypt, 12 rondas) y se
+# instala aquí, al cargar la composition root, antes de cualquier petición
+instala_el_hasher_de_contrasenas()
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
