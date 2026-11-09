@@ -81,3 +81,38 @@ def test_the_composition_root_installs_bcrypt():
     import src.config.dependencies  # noqa: F401 - la composition root lo instala
 
     assert isinstance(password_hasher.hasher_de_contrasenas(), BcryptPasswordHasher)
+
+
+@pytest.mark.parametrize("rondas", ["4", "11"])
+def test_production_refuses_fewer_than_12_rounds(rondas):
+    """
+    Given: ENVIRONMENT=production con BCRYPT_ROUNDS por debajo de 12
+    When: se leen las rondas al arrancar
+    Then: la app no arranca: un 4 puesto por error en Render abarataría los
+          hashes sin avisar (revisión de la PR, F-06)
+    """
+    with pytest.raises(RuntimeError, match="BCRYPT_ROUNDS"):
+        rondas_de_bcrypt({"ENVIRONMENT": "production", "BCRYPT_ROUNDS": rondas})
+    with pytest.raises(RuntimeError, match="BCRYPT_ROUNDS"):
+        rondas_de_bcrypt({"ENVIRONMENT": "Production", "BCRYPT_ROUNDS": rondas})
+
+
+def test_production_accepts_12_or_more():
+    """
+    Given: ENVIRONMENT=production con 12 o 13 rondas
+    When: se leen
+    Then: valen
+    """
+    assert rondas_de_bcrypt({"ENVIRONMENT": "production", "BCRYPT_ROUNDS": "13"}) == 13
+    assert rondas_de_bcrypt({"ENVIRONMENT": "production"}) == 12
+
+
+@pytest.mark.parametrize("valor", ["", "doce", "  "])
+def test_an_unusable_value_falls_back_to_12(valor):
+    """
+    Given: BCRYPT_ROUNDS vacía o con una errata
+    When: se leen las rondas
+    Then: se usan las 12 de producción (vaciar la variable en Render es la forma
+          natural de quitarla), no un error al arrancar
+    """
+    assert rondas_de_bcrypt({"BCRYPT_ROUNDS": valor}) == 12

@@ -78,6 +78,11 @@ PERMITIDOS = {
 }
 
 
+# Formas de cargar código sin la sentencia `import`: cuentan como un paquete no
+# permitido, así que un `__import__("bcrypt")` no se salta la lista
+PUERTAS_DE_ATRAS = frozenset({"__import__", "eval", "exec"})
+
+
 def _ficheros_de(capa: str) -> list[Path]:
     raices = [p / capa for p in (SRC / "modules").iterdir() if (p / capa).is_dir()]
     raices.append(SRC / "shared" / capa)
@@ -89,6 +94,13 @@ def _imports_externos(fichero: Path) -> set[tuple[str, int]]:
     arbol = ast.parse(fichero.read_text(encoding="utf-8"), filename=str(fichero))
     encontrados: set[tuple[str, int]] = set()
     for nodo in ast.walk(arbol):
+        if (
+            isinstance(nodo, ast.Call)
+            and isinstance(nodo.func, ast.Name)
+            and nodo.func.id in PUERTAS_DE_ATRAS
+        ):
+            encontrados.add((nodo.func.id, nodo.lineno))
+            continue
         if isinstance(nodo, ast.Import):
             nombres = [alias.name for alias in nodo.names]
         elif isinstance(nodo, ast.ImportFrom):
@@ -149,6 +161,28 @@ def test_todo_paquete_de_un_modulo_es_una_capa() -> None:
     ]
 
     assert fuera == [], "Paquetes fuera de las tres capas:\n" + "\n".join(fuera)
+
+
+@pytest.mark.parametrize(
+    "codigo",
+    [
+        "m = __import__('bcrypt')\n",
+        "m = eval('1')\n",
+        "exec('import bcrypt')\n",
+    ],
+)
+def test_el_detector_ve_los_imports_por_la_puerta_de_atras(tmp_path: Path, codigo: str) -> None:
+    """
+    Given: un fichero que importa sin `import` (__import__, eval, exec)
+    When: se comprueba
+    Then: sale como infracción: se saltaría la lista de permitidos
+    """
+    falso = tmp_path / "sonda.py"
+    falso.write_text(codigo, encoding="utf-8")
+
+    encontrados = {paquete for paquete, _ in _imports_externos(falso)}
+
+    assert encontrados & PUERTAS_DE_ATRAS
 
 
 def test_el_detector_ve_un_import_escondido_en_una_funcion(tmp_path: Path) -> None:
