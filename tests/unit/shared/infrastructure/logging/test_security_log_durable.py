@@ -16,6 +16,7 @@ from src.config import sentry_config
 from src.shared.domain.events.security_events import (
     LoginAttemptEvent,
     LogoutEvent,
+    PasswordResetCompletedAuditEvent,
     RefreshTokenRevokedEvent,
 )
 from src.shared.infrastructure.logging import security_logger as modulo
@@ -42,7 +43,20 @@ def enviados(monkeypatch):
         llamadas.append((mensaje, kwargs))
 
     monkeypatch.setattr(modulo.sentry_sdk, "capture_message", _captura)
+    # El tope de Sentry (1 por tipo cada 10 min), a cero en cada test
+    monkeypatch.setattr(modulo, "_TOPE", modulo.TopeDeSentry())
     return llamadas
+
+
+def _reset_hecho() -> PasswordResetCompletedAuditEvent:
+    """Una contraseña restablecida: HIGH, va a Sentry, y lleva el correo de la cuenta."""
+    return PasswordResetCompletedAuditEvent(
+        user_id=USUARIO,
+        email=CORREO,
+        success=True,
+        ip_address=IP,
+        user_agent="Mozilla/5.0",
+    )
 
 
 def _fallo_de_login() -> LoginAttemptEvent:
@@ -112,22 +126,29 @@ def test_stdout_follows_the_current_stdout(tmp_path, capsys, enviados):
 
 def test_a_high_event_goes_to_sentry_as_a_warning_without_pii(audit, enviados):
     """
-    Given: Un login fallido (HIGH), que lleva el correo
+    Given: Una contraseña restablecida (HIGH), que lleva el correo
     When: Se registra
     Then: Llega a Sentry como warning, agrupado por tipo, con el usuario, sin la IP ni
           el correo ni nada fuera de la lista permitida
     """
-    audit.log_security_event(_fallo_de_login())
+    audit.log_security_event(_reset_hecho())
 
     [(mensaje, datos)] = enviados
     assert datos["level"] == "warning"
-    assert mensaje == "Security event: LoginAttemptEvent"
-    assert datos["fingerprint"] == ["security-event", "LoginAttemptEvent"]
+    assert mensaje == "Security event: PasswordResetCompletedAuditEvent"
+    assert datos["fingerprint"] == ["security-event", "PasswordResetCompletedAuditEvent"]
     assert datos["user"] == {"id": USUARIO}
     contexto = datos["contexts"]["security_event"]
     assert contexto["user_id"] == USUARIO
     # Sin IP: el id basta, y la IP se queda en el log (revisión de la fase 2)
-    assert set(contexto) <= {"event_id", "event_type", "occurred_on", "severity", "user_id"}
+    assert set(contexto) <= {
+        "event_id",
+        "event_type",
+        "occurred_on",
+        "severity",
+        "user_id",
+        "omitted_since_last",
+    }
     assert IP not in json.dumps(datos, default=str)
     assert CORREO not in json.dumps(datos, default=str)
     assert CORREO not in mensaje
@@ -204,11 +225,14 @@ def test_a_sentry_failure_does_not_break_the_log(audit, tmp_path, capsys, monkey
         raise RuntimeError("sentry caído")
 
     monkeypatch.setattr(modulo.sentry_sdk, "capture_message", _revienta)
+    monkeypatch.setattr(modulo, "_TOPE", modulo.TopeDeSentry())
     capsys.readouterr()
 
-    audit.log_security_event(_fallo_de_login())
+    audit.log_security_event(_reset_hecho())
 
-    assert "LoginAttemptEvent" in (tmp_path / "audit.log").read_text(encoding="utf-8")
+    assert "PasswordResetCompletedAuditEvent" in (tmp_path / "audit.log").read_text(
+        encoding="utf-8"
+    )
     assert len(_lineas_json(capsys.readouterr().out)) == 1
 
 

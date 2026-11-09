@@ -22,6 +22,9 @@ import hashlib
 import logging
 import logging.handlers
 import sys
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -41,6 +44,7 @@ from ...domain.events.security_events import (
     LoginAttemptEvent,
     LogoutEvent,
     PasswordChangedEvent,
+    PasswordResetRequestedAuditEvent,
     RateLimitExceededEvent,
     RefreshRejectedAuditEvent,
     RefreshTokenRevokedEvent,
@@ -97,24 +101,81 @@ def datos_para_sentry(event: SecurityAuditEvent) -> dict[str, Any]:
     }
 
 
+def solo_en_el_log(event: SecurityAuditEvent) -> bool:
+    """
+    Los eventos que no van a Sentry aunque sean HIGH (Agustín, 9 nov 2026): los
+    logins fallidos y los restablecimientos pedidos para un correo que no es de nadie.
+    Son los más frecuentes y no dicen nada que el log (stdout) no guarde ya.
+    """
+    if isinstance(event, LoginAttemptEvent):
+        return not event.success
+    return isinstance(event, PasswordResetRequestedAuditEvent) and event.user_id is None
+
+
+class TopeDeSentry:
+    """
+    Como mucho un evento HIGH por tipo cada 10 minutos, por proceso (cupo de Sentry).
+
+    El que sale dice cuántos de su tipo se omitieron desde el anterior. Los CRITICAL
+    no pasan por aquí: van siempre.
+    """
+
+    VENTANA_S = 600
+
+    def __init__(self, reloj: Callable[[], float] = time.monotonic) -> None:
+        """
+        Args:
+            reloj: La hora en segundos; monotónica, para que un cambio de hora del
+                sistema no abra ni cierre la ventana
+        """
+        self._reloj = reloj
+        self._cerrojo = threading.Lock()
+        self._ultimo: dict[str, float] = {}
+        self._omitidos: dict[str, int] = {}
+
+    def deja_pasar(self, tipo: str) -> int | None:
+        """Los omitidos desde el último de ese tipo si este sale; None si no sale."""
+        with self._cerrojo:
+            ahora = self._reloj()
+            ultimo = self._ultimo.get(tipo)
+            if ultimo is not None and ahora - ultimo < self.VENTANA_S:
+                self._omitidos[tipo] = self._omitidos.get(tipo, 0) + 1
+                return None
+            self._ultimo[tipo] = ahora
+            return self._omitidos.pop(tipo, 0)
+
+
+_TOPE = TopeDeSentry()
+
+
 def avisa_a_sentry(event: SecurityAuditEvent) -> None:
     """Manda a Sentry un evento HIGH (warning) o CRITICAL (error); los demás, no.
 
     Uno por tipo de evento (fingerprint), con el id del usuario, nunca el correo ni
-    la IP. Si Sentry falla, solo se apunta el tipo del error: ni la petición ni
-    el log de auditoría dependen de Sentry.
+    la IP. Los HIGH, con tope (TopeDeSentry); los logins fallidos y los
+    restablecimientos a un correo desconocido, nunca (solo_en_el_log). Si Sentry
+    falla, solo se apunta el tipo del error: ni la petición ni el log de auditoría
+    dependen de Sentry.
     """
     nivel = _NIVEL_EN_SENTRY.get(event.severity)
-    if nivel is None:
+    if nivel is None or solo_en_el_log(event):
         return
     tipo = event.__class__.__name__
+    omitidos = 0
+    if event.severity is not SecuritySeverity.CRITICAL:
+        pasa = _TOPE.deja_pasar(tipo)
+        if pasa is None:
+            return
+        omitidos = pasa
     try:
         sentry_sdk.capture_message(
             f"Security event: {tipo}",
             level=nivel,
             fingerprint=["security-event", tipo],
             tags={ETIQUETA_DE_EVENTO_DE_SEGURIDAD: tipo, "security_severity": event.severity.value},
-            contexts={"security_event": datos_para_sentry(event)},
+            contexts={
+                "security_event": {**datos_para_sentry(event), "omitted_since_last": omitidos}
+            },
             user={"id": event.user_id} if event.user_id else None,
         )
     except Exception as error:
