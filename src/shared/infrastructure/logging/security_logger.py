@@ -56,11 +56,12 @@ from .formatters import JsonFormatter, PythonLoggingFormatter
 
 logger = logging.getLogger(__name__)
 
-# Lo que llega a Sentry de cada evento: el id del usuario y la IP como único dato
-# personal (F-05b). Sentry va con send_default_pii=False; aquí tampoco sale el correo
-_CAMPOS_PARA_SENTRY = frozenset(
-    {"event_id", "event_type", "occurred_on", "severity", "user_id", "ip_address"}
-)
+# Lo que llega a Sentry de cada evento: el id del usuario como único dato personal
+# (F-05b). Ni el correo ni la IP, que se queda en el log (BE #466, revisión de la
+# fase 2). El cuerpo de la petición lo quita el before_send (sentry_config.py)
+_CAMPOS_PARA_SENTRY = frozenset({"event_id", "event_type", "occurred_on", "severity", "user_id"})
+# La etiqueta con la que el before_send reconoce un evento de seguridad
+ETIQUETA_DE_EVENTO_DE_SEGURIDAD = "security_event"
 # Y la cuenta afectada por un administrador (`deactivated_user_id`...): otro id
 _SUFIJO_DE_ID_DE_USUARIO = "_user_id"
 
@@ -88,7 +89,7 @@ class _SalidaEstandar(logging.StreamHandler):
 
 
 def datos_para_sentry(event: SecurityAuditEvent) -> dict[str, Any]:
-    """Los campos del evento que pueden ir a Sentry: ids, IP, tipo, severidad y fecha."""
+    """Los campos del evento que pueden ir a Sentry: ids, tipo, severidad y fecha."""
     return {
         clave: valor
         for clave, valor in event.to_dict().items()
@@ -99,8 +100,8 @@ def datos_para_sentry(event: SecurityAuditEvent) -> dict[str, Any]:
 def avisa_a_sentry(event: SecurityAuditEvent) -> None:
     """Manda a Sentry un evento HIGH (warning) o CRITICAL (error); los demás, no.
 
-    Uno por tipo de evento (fingerprint), con el id del usuario y la IP, nunca el
-    correo. Si Sentry falla, solo se apunta el tipo del error: ni la petición ni
+    Uno por tipo de evento (fingerprint), con el id del usuario, nunca el correo ni
+    la IP. Si Sentry falla, solo se apunta el tipo del error: ni la petición ni
     el log de auditoría dependen de Sentry.
     """
     nivel = _NIVEL_EN_SENTRY.get(event.severity)
@@ -112,7 +113,7 @@ def avisa_a_sentry(event: SecurityAuditEvent) -> None:
             f"Security event: {tipo}",
             level=nivel,
             fingerprint=["security-event", tipo],
-            tags={"security_event": tipo, "security_severity": event.severity.value},
+            tags={ETIQUETA_DE_EVENTO_DE_SEGURIDAD: tipo, "security_severity": event.severity.value},
             contexts={"security_event": datos_para_sentry(event)},
             user={"id": event.user_id} if event.user_id else None,
         )

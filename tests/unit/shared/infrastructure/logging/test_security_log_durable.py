@@ -114,7 +114,7 @@ def test_a_high_event_goes_to_sentry_as_a_warning_without_pii(audit, enviados):
     """
     Given: Un login fallido (HIGH), que lleva el correo
     When: Se registra
-    Then: Llega a Sentry como warning, agrupado por tipo, con el usuario y la IP y sin
+    Then: Llega a Sentry como warning, agrupado por tipo, con el usuario, sin la IP ni
           el correo ni nada fuera de la lista permitida
     """
     audit.log_security_event(_fallo_de_login())
@@ -125,16 +125,10 @@ def test_a_high_event_goes_to_sentry_as_a_warning_without_pii(audit, enviados):
     assert datos["fingerprint"] == ["security-event", "LoginAttemptEvent"]
     assert datos["user"] == {"id": USUARIO}
     contexto = datos["contexts"]["security_event"]
-    assert contexto["ip_address"] == IP
     assert contexto["user_id"] == USUARIO
-    assert set(contexto) <= {
-        "event_id",
-        "event_type",
-        "occurred_on",
-        "severity",
-        "user_id",
-        "ip_address",
-    }
+    # Sin IP: el id basta, y la IP se queda en el log (revisión de la fase 2)
+    assert set(contexto) <= {"event_id", "event_type", "occurred_on", "severity", "user_id"}
+    assert IP not in json.dumps(datos, default=str)
     assert CORREO not in json.dumps(datos, default=str)
     assert CORREO not in mensaje
 
