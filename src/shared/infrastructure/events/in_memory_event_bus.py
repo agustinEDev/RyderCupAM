@@ -8,10 +8,10 @@ los handlers en memoria y los ejecuta de forma asíncrona.
 import logging
 from collections import defaultdict
 
-from .domain_event import DomainEvent
-from .event_bus import EventBus
-from .event_handler import EventHandler
-from .exceptions import EventHandlerError
+from src.shared.domain.events.domain_event import DomainEvent
+from src.shared.domain.events.event_bus import EventBus
+from src.shared.domain.events.event_handler import EventHandler
+from src.shared.domain.events.exceptions import EventHandlerError
 
 logger = logging.getLogger(__name__)
 
