@@ -1,7 +1,8 @@
 """
 Puerto del log de auditoría de seguridad para los casos de uso de usuario.
 
-Los casos de uso no importan de infraestructura (CLAUDE.md): registran sus
+Los casos de uso no importan de infraestructura (contrato `layers` de
+.importlinter): registran sus
 eventos de auditoría por aquí, y el adaptador vive en
 src/modules/user/infrastructure/security/security_audit_logger.py.
 """

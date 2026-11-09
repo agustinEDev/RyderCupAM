@@ -101,6 +101,5 @@ class Country:
 
 ## References
 
-- **CLAUDE.md**: Competition Module Section
 - **CHANGELOG.md**: v1.3.0
 - **Tests**: `tests/unit/modules/competition/domain/`

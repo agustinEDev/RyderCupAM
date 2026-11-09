@@ -67,7 +67,7 @@ PERMITIDOS = {
     # email_validator: la validación de formato del value object Email. Es pura
     # (sin red: se llama con check_deliverability=False) y no es un framework
     "domain": ESTANDAR_PURA | {"email_validator"},
-    # Pydantic en los DTOs es una decisión del proyecto (CLAUDE.md: "DTOs siempre
+    # Pydantic en los DTOs es una decisión del proyecto (ADR-046: "DTOs siempre
     # Pydantic"); geojson_pydantic son modelos Pydantic del estándar GeoJSON.
     # Lo concurrente (asyncio, weakref, contextvars, concurrent) lo usan los
     # casos de uso para coordinar, sin tocar la red ni el disco
