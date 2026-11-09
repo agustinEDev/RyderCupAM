@@ -79,6 +79,9 @@ from src.modules.golf_course.infrastructure.api.v1 import (  # noqa: E402
     hole_map_routes,
 )
 from src.modules.quick_match.infrastructure.api.v1 import quick_match_routes  # noqa: E402
+from src.modules.social.application.use_cases.upload_profile_photo_use_case import (  # noqa: E402
+    MAX_UPLOAD_BYTES as MAX_PHOTO_UPLOAD_BYTES,
+)
 from src.modules.social.infrastructure.api.v1 import (  # noqa: E402
     friend_routes,
     profile_photo_routes,
@@ -297,7 +300,11 @@ async def add_security_headers(request: Request, call_next):
 # (podría mentir, o usar chunked encoding sin esa cabecera) — la lectura por
 # trozos con corte temprano en el propio endpoint sigue siendo la protección
 # real; esto es un fast-fail adicional para el caso común.
-_AVATAR_UPLOAD_PATH = "/api/v1/users/me/avatar/upload"
+# Las rutas de subida de imágenes con su tope: el avatar y la galería (F-08)
+_UPLOAD_SIZE_LIMITS = {
+    "/api/v1/users/me/avatar/upload": MAX_UPLOAD_BYTES,
+    "/api/v1/users/me/photos": MAX_PHOTO_UPLOAD_BYTES,
+}
 # Content-Length cubre el multipart body ENTERO (boundaries + cabeceras de cada
 # parte), no solo los bytes del fichero — un archivo justo en el límite (o algo
 # por debajo) puede declarar un tamaño total ligeramente mayor que
@@ -308,7 +315,8 @@ _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES = 16 * 1024
 
 @app.middleware("http")
 async def limit_avatar_upload_content_length(request: Request, call_next):
-    if request.url.path == _AVATAR_UPLOAD_PATH and request.method == "POST":
+    max_bytes = _UPLOAD_SIZE_LIMITS.get(request.url.path)
+    if max_bytes is not None and request.method == "POST":
         content_length = request.headers.get("content-length")
         if content_length is not None:
             try:
@@ -317,14 +325,14 @@ async def limit_avatar_upload_content_length(request: Request, call_next):
                 declared_size = None
             if (
                 declared_size is not None
-                and declared_size > MAX_UPLOAD_BYTES + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
+                and declared_size > max_bytes + _MAX_AVATAR_MULTIPART_OVERHEAD_BYTES
             ):
                 return JSONResponse(
                     status_code=413,
                     content={
                         "detail": (
                             "El archivo supera el tamaño máximo permitido "
-                            f"({MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+                            f"({max_bytes // (1024 * 1024)}MB)"
                         )
                     },
                 )
