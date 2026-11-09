@@ -46,7 +46,6 @@ tests/reports/
 # AI & Development Tools
 # ==================================
 *.code-workspace
-CLAUDE.md
 GEMINI.md
 prompt_next_steps.md
 

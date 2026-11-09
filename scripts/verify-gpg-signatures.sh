@@ -217,7 +217,7 @@ else
     echo "   3. Force push: git push --force"
     echo ""
     echo "📖 Documentation:"
-    echo "   See CLAUDE.md section '🔐 Git Commit Signing' for setup instructions"
+    echo "   See docs/ci-cd/PIPELINE_GUIDE.md section 'GPG Signature Setup' for setup instructions"
     echo ""
     echo -e "${BLUE}========================================${NC}"
     exit 1

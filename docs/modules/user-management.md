@@ -171,7 +171,7 @@ UserUnitOfWorkInterface
 - Configured in `src/config/dependencies.py`
 - Complete Inversion of Control (IoC)
 
-**📋 See refactoring:** CLAUDE.md - Dependency Injection Refactoring (16 Nov 2025)
+**📋 See pattern:** ADR-012 Composition Root
 
 ---
 
@@ -352,7 +352,7 @@ pytest tests/unit/modules/user/ -n auto
 - composite() does not handle NULL correctly
 - TypeDecorator transparently converts Handicap ↔ float
 
-**📋 See ADR:** CLAUDE.md - Architecture Decisions
+**📋 See:** SQLAlchemy Mappers section above and `src/modules/user/infrastructure/persistence/sqlalchemy/mappers.py`
 
 ### 2. Dependency Injection Refactoring
 **Decision:** Ports & Adapters (Hexagonal Architecture)
@@ -382,7 +382,7 @@ pytest tests/unit/modules/user/ -n auto
 - DB revocation on logout
 - 722/722 tests passing (+35 new)
 
-**📋 See implementation:** CLAUDE.md - Session Timeout with Refresh Tokens
+**📋 See ADR:** ADR-039 Session Lifetime per Device (refresh token lifetime and revocation on logout)
 
 ### 4. Password Policy (OWASP ASVS V2.1)
 **Decision:** Update from 8 to 12 minimum characters
@@ -396,7 +396,7 @@ pytest tests/unit/modules/user/ -n auto
 - Common password blacklist
 - 681 tests updated (100%)
 
-**📋 See migration:** CLAUDE.md - Password Policy
+**📋 See migration:** ADR-023 Security Strategy (OWASP Compliance)
 
 ---
 

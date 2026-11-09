@@ -31,7 +31,7 @@
 - [ ] Script ingestión documentos (50 docs)
 - [ ] Dependency injection en routes
 - [ ] Tests integración API (15-20 tests)
-- [ ] Documentación: actualizar CLAUDE.md, Swagger
+- [ ] Documentación: actualizar docs/, Swagger
 - [ ] Deploy a Render con variables de entorno
 - [ ] Ingestión inicial knowledge base
 - [ ] **ELIMINAR ESTE DOCUMENTO**
@@ -299,7 +299,7 @@ Este documento puede **ELIMINARSE** cuando:
 - [ ] Deploy en Render realizado y funcionando
 - [ ] Variables de entorno configuradas en producción
 - [ ] Monitoreo activo (métricas de uso primeros 7 días)
-- [ ] Documentación técnica actualizada en CLAUDE.md
+- [ ] Documentación técnica actualizada en docs/
 - [ ] ADR-022 revisado y confirmado
 
 ---
@@ -321,7 +321,7 @@ Este documento puede **ELIMINARSE** cuando:
 
 ### Documentación
 - **ADR-022:** RAG Assistant Architecture (pendiente de crear)
-- **CLAUDE.md:** Actualizar con RAG module
+- **docs/README.md:** Actualizar con RAG module
 - **API.md:** Actualizar con endpoints de AI
 
 ### Stack Tecnológico
