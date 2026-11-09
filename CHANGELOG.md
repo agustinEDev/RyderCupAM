@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.55.0] - 2026-11-09
+
+**Fases 1 y 2 del plan para subir a 9 las notas de la auditoría de seguridad y calidad
+del 9 nov** (#773, #774, #775). Sin migraciones y sin cambios visibles. Va con el frontend
+**2.71.0**; el orden no importa, porque el front de antes ya renueva el token CSRF y
+repite la petición. Probado en el Kind con develop (23 casos más 9 de repetición).
+**Antes de desplegar**, las variables de Render: `SECRET_KEY` de 32 bytes o más y que no
+sea de ejemplo, `TESTING` sin poner y `ENVIRONMENT` distinto de `development` (revisadas
+el 9 nov). Al desplegar habrá unos 15 minutos de 403 de CSRF que se recuperan solos.
+
+### Security
+
+- **El log de seguridad sobrevive a los despliegues**: cada evento sale también por la
+  salida estándar en JSON, escrito desde un hilo. Los HIGH y CRITICAL van a Sentry sin
+  cuerpo de la petición, IP, migas ni extras; los logins fallidos y los resets a correos
+  desconocidos no van, y el resto de HIGH, como mucho uno por tipo cada 10 minutos. El
+  correo tecleado se guarda enmascarado (`a***@dominio` y un hash con clave).
+- **Las acciones de administrador quedan auditadas** (CRITICAL): dar o quitar admin,
+  cambiar el correo de otro y borrar una cuenta, solo cuando de verdad ocurren.
+- **La app no arranca con una configuración insegura** fuera de `ENVIRONMENT=development`
+  (y nunca en Render con development): `TESTING=true`, o una `SECRET_KEY` ausente, de
+  ejemplo o de menos de 32 bytes. `entrypoint.sh` lo comprueba antes de migrar, así que
+  una configuración mala no toca la base de datos. El algoritmo del JWT queda fijo en
+  HS256 y `X-Test-Client-ID` solo vale en los tests.
+- **`/openapi.json` pide las credenciales de `/docs`**, y los intentos fallidos tienen
+  límite por red (con la IP real de Cloudflare, también para las buenas una vez lleno).
+- **Cabeceras de seguridad y CSP `default-src 'none'` en todas las respuestas**, también
+  en los 403 de CSRF y los 500.
+- **El token CSRF lleva su hora firmada** y caduca con el refresh más una hora; los del
+  formato anterior se rechazan y el front los renueva solo.
+- **Las subidas de fotos se cortan al pasar de 10 MB**, también sin `Content-Length`.
+- **La búsqueda de competiciones escapa `%` y `_`**, y el tope de fotos de la galería se
+  comprueba con un candado.
+- **El contenedor corre sin root** (uid 10001) e instala las dependencias y pip con
+  `--require-hashes`; solo entra en la imagen lo que se usa al ejecutar.
+- **Las contraseñas de producción usan 12 rondas de bcrypt como mínimo**: `TESTING` ya no
+  las baja y `BCRYPT_ROUNDS` solo admite menos en desarrollo.
+
+### Changed
+
+- **Arquitectura vigilada en el CI**: lista de permitidos por capa, contratos para que la
+  aplicación no use frameworks ni `src.config` y para que `src/shared` no dependa de los
+  módulos (4 excepciones apuntadas como deuda). Puerto `PasswordHasher` con adaptador de
+  bcrypt; el alias repetido lo traduce la unidad de trabajo. ADR-046 y ADR-047.
+- **El compose de desarrollo** monta solo el código, en lectura, y los logs en su volumen.
+
 ## [2.54.0] - 2026-11-08
 
 **Desvincular Google pide la contraseña y deja rastro en el log de seguridad, y
